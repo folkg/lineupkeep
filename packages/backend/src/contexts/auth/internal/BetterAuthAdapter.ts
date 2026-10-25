@@ -543,7 +543,9 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         allowPublicClientPrelogin: true,
-        accessTokenExpiresIn: 300,
+        accessTokenExpiresIn: Duration.toSeconds(accessTokenLifetime),
+        refreshTokenExpiresIn: Duration.toSeconds(refreshTokenLifetime),
+        refreshTokenReuseInterval: Duration.toSeconds(refreshTokenReuseWindow),
       }),
       cimd({
         metadataProfile: "mcp-2026-07-28",
@@ -653,6 +655,12 @@ function toAuthenticationSession(session: BetterAuthSessionValue): Authenticatio
 }
 
 const signInCodeLifetime = Duration.minutes(10);
+
+const accessTokenLifetime = Duration.minutes(5);
+
+const refreshTokenLifetime = Duration.days(30);
+
+const refreshTokenReuseWindow = Duration.seconds(30);
 
 const signInCodesPerAddress = { window: Duration.hours(1), max: 5 };
 

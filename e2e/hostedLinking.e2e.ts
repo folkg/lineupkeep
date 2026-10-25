@@ -1,6 +1,11 @@
 import { expect, signUp, test } from "./support";
 import { captureCheckpoint } from "./verify/capture";
 
+test.skip(
+  process.env["E2E_TARGET"] === "cloudflare" || process.env["E2E_TARGET"] === "container",
+  "Only the Node target runs an in-process hosted browser; the other images have no browser runtime.",
+);
+
 test("signs in through the hosted browser, opens teams, and refuses another owner", async ({
   page,
   newUser,

@@ -147,9 +147,30 @@ Clients that cannot self-register may instead use an HTTPS client metadata docum
 
 A `*.run.app` hostname is long enough to truncate in some client consent forms. A short custom domain is the remedy; nothing in the protocol depends on the hostname.
 
+### Token lifetime and renewal
+
+An access token lasts **five minutes**. A refresh token lasts **30 days from issue or last rotation**, so a grant survives normal agent idle time between turns. Renewal, not a longer access token, is the supported path.
+
+Request `offline_access` on the first authorization; it is part of the set above. Without it the grant has no refresh token, so the client must send the person through authorization again when the access token expires.
+
+Every successful refresh rotates the refresh token. Persist the returned `refresh_token` before using the new access token. For 30 seconds after rotation the old token returns the same response, which lets a retried request recover; after that the provider treats reuse as replay and revokes the whole refresh-token grant for that client and person, including the newest token. The grant is then unrecoverable and only a fresh authorization restores it. A client that cannot persist the rotated token will lose the connection at its first renewal after the retry window.
+
+Refresh without a secret as a public client:
+
+```sh
+curl -sS -X POST https://<host>/api/auth/oauth2/token \
+  -H 'content-type: application/x-www-form-urlencoded' \
+  --data-urlencode 'grant_type=refresh_token' \
+  --data-urlencode 'client_id=<client-id>' \
+  --data-urlencode 'refresh_token=<refresh-token>' \
+  --data-urlencode 'resource=https://<host>/mcp'
+```
+
+The response carries a new `access_token`, `expires_in`, `scope`, and `refresh_token`. Access tokens are signed by a key persisted in the service database, so a deployment or restart does not invalidate a live token or grant.
+
 ### After connecting
 
-Use `tools/list` for live schemas/scopes/hints. Retry unconfirmed creation only with the same request identity/content; inspect current state before repeating other writes. Store rotated refresh tokens.
+Use `tools/list` for live schemas/scopes/hints. Retry unconfirmed creation only with the same request identity/content; inspect current state before repeating other writes. Keep the latest rotated refresh token as described above.
 Browser sign-out does not revoke offline grants: disconnect through `/api/auth/oauth2/revoke`. Issued access tokens may remain valid until expiry. OAuth setup proves no tool behavior; local workerd proves no production routing guarantee.
 
 ## Deployment

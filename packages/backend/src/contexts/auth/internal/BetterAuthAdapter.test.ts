@@ -32,7 +32,7 @@ import { user } from "./AuthTables.ts";
 import * as authSchema from "./AuthTables.ts";
 import { BetterAuthAdapter } from "./BetterAuthAdapter.ts";
 import * as oauthSchema from "./OAuthTables.ts";
-import { oauthClient, oauthRefreshToken } from "./OAuthTables.ts";
+import { oauthClient, oauthRefreshToken, jwks } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
 
 const databaseTestTimeout = 30_000;
@@ -898,6 +898,89 @@ it.effect(
 );
 
 it.effect(
+  "keeps an issued access token and rotating refresh grant valid in a fresh auth instance",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      yield* adapter.handle(sendCodeRequest("restart@example.test"));
+      const signedIn = yield* adapter.handle(
+        signInRequest("restart@example.test", yield* latestCode("restart@example.test")),
+      );
+      const headers = new Headers({ cookie: cookieHeader(signedIn) });
+      const challenge = yield* pkceChallenge(pkceVerifier);
+      const query = new URLSearchParams({
+        response_type: "code",
+        client_id: "https://connections-client.test/client.json",
+        redirect_uri: "http://127.0.0.1:19999/callback",
+        scope: "connections:read offline_access",
+        resource: "http://localhost:5173/mcp",
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        state: "restart",
+      });
+      const authorization = yield* adapter.handle(
+        new Request(`http://localhost:5173/api/auth/oauth2/authorize?${query}`, { headers }),
+      );
+      const location = new URL(
+        authorization.headers.get("location") ?? "",
+        baseConfig.BETTER_AUTH_URL,
+      );
+      const consent = yield* adapter.consent(headers, location.search.slice(1), true);
+      const code = new URL(consent).searchParams.get("code") ?? "";
+      const credentials = yield* jsonOf(
+        yield* adapter.handle(codeExchangeRequest(code, pkceVerifier)),
+        Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
+      );
+
+      const payload = jwtPayload(credentials.access_token);
+      assert.strictEqual(payload.exp - payload.iat, 300);
+      const database = yield* AuthDatabase;
+      const [refreshRow] = yield* Effect.promise(() => database.select().from(oauthRefreshToken));
+      assert.isDefined(refreshRow);
+      assert.strictEqual(
+        (refreshRow.expiresAt.getTime() - refreshRow.createdAt.getTime()) / 1000,
+        30 * 24 * 60 * 60,
+      );
+      assert.include(refreshRow.scopes, offlineAccess.name);
+      const storedKeys = yield* Effect.promise(() => database.select().from(jwks));
+      assert.strictEqual(storedKeys.length, 1);
+      assert.strictEqual(storedKeys[0]?.id, jwtHeader(credentials.access_token).kid);
+      assert.isAbove(storedKeys[0]?.privateKey.length ?? 0, 0);
+
+      const restarted = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
+      assert.propertyVal(
+        yield* restarted.resolveAccessToken(credentials.access_token, ["connections:read"]),
+        "status",
+        "authenticated",
+      );
+      const refreshed = yield* jsonOf(
+        yield* restarted.handle(refreshTokenRequest(credentials.refresh_token)),
+        Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
+      );
+      assert.notStrictEqual(refreshed.refresh_token, credentials.refresh_token);
+      assert.propertyVal(
+        yield* restarted.resolveAccessToken(refreshed.access_token, ["connections:read"]),
+        "status",
+        "authenticated",
+      );
+      const rotatedRow = (yield* Effect.promise(() =>
+        database.select().from(oauthRefreshToken),
+      )).find((row) => row.revoked === null);
+      assert.isDefined(rotatedRow);
+      assert.strictEqual(
+        (rotatedRow.expiresAt.getTime() - rotatedRow.createdAt.getTime()) / 1000,
+        30 * 24 * 60 * 60,
+      );
+      const keysAfterRestart = yield* Effect.promise(() => database.select().from(jwks));
+      assert.deepStrictEqual(
+        keysAfterRestart.map((key) => key.id),
+        storedKeys.map((key) => key.id),
+      );
+    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+  databaseTestTimeout,
+);
+
+it.effect(
   "keeps CIMD's 5 KiB limit stricter than the general HTTP response cap",
   () =>
     Effect.gen(function* () {
@@ -1078,6 +1161,61 @@ function tokenSegment(value: unknown): Effect.Effect<string, Schema.SchemaError,
   return Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(value).pipe(
     Effect.map((json) => Buffer.from(json).toString("base64url")),
   );
+}
+
+const pkceVerifier = "1234567890123456789012345678901234567890123";
+
+function pkceChallenge(verifier: string): Effect.Effect<string> {
+  return Effect.promise(async () => {
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    return btoa(String.fromCharCode(...new Uint8Array(hash)))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replaceAll("=", "");
+  });
+}
+
+function codeExchangeRequest(code: string, verifier: string): Request {
+  return new Request("http://localhost:5173/api/auth/oauth2/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: "https://connections-client.test/client.json",
+      redirect_uri: "http://127.0.0.1:19999/callback",
+      resource: "http://localhost:5173/mcp",
+      code_verifier: verifier,
+      code,
+    }),
+  });
+}
+
+function refreshTokenRequest(token: string): Request {
+  return new Request("http://localhost:5173/api/auth/oauth2/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: "https://connections-client.test/client.json",
+      resource: "http://localhost:5173/mcp",
+      refresh_token: token,
+    }),
+  });
+}
+
+const JwtPayload = Schema.Struct({ iat: Schema.Finite, exp: Schema.Finite });
+const JwtHeader = Schema.Struct({ kid: Schema.String });
+
+function jwtPayload(token: string): typeof JwtPayload.Type {
+  return Schema.decodeUnknownSync(JwtPayload)(jwtSegment(token, 1));
+}
+
+function jwtHeader(token: string): typeof JwtHeader.Type {
+  return Schema.decodeUnknownSync(JwtHeader)(jwtSegment(token, 0));
+}
+
+function jwtSegment(token: string, index: 0 | 1): unknown {
+  return JSON.parse(Buffer.from(token.split(".")[index] ?? "", "base64url").toString());
 }
 
 function authRequest(

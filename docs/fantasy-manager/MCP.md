@@ -108,13 +108,15 @@ connections:read fantasy:read transactions:review lineups:write teams:manage fee
 
 `connections:read` reads connection status; `fantasy:read`, `transactions:review`, `lineups:write`, `teams:manage`, and `feedback:manage` cover the query, review-link, lineup, automation-control, and feedback tools; `offline_access` buys a refresh token. Requesting a subset authorizes and then fails the tools whose scope it omitted, so the whole set is the supported request.
 
+Access tokens last five minutes; refresh tokens last 30 days from issue or last rotation. The refresh grant rotates on every use. A client must request `offline_access` on the first authorization and persist each returned `refresh_token`; a rotated-out token is accepted for 30 seconds so a retried refresh can recover, then reuse is treated as replay and revokes the whole grant for that client and person. A client that keeps reusing an already-rotated token therefore loses the connection at its next renewal and must authorize again. The full request and response shape, including the public-client refresh with no secret, is in the [client setup](../../README.md#token-lifetime-and-renewal).
+
 The unauthenticated `401` advertises the whole set in its `scope` parameter and body, and a `403` names the missing scope in the body as well as the challenge header. `server/discover` answers without a token and publishes only the product name, supported protocol versions, and capabilities. Authorization-server metadata publishes all seven scopes; protected-resource metadata publishes the six resource scopes, because `offline_access` addresses the authorization server rather than the resource. A scope-coverage test asserts the documented set against the required scope of every shipped tool.
 
 Dynamic registration records the advertised set as the client's allowed scope, while an authorization grant is exactly the scope an authorize request asks for. Both are needed: registration allows the grant, the request narrows it. Complete first-request examples, header and `_meta` requirements, and the registration fallback are in the [client setup](../../README.md#connecting-an-mcp-client).
 
 ## Client acceptance
 
-Use actual hosted Muse with a harmless read first: discovery, OAuth/consent, correct scopes, egress, expiry/reconnect, structured/text output, continuation use, and bounded-run waiting. Do not assume Muse's managed browser can execute the local helper.
+Use actual hosted Muse with a harmless read first: discovery, OAuth/consent, correct scopes, egress, an access-token expiry followed by a public-client refresh rather than a reconnect, structured/text output, continuation use, and bounded-run waiting. Do not assume Muse's managed browser can execute the local helper.
 
 OpenCode is a possible fallback after an actual test. Pi compatibility can improve later; retain the starter's stateless/serverless transport rather than adding a legacy/stateful branch.
 

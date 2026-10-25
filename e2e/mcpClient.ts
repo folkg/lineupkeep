@@ -135,6 +135,7 @@ export async function exchangeCode(
   readonly access_token: string;
   readonly token_type: "Bearer";
   readonly scope: string;
+  readonly expires_in?: number | undefined;
   readonly refresh_token?: string | undefined;
 }> {
   const returned = new URL(page.url());
@@ -170,9 +171,32 @@ export async function exchangeCode(
       access_token: Schema.String,
       token_type: Schema.Literal("Bearer"),
       scope: Schema.String,
+      expires_in: Schema.optional(Schema.Finite),
       refresh_token: Schema.optional(Schema.String),
     }),
   )(await response.json());
+}
+
+export async function registerPublicClient(origin: string, clientName: string): Promise<string> {
+  const response = await fetch(new URL("/api/auth/oauth2/register", origin), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      client_name: clientName,
+      redirect_uris: [callback],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      application_type: "native",
+    }),
+  });
+  const body = Schema.decodeUnknownSync(
+    Schema.Struct({ client_id: Schema.String, client_secret: Schema.optional(Schema.String) }),
+  )(await response.json());
+  if (response.status !== 201 || body.client_secret !== undefined) {
+    throw new Error(`Public client registration failed (${response.status})`);
+  }
+  return body.client_id;
 }
 
 export function exchangeRefreshToken(
@@ -187,7 +211,7 @@ export function exchangeRefreshToken(
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      client_id: clientId,
+      client_id: authorization.clientId,
       resource: authorization.resource,
       refresh_token: refreshToken,
     }),
