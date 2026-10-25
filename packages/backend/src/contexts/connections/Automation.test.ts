@@ -113,6 +113,25 @@ it.effect("excludes disabled, paused, unavailable, and reconnecting teams", () =
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
+it.effect("blocks a current-week run when the league publishes no scoring weeks", () =>
+  Effect.gen(function* () {
+    const runs = yield* LineupRuns;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    yield* fake.setLeague({ ...league, scoringType: "roto", periodWindow: undefined });
+    const requested = yield* Schema.decodeEffect(LineupRequestInput)({
+      requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164f9",
+      teams: [{ team, period: { coverage: "current" } }],
+    });
+
+    const submitted = yield* runs.submit(owner, requested);
+
+    assert.strictEqual(submitted.runs[0]?.status, "blocked");
+    assert.include(submitted.runs[0]?.outcome?.summary, "no scoring-week window");
+    assert.strictEqual(yield* fake.nativeCallCount, 0);
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
 it.effect("repairs an undispatched scheduled delivery before scheduling another", () =>
   Effect.gen(function* () {
     const automation = yield* Automation;

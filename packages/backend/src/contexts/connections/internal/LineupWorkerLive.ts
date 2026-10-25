@@ -2,7 +2,7 @@ import { DateTime, Effect, Layer, Option } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
-import type { LineupRunOutcome } from "#contexts/connections/LineupRun.ts";
+import type { LineupRunOutcome, LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import { LineupPersistenceFailed } from "#contexts/connections/LineupRun.ts";
 import { LineupWorker } from "#contexts/connections/LineupWork.ts";
 import type {
@@ -99,14 +99,17 @@ export const LineupWorkerLive = Layer.effect(
       if (league === undefined) {
         return;
       }
-      const target = resolveTarget(run.record.target, league);
-      if (target === undefined) {
+      const resolution = resolveTarget(run.record.target, league);
+      if (resolution.status !== "resolved") {
         return yield* block(
           run,
-          "stale_period",
-          "The requested period is not the provider's current period for this league.",
+          resolution.status,
+          resolution.status === "no_week_window"
+            ? "The provider reports no scoring-week window for this league, so a week target cannot be resolved. Request an explicit date."
+            : "The requested period is not the provider's current period for this league.",
         );
       }
+      const target = resolution.target;
       const roster = yield* readRoster(run, context, session, target);
       if (roster === undefined) {
         return;
@@ -580,32 +583,41 @@ export const LineupWorkerLive = Layer.effect(
   }),
 );
 
+type TargetResolution =
+  | { readonly status: "resolved"; readonly target: LineupTargetPeriod }
+  | { readonly status: "no_week_window" }
+  | { readonly status: "stale_period" };
+
 function resolveTarget(
-  requested: import("#contexts/connections/LineupRun.ts").LineupTargetPeriod,
+  requested: LineupTargetPeriod,
   league: ProviderLeagueSettings,
-): import("#contexts/connections/LineupRun.ts").LineupTargetPeriod | undefined {
+): TargetResolution {
   const window = league.periodWindow;
-  if (requested.coverage === "current") {
-    return window !== undefined &&
-      window.currentWeek >= window.startWeek &&
-      window.currentWeek <= window.endWeek
-      ? { coverage: "week", week: window.currentWeek }
-      : undefined;
-  }
+  const resolved = (target: LineupTargetPeriod): TargetResolution => ({
+    status: "resolved",
+    target,
+  });
   if (requested.coverage === "date") {
     return league.startDate !== undefined &&
       league.endDate !== undefined &&
       requested.date >= league.startDate &&
       requested.date <= league.endDate
-      ? requested
-      : undefined;
+      ? resolved(requested)
+      : { status: "stale_period" };
   }
-  return window !== undefined &&
-    requested.week >= window.startWeek &&
+  if (window === undefined) {
+    return { status: "no_week_window" };
+  }
+  if (requested.coverage === "current") {
+    return window.currentWeek >= window.startWeek && window.currentWeek <= window.endWeek
+      ? resolved({ coverage: "week", week: window.currentWeek })
+      : { status: "stale_period" };
+  }
+  return requested.week >= window.startWeek &&
     requested.week <= window.endWeek &&
     requested.week === window.currentWeek
-    ? requested
-    : undefined;
+    ? resolved(requested)
+    : { status: "stale_period" };
 }
 
 function observe(
