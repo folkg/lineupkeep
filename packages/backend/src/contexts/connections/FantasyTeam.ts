@@ -15,6 +15,24 @@ export type FantasySport = typeof FantasySport.Type;
 export const TeamAvailability = Schema.Literals(["available", "unavailable"]);
 export type TeamAvailability = typeof TeamAvailability.Type;
 
+export const TeamAutomationStatus = Schema.Literals([
+  "disabled",
+  "enabled",
+  "paused-until-fantasy-day-end",
+]);
+export type TeamAutomationStatus = typeof TeamAutomationStatus.Type;
+
+export const TeamAutomation = Schema.Struct({
+  status: TeamAutomationStatus,
+  changedAt: Schema.DateTimeUtc,
+  pausedAt: Schema.optional(Schema.DateTimeUtc),
+  resumesAt: Schema.optional(Schema.DateTimeUtc),
+  timeZone: Schema.optional(Schema.NonEmptyString),
+  fantasyDay: Schema.optional(Schema.NonEmptyString),
+  policyVersion: Schema.optional(Schema.NonEmptyString),
+});
+export type TeamAutomation = typeof TeamAutomation.Type;
+
 export const FantasyTeam = Schema.Struct({
   id: TeamId,
   connectionId: ConnectionId,
@@ -26,7 +44,7 @@ export const FantasyTeam = Schema.Struct({
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
   name: Schema.NonEmptyString,
   availability: TeamAvailability,
-  automationEnabled: Schema.Boolean,
+  automation: TeamAutomation,
   lastSeenAt: Schema.DateTimeUtc,
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,

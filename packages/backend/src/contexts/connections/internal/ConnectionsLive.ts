@@ -13,12 +13,14 @@ import {
 import type { ConnectionStatus } from "#contexts/connections/Connection.ts";
 import type {
   CompleteLinkingInput,
+  CompleteReconnectInput,
   ConnectionError,
   ConnectionId,
   ConnectionIdInput,
   ProviderConnection,
   ReconnectInput,
   StartLinkingInput,
+  StartReconnectInput,
 } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
@@ -137,6 +139,60 @@ export const ConnectionsLive = Layer.effect(
         }));
         return yield* repository
           .completeLinking(userId, commands)
+          .pipe(Effect.tap(annotateOneConnection));
+      });
+
+    const startReconnect = (
+      userId: UserId,
+      inputs: ReadonlyArray<StartReconnectInput>,
+    ): Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError> =>
+      repository.startReconnect(userId, inputs).pipe(Effect.tap(annotateOneConnection));
+
+    const completeReconnect = (
+      userId: UserId,
+      inputs: ReadonlyArray<CompleteReconnectInput>,
+    ): Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError> =>
+      Effect.gen(function* () {
+        const owned = yield* repository.loadOwned(
+          userId,
+          inputs.map((input) => input.id),
+        );
+        const byId = new Map(owned.map((record) => [record.id, record]));
+        for (const input of inputs) {
+          const record = byId.get(input.id);
+          if (record === undefined) {
+            return yield* ConnectionNotFound.make({ id: input.id });
+          }
+          if (record.state._tag !== "Ready" && record.state._tag !== "ReconnectRequired") {
+            return yield* ConnectionLinkRejected.make({
+              id: input.id,
+              status: statusOf(record),
+            });
+          }
+        }
+
+        yield* Effect.forEach(inputs, (input) => validateSession(input.id, input), {
+          concurrency: 1,
+        });
+        const encrypted = yield* Effect.forEach(
+          inputs,
+          (input) => encryptCredential(userId, input.id, input),
+          { concurrency: 1 },
+        );
+        const commands: ReadonlyArray<ReconnectCommand> = inputs.map((input, index) => {
+          const record = byId.get(input.id);
+          if (record?.state._tag !== "Ready" && record?.state._tag !== "ReconnectRequired") {
+            throw new Error("A reconnect target lost its generation before it was persisted");
+          }
+          return {
+            id: input.id,
+            provider: input.provider,
+            envelope: Array.getUnsafe(encrypted, index),
+            expectedGeneration: record.state.credentialGeneration,
+          };
+        });
+        return yield* repository
+          .reconnect(userId, commands)
           .pipe(Effect.tap(annotateOneConnection));
       });
 
@@ -288,8 +344,10 @@ export const ConnectionsLive = Layer.effect(
     return Connections.of({
       list,
       startLinking,
+      startReconnect,
       cancelLinking,
       completeLinking,
+      completeReconnect,
       reconnect,
       disconnect,
       discoverTeams,

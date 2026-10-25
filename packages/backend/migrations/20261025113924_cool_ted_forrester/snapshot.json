@@ -1,0 +1,375 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "1c0ebc6e-0d77-40ed-86bf-a12d687c1d3d",
+  "prevIds": [
+    "bd1633b3-92f0-4fa3-8464-d3072879d61c"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "provider_connections",
+        "reconnect_code"
+      ],
+      "writes": [
+        "s|col|public.provider_connections.reconnect_code",
+        "n|col|public.provider_connections.reconnect_code",
+        "e|col|public.provider_connections.reconnect_code"
+      ],
+      "reads": [
+        "n|tbl|public.provider_connections",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "provider_connections",
+        "reconnect_expires_at"
+      ],
+      "writes": [
+        "s|col|public.provider_connections.reconnect_expires_at",
+        "n|col|public.provider_connections.reconnect_expires_at",
+        "e|col|public.provider_connections.reconnect_expires_at"
+      ],
+      "reads": [
+        "n|tbl|public.provider_connections",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "provider_connections",
+        "reconnect_request_id"
+      ],
+      "writes": [
+        "s|col|public.provider_connections.reconnect_request_id",
+        "n|col|public.provider_connections.reconnect_request_id",
+        "e|col|public.provider_connections.reconnect_request_id"
+      ],
+      "reads": [
+        "n|tbl|public.provider_connections",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "provider_teams",
+        "automation_state"
+      ],
+      "writes": [
+        "s|col|public.provider_teams.automation_state",
+        "n|col|public.provider_teams.automation_state",
+        "e|col|public.provider_teams.automation_state"
+      ],
+      "reads": [
+        "n|tbl|public.provider_teams",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "provider_teams",
+        "automation_status"
+      ],
+      "writes": [
+        "s|col|public.provider_teams.automation_status",
+        "n|col|public.provider_teams.automation_status",
+        "e|col|public.provider_teams.automation_status"
+      ],
+      "reads": [
+        "n|tbl|public.provider_teams",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "provider_teams",
+        "automation_enabled"
+      ],
+      "writes": [
+        "s|col|public.provider_teams.automation_enabled",
+        "n|col|public.provider_teams.automation_enabled",
+        "e|col|public.provider_teams.automation_enabled"
+      ],
+      "reads": [
+        "n|tbl|public.provider_teams",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "provider_teams",
+        "paused_until"
+      ],
+      "writes": [
+        "s|col|public.provider_teams.paused_until",
+        "n|col|public.provider_teams.paused_until",
+        "e|col|public.provider_teams.paused_until"
+      ],
+      "reads": [
+        "n|tbl|public.provider_teams",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "provider_connections",
+        "provider_connections_reconnect_code_idx"
+      ],
+      "writes": [
+        "s|idx|public.provider_connections_reconnect_code_idx",
+        "n|idx|public.provider_connections_reconnect_code_idx",
+        "e|idx|public.provider_connections_reconnect_code_idx",
+        "n|rel|public.provider_connections_reconnect_code_idx"
+      ],
+      "reads": [
+        "n|tbl|public.provider_connections",
+        "n|sch|public",
+        "n|col|public.provider_connections.reconnect_code"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "provider_teams",
+        "provider_teams_user_id_automation_status_idx"
+      ],
+      "writes": [
+        "s|idx|public.provider_teams_user_id_automation_status_idx",
+        "n|idx|public.provider_teams_user_id_automation_status_idx",
+        "e|idx|public.provider_teams_user_id_automation_status_idx",
+        "n|rel|public.provider_teams_user_id_automation_status_idx"
+      ],
+      "reads": [
+        "n|tbl|public.provider_teams",
+        "n|sch|public",
+        "n|col|public.provider_teams.user_id",
+        "n|col|public.provider_teams.automation_status"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "provider_teams",
+        "provider_teams_automation_status_availability_idx"
+      ],
+      "writes": [
+        "s|idx|public.provider_teams_automation_status_availability_idx",
+        "n|idx|public.provider_teams_automation_status_availability_idx",
+        "e|idx|public.provider_teams_automation_status_availability_idx",
+        "n|rel|public.provider_teams_automation_status_availability_idx"
+      ],
+      "reads": [
+        "n|tbl|public.provider_teams",
+        "n|sch|public",
+        "n|col|public.provider_teams.automation_status",
+        "n|col|public.provider_teams.availability"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_connections",
+        "name": "reconnect_code",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_connections",
+        "name": "reconnect_expires_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_connections",
+        "name": "reconnect_request_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "automation_state",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "automation_status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_connections",
+        "name": "provider_connections_reconnect_code_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "reconnect_code",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "provider_teams_user_id_automation_status_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "automation_status",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "provider_teams_automation_status_availability_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "automation_status",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "availability",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"provider_teams\",\"automation_enabled\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"provider_teams\",\"paused_until\"]"
+    }
+  ]
+}

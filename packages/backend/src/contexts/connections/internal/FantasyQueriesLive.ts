@@ -203,7 +203,7 @@ export const FantasyQueriesLive = Layer.effect(
           season: team.season,
           name: team.name,
           availability: team.availability,
-          automationEnabled: team.automationEnabled,
+          automation: team.automation,
           lastSeenAt: team.lastSeenAt,
         }))
         .toSorted(

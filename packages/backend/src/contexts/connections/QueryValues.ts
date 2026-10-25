@@ -1,7 +1,13 @@
 import { Schema } from "effect";
 
 import { ConnectionId, Provider } from "./Connection.ts";
-import { FantasyLeague, FantasySport, TeamAvailability, TeamId } from "./FantasyTeam.ts";
+import {
+  FantasyLeague,
+  FantasySport,
+  TeamAutomation,
+  TeamAvailability,
+  TeamId,
+} from "./FantasyTeam.ts";
 
 export const queryCursorTtlMillis = 15 * 60 * 1000;
 const queryPageMaximumLimit = 50;
@@ -82,7 +88,7 @@ export const TeamListRow = Schema.Struct({
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
   name: Schema.NonEmptyString,
   availability: TeamAvailability,
-  automationEnabled: Schema.Boolean,
+  automation: TeamAutomation,
   lastSeenAt: Schema.DateTimeUtc,
 });
 export type TeamListRow = typeof TeamListRow.Type;

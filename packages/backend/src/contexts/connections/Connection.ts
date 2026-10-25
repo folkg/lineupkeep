@@ -38,6 +38,8 @@ export const ProviderConnection = Schema.Struct({
   credentialGeneration: Schema.optional(ConnectionCredentialGeneration),
   reconnectRequiredAt: Schema.optional(ConnectionTimestamp),
   disconnectedAt: Schema.optional(ConnectionTimestamp),
+  reconnectCode: Schema.optional(Schema.String),
+  reconnectExpiresAt: Schema.optional(ConnectionTimestamp),
   createdAt: ConnectionTimestamp,
   updatedAt: ConnectionTimestamp,
 });
@@ -75,6 +77,20 @@ export const CompleteLinkingInput = Schema.Struct({
   session: ProviderSessionValue,
 });
 export type CompleteLinkingInput = typeof CompleteLinkingInput.Type;
+
+export const StartReconnectInput = Schema.Struct({
+  requestId: ConnectionRequestId,
+  id: ConnectionId,
+  pairingCode: ConnectionPairingCode,
+});
+export type StartReconnectInput = typeof StartReconnectInput.Type;
+
+export const CompleteReconnectInput = Schema.Struct({
+  id: ConnectionId,
+  provider: Provider,
+  session: ProviderSessionValue,
+});
+export type CompleteReconnectInput = typeof CompleteReconnectInput.Type;
 
 export const ReconnectInput = Schema.Struct({
   id: ConnectionId,

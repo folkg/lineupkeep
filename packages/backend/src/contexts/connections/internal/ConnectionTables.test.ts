@@ -11,6 +11,7 @@ import { snapshotOf } from "#utilities/machine.ts";
 
 import { ConnectionLifecycleWorkflow } from "./ConnectionLifecycleWorkflow.ts";
 import { ConnectionRow, FantasyTeamRow } from "./ConnectionTables.ts";
+import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
 it.effect("round-trips every explored lifecycle state through its row codec", () =>
   Effect.gen(function* () {
@@ -27,6 +28,9 @@ it.effect("round-trips every explored lifecycle state through its row codec", ()
         userId: yield* Schema.decodeEffect(UserId)("owner"),
         requestId: "request",
         pairingCode: "ABCD2345",
+        reconnectCode: null,
+        reconnectExpiresAt: null,
+        reconnectRequestId: null,
         createdAt: at,
         state: snapshot.state.value,
       };
@@ -66,6 +70,9 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
             userId: yield* Schema.decodeEffect(UserId)("owner"),
             requestId: "request",
             pairingCode: "ABCD2345",
+            reconnectCode: null,
+            reconnectExpiresAt: null,
+            reconnectRequestId: null,
             createdAt: time,
             state: {
               _tag: "Linking" as const,
@@ -129,8 +136,11 @@ it.effect("round-trips discovered team rows through the codec", () =>
       season: 2026,
       name: "Alpha",
       availability: "available" as const,
-      automationEnabled: false,
-      pausedUntil: null,
+      automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
+        _tag: "Disabled",
+        changedAt: at,
+      }),
+      automationStatus: "disabled" as const,
       lastSeenAt: atDate,
       createdAt: atDate,
       updatedAt: atDate,
@@ -139,7 +149,7 @@ it.effect("round-trips discovered team rows through the codec", () =>
 
     assert.strictEqual(decoded.providerTeamKey, "461.l.1000.t.1");
     assert.strictEqual(decoded.league, "nfl");
-    assert.strictEqual(decoded.automationEnabled, false);
+    assert.strictEqual(decoded.automation.status, "disabled");
     assert.deepStrictEqual(decoded.lastSeenAt, at);
     assert.isTrue(
       yield* Effect.isFailure(Schema.decodeEffect(FantasyTeamRow)({ ...row, season: 1800 })),
@@ -160,6 +170,9 @@ it.effect("rejects incomplete lifecycle rows through the codec", () =>
       credentialGeneration: 1,
       reconnectRequiredAt: at,
       disconnectedAt: at,
+      reconnectCode: null,
+      reconnectExpiresAt: null,
+      reconnectRequestId: null,
       createdAt: at,
       updatedAt: at,
     };

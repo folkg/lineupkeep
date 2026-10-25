@@ -22,6 +22,7 @@ import {
   ProviderConnection,
   ReconnectInput,
   StartLinkingInput,
+  StartReconnectInput,
 } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
@@ -475,3 +476,52 @@ const EncryptionTestLayer = ConnectionCredentialEncryption.forKey(
 ).pipe(Layer.provide(NodeCrypto.layer));
 
 const ConnectionsTestLayer = ConnectionsLayerFor(NodeCrypto.layer);
+
+it.effect("starts one explicit reconnect intent and completes it through a new session", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const ready = Array.getUnsafe(yield* connections.startLinking(owner, [startInput]), 0);
+    const linked = Array.getUnsafe(
+      yield* connections.completeLinking(owner, [
+        { id: ready.id, provider: "yahoo", session },
+      ]),
+      0,
+    );
+    const intent = yield* Schema.decodeEffect(StartReconnectInput)({
+      requestId: secondRequestId,
+      id: linked.id,
+      pairingCode: "WXYZ6789",
+    });
+
+    const started = Array.getUnsafe(yield* connections.startReconnect(owner, [intent]), 0);
+    const replayed = Array.getUnsafe(yield* connections.startReconnect(owner, [intent]), 0);
+    const completed = Array.getUnsafe(yield* connections.completeReconnect(owner, [
+      { id: linked.id, provider: "yahoo", session },
+    ]), 0);
+
+    assert.strictEqual(started.reconnectCode, "WXYZ6789");
+    assert.isDefined(started.reconnectExpiresAt);
+    assert.deepStrictEqual(replayed, started);
+    assert.strictEqual(completed.status, "ready");
+    assert.strictEqual(completed.credentialGeneration, 2);
+    assert.isUndefined(completed.reconnectCode);
+    assert.isUndefined(completed.reconnectExpiresAt);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("rejects reconnect intent for a linking connection and another owner", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [startInput]), 0);
+    const intent = yield* Schema.decodeEffect(StartReconnectInput)({
+      requestId: secondRequestId,
+      id: linking.id,
+      pairingCode: "WXYZ6789",
+    });
+
+    const error = yield* Effect.flip(connections.startReconnect(owner, [intent]));
+
+    assert.instanceOf(error, ConnectionLinkRejected);
+    assert.strictEqual(error.status, "linking");
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);

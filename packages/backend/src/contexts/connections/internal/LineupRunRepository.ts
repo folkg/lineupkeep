@@ -1,5 +1,5 @@
 import { Machine } from "@typeonce/effect-machine";
-import { and, asc, desc, eq, isNull, lte, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
@@ -41,6 +41,7 @@ import type {
 
 export type { LineupWriteIntentRecord };
 import { LineupRunState, LineupRunWorkflow, lineupRunStatus } from "./LineupRunWorkflow.ts";
+import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 import type {
   LineupLeaseRef,
   LineupNativePlan,
@@ -246,6 +247,41 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         return { runs: records, complete: rows.length <= query.limit };
       });
 
+      const loadTeamActivity = Effect.fn("LineupRunRepository.loadTeamActivity")(function* (
+        userId: UserId,
+        teamIds: ReadonlyArray<TeamId>,
+        perTeam: number,
+      ) {
+        const ids = [...new Set(teamIds)];
+        if (!Array.isArrayNonEmpty(ids)) {
+          return new Map<TeamId, ReadonlyArray<LineupRunRecord>>();
+        }
+        const ranked = database
+          .select({
+            ...getTableColumns(lineupRuns),
+            rank: sql<number>`row_number() over (partition by ${lineupRuns.teamId} order by ${lineupRuns.createdAt} desc, ${lineupRuns.id} asc)`.as(
+              "rank",
+            ),
+          })
+          .from(lineupRuns)
+          .where(and(eq(lineupRuns.userId, userId), anyOf(lineupRuns.teamId, ids)))
+          .as("ranked_runs");
+        const rows = yield* database
+          .select()
+          .from(ranked)
+          .where(lte(ranked.rank, perTeam))
+          .orderBy(asc(ranked.teamId), desc(ranked.createdAt), asc(ranked.id))
+          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+        const grouped = new Map<TeamId, Array<LineupRunRecord>>();
+        for (const row of rows) {
+          const record = yield* decodeRun(row);
+          const existing = grouped.get(record.teamId) ?? [];
+          existing.push(record);
+          grouped.set(record.teamId, existing);
+        }
+        return grouped;
+      });
+
       const runsForRequest = Effect.fn("LineupRunRepository.runsForRequest")(function* (
         userId: UserId,
         requestId: LineupRequestId,
@@ -430,8 +466,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               const control = yield* tx
                 .select({
                   availability: providerTeams.availability,
-                  automationEnabled: providerTeams.automationEnabled,
-                  pausedUntil: providerTeams.pausedUntil,
+                  automationState: providerTeams.automationState,
                 })
                 .from(providerTeams)
                 .where(
@@ -439,13 +474,16 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 )
                 .limit(1);
               const ownedControl = control[0];
+              const automation =
+                ownedControl === undefined
+                  ? undefined
+                  : yield* Schema.decodeUnknownEffect(Schema.toCodecJson(TeamAutomationState))(
+                      ownedControl.automationState,
+                    ).pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
               if (
                 ownedControl === undefined ||
                 ownedControl.availability !== "available" ||
-                (ownedControl.pausedUntil !== null &&
-                  DateTime.toEpochMillis(DateTime.fromDateUnsafe(ownedControl.pausedUntil)) >
-                    DateTime.toEpochMillis(input.at)) ||
-                (record.trigger === "scheduled" && !ownedControl.automationEnabled)
+                (record.trigger === "scheduled" && automation?._tag !== "Enabled")
               ) {
                 return { status: "blocked" as const, reason: "controls_changed" as const };
               }
@@ -1026,6 +1064,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         createRequest,
         loadRuns,
         runsForRequest,
+        loadTeamActivity,
         claim,
         loadWriteIntent,
         unresolvedWriteIntent,

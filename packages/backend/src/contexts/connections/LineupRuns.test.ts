@@ -26,6 +26,7 @@ import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { LineupRequestConflict, LineupRequestInput, LineupRunNotFound } from "./LineupRun.ts";
+import { TeamAutomationState } from "./internal/TeamAutomationWorkflow.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import { LineupWorker } from "./LineupWork.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
@@ -133,7 +134,7 @@ it.effect("reports a definitive provider rejection as failed, never completed", 
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-it.effect("blocks a manual write when the team is paused after observation", () =>
+it.effect("lets a manual run bypass pause and enrollment after observation", () =>
   Effect.gen(function* () {
     const runs = yield* LineupRuns;
     const database = yield* ConnectionsDatabase;
@@ -145,14 +146,25 @@ it.effect("blocks a manual write when the team is paused after observation", () 
     yield* Deferred.await(gate.started);
     yield* database
       .update(providerTeams)
-      .set({ pausedUntil: DateTime.toDateUtc(DateTime.addDuration(yield* DateTime.now, 60_000)) })
+      .set({
+        automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
+          _tag: "PausedUntilFantasyDayEnd",
+          changedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
+          pausedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
+          resumesAt: DateTime.makeUnsafe("2026-10-26T07:00:00Z"),
+          timeZone: "America/Los_Angeles",
+          fantasyDay: "2026-10-25",
+          policyVersion: "yahoo-pacific-midnight/1",
+        }),
+        automationStatus: "paused-until-fantasy-day-end",
+      })
       .where(and(eq(providerTeams.userId, owner), eq(providerTeams.id, team.id)));
     yield* Deferred.succeed(gate.release, undefined);
     const submitted = yield* Fiber.join(fiber);
 
-    assert.strictEqual(submitted.runs[0]?.status, "blocked");
-    assert.strictEqual(submitted.runs[0]?.outcome?.kind, "blocked");
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    assert.strictEqual(submitted.runs[0]?.status, "completed");
+    assert.strictEqual(submitted.runs[0]?.outcome?.kind, "changed");
+    assert.strictEqual(yield* fake.nativeCallCount, 1);
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 

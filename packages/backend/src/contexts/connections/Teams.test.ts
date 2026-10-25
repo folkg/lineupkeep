@@ -2,7 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { and, eq } from "drizzle-orm";
-import { Array, Crypto, Effect, Layer, Redacted, Schema } from "effect";
+import { Array, Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 
 import {
   ConnectionCredentialGeneration,
@@ -24,6 +24,7 @@ import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { providerCredentials, providerTeams } from "./internal/ConnectionTables.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
+import { TeamAutomationState } from "./internal/TeamAutomationWorkflow.ts";
 import { ProviderGateway } from "./Provider.ts";
 import type { ProviderTeam } from "./Provider.ts";
 
@@ -46,7 +47,7 @@ it.effect("discovers multiple teams in one league and persists them disabled", (
     assert.strictEqual(new Set(discovered.map((row) => row.id)).size, 2);
     assert.isTrue(discovered.every((row) => row.league === "nhl"));
     assert.isTrue(discovered.every((row) => row.providerLeagueKey === "nhl"));
-    assert.isTrue(discovered.every((row) => row.automationEnabled === false));
+    assert.isTrue(discovered.every((row) => row.automation.status === "disabled"));
     assert.isTrue(discovered.every((row) => row.availability === "available"));
     assert.deepStrictEqual(yield* connections.listTeams(owner), discovered);
     assert.deepStrictEqual(yield* connections.listTeams(other), []);
@@ -66,7 +67,13 @@ it.effect("refreshes availability, restores teams, and preserves configuration",
     const originalId = findTeam(yield* connections.listTeams(owner), first.providerTeamKey).id;
     yield* database
       .update(providerTeams)
-      .set({ automationEnabled: true })
+      .set({
+        automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
+          _tag: "Enabled",
+          changedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
+        }),
+        automationStatus: "enabled",
+      })
       .where(
         and(
           eq(providerTeams.userId, owner),
@@ -83,18 +90,18 @@ it.effect("refreshes availability, restores teams, and preserves configuration",
     assert.strictEqual(renamed.name, "Renamed Skate");
     assert.strictEqual(renamed.id, originalId);
     assert.strictEqual(renamed.availability, "available");
-    assert.strictEqual(renamed.automationEnabled, true);
+    assert.strictEqual(renamed.automation.status, "enabled");
     assert.strictEqual(unavailable.name, "Second Skate");
     assert.strictEqual(unavailable.availability, "unavailable");
-    assert.strictEqual(unavailable.automationEnabled, false);
+    assert.strictEqual(unavailable.automation.status, "disabled");
 
     const third = team("nhl.l.1.t.3", "Third Skate");
     yield* fake.setTeams([first, second, third]);
     const restored = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
 
     assert.isTrue(restored.every((row) => row.availability === "available"));
-    assert.strictEqual(findTeam(restored, first.providerTeamKey).automationEnabled, true);
-    assert.strictEqual(findTeam(restored, third.providerTeamKey).automationEnabled, false);
+    assert.strictEqual(findTeam(restored, first.providerTeamKey).automation.status, "enabled");
+    assert.strictEqual(findTeam(restored, third.providerTeamKey).automation.status, "disabled");
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
@@ -164,7 +171,7 @@ it.effect("marks teams unavailable when their connection is disconnected", () =>
     const teams = yield* connections.listTeams(owner);
 
     assert.strictEqual(Array.getUnsafe(teams, 0).availability, "unavailable");
-    assert.strictEqual(Array.getUnsafe(teams, 0).automationEnabled, false);
+    assert.strictEqual(Array.getUnsafe(teams, 0).automation.status, "disabled");
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 

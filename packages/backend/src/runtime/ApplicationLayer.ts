@@ -23,12 +23,15 @@ import { LineupRunRepository } from "#contexts/connections/internal/LineupRunRep
 import { LineupRunsLive } from "#contexts/connections/internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "#contexts/connections/internal/LineupWorkerLive.ts";
 import { QueryRepository } from "#contexts/connections/internal/QueryRepository.ts";
+import { TeamRepository } from "#contexts/connections/internal/TeamRepository.ts";
+import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
 import { QueryTokens } from "#contexts/connections/internal/QueryTokens.ts";
 import { TransactionReviewsLive } from "#contexts/connections/internal/TransactionReviewsLive.ts";
 import { YahooProvider } from "#contexts/connections/internal/yahoo/YahooProvider.ts";
 import type { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import { lineupScopes } from "#contexts/connections/LineupScopes.ts";
 import type { LineupDispatcher, LineupWorker } from "#contexts/connections/LineupWork.ts";
+import type { Teams } from "#contexts/connections/Teams.ts";
 import { fantasyQueryScopes } from "#contexts/connections/QueryScopes.ts";
 import type { TransactionReviews } from "#contexts/connections/TransactionReview.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
@@ -95,10 +98,16 @@ const LineupRunsLayer = LineupRunsLive.pipe(
   Layer.provide(QueryRepositoryLayer),
   Layer.provide(LineupDispatcherLayer),
 );
+const TeamRepositoryLayer = TeamRepository.layer.pipe(Layer.provide(ConnectionsDatabase.layer));
+const TeamsLayer = TeamsLive.pipe(
+  Layer.provide(TeamRepositoryLayer),
+  Layer.provide(LineupRepositoryLayer),
+);
 export const ApplicationLayer = Layer.mergeAll(
   ConnectionsLayer,
   QueriesLayer,
   LineupRunsLayer,
+  TeamsLayer,
   LineupDispatcherLayer,
   LineupWorkerLayer,
   AuthLayer,
@@ -113,5 +122,6 @@ export type BackendServices =
   | FantasyQueries
   | TransactionReviews
   | LineupRuns
+  | Teams
   | LineupDispatcher
   | LineupWorker;

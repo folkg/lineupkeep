@@ -4,11 +4,13 @@ import type { Effect } from "effect";
 
 import type {
   CompleteLinkingInput,
+  CompleteReconnectInput,
   ConnectionError,
   ConnectionIdInput,
   ProviderConnection,
   ReconnectInput,
   StartLinkingInput,
+  StartReconnectInput,
 } from "./Connection.ts";
 import type { FantasyTeam } from "./FantasyTeam.ts";
 
@@ -34,6 +36,16 @@ export type ConnectionsShape = {
   readonly completeLinking: (
     userId: UserId,
     inputs: ReadonlyArray<CompleteLinkingInput>,
+  ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
+
+  readonly startReconnect: (
+    userId: UserId,
+    inputs: ReadonlyArray<StartReconnectInput>,
+  ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
+
+  readonly completeReconnect: (
+    userId: UserId,
+    inputs: ReadonlyArray<CompleteReconnectInput>,
   ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
 
   readonly reconnect: (

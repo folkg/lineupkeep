@@ -1,7 +1,6 @@
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
-import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type {
   GetLineupRunsInput,
   LineupError,
@@ -22,6 +21,7 @@ import { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import type { LineupRunsShape } from "#contexts/connections/LineupRuns.ts";
 import { LineupDispatcher } from "#contexts/connections/LineupWork.ts";
 
+import { isSettled, toLineupRun } from "./LineupRunView.ts";
 import type { NewLineupRun, RunQuery } from "./LineupRunRepository.ts";
 import { LineupRunRepository } from "./LineupRunRepository.ts";
 import { QueryRepository } from "./QueryRepository.ts";
@@ -76,7 +76,7 @@ export const LineupRunsLive = Layer.effect(
       return {
         request: input.requestId,
         delivery,
-        runs: loaded.runs.map(toPublicRun),
+        runs: loaded.runs.map(toLineupRun),
       } satisfies LineupSubmitData;
     });
 
@@ -98,7 +98,7 @@ export const LineupRunsLive = Layer.effect(
       }
       return {
         status: "ok" as const,
-        runs: result.runs.map(toPublicRun),
+        runs: result.runs.map(toLineupRun),
         observedAt: yield* DateTime.now,
         page: { returned: result.runs.length, complete: result.complete },
       } satisfies LineupRunsData;
@@ -206,103 +206,4 @@ function mapRepositoryError<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A,
       return LineupPersistenceFailed.make({ cause });
     }),
   );
-}
-
-function toPublicRun(record: {
-  readonly id: LineupRun["run"];
-  readonly requestId: string;
-  readonly teamId: TeamId;
-  readonly target: LineupRun["target"];
-  readonly trigger: LineupRun["trigger"];
-  readonly implementation: "provider_native";
-  readonly implementationVersion: string;
-  readonly status: LineupRun["status"];
-  readonly attempts: number;
-  readonly createdAt: DateTime.Utc;
-  readonly updatedAt: DateTime.Utc;
-  readonly state: import("./LineupRunWorkflow.ts").LineupRunState;
-}): LineupRun {
-  const state = record.state;
-  return {
-    run: record.id,
-    request: record.requestId,
-    team: record.teamId,
-    target: record.target,
-    trigger: record.trigger,
-    implementation: record.implementation,
-    implementationVersion: record.implementationVersion,
-    status: record.status,
-    attempts: record.attempts,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    ...(terminalOutcome(state) === undefined ? {} : { outcome: terminalOutcome(state) }),
-    ...(pendingInfo(state) === undefined ? {} : { pending: pendingInfo(state) }),
-  };
-}
-
-function terminalOutcome(
-  state: import("./LineupRunWorkflow.ts").LineupRunState,
-): LineupRun["outcome"] {
-  switch (state._tag) {
-    case "Completed":
-    case "Skipped":
-    case "Blocked":
-    case "Failed":
-    case "Uncertain":
-    case "Superseded":
-      return state.outcome;
-    case "Queued":
-    case "Reading":
-    case "Planning":
-    case "Validating":
-    case "Applying":
-    case "Verifying":
-    case "RetryWait":
-      return undefined;
-  }
-}
-
-function pendingInfo(state: import("./LineupRunWorkflow.ts").LineupRunState): LineupRun["pending"] {
-  switch (state._tag) {
-    case "RetryWait":
-      return {
-        reason: state.reason,
-        detail: state.detail,
-        retryAt: state.retryAt,
-      };
-    case "Queued":
-    case "Reading":
-    case "Planning":
-    case "Validating":
-    case "Applying":
-    case "Verifying":
-      return { reason: state._tag.toLocaleLowerCase(), detail: "The durable run is in progress." };
-    case "Completed":
-    case "Skipped":
-    case "Blocked":
-    case "Failed":
-    case "Uncertain":
-    case "Superseded":
-      return undefined;
-  }
-}
-
-function isSettled(status: LineupRun["status"]): boolean {
-  switch (status) {
-    case "completed":
-    case "skipped":
-    case "blocked":
-    case "failed":
-    case "uncertain":
-    case "superseded":
-      return true;
-    case "queued":
-    case "reading":
-    case "planning":
-    case "validating":
-    case "applying":
-    case "verifying":
-    case "retry-wait":
-      return false;
-  }
 }

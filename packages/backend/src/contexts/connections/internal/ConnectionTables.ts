@@ -1,8 +1,8 @@
 import { createSelectSchema } from "drizzle-orm/effect-schema";
 import {
-  boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -21,11 +21,14 @@ import {
 import {
   FantasyLeague,
   FantasySport,
+  TeamAutomation,
+  TeamAutomationStatus,
   TeamAvailability,
   TeamId,
 } from "#contexts/connections/FantasyTeam.ts";
 
 import { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
+import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
 export const providerConnections = pgTable(
   "provider_connections",
@@ -43,12 +46,16 @@ export const providerConnections = pgTable(
     credentialGeneration: integer("credential_generation"),
     reconnectRequiredAt: timestamp("reconnect_required_at", { withTimezone: true }),
     disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    reconnectCode: text("reconnect_code"),
+    reconnectExpiresAt: timestamp("reconnect_expires_at", { withTimezone: true }),
+    reconnectRequestId: text("reconnect_request_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("provider_connections_user_id_id_idx").on(table.userId, table.id),
     uniqueIndex("provider_connections_user_id_request_id_idx").on(table.userId, table.requestId),
+    index("provider_connections_reconnect_code_idx").on(table.reconnectCode),
   ],
 );
 
@@ -84,8 +91,10 @@ export const providerTeams = pgTable(
     availability: text("availability", { enum: ["available", "unavailable"] })
       .notNull()
       .default("available"),
-    automationEnabled: boolean("automation_enabled").notNull().default(false),
-    pausedUntil: timestamp("paused_until", { withTimezone: true }),
+    automationState: jsonb("automation_state").notNull(),
+    automationStatus: text("automation_status", {
+      enum: ["disabled", "enabled", "paused-until-fantasy-day-end"],
+    }).notNull(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -94,12 +103,21 @@ export const providerTeams = pgTable(
     primaryKey({ columns: [table.connectionId, table.providerTeamKey] }),
     uniqueIndex("provider_teams_id_idx").on(table.id),
     index("provider_teams_user_id_league_name_idx").on(table.userId, table.league, table.name),
+    index("provider_teams_user_id_automation_status_idx").on(
+      table.userId,
+      table.automationStatus,
+    ),
+    index("provider_teams_automation_status_availability_idx").on(
+      table.automationStatus,
+      table.availability,
+    ),
   ],
 );
 
-export const FantasyTeamRow = createSelectSchema(providerTeams, {
+const FantasyTeamSelect = createSelectSchema(providerTeams, {
   id: TeamId,
   connectionId: ConnectionId,
+  userId: UserId,
   provider: Provider,
   providerTeamKey: Schema.NonEmptyString,
   providerLeagueKey: Schema.NonEmptyString,
@@ -108,10 +126,133 @@ export const FantasyTeamRow = createSelectSchema(providerTeams, {
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
   name: Schema.NonEmptyString,
   availability: TeamAvailability,
+  automationState: Schema.Unknown,
+  automationStatus: TeamAutomationStatus,
   lastSeenAt: Schema.DateTimeUtcFromDate,
   createdAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
 });
+
+export const FantasyTeamRow = FantasyTeamSelect.pipe(
+  Schema.decodeTo(
+    Schema.Struct({
+      id: TeamId,
+      connectionId: ConnectionId,
+      userId: UserId,
+      provider: Provider,
+      providerTeamKey: Schema.NonEmptyString,
+      providerLeagueKey: Schema.NonEmptyString,
+      league: FantasyLeague,
+      sport: FantasySport,
+      season: Schema.Int.check(Schema.isGreaterThan(1900)),
+      name: Schema.NonEmptyString,
+      availability: TeamAvailability,
+      automation: TeamAutomation,
+      lastSeenAt: Schema.DateTimeUtc,
+      createdAt: Schema.DateTimeUtc,
+      updatedAt: Schema.DateTimeUtc,
+    }).pipe(Schema.toType),
+    SchemaTransformation.transformEffect({
+      decode: (row) =>
+        Effect.gen(function* () {
+          const state = yield* SchemaParser.decodeUnknownEffect(
+            Schema.toCodecJson(TeamAutomationState),
+          )(row.automationState);
+          if (teamAutomationStateStatus(state) !== row.automationStatus) {
+            return yield* Effect.die(
+              new Error("The stored team automation status does not match its state"),
+            );
+          }
+          return {
+            id: row.id,
+            connectionId: row.connectionId,
+            userId: row.userId,
+            provider: row.provider,
+            providerTeamKey: row.providerTeamKey,
+            providerLeagueKey: row.providerLeagueKey,
+            league: row.league,
+            sport: row.sport,
+            season: row.season,
+            name: row.name,
+            availability: row.availability,
+            automation: automationView(state),
+            lastSeenAt: row.lastSeenAt,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          };
+        }),
+      encode: (team) =>
+        Effect.gen(function* () {
+          const state = stateFromAutomation(team.automation);
+          const automationState = yield* SchemaParser.encodeEffect(
+            Schema.toCodecJson(TeamAutomationState),
+          )(state);
+          return {
+            ...team,
+            automationState,
+            automationStatus: teamAutomationStateStatus(state),
+          };
+        }),
+    }),
+  ),
+);
+
+export function teamAutomationStateStatus(state: TeamAutomationState): TeamAutomationStatus {
+  switch (state._tag) {
+    case "Disabled":
+      return "disabled";
+    case "Enabled":
+      return "enabled";
+    case "PausedUntilFantasyDayEnd":
+      return "paused-until-fantasy-day-end";
+  }
+}
+
+function automationView(state: TeamAutomationState): TeamAutomation {
+  switch (state._tag) {
+    case "Disabled":
+    case "Enabled":
+      return { status: teamAutomationStateStatus(state), changedAt: state.changedAt };
+    case "PausedUntilFantasyDayEnd":
+      return {
+        status: "paused-until-fantasy-day-end",
+        changedAt: state.changedAt,
+        pausedAt: state.pausedAt,
+        resumesAt: state.resumesAt,
+        timeZone: state.timeZone,
+        fantasyDay: state.fantasyDay,
+        policyVersion: state.policyVersion,
+      };
+  }
+}
+
+function stateFromAutomation(automation: TeamAutomation): TeamAutomationState {
+  switch (automation.status) {
+    case "disabled":
+      return { _tag: "Disabled", changedAt: automation.changedAt };
+    case "enabled":
+      return { _tag: "Enabled", changedAt: automation.changedAt };
+    case "paused-until-fantasy-day-end":
+      if (
+        automation.pausedAt === undefined ||
+        automation.resumesAt === undefined ||
+        automation.timeZone === undefined ||
+        automation.fantasyDay === undefined ||
+        automation.policyVersion === undefined
+      ) {
+        throw new Error("A paused team is missing its fantasy-day boundary");
+      }
+      return {
+        _tag: "PausedUntilFantasyDayEnd",
+        changedAt: automation.changedAt,
+        pausedAt: automation.pausedAt,
+        resumesAt: automation.resumesAt,
+        timeZone: automation.timeZone,
+        fantasyDay: automation.fantasyDay,
+        policyVersion: automation.policyVersion,
+      };
+  }
+}
 
 const Row = createSelectSchema(providerConnections, {
   id: ConnectionId,
@@ -122,11 +263,23 @@ const Row = createSelectSchema(providerConnections, {
   credentialGeneration: Schema.NullOr(ConnectionCredentialGeneration),
   reconnectRequiredAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   disconnectedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  reconnectCode: Schema.NullOr(Schema.String),
+  reconnectExpiresAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  reconnectRequestId: Schema.NullOr(Schema.String),
   createdAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
 });
 
-const Identity = Struct.pick(Row.fields, ["id", "userId", "requestId", "pairingCode", "createdAt"]);
+const Identity = Struct.pick(Row.fields, [
+  "id",
+  "userId",
+  "requestId",
+  "pairingCode",
+  "reconnectCode",
+  "reconnectExpiresAt",
+  "reconnectRequestId",
+  "createdAt",
+]);
 const LifecycleConnection = Schema.Struct({ ...Identity, state: ConnectionLifecycleState }).pipe(
   Schema.toType,
 );
@@ -168,6 +321,9 @@ export const ConnectionRow = Row.pipe(
             userId: row.userId,
             requestId: row.requestId,
             pairingCode: row.pairingCode,
+            reconnectCode: row.reconnectCode,
+            reconnectExpiresAt: row.reconnectExpiresAt,
+            reconnectRequestId: row.reconnectRequestId,
             createdAt: row.createdAt,
             state,
           })),
