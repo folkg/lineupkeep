@@ -41,9 +41,9 @@ it.effect("accepts a client error report with the request id as ref", () =>
       {
         kind: "client_error",
         message: "Cannot read properties of undefined",
-        thrownIn: "<App> › <NotesPage> › <NoteList>",
-        caughtBy: "<App> › <NotesPage> › <Errored>",
-        pathname: "/notes",
+        thrownIn: "<App> › <ConnectionsPage> › <ConnectionList>",
+        caughtBy: "<App> › <ConnectionsPage> › <Errored>",
+        pathname: "/connections",
         clientTraceId: "0af7651916cd43dd8448eb211c80319c",
       },
       budget,
@@ -86,7 +86,7 @@ it.effect("records server errors with site and paths", () =>
       {
         kind: "render",
         handling: "fallback",
-        ownerPath: "<App> › <NotesPage>",
+        ownerPath: "<App> › <ConnectionsPage>",
         boundaryPath: "<App> › <Errored>",
       },
       budget,
@@ -105,7 +105,7 @@ it.effect("records server errors with site and paths", () =>
 it.effect("records slow SSR boundaries with wait facts", () =>
   Effect.gen(function* () {
     const { result, span } = yield* recordSlowBoundary({
-      ownerPath: "<App> › <NotesPage> › <Loading>",
+      ownerPath: "<App> › <ConnectionsPage> › <Loading>",
       durationMs: 640.4,
       outcome: "settled",
       passes: 2,

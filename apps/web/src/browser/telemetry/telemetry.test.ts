@@ -13,17 +13,17 @@ it("classifies a client error without reading arbitrary exception text", () => {
 
   const report = buildClientErrorReport(
     error,
-    { ownerPath: ["<App>", "<NotesPage>"], boundaryPath: ["<App>", "<Errored>"] },
-    { pathname: "/notes" },
+    { ownerPath: ["<App>", "<ConnectionsPage>"], boundaryPath: ["<App>", "<Errored>"] },
+    { pathname: "/connections" },
     "0af7651916cd43dd8448eb211c80319c",
   );
 
   expect(report).toEqual({
     kind: "client_error",
     message: "ui.boundary_caught",
-    thrownIn: "<App> › <NotesPage>",
+    thrownIn: "<App> › <ConnectionsPage>",
     caughtBy: "<App> › <Errored>",
-    pathname: "/notes",
+    pathname: "/connections",
     clientTraceId: "0af7651916cd43dd8448eb211c80319c",
   });
   expect(JSON.stringify(report)).not.toContain("private-");
@@ -48,7 +48,7 @@ it("builds a slow interaction report from holds", () => {
     settledMs: 840,
     holds: [
       {
-        blockers: ["saveNote"],
+        blockers: ["startLinking"],
         holdMs: 812,
         acknowledgements: [],
       },
@@ -62,7 +62,7 @@ it("builds a slow interaction report from holds", () => {
     name: "click",
     target: 'button#save "Save"',
     settledMs: 840,
-    holds: [{ blockers: "saveNote", holdMs: 812, acknowledged: false }],
+    holds: [{ blockers: "startLinking", holdMs: 812, acknowledged: false }],
   });
 });
 

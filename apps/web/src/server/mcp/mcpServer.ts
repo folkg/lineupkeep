@@ -5,12 +5,12 @@ import { Toolkit } from "effect/ai";
 
 import { runBackend } from "#server/backendEntry.ts";
 
+import { connectionToolHandlers, connectionTools } from "./connectionTools";
 import { mcpRequest } from "./mcpEndpoint";
-import { noteToolHandlers, noteTools } from "./noteTools";
 
-export const applicationTools = Toolkit.merge(noteTools);
-const applicationHandlers = (userId: UserId): ReturnType<typeof noteToolHandlers> =>
-  Layer.mergeAll(noteToolHandlers(userId));
+export const applicationTools = Toolkit.merge(connectionTools);
+const applicationHandlers = (userId: UserId): ReturnType<typeof connectionToolHandlers> =>
+  connectionToolHandlers(userId);
 
 export function handleMcpRequest(
   request: Request,

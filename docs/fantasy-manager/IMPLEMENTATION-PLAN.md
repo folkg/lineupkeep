@@ -93,7 +93,7 @@ These implement the accepted rules but have not been separately approved:
 | Stage | Deliverable                                                             |
 | ----- | ----------------------------------------------------------------------- |
 | 0     | Ready/fixed starter, name/path approval, contract and feasibility gates |
-| 1     | Independent validated baseline; example Notes removed separately        |
+| 1     | Independent validated baseline; Notes demo removed, connections started |
 | 2     | Local linking, encrypted connections, exact team discovery              |
 | 3     | Generic rich-query MCP and safe transaction-review links                |
 | 4     | Durable native `set_lineup`, verified/pending results, recovery         |

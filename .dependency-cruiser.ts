@@ -2,7 +2,7 @@ import type { IConfiguration, IRegularForbiddenRuleType } from "dependency-cruis
 
 const permittedContextImports = {
   auth: [],
-  notes: ["contexts/auth/User.ts"],
+  connections: ["contexts/auth/User.ts"],
 };
 
 const backendRoot = "^packages/backend/src/";

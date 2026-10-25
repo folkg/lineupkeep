@@ -1,0 +1,122 @@
+import { assert, it } from "@effect/vitest";
+import { MachineTest } from "@typeonce/effect-machine/testing";
+import { Arbitrary, DateTime, Effect, Schema } from "effect";
+
+import { UserId } from "#contexts/auth/User.ts";
+import { decodeConnectionId } from "#contexts/connections/Connection.ts";
+import { snapshotOf } from "#utilities/machine.ts";
+
+import { ConnectionLifecycleWorkflow } from "./ConnectionLifecycleWorkflow.ts";
+import { ConnectionRow } from "./ConnectionTables.ts";
+
+it.effect("round-trips every explored lifecycle state through its row codec", () =>
+  Effect.gen(function* () {
+    const explored = yield* MachineTest.explore(ConnectionLifecycleWorkflow, {
+      input,
+      events: () => [cancel],
+      stateKey: ({ snapshot }) => JSON.stringify(snapshot),
+    });
+    assert.strictEqual(explored.completeness._tag, "Complete");
+    assert.strictEqual(explored.transitionCoverage.definitions.missing, 0);
+    for (const { snapshot } of explored.nodes) {
+      const record = {
+        id: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
+        userId: yield* Schema.decodeEffect(UserId)("owner"),
+        requestId: "request",
+        createdAt: at,
+        state: snapshot.state.value,
+      };
+      const row = yield* Schema.encodeEffect(ConnectionRow)(record);
+      const decoded = yield* Schema.decodeEffect(ConnectionRow)(row);
+      const restored = yield* snapshotOf(ConnectionLifecycleWorkflow, decoded.state);
+
+      assert.strictEqual(row.provider, record.state.provider);
+      assert.deepStrictEqual(row.updatedAt, DateTime.toDateUtc(record.state.updatedAt));
+      assert.deepStrictEqual(restored, snapshot);
+      assert.deepStrictEqual(yield* Schema.encodeEffect(ConnectionRow)(decoded), row);
+      assert.strictEqual(decoded.id, record.id);
+      assert.strictEqual(decoded.userId, record.userId);
+      assert.strictEqual(decoded.requestId, record.requestId);
+      assert.deepStrictEqual(decoded.createdAt, record.createdAt);
+    }
+  }),
+);
+
+it.effect("round-trips generated lifecycle data and timestamp edges", () =>
+  Effect.gen(function* () {
+    const generated = Arbitrary.schema(
+      Schema.Struct({
+        millis: Schema.Int.check(
+          Schema.isBetween({ minimum: -8_640_000_000_000_000, maximum: 8_640_000_000_000_000 }),
+        ),
+      }),
+    );
+    const result = yield* Arbitrary.checkEffect(
+      generated,
+      ({ millis }) =>
+        Effect.gen(function* () {
+          const time = DateTime.makeUnsafe(millis);
+          const record = {
+            id: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
+            userId: yield* Schema.decodeEffect(UserId)("owner"),
+            requestId: "request",
+            createdAt: time,
+            state: {
+              _tag: "Linking" as const,
+              provider: "yahoo" as const,
+              expiresAt: time,
+              updatedAt: at,
+            },
+          };
+          for (const state of [
+            record.state,
+            {
+              _tag: "Disconnected" as const,
+              provider: "yahoo" as const,
+              disconnectedAt: time,
+              updatedAt: time,
+            },
+          ]) {
+            const row = yield* Schema.encodeEffect(ConnectionRow)({ ...record, state });
+            const decoded = yield* Schema.decodeEffect(ConnectionRow)(row);
+            if (
+              !Schema.toEquivalence(Schema.toType(ConnectionRow))(decoded, { ...record, state })
+            ) {
+              return false;
+            }
+          }
+          return true;
+        }),
+      { seed: 20261021, runs: 100 },
+    );
+
+    assert.strictEqual(result._tag, "Passed", Arbitrary.formatCheckFailure(result));
+  }),
+);
+
+it.effect("rejects a linking row without an expiry through its codec", () =>
+  Effect.gen(function* () {
+    const malformed = {
+      id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
+      userId: "owner",
+      requestId: "request",
+      provider: "yahoo",
+      status: "linking",
+      expiresAt: null,
+      disconnectedAt: null,
+      createdAt: at,
+      updatedAt: at,
+    };
+
+    assert.isTrue(yield* Effect.isFailure(Schema.decodeUnknownEffect(ConnectionRow)(malformed)));
+  }),
+);
+
+const at = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
+const input = {
+  _tag: "Linking" as const,
+  provider: "yahoo" as const,
+  expiresAt: DateTime.makeUnsafe("2026-01-01T00:10:00Z"),
+  updatedAt: at,
+};
+const cancel = { _tag: "LinkCancelled" as const, at: DateTime.makeUnsafe("2026-01-02T00:00:00Z") };

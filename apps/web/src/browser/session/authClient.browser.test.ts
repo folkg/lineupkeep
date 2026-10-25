@@ -6,7 +6,7 @@ it.each(["email", "google"] as const)(
   "carries the raw signed OAuth query through %s sign-in",
   async (method) => {
     const rawQuery =
-      "?client_id=https%3A%2F%2Fclient.test%2Fmeta&ba_param=client_id&ba_param=scope&scope=notes%3Aread+notes%3Awrite&sig=a%2Bb%2Fc%3D";
+      "?client_id=https%3A%2F%2Fclient.test%2Fmeta&ba_param=client_id&ba_param=scope&scope=connections%3Aread+connections%3Awrite&sig=a%2Bb%2Fc%3D";
     using _history = setupHistory(rawQuery);
     const authClient = makeAuthClient((_input, init) => {
       if (typeof init?.body !== "string") {
@@ -18,7 +18,7 @@ it.each(["email", "google"] as const)(
     const response =
       method === "email"
         ? await authClient.signIn.emailOtp({ email: "reader@example.test", otp: "123456" })
-        : await authClient.signIn.social({ provider: "google", callbackURL: "/notes" });
+        : await authClient.signIn.social({ provider: "google", callbackURL: "/connections" });
 
     expect(response.error).toBeNull();
     expect(response.data).toMatchObject({ posted: { oauth_query: rawQuery.slice(1) } });

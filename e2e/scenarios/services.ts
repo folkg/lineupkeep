@@ -1,62 +1,45 @@
-import {
-  CreateNoteInput,
-  ListNotesInput,
-  NoteIdInput,
-  UpdateNoteInput,
-} from "@lineupkeep/backend/notes/Note";
-import type { Note } from "@lineupkeep/backend/notes/Note";
-import { Notes } from "@lineupkeep/backend/notes/Notes";
-import { Array, Effect, Schema } from "effect";
+import { ConnectionIdInput, StartLinkingInput } from "@lineupkeep/backend/connections/Connection";
+import type { ProviderConnection } from "@lineupkeep/backend/connections/Connection";
+import { Connections } from "@lineupkeep/backend/connections/Connections";
+import { Array, DateTime, Effect, Schema } from "effect";
 
 import type { ServiceProgram } from "#e2e/serviceContract.ts";
 
-export const createNote: ServiceProgram = (user, arguments_) =>
+export const startLinking: ServiceProgram = (user, arguments_) =>
   Effect.gen(function* () {
-    const input = yield* Schema.decodeUnknownEffect(CreateNoteInput)(arguments_);
-    const notes = yield* Notes;
-    const note = Array.getUnsafe(yield* notes.create(user.id, [input]), 0);
-    return observeNote(note);
+    const input = yield* Schema.decodeUnknownEffect(StartLinkingInput)(arguments_);
+    const connections = yield* Connections;
+    const connection = Array.getUnsafe(yield* connections.startLinking(user.id, [input]), 0);
+    return observeConnection(connection);
   });
 
-export const createNotes: ServiceProgram = (user, arguments_) =>
+export const startLinkingBatch: ServiceProgram = (user, arguments_) =>
   Effect.gen(function* () {
-    const inputs = yield* Schema.decodeUnknownEffect(Schema.Array(CreateNoteInput))(arguments_);
-    const notes = yield* Notes;
-    return (yield* notes.create(user.id, inputs)).map(observeNote);
+    const inputs = yield* Schema.decodeUnknownEffect(Schema.Array(StartLinkingInput))(arguments_);
+    const connections = yield* Connections;
+    return (yield* connections.startLinking(user.id, inputs)).map(observeConnection);
   });
 
-export const updateNotes: ServiceProgram = (user, arguments_) =>
+export const cancelLinking: ServiceProgram = (user, arguments_) =>
   Effect.gen(function* () {
-    const inputs = yield* Schema.decodeUnknownEffect(Schema.Array(UpdateNoteInput))(arguments_);
-    const notes = yield* Notes;
-    return (yield* notes.update(user.id, inputs)).map(observeNote);
+    const input = yield* Schema.decodeUnknownEffect(ConnectionIdInput)(arguments_);
+    const connections = yield* Connections;
+    const connection = Array.getUnsafe(yield* connections.cancelLinking(user.id, [input]), 0);
+    return observeConnection(connection);
   });
 
-export const readNotes: ServiceProgram = (user, arguments_) =>
+export const cancelLinkingBatch: ServiceProgram = (user, arguments_) =>
   Effect.gen(function* () {
-    const input = yield* Schema.decodeUnknownEffect(ListNotesInput)(arguments_);
-    const notes = yield* Notes;
-    return (yield* notes.list(user.id, input)).items.map(observeNote);
+    const inputs = yield* Schema.decodeUnknownEffect(Schema.Array(ConnectionIdInput))(arguments_);
+    const connections = yield* Connections;
+    return (yield* connections.cancelLinking(user.id, inputs)).map(observeConnection);
   });
 
-export const trashNote: ServiceProgram = (user, arguments_) =>
+export const readConnections: ServiceProgram = (user, arguments_) =>
   Effect.gen(function* () {
-    const input = yield* Schema.decodeUnknownEffect(NoteIdInput)(arguments_);
-    const notes = yield* Notes;
-    const note = Array.getUnsafe(yield* notes.moveToTrash(user.id, [input]), 0);
-    return observeNote(note);
-  });
-
-export const seedTrash: ServiceProgram = (user, arguments_) =>
-  Effect.gen(function* () {
-    const inputs = yield* Schema.decodeUnknownEffect(Schema.Array(CreateNoteInput))(arguments_);
-    const notes = yield* Notes;
-    const created = yield* notes.create(user.id, inputs);
-    yield* notes.moveToTrash(
-      user.id,
-      created.map((note) => ({ id: note.id })),
-    );
-    return { count: inputs.length, ids: created.map((note) => note.id) };
+    yield* Schema.decodeUnknownEffect(Schema.Struct({}))(arguments_);
+    const connections = yield* Connections;
+    return (yield* connections.list(user.id)).map(observeConnection);
   });
 
 export const rejectOperation: ServiceProgram = (_user, arguments_) =>
@@ -71,6 +54,22 @@ export const nonJsonResult: ServiceProgram = (_user, arguments_) =>
     return 1n;
   });
 
-function observeNote(note: Note): Pick<Note, "id" | "title" | "body" | "lifecycle"> {
-  return { id: note.id, title: note.title, body: note.body, lifecycle: note.lifecycle };
+function observeConnection(connection: ProviderConnection): ObservedConnection {
+  return {
+    id: connection.id,
+    status: connection.status,
+    ...(connection.linkingExpiresAt === undefined
+      ? {}
+      : { linkingExpiresAt: DateTime.formatIso(connection.linkingExpiresAt) }),
+    ...(connection.disconnectedAt === undefined
+      ? {}
+      : { disconnectedAt: DateTime.formatIso(connection.disconnectedAt) }),
+  };
 }
+
+type ObservedConnection = {
+  readonly id: string;
+  readonly status: ProviderConnection["status"];
+  readonly linkingExpiresAt?: string;
+  readonly disconnectedAt?: string;
+};

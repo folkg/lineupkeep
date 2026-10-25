@@ -22,7 +22,7 @@ These are local reference paths, not build-time dependencies.
 - Independent jj repository: one flattened starter baseline, then a Lineupkeep identity/preparation change.
 - All 17 planning documents copied, with current setup/name annotations where appropriate.
 - Product/brand guidance, the owner-selected royal violet and gold palette, semantic light/dark tokens, self-hosted typography, wordmark, favicon, and an Impeccable design sidecar.
-- Retained starter platform and demo for regression checks; no fantasy application implementation.
+- Retained starter platform with the first connections vertical; the Notes demo is removed and no fantasy-provider integration is implemented.
 - Independent package namespace, local resource labels, stack/resource identities, and telemetry names. No existing cloud state was renamed or imported.
 - Fresh dependencies; source dependencies, environment, outputs, browser sessions, cloud state, and VCS history were not copied.
 
@@ -53,7 +53,7 @@ The autonomous handoff does not waive publication security, billing authorizatio
 
 Use [the Phase 1 execution prompt](docs/PHASE-1-HANDOFF.md#prompt-for-the-next-agent) to assign the entire implementation. Start with bounded local-linking feasibility and the first connection/team-discovery slice, not the optimizer; then continue through Phase 1 without requesting a separate assignment for every slice. Inspect the proposed public seams, retain sound starter auth/runtime/MCP behavior, and prove ownership and recovery using a behavioral provider fake and disposable PostgreSQL. Establish local-helper pairing feasibility before investing in its full UI. Real Yahoo access requires a separately scoped approval.
 
-Do not recopy the starter or rebuild the platform. Remove Notes as a separate reviewed change when beginning the fantasy context; add only the types, persistence, and services required by each vertical slice. Defer custom scoring/solver work to Phase 2, and carry the security fix as a tracked pre-publication gate. Do not add speculative provider frameworks or alternative hosting targets.
+Do not recopy the starter or rebuild the platform. The Notes demo is removed; add only the types, persistence, and services required by each vertical slice. Defer custom scoring/solver work to Phase 2, and carry the security fix as a tracked pre-publication gate. Do not add speculative provider frameworks or alternative hosting targets.
 
 Phase 1 comes before the custom optimizer. Cloud Run + fresh Neon Free is the chosen target, with two min-zero request-billed services; the copied infrastructure is an undeployed scaffold, not proof of free-tier fit. Its original host defaults still require the planned implementation work.
 

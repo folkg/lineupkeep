@@ -322,7 +322,7 @@ it.effect(
       const adapter = yield* BetterAuthAdapter;
 
       const response = yield* adapter.handle(
-        authRequest("/sign-in/social", { provider: "google", callbackURL: "/notes" }),
+        authRequest("/sign-in/social", { provider: "google", callbackURL: "/connections" }),
       );
 
       const body = yield* jsonOf(response, Schema.Struct({ url: Schema.String }));
@@ -388,10 +388,10 @@ it.effect(
         .replaceAll("=", "");
       const query = new URLSearchParams({
         response_type: "code",
-        client_id: "https://notes-client.test/client.json",
+        client_id: "https://connections-client.test/client.json",
         redirect_uri: "http://127.0.0.1:19999/callback",
         resource: "http://localhost:5173/mcp",
-        scope: "notes:read",
+        scope: "connections:read",
         state: "client-state",
         code_challenge: challenge,
         code_challenge_method: "S256",
@@ -408,7 +408,7 @@ it.effect(
       const social = yield* adapter.handle(
         authRequest("/sign-in/social", {
           provider: "google",
-          callbackURL: "/notes",
+          callbackURL: "/connections",
           oauth_query: login.search.slice(1),
         }),
       );
@@ -452,7 +452,7 @@ it.effect(
       assert.strictEqual(consent.searchParams.get("state"), "client-state");
       assert.strictEqual(
         consent.searchParams.get("client_id"),
-        "https://notes-client.test/client.json",
+        "https://connections-client.test/client.json",
       );
       assert.isTrue(consent.searchParams.has("sig"));
       assert.strictEqual(
@@ -511,7 +511,7 @@ it.effect(
         Effect.promise(() =>
           signer.api.signJWT({
             body: {
-              payload: { sub: "reader", scope: "notes:read", exp: 4_000_000_000, ...claims },
+              payload: { sub: "reader", scope: "connections:read", exp: 4_000_000_000, ...claims },
             },
           }),
         );
@@ -522,13 +522,16 @@ it.effect(
       const wrongIssuer = yield* token({ iss: "https://other.example/api/auth" });
       const proofBound = yield* token({ cnf: { jkt: "proof-required" } });
 
-      assert.deepStrictEqual(yield* adapter.resolveAccessToken(valid.token, ["notes:read"]), {
+      assert.deepStrictEqual(yield* adapter.resolveAccessToken(valid.token, ["connections:read"]), {
         status: "authenticated",
         userId: decodeUserId("reader"),
       });
-      assert.deepStrictEqual(yield* adapter.resolveAccessToken(valid.token, ["notes:write"]), {
-        status: "insufficient_scope",
-      });
+      assert.deepStrictEqual(
+        yield* adapter.resolveAccessToken(valid.token, ["connections:write"]),
+        {
+          status: "insufficient_scope",
+        },
+      );
       for (const invalid of [
         wrongAudience.token,
         expired.token,
@@ -536,7 +539,7 @@ it.effect(
         proofBound.token,
         "not.a.token",
       ]) {
-        assert.deepStrictEqual(yield* adapter.resolveAccessToken(invalid, ["notes:read"]), {
+        assert.deepStrictEqual(yield* adapter.resolveAccessToken(invalid, ["connections:read"]), {
           status: "invalid",
         });
       }
@@ -553,9 +556,9 @@ it.effect(
       const second = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
       const query = new URLSearchParams({
         response_type: "code",
-        client_id: "https://notes-client.test/client.json",
+        client_id: "https://connections-client.test/client.json",
         redirect_uri: "http://127.0.0.1:19999/callback",
-        scope: "notes:read",
+        scope: "connections:read",
         resource: "http://localhost:5173/mcp",
         code_challenge: "a".repeat(43),
         code_challenge_method: "S256",
@@ -590,7 +593,7 @@ it.effect(
       );
       const clients = yield* Effect.promise(() => database.select().from(oauthClient));
       assert.strictEqual(clients.length, 1);
-      assert.strictEqual(clients[0]?.clientId, "https://notes-client.test/client.json");
+      assert.strictEqual(clients[0]?.clientId, "https://connections-client.test/client.json");
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -624,9 +627,9 @@ it.effect(
         .replaceAll("=", "");
       const query = new URLSearchParams({
         response_type: "code",
-        client_id: "https://notes-client.test/client.json",
+        client_id: "https://connections-client.test/client.json",
         redirect_uri: "http://127.0.0.1:19999/callback",
-        scope: "notes:read notes:write offline_access",
+        scope: "connections:read connections:write offline_access",
         resource: "http://localhost:5173/mcp",
         code_challenge: challenge,
         code_challenge_method: "S256",
@@ -654,9 +657,9 @@ it.effect(
       assert.deepStrictEqual(client, {
         status: "valid",
         client: {
-          id: "https://notes-client.test/client.json",
-          name: "Notes test client",
-          host: "notes-client.test",
+          id: "https://connections-client.test/client.json",
+          name: "Lineupkeep test client",
+          host: "connections-client.test",
         },
         scopes: [
           ...testScopeDefinitions,
@@ -675,7 +678,7 @@ it.effect(
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
             grant_type: "authorization_code",
-            client_id: "https://notes-client.test/client.json",
+            client_id: "https://connections-client.test/client.json",
             redirect_uri: "http://127.0.0.1:19999/callback",
             resource: "http://localhost:5173/mcp",
             code_verifier: verifier,
@@ -719,7 +722,7 @@ it.effect(
             headers: { "content-type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
               grant_type: "refresh_token",
-              client_id: "https://notes-client.test/client.json",
+              client_id: "https://connections-client.test/client.json",
               resource: "http://localhost:5173/mcp",
               refresh_token: token,
             }),
@@ -733,7 +736,7 @@ it.effect(
       );
       assert.notStrictEqual(rotated.refresh_token, credentials.refresh_token);
       assert.propertyVal(
-        yield* adapter.resolveAccessToken(rotated.access_token, ["notes:write"]),
+        yield* adapter.resolveAccessToken(rotated.access_token, ["connections:write"]),
         "status",
         "authenticated",
       );
@@ -751,7 +754,7 @@ it.effect(
         Schema.Struct({ access_token: Schema.String, refresh_token: Schema.String }),
       );
       assert.propertyVal(
-        yield* adapter.resolveAccessToken(offline.access_token, ["notes:read"]),
+        yield* adapter.resolveAccessToken(offline.access_token, ["connections:read"]),
         "status",
         "authenticated",
       );
@@ -760,7 +763,7 @@ it.effect(
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
-            client_id: "https://notes-client.test/client.json",
+            client_id: "https://connections-client.test/client.json",
             token: offline.refresh_token,
             token_type_hint: "refresh_token",
           }),
@@ -769,7 +772,7 @@ it.effect(
       assert.strictEqual(revoked.status, 200);
       assert.strictEqual((yield* refresh(offline.refresh_token)).status, 400);
       assert.propertyVal(
-        yield* adapter.resolveAccessToken(offline.access_token, ["notes:read"]),
+        yield* adapter.resolveAccessToken(offline.access_token, ["connections:read"]),
         "status",
         "authenticated",
       );
@@ -782,7 +785,9 @@ it.effect(
           .where(isNotNull(oauthRefreshToken.revoked)),
       );
       assert.strictEqual((yield* refresh(credentials.refresh_token)).status, 400);
-      const identity = yield* adapter.resolveAccessToken(credentials.access_token, ["notes:write"]);
+      const identity = yield* adapter.resolveAccessToken(credentials.access_token, [
+        "connections:write",
+      ]);
       assert.propertyVal(identity, "status", "authenticated");
       assert.propertyVal(identity, "userId", (yield* adapter.getSession(headers))?.user.id);
     }).pipe(
@@ -794,7 +799,7 @@ it.effect(
             Promise.resolve(
               Response.json({
                 client_id: request.url,
-                client_name: "Notes test client",
+                client_name: "Lineupkeep test client",
                 redirect_uris: ["http://127.0.0.1:19999/callback"],
                 grant_types: ["authorization_code", "refresh_token"],
                 response_types: ["code"],
@@ -818,7 +823,7 @@ it.effect(
         client_id: "https://large-client.test/client.json",
         redirect_uri: "http://127.0.0.1:19999/callback",
         response_type: "code",
-        scope: "notes:read",
+        scope: "connections:read",
         resource: "http://localhost:5173/mcp",
         code_challenge: "a".repeat(43),
         code_challenge_method: "S256",
@@ -854,7 +859,7 @@ const testMetadata = PublicInternet.fromTransport((request) =>
   Promise.resolve(
     Response.json({
       client_id: request.url,
-      client_name: "Notes test client",
+      client_name: "Lineupkeep test client",
       redirect_uris: ["http://127.0.0.1:19999/callback"],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
@@ -864,8 +869,8 @@ const testMetadata = PublicInternet.fromTransport((request) =>
 );
 
 const testScopeDefinitions = [
-  { name: "notes:read", description: "Read test documents." },
-  { name: "notes:write", description: "Change test documents." },
+  { name: "connections:read", description: "Read test documents." },
+  { name: "connections:write", description: "Change test documents." },
 ] as const;
 const testScopes = Layer.succeed(AuthorizationScopes)(testScopeDefinitions);
 

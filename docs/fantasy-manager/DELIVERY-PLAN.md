@@ -48,12 +48,12 @@ Tasks:
 
 - Copy the approved starter without VCS metadata, dependencies, caches, build outputs, env/secrets, or resolved cloud resource references.
 - Establish the successor's own version control and product identity. Leave both AutoCoach and rush-hour untouched.
-- Validate the unchanged baseline first; remove the example Notes feature as a separate reviewed change, not intertwined with fantasy implementation.
+- The unchanged baseline was validated; the example Notes feature is removed in its own reviewed change, and the first connections vertical replaces its test scaffolding.
 - Keep registration, auth/OAuth/MCP, observability, runtime, email transport, frontend stack, and dependency boundaries where applicable. Do not rewrite working infrastructure because this is a ground-up domain rewrite.
 - Establish one fantasy context with focused services, branded opaque IDs, generic period references, minimal domain schemas, expected errors, and test Layers. Do not add speculative multi-provider or multi-cloud frameworks.
 - Record machine-state codecs and owner-filtered, batch-first persistence conventions. Start with real migrated storage tests.
 
-**Exit:** baseline checks pass; no example Notes behavior remains; no old/starter resource identities or hardcoded owner; all new tests prove failures before their implementations.
+**Exit:** baseline checks pass; no example Notes behavior remains; no old/starter resource identities or hardcoded owner; new tests prove failures before their implementations.
 
 ## Stage 2 — Local linking and exact team discovery
 

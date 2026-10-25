@@ -40,11 +40,13 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
       project: ["**/*.ts"],
     },
     "apps/web": {
+      ...(production === true ? { ignore: productionTestOnlyFiles } : {}),
       ignoreDependencies: [
         "@solidjs/diagnostics",
         "@solidjs/vite-plugin!",
         "@tailwindcss/vite!",
         "cloudflare",
+        ...(production === true ? ["@kobalte/core"] : []),
       ],
       project: ["src/**/*.ts!", "src/**/*.tsx!", "src/**/*.css!", "!src/**/*Test.ts!"],
       entry: ["src/server/targets/*.ts!", "deploy/**/*.ts"],
@@ -60,14 +62,23 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
   },
 });
 
+const productionTestOnlyFiles = [
+  "src/browser/navigation/UnsavedChanges.tsx",
+  "src/browser/navigation/useUnsavedChanges.ts",
+  "src/browser/shared-ui/ConfirmDialog.tsx",
+  "src/browser/shared-ui/SearchField.tsx",
+  "src/browser/timing/delay.ts",
+];
+
 const productionTestSeams: Record<string, Array<"exports" | "types">> = {
   "tools/local-stack/*.ts": ["exports", "types"],
   "packages/backend/src/**/*Test.ts": ["exports", "types"],
   "packages/backend/src/database/dbUtilities.ts": ["exports"],
   "packages/backend/src/contexts/auth/User.ts": ["exports"],
   "packages/backend/src/contexts/auth/AuthSession.ts": ["types"],
-  "packages/backend/src/contexts/notes/Note.ts": ["exports"],
+  "packages/backend/src/contexts/connections/Connection.ts": ["exports"],
   "apps/web/src/browser/session/authClient.ts": ["exports"],
+  "apps/web/src/browser/shared-ui/icons.tsx": ["exports"],
   "apps/web/src/browser/telemetry/telemetry.ts": ["exports", "types"],
   "apps/web/src/server/mcp/mcpServer.ts": ["exports"],
   "apps/web/src/server/telemetry/telemetryServer.ts": ["exports"],

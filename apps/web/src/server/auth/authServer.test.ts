@@ -19,7 +19,7 @@ it.each([{ query: "signed", accept: "true" }, { query: "signed" }, { query: "", 
 
 it("preserves signed repeated parameters and encoded bytes in both consent inputs", () => {
   const query =
-    "oauth_query=scope%3Dnotes%253Aread%26scope%3Doffline_access&sig=a%2Bb+%20&scope=x&scope=y";
+    "oauth_query=scope%3Dconnections%253Aread%26scope%3Doffline_access&sig=a%2Bb+%20&scope=x&scope=y";
 
   expect(Schema.decodeSync(ConsentRequestInput)({ query })).toEqual({ query });
   expect(Schema.decodeSync(ConsentDecisionInput)({ query, accept: true })).toEqual({

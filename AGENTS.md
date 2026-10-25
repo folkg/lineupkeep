@@ -8,7 +8,7 @@ Read [START-HERE.md](START-HERE.md), [PRODUCT.md](PRODUCT.md), the [implementati
 
 Use jj, not Git. Keep work as focused, described jj changes; finish a completed task with a fresh empty working copy. Never rewrite the source starter or AutoCoach repository. No remote or production resources are configured.
 
-The approved identity is Lineupkeep, lowercase lineupkeep in the wordmark, with royal violet and gold in both light and dark. Preserve professional solidity and sporting energy; do not substitute green or reopen palette selection during routine implementation. [DESIGN.md](DESIGN.md), [.impeccable/design.json](.impeccable/design.json), and [brand notes](docs/brand/BRAND.md) replace the starter identity. Notes is a retained demo, not the product. Do not invent live features, results, testimonials, projections, or registered-domain ownership.
+The approved identity is Lineupkeep, lowercase lineupkeep in the wordmark, with royal violet and gold in both light and dark. Preserve professional solidity and sporting energy; do not substitute green or reopen palette selection during routine implementation. [DESIGN.md](DESIGN.md), [.impeccable/design.json](.impeccable/design.json), and [brand notes](docs/brand/BRAND.md) replace the starter identity. The connections surface starts provider linking; it is not the finished product. Do not invent live features, results, testimonials, projections, or registered-domain ownership.
 
 ## Starter platform agreement
 

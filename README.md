@@ -12,7 +12,7 @@ An independent, provider-neutral fantasy-management product, prepared from a fre
 4. [Planning index](docs/fantasy-manager/README.md): all decisions, research, glossary, MCP/architecture/hosting proposals, UX brief, and ADRs.
 5. [Setup provenance](docs/SETUP.md) and [release readiness](docs/release-readiness.md).
 
-**Current state:** independent repository, brand/design-system foundation, and retained starter authentication/Notes/MCP scaffold. Fantasy-provider linking, queries, lineup setting, scheduling, and optimization are **not implemented**. The current dependency baseline has a documented critical publication blocker. The [autonomous Phase 1 mandate](docs/PHASE-1-HANDOFF.md) records implementation/setup authority and conditional rollout gates; current checks are not release acceptance.
+**Current state:** independent repository, brand/design-system foundation, retained starter authentication, and a first connections vertical that starts and cancels provider-link requests. The Notes demo is removed. Provider-linking completion, provider queries, lineup setting, scheduling, and optimization are **not implemented**. The current dependency baseline has a documented critical publication blocker. The [autonomous Phase 1 mandate](docs/PHASE-1-HANDOFF.md) records implementation/setup authority and conditional rollout gates; current checks are not release acceptance.
 
 The lowercase wordmark is **lineupkeep**; ordinary prose uses **Lineupkeep**. The approved palette is **royal violet and gold**, with complete light/dark themes. No domain has been purchased or production origin configured.
 
@@ -62,11 +62,11 @@ Pages wait for primary data; writes return refreshed page data in the same respo
 
 ## Package imports
 
-Use `./module` for same-directory imports, package-owned `#…` imports for other directories, and `@lineupkeep/<package>/…` exports across packages. Each package owns its aliases in `package.json`; `bun run lint` autofixes parent-relative imports. For example, web modules use `#browser/notes/noteQueries.ts` or `#contracts/notes/noteContract.ts`, and backend modules use `#contexts/auth/User.ts` or `#database/dbUtilities.ts`. Keep explicit file extensions in aliases so Node and build tools resolve the same file. New domains fit the existing role wildcards without updating an alias inventory.
+Use `./module` for same-directory imports, package-owned `#…` imports for other directories, and `@lineupkeep/<package>/…` exports across packages. Each package owns its aliases in `package.json`; `bun run lint` autofixes parent-relative imports. For example, web modules use `#browser/connections/connectionQueries.ts` or `#contracts/connections/connectionContract.ts`, and backend modules use `#contexts/auth/User.ts` or `#database/dbUtilities.ts`. Keep explicit file extensions in aliases so Node and build tools resolve the same file. New domains fit the existing role wildcards without updating an alias inventory.
 
 ## Next work
 
-The owner has chosen to proceed with local implementation on the current pinned baseline while awaiting a coherent security fix. Follow the [delivery stages](docs/fantasy-manager/DELIVERY-PLAN.md), resolving feasibility at each owning slice; keep the security fix as a pre-publication gate rather than a blanket local-development stop. Remain loopback-only and do not publicly tunnel the vulnerable transport. Use the [autonomous Phase 1 handoff](docs/PHASE-1-HANDOFF.md) for the complete assignment, authorized GCP CLI setup, secure credential provisioning, and conditional deployment gates. Do not ask for a new assignment after each internal slice. Remove the Notes demo as a separate reviewed change during that assignment; it is scaffolding, not the product's domain.
+The owner has chosen to proceed with local implementation on the current pinned baseline while awaiting a coherent security fix. Follow the [delivery stages](docs/fantasy-manager/DELIVERY-PLAN.md), resolving feasibility at each owning slice; keep the security fix as a pre-publication gate rather than a blanket local-development stop. Remain loopback-only and do not publicly tunnel the vulnerable transport. Use the [autonomous Phase 1 handoff](docs/PHASE-1-HANDOFF.md) for the complete assignment, authorized GCP CLI setup, secure credential provisioning, and conditional deployment gates. Do not ask for a new assignment after each internal slice. The Notes demo is removed; the connections vertical is scaffolding for linking, not a finished product surface.
 
 ## Connecting an MCP client
 

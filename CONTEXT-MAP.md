@@ -13,11 +13,11 @@
 ## Existing platform
 
 - `apps/web/src/routes/`: TanStack Start routes and metadata.
-- `apps/web/src/browser/`: Solid browser UI. Auth and Notes are retained starter features; no fantasy workspace exists.
+- `apps/web/src/browser/`: Solid browser UI. Auth is retained from the starter; connections is the first product surface and starts provider-link requests.
 - `apps/web/src/browser/brand-ui/`, `apps/web/src/theme/`: Lineupkeep foundation and generic primitives.
 - `apps/web/src/server/`: server functions, session/auth adapters, stateless starter MCP.
 - `packages/backend/src/contexts/auth/`: application authentication.
-- `packages/backend/src/contexts/notes/`: demo domain, not a fantasy model.
+- `packages/backend/src/contexts/connections/`: provider-link request domain; linking completion is not implemented.
 - `packages/backend/src/runtime/`: runtime composition and PublicInternet.
 - `packages/backend/src/utilities/machine.ts`: starter machine convention, not a durable side-effect engine.
 - `packages/brand/src/product.ts`: shared product identity.
@@ -27,6 +27,6 @@
 
 ## Not implemented
 
-Provider connection, team automation, lineup run, helper pairing, provider query adapter, lineup writer, worker/outbox/queue, scheduling, reconnect delivery, scoring, legal roster modelling, solver, and fantasy MCP. Proposed names in planning documents do not imply existing modules.
+Linking completion, encrypted provider credentials, team automation, lineup run, helper pairing, provider query adapter, lineup writer, worker/outbox/queue, scheduling, reconnect delivery, scoring, legal roster modelling, solver, and fantasy MCP. Proposed names in planning documents do not imply existing modules.
 
 The old AutoCoach checkout is external reference evidence only. There is no build/runtime dependency, migration route, secret reuse, imported VCS history, or imported cloud state.

@@ -36,7 +36,7 @@ it("starts Google sign-in toward the page that asked for it", async () => {
 
   await expect.element(google).toHaveTextContent("Opening Google…");
   expect(started).toEqual([
-    { returnTo: "/notes?view=trash", errorReturnTo: "/auth?redirect=%2Fnotes%3Fview%3Dtrash" },
+    { returnTo: "/connections", errorReturnTo: "/auth?redirect=%2Fconnections" },
   ]);
 });
 
@@ -130,7 +130,7 @@ it("accepts a pasted code with spacing and signs in with its digits", async () =
   await page.getByLabelText("Code").fill("123 456");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect.element(page.getByText("Notes", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Connections", { exact: true })).toBeVisible();
   expect(attempts).toEqual([{ email: "reader@example.test", code: "123456" }]);
 });
 
@@ -178,7 +178,7 @@ it("checks the session before offering another try after an unconfirmed sign-in"
 
   await page.getByRole("button", { name: "Check again" }).click();
 
-  await expect.element(page.getByText("Notes", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Connections", { exact: true })).toBeVisible();
 });
 
 it("waits before offering another code", async () => {
@@ -240,23 +240,23 @@ function setupAuthPage(options: AuthPageFixtureOptions): {
         <AuthPage
           remote={remote}
           methodsQuery={() => methodsQuery}
-          returnTo="/notes?view=trash"
-          googleErrorReturnTo="/auth?redirect=%2Fnotes%3Fview%3Dtrash"
+          returnTo="/connections"
+          googleErrorReturnTo="/auth?redirect=%2Fconnections"
           googleError={options.googleError}
-          onAuthenticated={() => navigate({ to: "/notes" })}
+          onAuthenticated={() => navigate({ to: "/connections" })}
         />
       );
     },
   });
-  const notesRoute = createRoute({
+  const connectionsRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/notes",
-    component: () => <p>Notes</p>,
+    path: "/connections",
+    component: () => <p>Connections</p>,
   });
   const router = createRouter({
     context: { queryClient, sessionRemote },
     history: createMemoryHistory({ initialEntries: ["/auth"] }),
-    routeTree: rootRoute.addChildren([authRoute, notesRoute]),
+    routeTree: rootRoute.addChildren([authRoute, connectionsRoute]),
   });
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <RouterProvider router={router} />, host);

@@ -7,7 +7,7 @@ export const BackendRuntime = {
     Runtime.make({
       ...platform,
       publicInternet: PublicInternet.fromTransport((request) => {
-        if (request.url !== "https://notes-client.test/client.json") {
+        if (request.url !== "https://connections-client.test/client.json") {
           return Promise.reject(
             new Error("E2E_TEST_COMPOSITION_DO_NOT_DEPLOY: unknown metadata resource"),
           );
@@ -15,7 +15,7 @@ export const BackendRuntime = {
         return Promise.resolve(
           Response.json({
             client_id: request.url,
-            client_name: "Notes test client",
+            client_name: "Lineupkeep test client",
             redirect_uris: ["http://127.0.0.1:19999/callback"],
             grant_types: ["authorization_code", "refresh_token"],
             response_types: ["code"],

@@ -217,7 +217,7 @@ TextField, TextArea, and SearchField keep persistent labels, visible boundaries,
 
 ### Containers and metadata
 
-Badge is labelled metadata, not a rank sticker. Its gold treatment adds emphasis; quieter supporting states can use action-soft without inventing another status palette. IntroPanel/Panel are occasional dark companion surfaces, not a site-wide card recipe. Entry/NotesList remain starter-demo primitives; do not derive the fantasy domain by renaming them.
+Badge is labelled metadata, not a rank sticker. Its gold treatment adds emphasis; quieter supporting states can use action-soft without inventing another status palette. IntroPanel/Panel are occasional dark companion surfaces, not a site-wide card recipe. Entry remains a starter primitive; do not derive the fantasy domain by renaming starter components.
 
 ### Future operational states
 
@@ -243,7 +243,7 @@ Theme text selection, caret, scrollbar, focus, and underline offset from semanti
 
 - Don't use LineUPkeep, LineUpKeep, arrows, trophies, shields, or AI decoration.
 - Don't use gradient lettering, lime stickers, tilted paper, or simulated notebooks.
-- Don't infer the fantasy domain by renaming the Notes demo.
+- Don't infer the fantasy domain by renaming starter-demo components.
 - Don't use colour alone to communicate connection, automation, or risk.
 - Don't claim live features, ownership, accuracy, or publication readiness without evidence.
 

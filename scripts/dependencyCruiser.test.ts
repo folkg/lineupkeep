@@ -499,15 +499,15 @@ it("permits context implementation wiring in ApplicationLayer", async () => {
 });
 
 it("keeps feature scope catalogues out of Auth and permits application composition", async () => {
-  const scope = "packages/backend/src/contexts/notes/NoteScopes.ts";
+  const scope = "packages/backend/src/contexts/connections/ConnectionScopes.ts";
   const rejected = await checkArchitecture({
     "packages/backend/src/contexts/auth/internal/Foreign.ts":
-      'import "#contexts/notes/NoteScopes.ts";',
+      'import "#contexts/connections/ConnectionScopes.ts";',
     [scope]: "export const scopes = [];",
   });
   const accepted = await checkArchitecture({
     "packages/backend/src/runtime/BackendRuntime.ts":
-      'import "#contexts/notes/NoteScopes.ts"; import "#contexts/auth/AuthorizationScopes.ts";',
+      'import "#contexts/connections/ConnectionScopes.ts"; import "#contexts/auth/AuthorizationScopes.ts";',
     [scope]: "export const scopes = [];",
     "packages/backend/src/contexts/auth/AuthorizationScopes.ts": "export const scopes = [];",
   });
@@ -554,8 +554,8 @@ it("permits a thin MCP route and Effect tools delegating to a public backend use
     "apps/web/src/routes/mcp.ts":
       'import "@tanstack/solid-router"; export { value } from "#server/mcp/tools.ts";',
     "apps/web/src/server/mcp/tools.ts":
-      'import "effect/ai"; export { value } from "@lineupkeep/backend/notes/Notes";',
-    "packages/backend/src/contexts/notes/Notes.ts": "export const value = 1;",
+      'import "effect/ai"; export { value } from "@lineupkeep/backend/connections/Connections";',
+    "packages/backend/src/contexts/connections/Connections.ts": "export const value = 1;",
   };
 
   const architecture = await checkArchitecture(files);
@@ -975,7 +975,7 @@ it("rejects cycles through a helper even when they include the generated route t
 
 it("rejects a context's undeclared dependency on another public contract", async () => {
   const files = {
-    "packages/backend/src/contexts/notes/internal/NoteRepository.ts":
+    "packages/backend/src/contexts/connections/internal/ConnectionRepository.ts":
       'export { Auth } from "#contexts/auth/Auth.ts";',
     "packages/backend/src/contexts/auth/Auth.ts": "export const Auth = {};",
   };
@@ -983,15 +983,15 @@ it("rejects a context's undeclared dependency on another public contract", async
   const result = await checkArchitecture(files);
 
   expect(result.status).toBeGreaterThan(0);
-  expect(result.output).toContain("context-dependencies-notes");
+  expect(result.output).toContain("context-dependencies-connections");
   expect(result.output.replaceAll(/\s+/g, " ")).toContain(
     "declare only the needed public contract in permittedContextImports",
   );
 });
 
-it("allows Notes to consume the published identity module", async () => {
+it("allows Connections to consume the published identity module", async () => {
   const files = {
-    "packages/backend/src/contexts/notes/Note.ts":
+    "packages/backend/src/contexts/connections/Connection.ts":
       'export { UserId } from "#contexts/auth/User.ts";',
     "packages/backend/src/contexts/auth/User.ts": 'export const UserId = "user";',
   };
@@ -1047,7 +1047,7 @@ it("rejects foreign tables even when a public identity relationship exists", asy
 
 it("rejects undeclared shared-kernel participation", async () => {
   const files = {
-    "packages/backend/src/contexts/notes/Note.ts":
+    "packages/backend/src/contexts/connections/Connection.ts":
       'export { Money } from "#backend/shared-kernels/money/Money.ts";',
     "packages/backend/src/shared-kernels/money/Money.ts": "export const Money = {};",
   };
@@ -1055,7 +1055,7 @@ it("rejects undeclared shared-kernel participation", async () => {
   const result = await checkArchitecture(files);
 
   expect(result.status).toBeGreaterThan(0);
-  expect(result.output).toContain("context-dependencies-notes");
+  expect(result.output).toContain("context-dependencies-connections");
   expect(result.output.replaceAll(/\s+/g, " ")).toContain(
     "declare only the needed public contract in permittedContextImports",
   );

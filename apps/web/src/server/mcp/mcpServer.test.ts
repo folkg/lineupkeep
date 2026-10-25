@@ -1,14 +1,8 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
-import {
-  NoteLifecycleConflict,
-  NoteLifecycleRejected,
-  NoteNotFound,
-  NotePersistenceFailed,
-  decodeNoteId,
-} from "@lineupkeep/backend/notes/Note";
-import type { NotesShape } from "@lineupkeep/backend/notes/Notes";
-import { Notes } from "@lineupkeep/backend/notes/Notes";
+import { ConnectionPersistenceFailed } from "@lineupkeep/backend/connections/Connection";
+import type { ConnectionsShape } from "@lineupkeep/backend/connections/Connections";
+import { Connections } from "@lineupkeep/backend/connections/Connections";
 import { Effect, Layer, Schema } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { expect, it } from "vitest";
@@ -37,19 +31,21 @@ it("derives the endpoint path and discovery challenge from the Auth resource", a
       mcpRequest(invocation, tools, () => Layer.empty, { name: "Example", version: "1" }).pipe(
         Effect.updateService(AuthService, (auth) => ({
           ...auth,
-          oauthResource: "https://notes.example/agents",
+          oauthResource: "https://connections.example/agents",
         })),
         Effect.provide(authentication),
       ),
     );
   const input = request("tools/list", {}, "read");
-  const invocation = new Request("https://notes.example/agents", {
+  const invocation = new Request("https://connections.example/agents", {
     method: "POST",
     headers: input.headers,
     body: await input.text(),
   });
 
-  const challenged = await run(new Request("https://notes.example/agents", { method: "POST" }));
+  const challenged = await run(
+    new Request("https://connections.example/agents", { method: "POST" }),
+  );
   const served = await run(invocation);
 
   expect(challenged.status).toBe(401);
@@ -60,7 +56,7 @@ it("derives the endpoint path and discovery challenge from the Auth resource", a
   expect(await served.json()).toMatchObject({ result: { tools: [] } });
 });
 
-it("serves composed feature toolkits without requiring Notes services", async () => {
+it("serves composed feature toolkits without requiring connection services", async () => {
   const reads = Toolkit.make(
     Tool.make("echo", {
       parameters: Schema.Struct({ value: Schema.String }),
@@ -107,36 +103,8 @@ it("challenges an unauthenticated client with protected-resource discovery", asy
 
   expect(response.status).toBe(401);
   expect(response.headers.get("www-authenticate")).toBe(
-    'Bearer resource_metadata="https://notes.example/.well-known/oauth-protected-resource/mcp"',
+    'Bearer resource_metadata="https://connections.example/.well-known/oauth-protected-resource/mcp"',
   );
-});
-
-it.each(["create_note", "update_note", "trash_note", "restore_note"])(
-  "offers scope step-up before running %s with a read token",
-  async (name) => {
-    const response = await handle(request("tools/call", { name, arguments: {} }, "read"));
-
-    expect(response.status).toBe(403);
-    expect(response.headers.get("www-authenticate")).toContain(
-      'error="insufficient_scope", scope="notes:write"',
-    );
-  },
-);
-
-it("checks write scope for a notification-shaped tool invocation", async () => {
-  const invocation = new Request("https://notes.example/mcp", {
-    method: "POST",
-    headers: request("tools/call", { name: "create_note" }, "read").headers,
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      method: "tools/call",
-      params: { name: "create_note", arguments: {} },
-    }),
-  });
-
-  const response = await handle(invocation);
-
-  expect(response.status).toBe(403);
 });
 
 it.each(["2025-03-26", "2025-06-18", "2025-11-25"])(
@@ -149,116 +117,52 @@ it.each(["2025-03-26", "2025-06-18", "2025-11-25"])(
   },
 );
 
-it("lists only the five annotated Notes tools with derived field constraints", async () => {
+it("lists only the read-only connection tool without exposing account identity", async () => {
   const response = await handle(request("tools/list", {}, "read"));
   const body = await json(response);
 
   expect(response.status).toBe(200);
-  expect(JSON.stringify(body)).toContain('"maxLength":200');
-  expect(JSON.stringify(body)).toContain('"maxLength":10000');
   expect(JSON.stringify(body)).toContain('"readOnlyHint":true');
-  expect(JSON.stringify(body)).toContain('"requestId"');
-  expect(JSON.stringify(body)).toContain('"maximum":1000');
-  expect(JSON.stringify(body)).not.toContain("delete_permanently");
+  expect(JSON.stringify(body)).not.toContain('"userId"');
+  expect(JSON.stringify(body)).not.toContain('"requestId"');
   const decoded = Schema.decodeUnknownSync(
     Schema.Struct({
       result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }),
     }),
   )(body);
-  expect(decoded.result.tools.map((tool) => tool.name)).toEqual([
-    "list_notes",
-    "create_note",
-    "update_note",
-    "trash_note",
-    "restore_note",
-  ]);
+  expect(decoded.result.tools.map((tool) => tool.name)).toEqual(["list_connections"]);
 });
 
-it.each([
-  { title: "Title", body: "Body" },
-  { requestId: "cf8fbeec-0da5-4239-a029-cd59b63b7e69", title: " ", body: "Body" },
-  { requestId: "cf8fbeec-0da5-4239-a029-cd59b63b7e69", title: "T".repeat(201), body: "Body" },
-  { requestId: "cf8fbeec-0da5-4239-a029-cd59b63b7e69", title: "Title", body: " \n " },
-  { requestId: "not-a-uuid", title: "Title", body: "Body" },
-])("rejects invalid tool arguments as JSON-RPC invalid-params: %j", async (arguments_) => {
+it("rejects unexpected connection arguments as JSON-RPC invalid-params", async () => {
   const response = await handle(
-    request("tools/call", { name: "create_note", arguments: arguments_ }, "write"),
+    request("tools/call", { name: "list_connections", arguments: { limit: 1 } }, "read"),
   );
 
   expect(await json(response)).toMatchObject({ id: 1, error: { code: -32602 } });
   expect(response.status).toBe(400);
-});
-
-it.each([0, 1001, 1.5])("rejects an invalid Notes page limit of %s", async (limit) => {
-  const response = await handle(
-    request("tools/call", { name: "list_notes", arguments: { limit } }, "read"),
-  );
-
-  expect(response.status).toBe(400);
-  expect(await json(response)).toMatchObject({ id: 1, error: { code: -32602 } });
-});
-
-it("returns an actionable tool error for a Note not owned by the User", async () => {
-  const response = await handle(
-    request("tools/call", { name: "restore_note", arguments: { id: noteId } }, "write"),
-  );
-
-  expect(response.status).toBe(200);
-  const body = await json(response);
-  expect(body).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(body)).toContain("Note not found");
 });
 
 it("returns a stateless tool result without initializing a session", async () => {
   const response = await handle(
-    request("tools/call", { name: "list_notes", arguments: {} }, "read"),
+    request("tools/call", { name: "list_connections", arguments: {} }, "read"),
   );
 
   expect(response.status).toBe(200);
   expect(await json(response)).toMatchObject({
-    result: { structuredContent: { notes: [] }, isError: false },
+    result: { structuredContent: { connections: [] }, isError: false },
   });
   expect(response.headers.has("mcp-session-id")).toBe(false);
 });
 
-it.each([
-  [
-    "restore_note",
-    () => NoteLifecycleConflict.make({ id: noteId, expected: "trashed" }),
-    "current state",
-  ],
-  [
-    "restore_note",
-    () =>
-      NoteLifecycleRejected.make({ id: noteId, lifecycle: "active", event: "RestoreRequested" }),
-    "current state",
-  ],
-] as const)("returns an actionable %s rejection for %s", async (name, failure, message) => {
-  const fail = (): Effect.Effect<never, NoteLifecycleConflict | NoteLifecycleRejected, never> =>
-    Effect.fail(failure());
-  const arguments_ = { id: noteId };
-
-  const response = await handle(request("tools/call", { name, arguments: arguments_ }, "write"), {
-    ...unavailableNotes,
-    create: fail,
-    restore: fail,
-  });
-
-  expect(response.status).toBe(200);
-  const body = await json(response);
-  expect(body).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(body)).toContain(message);
-});
-
 it("scrubs unexpected persistence details from the tool response", async () => {
   const response = await handle(
-    request("tools/call", { name: "restore_note", arguments: { id: noteId } }, "write"),
+    request("tools/call", { name: "list_connections", arguments: {} }, "read"),
     {
-      ...unavailableNotes,
-      restore: () =>
+      ...unavailableConnections,
+      list: () =>
         Effect.fail(
-          NotePersistenceFailed.make({
-            cause: new Error("private database password and Note content"),
+          ConnectionPersistenceFailed.make({
+            cause: new Error("private database password and provider cookie"),
           }),
         ),
     },
@@ -271,12 +175,9 @@ it("scrubs unexpected persistence details from the tool response", async () => {
   expect(JSON.stringify(body)).not.toContain("private database");
 });
 
-const noteId = decodeNoteId("af2927f1-6aaa-493a-a3d8-0fc07b76fa88");
-const notFound = (): Effect.Effect<never, NoteNotFound, never> =>
-  Effect.fail(NoteNotFound.make({ id: noteId }));
 const authentication = Layer.succeed(AuthService)({
   signInMethods: { google: false },
-  oauthResource: "https://notes.example/mcp",
+  oauthResource: "https://connections.example/mcp",
   getSession: () => Effect.void.pipe(Effect.as(undefined)),
   handle: () => Effect.succeed(new Response()),
   getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
@@ -288,17 +189,17 @@ const authentication = Layer.succeed(AuthService)({
         : { status: "authenticated" as const, userId: decodeUserId("reader") },
     ),
 });
-const unavailableNotes: NotesShape = {
-  list: () => Effect.succeed({ items: [] }),
-  create: notFound,
-  update: notFound,
-  moveToTrash: notFound,
-  restore: notFound,
-  deletePermanently: notFound,
+const unavailableConnections: ConnectionsShape = {
+  list: () => Effect.succeed([]),
+  startLinking: () => Effect.succeed([]),
+  cancelLinking: () => Effect.succeed([]),
 };
 
-function handle(request: Request, notes: NotesShape = unavailableNotes): Promise<Response> {
-  const services = Layer.merge(authentication, Layer.succeed(Notes)(notes));
+function handle(
+  request: Request,
+  connections: ConnectionsShape = unavailableConnections,
+): Promise<Response> {
+  const services = Layer.merge(authentication, Layer.succeed(Connections)(connections));
   return handleMcpRequest(request, (_request, _operation, program) =>
     Effect.runPromise(Effect.provide(program, services)),
   );
@@ -310,7 +211,7 @@ function request(
   token?: string,
   version = "2026-07-28",
 ): Request {
-  return new Request("https://notes.example/mcp", {
+  return new Request("https://connections.example/mcp", {
     method: "POST",
     headers: {
       "content-type": "application/json",

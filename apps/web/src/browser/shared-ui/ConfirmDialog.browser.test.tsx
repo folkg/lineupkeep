@@ -18,9 +18,9 @@ it("confirms a destructive action through the dialog", async () => {
   expect(triggerElement.getAttribute("aria-haspopup")).toBe("dialog");
   expect(triggerElement.getAttribute("aria-expanded")).toBe("true");
   expect(triggerElement.getAttribute("aria-controls")).toBeTruthy();
-  await expect.element(page.getByText("Delete this note?")).toBeVisible();
+  await expect.element(page.getByText("Delete this connection?")).toBeVisible();
 
-  await page.getByRole("button", { name: "Delete note" }).click();
+  await page.getByRole("button", { name: "Delete connection" }).click();
 
   expect(confirmed).toBe(1);
   expect(dialog.elements().length).toBe(0);
@@ -43,7 +43,7 @@ it("closes after confirmation while the resulting write remains pending", async 
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect.element(page.getByRole("alertdialog")).toBeVisible();
 
-  await page.getByRole("button", { name: "Delete note", exact: true }).click();
+  await page.getByRole("button", { name: "Delete connection", exact: true }).click();
 
   await expect.element(page.getByRole("alertdialog"), { timeout: 1000 }).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Delete", exact: true })).toHaveFocus();
@@ -62,7 +62,7 @@ it("keeps the action unconfirmed when the dialog is cancelled", async () => {
   const dialog = page.getByRole("alertdialog");
   await expect.element(dialog).toBeVisible();
 
-  await page.getByRole("button", { name: "Keep note" }).click();
+  await page.getByRole("button", { name: "Keep connection" }).click();
 
   expect(confirmed).toBe(0);
   expect(dialog.elements().length).toBe(0);
@@ -90,10 +90,10 @@ function renderConfirmDialog(props: Pick<ConfirmDialogProps, "onConfirm">): {
   const dispose = render(
     () => (
       <ConfirmDialog
-        cancelLabel="Keep note"
-        confirmLabel="Delete note"
-        description="This permanently removes the note from your working set."
-        title="Delete this note?"
+        cancelLabel="Keep connection"
+        confirmLabel="Delete connection"
+        description="This permanently removes the connection from your account."
+        title="Delete this connection?"
         trigger={(triggerProps) => (
           <Button tone="danger" variant="quiet" {...triggerProps}>
             Delete

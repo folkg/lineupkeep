@@ -14,7 +14,7 @@ import {
 import { Tool, Toolkit } from "effect/ai";
 import { HttpClient, HttpClientError } from "effect/http";
 
-import { NotePersistenceFailed } from "#contexts/notes/Note.ts";
+import { ConnectionPersistenceFailed } from "#contexts/connections/Connection.ts";
 
 import { makeTelemetryTest } from "./internal/TelemetryTest.ts";
 import { ObservabilityLive } from "./Observability.ts";
@@ -22,14 +22,14 @@ import { ObservabilityLive } from "./Observability.ts";
 it.effect("exports failed SQL children without bind values or nested causes", () =>
   Effect.gen(function* () {
     const error = EffectDrizzleQueryError.make({
-      query: "insert into notes (title, body) values ($1, $2)",
+      query: "insert into provider_connections (provider, status) values ($1, $2)",
       params: ["private-sql-title", "private-sql-body"],
       cause: new Error("private-database-cause"),
     });
     const program = Effect.fail(error).pipe(
       Effect.withSpan("sql.execute"),
-      Effect.mapError((cause) => NotePersistenceFailed.make({ cause })),
-      Effect.withSpan("notes.create"),
+      Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+      Effect.withSpan("connections.start_linking"),
     );
 
     const telemetry = makeTelemetryTest();
@@ -55,14 +55,14 @@ it.effect("exports failed SQL children without bind values or nested causes", ()
 it.effect("exports real Toolkit calls without raw MCP parameters", () =>
   Effect.gen(function* () {
     const toolkit = Toolkit.make(
-      Tool.make("create_note", {
+      Tool.make("list_connections", {
         parameters: Schema.Struct({ title: Schema.String, body: Schema.String }),
         success: Schema.Void,
       }),
     );
     const program = Effect.gen(function* () {
       const ready = yield* toolkit;
-      const output = yield* ready.handle("create_note", {
+      const output = yield* ready.handle("list_connections", {
         title: "private-tool-title",
         body: "private-tool-body",
       });
@@ -70,7 +70,7 @@ it.effect("exports real Toolkit calls without raw MCP parameters", () =>
     }).pipe(
       Effect.scoped,
       Effect.provide(
-        toolkit.toLayer({ create_note: () => Effect.void.pipe(Effect.withSpan("mcp.tool")) }),
+        toolkit.toLayer({ list_connections: () => Effect.void.pipe(Effect.withSpan("mcp.tool")) }),
       ),
       Effect.withSpan("mcp.request"),
     );
@@ -81,7 +81,7 @@ it.effect("exports real Toolkit calls without raw MCP parameters", () =>
 
     assert.isTrue(Exit.isSuccess(exit));
     assert.isAtLeast(spans.length, 2);
-    assert.include(payloads.join(""), "create_note");
+    assert.include(payloads.join(""), "list_connections");
     assert.notInclude(payloads.join(""), "parameters");
     assert.notInclude(payloads.join(""), "private-");
   }),

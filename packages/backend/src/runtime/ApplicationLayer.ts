@@ -8,29 +8,29 @@ import { AuthDatabase } from "#contexts/auth/internal/AuthDatabase.ts";
 import { AuthLive } from "#contexts/auth/internal/AuthLive.ts";
 import { BetterAuthAdapter } from "#contexts/auth/internal/BetterAuthAdapter.ts";
 import { SignInCodeQuotaRepository } from "#contexts/auth/internal/SignInCodeQuotaRepository.ts";
-import { NoteRepository } from "#contexts/notes/internal/NoteRepository.ts";
-import { NotesDatabase } from "#contexts/notes/internal/NotesDatabase.ts";
-import { NotesLive } from "#contexts/notes/internal/NotesLive.ts";
-import type { Notes } from "#contexts/notes/Notes.ts";
-import { noteScopes } from "#contexts/notes/NoteScopes.ts";
+import type { Connections } from "#contexts/connections/Connections.ts";
+import { connectionScopes } from "#contexts/connections/ConnectionScopes.ts";
+import { ConnectionRepository } from "#contexts/connections/internal/ConnectionRepository.ts";
+import { ConnectionsDatabase } from "#contexts/connections/internal/ConnectionsDatabase.ts";
+import { ConnectionsLive } from "#contexts/connections/internal/ConnectionsLive.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
 
 const AuthLayer = AuthLive.pipe(
   Layer.provide(BetterAuthAdapter.layer),
-  Layer.provide(Layer.succeed(AuthorizationScopes)(Object.values(noteScopes))),
+  Layer.provide(Layer.succeed(AuthorizationScopes)(Object.values(connectionScopes))),
   Layer.provide(SignInCodeQuotaRepository.layer),
   Layer.provide(AuthDatabase.layer),
   Layer.provide(EmailDelivery.fromConfig),
   Layer.provide(FetchHttpClient.layer),
 );
-const NotesLayer = NotesLive.pipe(
-  Layer.provide(NoteRepository.layer),
-  Layer.provide(NotesDatabase.layer),
+const ConnectionsLayer = ConnectionsLive.pipe(
+  Layer.provide(ConnectionRepository.layer),
+  Layer.provide(ConnectionsDatabase.layer),
 );
-export const ApplicationLayer = Layer.mergeAll(NotesLayer, AuthLayer).pipe(
+export const ApplicationLayer = Layer.mergeAll(ConnectionsLayer, AuthLayer).pipe(
   Layer.provide(PostgresLive),
   Layer.provide(NodeCrypto.layer),
 );
 
-export type BackendServices = AuthService | Notes;
+export type BackendServices = AuthService | Connections;

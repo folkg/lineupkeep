@@ -33,7 +33,7 @@ function AppActions(): JSX.Element {
   return (
     <>
       <Nav label="Primary navigation">
-        <NavLink to="/notes">Notes</NavLink>
+        <NavLink to="/connections">Connections</NavLink>
         <Show fallback={<NavLink to="/auth">Sign in</NavLink>} when={session.isSignedIn()}>
           <Button
             pending={session.isSigningOut()}

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { addNote, expect, noteTitles, requestCode, signIn, signUp, test } from "./support";
+import { expect, requestCode, signIn, signUp, test } from "./support";
 
 test("keeps sign-in controls inactive until their handlers are hydrated", async ({ page }) => {
   const scripts = Promise.withResolvers<void>();
@@ -31,7 +31,7 @@ test("keeps sign-in controls inactive until their handlers are hydrated", async 
 
   await expect(page.getByLabel("Email")).toBeEnabled();
   await signIn(page, { email: `e2e-hydration-${randomUUID()}@example.com` });
-  await expect(page).toHaveURL("/notes");
+  await expect(page).toHaveURL("/connections");
 });
 
 test("offers no Google sign-in when it is not configured", async ({ page }) => {
@@ -56,7 +56,7 @@ test("explains a wrong code and signs in with the right one", async ({ page }) =
   ).toBeVisible();
   await page.getByLabel("Code").fill(code);
   await page.getByRole("main").getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL("/notes");
+  await expect(page).toHaveURL("/connections");
 });
 
 test("returns to the email step to use a different address", async ({ page }) => {
@@ -67,24 +67,22 @@ test("returns to the email step to use a different address", async ({ page }) =>
 
   await expect(page.getByLabel("Email")).toBeFocused();
   await signIn(page, { email: `e2e-corrected-${randomUUID()}@example.com` });
-  await expect(page).toHaveURL("/notes");
+  await expect(page).toHaveURL("/connections");
 });
 
 test("signs in again after an ended session and returns to the page", async ({ page }) => {
   const account = await signUp(page);
-  await addNote(page, "Before the session ended", "Saved while signed in.");
   await page.context().clearCookies();
-  await page.getByRole("textbox", { name: "Title", exact: true }).fill("Written after expiry");
-  await page.getByRole("textbox", { name: "Note", exact: true }).fill("Discarded on purpose.");
-  await page.getByRole("button", { name: "Add note" }).click();
+  await page.getByRole("button", { name: "Link Yahoo" }).click();
+  await expect(page.getByText(/^Your session has ended\./)).toBeVisible();
+  await expect(page).toHaveURL("/connections");
   await page.getByRole("button", { name: "Sign in again" }).click();
-  await page.getByRole("button", { name: "Discard and leave" }).click();
-  await expect(page).toHaveURL("/auth?redirect=%2Fnotes");
+  await expect(page).toHaveURL("/auth?redirect=%2Fconnections");
 
   await signIn(page, account);
 
-  await expect(page).toHaveURL("/notes");
-  await expect(noteTitles(page)).toHaveText(["Before the session ended"]);
+  await expect(page).toHaveURL("/connections");
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
 
 for (const viewport of [

@@ -1,0 +1,97 @@
+import { createSelectSchema } from "drizzle-orm/effect-schema";
+import { index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { Effect, Schema, SchemaParser, SchemaTransformation, Struct } from "effect";
+
+import { UserId } from "#contexts/auth/User.ts";
+import { ConnectionId } from "#contexts/connections/Connection.ts";
+
+import { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
+
+export const providerConnections = pgTable(
+  "provider_connections",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    requestId: text("request_id").notNull(),
+    provider: text("provider", { enum: ["yahoo"] }).notNull(),
+    status: text("status", { enum: ["linking", "disconnected"] }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("provider_connections_user_id_id_idx").on(table.userId, table.id),
+    uniqueIndex("provider_connections_user_id_request_id_idx").on(table.userId, table.requestId),
+  ],
+);
+
+const Row = createSelectSchema(providerConnections, {
+  id: ConnectionId,
+  userId: UserId,
+  expiresAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  disconnectedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  createdAt: Schema.DateTimeUtcFromDate,
+  updatedAt: Schema.DateTimeUtcFromDate,
+});
+
+const Identity = Struct.pick(Row.fields, ["id", "userId", "requestId", "createdAt"]);
+const LifecycleConnection = Schema.Struct({ ...Identity, state: ConnectionLifecycleState }).pipe(
+  Schema.toType,
+);
+
+export const ConnectionRow = Row.pipe(
+  Schema.decodeTo(
+    LifecycleConnection,
+    SchemaTransformation.transformEffect<typeof LifecycleConnection.Type, typeof Row.Type>({
+      decode: (row) => {
+        const content = {
+          provider: row.provider,
+          updatedAt: row.updatedAt,
+        };
+        const state = (() => {
+          switch (row.status) {
+            case "linking":
+              return { _tag: "Linking", ...content, expiresAt: row.expiresAt };
+            case "disconnected":
+              return { _tag: "Disconnected", ...content, disconnectedAt: row.disconnectedAt };
+          }
+        })();
+        return SchemaParser.decodeUnknownEffect(ConnectionLifecycleState)(state).pipe(
+          Effect.map((state) => ({
+            id: row.id,
+            userId: row.userId,
+            requestId: row.requestId,
+            createdAt: row.createdAt,
+            state,
+          })),
+        );
+      },
+      encode: ({ state, ...identity }) =>
+        Effect.succeed(
+          (() => {
+            switch (state._tag) {
+              case "Linking":
+                return {
+                  ...identity,
+                  provider: state.provider,
+                  status: "linking" as const,
+                  expiresAt: state.expiresAt,
+                  disconnectedAt: null,
+                  updatedAt: state.updatedAt,
+                };
+              case "Disconnected":
+                return {
+                  ...identity,
+                  provider: state.provider,
+                  status: "disconnected" as const,
+                  expiresAt: null,
+                  disconnectedAt: state.disconnectedAt,
+                  updatedAt: state.updatedAt,
+                };
+            }
+          })(),
+        ),
+    }),
+  ),
+);

@@ -13,7 +13,7 @@ it.effect("rejects an expired session before running the use case", () =>
   Effect.gen(function* () {
     const owners = yield* Ref.make<ReadonlyArray<string>>([]);
     const context = yield* makeRequestContext(
-      new Request("http://localhost/notes", { headers: { "x-request-id": "test-entry" } }),
+      new Request("http://localhost/connections", { headers: { "x-request-id": "test-entry" } }),
     );
     const authentication = authenticationLayer(undefined);
 
@@ -30,7 +30,7 @@ it.effect("runs the use case for the authenticated user", () =>
   Effect.gen(function* () {
     const owners = yield* Ref.make<ReadonlyArray<string>>([]);
     const context = yield* makeRequestContext(
-      new Request("http://localhost/notes", { headers: { "x-request-id": "test-entry" } }),
+      new Request("http://localhost/connections", { headers: { "x-request-id": "test-entry" } }),
     );
     const authentication = authenticationLayer({
       user: { id: "signed-in-user", email: "person@example.test", name: "Person" },

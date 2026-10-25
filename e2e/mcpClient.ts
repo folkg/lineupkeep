@@ -222,7 +222,7 @@ export async function discoverAuthorization(
 
 export const callback = "http://127.0.0.1:19999/callback";
 
-const clientId = "https://notes-client.test/client.json";
+const clientId = "https://connections-client.test/client.json";
 
 const ResourceMetadata = Schema.Struct({
   resource: Schema.String,

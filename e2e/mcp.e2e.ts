@@ -11,7 +11,7 @@ import {
   mcpClient,
   mcpEndpoint,
 } from "./mcpClient.ts";
-import { expect, noteCard, signIn, signUp, test } from "./support.ts";
+import { expect, signIn, signUp, test } from "./support.ts";
 test("discovers and authorizes a stateless client through email sign-in, consent and PKCE", async ({
   page,
   baseURL,
@@ -26,7 +26,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
   const { credentials } = await authorize(
     page,
     origin,
-    "notes:read notes:write",
+    "connections:read",
     `mcp-${randomUUID()}@example.com`,
   );
   const tools = await mcpClient(mcpEndpoint(origin), credentials.access_token).request(
@@ -37,110 +37,45 @@ test("discovers and authorizes a stateless client through email sign-in, consent
   expect(tools.headers.has("mcp-session-id")).toBe(false);
   expect(await tools.json()).toMatchObject({
     result: {
-      tools: [
-        { name: "list_notes" },
-        { name: "create_note" },
-        { name: "update_note" },
-        { name: "trash_note" },
-        { name: "restore_note" },
-      ],
+      tools: [{ name: "list_connections" }],
     },
   });
 });
 
-test("reuses creation identity and shows the same Note in the browser", async ({
-  page,
-  baseURL,
-}) => {
-  const origin = requiredOrigin(baseURL);
-  await signUp(page);
-  const { credentials } = await authorize(page, origin);
-  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
-  const input = {
-    name: "create_note",
-    arguments: { requestId: randomUUID(), title: "From MCP", body: "Visible in the browser" },
-  };
-
-  const first = Schema.decodeUnknownSync(NoteResult)(
-    await (await client.request("tools/call", input)).json(),
-  );
-  const retry = Schema.decodeUnknownSync(NoteResult)(
-    await (await client.request("tools/call", input)).json(),
-  );
-  await page.goto("/notes");
-
-  expect(retry.result.structuredContent.note.id).toBe(first.result.structuredContent.note.id);
-  await expect(noteCard(page, "From MCP")).toHaveCount(1);
-  await expect(noteCard(page, "From MCP")).toContainText("Visible in the browser");
-});
-
-test("updates, trashes and restores a Note through tools", async ({ page, baseURL }) => {
-  const origin = requiredOrigin(baseURL);
-  await signUp(page);
-  const { credentials } = await authorize(page, origin);
-  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
-  const created = await client.request("tools/call", {
-    name: "create_note",
-    arguments: { requestId: randomUUID(), title: "Lifecycle", body: "Original" },
-  });
-  const id = Schema.decodeUnknownSync(NoteResult)(await created.json()).result.structuredContent
-    .note.id;
-
-  for (const [name, arguments_] of [
-    ["update_note", { id, title: "Updated over MCP", body: "Updated" }],
-    ["trash_note", { id }],
-    ["restore_note", { id }],
-  ] as const) {
-    const changed = await client.request("tools/call", { name, arguments: arguments_ });
-    expect(changed.status).toBe(200);
-    expect(await changed.json()).toMatchObject({ result: { isError: false } });
-    const listed = await client.request("tools/call", {
-      name: "list_notes",
-      arguments: { lifecycle: name === "trash_note" ? "trashed" : "active" },
-    });
-    expect(await listed.json()).toMatchObject({
-      result: {
-        structuredContent: { notes: [{ id, title: "Updated over MCP", body: "Updated" }] },
-      },
-    });
-  }
-  await page.goto("/notes");
-  await expect(noteCard(page, "Updated over MCP")).toContainText("Updated");
-});
-
-test("keeps another person's Notes invisible and unmodifiable in browser and MCP", async ({
+test("lists the owner's connection status over MCP without exposing account identity", async ({
   page,
   baseURL,
   newUser,
+  services,
 }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
+  const connection = Schema.decodeUnknownSync(
+    Schema.Struct({ id: Schema.String, status: Schema.String }),
+  )(
+    await services.exercise(page, "start the owner's link", "startLinking", {
+      requestId: randomUUID(),
+      provider: "yahoo",
+    }),
+  );
   const { credentials } = await authorize(page, origin);
   const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
-  const created = await client.request("tools/call", {
-    name: "create_note",
-    arguments: { requestId: randomUUID(), title: "Private MCP Note", body: "Only mine" },
+
+  const listed = await client.callTool("list_connections", {});
+
+  expect(listed.isError).toBe(false);
+  expect(listed.structuredContent).toMatchObject({
+    connections: [{ id: connection.id, provider: "yahoo", status: "linking" }],
   });
-  const id = Schema.decodeUnknownSync(NoteResult)(await created.json()).result.structuredContent
-    .note.id;
+  expect(JSON.stringify(listed.structuredContent)).not.toContain("userId");
+
   const other = await newUser();
   await signUp(other);
-  await expect(other.getByRole("heading", { name: "Private MCP Note", exact: true })).toHaveCount(
-    0,
-  );
   const otherAuthorization = await authorize(other, origin);
   const otherClient = mcpClient(mcpEndpoint(origin), otherAuthorization.credentials.access_token);
+  const hidden = await otherClient.callTool("list_connections", {});
 
-  const hidden = await otherClient.request("tools/call", { name: "list_notes", arguments: {} });
-  const forbidden = await otherClient.request("tools/call", {
-    name: "restore_note",
-    arguments: { id },
-  });
-
-  expect(await hidden.json()).toMatchObject({ result: { structuredContent: { notes: [] } } });
-  expect(await forbidden.json()).toMatchObject({ result: { isError: true } });
-  await page.goto("/notes");
-  await expect(noteCard(page, "Private MCP Note")).toContainText("Only mine");
+  expect(hidden.structuredContent).toEqual({ connections: [] });
 });
 
 test("returns access_denied and the original state when consent is denied", async ({
@@ -149,7 +84,7 @@ test("returns access_denied and the original state when consent is denied", asyn
 }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const authorization = await beginAuthorization(page, mcpEndpoint(origin), "notes:read");
+  const authorization = await beginAuthorization(page, mcpEndpoint(origin), "connections:read");
   await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
 
   await page.getByRole("button", { name: "Deny access", exact: true }).click();
@@ -168,7 +103,7 @@ test("presents missing and forged consent requests without permission actions", 
   for (const query of [
     "",
     "?client_id=",
-    "?client_id=https%3A%2F%2Fnotes-client.test%2Fclient.json&sig=forged",
+    "?client_id=https%3A%2F%2Fconnections-client.test%2Fclient.json&sig=forged",
   ]) {
     await page.goto(`/consent${query}`);
     await expect(
@@ -179,28 +114,10 @@ test("presents missing and forged consent requests without permission actions", 
   }
 });
 
-test("challenges a read-only token to step up before a write", async ({ page, baseURL }) => {
-  const origin = requiredOrigin(baseURL);
-  await signUp(page);
-  const { credentials } = await authorize(page, origin, "notes:read");
-  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
-  expect((await client.request("tools/list")).status).toBe(200);
-
-  const write = await client.request("tools/call", {
-    name: "create_note",
-    arguments: { requestId: randomUUID(), title: "No permission", body: "" },
-  });
-
-  expect(write.status).toBe(403);
-  expect(write.headers.get("www-authenticate")).toContain(
-    'error="insufficient_scope", scope="notes:write"',
-  );
-});
-
 test("rejects legacy protocols and dynamic client registration", async ({ page, baseURL }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const { credentials } = await authorize(page, origin, "notes:read");
+  const { credentials } = await authorize(page, origin, "connections:read");
 
   const legacy = await mcpClient(mcpEndpoint(origin), credentials.access_token).request(
     "tools/list",
@@ -229,7 +146,7 @@ test("rotates refresh credentials and rejects the spent token after the retry wi
   const { credentials, authorization } = await authorize(
     page,
     origin,
-    "notes:read notes:write offline_access",
+    "connections:read offline_access",
   );
   const initial = Schema.decodeUnknownSync(RefreshCredentials)(credentials);
 
@@ -237,13 +154,13 @@ test("rotates refresh credentials and rejects the spent token after the retry wi
   expect(response.status).toBe(200);
   const rotated = Schema.decodeUnknownSync(RefreshCredentials)(await response.json());
   const tools = await mcpClient(mcpEndpoint(origin), rotated.access_token).request("tools/call", {
-    name: "list_notes",
+    name: "list_connections",
     arguments: {},
   });
 
   expect(rotated.refresh_token).not.toBe(initial.refresh_token);
   expect(tools.status).toBe(200);
-  expect(await tools.json()).toMatchObject({ result: { structuredContent: { notes: [] } } });
+  expect(await tools.json()).toMatchObject({ result: { structuredContent: { connections: [] } } });
   const replayResponse = await exchangeRefreshToken(authorization, initial.refresh_token);
   expect(replayResponse.status).toBe(200);
   expect(
@@ -266,7 +183,7 @@ test("rotates refresh credentials and rejects the spent token after the retry wi
 async function authorize(
   page: Page,
   origin: string,
-  scope = "notes:read notes:write",
+  scope = "connections:read",
   email?: string,
 ): Promise<{
   credentials: {
@@ -289,12 +206,16 @@ async function authorize(
     await signIn(page, { email });
   }
   await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
-  await expect(page.getByText("Connecting to notes-client.test", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("Calls itself “Notes test client” — names are not verified.", { exact: true }),
+    page.getByText("Connecting to connections-client.test", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("https://notes-client.test/client.json", { exact: true }),
+    page.getByText("Calls itself “Lineupkeep test client” — names are not verified.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("https://connections-client.test/client.json", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Allow access", exact: true }).click();
   await expect(page).toHaveURL(callbackPattern);
@@ -309,11 +230,6 @@ function requiredOrigin(value: string | undefined): string {
 }
 
 const callbackPattern = new RegExp(`^${callback.replaceAll(".", "\\.")}\\?`);
-const NoteResult = Schema.Struct({
-  result: Schema.Struct({
-    structuredContent: Schema.Struct({ note: Schema.Struct({ id: Schema.String }) }),
-  }),
-});
 const RefreshCredentials = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.String,

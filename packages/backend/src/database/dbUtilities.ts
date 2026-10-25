@@ -1,4 +1,4 @@
-import { and, asc, eq, getTableColumns, gt, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, sql } from "drizzle-orm";
 import type { GetColumnData, InferSelectModel, SQL } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import type { QueryEffectHKTBase } from "drizzle-orm/effect-core/query-effect";
@@ -6,8 +6,7 @@ import { getTableConfig, pgTable } from "drizzle-orm/pg-core";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { PgEffectDatabase } from "drizzle-orm/pg-core/effect/db";
 import type { PgQueryResultHKT } from "drizzle-orm/pg-core/session";
-import { Array, Effect, Result, Schema } from "effect";
-import { Base64Url } from "effect/encoding";
+import { Array, Effect, Schema } from "effect";
 
 export function anyOf<Column extends PgColumn>(
   column: Column,
@@ -149,84 +148,6 @@ export function mutateRows<Table extends PgTable, Row, E, RD, RE, R>(
     return [...results.values()];
   });
 }
-
-export function keysetPage<Row extends { readonly id: string }, E, R>(options: {
-  readonly query: (
-    after: SQL | undefined,
-    limit: number,
-  ) => Effect.Effect<ReadonlyArray<Row>, E, R>;
-  readonly key: PgColumn;
-  readonly after?: string;
-  readonly filters: Schema.JsonObject;
-  readonly limit: number;
-}): Effect.Effect<
-  { readonly items: ReadonlyArray<Row>; readonly nextCursor?: string },
-  E | KeysetCursorInvalid,
-  R
-> {
-  const fingerprint = encodeJson(canonicalValue(options.filters));
-  const cursor =
-    options.after === undefined
-      ? Result.succeed(undefined)
-      : Base64Url.decodeString(options.after).pipe(
-          Result.flatMap(decodeCursor),
-          Result.flatMap((cursor) =>
-            cursor.filters === fingerprint
-              ? Result.succeed(cursor.key)
-              : Result.fail(KeysetCursorInvalid.make({})),
-          ),
-          Result.mapError(() => KeysetCursorInvalid.make({})),
-        );
-  return Effect.fromResult(cursor).pipe(
-    Effect.flatMap((after) =>
-      options.query(after === undefined ? undefined : gt(options.key, after), options.limit + 1),
-    ),
-    Effect.map((rows) => {
-      const items = rows.slice(0, options.limit);
-      const last = items.at(-1);
-      return {
-        items,
-        ...(rows.length > options.limit && last !== undefined
-          ? {
-              nextCursor: Base64Url.encode(
-                encodeCursor({ version: 1, key: last.id, filters: fingerprint }),
-              ),
-            }
-          : {}),
-      };
-    }),
-  );
-}
-
-export class KeysetCursorInvalid extends Schema.TaggedError<
-  KeysetCursorInvalid,
-  { readonly brand: unique symbol }
->()("KeysetCursorInvalid", {}) {}
-
-function canonicalValue(value: Schema.Json): Schema.Json {
-  if (value === null || typeof value !== "object") {
-    return value;
-  }
-  if (globalThis.Array.isArray(value)) {
-    return value.map(canonicalValue);
-  }
-  return Object.fromEntries(
-    Object.entries(value)
-      .toSorted(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => [key, canonicalValue(item)]),
-  );
-}
-
-const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
-const Cursor = Schema.fromJsonString(
-  Schema.Struct({
-    version: Schema.Literal(1),
-    key: Schema.String.check(Schema.isUUID()),
-    filters: Schema.String,
-  }),
-);
-const encodeCursor = Schema.encodeSync(Cursor);
-const decodeCursor = Schema.decodeUnknownResult(Cursor);
 
 function arrayParameter(column: PgColumn, values: ReadonlyArray<unknown>): SQL {
   const array = pgTable("batch_parameter", { value: column.toBuilder().array() }).value;

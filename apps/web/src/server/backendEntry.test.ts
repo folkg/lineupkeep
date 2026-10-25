@@ -1,26 +1,27 @@
 import { assert, it } from "@effect/vitest";
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import {
-  Note,
-  NoteBatchInvalid,
-  NoteCreateFailed,
-  NoteLifecycleConflict,
-  NoteLifecycleRejected,
-  NoteNotFound,
-  NotePersistenceFailed,
-  decodeNoteId,
-  type NoteError,
-} from "@lineupkeep/backend/notes/Note";
+  ConnectionCreateFailed,
+  ConnectionNotFound,
+  ConnectionPersistenceFailed,
+  ProviderConnection,
+  decodeConnectionId,
+  type ConnectionError,
+} from "@lineupkeep/backend/connections/Connection";
 import {
   makeRequestContext,
   requestContextLayer,
 } from "@lineupkeep/backend/runtime/RequestContext";
 import { Effect, Layer, Schema, DateTime, Cause, Exit } from "effect";
 
-import type { NoteMutationError } from "#contracts/notes/noteContract.ts";
+import type { ConnectionMutationError } from "#contracts/connections/connectionContract.ts";
 
 import { authenticatedUseCase } from "./backendEntry.ts";
-import { mapNoteError, NoteInputInvalid, toNoteView } from "./notes/notePresentation";
+import {
+  ConnectionInputInvalid,
+  mapConnectionError,
+  toConnectionView,
+} from "./connections/connectionPresentation";
 
 it.effect("rejects anonymous invalid input before reporting validation failure", () =>
   Effect.gen(function* () {
@@ -32,7 +33,7 @@ it.effect("rejects anonymous invalid input before reporting validation failure",
 
 it.effect("preserves defects instead of classifying them as expected rejections", () =>
   Effect.gen(function* () {
-    const program = authenticatedUseCase(() => Effect.die("private defect"), mapNoteError);
+    const program = authenticatedUseCase(() => Effect.die("private defect"), mapConnectionError);
     const exit = yield* program.pipe(Effect.provide(yield* authentication(true)), Effect.exit);
 
     assert.isTrue(Exit.isFailure(exit) && Cause.hasDies(exit.cause));
@@ -42,30 +43,28 @@ it.effect("preserves defects instead of classifying them as expected rejections"
 it.effect("returns ownership-free ISO dates through the authenticated result", () =>
   Effect.gen(function* () {
     const timestamp = DateTime.makeUnsafe("2026-01-02T03:04:05Z");
-    const note = yield* Schema.decodeEffect(Note)({
+    const connection = yield* Schema.decodeEffect(ProviderConnection)({
       id: "0fbcaf9b-f3bd-4b27-952b-d80ad6383b99",
       userId: "signed-in-user",
-      title: "Title",
-      body: "Body",
-      lifecycle: "trashed",
-      trashedAt: timestamp,
+      provider: "yahoo",
+      status: "linking",
+      linkingExpiresAt: timestamp,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
 
     const result = yield* authenticatedUseCase(
-      () => Effect.succeed(toNoteView(note)),
-      mapNoteError,
+      () => Effect.succeed(toConnectionView(connection)),
+      mapConnectionError,
     ).pipe(Effect.provide(yield* authentication(true)));
 
     assert.deepStrictEqual(result, {
       type: "success",
       data: {
-        id: note.id,
-        title: "Title",
-        body: "Body",
-        lifecycle: "trashed",
-        trashedAt: "2026-01-02T03:04:05.000Z",
+        id: connection.id,
+        provider: "yahoo",
+        status: "linking",
+        linkingExpiresAt: "2026-01-02T03:04:05.000Z",
         createdAt: "2026-01-02T03:04:05.000Z",
         updatedAt: "2026-01-02T03:04:05.000Z",
       },
@@ -73,35 +72,27 @@ it.effect("returns ownership-free ISO dates through the authenticated result", (
   }),
 );
 
-it.effect("projects every expected note failure to a safe code and business outcome", () =>
+it.effect("projects every expected connection failure to a safe code and business outcome", () =>
   Effect.gen(function* () {
-    const id = decodeNoteId("0fbcaf9b-f3bd-4b27-952b-d80ad6383b99");
+    const id = decodeConnectionId("0fbcaf9b-f3bd-4b27-952b-d80ad6383b99");
     const failures: ReadonlyArray<
-      readonly [NoteError | NoteInputInvalid, NoteMutationError["type"], string]
+      readonly [ConnectionError | ConnectionInputInvalid, ConnectionMutationError["type"], string]
     > = [
-      [NoteInputInvalid.make({}), "note.input_invalid", "rejected"],
-      [NoteBatchInvalid.make({ reason: "private reason" }), "note.input_invalid", "rejected"],
-      [NoteNotFound.make({ id }), "note.not_found", "rejected"],
-      [NoteCreateFailed.make({}), "note.create_failed", "failure"],
+      [ConnectionInputInvalid.make({}), "connection.input_invalid", "rejected"],
+      [ConnectionNotFound.make({ id }), "connection.not_found", "rejected"],
+      [ConnectionCreateFailed.make({}), "connection.create_failed", "failure"],
       [
-        NotePersistenceFailed.make({ cause: "private database failure" }),
-        "note.persistence_failed",
+        ConnectionPersistenceFailed.make({ cause: "private database failure" }),
+        "connection.persistence_failed",
         "failure",
-      ],
-      [
-        NoteLifecycleConflict.make({ id, expected: "active" }),
-        "note.lifecycle_conflict",
-        "conflict",
-      ],
-      [
-        NoteLifecycleRejected.make({ id, lifecycle: "active", event: "private event" }),
-        "note.lifecycle_rejected",
-        "rejected",
       ],
     ];
     const layer = yield* authentication(true);
     for (const [error, code, outcome] of failures) {
-      const observation = yield* authenticatedUseCase(() => Effect.fail(error), mapNoteError).pipe(
+      const observation = yield* authenticatedUseCase(
+        () => Effect.fail(error),
+        mapConnectionError,
+      ).pipe(
         Effect.flatMap((result) =>
           Effect.map(Effect.currentSpan, (span) => ({
             result,
@@ -128,13 +119,10 @@ function execute(signedIn: boolean): Effect.Effect<
       type: "error";
       error: {
         type:
-          | "note.create_failed"
-          | "note.input_invalid"
-          | "note.lifecycle_conflict"
-          | "note.lifecycle_rejected"
-          | "note.list_invalid"
-          | "note.not_found"
-          | "note.persistence_failed";
+          | "connection.create_failed"
+          | "connection.input_invalid"
+          | "connection.not_found"
+          | "connection.persistence_failed";
       };
     }
   | {
@@ -147,8 +135,8 @@ function execute(signedIn: boolean): Effect.Effect<
 > {
   const decoded = Schema.decodeUnknownResult(Schema.String)(42);
   return authenticatedUseCase(
-    () => Effect.fromResult(decoded).pipe(Effect.mapError(() => NoteInputInvalid.make({}))),
-    mapNoteError,
+    () => Effect.fromResult(decoded).pipe(Effect.mapError(() => ConnectionInputInvalid.make({}))),
+    mapConnectionError,
   ).pipe(Effect.provide(authentication(signedIn).pipe(Layer.unwrap)));
 }
 
@@ -165,7 +153,9 @@ function authentication(
 > {
   return Effect.gen(function* () {
     const context = yield* makeRequestContext(
-      new Request("https://example.test/notes", { headers: { "x-request-id": "use-case-test" } }),
+      new Request("https://example.test/connections", {
+        headers: { "x-request-id": "use-case-test" },
+      }),
     );
     return Layer.merge(
       requestContextLayer(context),

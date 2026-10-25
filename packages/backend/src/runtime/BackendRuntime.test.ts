@@ -9,12 +9,12 @@ import { RequestContext } from "./RequestContext.ts";
 it.effect("runs a backend program with context derived from its request", () =>
   withTestRuntime((runtime) =>
     Effect.gen(function* () {
-      const request = new Request("http://localhost/notes", {
+      const request = new Request("http://localhost/connections", {
         headers: { "x-request-id": "request-1" },
       });
 
       const result = yield* Effect.promise(() =>
-        runtime.run(readRequestId(), request, "notes.list"),
+        runtime.run(readRequestId(), request, "connections.list"),
       );
 
       assert.strictEqual(result, "request-1");
@@ -25,7 +25,7 @@ it.effect("runs a backend program with context derived from its request", () =>
 it.effect("creates an operation span with request context", () =>
   withTestRuntime((runtime) =>
     Effect.gen(function* () {
-      const request = new Request("http://localhost/notes", {
+      const request = new Request("http://localhost/connections", {
         method: "POST",
         headers: {
           traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
@@ -34,15 +34,15 @@ it.effect("creates an operation span with request context", () =>
       });
 
       const span = yield* Effect.promise(() =>
-        runtime.run(Effect.currentSpan, request, "notes.update"),
+        runtime.run(Effect.currentSpan, request, "connections.update"),
       );
 
-      assert.strictEqual(span.name, "notes.update");
+      assert.strictEqual(span.name, "connections.update");
       assert.strictEqual(span.kind, "server");
       assert.strictEqual(span.traceId, "0af7651916cd43dd8448eb211c80319c");
       assert.strictEqual(Option.getOrThrow(span.parent).spanId, "b7ad6b7169203331");
       assert.strictEqual(span.attributes.get("request.id"), "request-1");
-      assert.strictEqual(span.attributes.get("app.operation"), "notes.update");
+      assert.strictEqual(span.attributes.get("app.operation"), "connections.update");
       assert.strictEqual(span.attributes.get("app.outcome"), "success");
       assert.isFalse(span.attributes.has("http.request.method"));
       assert.isFalse(span.attributes.has("url.path"));
@@ -54,12 +54,12 @@ it.effect("creates an operation span with request context", () =>
 it.effect("parents backend operations to the enclosing HTTP request span", () =>
   withTestRuntime((runtime) =>
     Effect.gen(function* () {
-      const request = new Request("http://localhost/notes");
+      const request = new Request("http://localhost/connections");
       let operationSpan: Tracer.Span | undefined;
 
       const response = yield* Effect.promise(() =>
         runtime.runHttpHandler(request, async (tracedRequest) => {
-          operationSpan = await runtime.run(Effect.currentSpan, tracedRequest, "notes.list");
+          operationSpan = await runtime.run(Effect.currentSpan, tracedRequest, "connections.list");
           return new Response(undefined, { status: 204 });
         }),
       );
@@ -77,11 +77,11 @@ it.effect("parents backend operations to the enclosing HTTP request span", () =>
 it.effect("rejects the promise when the backend program fails", () =>
   withTestRuntime((runtime) =>
     Effect.gen(function* () {
-      const request = new Request("http://localhost/notes");
+      const request = new Request("http://localhost/connections");
       const program = Effect.fail(new BackendRuntimeTestError());
 
       const assertion = rejects(
-        runtime.run(program, request, "notes.list"),
+        runtime.run(program, request, "connections.list"),
         BackendRuntimeTestError,
       );
 
@@ -94,7 +94,7 @@ it.effect("hands after-response work to the platform once the response is ready"
   Effect.gen(function* () {
     const extended: Array<Promise<unknown>> = [];
     const completed: Array<string> = [];
-    const request = new Request("http://localhost/notes");
+    const request = new Request("http://localhost/connections");
 
     const response = yield* withTestRuntime(
       (runtime) =>
@@ -130,7 +130,7 @@ it.effect("finishes in-flight requests before releasing resources on dispose", (
           await runtime.dispose();
         }),
     );
-    const request = new Request("http://localhost/notes");
+    const request = new Request("http://localhost/connections");
     const response = runtime.runHttpHandler(request, () => handler.promise);
 
     const disposed = runtime.dispose().then(() => events.push("disposed"));

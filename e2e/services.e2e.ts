@@ -38,17 +38,20 @@ test("signs in named personas headlessly and isolates persisted service outcomes
   expect(owner).toBeInstanceOf(ServiceIdentity);
   expect(JSON.stringify(owner)).toBe('{"persona":"owner"}');
   const other = await services.signIn("other");
-  await services.arrange(owner, "verify the empty starting collection", "readNotes");
+  await services.arrange(owner, "verify the empty starting collection", "readConnections");
 
-  const note = await services.exercise(owner, "create an owned Note", "createNote", {
+  const connection = await services.exercise(owner, "start an owned link", "startLinking", {
     requestId: randomUUID(),
-    title: "Service proof",
-    body: "Private",
+    provider: "yahoo",
   });
-  const owned = await services.inspect(owner, "read persisted Notes", "readNotes");
-  const isolated = await services.inspect(other, "read another User's Notes", "readNotes");
+  const owned = await services.inspect(owner, "read persisted connections", "readConnections");
+  const isolated = await services.inspect(
+    other,
+    "read another User's connections",
+    "readConnections",
+  );
 
-  expect(owned).toEqual([note]);
+  expect(owned).toEqual([connection]);
   expect(isolated).toEqual([]);
   expect(browser.contexts()).toEqual([]);
   const evidence = test
@@ -59,7 +62,7 @@ test("signs in named personas headlessly and isolates persisted service outcomes
   expect(evidence.map(({ persona }) => persona)).toEqual(["owner", "owner", "owner", "other"]);
   expect(evidence.every(({ traceId }) => /^[a-f0-9]{32}$/u.test(traceId))).toBe(true);
   expect(evidence[1]).toMatchObject({
-    outcome: { status: "succeeded", result: note },
+    outcome: { status: "succeeded", result: connection },
     execution: "application",
   });
 });
@@ -73,12 +76,15 @@ test("uses named browser personas with their real sessions for service calls", a
   const other = await newUser("other");
   await signUp(other);
 
-  await services.exercise(page, "create as the browser owner", "createNote", {
+  await services.exercise(page, "start a link as the browser owner", "startLinking", {
     requestId: randomUUID(),
-    title: "Browser persona",
-    body: "Private",
+    provider: "yahoo",
   });
-  const isolated = await services.inspect(other, "read as the other browser User", "readNotes");
+  const isolated = await services.inspect(
+    other,
+    "read as the other browser User",
+    "readConnections",
+  );
 
   expect(isolated).toEqual([]);
   const calls = test
@@ -88,68 +94,65 @@ test("uses named browser personas with their real sessions for service calls", a
   expect(calls.map(({ persona }) => persona)).toEqual(["owner", "other"]);
 });
 
-test("replays concurrent batch creates and rolls back mixed-owner updates in PostgreSQL", async ({
+test("replays concurrent batch links and rolls back mixed-owner cancellations in PostgreSQL", async ({
   services,
 }) => {
   const owner = await services.signIn("batch-owner");
   const other = await services.signIn("batch-other");
   const inputs = [
-    { requestId: randomUUID(), title: "Batch first", body: "First body" },
-    { requestId: randomUUID(), title: "Batch second", body: "Second body" },
+    { requestId: randomUUID(), provider: "yahoo" },
+    { requestId: randomUUID(), provider: "yahoo" },
   ];
-  await test.step("Baseline: [batch-owner] has no Notes", async () => {
-    expect(await services.inspect(owner, "read the starting collection", "readNotes")).toEqual([]);
+  await test.step("Baseline: [batch-owner] has no connections", async () => {
+    expect(
+      await services.inspect(owner, "read the starting collection", "readConnections"),
+    ).toEqual([]);
   });
 
   const [first, replay] =
-    await test.step("Action: [batch-owner] submits identical batches concurrently", () =>
+    await test.step("Action: [batch-owner] submits identical link batches concurrently", () =>
       Promise.all([
-        services.exercise(owner, "create the batch", "createNotes", inputs),
-        services.exercise(owner, "retry the batch concurrently", "createNotes", inputs),
+        services.exercise(owner, "start the batch", "startLinkingBatch", inputs),
+        services.exercise(owner, "retry the batch concurrently", "startLinkingBatch", inputs),
       ]));
   expect(replay).toEqual(first);
   const observations = Schema.decodeUnknownSync(
     Schema.Array(
       Schema.Struct({
         id: Schema.String,
-        title: Schema.String,
-        body: Schema.String,
-        lifecycle: Schema.String,
+        status: Schema.String,
+        linkingExpiresAt: Schema.optional(Schema.String),
       }),
     ),
   )(first);
   const foreign = Schema.decodeUnknownSync(
     Schema.Struct({
       id: Schema.String,
-      title: Schema.String,
-      body: Schema.String,
-      lifecycle: Schema.String,
+      status: Schema.String,
+      linkingExpiresAt: Schema.optional(Schema.String),
     }),
   )(
-    await services.exercise(other, "create a foreign Note", "createNote", {
+    await services.exercise(other, "start a foreign link", "startLinking", {
       requestId: randomUUID(),
-      title: "Other owner",
-      body: "Private",
+      provider: "yahoo",
     }),
   );
 
-  await test.step("Result: [batch-owner] cannot commit an update containing another owner's Note", async () => {
+  await test.step("Result: [batch-owner] cannot cancel a batch containing another owner's connection", async () => {
     await expect(
-      services.exercise(owner, "reject a mixed-owner update", "updateNotes", [
-        ...observations.map((note) => ({
-          id: note.id,
-          title: "Must roll back",
-          body: "Must roll back",
-        })),
-        { id: foreign.id, title: "Forbidden", body: "Forbidden" },
+      services.exercise(owner, "reject a mixed-owner cancellation", "cancelLinkingBatch", [
+        ...observations.map((connection) => ({ id: connection.id })),
+        { id: foreign.id },
       ]),
-    ).rejects.toThrow("note.not_found");
+    ).rejects.toThrow("connection.not_found");
   });
-  await test.step("Persistence: both owners retain their original Notes without duplicates", async () => {
-    expect(await services.inspect(owner, "read after the rejected update", "readNotes")).toEqual(
-      observations.toSorted((left, right) => left.id.localeCompare(right.id)),
+  await test.step("Persistence: both owners retain their original connections without duplicates", async () => {
+    expect(
+      await services.inspect(owner, "read after the rejected cancellation", "readConnections"),
+    ).toEqual(observations.toSorted((left, right) => left.id.localeCompare(right.id)));
+    expect(await services.inspect(other, "read the foreign connection", "readConnections")).toEqual(
+      [foreign],
     );
-    expect(await services.inspect(other, "read the foreign Note", "readNotes")).toEqual([foreign]);
   });
 });
 
@@ -160,8 +163,8 @@ test("rejects anonymous service invocations and invalid programs or arguments", 
   const invocation = {
     persona: "owner",
     phase: "Read",
-    description: "read Notes",
-    program: "readNotes",
+    description: "read connections",
+    program: "readConnections",
     arguments: {},
   };
 
@@ -177,6 +180,6 @@ test("rejects anonymous service invocations and invalid programs or arguments", 
   ).toBe(404);
   const owner = await services.signIn("owner");
   await expect(
-    services.exercise(owner, "reject invalid arguments", "createNote", { title: 42 }),
+    services.exercise(owner, "reject invalid arguments", "startLinking", { provider: 42 }),
   ).rejects.toThrow();
 });

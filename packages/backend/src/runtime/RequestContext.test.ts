@@ -12,7 +12,7 @@ it.effect(
   "establishes correlation once before constructing context for an uncorrelated request",
   () =>
     Effect.gen(function* () {
-      const request = new Request("http://localhost/notes");
+      const request = new Request("http://localhost/connections");
 
       const entry = yield* correlateRequestEffect(request);
       const nested = yield* correlateRequestEffect(entry.request);
@@ -31,7 +31,7 @@ it.effect(
 
 it.effect("retains an entry-correlated request after an adapter consumes its body", () =>
   Effect.gen(function* () {
-    const request = new Request("http://localhost/notes", {
+    const request = new Request("http://localhost/connections", {
       method: "POST",
       body: "adapter input",
       headers: { "x-request-id": "entry-id" },
@@ -49,10 +49,10 @@ it.effect("retains an entry-correlated request after an adapter consumes its bod
 
 it.effect("rebuilds a request with added headers from its parts", () =>
   Effect.gen(function* () {
-    const original = new Request("http://localhost/notes", {
+    const original = new Request("http://localhost/connections", {
       method: "POST",
       headers: { "content-type": "text/plain" },
-      body: "note body",
+      body: "request body",
     });
     const parts: RequestParts = {
       url: original.url,
@@ -65,10 +65,10 @@ it.effect("rebuilds a request with added headers from its parts", () =>
     const rebuilt = withRequestHeaders(parts, { "x-request-id": "request-1" });
 
     assert.strictEqual(rebuilt.method, "POST");
-    assert.strictEqual(rebuilt.url, "http://localhost/notes");
+    assert.strictEqual(rebuilt.url, "http://localhost/connections");
     assert.strictEqual(rebuilt.headers.get("content-type"), "text/plain");
     assert.strictEqual(rebuilt.headers.get("x-request-id"), "request-1");
     assert.strictEqual(original.headers.get("x-request-id"), null);
-    assert.strictEqual(yield* Effect.promise(() => rebuilt.text()), "note body");
+    assert.strictEqual(yield* Effect.promise(() => rebuilt.text()), "request body");
   }),
 );

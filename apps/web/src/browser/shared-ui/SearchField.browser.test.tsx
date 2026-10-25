@@ -8,7 +8,7 @@ import type { SearchFieldStatus } from "./SearchField";
 
 it("clears the search and returns focus to the input", async () => {
   using _app = renderSearchField();
-  const input = page.getByRole("searchbox", { name: "Search notes" });
+  const input = page.getByRole("searchbox", { name: "Search connections" });
   await input.fill("meeting");
 
   await page.getByRole("button", { name: "Clear search" }).click();
@@ -22,7 +22,7 @@ it("clears controlled search state when Escape is pressed", async () => {
   using _app = renderSearchField({ type: "idle" }, () => {
     clears += 1;
   });
-  const input = page.getByRole("searchbox", { name: "Search notes" });
+  const input = page.getByRole("searchbox", { name: "Search connections" });
   await input.fill("meeting");
 
   await userEvent.keyboard("{Escape}");
@@ -50,7 +50,7 @@ it("shows pending recovery while keeping keyboard focus and search input availab
     .element(page.getByRole("button", { name: "Retrying search…" }), { timeout: 1000 })
     .toHaveAttribute("aria-busy", "true");
   await expect.element(page.getByRole("button", { name: "Retrying search…" })).toHaveFocus();
-  await expect.element(page.getByRole("searchbox", { name: "Search notes" })).toBeEnabled();
+  await expect.element(page.getByRole("searchbox", { name: "Search connections" })).toBeEnabled();
 
   read.resolve();
 
@@ -58,13 +58,13 @@ it("shows pending recovery while keeping keyboard focus and search input availab
 });
 
 it("delays loading feedback while keeping the field enabled", async () => {
-  using _app = renderSearchField({ message: "Searching notes…", type: "loading" });
-  const input = page.getByRole("searchbox", { name: "Search notes" });
+  using _app = renderSearchField({ message: "Searching connections…", type: "loading" });
+  const input = page.getByRole("searchbox", { name: "Search connections" });
   const status = page.getByRole("status");
 
   expect(status.element().textContent).toBe("");
   await expect.element(input).toBeEnabled();
-  await expect.element(status).toHaveTextContent("Searching notes…");
+  await expect.element(status).toHaveTextContent("Searching connections…");
 });
 
 function renderSearchField(
@@ -78,7 +78,7 @@ function renderSearchField(
     const [value, setValue] = createSignal("");
     return (
       <SearchField
-        ariaLabel="Search notes"
+        ariaLabel="Search connections"
         status={status}
         value={value()}
         onClear={() => {

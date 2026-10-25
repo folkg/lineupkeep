@@ -6,7 +6,6 @@ import {
   type BrowserContextOptions,
   type Page,
   type Request,
-  type Locator,
 } from "@playwright/test";
 import { Schema } from "effect";
 
@@ -132,8 +131,8 @@ export async function signUp(page: Page, persona = pagePersona(page)): Promise<A
     const account = { email: `e2e-${randomUUID()}@example.com` };
     await page.goto("/auth");
     await signIn(page, account);
-    await expect(page).toHaveURL("/notes");
-    await expect(page.getByRole("heading", { name: "Notes", exact: true })).toBeVisible();
+    await expect(page).toHaveURL("/connections");
+    await expect(page.getByRole("heading", { name: "Connections", exact: true })).toBeVisible();
     return account;
   });
 }
@@ -183,23 +182,6 @@ async function inboxFor(email: string): Promise<ReadonlyArray<InboxMessage>> {
 const Inbox = Schema.fromJsonString(
   Schema.Array(Schema.Struct({ subject: Schema.String, text: Schema.String })),
 );
-
-export async function addNote(page: Page, title: string, body: string): Promise<void> {
-  await page.getByRole("textbox", { name: "Title", exact: true }).fill(title);
-  await page.getByRole("textbox", { name: "Note", exact: true }).fill(body);
-  await page.getByRole("button", { name: "Add note" }).click();
-  await expect(page.getByText("Note added.")).toBeVisible();
-}
-
-export function noteTitles(page: Page): Locator {
-  return page.getByRole("region", { name: "Note results" }).getByRole("heading");
-}
-
-export function noteCard(page: Page, title: string): Locator {
-  return page
-    .getByRole("article")
-    .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
-}
 
 export function recordServerRequests(page: Page): ServerRequests {
   const recorded: Array<string> = [];

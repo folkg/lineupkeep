@@ -6,7 +6,7 @@ import { requireAuthenticatedSession } from "./requireAuthenticatedSession";
 it("redirects an anonymous Session to authentication and back", async () => {
   const result = await requireAuthenticatedSession(
     () => Promise.resolve({ status: "anonymous" }),
-    "/notes?view=trash",
+    "/connections?status=linking",
   ).then(
     () => undefined,
     (error: unknown) => error,
@@ -14,6 +14,6 @@ it("redirects an anonymous Session to authentication and back", async () => {
 
   expect(isRedirect(result)).toBe(true);
   expect(isRedirect(result) ? result.options.search : undefined).toEqual({
-    redirect: "/notes?view=trash",
+    redirect: "/connections?status=linking",
   });
 });
