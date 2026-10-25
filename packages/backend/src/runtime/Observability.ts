@@ -27,9 +27,7 @@ function loadObservabilityConfig(): Config.Config<{
 }> {
   return Config.all({
     environment: appEnvironmentConfig,
-    serviceName: Config.String("OTEL_SERVICE_NAME").pipe(
-      Config.withDefault("sourdough-starter-web"),
-    ),
+    serviceName: Config.String("OTEL_SERVICE_NAME").pipe(Config.withDefault("lineupkeep-web")),
     serviceVersion: Config.String("SERVICE_VERSION").pipe(Config.withDefault("development")),
     slowSpanThreshold: Config.Duration("DEV_SLOW_SPAN_THRESHOLD").pipe(
       Config.withDefault(Duration.millis(100)),

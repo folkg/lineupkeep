@@ -8,12 +8,12 @@ import {
   LocalDestroySchema,
   LocalEndpointsSchema,
   LocalRunSchema,
-} from "@sourdough/tools/local-stack/contract.ts";
-import type { LocalRun } from "@sourdough/tools/local-stack/contract.ts";
+} from "@lineupkeep/tools/local-stack/contract.ts";
+import type { LocalRun } from "@lineupkeep/tools/local-stack/contract.ts";
 import {
   postgresContainer,
   removeOwnedContainer,
-} from "@sourdough/tools/local-stack/postgresContainer.ts";
+} from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import { Schema } from "effect";
 
 import type { OwnedInfrastructure } from "./lifecycle.ts";

@@ -7,7 +7,7 @@ import { expect, it } from "vitest";
 
 import { assertDeployableComposition, assertClientModules } from "./verifyComposition.ts";
 it("rejects a server bundle containing the E2E runtime composition", async () => {
-  await using temporary = await mkdtempDisposable(join(tmpdir(), "sourdough-composition-"));
+  await using temporary = await mkdtempDisposable(join(tmpdir(), "lineupkeep-composition-"));
   const directory = temporary.path;
   await mkdir(join(directory, "chunks"));
   await writeFile(
@@ -27,7 +27,7 @@ it("marks the verification route handler as non-deployable", async () => {
 });
 
 it("accepts a deployable server bundle", async () => {
-  await using temporary = await mkdtempDisposable(join(tmpdir(), "sourdough-composition-"));
+  await using temporary = await mkdtempDisposable(join(tmpdir(), "lineupkeep-composition-"));
   const directory = temporary.path;
   await writeFile(join(directory, "server.js"), 'export const application = "production";');
 

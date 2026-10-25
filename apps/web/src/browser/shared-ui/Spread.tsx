@@ -7,8 +7,8 @@ export function Spread(props: SpreadProps): JSX.Element {
     <Show
       when={props.variant === "form"}
       fallback={
-        <section class="grid flex-1 items-start gap-9 pt-10 pb-[max(64px,env(safe-area-inset-bottom))] md:min-h-[calc(100svh-var(--theme-size-header-wide))] md:grid-cols-[minmax(0,0.85fr)_minmax(440px,1.15fr)] md:items-center md:gap-[clamp(48px,7vw,108px)] md:py-[clamp(28px,5vh,58px)]">
-          <div class="max-w-[680px] lg:max-w-[530px]">{props.start}</div>
+        <section class="grid gap-14 py-[clamp(56px,10vh,112px)] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] md:items-end md:gap-20">
+          <div class="min-w-0">{props.start}</div>
           {props.end}
         </section>
       }

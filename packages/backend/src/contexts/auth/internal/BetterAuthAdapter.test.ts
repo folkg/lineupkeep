@@ -149,7 +149,7 @@ it.effect(
       const [message] = yield* outbox.messages;
       const code = codeIn(message?.text ?? "");
       assert.strictEqual(message?.to, "reader@example.test");
-      assert.strictEqual(message?.subject, `${code} is your Sourdough Starter sign-in code`);
+      assert.strictEqual(message?.subject, `${code} is your Lineupkeep sign-in code`);
       assert.include(message?.text ?? "", "expires in 10 minutes");
       assert.notInclude(yield* Effect.promise(() => response.text()), code);
     }).pipe(Effect.provide(adapterLayer(baseConfig))),
@@ -870,7 +870,7 @@ const testScopeDefinitions = [
 const testScopes = Layer.succeed(AuthorizationScopes)(testScopeDefinitions);
 
 const baseConfig = {
-  DATABASE_URL: "postgres://test:test@localhost:1/sourdough_test",
+  DATABASE_URL: "postgres://test:test@localhost:1/lineupkeep_test",
   BETTER_AUTH_URL: "http://localhost:5173",
   BETTER_AUTH_SECRET: "test-secret-with-at-least-thirty-two-characters",
   APP_ENV: "test",

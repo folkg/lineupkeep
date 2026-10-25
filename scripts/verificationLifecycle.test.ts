@@ -11,7 +11,7 @@ import {
   containerNameFor,
   postgresContainer,
   testContainers,
-} from "@sourdough/tools/local-stack/postgresContainer.ts";
+} from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import { Schema } from "effect";
 import { assert, expect, it, vi } from "vitest";
 
@@ -542,8 +542,8 @@ it("manages only containers named for a run", () => {
 
   const owned = postgresContainer(containerNameFor(runId), "/lock");
 
-  expect(owned.name).toBe(`sourdough-test-${runId.replaceAll("-", "")}`);
-  expect(() => postgresContainer("sourdough-postgres", "/lock")).toThrow("Refusing to manage");
+  expect(owned.name).toBe(`lineupkeep-test-${runId.replaceAll("-", "")}`);
+  expect(() => postgresContainer("lineupkeep-postgres", "/lock")).toThrow("Refusing to manage");
 });
 
 it("removes a container that an orphaned Docker client finishes creating after its run died", async () => {
@@ -593,7 +593,7 @@ it("treats a container as orphaned only when its checkout's lock is gone or anot
   await expect.poll(() => existsSync(join(lock, "owner.json"))).toBe(true);
 
   const ownRun = await isOrphaned(lock, "verify_fixture");
-  const otherRun = await isOrphaned(lock, "sourdough-test-0123456789abcdef0123456789abcdef");
+  const otherRun = await isOrphaned(lock, "lineupkeep-test-0123456789abcdef0123456789abcdef");
   await running;
   const afterRelease = await isOrphaned(lock, "verify_fixture");
 
@@ -619,9 +619,9 @@ it("lists only disposable test containers that name their checkout's lock, keepi
   const unlabelled = containerNameFor(randomUUID());
   const lock = "/check\tout\nwith delimiters/.artifacts/.lock";
   await docker.listContainers([
-    { name: labelled, labels: { "sourdough.lock": lock } },
+    { name: labelled, labels: { "lineupkeep.lock": lock } },
     { name: unlabelled, labels: {} },
-    { name: "sourdough-postgres", labels: { "sourdough.lock": "/elsewhere" } },
+    { name: "lineupkeep-postgres", labels: { "lineupkeep.lock": "/elsewhere" } },
   ]);
 
   const containers = await testContainers(AbortSignal.timeout(10_000));
@@ -634,8 +634,8 @@ it("skips a listed container that disappears before it is inspected", async () =
   const vanishing = containerNameFor(randomUUID());
   const remaining = containerNameFor(randomUUID());
   await docker.listContainers([
-    { name: vanishing, labels: { "sourdough.lock": "/one/.artifacts/.lock" } },
-    { name: remaining, labels: { "sourdough.lock": "/two/.artifacts/.lock" } },
+    { name: vanishing, labels: { "lineupkeep.lock": "/one/.artifacts/.lock" } },
+    { name: remaining, labels: { "lineupkeep.lock": "/two/.artifacts/.lock" } },
   ]);
   await docker.vanish(0);
 
@@ -962,7 +962,7 @@ echo "$*" >> "${folder}/calls"
 case "$1" in
   create) sleep 1; touch "${state}/$3" ;;
   ps) cat "${folder}/ids" ;;
-  container) if [ -f "${folder}/inspect-$3.json" ]; then cat "${folder}/inspect-$3.json"; elif [ -f "${state}/$3" ]; then printf '[{"Name":"/%s","Config":{"Labels":{"sourdough.disposable":"test-database","sourdough.lock":"/lock"}}}]' "$3"; else echo "Error: No such object: $3" >&2; exit 1; fi ;;
+  container) if [ -f "${folder}/inspect-$3.json" ]; then cat "${folder}/inspect-$3.json"; elif [ -f "${state}/$3" ]; then printf '[{"Name":"/%s","Config":{"Labels":{"lineupkeep.disposable":"test-database","lineupkeep.lock":"/lock"}}}]' "$3"; else echo "Error: No such object: $3" >&2; exit 1; fi ;;
   rm) if [ -f "${state}/$4" ]; then rm "${state}/$4"; else echo "Error: No such container: $4" >&2; if [ ! -f "${folder}/absent-success" ]; then exit 1; fi; fi ;;
 esac
 `,
@@ -1003,7 +1003,9 @@ esac
         JSON.stringify([
           {
             Name: `/${name}`,
-            Config: { Labels: { "sourdough.disposable": "test-database", "sourdough.lock": lock } },
+            Config: {
+              Labels: { "lineupkeep.disposable": "test-database", "lineupkeep.lock": lock },
+            },
           },
         ]),
       );
@@ -1016,7 +1018,7 @@ esac
           {
             Name: `/${name}`,
             Config: {
-              Labels: { "sourdough.disposable": "test-database", "sourdough.lock": "/lock" },
+              Labels: { "lineupkeep.disposable": "test-database", "lineupkeep.lock": "/lock" },
             },
           },
         ]),

@@ -13,7 +13,7 @@ it("isolates test runs from inherited application credentials and fixed addresse
     OTEL_EXPORTER_OTLP_ENDPOINT: "https://remote.invalid",
   };
   const stack = {
-    database: new URL("postgres://sourdough:local@127.0.0.1:49001/sourdough_test"),
+    database: new URL("postgres://lineupkeep:local@127.0.0.1:49001/lineupkeep_test"),
     ports: { app: 21001, email: 21002, traces: 21003 },
     inspector: "ws://127.0.0.1:21004/owned-inspector",
   };
@@ -26,7 +26,7 @@ it("isolates test runs from inherited application credentials and fixed addresse
   );
 
   expect(environment["DATABASE_URL"]).toBe(
-    "postgres://sourdough:local@127.0.0.1:49001/sourdough_test",
+    "postgres://lineupkeep:local@127.0.0.1:49001/lineupkeep_test",
   );
   expect(environment["BETTER_AUTH_URL"]).toBe("http://127.0.0.1:21001");
   expect(environment["RESEND_API_BASE_URL"]).toBe("http://127.0.0.1:21002");

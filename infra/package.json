@@ -1,5 +1,5 @@
 {
-  "name": "@sourdough/infra",
+  "name": "@lineupkeep/infra",
   "private": true,
   "type": "module",
   "imports": {
@@ -18,8 +18,8 @@
     "@alchemy.run/frontend-frameworks": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
-    "@sourdough/tools": "workspace:*",
-    "@sourdough/web": "workspace:*",
+    "@lineupkeep/tools": "workspace:*",
+    "@lineupkeep/web": "workspace:*",
     "alchemy": "catalog:",
     "effect": "catalog:",
     "vite": "catalog:"

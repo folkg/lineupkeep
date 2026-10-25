@@ -6,7 +6,7 @@ import { databaseUrlConfig, decodeDatabaseUrl } from "#config/DatabaseUrl.ts";
 export class DatabaseConnection extends Context.Service<
   DatabaseConnection,
   DatabaseConnectionSettings
->()("@sourdough/backend/database/DatabaseConnection") {
+>()("@lineupkeep/backend/database/DatabaseConnection") {
   static fromConfig(options: {
     readonly idleTimeout: Duration.Input;
   }): Layer.Layer<DatabaseConnection, Config.ConfigError> {

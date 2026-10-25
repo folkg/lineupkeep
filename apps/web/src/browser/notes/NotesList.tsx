@@ -2,7 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { Errored, For, Loading, Show, onSettled } from "solid-js";
 import type { Accessor } from "solid-js";
 
-import { Tape } from "#browser/brand-ui/Tape.tsx";
+import { Badge } from "#browser/brand-ui/Badge.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Box } from "#browser/shared-ui/Box.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
@@ -57,10 +57,10 @@ export function NotesList(props: NotesListProps): JSX.Element {
               </Heading>
               <Show when={list.count()}>
                 {(count) => (
-                  <Tape size="caption">
+                  <Badge size="caption">
                     {count()}
                     {list.hasMore() ? "+" : ""} {count() === 1 ? "note" : "notes"}
-                  </Tape>
+                  </Badge>
                 )}
               </Show>
             </Inline>

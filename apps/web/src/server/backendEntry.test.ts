@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { AuthService } from "@sourdough/backend/auth/Auth";
+import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import {
   Note,
   NoteBatchInvalid,
@@ -10,8 +10,11 @@ import {
   NotePersistenceFailed,
   decodeNoteId,
   type NoteError,
-} from "@sourdough/backend/notes/Note";
-import { makeRequestContext, requestContextLayer } from "@sourdough/backend/runtime/RequestContext";
+} from "@lineupkeep/backend/notes/Note";
+import {
+  makeRequestContext,
+  requestContextLayer,
+} from "@lineupkeep/backend/runtime/RequestContext";
 import { Effect, Layer, Schema, DateTime, Cause, Exit } from "effect";
 
 import type { NoteMutationError } from "#contracts/notes/noteContract.ts";
@@ -138,8 +141,8 @@ function execute(signedIn: boolean): Effect.Effect<
       type: "success";
       data: string;
     },
-  | import("@sourdough/backend/auth/Auth").AuthenticationInvalidResponse
-  | import("@sourdough/backend/auth/Auth").AuthenticationUnavailable,
+  | import("@lineupkeep/backend/auth/Auth").AuthenticationInvalidResponse
+  | import("@lineupkeep/backend/auth/Auth").AuthenticationUnavailable,
   never
 > {
   const decoded = Schema.decodeUnknownResult(Schema.String)(42);
@@ -153,7 +156,7 @@ function authentication(
   signedIn: boolean,
 ): Effect.Effect<
   Layer.Layer<
-    AuthService | import("@sourdough/backend/runtime/RequestContext").RequestContext,
+    AuthService | import("@lineupkeep/backend/runtime/RequestContext").RequestContext,
     never,
     never
   >,

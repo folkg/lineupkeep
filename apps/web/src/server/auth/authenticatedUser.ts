@@ -1,5 +1,5 @@
-import { getCurrentAuthSession } from "@sourdough/backend/auth/AuthSession";
-import type { UserId } from "@sourdough/backend/auth/User";
+import { getCurrentAuthSession } from "@lineupkeep/backend/auth/AuthSession";
+import type { UserId } from "@lineupkeep/backend/auth/User";
 import { Effect } from "effect";
 
 import type { AuthenticationFailureResult } from "#contracts/auth/authContract.ts";
@@ -10,12 +10,12 @@ export function withAuthenticatedUser<A, E, R>(
   A | AuthenticationFailureResult,
   | E
   | (
-      | import("@sourdough/backend/auth/Auth").AuthenticationInvalidResponse
-      | import("@sourdough/backend/auth/Auth").AuthenticationUnavailable
+      | import("@lineupkeep/backend/auth/Auth").AuthenticationInvalidResponse
+      | import("@lineupkeep/backend/auth/Auth").AuthenticationUnavailable
     ),
   | R
-  | import("@sourdough/backend/auth/Auth").AuthService
-  | import("@sourdough/backend/runtime/RequestContext").RequestContext
+  | import("@lineupkeep/backend/auth/Auth").AuthService
+  | import("@lineupkeep/backend/runtime/RequestContext").RequestContext
 > {
   return Effect.flatMap(
     getCurrentAuthSession(),

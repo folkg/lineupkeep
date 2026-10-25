@@ -1,4 +1,4 @@
-import type { ConsentRequest } from "@sourdough/backend/auth/Auth";
+import type { ConsentRequest } from "@lineupkeep/backend/auth/Auth";
 import { queryOptions } from "@tanstack/solid-query";
 
 import type { ConsentRemote } from "./consentRemote";

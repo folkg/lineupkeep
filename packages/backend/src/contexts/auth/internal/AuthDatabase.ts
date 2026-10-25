@@ -18,7 +18,7 @@ export const authRelations = defineRelations({ ...authSchema, ...oauthSchema }, 
 export class AuthDatabase extends Context.Service<
   AuthDatabase,
   PgAsyncDatabase<PgQueryResultHKT, typeof authRelations>
->()("@sourdough/backend/contexts/auth/internal/AuthDatabase") {
+>()("@lineupkeep/backend/contexts/auth/internal/AuthDatabase") {
   static readonly layer = Layer.effect(
     this,
     Effect.gen(function* () {

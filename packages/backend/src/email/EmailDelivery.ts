@@ -17,7 +17,7 @@ import type { HttpClientError } from "effect/http";
 import { appEnvironmentConfig } from "#config/AppEnvironment.ts";
 
 export class EmailDelivery extends Context.Service<EmailDelivery, EmailDeliveryShape>()(
-  "@sourdough/backend/email/EmailDelivery",
+  "@lineupkeep/backend/email/EmailDelivery",
 ) {
   static readonly fromConfig: Layer.Layer<EmailDelivery, Config.ConfigError, EmailTransport> =
     Layer.unwrap(

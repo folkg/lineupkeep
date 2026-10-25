@@ -28,7 +28,7 @@ const providers = Layer.mergeAll(
 );
 
 export default Alchemy.Stack(
-  "SourdoughStarterWeb",
+  "LineupkeepWeb",
   {
     providers,
     state: deploymentState,

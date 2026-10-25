@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { LocalEndpointsSchema, LocalRunSchema } from "@sourdough/tools/local-stack/contract.ts";
-import type { LocalRun } from "@sourdough/tools/local-stack/contract.ts";
+import { LocalEndpointsSchema, LocalRunSchema } from "@lineupkeep/tools/local-stack/contract.ts";
+import type { LocalRun } from "@lineupkeep/tools/local-stack/contract.ts";
 import * as Alchemy from "alchemy";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
@@ -40,7 +40,7 @@ export async function readSafetyRun(): Promise<{
 }
 
 export function developmentSafety(run: LocalRun): DevelopmentSafety {
-  const name = `sourdough-starter-dev-safety-${run.runId}`;
+  const name = `lineupkeep-dev-safety-${run.runId}`;
   const identity = {
     name,
     volume: `${name}-data`,
@@ -50,7 +50,7 @@ export function developmentSafety(run: LocalRun): DevelopmentSafety {
   const providers = developmentPostgresProvider();
   const options = safetyOptions(run, providers);
   const stack = Alchemy.Stack(
-    "SourdoughStarterDevelopmentDatabaseSafety",
+    "LineupkeepDevelopmentDatabaseSafety",
     options,
     Effect.gen(function* () {
       const database = yield* DevelopmentPostgres("Postgres", identity);
@@ -64,7 +64,7 @@ export function migrationSafety(run: LocalRun, fail: boolean): MigrationSafety {
   const options = safetyOptions(run, Layer.mergeAll(Command.providers(), postgresProvider));
   const marker = join(run.directory, "migration-activated");
   const stack = Alchemy.Stack(
-    "SourdoughStarterMigrationGateSafety",
+    "LineupkeepMigrationGateSafety",
     options,
     Effect.gen(function* () {
       const database = yield* DatabaseDeployment.pipe(Effect.provide(localPostgres(options.stage)));

@@ -57,12 +57,9 @@ const buttonBase =
 
 const buttonBorderless = "border-transparent";
 
-const buttonLift =
-  "hover:-translate-y-px active:translate-y-0 disabled:translate-y-0 aria-disabled:translate-y-0";
+const filledShape = "min-h-button px-4.5 font-semibold";
 
-const filledShape = "min-h-button px-4.5 font-bold";
-
-const quietShape = "min-h-tap-target px-2.5 font-bold";
+const quietShape = "min-h-tap-target px-2.5 font-semibold";
 
 const linkShape = "min-h-tap-target p-0 font-semibold underline decoration-1 underline-offset-4";
 
@@ -71,7 +68,7 @@ const quietNeutral = "text-ink-soft hover:bg-action-soft hover:text-ink";
 export const iconButtonClass = cx(
   buttonBase,
   buttonBorderless,
-  "size-tap-target font-bold",
+  "size-tap-target font-semibold",
   quietNeutral,
 );
 
@@ -79,14 +76,12 @@ const buttonStyles: Record<ButtonStyleKey, string> = {
   "accent:neutral": cx(
     buttonBase,
     buttonBorderless,
-    buttonLift,
     filledShape,
     "bg-accent text-on-accent hover:bg-accent-hover",
   ),
 
   "google:neutral": cx(
     "inline-flex min-h-button items-center justify-center gap-2.5 rounded-control border border-google-stroke bg-google-fill px-3 font-google text-google font-medium text-google-ink no-underline transition-transform duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus aria-disabled:pointer-events-none aria-disabled:opacity-50",
-    buttonLift,
   ),
   "link:danger": cx(
     buttonBase,
@@ -103,14 +98,12 @@ const buttonStyles: Record<ButtonStyleKey, string> = {
   "primary:danger": cx(
     buttonBase,
     buttonBorderless,
-    buttonLift,
     filledShape,
     "bg-danger text-paper hover:bg-danger-hover",
   ),
   "primary:neutral": cx(
     buttonBase,
     buttonBorderless,
-    buttonLift,
     filledShape,
     "bg-action text-paper hover:bg-action-hover",
   ),
@@ -123,13 +116,11 @@ const buttonStyles: Record<ButtonStyleKey, string> = {
   "quiet:neutral": cx(buttonBase, buttonBorderless, quietShape, quietNeutral),
   "secondary:danger": cx(
     buttonBase,
-    buttonLift,
     filledShape,
     "border-danger text-danger hover:bg-danger hover:text-paper",
   ),
   "secondary:neutral": cx(
     buttonBase,
-    buttonLift,
     filledShape,
     "border-ink text-ink hover:bg-ink hover:text-paper",
   ),

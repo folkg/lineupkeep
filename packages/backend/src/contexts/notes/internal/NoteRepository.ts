@@ -24,7 +24,7 @@ import { NotesDatabase } from "./NotesDatabase.ts";
 import { notes, NoteRow, ReadNoteRow } from "./NotesTables.ts";
 
 export class NoteRepository extends Context.Service<NoteRepository>()(
-  "@sourdough/backend/contexts/notes/internal/NoteRepository",
+  "@lineupkeep/backend/contexts/notes/internal/NoteRepository",
   {
     make: Effect.gen(function* () {
       const database = yield* NotesDatabase;

@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import type { Element } from "solid-js";
 
-import { Tape } from "./Tape";
+import { Badge } from "./Badge";
 
 export function Entry(props: EntryProps): JSX.Element {
   return (
@@ -11,7 +11,7 @@ export function Entry(props: EntryProps): JSX.Element {
       data-editing={props.editing ? "true" : undefined}
     >
       <div class="flex items-start justify-between gap-[18px] max-md:grid max-md:gap-2.5">
-        <Tape size="cue">{props.cue}</Tape>
+        <Badge size="cue">{props.cue}</Badge>
         <div class="flex flex-wrap justify-end gap-0.5 max-md:justify-start">{props.actions}</div>
       </div>
       {props.children}

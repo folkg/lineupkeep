@@ -1,4 +1,4 @@
-import { UserId } from "@sourdough/backend/auth/User";
+import { UserId } from "@lineupkeep/backend/auth/User";
 import { Schema } from "effect";
 
 import { noteTitleMaxLength, noteBodyMaxLength, noteSearchMaxLength } from "./NoteLimits.ts";

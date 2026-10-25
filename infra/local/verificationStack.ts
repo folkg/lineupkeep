@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { LocalRun } from "@sourdough/tools/local-stack/contract.ts";
+import type { LocalRun } from "@lineupkeep/tools/local-stack/contract.ts";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -23,7 +23,7 @@ export const verificationProviders = Layer.mergeAll(
   postgresProvider,
 );
 
-export const verificationStackName = "SourdoughStarterVerification";
+export const verificationStackName = "LineupkeepVerification";
 
 export function verificationStack(
   run: LocalRun,

@@ -12,7 +12,7 @@ export class PublicInternet extends Context.Service<
       options?: PublicInternetOptions,
     ) => Effect.Effect<Response, PublicInternetUnavailable, Scope.Scope>;
   }
->()("@sourdough/backend/runtime/PublicInternet") {
+>()("@lineupkeep/backend/runtime/PublicInternet") {
   static fromTransport(transport: PublicTransport): Layer.Layer<PublicInternet> {
     return Layer.succeed(PublicInternet)({
       request: Effect.fn("PublicInternet.request", { kind: "client" })(function* (

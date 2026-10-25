@@ -3,7 +3,7 @@ import { Context } from "effect";
 export class AuthorizationScopes extends Context.Service<
   AuthorizationScopes,
   ReadonlyArray<AuthorizationScope>
->()("@sourdough/backend/contexts/auth/AuthorizationScopes") {}
+>()("@lineupkeep/backend/contexts/auth/AuthorizationScopes") {}
 
 export const offlineAccess = {
   name: "offline_access",

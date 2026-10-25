@@ -1,4 +1,16 @@
-# Project Working Agreement
+# Lineupkeep working agreement
+
+## Independent rewrite and authorization
+
+Lineupkeep is a complete, provider-neutral rewrite. AutoCoach is reference material only: do not transplant its implementation, architecture, algorithms, credentials, data, deployment files, or managed resources. Reuse verified knowledge and make deliberate decisions; retain sound starter platform foundations rather than rebuilding them without a reason.
+
+Read [START-HERE.md](START-HERE.md), [PRODUCT.md](PRODUCT.md), the [implementation plan](docs/fantasy-manager/IMPLEMENTATION-PLAN.md), and the [agreed glossary](docs/fantasy-manager/GLOSSARY.md) before implementation. The owner wants autonomous completion of Phase 1 under [the handoff mandate](docs/PHASE-1-HANDOFF.md), using bounded internal slices rather than repeated owner approvals, while awaiting a coherent upstream security fix. The documented vulnerable transport is a publication gate, not a blanket stop on local development: remain loopback-only, do not expose it through a public tunnel, and retain the required upgrade/security acceptance. The owner authorizes use of their GCP CLI for fresh Lineupkeep setup; the handoff records conditional rollout authority and unresolved billing/budget, secure access, framework-pin, and live-provider gates. Do not infer destination approval from the active CLI project. Preparing the handoff did not itself begin feature execution.
+
+Use jj, not Git. Keep work as focused, described jj changes; finish a completed task with a fresh empty working copy. Never rewrite the source starter or AutoCoach repository. No remote or production resources are configured.
+
+The approved identity is Lineupkeep, lowercase lineupkeep in the wordmark, with royal violet and gold in both light and dark. Preserve professional solidity and sporting energy; do not substitute green or reopen palette selection during routine implementation. [DESIGN.md](DESIGN.md), [.impeccable/design.json](.impeccable/design.json), and [brand notes](docs/brand/BRAND.md) replace the starter identity. Notes is a retained demo, not the product. Do not invent live features, results, testimonials, projections, or registered-domain ownership.
+
+## Starter platform agreement
 
 ## Commands and checks
 

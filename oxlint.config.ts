@@ -150,10 +150,10 @@ const universalImports: ImportPolicy = {
     },
     {
       group: [
-        "@sourdough/backend",
-        "@sourdough/backend/**",
+        "@lineupkeep/backend",
+        "@lineupkeep/backend/**",
         "**/packages/backend/src/**",
-        "!@sourdough/backend/**/*Limits",
+        "!@lineupkeep/backend/**/*Limits",
       ],
       allowTypeImports: true,
       message:
@@ -204,7 +204,7 @@ const adapterImports: ImportPolicy = {
         "Authentication implementation imports thicken cross-runtime adapters; delegate authentication to apps/web/src/server implementations.",
     },
     {
-      group: ["@sourdough/backend", "@sourdough/backend/**", "**/packages/backend/src/**"],
+      group: ["@lineupkeep/backend", "@lineupkeep/backend/**", "**/packages/backend/src/**"],
       allowTypeImports: true,
       message:
         "Backend runtime imports bypass the web adapter boundary; delegate through apps/web/src/server implementations and use import type for domain contracts.",

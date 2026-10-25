@@ -1,5 +1,5 @@
+import { productName } from "@lineupkeep/brand/product";
 import type { JSX } from "@solidjs/web";
-import { productName } from "@sourdough/brand/product";
 import type { Accessor } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
@@ -19,16 +19,15 @@ export function AuthPage(props: AuthPageProps): JSX.Element {
         variant="form"
         start={
           <IntroPanel
-            cue="Ready when you are"
+            cue="Development preview"
             title={
               <Heading level={1} size="statement">
-                A place for what comes next.
+                A clear place to begin.
               </Heading>
             }
           >
             <Text size="lede" tone="muted">
-              {productName} keeps capture quick and the workspace quiet. The structure underneath is
-              ready for whatever this starter becomes next.
+              This is the {productName} development shell. Fantasy features are not built yet.
             </Text>
           </IntroPanel>
         }

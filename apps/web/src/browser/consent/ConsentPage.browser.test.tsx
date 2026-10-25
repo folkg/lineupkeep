@@ -1,5 +1,5 @@
+import type { ConsentRequest } from "@lineupkeep/backend/auth/Auth";
 import { render } from "@solidjs/web";
-import type { ConsentRequest } from "@sourdough/backend/auth/Auth";
 import { QueryClientProvider } from "@tanstack/solid-query";
 import {
   Outlet,

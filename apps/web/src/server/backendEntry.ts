@@ -1,10 +1,10 @@
 import {
   AuthenticationInvalidResponse,
   AuthenticationUnavailable,
-} from "@sourdough/backend/auth/Auth";
-import type { UserId } from "@sourdough/backend/auth/User";
-import type { BackendOperation, BackendServices } from "@sourdough/backend/runtime/BackendRuntime";
-import type { RequestContext } from "@sourdough/backend/runtime/RequestContext";
+} from "@lineupkeep/backend/auth/Auth";
+import type { UserId } from "@lineupkeep/backend/auth/User";
+import type { BackendOperation, BackendServices } from "@lineupkeep/backend/runtime/BackendRuntime";
+import type { RequestContext } from "@lineupkeep/backend/runtime/RequestContext";
 import { Effect, Schema } from "effect";
 
 import { deploymentTarget } from "#deployment-target";
@@ -75,7 +75,7 @@ export function authenticatedUseCase<A, E, R, Code extends string>(
       data: A;
     },
   AuthenticationInvalidResponse | AuthenticationUnavailable,
-  R | import("@sourdough/backend/auth/Auth").AuthService | RequestContext
+  R | import("@lineupkeep/backend/auth/Auth").AuthService | RequestContext
 > {
   return withAuthenticatedUser((userId) =>
     Effect.matchEffect(useCase(userId), {

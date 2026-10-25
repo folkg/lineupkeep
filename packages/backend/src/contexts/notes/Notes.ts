@@ -1,4 +1,4 @@
-import type { UserId } from "@sourdough/backend/auth/User";
+import type { UserId } from "@lineupkeep/backend/auth/User";
 import { Context } from "effect";
 import type { Effect } from "effect";
 
@@ -13,7 +13,7 @@ import type {
 } from "./Note.ts";
 
 export class Notes extends Context.Service<Notes, NotesShape>()(
-  "@sourdough/backend/contexts/notes/Notes",
+  "@lineupkeep/backend/contexts/notes/Notes",
 ) {}
 
 export type NotesShape = {

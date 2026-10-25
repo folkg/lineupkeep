@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { access, rm } from "node:fs/promises";
 
-import { docker } from "@sourdough/tools/local-stack/postgresContainer.ts";
+import { docker } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import * as Test from "alchemy/Test/Vitest";
 import { Effect, Exit } from "effect";
 
@@ -47,9 +47,9 @@ function ledgerCount(): Effect.Effect<number, never, never> {
         localDatabaseName(healthy.options.stage),
         "psql",
         "-U",
-        "sourdough",
+        "lineupkeep",
         "-d",
-        "sourdough_test",
+        "lineupkeep_test",
         "-Atc",
         "SELECT count(*) FROM drizzle.__drizzle_migrations",
       ]),

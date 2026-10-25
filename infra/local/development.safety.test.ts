@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { docker } from "@sourdough/tools/local-stack/postgresContainer.ts";
+import { docker } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import * as Test from "alchemy/Test/Vitest";
 import { Effect, Redacted } from "effect";
 
@@ -103,6 +103,6 @@ test(
 
 function query(statement: string): Effect.Effect<string, never, never> {
   return Effect.promise(() =>
-    docker(["exec", id, "psql", "-U", "sourdough_dev", "-d", "sourdough_dev", "-Atc", statement]),
+    docker(["exec", id, "psql", "-U", "lineupkeep_dev", "-d", "lineupkeep_dev", "-Atc", statement]),
   );
 }

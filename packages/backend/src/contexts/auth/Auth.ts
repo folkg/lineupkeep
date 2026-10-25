@@ -5,7 +5,7 @@ import type { AuthorizationScope } from "./AuthorizationScopes.ts";
 import type { UserId } from "./User.ts";
 
 export class AuthService extends Context.Service<AuthService, AuthServiceShape>()(
-  "@sourdough/backend/contexts/auth/Auth/AuthService",
+  "@lineupkeep/backend/contexts/auth/Auth/AuthService",
 ) {}
 
 export class AuthenticationUnavailable extends Schema.TaggedError<

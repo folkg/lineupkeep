@@ -11,7 +11,7 @@ import { authRelations } from "./AuthDatabase.ts";
 export class AuthDatabaseStatements extends Context.Service<
   AuthDatabaseStatements,
   ReadonlyArray<string>
->()("@sourdough/backend/contexts/auth/internal/AuthDatabaseTest/AuthDatabaseStatements") {}
+>()("@lineupkeep/backend/contexts/auth/internal/AuthDatabaseTest/AuthDatabaseStatements") {}
 
 export const AuthDatabaseTest = Layer.effectContext(
   Effect.gen(function* () {

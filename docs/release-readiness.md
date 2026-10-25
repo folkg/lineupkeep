@@ -2,6 +2,12 @@
 
 Status checked **2026-10-22** against official upstream issues, releases and published package source. These are dated observations, not permanent upstream statuses or release authorization.
 
+## Local-development decision
+
+The Lineupkeep owner has chosen to continue local implementation on the pinned baseline while awaiting a coherent upstream security fix. This supersedes treating that fix as an entry condition for all local feature work; it does **not** waive the publication blocker below or establish security acceptance.
+
+Keep the application loopback-only, with no public tunnel or public deployment of the vulnerable transport. Automated provider tests use synthetic data and behavioral fakes; real provider access remains separately authorized. Track adoption of the coherent fix before publication, including installed-source inspection and real-transport security/SSR/single-flight acceptance. No new upstream-status check or dependency audit is claimed by this decision.
+
 ## Publication blocker: Solid Start RPC security
 
 **Do not publish v1 with the current vulnerable transport.** [GHSA-qx66-fv34-fjm8 / CVE-2026-102989](https://github.com/TanStack/router/security/advisories/GHSA-qx66-fv34-fjm8) is critical. [Router #8573](https://github.com/TanStack/router/pull/8573) is merged; the first fixed `start-server-core` is **1.169.39**.

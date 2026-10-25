@@ -1,13 +1,13 @@
 import { spawnSync } from "node:child_process";
 
-import { assertDeployableComposition } from "@sourdough/web/deploy/verifyComposition.ts";
+import { assertDeployableComposition } from "@lineupkeep/web/deploy/verifyComposition.ts";
 
 const target = process.argv[2];
 if (target !== "node" && target !== "cloudflare") {
   throw new Error("Build target must be node or cloudflare");
 }
 const testComposition = process.argv[3] === "--test-composition";
-const result = spawnSync("bun", ["--no-env-file", "--filter", "@sourdough/web", "build"], {
+const result = spawnSync("bun", ["--no-env-file", "--filter", "@lineupkeep/web", "build"], {
   cwd: new URL("../../", import.meta.url),
   stdio: "inherit",
   env: {

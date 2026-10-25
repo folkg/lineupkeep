@@ -13,7 +13,7 @@ export function EmptyState(props: EmptyStateProps): JSX.Element {
 export function LoadingState(props: LoadingStateProps): JSX.Element {
   return (
     <div aria-label={props.label} role="status" class={stateClass}>
-      <span class="h-2 w-[120px] animate-pulse rounded-tape bg-rule" />
+      <span class="h-2 w-[120px] animate-pulse rounded-badge bg-rule" />
       <span>{props.children}</span>
     </div>
   );

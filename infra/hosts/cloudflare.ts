@@ -1,7 +1,7 @@
 import {
   assertPublicRouting,
   workerConfiguration,
-} from "@sourdough/web/deploy/cloudflare/settings.ts";
+} from "@lineupkeep/web/deploy/cloudflare/settings.ts";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
 import { Effect, Layer, Redacted } from "effect";

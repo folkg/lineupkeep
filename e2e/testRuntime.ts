@@ -1,6 +1,6 @@
-import type { BackendPlatform } from "@sourdough/backend/runtime/BackendPlatform";
-import { BackendRuntime as Runtime } from "@sourdough/backend/runtime/BackendRuntime";
-import { PublicInternet } from "@sourdough/backend/runtime/PublicInternet";
+import type { BackendPlatform } from "@lineupkeep/backend/runtime/BackendPlatform";
+import { BackendRuntime as Runtime } from "@lineupkeep/backend/runtime/BackendRuntime";
+import { PublicInternet } from "@lineupkeep/backend/runtime/PublicInternet";
 
 export const BackendRuntime = {
   make: (platform: BackendPlatform) =>

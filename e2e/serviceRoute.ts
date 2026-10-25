@@ -1,4 +1,4 @@
-import { runBackend } from "@sourdough/web/server/backendEntry.ts";
+import { runBackend } from "@lineupkeep/web/server/backendEntry.ts";
 
 import * as programs from "#verification-programs";
 

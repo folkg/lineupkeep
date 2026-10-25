@@ -3,7 +3,7 @@ import { Context } from "effect";
 import type { Redacted } from "effect";
 
 export class HostDeployment extends Context.Service<HostDeployment, HostOutputs>()(
-  "@sourdough/infra/HostDeployment",
+  "@lineupkeep/infra/HostDeployment",
 ) {}
 
 export type HostOutputs = {

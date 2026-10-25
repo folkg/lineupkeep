@@ -1,5 +1,5 @@
 {
-  "name": "sourdough-starter",
+  "name": "lineupkeep",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -35,11 +35,11 @@
     "verify": "node e2e/verify.ts",
     "verify:video": "node e2e/verify/renderVideo.ts",
     "verify:review": "node e2e/verify/review.ts",
-    "build": "bun --filter @sourdough/web build",
+    "build": "bun --filter @lineupkeep/web build",
     "build:node": "DEPLOY_TARGET=node bun run build",
     "build:cloudflare": "DEPLOY_TARGET=cloudflare bun run build",
     "build:all": "bun run build:node && bun run build:cloudflare",
-    "architecture": "depcruise packages/backend/src packages/brand/src apps/web/src e2e infra tools scripts --output-type err-long && bun --filter @sourdough/backend architecture",
+    "architecture": "depcruise packages/backend/src packages/brand/src apps/web/src e2e infra tools scripts --output-type err-long && bun --filter @lineupkeep/backend architecture",
     "checks": "time sh -c 'bun run fix && bun run architecture && bun run knip && bun run knip:production && bun run test && bun run build:all'",
     "checks:ci": "bun run lint:check && bun run format:check && bun run architecture && bun run knip && bun run knip:production && bun run test && bun run build:all",
     "db:generate": "drizzle-kit generate --config=packages/backend/drizzle.config.ts",
@@ -49,16 +49,16 @@
     "db:reset": "node infra/local/development.ts reset",
     "db:studio": "node infra/local/development.ts studio",
     "update-latest": "bun update -i --recursive --latest",
-    "targets:verify": "bun run build:node && bun --filter @sourdough/web verify:node && bun run build:cloudflare && bun --filter @sourdough/web verify:cloudflare"
+    "targets:verify": "bun run build:node && bun --filter @lineupkeep/web verify:node && bun run build:cloudflare && bun --filter @lineupkeep/web verify:cloudflare"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",
     "@effect/vitest": "catalog:",
     "@iconify-json/lucide": "1.2.147",
+    "@lineupkeep/tools": "workspace:*",
+    "@lineupkeep/web": "workspace:*",
     "@playwright/test": "catalog:",
     "@solidjs/vite-plugin": "catalog:",
-    "@sourdough/tools": "workspace:*",
-    "@sourdough/web": "workspace:*",
     "@swc/core": "1.16.18",
     "@tanstack/start-plugin-core": "1.171.34",
     "@typeonce/oxlint-plugin-effect-machine": "catalog:",

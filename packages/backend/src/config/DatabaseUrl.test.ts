@@ -11,13 +11,13 @@ import { databaseUrlConfig } from "./DatabaseUrl.ts";
 it.effect("decodes a PostgreSQL database URL from Effect configuration", () =>
   Effect.gen(function* () {
     const provider = ConfigProvider.fromUnknown({
-      DATABASE_URL: "postgres://user:password@localhost:5432/sourdough_app",
+      DATABASE_URL: "postgres://user:password@localhost:5432/lineupkeep_app",
     });
 
     const databaseUrl = yield* databaseUrlConfig.parse(provider);
 
     expect(Redacted.value(databaseUrl)).toBe(
-      "postgres://user:password@localhost:5432/sourdough_app",
+      "postgres://user:password@localhost:5432/lineupkeep_app",
     );
   }),
 );
@@ -25,7 +25,7 @@ it.effect("decodes a PostgreSQL database URL from Effect configuration", () =>
 it.effect("keeps database credentials redacted in diagnostics", () =>
   Effect.gen(function* () {
     const provider = ConfigProvider.fromUnknown({
-      DATABASE_URL: "postgres://reader:diagnostic-secret@db.test/sourdough",
+      DATABASE_URL: "postgres://reader:diagnostic-secret@db.test/lineupkeep",
     });
 
     const url = yield* databaseUrlConfig.parse(provider);

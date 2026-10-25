@@ -1,5 +1,5 @@
-import { AuthService } from "@sourdough/backend/auth/Auth";
-import type { UserId } from "@sourdough/backend/auth/User";
+import { AuthService } from "@lineupkeep/backend/auth/Auth";
+import type { UserId } from "@lineupkeep/backend/auth/User";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { McpProtocol, McpServer } from "effect/ai";
 import type { Tool, Toolkit } from "effect/ai";

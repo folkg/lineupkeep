@@ -21,7 +21,7 @@ export function useConsent(props: {
           readonly host: string;
         };
         readonly scopes: ReadonlyArray<
-          import("@sourdough/backend/auth/AuthorizationScopes").AuthorizationScope
+          import("@lineupkeep/backend/auth/AuthorizationScopes").AuthorizationScope
         >;
       }
     | undefined;
@@ -50,7 +50,7 @@ export function useConsent(props: {
           readonly host: string;
         };
         readonly scopes: ReadonlyArray<
-          import("@sourdough/backend/auth/AuthorizationScopes").AuthorizationScope
+          import("@lineupkeep/backend/auth/AuthorizationScopes").AuthorizationScope
         >;
       }
     | undefined => {

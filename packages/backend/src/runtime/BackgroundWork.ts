@@ -1,7 +1,7 @@
 import { Context, Layer } from "effect";
 
 export class BackgroundWork extends Context.Service<BackgroundWork, BackgroundWorkShape>()(
-  "@sourdough/backend/runtime/BackgroundWork",
+  "@lineupkeep/backend/runtime/BackgroundWork",
 ) {
   static readonly processLifetime = Layer.succeed(BackgroundWork)({
     extend: () => undefined,

@@ -12,7 +12,7 @@ export const notesRelations = defineRelations({ notes });
 export class NotesDatabase extends Context.Service<
   NotesDatabase,
   PgEffectDatabase<EffectPgQueryEffectHKT, PgQueryResultHKT, typeof notesRelations>
->()("@sourdough/backend/contexts/notes/internal/NotesDatabase") {
+>()("@lineupkeep/backend/contexts/notes/internal/NotesDatabase") {
   static readonly layer = Layer.effect(
     this,
     PgDrizzle.makeWithDefaults({ relations: notesRelations }),

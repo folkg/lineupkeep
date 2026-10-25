@@ -8,7 +8,7 @@ import { AuthDatabase } from "./AuthDatabase.ts";
 import { signInCodeQuota } from "./AuthTables.ts";
 
 export class SignInCodeQuotaRepository extends Context.Service<SignInCodeQuotaRepository>()(
-  "@sourdough/backend/contexts/auth/internal/SignInCodeQuotaRepository",
+  "@lineupkeep/backend/contexts/auth/internal/SignInCodeQuotaRepository",
   {
     make: Effect.gen(function* () {
       const database = yield* AuthDatabase;

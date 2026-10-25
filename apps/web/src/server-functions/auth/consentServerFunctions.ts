@@ -1,4 +1,4 @@
-import { AuthService } from "@sourdough/backend/auth/Auth";
+import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import { createIsomorphicFn, createServerFn } from "@tanstack/solid-start";
 import { getRequest } from "@tanstack/solid-start/server";
 import { Effect, Schema } from "effect";

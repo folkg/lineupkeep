@@ -109,7 +109,7 @@ export function localContainerHost(
             internal: 3000,
           },
         ],
-        labels: { "sourdough.disposable": "test-web", "sourdough.lock": ownership.lockDirectory },
+        labels: { "lineupkeep.disposable": "test-web", "lineupkeep.lock": ownership.lockDirectory },
         networkMode: "bridge",
         extraHosts: [`host.docker.internal:${relayNetwork.host}`],
         stopTimeout: "30 seconds",

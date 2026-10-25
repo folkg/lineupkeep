@@ -1,6 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { decodeUserId } from "@sourdough/backend/auth/User";
+import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Array, Crypto, DateTime, Effect, Exit, Layer, Schema } from "effect";
 
 import { makeTelemetryTest } from "#runtime/internal/TelemetryTest.ts";

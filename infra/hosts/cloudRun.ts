@@ -31,7 +31,7 @@ export function cloudRunHost(
         format: "DOCKER",
       });
       const account = yield* GCP.IAM.ServiceAccount("Runtime", {
-        displayName: "Sourdough Starter web runtime",
+        displayName: "Lineupkeep web runtime",
       });
       const secrets = yield* Effect.all(
         Object.entries(environment).map(([name, value]) => runtimeSecret(name, value, account)),

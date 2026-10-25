@@ -5,7 +5,7 @@ import type {
   NoteIdInput,
   NoteLifecycle,
   NoteError,
-} from "@sourdough/backend/notes/Note";
+} from "@lineupkeep/backend/notes/Note";
 
 import type { AuthenticationFailure } from "#contracts/auth/authContract.ts";
 import type { UseCaseResult } from "#contracts/useCaseContract.ts";

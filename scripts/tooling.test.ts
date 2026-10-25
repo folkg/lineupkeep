@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { findTableOwnershipConflicts } from "@sourdough/backend/scripts/tableOwnership.ts";
+import { findTableOwnershipConflicts } from "@lineupkeep/backend/scripts/tableOwnership.ts";
 import { Schema } from "effect";
 import { expect, it } from "vitest";
 
@@ -137,7 +137,7 @@ it("keeps Bun-dispatched Alchemy on its Node branch without inherited credential
   `,
   );
 
-  execFileSync("bun", ["--filter", "@sourdough/infra", "plan", "--help"], {
+  execFileSync("bun", ["--filter", "@lineupkeep/infra", "plan", "--help"], {
     cwd: new URL("../", import.meta.url),
     env: {
       PATH: process.env["PATH"],
@@ -219,7 +219,7 @@ const consumedBackendFixture = {
     workspaces: ["packages/*", "apps/*"],
   }),
   "apps/web/src/server/targets/node.ts":
-    'import { used } from "@sourdough/backend/calendar/Calendar"; console.log(used);',
+    'import { used } from "@lineupkeep/backend/calendar/Calendar"; console.log(used);',
   "packages/backend/src/contexts/calendar/Calendar.ts":
     'export { used } from "#contexts/calendar/internal/calendarValue.ts";',
   "packages/backend/src/contexts/calendar/internal/calendarValue.ts": "export const used = 1;",

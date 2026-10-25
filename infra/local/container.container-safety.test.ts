@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 import { it } from "@effect/vitest";
-import { docker, removeOwnedContainer } from "@sourdough/tools/local-stack/postgresContainer.ts";
+import { docker, removeOwnedContainer } from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import { Effect, Schema, Schedule } from "effect";
 
 import { readSafetyRun } from "./safety.ts";
@@ -17,7 +17,7 @@ it.live("retains image safety settings, rejects foreign ownership and stops grac
     assert.deepEqual(container.Config.Cmd, ["node", "server/index.mjs"]);
     assert.equal(container.Config.User, "node");
     assert.equal(container.Config.StopSignal, "SIGTERM");
-    assert.equal(container.Config.Labels["sourdough.disposable"], "test-web");
+    assert.equal(container.Config.Labels["lineupkeep.disposable"], "test-web");
     assert.equal(container.Config.StopTimeout, 30);
     assert.match(container.Config.Healthcheck.Test.join(" "), /fetch/);
     assert.ok(

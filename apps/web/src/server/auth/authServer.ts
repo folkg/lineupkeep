@@ -1,5 +1,5 @@
-import { AuthService, type SignInMethods } from "@sourdough/backend/auth/Auth";
-import { getCurrentAuthSession, type AuthSessionValue } from "@sourdough/backend/auth/AuthSession";
+import { AuthService, type SignInMethods } from "@lineupkeep/backend/auth/Auth";
+import { getCurrentAuthSession, type AuthSessionValue } from "@lineupkeep/backend/auth/AuthSession";
 import { Effect, Schema } from "effect";
 
 import { mapAuthenticationFailure, runBackend } from "#server/backendEntry.ts";

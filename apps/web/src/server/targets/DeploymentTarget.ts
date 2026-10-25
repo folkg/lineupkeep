@@ -1,4 +1,4 @@
-import type { BackendRuntime } from "@sourdough/backend/runtime/BackendRuntime";
+import type { BackendRuntime } from "@lineupkeep/backend/runtime/BackendRuntime";
 
 export type DeploymentTarget = {
   readonly backend: BackendRuntime;

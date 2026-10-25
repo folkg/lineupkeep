@@ -45,6 +45,10 @@
   --font-google: "Google Sans", Roboto, Arial, sans-serif;
   --font-sans: var(--theme-font-sans);
 
+  --text-wordmark: var(--theme-text-wordmark);
+  --text-wordmark--line-height: var(--theme-text-wordmark-line-height);
+  --text-wordmark--letter-spacing: var(--theme-text-wordmark-letter-spacing);
+
   --text-display: var(--theme-text-display);
   --text-display--line-height: var(--theme-text-display-line-height);
   --text-display--letter-spacing: var(--theme-text-display-letter-spacing);
@@ -55,13 +59,13 @@
   --text-headline--line-height: var(--theme-text-headline-line-height);
   --text-headline--letter-spacing: var(--theme-text-headline-letter-spacing);
   --text-title: var(--theme-text-title);
-  --text-title--line-height: 0.95;
+  --text-title--line-height: 1.15;
   --text-title--letter-spacing: var(--theme-tracking-tight);
   --text-subtitle: var(--theme-text-subtitle);
-  --text-subtitle--line-height: 1;
+  --text-subtitle--line-height: 1.2;
   --text-subtitle--letter-spacing: var(--theme-tracking-tight);
   --text-section-title: var(--theme-text-section-title);
-  --text-section-title--line-height: 1.1;
+  --text-section-title--line-height: 1.3;
   --text-item: var(--theme-text-item);
   --text-item--line-height: 1.3;
   --text-item--letter-spacing: var(--theme-text-item-letter-spacing);
@@ -99,7 +103,7 @@
   --spacing-header-wide: var(--theme-size-header-wide);
   --spacing-surface: var(--theme-space-surface);
 
-  --radius-tape: var(--theme-radius-tape);
+  --radius-badge: var(--theme-radius-badge);
   --radius-sheet: var(--theme-radius-sheet);
   --radius-control: var(--theme-radius-control);
   --radius-surface: var(--theme-radius-surface);
@@ -112,19 +116,8 @@
   --breakpoint-sm: 37.5rem;
   --breakpoint-md: 56.25rem;
 
-  --animate-prompt-in: prompt-in var(--theme-duration-reveal) var(--theme-ease-out) both;
   --animate-overlay-in: overlay-in var(--theme-duration-quick) var(--theme-ease-out) both;
   --animate-dialog-in: dialog-in var(--theme-duration-quick) var(--theme-ease-out) both;
-
-  @keyframes prompt-in {
-    from {
-      clip-path: inset(0 0 100% 0);
-    }
-
-    to {
-      clip-path: inset(0 0 0 0);
-    }
-  }
 
   @keyframes overlay-in {
     from {

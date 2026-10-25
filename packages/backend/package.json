@@ -1,5 +1,5 @@
 {
-  "name": "@sourdough/backend",
+  "name": "@lineupkeep/backend",
   "private": true,
   "type": "module",
   "imports": {
@@ -29,7 +29,7 @@
     "@effect/sql-pg": "catalog:",
     "@effect/sql-pglite": "catalog:",
     "@electric-sql/pglite": "catalog:",
-    "@sourdough/brand": "workspace:*",
+    "@lineupkeep/brand": "workspace:*",
     "@typeonce/effect-machine": "catalog:",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",

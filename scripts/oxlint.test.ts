@@ -270,7 +270,7 @@ it("autofixes extensionless imports and uses package exports across packages", (
 
   expect(result.status, result.output).toBe(0);
   expect(result.sources["infra/local/example.ts"]).toContain(
-    '"@sourdough/tools/local-stack/value.ts"',
+    '"@lineupkeep/tools/local-stack/value.ts"',
   );
   expect(result.sources["infra/local/example.ts"]).toContain('"#infra/stage.ts"');
 });
@@ -295,7 +295,7 @@ it("explains missing aliases without rewriting an unexported cross-package targe
 it("keeps same-directory imports and package imports unchanged", () => {
   const files = {
     "packages/backend/src/config/example.ts":
-      'import { value } from "./value.ts"; export { value }; export type { UserId } from "@sourdough/backend/auth/User";',
+      'import { value } from "./value.ts"; export { value }; export type { UserId } from "@lineupkeep/backend/auth/User";',
     "packages/backend/src/config/value.ts": "export const value = 1;",
     "packages/backend/src/contexts/auth/User.ts": "export type UserId = string;",
   };
@@ -613,7 +613,7 @@ it.each([
 ])("rejects %s in design-system classes", (_, utility) => {
   const files = {
     "apps/web/src/browser/shared-ui/Panel.tsx": `const panelClass = "grid gap-2 ${utility}"; export const Panel = (): import("@solidjs/web").JSX.Element => <section class={panelClass}>Panel</section>;`,
-    "apps/web/src/browser/brand-ui/Tape.tsx": `export const Tape = () => <span class={\`grid \${"x"} ${utility}\`}>Tape</span>;`,
+    "apps/web/src/browser/brand-ui/Badge.tsx": `export const Badge = () => <span class={\`grid \${"x"} ${utility}\`}>Badge</span>;`,
   };
 
   const result = checkLint(files);
@@ -798,7 +798,7 @@ it.each([
   expect(result.output).toContain("compiler-erased validator/handler");
 });
 
-it.each(["drizzle-orm", "alchemy", "@sourdough/backend/inventory/internal/InventoryRepository"])(
+it.each(["drizzle-orm", "alchemy", "@lineupkeep/backend/inventory/internal/InventoryRepository"])(
   "rejects persistence and construction in server functions through %s",
   (source) => {
     const result = checkLint({
@@ -915,8 +915,8 @@ it.each([
   'import { Effect } from "effect"; export const value = Effect.setContext;',
   'import { Effect } from "effect"; export const value = Effect.updateContext;',
 
-  'import { UserId as Identity } from "@sourdough/backend/auth/User"; export const value = Identity;',
-  'import { decodeUserId as identity } from "@sourdough/backend/auth/User"; export const value = identity;',
+  'import { UserId as Identity } from "@lineupkeep/backend/auth/User"; export const value = Identity;',
+  'import { decodeUserId as identity } from "@lineupkeep/backend/auth/User"; export const value = identity;',
   'import { Schema } from "effect"; export const value = Schema.String.pipe(Schema.brand("UserId"));',
   'import { brand as identity } from "effect/Schema"; export const value = identity("UserId");',
 ])("rejects scenario service substitution or identity construction: %s", (source) => {
@@ -940,10 +940,10 @@ it("allows scenario programs to decode arguments and call services with their au
       "export type AuthSessionUser = { readonly id: string };",
     "packages/backend/src/contexts/notes/Notes.ts": `import { Context } from "effect";
       import type { Effect } from "effect";
-      export class Notes extends Context.Service<Notes, { readonly list: (userId: string) => Effect.Effect<ReadonlyArray<string>> }>()("@sourdough/backend/contexts/notes/Notes") {}`,
+      export class Notes extends Context.Service<Notes, { readonly list: (userId: string) => Effect.Effect<ReadonlyArray<string>> }>()("@lineupkeep/backend/contexts/notes/Notes") {}`,
     "e2e/scenarios/services.ts": `import { Effect, Schema } from "effect";
-      import { Notes } from "@sourdough/backend/notes/Notes";
-      import type { AuthSessionUser } from "@sourdough/backend/auth/AuthSession";
+      import { Notes } from "@lineupkeep/backend/notes/Notes";
+      import type { AuthSessionUser } from "@lineupkeep/backend/auth/AuthSession";
       export const read = (user: AuthSessionUser, input: unknown): Effect.Effect<{ readonly owner: string; readonly title: string; readonly count: number }, Schema.SchemaError, Notes> => Effect.gen(function* () {
         const args = yield* Schema.decodeUnknownEffect(Schema.Struct({ title: Schema.String }))(input);
         const notes = yield* Notes;
@@ -1091,7 +1091,7 @@ function fixture(body: string): {
 } {
   return {
     "packages/backend/src/contexts/notes/Notes.ts":
-      'import { Context } from "effect"; import type { Effect } from "effect"; export class Notes extends Context.Service<Notes, { readonly update: (owner: string, inputs: readonly string[]) => Effect.Effect<void> }>()("@sourdough/backend/contexts/notes/Notes") {}',
-    "apps/web/src/server/notes/fixture.ts": `import { Notes as Renamed } from "@sourdough/backend/notes/Notes"; import { Effect } from "effect"; declare const inputs: string[]; declare const owner: string; export const run = Effect.gen(function* () { const notes = yield* Renamed; void owner; void notes; void inputs; ${body} });`,
+      'import { Context } from "effect"; import type { Effect } from "effect"; export class Notes extends Context.Service<Notes, { readonly update: (owner: string, inputs: readonly string[]) => Effect.Effect<void> }>()("@lineupkeep/backend/contexts/notes/Notes") {}',
+    "apps/web/src/server/notes/fixture.ts": `import { Notes as Renamed } from "@lineupkeep/backend/notes/Notes"; import { Effect } from "effect"; declare const inputs: string[]; declare const owner: string; export const run = Effect.gen(function* () { const notes = yield* Renamed; void owner; void notes; void inputs; ${body} });`,
   };
 }

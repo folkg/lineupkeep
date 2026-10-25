@@ -4,12 +4,12 @@ import {
   postgresConnection,
   postgresContainer,
   testContainers,
-} from "@sourdough/tools/local-stack/postgresContainer.ts";
+} from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Effect, Redacted } from "effect";
 
-export const Postgres = Resource<PostgresResource>("SourdoughStarter.LocalPostgres");
+export const Postgres = Resource<PostgresResource>("Lineupkeep.LocalPostgres");
 
 export const postgresProvider = Provider.succeed(Postgres, {
   read: ({ olds }) => inspect(olds),
@@ -37,7 +37,7 @@ export function localDatabaseName(stage: string): string {
     .update(new URL("../../", import.meta.url).pathname)
     .digest("hex")
     .slice(0, 10);
-  return `sourdough-starter-alchemy-${checkout}-${stage}`;
+  return `lineupkeep-alchemy-${checkout}-${stage}`;
 }
 
 function inspect(properties: { name: string; lockDirectory: string }): Effect.Effect<
@@ -68,7 +68,7 @@ function inspect(properties: { name: string; lockDirectory: string }): Effect.Ef
 }
 
 type PostgresResource = Resource<
-  "SourdoughStarter.LocalPostgres",
+  "Lineupkeep.LocalPostgres",
   { name: string; lockDirectory: string },
   { name: string; url: Redacted.Redacted<string> }
 >;

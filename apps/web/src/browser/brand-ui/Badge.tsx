@@ -2,7 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import type { Element } from "solid-js";
 
-export function Tape(props: TapeProps): JSX.Element {
+export function Badge(props: BadgeProps): JSX.Element {
   return (
     <Show
       when={props.size === "glyph"}
@@ -16,13 +16,13 @@ export function Tape(props: TapeProps): JSX.Element {
 }
 
 const sizeClass = {
-  caption: "rounded-tape bg-accent px-2 py-1 text-caption font-bold text-on-accent",
-  cue: "inline-flex min-h-cue items-center justify-self-start rounded-tape bg-accent px-2.5 text-metadata font-bold text-on-accent",
+  caption: "rounded-badge bg-accent px-2 py-1 text-caption font-medium text-on-accent",
+  cue: "inline-flex min-h-cue items-center justify-self-start rounded-badge bg-accent px-2.5 text-metadata font-medium text-on-accent",
   glyph:
-    "grid size-glyph shrink-0 place-items-center rounded-tape bg-accent font-display text-glyph font-bold text-on-accent",
+    "grid size-glyph shrink-0 place-items-center rounded-badge bg-accent font-display text-glyph font-semibold text-on-accent",
 };
 
-type TapeProps = {
+type BadgeProps = {
   readonly size: keyof typeof sizeClass;
   readonly children: Element;
 };

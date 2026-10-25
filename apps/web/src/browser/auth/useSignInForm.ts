@@ -1,4 +1,4 @@
-import { productName } from "@sourdough/brand/product";
+import { productName } from "@lineupkeep/brand/product";
 import { useQuery } from "@tanstack/solid-query";
 import { untrack } from "solid-js";
 import type { Accessor } from "solid-js";

@@ -2,7 +2,7 @@ import {
   noteTitleMaxLength,
   noteBodyMaxLength,
   noteSearchMaxLength,
-} from "@sourdough/backend/notes/NoteLimits";
+} from "@lineupkeep/backend/notes/NoteLimits";
 export function noteTitleError(value: string): string | undefined {
   const title = value.trim();
   return title.length === 0

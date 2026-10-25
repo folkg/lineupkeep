@@ -1,14 +1,14 @@
-import { AuthService } from "@sourdough/backend/auth/Auth";
-import { decodeUserId } from "@sourdough/backend/auth/User";
+import { AuthService } from "@lineupkeep/backend/auth/Auth";
+import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import {
   NoteLifecycleConflict,
   NoteLifecycleRejected,
   NoteNotFound,
   NotePersistenceFailed,
   decodeNoteId,
-} from "@sourdough/backend/notes/Note";
-import type { NotesShape } from "@sourdough/backend/notes/Notes";
-import { Notes } from "@sourdough/backend/notes/Notes";
+} from "@lineupkeep/backend/notes/Note";
+import type { NotesShape } from "@lineupkeep/backend/notes/Notes";
+import { Notes } from "@lineupkeep/backend/notes/Notes";
 import { Effect, Layer, Schema } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { expect, it } from "vitest";
@@ -24,7 +24,7 @@ it("identifies the product during protocol discovery", async () => {
   expect(await response.json()).toMatchObject({
     result: {
       _meta: {
-        "io.modelcontextprotocol/serverInfo": { name: "Sourdough Starter", version: "1.0.0" },
+        "io.modelcontextprotocol/serverInfo": { name: "Lineupkeep", version: "1.0.0" },
       },
     },
   });

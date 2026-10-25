@@ -1,9 +1,28 @@
-# Sourdough Starter
+# Lineupkeep
 
-An authenticated Node.js web application starter using Solid, TanStack Start/Query, Effect, Drizzle, and PostgreSQL.
-Every application created from this starter replaces Notes with its own domain; the product and design documents describe the shipped application.
+**Your lineup. Looked after.**
 
-**Pre-v1:** see [release readiness](docs/release-readiness.md) for publication blockers, accepted version holds and optional adoption gates.
+An independent, provider-neutral fantasy-management product, prepared from a fresh Effect/Solid starter. This is a **complete rewrite**, not an AutoCoach fork, port, migration, or facelift.
+
+## Start here
+
+1. [Project handoff](START-HERE.md): scope, implementation boundary, source references, and next work.
+2. [Product](PRODUCT.md), [branding](docs/brand/BRAND.md), and [design system](DESIGN.md).
+3. [Implementation plan](docs/fantasy-manager/IMPLEMENTATION-PLAN.md), [delivery stages](docs/fantasy-manager/DELIVERY-PLAN.md), and [test strategy](docs/fantasy-manager/TESTING.md).
+4. [Planning index](docs/fantasy-manager/README.md): all decisions, research, glossary, MCP/architecture/hosting proposals, UX brief, and ADRs.
+5. [Setup provenance](docs/SETUP.md) and [release readiness](docs/release-readiness.md).
+
+**Current state:** independent repository, brand/design-system foundation, and retained starter authentication/Notes/MCP scaffold. Fantasy-provider linking, queries, lineup setting, scheduling, and optimization are **not implemented**. The current dependency baseline has a documented critical publication blocker. The [autonomous Phase 1 mandate](docs/PHASE-1-HANDOFF.md) records implementation/setup authority and conditional rollout gates; current checks are not release acceptance.
+
+The lowercase wordmark is **lineupkeep**; ordinary prose uses **Lineupkeep**. The approved palette is **royal violet and gold**, with complete light/dark themes. No domain has been purchased or production origin configured.
+
+## Reference, not inheritance
+
+AutoCoach can supply historical research and reverse-engineered provider knowledge. It does not supply this application's implementation or architecture. There is no migration of users, data, credentials, infrastructure state, or history. Make deliberate decisions across architecture, algorithms, infrastructure, Alchemy IaC, testing, accessibility, security, and operations. “Ground up” does not mean rewriting sound starter platform services or ignoring verified evidence.
+
+## Repository
+
+Jujutsu owns version control. There is one flattened starter baseline, followed by focused Lineupkeep preparation/branding changes and an empty working copy for the next assigned task. No remote is configured. Use `jj status`, `jj log`, and `jj diff`; do not use Git commands.
 
 ## Start locally
 
@@ -43,18 +62,11 @@ Pages wait for primary data; writes return refreshed page data in the same respo
 
 ## Package imports
 
-Use `./module` for same-directory imports, package-owned `#…` imports for other directories, and `@sourdough/<package>/…` exports across packages. Each package owns its aliases in `package.json`; `bun run lint` autofixes parent-relative imports. For example, web modules use `#browser/notes/noteQueries.ts` or `#contracts/notes/noteContract.ts`, and backend modules use `#contexts/auth/User.ts` or `#database/dbUtilities.ts`. Keep explicit file extensions in aliases so Node and build tools resolve the same file. New domains fit the existing role wildcards without updating an alias inventory.
+Use `./module` for same-directory imports, package-owned `#…` imports for other directories, and `@lineupkeep/<package>/…` exports across packages. Each package owns its aliases in `package.json`; `bun run lint` autofixes parent-relative imports. For example, web modules use `#browser/notes/noteQueries.ts` or `#contracts/notes/noteContract.ts`, and backend modules use `#contexts/auth/User.ts` or `#database/dbUtilities.ts`. Keep explicit file extensions in aliases so Node and build tools resolve the same file. New domains fit the existing role wildcards without updating an alias inventory.
 
-## Seed checklist
+## Next work
 
-- [ ] **Choose a fresh identity:** display/repository/package names, `@sourdough/*` namespace, canonical origin, telemetry service/version, stack/resource and stage identities. Update imports, manifests, aliases, policy fixtures, metadata, copy, accessible names, and assertions; regenerate the lockfile with Bun. Never rename existing managed state by text replacement.
-- [ ] **Record the real product:** replace [PRODUCT](PRODUCT.md) and [GLOSSARY](GLOSSARY.md) with users/jobs/terms; choose brand identity and refresh [DESIGN](DESIGN.md) and Impeccable sidecar/previews together. Invent no customer research.
-- [ ] **Add your domain:** follow [add-domain](.agents/skills/add-domain/SKILL.md), including tests and genuine integration wiring.
-- [ ] **Remove Notes outside in:** routes/navigation, MCP tools/scopes/registrations, server functions/contracts/remotes/controllers/workflows/views, then backend runtime Layers/repositories/tables and fixtures. Retain shared auth, query, navigation, UI, and telemetry; update actual import permissions, not incidental domain lists.
-- [ ] **Handle database history:** only a never-deployed fresh seed may regenerate the initial migration. Retained/local/remote data requires backup and reviewed forward migrations; never rewrite applied history or assume sample data is expendable.
-- [ ] **Select deployment lifecycle:** review stage/host/region/registry/database and preview isolation. Separate application data, protected state, retained development, and disposable verification; define restore ownership and serialized migrations/rollouts in the [runbook](docs/deployment.md).
-- [ ] **Configure integrations:** follow annotated [.env.example](.env.example) for auth origin, independent production secrets, sender/Resend, trusted ingress, optional Google branding/callbacks, and provider inputs. Keep provisioning/state secrets out of runtime/build/tests; generated URLs/ports/bindings remain composition-owned.
-- [ ] **Verify before requesting deployment:** checks, affected E2Es, artifact verification, and appropriate browser/MCP/service evidence. Search for unintended sample identities; obtain authorization for the reviewed plan. Local success authorizes nothing remotely.
+The owner has chosen to proceed with local implementation on the current pinned baseline while awaiting a coherent security fix. Follow the [delivery stages](docs/fantasy-manager/DELIVERY-PLAN.md), resolving feasibility at each owning slice; keep the security fix as a pre-publication gate rather than a blanket local-development stop. Remain loopback-only and do not publicly tunnel the vulnerable transport. Use the [autonomous Phase 1 handoff](docs/PHASE-1-HANDOFF.md) for the complete assignment, authorized GCP CLI setup, secure credential provisioning, and conditional deployment gates. Do not ask for a new assignment after each internal slice. Remove the Notes demo as a separate reviewed change during that assignment; it is scaffolding, not the product's domain.
 
 ## Connecting an MCP client
 

@@ -3,9 +3,9 @@ import {
   ListNotesInput,
   NoteIdInput,
   UpdateNoteInput,
-} from "@sourdough/backend/notes/Note";
-import type { Note } from "@sourdough/backend/notes/Note";
-import { Notes } from "@sourdough/backend/notes/Notes";
+} from "@lineupkeep/backend/notes/Note";
+import type { Note } from "@lineupkeep/backend/notes/Note";
+import { Notes } from "@lineupkeep/backend/notes/Notes";
 import { Array, Effect, Schema } from "effect";
 
 import type { ServiceProgram } from "#e2e/serviceContract.ts";

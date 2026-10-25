@@ -1,4 +1,4 @@
-import { isolate } from "@sourdough/backend/runtime/BackendPlatform";
+import { isolate } from "@lineupkeep/backend/runtime/BackendPlatform";
 import { env, waitUntil } from "cloudflare:workers";
 
 import { BackendRuntime } from "#backend-runtime";

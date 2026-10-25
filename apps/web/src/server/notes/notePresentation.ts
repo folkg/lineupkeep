@@ -1,4 +1,4 @@
-import type { Note, NoteError } from "@sourdough/backend/notes/Note";
+import type { Note, NoteError } from "@lineupkeep/backend/notes/Note";
 import { DateTime, Schema } from "effect";
 
 import type { NoteMutationError, NoteView } from "#contracts/notes/noteContract.ts";

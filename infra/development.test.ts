@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 import {
   containerNameFor,
   postgresContainer,
-} from "@sourdough/tools/local-stack/postgresContainer.ts";
+} from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import { assert, expect, it, type TestContext } from "vitest";
 
 import { acquireDevelopmentLock } from "./local/developmentLock.ts";
@@ -57,7 +57,7 @@ it("terminates stalled shutdown and removes its directory before native teardown
 });
 
 it("excludes concurrent development maintenance and releases on completion", async () => {
-  await using temporary = await mkdtempDisposable(join(tmpdir(), "sourdough-starter-dev-lock-"));
+  await using temporary = await mkdtempDisposable(join(tmpdir(), "lineupkeep-dev-lock-"));
   const root = temporary.path;
   const directory = pathToFileURL(`${root}/lock/`);
   const release = await acquireDevelopmentLock(directory);
@@ -71,7 +71,7 @@ it("excludes concurrent development maintenance and releases on completion", asy
 });
 
 it("reclaims a development lock whose owner no longer exists", async () => {
-  await using temporary = await mkdtempDisposable(join(tmpdir(), "sourdough-starter-dev-lock-"));
+  await using temporary = await mkdtempDisposable(join(tmpdir(), "lineupkeep-dev-lock-"));
   const root = temporary.path;
   const directory = pathToFileURL(`${root}/`);
   await writeFile(new URL("owner.json", directory), JSON.stringify({ pid: 2147483647 }));
@@ -91,12 +91,10 @@ it("rejects persistent stages and database identities in verification", () => {
   expect(stageSpec("development-cloudflare").database).toBe("development");
   expect(() => assertVerificationStage("development", runId, databaseName)).toThrow();
   expect(() =>
-    assertVerificationStage("verify-checkout-run", runId, "sourdough-starter-dev-data"),
+    assertVerificationStage("verify-checkout-run", runId, "lineupkeep-dev-data"),
   ).toThrow();
   expect(() => assertVerificationStage("verify-checkout-run", runId, databaseName)).not.toThrow();
-  expect(() => postgresContainer("sourdough-starter-dev-data", "/test/lock")).toThrow(
-    "disposable test",
-  );
+  expect(() => postgresContainer("lineupkeep-dev-data", "/test/lock")).toThrow("disposable test");
 });
 
 async function developmentInterruptFixture(
@@ -111,7 +109,7 @@ async function developmentInterruptFixture(
 }> {
   await using resources = new AsyncDisposableStack();
   const temporary = resources.use(
-    await mkdtempDisposable(join(tmpdir(), "sourdough-starter-dev-interrupt-")),
+    await mkdtempDisposable(join(tmpdir(), "lineupkeep-dev-interrupt-")),
   );
   const root = temporary.path;
   const module = new URL("./local/developmentInterrupt.ts", import.meta.url).href;

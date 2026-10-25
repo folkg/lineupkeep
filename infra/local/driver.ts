@@ -2,8 +2,8 @@ import { glob, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { LocalEndpointsSchema, LocalRunSchema } from "@sourdough/tools/local-stack/contract.ts";
-import type { LocalRun } from "@sourdough/tools/local-stack/contract.ts";
+import { LocalEndpointsSchema, LocalRunSchema } from "@lineupkeep/tools/local-stack/contract.ts";
+import type { LocalRun } from "@lineupkeep/tools/local-stack/contract.ts";
 import * as Alchemy from "alchemy";
 import { State } from "alchemy/State";
 import * as Core from "alchemy/Test/Core";

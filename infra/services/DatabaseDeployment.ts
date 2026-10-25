@@ -3,7 +3,7 @@ import { Context } from "effect";
 import type { Redacted } from "effect";
 
 export class DatabaseDeployment extends Context.Service<DatabaseDeployment, DatabaseOutputs>()(
-  "@sourdough/infra/DatabaseDeployment",
+  "@lineupkeep/infra/DatabaseDeployment",
 ) {}
 
 export type DatabaseOutputs = {

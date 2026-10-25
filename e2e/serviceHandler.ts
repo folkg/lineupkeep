@@ -1,6 +1,6 @@
-import { getCurrentAuthSession } from "@sourdough/backend/auth/AuthSession";
-import type { BackendServices } from "@sourdough/backend/runtime/BackendRuntime";
-import type { RequestContext } from "@sourdough/backend/runtime/RequestContext";
+import { getCurrentAuthSession } from "@lineupkeep/backend/auth/AuthSession";
+import type { BackendServices } from "@lineupkeep/backend/runtime/BackendRuntime";
+import type { RequestContext } from "@lineupkeep/backend/runtime/RequestContext";
 import { Cause, Effect, Exit, Schema } from "effect";
 
 import type { ServiceProgram } from "./serviceContract";

@@ -48,7 +48,7 @@ async function relayFixture(): Promise<{
   [Symbol.asyncDispose]: () => Promise<void>;
 }> {
   await using resources = new AsyncDisposableStack();
-  const directory = resources.use(await mkdtempDisposable(join(tmpdir(), "sourdough-relay-")));
+  const directory = resources.use(await mkdtempDisposable(join(tmpdir(), "lineupkeep-relay-")));
   const target = join(directory.path, "upstream");
   const upstream = resources.use(
     httpServer((request, response) => response.end(request.headers.host)),

@@ -3,7 +3,7 @@ import { Context, Crypto, Effect, Layer, Schema } from "effect";
 import { dual } from "effect/Function";
 
 export class RequestContext extends Context.Service<RequestContext, RequestContextShape>()(
-  "@sourdough/backend/runtime/RequestContext",
+  "@lineupkeep/backend/runtime/RequestContext",
 ) {}
 
 export function makeRequestContext(request: Request): Effect.Effect<RequestContextShape> {

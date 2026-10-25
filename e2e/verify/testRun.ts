@@ -10,7 +10,7 @@ import {
   containerNameFor,
   removeOwnedContainer,
   testContainers,
-} from "@sourdough/tools/local-stack/postgresContainer.ts";
+} from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 
 import {
   isOrphaned,
@@ -67,7 +67,7 @@ export async function runTests(run: TestRun): Promise<VerificationOutcome> {
           lockDirectory,
           target: run.target,
           sourceFingerprint: before,
-          labels: { "sourdough.disposable": "test-database", "sourdough.lock": lockDirectory },
+          labels: { "lineupkeep.disposable": "test-database", "lineupkeep.lock": lockDirectory },
           environment: Object.fromEntries(
             Object.entries(environment).filter(([, value]) => typeof value === "string"),
           ),
@@ -207,7 +207,7 @@ async function collectOrphanedContainers(signal: AbortSignal): Promise<OrphanCol
     problems.push(`Test containers could not be listed: ${describe(error)}`);
   }
   for (const container of containers) {
-    if (!container.name.startsWith("sourdough-test-")) {
+    if (!container.name.startsWith("lineupkeep-test-")) {
       continue;
     }
     try {

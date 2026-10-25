@@ -8,10 +8,10 @@
         "@effect/tsgo": "catalog:",
         "@effect/vitest": "catalog:",
         "@iconify-json/lucide": "1.2.147",
+        "@lineupkeep/tools": "workspace:*",
+        "@lineupkeep/web": "workspace:*",
         "@playwright/test": "catalog:",
         "@solidjs/vite-plugin": "catalog:",
-        "@sourdough/tools": "workspace:*",
-        "@sourdough/web": "workspace:*",
         "@swc/core": "1.16.18",
         "@tanstack/start-plugin-core": "1.171.34",
         "@typeonce/oxlint-plugin-effect-machine": "catalog:",
@@ -37,15 +37,15 @@
       },
     },
     "apps/web": {
-      "name": "@sourdough/web",
+      "name": "@lineupkeep/web",
       "dependencies": {
         "@better-auth/oauth-provider": "catalog:",
-        "@fontsource/barlow-condensed": "5.3.0",
+        "@fontsource-variable/schibsted-grotesk": "5.3.0",
         "@kobalte/core": "2.0.0-alpha.2",
+        "@lineupkeep/backend": "workspace:*",
+        "@lineupkeep/brand": "workspace:*",
         "@solidjs/vite-plugin": "catalog:",
         "@solidjs/web": "catalog:",
-        "@sourdough/backend": "workspace:*",
-        "@sourdough/brand": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "@tanstack/solid-query": "catalog:",
         "@tanstack/solid-router": "catalog:",
@@ -66,13 +66,13 @@
       },
     },
     "infra": {
-      "name": "@sourdough/infra",
+      "name": "@lineupkeep/infra",
       "dependencies": {
         "@alchemy.run/frontend-frameworks": "catalog:",
         "@effect/platform-node": "catalog:",
         "@effect/sql-pg": "catalog:",
-        "@sourdough/tools": "workspace:*",
-        "@sourdough/web": "workspace:*",
+        "@lineupkeep/tools": "workspace:*",
+        "@lineupkeep/web": "workspace:*",
         "alchemy": "catalog:",
         "effect": "catalog:",
         "vite": "catalog:",
@@ -84,7 +84,7 @@
       },
     },
     "packages/backend": {
-      "name": "@sourdough/backend",
+      "name": "@lineupkeep/backend",
       "dependencies": {
         "@better-auth/cimd": "catalog:",
         "@better-auth/core": "catalog:",
@@ -95,7 +95,7 @@
         "@effect/sql-pg": "catalog:",
         "@effect/sql-pglite": "catalog:",
         "@electric-sql/pglite": "catalog:",
-        "@sourdough/brand": "workspace:*",
+        "@lineupkeep/brand": "workspace:*",
         "@typeonce/effect-machine": "catalog:",
         "better-auth": "catalog:",
         "drizzle-orm": "catalog:",
@@ -105,10 +105,10 @@
       },
     },
     "packages/brand": {
-      "name": "@sourdough/brand",
+      "name": "@lineupkeep/brand",
     },
     "tools": {
-      "name": "@sourdough/tools",
+      "name": "@lineupkeep/tools",
       "dependencies": {
         "effect": "catalog:",
         "postgres": "catalog:",
@@ -423,7 +423,7 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
-    "@fontsource/barlow-condensed": ["@fontsource/barlow-condensed@5.3.0", "", {}, "sha512-RA7MmIx0v3eQ6Gcf74qLVLOwLB0GpPOzx+eU9iG/AmCnSJGcIWYeU8y6CEMGZ210MGwGg5CZhzLkkvyZdTTk1g=="],
+    "@fontsource-variable/schibsted-grotesk": ["@fontsource-variable/schibsted-grotesk@5.3.0", "", {}, "sha512-ndS6H/KICWANchlHF3q4UdZD+xrZ3Ji0rUobIuXlgvDUzDfqZDsVuXPXZb636nJZMHE9zZ9Fmwgqazm8hMB50Q=="],
 
     "@hono/node-server": ["@hono/node-server@1.19.9", "", { "peerDependencies": { "hono": "^4" } }, "sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw=="],
 
@@ -548,6 +548,16 @@
     "@libsql/linux-x64-musl": ["@libsql/linux-x64-musl@0.5.29", "", { "os": "linux", "cpu": "x64" }, "sha512-gquqwA/39tH4pFl+J9n3SOMSymjX+6kZ3kWgY3b94nXFTwac9bnFNMffIomgvlFaC4ArVqMnOZD3nuJ3H3VO1w=="],
 
     "@libsql/win32-x64-msvc": ["@libsql/win32-x64-msvc@0.5.29", "", { "os": "win32", "cpu": "x64" }, "sha512-4/0CvEdhi6+KjMxMaVbFM2n2Z44escBRoEYpR+gZg64DdetzGnYm8mcNLcoySaDJZNaBd6wz5DNdgRmcI4hXcg=="],
+
+    "@lineupkeep/backend": ["@lineupkeep/backend@workspace:packages/backend"],
+
+    "@lineupkeep/brand": ["@lineupkeep/brand@workspace:packages/brand"],
+
+    "@lineupkeep/infra": ["@lineupkeep/infra@workspace:infra"],
+
+    "@lineupkeep/tools": ["@lineupkeep/tools@workspace:tools"],
+
+    "@lineupkeep/web": ["@lineupkeep/web@workspace:apps/web"],
 
     "@mrleebo/prisma-ast": ["@mrleebo/prisma-ast@0.13.1", "", { "dependencies": { "chevrotain": "^10.5.0", "lilconfig": "^2.1.0" } }, "sha512-XyroGQXcHrZdvmrGJvsA9KNeOOgGMg1Vg9OlheUsBOSKznLMDl+YChxbkboRHvtFYJEMRYmlV3uoo/njCw05iw=="],
 
@@ -926,16 +936,6 @@
     "@solidjs/vite-plugin": ["@solidjs/vite-plugin@3.0.0-next.47", "", { "dependencies": { "@ampproject/remapping": "^2.3.0", "@babel/core": "^7.23.3", "@solidjs/babel-plugin": "^2.0.0-rc.13", "@solidjs/compiler": "^2.0.0-rc.13", "@types/babel__core": "^7.20.4", "merge-anything": "^5.1.7", "vitefu": "^1.0.4" }, "peerDependencies": { "@solidjs/start-devtools": "^1.0.0-next.2", "@solidjs/web": "^2.0.0-rc.13", "@testing-library/jest-dom": "^5.16.6 || ^5.17.0 || ^6.0.0 || ^7.0.0", "solid-js": "^2.0.0-rc.13", "vite": "^8.0.0 || ^9.0.0" }, "optionalPeers": ["@solidjs/start-devtools", "@testing-library/jest-dom"] }, "sha512-vcsZbXkTCt2RalJmUPp25iz+7KYGriP9w54BLf5uIJ0xDf5woTN92WdlDCh0udZV/Zb2xw2qrWQA977QeuScJw=="],
 
     "@solidjs/web": ["@solidjs/web@2.0.0-rc.13", "", { "dependencies": { "seroval": "~1.6.7", "seroval-plugins": "~1.6.7" }, "peerDependencies": { "solid-js": "^2.0.0-rc.13" } }, "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="],
-
-    "@sourdough/backend": ["@sourdough/backend@workspace:packages/backend"],
-
-    "@sourdough/brand": ["@sourdough/brand@workspace:packages/brand"],
-
-    "@sourdough/infra": ["@sourdough/infra@workspace:infra"],
-
-    "@sourdough/tools": ["@sourdough/tools@workspace:tools"],
-
-    "@sourdough/web": ["@sourdough/web@workspace:apps/web"],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 

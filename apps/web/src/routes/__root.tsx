@@ -1,5 +1,5 @@
+import { productName } from "@lineupkeep/brand/product";
 import type { JSX } from "@solidjs/web";
-import { productName } from "@sourdough/brand/product";
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/solid-router";
 import type { Element } from "solid-js";
 
@@ -14,12 +14,14 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: `${productName} — notes in reach` },
+      { title: `${productName} — Your lineup. Looked after.` },
       {
         name: "description",
-        content: "A focused notes workspace built on a production-ready application starter.",
+        content:
+          "Lineupkeep development preview. An independent fantasy-management product in preparation.",
       },
     ],
+    links: [{ rel: "icon", type: "image/svg+xml", href: "/brand/lineupkeep-mark.svg" }],
     scripts: [{ children: themeBootstrapScript }],
   }),
 
@@ -39,11 +41,7 @@ function RootDocument(props: RootDocumentProps): JSX.Element {
       <head>
         <HeadContent />
       </head>
-      <body
-        data-design-finish="reviewed-and-documented"
-        data-design-seed="sourdough-starter-r1"
-        data-design-world="prompt-book"
-      >
+      <body>
         {}
         {props.children}
         <Scripts />

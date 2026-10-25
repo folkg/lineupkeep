@@ -1,5 +1,5 @@
 {
-  "name": "@sourdough/tools",
+  "name": "@lineupkeep/tools",
   "private": true,
   "type": "module",
   "exports": {

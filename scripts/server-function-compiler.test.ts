@@ -12,7 +12,7 @@ it.each(globSync("apps/web/src/server-functions/**/*.ts"))(
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("createClientRpc");
     expect(result.stdout).not.toMatch(
-      /(?:from|import\()[^\n]*(?:effect|@sourdough\/backend|#server\/|\/server\/)/u,
+      /(?:from|import\()[^\n]*(?:effect|@lineupkeep\/backend|#server\/|\/server\/)/u,
     );
     expect(result.stdout).not.toMatch(
       /runUseCase|decodeResult|toStandardSchemaV1|NoteInputInvalid|Notes\.use/u,
@@ -26,7 +26,7 @@ it("strips a result-valued validator and direct use case for an unregistered dom
     `
     import { createServerFn } from "@tanstack/solid-start";
     import { Schema, Effect } from "effect";
-    import { InventoryInput, Inventory } from "@sourdough/backend/inventory/Inventory";
+    import { InventoryInput, Inventory } from "@lineupkeep/backend/inventory/Inventory";
     import { runUseCase } from "#server/backendEntry.ts";
     export const reserve = createServerFn({ method: "POST" })
       .validator((raw: typeof InventoryInput.Encoded) => Schema.decodeResult(InventoryInput)(raw))

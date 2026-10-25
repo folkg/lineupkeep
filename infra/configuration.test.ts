@@ -90,7 +90,7 @@ it.effect(
             BETTER_AUTH_URL: "https://app.example.com",
             BETTER_AUTH_SECRET: "private-auth-secret",
             RESEND_API_KEY: "private-email-secret",
-            EMAIL_FROM: "Sourdough Starter <sourdough@example.com>",
+            EMAIL_FROM: "Lineupkeep <lineupkeep@example.com>",
             AUTH_CLIENT_IP_HEADERS: "cf-connecting-ip",
             CLOUDFLARE_API_TOKEN: "must-not-cross",
           }),
@@ -114,7 +114,7 @@ it.effect("exports traces using the forwarded production configuration", () =>
             BETTER_AUTH_URL: "https://app.example.com",
             BETTER_AUTH_SECRET: "private-auth-secret",
             RESEND_API_KEY: "private-email-secret",
-            EMAIL_FROM: "Sourdough Starter <sourdough@example.com>",
+            EMAIL_FROM: "Lineupkeep <lineupkeep@example.com>",
             AUTH_CLIENT_IP_HEADERS: "cf-connecting-ip",
             OTEL_TRACES_EXPORTER: "otlp",
             OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example.com",
@@ -145,7 +145,7 @@ it.effect("exports traces using the forwarded production configuration", () =>
       }),
     );
     const tracing = OtlpTracer.layerFromConfig({
-      resource: { serviceName: "sourdough-starter-web", serviceVersion: "test" },
+      resource: { serviceName: "lineupkeep-web", serviceVersion: "test" },
     }).pipe(
       Layer.provide(OtlpSerialization.layerJson),
       Layer.provide(Layer.succeed(HttpClient.HttpClient)(collector)),
@@ -213,7 +213,7 @@ it.effect("requires production email configuration even when development needs n
         ConfigProvider.fromUnknown({
           BETTER_AUTH_URL: "https://app.example.com",
           BETTER_AUTH_SECRET: "private-auth-secret",
-          EMAIL_FROM: "Sourdough Starter <sourdough@example.com>",
+          EMAIL_FROM: "Lineupkeep <lineupkeep@example.com>",
           AUTH_CLIENT_IP_HEADERS: "cf-connecting-ip",
         }),
       ),

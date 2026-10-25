@@ -6,22 +6,12 @@ import { PanelSurface } from "#browser/shared-ui/Surface.tsx";
 export function IntroPanel(props: IntroPanelProps): JSX.Element {
   return (
     <PanelSurface>
-      <div class="relative flex min-h-[min(520px,calc(100svh-128px))] flex-col justify-between overflow-hidden rounded-sheet bg-panel p-[clamp(32px,5vw,60px)] text-on-panel max-md:min-h-0 max-md:gap-5 max-md:p-surface">
-        <div class="relative z-[1] grid gap-6">
+      <div class="flex min-h-[min(480px,calc(100svh-160px))] flex-col justify-between gap-10 rounded-sheet bg-panel p-[clamp(28px,4vw,52px)] text-on-panel max-md:min-h-0 max-md:gap-4 max-md:p-6">
+        <div class="grid gap-6 max-md:gap-4">
           {props.title}
-          <div class="max-md:hidden">{props.children}</div>
+          {props.children}
         </div>
-        <span
-          aria-hidden="true"
-          class="absolute -right-[18px] bottom-12 h-[22px] w-[150px] rotate-[-4deg] bg-accent max-md:-right-[26px] max-md:bottom-[18px]"
-        />
-        <div
-          aria-hidden="true"
-          class="relative z-[1] flex items-center gap-3 text-caption text-accent"
-        >
-          <span class="h-px w-[42px] bg-current" />
-          <strong>{props.cue}</strong>
-        </div>
+        <p class="text-caption text-on-panel-soft">{props.cue}</p>
       </div>
     </PanelSurface>
   );

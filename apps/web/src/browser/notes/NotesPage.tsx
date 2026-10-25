@@ -36,8 +36,8 @@ export function NotesPage(props: NotesPageProps): JSX.Element {
           }
         />
         <Page
-          lede="Capture what matters now. Revise it when the thought gets clearer."
-          title="Your notes, in reach."
+          lede="Retained starter demo for development checks. This is not the fantasy-management workspace."
+          title="Starter workspace"
         >
           {}
           <Show when={props.filter().lifecycle} keyed>

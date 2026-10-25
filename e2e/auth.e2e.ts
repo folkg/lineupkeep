@@ -52,9 +52,7 @@ test("explains a wrong code and signs in with the right one", async ({ page }) =
   await page.getByRole("main").getByRole("button", { name: "Sign in" }).click();
 
   await expect(
-    page.getByText(
-      "That code isn't right. Check the latest email from Sourdough Starter and try again.",
-    ),
+    page.getByText("That code isn't right. Check the latest email from Lineupkeep and try again."),
   ).toBeVisible();
   await page.getByLabel("Code").fill(code);
   await page.getByRole("main").getByRole("button", { name: "Sign in" }).click();

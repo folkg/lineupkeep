@@ -1,9 +1,9 @@
 import { assert, it } from "@effect/vitest";
-import { makeTelemetryTest } from "@sourdough/backend/runtime/internal/TelemetryTest";
+import { makeTelemetryTest } from "@lineupkeep/backend/runtime/internal/TelemetryTest";
 import {
   type RequestContext,
   requestContextLayer,
-} from "@sourdough/backend/runtime/RequestContext";
+} from "@lineupkeep/backend/runtime/RequestContext";
 import { Effect, Exit, Tracer, Logger } from "effect";
 import { TestClock } from "effect/testing";
 

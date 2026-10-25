@@ -91,7 +91,7 @@ export function assertLocalStage(stage: StageSpec, local: boolean): void {
 export function assertVerificationStage(stage: string, runId: string, databaseName: string): void {
   if (
     !stage.startsWith("verify-") ||
-    databaseName !== `sourdough-test-${runId.replaceAll("-", "")}`
+    databaseName !== `lineupkeep-test-${runId.replaceAll("-", "")}`
   ) {
     throw new Error("Verification requires a verify stage and its disposable run-owned database");
   }

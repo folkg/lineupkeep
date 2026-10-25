@@ -1,5 +1,5 @@
+import { productName } from "@lineupkeep/brand/product";
 import type { JSX } from "@solidjs/web";
-import { productName } from "@sourdough/brand/product";
 import { Show } from "solid-js";
 import type { Element } from "solid-js";
 
@@ -16,7 +16,7 @@ export function AppShell(props: AppShellProps): JSX.Element {
   return (
     <PageShell
       brand={
-        <BrandLink aria-label={`${productName} home`} mark="S/" to="/">
+        <BrandLink aria-label={`${productName} home`} to="/">
           {productName}
         </BrandLink>
       }

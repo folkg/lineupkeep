@@ -1,7 +1,10 @@
 import { assert, it } from "@effect/vitest";
-import { AuthService } from "@sourdough/backend/auth/Auth";
-import type { AuthenticationSession } from "@sourdough/backend/auth/Auth";
-import { makeRequestContext, requestContextLayer } from "@sourdough/backend/runtime/RequestContext";
+import { AuthService } from "@lineupkeep/backend/auth/Auth";
+import type { AuthenticationSession } from "@lineupkeep/backend/auth/Auth";
+import {
+  makeRequestContext,
+  requestContextLayer,
+} from "@lineupkeep/backend/runtime/RequestContext";
 import { Effect, Layer, Ref } from "effect";
 
 import { withAuthenticatedUser } from "./authenticatedUser";

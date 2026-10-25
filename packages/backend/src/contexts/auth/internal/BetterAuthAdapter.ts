@@ -3,7 +3,7 @@ import { getCurrentAuthEndpointContext } from "@better-auth/core/context";
 import type { DB } from "@better-auth/drizzle-adapter/relations-v2";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { mcp } from "@better-auth/mcp";
-import { productName } from "@sourdough/brand/product";
+import { productName } from "@lineupkeep/brand/product";
 import { getSessionCookie } from "better-auth/cookies";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -38,7 +38,7 @@ import * as oauthSchema from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
 
 export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
-  "@sourdough/backend/contexts/auth/internal/BetterAuthAdapter",
+  "@lineupkeep/backend/contexts/auth/internal/BetterAuthAdapter",
   {
     make: Effect.gen(function* () {
       const database = yield* AuthDatabase;

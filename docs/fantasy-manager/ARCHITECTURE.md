@@ -1,0 +1,265 @@
+# Technical architecture
+
+Status: recommended implementation design for final review. Product decisions are recorded in [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md). This document does not authorize implementation or deployment.
+
+## 1. Design in one sentence
+
+A provider-neutral fantasy domain owns validated reads, connections, team controls, and durable lineup runs; explicit state machines coordinate IO, while a pure assignment solver consumes a small sport/provider-agnostic problem prepared by opinionated selection policies.
+
+```text
+Hosted Muse / other MCP clients       Browser
+              \                       /
+               Public Cloud Run application
+                  |             |
+          public use cases      | bounded wait / run status
+                  |             |
+             Neon PostgreSQL: users, connections, teams, controls,
+                     run snapshots, diagnostics, delivery outbox
+                                  |
+                    Cloud Tasks, authenticated delivery
+                                  |
+Cloud Scheduler ----------> Private Cloud Run worker
+                                  |
+                     provider batch planning / execution
+                                  |
+                 PublicInternet -> exact approved provider endpoints
+
+User's computer: local linking helper -> explicit pairing approval
+                -> provider's own login page -> encrypted server persistence
+```
+
+Both Cloud Run services scale to zero. MCP transport remains request-scoped/stateless; domain work is durable independently of an MCP connection. No server LLM, hosted browser, Redis, continuously running scheduler, optimizer sidecar, or custom durable-workflow platform is required.
+
+## 2. Modules and seams
+
+Start with one fantasy domain context containing focused public services for connections, queries, team automation, and lineup runs. Do not invent multiple bounded contexts simply because there are three machines. Split ownership only when actual independent responsibilities justify it.
+
+Follow the starter's placement, Schema/Effect errors, Layers, row codecs, repositories, machine helpers, architecture checks, runtime, and browser/server contracts. Public services and repositories are batch-first; single callers pass one-element collections. Provider-specific transport chunking stays inside its adapter. Set-based persistence must not become per-team repository calls in a loop.
+
+Internal roles:
+
+| Module            | Interface responsibility                                                      | What stays hidden                                      |
+| ----------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Connections       | Start/finish linking, list safe metadata, reconnect/disconnect                | Cookie formats, secret versions, account fingerprints  |
+| Fantasy queries   | Discover teams/leagues, read selected roster/player/stat/matchup/history data | Provider endpoints, nested parsing, hydration strategy |
+| Team automation   | Enable, disable, pause through fantasy-day end                                | Persistence and expiry mechanics                       |
+| Lineup runs       | Request, inspect, execute/reconcile a run                                     | Queue, leases, provider writes, retry mechanics        |
+| Provider adapter  | Interpret provider facts/rules and perform bounded supported operations       | Yahoo keys, T/Y, crumb, XML, web-link parameters       |
+| Selection policy  | Prepare comparable signed values and participation-aware decisions            | Diamond data and provider/sport-specific formulas      |
+| Assignment solver | Return the best legal complete assignment or infeasibility                    | No network, clock, Yahoo, sport, or player-name logic  |
+
+This is a responsibility map, not a mandate for one file or class per row. Keep small related functions together. A production Yahoo adapter and deliberately different synthetic test adapter justify the provider seam; no runtime plugin-loading system, speculative ESPN adapter, generic capability catalog, or arbitrary request language.
+
+## 3. Domain data: three shapes, not one giant player object
+
+### Provider decoding
+
+Decode unknown responses at the adapter. Validate the exact requested resources, season/period, membership, and actual/projected distinction. An HTTP 200 with a different period or no meaningful rows is not a valid zero dataset.
+
+Use provider-specific schemas privately. Preserve missing values, distinguish zero, and do not require ranks merely to admit a player. Do not default unknown injury status to healthy. Discover exact teams; do not select only one team per league or skip a roster just because it is uneditable.
+
+### Query data
+
+Return only explicitly selected generic fields/groups, with compact defaults. Useful groups include identity/eligibility, availability, actual statistics, projections, ownership, and scoring context. A self-describing statistic needs its name, unit, period, actual/projected meaning, and missingness. Share metadata dictionaries within a page instead of repeating large descriptions per value.
+
+No public diamond/cohort selectors, provider-specific projection variants, raw Yahoo payload escape hatch, arbitrary URL field, or unbounded JSON extension bag. Support current use cases, not every hypothetical provider field. Do not reduce rich MCP exploration to the optimizer's tiny input.
+
+Opaque application references resolve provider keys internally. Stat references can be opaque and dictionary-described; do not claim arbitrary provider statistics have identical cross-provider semantics. Opponent/public-league reads require verified read access through the caller's connection; they do not confer management rights.
+
+### Optimization problem
+
+An immutable problem contains only player references, starter/reserve slot capacities and meaningful identities, pooled standard-roster limits, legal bench accommodation, current assignments, legal destination edges, fixed assignments, a common signed-value basis, and deterministic tie metadata. The shell supplies time-dependent facts before invoking the pure core.
+
+Reserve eligibility is a legal constraint. Participation/injury/real-world starting status is policy evidence, not automatically a prohibition on starting. Scoring evidence is never exposed as Yahoo-specific methods in the shared interface.
+
+Preserve every roster member. An empty starter is allowed; dropping a player or fabricating bench/reserve capacity is not. If no complete legal same-roster assignment exists, return a blocked explanation rather than quietly removing players or submitting a knowingly invalid roster.
+
+## 4. Provider and policy resolution
+
+Resolve the owner and connection from stored team identity, then its provider implementation. Select policy using sport, league format/rules, target period, and available evidence—not provider name alone.
+
+Yahoo is the only initial live adapter, for NFL/NHL. Different providers may batch differently and define different periods/day boundaries. The generic operation remains the same; no public methods for Yahoo entitlement checks or diamond cohorts.
+
+Phase 1 `set_lineup` invokes native start-active. Phase 2 switches scheduled/manual generic requests to the custom optimizer once ready. Report `provider_native` versus `optimizer` behavior and relevant policy version in safe results. A native invocation is not a projection-optimal guarantee and does not enforce the custom optimizer's signed-value objective.
+
+Queued requests express intent, not a permanently selected algorithm. Resolve the active implementation when claiming fresh work; persist the selected version for that attempt. Do not reinterpret an already-sent native write after a deployment. Never overlap a replacement optimizer write with an unresolved prior write.
+
+### Selection values
+
+- Prefer comparable projected points when usable; otherwise Yahoo's private policy uses diamond-manager started evidence.
+- Never compare raw projected points with raw percentages. Use one consistent basis for the relevant decision.
+- Zero is valid; missing is not zero. Do not synthesize an overall-ownership fallback or a positive sentinel without an explicit policy decision.
+- If evidence is incomplete, use the agreed fallback consistently. Where no comparison is possible, preserve affected assignments and report incomplete evidence; do not claim a globally optimal full-team result.
+- Avoid double injury penalties when source projections already include participation assumptions.
+- Participation preference is soft, not an unconditional confirmed-starter tier. An unconfirmed player can beat empty; a negative-valued player should remain benched when legal.
+- Category leagues initially use a scalar heuristic, not category-win optimization. No user-facing scoring controls.
+- Future baseball policy must distinguish starters, relievers, dual eligibility, relief appearances, and unconfirmed starts. Do not assume 'not today's announced starter' means a pitcher cannot contribute. MLB remains deferred.
+
+The exact opinionated formulas require worked sport-policy examples and tests before implementation. They are not inherited from the old app's multipliers. Meaningful free NHL scoring evidence remains an explicit Phase 2 gate: earlier probes did not establish useful diamond values or equivalent NHL projections. Do not hide this by treating all sampled zeros as proven useful data.
+
+## 5. Recommended solver: weighted assignment first
+
+Use a weighted bipartite assignment formulation, not a procedural sequence of player swaps:
+
+- One side: rostered players.
+- Destinations: actual starter positions, legal bench accommodation, and reserve positions.
+- Edges: legal assignments only, with locks fixed.
+- All players remain assigned exactly once; starter/reserve counts and any pooled standard-roster limits are respected.
+- Empty starting slots are permitted. Unmatched players are not a substitute for legal bench accommodation.
+- Do not blindly model the advertised BN count as a hard maximum. The old app excludes BN from overfilled-position checks and counts total standard-roster capacity separately. Verify actual provider semantics. Where starter+bench share a capacity, encode that pool explicitly so a negative-valued goalie can legally remain benched without inventing roster space.
+
+Optimize lexicographically:
+
+1. Legality and fixed assignments are mandatory, not penalties.
+2. Maximize total comparable signed starting value; non-starting contribution and empty slots are zero.
+3. Among equal-value plans, prefer eligible zero-valued starter occupancy.
+4. Minimize semantic assignment changes.
+5. Choose a canonical deterministic result.
+
+Equivalent repeated slots must not create fake changes: exchanging two identical center-slot indices is not a Yahoo position change. The provider mapping determines whether slot identity matters.
+
+Use explicitly specified fixed-precision values/exact integer objectives where practical. Never let a small floating-point epsilon silently overturn a better primary score. Lexicographic priorities require a proved bounded encoding or staged optimization, not arbitrary large constants.
+
+### Algorithm/library recommendation
+
+Recommend min-cost flow if the verified model includes pooled standard-roster capacity alongside reserve positions. Player-to-position edges feed a bounded starter/bench pool, while reserve destinations obey their own capacities; all roster members must be routed. This directly represents constraints a simple one-player/one-slot matrix may not express.
+
+Hungarian assignment remains a simpler candidate only if the actual rules reduce to independent slot capacities. Neither requires a general MILP/CP-SAT runtime for this network-representable problem. Do not force pooled constraints into a lossy matrix merely to use a convenient library.
+
+The inspected `havelessbemore/munkres` implementation advertises TypeScript, no runtime dependencies, rectangular matrices, and number/bigint paths. It is a candidate, not an approved dependency: inspect the current published package/license/source and test exact objectives and infeasibility before choosing it. Its documented Infinity entries are 'avoid if possible', not absolute forbiddance; any wrapper must reject forbidden returned edges and prove infeasibility independently. Do not confuse it with similarly named older packages.
+
+The inspected `Vages/min-cost-flow` repository and OR-Tools WASM binding are additional comparison candidates, not endorsed dependencies. Check negative costs, exact lexicographic priorities, infeasibility, published maintenance/license, runtime footprint, and tests; a search result alone is not a library-selection proof.
+
+Do not write a Hungarian/min-cost-flow engine from scratch by default, add Python/OR-Tools services, or import a large WASM solver without demonstrated need. Use a bounded solver spike to settle the smallest implementation satisfying the actual constraint contract; if no suitable library exists, obtain approval before undertaking a custom solver.
+
+Escalate to integer/constraint programming only when accepted coupled constraints cannot be represented by assignment/flow. Multi-period planning, season-long pace limits, transactions, and true category objectives are not silently included.
+
+## 6. Three principal machines
+
+Use the starter's existing Effect-machine conventions and test support unless a verified requirement makes them unsuitable. Machine snapshots are domain state; a machine library alone does not provide durable execution.
+
+### Provider connection
+
+Candidate states: linking, ready, reconnect-required, disconnected. Each state owns its data, rather than combining unrelated booleans and optional fields. Expiring/replaying pairing attempts cannot change another user's connection. Reauthentication creates a new credential generation; stale work must revalidate it before writing.
+
+A reconnect-required transition opens one connection incident and one notification intent. Five teams using that connection do not create five emails. A later expiration after successful reconnect is a new incident.
+
+### Team automation
+
+States: disabled, enabled, paused-until-fantasy-day-end. Keep availability observations separate from enrollment: unavailable is not the same as disabled. Pause expiry restores eligibility at the next normal check, not a special forced run.
+
+Evaluate deadlines using the provider's fantasy-day policy and Effect DateTime named-zone calendar arithmetic. No fixed PST offset, 24-hour arithmetic across DST, or dependence on the server/user timezone. Yahoo's exact rollover still needs verification.
+
+Manual authorized requests bypass scheduled enrollment checks but not connection readiness, ownership, availability, locks, or uncertain-write protection.
+
+### Lineup run
+
+Recommended logical states:
+
+```text
+queued -> reading -> planning -> validating -> applying -> verifying -> completed
+    |         |          |            |           |            |
+    +------> skipped / blocked / retry-wait / failed / uncertain / superseded
+```
+
+Native Phase 1 planning prepares the bounded native command, not a custom lineup. No-op results must be distinguishable from failures, blocked work, and inability to determine a write outcome. Retry is a recovery transition with preserved attempt history, not a new unrelated run.
+
+Persist the state data needed to resume/reconcile, not an in-memory process continuation. Full state identifiers, events, codecs, retry budgets, and transition guards are a Stage 1 implementation specification; diagrams alone are insufficient.
+
+## 7. Durable execution without a custom workflow engine
+
+Use Postgres snapshots, short atomic transitions, a delivery outbox, and Cloud Tasks. Do not hold a database transaction or row lock while making external HTTP requests.
+
+### Request and delivery
+
+1. Authenticate the caller; resolve owned team/period and validate bounded input.
+2. Use a stable request identity, rejecting reuse with different intent. In one transaction, persist the run and enqueue intent.
+3. Dispatch the outbox promptly with deterministic delivery identity. Record success; duplicate task creation/delivery must be harmless.
+4. The existing hourly scheduler also repairs undispatched intents and stale work. Do not add a high-frequency database polling daemon that prevents Neon suspension.
+5. Worker delivery contains run references, never cookies. Load and authorize stored work rather than trusting incoming owner/team fields.
+6. Manual MCP waits for a bounded interval, then returns current status/run reference. Request cancellation does not cancel committed durable work. `BackgroundWork` is not a substitute for durable enqueue.
+
+A queue outage may delay execution; report pending/delivery difficulty honestly. Do not promise deadline guarantees that an hourly repair sweep cannot provide.
+
+### Team coordination and batching
+
+A team/period run is the recovery/outcome unit. Serialize application writes to the same team across manual and scheduled work. Bound provider traffic per connection.
+
+Batch compatible reads and writes inside the provider implementation where supported. A queue delivery may contain a bounded group of run references; completed teams are not re-applied when the group is redelivered. Batch persistence remains set-based. Do not claim batch HTTP is a cross-team atomic transaction.
+
+Use short-lived leases with generation/version checks and a durable write-intent state. A lease expiring is not proof that an already-sent provider request ended. Yahoo does not honor our fencing token, so never permit a replacement write solely because a local lease expired.
+
+### Validate, apply, reconcile
+
+- Re-read relevant roster, membership, locks, connection generation, target period, and automation controls before writing. Re-plan boundedly if stale.
+- Pause/disable stops scheduled work before a write starts; it cannot undo an HTTP request already sent.
+- Persist intended assignment/before-state fingerprint before explicit writes. Submit only the provider-required editable assignments.
+- Verify coverage, membership, and observed assignments afterward. Native actions can succeed when some players are locked; do not require every player editable.
+- A timeout after transmission is uncertain, not definitely failed. Reconcile by readback before considering another write.
+- For explicit assignments, compare observed state with both intended and before-state. For native actions the exact intended lineup may not be knowable; readback cannot invent proof of acceptance.
+- If evidence remains ambiguous, preserve an uncertain/blocked outcome and require recovery rather than blindly replaying. Do not automatically restore, undo, or fight external manual edits.
+- External edits can race our last validation. With no provider CAS/idempotency guarantee, exactly-once effects and elimination of all races cannot be promised.
+
+Only classify transport failures as safe pre-transmission failures if the transport can prove that distinction. The current PublicInternet error is intentionally opaque; do not infer it from a generic network exception.
+
+## 8. Persistence and lifecycle
+
+Minimal persistent responsibilities:
+
+- Starter auth/session/OAuth data.
+- Provider connection metadata and separately encrypted credential records.
+- Stable owned team identity/configuration and last-seen availability.
+- Team automation state/codec.
+- Run state/version, request identity, attempts, implementation/policy version, concise result.
+- Minimal diagnostic inputs, expiring after seven days.
+- Delivery/notification intents and their stable identities.
+
+Concise run outcomes/explanations expire after 30 days. Do not preserve their full content forever through soft-deleted rows, event tables, traces, backups, or abandoned outbox payloads. Define cleanup for every copy. Current configuration and unresolved incidents are not historical run retention.
+
+Use real migrations, owned-row predicates, pragmatic owner/filter/order/expiry indexes, stable ordering, bounded pages, and idempotent creates. Add uniqueness for actual identities, not league-only identities that overwrite two teams in one league.
+
+Keep application data, infrastructure state, and test databases on separate lifecycles. Database retention is not a backup. Before deployment/migration, adopt the starter's protected remote-state, recovery, and backup procedures with this product's own resources and least-privilege roles.
+
+## 9. Linking and secrets
+
+Use a local helper on the user's machine. Do not assume hosted Muse can run browser JS in the user's existing session. Recommend a small Effect CLI and a dedicated temporary local browser profile where the human signs into the provider directly; the app never collects the password or broad browser profile.
+
+A bounded pairing flow should bind the helper to the authenticated application user with short-lived one-use approval and a helper-held proof. Do not put bearer secrets into shell command arguments or ship a new custom auth protocol when the auth library's supported flow can satisfy the contract. Verify available device/pairing primitives before selecting the exact mechanism; local-helper feasibility is an explicit early spike.
+
+Extract only the provider's required session material, send over authenticated TLS, validate the connection server-side, and store encrypted credentials separately. No cookies/crumbs in MCP, frontend state, telemetry, diagnostic snapshots, task payloads, URLs returned to agents, or email. Disconnect blocks future work and removes active secret material; already-sent requests still require reconciliation.
+
+For the free-tier design, a versioned AES-GCM envelope with a key held in Secret Manager is a practical candidate. Bind ciphertext to owner/connection/provider/version as authenticated data. Use native cryptography behind Effect, unique nonces, rotation, tamper/cross-owner tests, and deliberate key recovery. Do not automatically recreate the old app's paid KMS-key topology. Autokey-specific KMS free allowances are not proof arbitrary application keys are free.
+
+No credentials in infrastructure state/build outputs beyond unavoidable protected provider records; treat infrastructure state and local Alchemy outputs as secret-bearing. Never copy `.env`, profiles, VCS state, dependency caches, or existing cloud resource references from either old app or starter.
+
+## 10. Yahoo transport and review links
+
+Every production Yahoo HTTP request uses starter PublicInternet. The Yahoo implementation independently restricts exact origins, methods, paths, query fields, resource keys, and XML bodies; rejects redirects; and sets bounded response/time budgets. No raw-fetch escape hatch.
+
+Current PublicInternet accepts Request and scoped Response consumption; its defaults are 15 seconds and 1 MiB. Earlier verified bulk Yahoo payloads exceed that default. Configure a deliberate larger bound only for bounded rich Yahoo operations, not globally. Consume/cancel response bodies within scope.
+
+Yahoo native start-active uses an XML roster action; optimal-start was explicitly premium-denied on the researched account. No premium optimization endpoint, purchase, entitlement bypass, or substitute recommendation call is included.
+
+Review links support add, add/drop, drop, and trade, with exact provider-host allowlists and identifier validation. Yahoo uses scalar `apid`/`dpid`, and stage-one trade review with repeated outgoing/incoming IDs. Keep numeric web IDs private to the adapter. No submission-stage URLs, arbitrary redirects, CSRF material, transaction execution, or claim that a prefill guarantees final eligibility. Validate same-league/counterparty/player relationships before generating a link.
+
+## 11. MCP and frontend
+
+See [MCP.md](MCP.md), [UX-BRIEF.md](UX-BRIEF.md), and [TESTING.md](TESTING.md). Both surfaces call the same public use cases, not separate implementations.
+
+Retain the starter's application-user/client authorization, OAuth consent, ownership, narrow read/write scopes, and runtime/Effect-free browser boundaries. A future HTTP dataset adapter is not required now. Hosted Muse remains the primary client acceptance target; do not change to stateful/legacy MCP for older Pi.
+
+## 12. Infrastructure and cost
+
+Cloud Run public web/MCP and IAM-protected worker, Cloud Tasks, shared hourly Cloud Scheduler, fresh Neon Free application database, protected remote Alchemy state, Secret Manager, bounded image retention, and the existing transactional email implementation are sufficient candidates.
+
+See [HOSTING.md](HOSTING.md) for quotas and costs. Do not inherit the starter's current min-one/instance-billing configuration or external database resource reference. Put ordinary non-secret environment configuration in plain environment entries instead of creating a Secret Manager version per setting. Verify the billing account's shared free allowances, including existing projects.
+
+Production needs ingress-aware auth rate limits and email quotas even with open registration. These are ordinary abuse controls, not an allowlist or invitation system. Free-tier fit under expected usage is a target; public traffic cannot be guaranteed a zero bill merely by setting a billing alert.
+
+## 13. Hard acceptance gates
+
+- Resolve the starter's documented critical RPC publication blocker and obtain a stable copy-ready baseline. Do not publish the inspected vulnerable dependency closure or invent a local backport.
+- Verify actual hosted Muse OAuth/tool behavior and chosen cloud egress/session compatibility.
+- Verify Yahoo's exact fantasy-day rollover and supported league rules.
+- Establish meaningful scoring evidence and complete legal assignment/write behavior before Phase 2 activation.
+- Obtain explicit authorization for infrastructure plan/apply and any live provider write acceptance. No such action is authorized by this document.

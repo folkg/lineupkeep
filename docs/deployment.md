@@ -1,6 +1,6 @@
 # Deployment owner runbook
 
-This runbook explains safe operation, not authorization. Deploy nothing until the owner approves the exact plan and rollout. Local checks cannot establish cloud credentials, IAM, routing, delivery, or restoration.
+This runbook explains safe operation, not authorization. [The Phase 1 mandate](PHASE-1-HANDOFF.md) records the owner's GCP CLI setup permission and conditional rollout authority. Review and record the exact plan; do not apply until its billing/budget, access, and publication-security gates are satisfied. A material scope/cost change needs owner approval. Local checks cannot establish cloud credentials, IAM, routing, delivery, or restoration.
 
 ## Select a stage and lifecycle
 
@@ -18,7 +18,7 @@ This runbook explains safe operation, not authorization. Deploy nothing until th
 
 Local state depends on **Alchemy dev execution mode**, not a stage named `local`. Non-dev plan/deploy/destroy requires remote state. Development and verification explicitly use local state.
 
-Remote web stages reference the **same** durable `SourdoughStarterDatabase` / `production` resource in [neon.ts](../infra/database/neon.ts); they are not isolated previews. Add stage/database isolation deliberately. Changing hosts requires reviewing replacement and deletion effects, not simply switching an environment flag.
+Remote web stages reference the **same** durable `LineupkeepDatabase` / `production` resource in [neon.ts](../infra/database/neon.ts); they are not isolated previews. Add stage/database isolation deliberately. Changing hosts requires reviewing replacement and deletion effects, not simply switching an environment flag.
 
 [database.run.ts](../infra/database.run.ts) owns the durable database independently of web teardown. Retention protects the physical database but removes its state record when destroyed: it does not replace backups or adoption procedures. Routine CI must not destroy this stack.
 
@@ -31,7 +31,7 @@ All non-local stacks use `alchemy/State/PostgresState` through [state.ts](../inf
 3. Define backup/PITR retention, recovery owner, RPO, and RTO as application policy. Pause deployments and exercise restore into a separate state-only database. Verify restored records against actual resource identities before changing the secret. Restoring state does not roll back application code or data. Backups contain secrets too.
 4. Store `ALCHEMY_STATE_DATABASE_URL` in protected CI environments and an owner-controlled secret manager. Use certificate-verified TLS (`sslmode=verify-full`) and a **direct/session-capable endpoint**, not Neon's `-pooler` transaction endpoint: state locks are session advisory locks. Reserve at least two simultaneous connections per running state store for lock holding and independent verification, with capacity for commands accessing multiple stack/stage pairs. Missing configuration fails closed; there is no local fallback.
 5. Serialize plan/deploy/destroy per exact stack/stage across CI and owner terminals. Use application-specific concurrency identities and `cancel-in-progress: false`. The advisory lock fails fast; it is not a queue. Never evade contention by changing the state URL, stack/stage, or lock prefix. Shared application databases also require cross-stage migration serialization or a database-scoped migration lock before rollout.
-6. Authorize a first plan, then authorize deployment separately. Review credentials, host/database policy, connection capacity, and restore readiness. Rotate credentials consistently with deployments paused. Never delete state to clear locks; session locks release when their connections close.
+6. Confirm authority for the first plan and for deployment under the applicable mandate; conditional rollout authority is usable only after its gates are satisfied. Review credentials, host/database policy, connection capacity, and restore readiness. Rotate credentials consistently with deployments paused. Never delete state to clear locks; session locks release when their connections close.
 
 Plan and destroy need the same state store as deploy. Keep URLs out of source and command arguments, and deny state secrets to untrusted PR/build/check jobs. Checkout-local `.alchemy` and `infra/.alchemy` also contain resolved credentials: keep them ignored/private, preserve them when cleanup is incomplete, and never share them as evidence.
 
@@ -66,7 +66,7 @@ Provider credentials belong to protected shell/CI inputs or a configured interac
 
 - **Neon database stack:** `NEON_API_KEY` provisions the retained database; it is not an application database credential or an additional web-runtime secret.
 - **Cloudflare:** use account ID plus a narrowly scoped API token for Worker/Hyperdrive operations. The provider also supports global API key plus email (`CLOUDFLARE_EMAIL`, alias `CLOUDFLARE_ACCOUNT_EMAIL`); prefer the scoped token. Review actual permissions before use. [cloudflare.ts](../infra/hosts/cloudflare.ts) owns resource composition.
-- **GCP:** `GOOGLE_ACCESS_TOKEN` plus `GOOGLE_PROJECT_ID` (alias `GOOGLE_CLOUD_PROJECT`), or `GOOGLE_APPLICATION_CREDENTIALS` pointing to a protected service-account JSON key, plus `GCP_REGION`. Do not assume arbitrary ADC/Workload Identity files are accepted by the pinned provider. Tokens must last through the operation. Separately authenticate gcloud and Docker, and align gcloud's active project/identity with Alchemy: registry configuration and secret-version commands use that CLI context. Misalignment can affect the wrong project. [cloudRun.ts](../infra/hosts/cloudRun.ts) owns composition.
+- **GCP:** `GOOGLE_ACCESS_TOKEN` plus `GOOGLE_PROJECT_ID` (alias `GOOGLE_CLOUD_PROJECT`), or `GOOGLE_APPLICATION_CREDENTIALS` pointing to a protected service-account JSON key, plus `GCP_REGION`. Do not assume arbitrary ADC/Workload Identity files are accepted by the pinned provider. An authorized agent can obtain a short-lived token from gcloud directly into the deployment process environment without displaying or recording it; do not ask the owner to paste it into chat. Gcloud login alone does not automatically configure Alchemy, Neon, email, or protected state. Tokens must last through the operation. Separately authenticate gcloud and Docker, and align gcloud's active project/identity with Alchemy: registry configuration and secret-version commands use that CLI context. Misalignment can affect the wrong project. [cloudRun.ts](../infra/hosts/cloudRun.ts) owns composition.
 
 Cloud Run owns image publication in [cloudRun.ts](../infra/hosts/cloudRun.ts) using the shared [Node image build](../infra/build/node.ts); builds receive no application/state secrets. Cloud Run uses Secret Manager and a dedicated runtime account; Cloudflare receives bindings. Audit permissions/rotation on the selected host.
 
@@ -75,11 +75,11 @@ Cloud Run owns image publication in [cloudRun.ts](../infra/hosts/cloudRun.ts) us
 After owner bootstrap and authorization, use the scripts in [infra/package.json](../infra/package.json). For example, planning the database is separate from planning the web stack:
 
 ```sh
-bun --filter @sourdough/infra plan:database --stage production
-bun --filter @sourdough/infra plan --stage production
+bun --filter @lineupkeep/infra plan:database --stage production
+bun --filter @lineupkeep/infra plan --stage production
 ```
 
-Review the resulting changes before separately authorizing apply. [migrations.ts](../infra/migrations.ts) applies committed Drizzle migrations against the direct URL; consumed Outputs gate activation on success. Destroy does not roll schema back. Use expand/contract changes and a tested application-data backup/recovery plan. Explicit external-db stages require both URLs and deliberate target confirmation before migrating.
+Review and record the resulting changes before apply; verify that the applicable mandate covers their resources, cost, and rollout. [migrations.ts](../infra/migrations.ts) applies committed Drizzle migrations against the direct URL; consumed Outputs gate activation on success. Destroy does not roll schema back. Use expand/contract changes and a tested application-data backup/recovery plan. Explicit external-db stages require both URLs and deliberate target confirmation before migrating.
 
 Keep application data, protected infrastructure state, and disposable verification resources on separate lifecycles; retained development data is not verification storage. Run near the database and reconcile runtime pools, concurrency, and instance limits with its real connection budget. Keep Hyperdrive query caching disabled for read-after-write consistency. Process and isolate resource lifetimes differ; use `BackgroundWork` for response-independent work and a durable queue/job system for work that must survive instance loss.
 

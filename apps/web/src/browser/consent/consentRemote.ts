@@ -1,4 +1,4 @@
-import type { ConsentRequest } from "@sourdough/backend/auth/Auth";
+import type { ConsentRequest } from "@lineupkeep/backend/auth/Auth";
 
 import {
   decideConsentServerFn,

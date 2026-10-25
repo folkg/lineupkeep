@@ -1,14 +1,14 @@
-import type { UserId } from "@sourdough/backend/auth/User";
+import type { UserId } from "@lineupkeep/backend/auth/User";
 import {
   CreateNoteInput,
   ListNotesInput,
   Note,
   NoteIdInput,
   UpdateNoteInput,
-} from "@sourdough/backend/notes/Note";
-import type { NoteError } from "@sourdough/backend/notes/Note";
-import { Notes } from "@sourdough/backend/notes/Notes";
-import { noteScopes } from "@sourdough/backend/notes/NoteScopes";
+} from "@lineupkeep/backend/notes/Note";
+import type { NoteError } from "@lineupkeep/backend/notes/Note";
+import { Notes } from "@lineupkeep/backend/notes/Notes";
+import { noteScopes } from "@lineupkeep/backend/notes/NoteScopes";
 import { Array, Effect, Schema } from "effect";
 import type { Layer } from "effect";
 import { Tool, Toolkit } from "effect/ai";

@@ -62,7 +62,7 @@ const plugin = {
             node,
             message:
               replacement === undefined
-                ? "Parent-relative imports obscure package ownership; add a matching package.json imports alias, or expose a cross-package module through its @sourdough package exports."
+                ? "Parent-relative imports obscure package ownership; add a matching package.json imports alias, or expose a cross-package module through its @lineupkeep package exports."
                 : `Parent-relative imports obscure package ownership; use ${replacement} through package.json imports or package exports instead.`,
             ...(replacement === undefined
               ? {}
@@ -426,7 +426,7 @@ const plugin = {
             for (const declaration of imports) {
               if (
                 declaration.importKind === "type" ||
-                !/(?:^effect(?:\/|$)|^@effect\/|^@sourdough\/backend|(?:^|\/)server(?:\/|$))/u.test(
+                !/(?:^effect(?:\/|$)|^@effect\/|^@lineupkeep\/backend|(?:^|\/)server(?:\/|$))/u.test(
                   declaration.source?.value ?? "",
                 )
               ) {

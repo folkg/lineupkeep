@@ -1,4 +1,4 @@
-import { longRunningProcess } from "@sourdough/backend/runtime/BackendPlatform";
+import { longRunningProcess } from "@lineupkeep/backend/runtime/BackendPlatform";
 
 import { BackendRuntime } from "#backend-runtime";
 

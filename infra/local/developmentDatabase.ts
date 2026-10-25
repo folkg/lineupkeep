@@ -5,7 +5,7 @@ import {
   image,
   serverSettings,
   waitUntilReady,
-} from "@sourdough/tools/local-stack/postgresContainer.ts";
+} from "@lineupkeep/tools/local-stack/postgresContainer.ts";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Provider from "alchemy/Provider";
@@ -16,14 +16,14 @@ import { DatabaseDeployment } from "#infra/services/DatabaseDeployment.ts";
 
 export const DevelopmentPostgres = Resource<
   Resource<
-    "SourdoughStarter.DevelopmentPostgres",
+    "Lineupkeep.DevelopmentPostgres",
     DevelopmentDatabaseIdentity,
     { url: Redacted.Redacted<string> }
   >
->("SourdoughStarter.DevelopmentPostgres");
+>("Lineupkeep.DevelopmentPostgres");
 
 export const developmentDatabase = Alchemy.Stack(
-  "SourdoughStarterDevelopmentDatabase",
+  "LineupkeepDevelopmentDatabase",
   { providers: developmentPostgresProvider(), state: Alchemy.localState() },
   Effect.gen(function* () {
     if (!(yield* AlchemyContext).dev) {
@@ -37,7 +37,7 @@ export const developmentDatabase = Alchemy.Stack(
 export const developmentDatabaseLayer = Layer.effect(DatabaseDeployment)(
   Effect.gen(function* () {
     const database = yield* DevelopmentPostgres.ref("Postgres", {
-      stack: "SourdoughStarterDevelopmentDatabase",
+      stack: "LineupkeepDevelopmentDatabase",
       stage: "development",
     });
     return { runtimeUrl: database.url, directUrl: database.url };
@@ -53,8 +53,8 @@ export function developmentDatabaseIdentity(): {
   const checkout = new URL("../../", import.meta.url).pathname;
   const hash = createHash("sha256").update(checkout).digest("hex").slice(0, 10);
   return {
-    name: `sourdough-starter-dev-${hash}`,
-    volume: `sourdough-starter-dev-${hash}-data`,
+    name: `lineupkeep-dev-${hash}`,
+    volume: `lineupkeep-dev-${hash}-data`,
     checkout,
     restartPolicy: "unless-stopped",
   };
@@ -80,7 +80,7 @@ export async function resetDevelopmentDatabase(
 export function developmentPostgresProvider(): Layer.Layer<
   Alchemy.Provider<
     Resource<
-      "SourdoughStarter.DevelopmentPostgres",
+      "Lineupkeep.DevelopmentPostgres",
       DevelopmentDatabaseIdentity,
       {
         url: Redacted.Redacted<string>;
@@ -140,11 +140,11 @@ async function startDatabase(identity: DevelopmentDatabaseIdentity): Promise<{
       "--mount",
       `type=volume,src=${volume},dst=/var/lib/postgresql`,
       "--env",
-      "POSTGRES_USER=sourdough_dev",
+      "POSTGRES_USER=lineupkeep_dev",
       "--env",
-      "POSTGRES_PASSWORD=sourdough_dev_local_only",
+      "POSTGRES_PASSWORD=lineupkeep_dev_local_only",
       "--env",
-      "POSTGRES_DB=sourdough_dev",
+      "POSTGRES_DB=lineupkeep_dev",
       image,
       ...serverSettings.flatMap((setting) => ["-c", setting]),
     ]);
@@ -156,7 +156,7 @@ async function startDatabase(identity: DevelopmentDatabaseIdentity): Promise<{
     throw new Error("Development database has no loopback port");
   }
   const url = new URL(
-    `postgres://sourdough_dev:sourdough_dev_local_only@127.0.0.1:${port}/sourdough_dev`,
+    `postgres://lineupkeep_dev:lineupkeep_dev_local_only@127.0.0.1:${port}/lineupkeep_dev`,
   );
   await waitUntilReady(url, AbortSignal.timeout(60_000));
   return { url: Redacted.make(url.href) };
@@ -195,8 +195,8 @@ type DevelopmentDatabaseIdentity = {
   readonly restartPolicy: "no" | "unless-stopped";
 };
 
-const ownerLabel = "sourdough-starter.checkout";
-const purposeLabel = "sourdough-starter.purpose";
+const ownerLabel = "lineupkeep.checkout";
+const purposeLabel = "lineupkeep.purpose";
 const Labels = Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.String)));
 const Volumes = Schema.fromJsonString(Schema.Array(Schema.Struct({ Labels })));
 const Containers = Schema.fromJsonString(

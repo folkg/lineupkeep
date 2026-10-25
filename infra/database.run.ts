@@ -9,7 +9,7 @@ import { Effect, Redacted } from "effect";
 import { deploymentState } from "./state.ts";
 
 export default Alchemy.Stack(
-  "SourdoughStarterDatabase",
+  "LineupkeepDatabase",
   {
     providers: Neon.providers(),
     state: deploymentState,
@@ -20,11 +20,11 @@ export default Alchemy.Stack(
       return yield* Effect.die(new Error("The durable Neon stack cannot run in local mode"));
     }
     const database = yield* Neon.Project("Postgres", {
-      name: "sourdough-starter",
+      name: "lineupkeep",
       pgVersion: 18,
       region: "aws-us-east-1",
       defaultBranchName: "production",
-      databaseName: "sourdough_starter",
+      databaseName: "lineupkeep",
     }).pipe(RemovalPolicy.retain());
     return {
       runtimeUrl: Output.map(database.pooledConnectionUri, Redacted.make),

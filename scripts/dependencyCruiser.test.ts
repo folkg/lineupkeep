@@ -161,7 +161,7 @@ it("accepts consumers of the domain contract and an in-memory Layer without infr
     "packages/backend/src/contexts/uploads/UploadsTest.ts":
       'import { Effect, Layer } from "effect"; import { Uploads } from "./Uploads.ts"; export const uploadsTest = Layer.succeed(Uploads)({ read: () => Effect.succeed("contents") });',
     "apps/web/src/server/mcp/uploadTools.ts":
-      'export { Uploads } from "@sourdough/backend/uploads/Uploads";',
+      'export { Uploads } from "@lineupkeep/backend/uploads/Uploads";',
   });
 
   expect(result.status, result.output).toBe(0);
@@ -170,14 +170,14 @@ it("accepts consumers of the domain contract and an in-memory Layer without infr
 it("permits same-domain package contracts without a configuration edit", async () => {
   const result = await checkArchitecture({
     "packages/backend/src/contexts/calendar/internal/CalendarLive.ts":
-      'export { value } from "@sourdough/backend/calendar/Calendar";',
+      'export { value } from "@lineupkeep/backend/calendar/Calendar";',
     "packages/backend/src/contexts/calendar/Calendar.ts": "export const value = 1;",
   });
 
   expect(result.status, result.output).toBe(0);
 });
 
-it.each([["@sourdough/backend/calendar/internal/CalendarRepository", "CalendarRepository.ts"]])(
+it.each([["@lineupkeep/backend/calendar/internal/CalendarRepository", "CalendarRepository.ts"]])(
   "rejects forbidden package imports through %s",
   async (specifier, file) => {
     const result = await checkArchitecture({
@@ -192,8 +192,8 @@ it.each([["@sourdough/backend/calendar/internal/CalendarRepository", "CalendarRe
 );
 
 it.each([
-  'export type { Value } from "@sourdough/backend/calendar/internal/CalendarRepository";',
-  'import { value as repositoryValue } from "@sourdough/backend/calendar/internal/CalendarRepository"; export const value = repositoryValue;',
+  'export type { Value } from "@lineupkeep/backend/calendar/internal/CalendarRepository";',
+  'import { value as repositoryValue } from "@lineupkeep/backend/calendar/internal/CalendarRepository"; export const value = repositoryValue;',
 ])("rejects private package imports regardless of import form: %s", async (source) => {
   const result = await checkArchitecture({
     "apps/web/src/server/calendar/read.ts": source,
@@ -209,7 +209,7 @@ it.each([
 it("rejects runtime Test resources through wildcard package exports", async () => {
   const result = await checkArchitecture({
     "apps/web/src/server/calendar/read.ts":
-      'export { value } from "@sourdough/backend/runtime/CalendarTest";',
+      'export { value } from "@lineupkeep/backend/runtime/CalendarTest";',
     "packages/backend/src/runtime/CalendarTest.ts": "export const value = 1;",
   });
 
@@ -323,7 +323,7 @@ it("rejects shared local-stack imports of application contracts", async () => {
 
 it("rejects infrastructure imports of application internals", async () => {
   const result = await checkArchitecture({
-    "infra/example.ts": 'export { backend } from "@sourdough/web/server/backend.ts";',
+    "infra/example.ts": 'export { backend } from "@lineupkeep/web/server/backend.ts";',
     "apps/web/src/server/backend.ts": "export const backend = {};",
   });
 
@@ -336,7 +336,7 @@ it("rejects infrastructure imports of application internals", async () => {
 
 it("rejects provisioning helpers imported by runtime modules", async () => {
   const result = await checkArchitecture({
-    "apps/web/src/example.ts": 'export { stage } from "@sourdough/infra/stage.ts";',
+    "apps/web/src/example.ts": 'export { stage } from "@lineupkeep/infra/stage.ts";',
     "infra/stage.ts": 'export const stage = "production";',
   });
 
@@ -350,7 +350,7 @@ it("rejects provisioning helpers imported by runtime modules", async () => {
 it("accepts public backend contracts and pure deployment inputs in infrastructure", async () => {
   const result = await checkArchitecture({
     "infra/example.ts":
-      'export { Settings } from "../packages/backend/src/config/Settings.ts"; export { settings } from "@sourdough/web/deploy/settings.ts";',
+      'export { Settings } from "../packages/backend/src/config/Settings.ts"; export { settings } from "@lineupkeep/web/deploy/settings.ts";',
     "packages/backend/src/config/Settings.ts": "export type Settings = { readonly port: number };",
     "apps/web/deploy/settings.ts": "export const settings = {};",
   });
@@ -554,7 +554,7 @@ it("permits a thin MCP route and Effect tools delegating to a public backend use
     "apps/web/src/routes/mcp.ts":
       'import "@tanstack/solid-router"; export { value } from "#server/mcp/tools.ts";',
     "apps/web/src/server/mcp/tools.ts":
-      'import "effect/ai"; export { value } from "@sourdough/backend/notes/Notes";',
+      'import "effect/ai"; export { value } from "@lineupkeep/backend/notes/Notes";',
     "packages/backend/src/contexts/notes/Notes.ts": "export const value = 1;",
   };
 
@@ -576,12 +576,12 @@ it("accepts a previously unnamed domain inside erased validators and handlers", 
       export const InventoryInput = Schema.Struct({ id: Schema.String });
       export class Inventory extends Context.Service<Inventory, {
         readonly reserve: (input: ReadonlyArray<typeof InventoryInput.Type>) => Effect.Effect<void>;
-      }>()("@sourdough/backend/contexts/inventory/Inventory") {}
+      }>()("@lineupkeep/backend/contexts/inventory/Inventory") {}
     `,
     "apps/web/src/server-functions/inventory.ts": `
       import { createServerFn } from "@tanstack/solid-start";
       import { Schema, Effect } from "effect";
-      import { InventoryInput, Inventory } from "@sourdough/backend/inventory/Inventory";
+      import { InventoryInput, Inventory } from "@lineupkeep/backend/inventory/Inventory";
       import { runUseCase } from "#server/backendEntry.ts";
       export const reserve = createServerFn({ method: "POST" })
         .validator((raw: typeof InventoryInput.Encoded) => Schema.decodeResult(InventoryInput)(raw))
@@ -601,7 +601,7 @@ it("rejects repository dependencies from server functions in the module graph", 
     "packages/backend/src/contexts/inventory/internal/InventoryRepository.ts":
       "export const repository = 1;",
     "apps/web/src/server-functions/inventory.ts":
-      'import { repository } from "@sourdough/backend/inventory/internal/InventoryRepository"; export const reserve = () => repository;',
+      'import { repository } from "@lineupkeep/backend/inventory/internal/InventoryRepository"; export const reserve = () => repository;',
   });
 
   expect(result.status).toBeGreaterThan(0);
@@ -626,7 +626,7 @@ it("accepts browser-safe primitive limits in a previously unnamed domain", async
   const files = {
     "packages/backend/src/contexts/inventory/InventoryLimits.ts": "export const maxItems = 200;",
     "apps/web/src/browser/inventory/input.ts":
-      'export { maxItems } from "@sourdough/backend/inventory/InventoryLimits";',
+      'export { maxItems } from "@lineupkeep/backend/inventory/InventoryLimits";',
   };
 
   const lint = checkLint(files);
@@ -744,7 +744,7 @@ it("permits backend domain types and server-function and API-handler adapters", 
   const files = {
     "packages/backend/src/contexts/auth/User.ts": "export type UserId = string;",
     "apps/web/src/browser/auth/sessionRemote.ts":
-      'export type { UserId } from "@sourdough/backend/auth/User"; export { read } from "#server-functions/read.ts";',
+      'export type { UserId } from "@lineupkeep/backend/auth/User"; export { read } from "#server-functions/read.ts";',
     "apps/web/src/server-functions/read.ts":
       'import { createServerFn } from "@tanstack/solid-start"; import { read as serverRead } from "#server/read.ts"; export const read = createServerFn().handler(() => serverRead);',
     "apps/web/src/routes/api/read.ts": 'export { read } from "#server/read.ts";',
@@ -836,9 +836,9 @@ it("permits browser and backend modules to share literal product identity", asyn
   const result = await checkArchitecture({
     "packages/brand/src/product.ts": 'export const productName = "Example";',
     "apps/web/src/browser/app-shell/AppShell.tsx":
-      'import { productName } from "@sourdough/brand/product"; export const AppShell = productName;',
+      'import { productName } from "@lineupkeep/brand/product"; export const AppShell = productName;',
     "packages/backend/src/contexts/auth/internal/Adapter.ts":
-      'import { productName } from "@sourdough/brand/product"; export const name = productName;',
+      'import { productName } from "@lineupkeep/brand/product"; export const name = productName;',
   });
 
   expect(result.status, result.output).toBe(0);
@@ -862,8 +862,8 @@ it.each(["effect", "node:fs"])(
 it("rejects neutral primitives depending on brand compositions", async () => {
   const files = {
     "apps/web/src/browser/shared-ui/Page.tsx":
-      'import { Tape } from "#browser/brand-ui/Tape.tsx"; export const Page = Tape;',
-    "apps/web/src/browser/brand-ui/Tape.tsx": "export const Tape = 1;",
+      'import { Badge } from "#browser/brand-ui/Badge.tsx"; export const Page = Badge;',
+    "apps/web/src/browser/brand-ui/Badge.tsx": "export const Badge = 1;",
   };
 
   const result = await checkArchitecture(files);
@@ -937,7 +937,7 @@ it("rejects persistence drivers in verification scenarios", async () => {
 
 it("allows public backend services and the owned database observer", async () => {
   const result = await checkArchitecture({
-    "e2e/scenario.e2e.ts": 'export { Notes } from "@sourdough/backend/notes/Notes";',
+    "e2e/scenario.e2e.ts": 'export { Notes } from "@lineupkeep/backend/notes/Notes";',
     "packages/backend/src/contexts/notes/Notes.ts": "export const Notes = {};",
     "e2e/verify/databaseActivity.ts":
       'import postgres from "postgres"; export const probe = postgres;',
@@ -1300,5 +1300,5 @@ const featureFixture = {
   "packages/backend/src/contexts/uploads/Uploads.ts":
     'import { Context, Effect } from "effect"; export class Uploads extends Context.Service<Uploads, { readonly read: (key: string) => Effect.Effect<string> }>()("Uploads") {}',
   [featureModule]:
-    'export { Uploads } from "@sourdough/backend/uploads/Uploads"; export { Layer } from "effect"; export { Bucket } from "alchemy/Cloudflare/R2"; export * as storage from "@distilled.cloud/gcp/storage_v1"; export const uploads = {};',
+    'export { Uploads } from "@lineupkeep/backend/uploads/Uploads"; export { Layer } from "effect"; export { Bucket } from "alchemy/Cloudflare/R2"; export * as storage from "@distilled.cloud/gcp/storage_v1"; export const uploads = {};',
 };

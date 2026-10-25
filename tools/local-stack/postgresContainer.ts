@@ -157,7 +157,7 @@ async function clientsFinished(name: string, signal: AbortSignal): Promise<void>
 }
 
 export function containerNameFor(runId: string): string {
-  return `sourdough-test-${runId.replaceAll("-", "")}`;
+  return `lineupkeep-test-${runId.replaceAll("-", "")}`;
 }
 
 export async function waitUntilReady(url: URL, signal: AbortSignal): Promise<void> {
@@ -208,9 +208,9 @@ const run = promisify(execFile);
 export const image = "postgres:18-alpine";
 
 const credentials = {
-  user: "sourdough",
-  password: "sourdough_test_only",
-  database: "sourdough_test",
+  user: "lineupkeep",
+  password: "lineupkeep_test_only",
+  database: "lineupkeep_test",
 };
 
 export const serverSettings = [
@@ -228,7 +228,7 @@ export const serverSettings = [
 ];
 
 const ownedContainerName =
-  /^(?:sourdough-test-[0-9a-f]{32}(?:-web)?|sourdough-starter-alchemy-[a-z0-9-]+)$/u;
+  /^(?:lineupkeep-test-[0-9a-f]{32}(?:-web)?|lineupkeep-alchemy-[a-z0-9-]+)$/u;
 const InspectedContainers = Schema.fromJsonString(
   Schema.Array(
     Schema.Struct({
@@ -239,8 +239,8 @@ const InspectedContainers = Schema.fromJsonString(
     }),
   ),
 );
-const disposableLabel = "sourdough.disposable";
-const lockLabel = "sourdough.lock";
+const disposableLabel = "lineupkeep.disposable";
+const lockLabel = "lineupkeep.lock";
 
 const absenceQuietMs = 2000;
 const absencePollMs = 250;

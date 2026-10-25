@@ -6,7 +6,7 @@ import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { PanelSurface } from "#browser/shared-ui/Surface.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 
-import { Tape } from "./Tape";
+import { Badge } from "./Badge";
 
 export function Panel(props: PanelProps): JSX.Element {
   const titleId = createUniqueId();
@@ -21,7 +21,7 @@ export function Panel(props: PanelProps): JSX.Element {
             <Heading id={titleId} level={2} size="subtitle">
               {props.title}
             </Heading>
-            <Show when={props.marker}>{(marker) => <Tape size="glyph">{marker()}</Tape>}</Show>
+            <Show when={props.marker}>{(marker) => <Badge size="glyph">{marker()}</Badge>}</Show>
           </div>
           <Show when={props.description}>
             {(description) => (

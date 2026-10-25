@@ -124,7 +124,7 @@ function withFixture<Result>(
 }
 
 function createFixture(files: Readonly<Record<string, string>>): string {
-  const fixture = realpathSync(mkdtempSync(join(tmpdir(), "sourdough-architecture-")));
+  const fixture = realpathSync(mkdtempSync(join(tmpdir(), "lineupkeep-architecture-")));
   try {
     for (const workspace of ["packages/backend", "packages/brand", "apps/web"]) {
       mkdirSync(join(fixture, workspace, "src"), { recursive: true });
@@ -138,9 +138,9 @@ function createFixture(files: Readonly<Record<string, string>>): string {
     mkdirSync(join(fixture, "e2e"));
     mkdirSync(join(fixture, "infra"));
     mkdirSync(join(fixture, "tools"));
-    mkdirSync(join(fixture, "node_modules", "@sourdough"), { recursive: true });
+    mkdirSync(join(fixture, "node_modules", "@lineupkeep"), { recursive: true });
     for (const entry of readdirSync(join(repositoryRoot, "node_modules"))) {
-      if (entry !== "@sourdough") {
+      if (entry !== "@lineupkeep") {
         symlinkSync(
           join(repositoryRoot, "node_modules", entry),
           join(fixture, "node_modules", entry),
@@ -161,7 +161,7 @@ function createFixture(files: Readonly<Record<string, string>>): string {
       );
       symlinkSync(
         join(fixture, workspace),
-        join(fixture, "node_modules", "@sourdough", name),
+        join(fixture, "node_modules", "@lineupkeep", name),
         "dir",
       );
     }

@@ -1,103 +1,107 @@
-@import "@fontsource/barlow-condensed/600.css";
-@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource-variable/schibsted-grotesk/wght.css";
 
 :root {
   color-scheme: light;
 
-  --theme-canvas: #f4f3ee;
+  --theme-canvas: #f6f5ff;
   --theme-paper: #ffffff;
-  --theme-ink: #181a19;
-  --theme-ink-soft: #575b57;
-  --theme-ink-faint: #62665f;
-  --theme-rule: #c8c8bf;
-  --theme-rule-strong: #989b94;
-  --theme-action: #215cff;
-  --theme-action-hover: #1549d8;
-  --theme-action-soft: #e8eeff;
-  --theme-accent: #d8ff36;
-  --theme-accent-hover: #c3ea24;
-  --theme-on-accent: #162100;
-  --theme-danger: #b62f2f;
-  --theme-danger-hover: #8f2222;
-  --theme-danger-soft: #fff0ee;
-  --theme-danger-on-panel: #ffaaa0;
-  --theme-panel: #181a19;
-  --theme-on-panel: #eef0ed;
-  --theme-on-panel-soft: #bec3be;
-  --theme-panel-rule: #6b6f6a;
-  --theme-lift: rgb(24 26 25 / 0.12);
+  --theme-ink: #20143b;
+  --theme-ink-soft: #625675;
+  --theme-ink-faint: #726480;
+  --theme-rule: #dfd9ec;
+  --theme-rule-strong: #9483a8;
+  --theme-action: #6236e5;
+  --theme-action-hover: #4c24bf;
+  --theme-action-soft: #ece6ff;
+  --theme-accent: #ffe253;
+  --theme-accent-hover: #f5d137;
+  --theme-on-accent: #23113f;
+  --theme-danger: #a33432;
+  --theme-danger-hover: #802421;
+  --theme-danger-soft: #faece9;
+  --theme-danger-on-panel: #ffc0b9;
+  --theme-panel: #291450;
+  --theme-on-panel: #ffffff;
+  --theme-on-panel-soft: #dccff0;
+  --theme-panel-rule: #947eb3;
+  --theme-lift: rgb(32 20 59 / 0.08);
 
-  --theme-font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --theme-font-display: "Schibsted Grotesk Variable", sans-serif;
   --theme-font-sans:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
 
-  --theme-text-display: clamp(4.2rem, 7.3vw, 5.75rem);
-  --theme-text-display-line-height: 0.88;
-  --theme-text-display-letter-spacing: -0.025em;
+  --theme-text-wordmark: 1.5rem;
+  --theme-text-wordmark-line-height: 1.2;
+  --theme-text-wordmark-letter-spacing: -0.035em;
 
-  --theme-text-statement: clamp(2rem, 7.04vw + 0.24rem, var(--theme-text-display));
-  --theme-text-headline: clamp(3rem, 5vw, 4.5rem);
-  --theme-text-headline-line-height: 0.92;
-  --theme-text-headline-letter-spacing: -0.025em;
-  --theme-text-title: clamp(2.7rem, 1.867rem + 3.556vw, 3.2rem);
-  --theme-text-subtitle: 2rem;
-  --theme-text-section-title: 1.35rem;
-  --theme-text-item: 1.16rem;
-  --theme-text-item-letter-spacing: -0.018em;
-  --theme-text-lede: clamp(0.96rem, 0.827rem + 0.569vw, 1.04rem);
+  --theme-text-display: clamp(3rem, 5.5vw, 5.25rem);
+  --theme-text-display-line-height: 1.06;
+  --theme-text-display-letter-spacing: -0.035em;
+
+  --theme-text-statement: clamp(2rem, 4vw, 3.75rem);
+  --theme-text-headline: clamp(2.5rem, 4vw, 3.75rem);
+  --theme-text-headline-line-height: 1.1;
+  --theme-text-headline-letter-spacing: -0.03em;
+  --theme-text-title: clamp(2rem, 3.2vw, 2.75rem);
+  --theme-text-subtitle: 1.75rem;
+  --theme-text-section-title: 1.25rem;
+  --theme-text-item: 1.125rem;
+  --theme-text-item-letter-spacing: -0.015em;
+  --theme-text-lede: clamp(1rem, 0.95rem + 0.3vw, 1.125rem);
   --theme-text-base: 1rem;
-  --theme-text-glyph: 1.3rem;
-  --theme-text-supporting: 0.94rem;
-  --theme-text-control: 0.9rem;
-  --theme-text-label: 0.8rem;
-  --theme-text-caption: 0.78rem;
-  --theme-text-feedback: 0.82rem;
-  --theme-text-metadata: 0.72rem;
-  --theme-tracking-tight: -0.02em;
-  --theme-tracking-rail: 0.08em;
+  --theme-text-glyph: 1.125rem;
+  --theme-text-supporting: 0.9375rem;
+  --theme-text-control: 0.875rem;
+  --theme-text-label: 0.8125rem;
+  --theme-text-caption: 0.8125rem;
+  --theme-text-feedback: 0.875rem;
+  --theme-text-metadata: 0.75rem;
+  --theme-tracking-tight: -0.025em;
+  --theme-tracking-rail: 0.02em;
 
   --theme-size-tap-target: 2.75rem;
   --theme-size-button: 2.875rem;
   --theme-size-field: 3rem;
   --theme-size-cue: 1.6875rem;
   --theme-size-glyph: 2rem;
-  --theme-size-header: 4rem;
-  --theme-size-header-wide: 4.5rem;
-  --theme-space-surface: 1.375rem;
+  --theme-size-header: 4.5rem;
+  --theme-size-header-wide: 5rem;
+  --theme-space-surface: 1.5rem;
 
-  --theme-radius-tape: 2px;
-  --theme-radius-sheet: 3px;
-  --theme-radius-control: 5px;
-  --theme-radius-surface: 8px;
+  --theme-radius-badge: 4px;
+  --theme-radius-sheet: 12px;
+  --theme-radius-control: 6px;
+  --theme-radius-surface: 12px;
 
   --theme-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --theme-duration-quick: 150ms;
-  --theme-duration-reveal: 620ms;
+  --theme-duration-quick: 140ms;
+  --theme-duration-reveal: 200ms;
 }
 
 .dark {
   color-scheme: dark;
 
-  --theme-canvas: #141612;
-  --theme-paper: #1d201a;
-  --theme-ink: #ecebe2;
-  --theme-ink-soft: #b0b4a8;
-  --theme-ink-faint: #878b7f;
-  --theme-rule: #33362e;
-  --theme-rule-strong: #565a4e;
-  --theme-action: #85a7ff;
-  --theme-action-hover: #a3bcff;
-  --theme-action-soft: #1d2c52;
-  --theme-accent: #d8ff36;
-  --theme-accent-hover: #c8ef35;
-  --theme-on-accent: #162100;
-  --theme-danger: #ff9187;
-  --theme-danger-hover: #ffb3ab;
-  --theme-danger-soft: #341712;
-  --theme-danger-on-panel: #ff9187;
-  --theme-panel: #20241c;
-  --theme-on-panel: #eceee7;
-  --theme-on-panel-soft: #a9ada1;
-  --theme-panel-rule: #4a4e43;
-  --theme-lift: rgb(0 0 0 / 0.55);
+  --theme-canvas: #151020;
+  --theme-paper: #21192f;
+  --theme-ink: #f8f3ff;
+  --theme-ink-soft: #c6b9d9;
+  --theme-ink-faint: #b3a1ca;
+  --theme-rule: #48375e;
+  --theme-rule-strong: #a48bbc;
+  --theme-action: #baa3ff;
+  --theme-action-hover: #cfbdff;
+  --theme-action-soft: #39275d;
+  --theme-accent: #ffe253;
+  --theme-accent-hover: #f5d137;
+  --theme-on-accent: #271240;
+  --theme-danger: #ffb9b0;
+  --theme-danger-hover: #ffd1c9;
+  --theme-danger-soft: #492b27;
+  --theme-danger-on-panel: #ffb9b0;
+  --theme-panel: #412479;
+  --theme-on-panel: #ffffff;
+  --theme-on-panel-soft: #e1d1ff;
+  --theme-panel-rule: #a48bbc;
+  --theme-lift: rgb(0 0 0 / 0.25);
 }

@@ -1,5 +1,5 @@
-import type { UserId } from "@sourdough/backend/auth/User";
-import { productName } from "@sourdough/brand/product";
+import type { UserId } from "@lineupkeep/backend/auth/User";
+import { productName } from "@lineupkeep/brand/product";
 import { Layer } from "effect";
 import { Toolkit } from "effect/ai";
 
