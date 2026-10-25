@@ -1,6 +1,8 @@
 # Lineupkeep linking helper
 
-`lineupkeep link` links a Yahoo session to a running Lineupkeep app without Lineupkeep ever seeing the provider password.
+`lineupkeep link` is the fallback for linking a Yahoo session to a running Lineupkeep app when the hosted browser sign-in is unavailable. It runs on your computer and uploads only the provider session material, not your password.
+
+The primary flow is **Connect Yahoo** on the Connections page: it streams a private hosted browser into the app. Use this helper when that path is unavailable or you prefer a local sign-in.
 
 ## Prerequisites
 

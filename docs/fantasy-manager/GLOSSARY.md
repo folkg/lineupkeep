@@ -38,6 +38,22 @@ _Avoid_: Roster when referring only to assignments
 A user's linked access to an account on a fantasy provider. Multiple fantasy teams may be accessible through one connection.
 _Avoid_: User account when referring to provider access
 
+**Hosted linking session**:
+An owner-bound, one-use, short-lived authorization to open a provider sign-in inside an isolated hosted browser. The session issues a one-use ticket, stores only its hash, and ends on capture, cancellation, expiry, or fault.
+_Avoid_: Login token when referring to the browser ticket
+
+**Hosted browser**:
+A temporary browser process and profile created for one hosted linking session, with restricted provider egress and no persisted recording. It is destroyed when the session ends.
+_Avoid_: Remote desktop, general proxy
+
+**Local helper**:
+The first-party command-line fallback that pairs with the signed-in application through RFC 8628 device authorization and opens a dedicated temporary local browser profile for provider sign-in.
+_Avoid_: Hosted browser when referring to the helper
+
+**Provider session material**:
+The minimal provider tokens or cookies required to act on a linked account after sign-in. It is captured only after the provider accepts the sign-in, encrypted at rest, and never treated as a password.
+_Avoid_: Credentials when referring to a provider password
+
 **Starting position**:
 An active lineup position whose assigned player can contribute to the fantasy team's result.
 

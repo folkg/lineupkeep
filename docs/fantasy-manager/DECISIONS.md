@@ -1,6 +1,6 @@
 # Agreed decisions from grilling
 
-These records preserve the answers and corrections from all eight rounds. Later rounds refine earlier ones; [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) is the consolidated current scope. Technical recommendations remain subject to final plan approval.
+These records preserve the answers and corrections from all recorded rounds through Round 10. Later rounds refine earlier ones; [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) is the consolidated current scope. Technical recommendations remain subject to final plan approval.
 
 ## Round 1 decisions
 
@@ -100,7 +100,7 @@ The helper initiates, the signed-in application user approves, and the helper re
 - **`one-time-token`:** the token is a copy of the existing browser session's long-lived token, requires transferring a bearer secret from the application UI to the helper, and is not scoped.
 - **`email-otp`:** proves control of the email address rather than approval from the authenticated session, and conflates pairing with sign-in.
 - **`magic-link`:** a bearer link delivered by email is not a helper-held proof and is not one-use for a second device.
-- **Custom pairing code/proof protocol, browser extension, hosted browser login, remote CDP:** unnecessary where a supported flow fits, or explicitly excluded by ARCHITECTURE §9.
+- **Custom pairing code/proof protocol, browser extension, hosted browser login, remote CDP:** unnecessary for helper pairing where a supported flow fits. Round 10 supersedes the hosted-browser rejection for the primary provider-linking flow; it does not change the helper contract.
 
 ### Helper responsibilities
 
@@ -113,3 +113,86 @@ The helper initiates, the signed-in application user approves, and the helper re
 ### Proof
 
 `packages/backend/src/contexts/auth/internal/DevicePairing.test.ts` exercises start → claim → wrong-owner rejection → approve → scoped redemption → replay rejection → expiry rejection against the installed auth layer with a fake client-metadata transport and no live provider or network. The production adapter enables `oauthDeviceAuthorization()` with a ten-minute code and five-second polling interval. The first-party helper client and the application pairing lifecycle are delivered by the pairing vertical.
+
+## Round 10 — Hosted browser linking
+
+Status: chosen and proved locally with a fake provider. The owner rejected
+local-helper-first onboarding: it requires an install, copying a pairing code,
+a second approval, does not refresh the provider session, and does not discover
+teams until the helper finishes. Hosted browser linking is now the primary flow;
+the RFC 8628 local helper remains the fallback.
+
+This round supersedes the Round 9 rejection of **hosted browser login and remote
+CDP** for provider linking only. That rejection still describes helper pairing:
+the helper does not need a hosted browser or remote CDP to pair with the
+application. The helper flow, scoped token, and ten-minute device-code contract
+are unchanged.
+
+### Chosen mechanism
+
+- A click on **Connect Yahoo** creates an owner-bound, one-use hosted linking
+  session. The session expires within ten minutes, is rate-limited, and is the
+  only open hosted session for that owner.
+- The browser receives a one-use ticket as an HttpOnly, `SameSite=Strict`,
+  path-scoped cookie. The response body and URL contain only the session id and
+  stream path; the ticket is never exposed to JavaScript, logs, or the client.
+  Only a SHA-256 hash of the ticket is stored.
+- A fresh Chromium profile is launched per session. The provider page is
+  streamed as bounded JPEG frames over an authenticated WebSocket and input is
+  relayed as bounded click, text, key, and scroll messages. Passwords are
+  relayed transiently to the provider page and are never stored, logged, traced,
+  or written to disk by this application.
+- Chromium egress is restricted to the exact provider login and asset origins.
+  Redirects, downloads, popups, service workers, private/link-local/metadata
+  addresses, and arbitrary proxying are blocked. The browser cannot reach
+  application-private services.
+- The browser is killed and its profile removed as soon as the required `T` and
+  `Y` cookies are captured and validated, and on cancel, expiry, disconnect, or
+  fault. The web process completes the connection, discovers teams, and the
+  Connections page moves to `/teams` without a manual refresh or code copy.
+- Wrong-owner joins, replayed sessions, expired sessions, concurrent starts, and
+  excessive starts are rejected. The local end-to-end test proves the
+  wrong-owner and replay paths against the real WebSocket endpoint; domain tests
+  prove expiry, one-use completion, cancellation, concurrency, and rate limits.
+- The local helper remains fully supported and documented as the fallback. It
+  keeps its RFC 8628 pairing, temporary local profile, scoped upload token, and
+  tests.
+
+### Failure states
+
+The stream distinguishes expired sessions, blocked logins, additional
+verification (two-factor), provider unavailability, browser unavailability, and
+a rejected or unconfirmed completion. The UI gives an actionable message and
+keeps the helper fallback visible. A failed completion never leaves the browser
+open for an unbounded retry.
+
+### Infra status
+
+The local node target runs the browser in-process for development and tests.
+Cloudflare returns `hosted_browser.unsupported`. The dedicated production
+service is planned in [HOSTED-BROWSER-INFRA-PLAN.md](HOSTED-BROWSER-INFRA-PLAN.md):
+IAM-private, WebSocket-capable, scale-to-zero, one browser per instance,
+sandboxed, and egress-restricted. It is not provisioned or deployed.
+
+### Rejected alternatives
+
+- **Local helper as the primary flow:** rejected by the owner for onboarding
+  friction, no refresh, and no automatic discovery.
+- **Asking the user to copy a code or paste cookies:** rejected; it moves a
+  secret into the client and keeps the second-device approval.
+- **Using the user's existing browser through an extension or remote CDP:**
+  rejected; it exposes the user's normal profile and broad session.
+- **A public or unauthenticated viewer/WebSocket:** rejected; every stream is
+  owner-bound and short-lived.
+- **A general-purpose browser proxy or arbitrary CDP endpoint:** rejected;
+  egress and provider scope are fixed.
+
+### Proof and remaining work
+
+Local proof: `apps/web/src/server/hostedLinking/playwrightHostedBrowser.test.ts`
+(frames, input, `T`/`Y` capture, egress block, profile cleanup, expiry) and
+`e2e/hostedLinking.e2e.ts` (fake provider sign-in, auto-ready, teams, wrong
+owner, replay). No live Yahoo login is performed by automated tests. Production
+still needs the dedicated service, a manual live sign-in, IAM/egress review,
+WebSocket duration/cold-start evidence, and the deployment gates recorded in
+the infra plan.

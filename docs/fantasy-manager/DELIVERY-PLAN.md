@@ -31,7 +31,7 @@ Tasks:
 - Preserve the starter's pinned Effect, machine, auth, runtime, MCP, architecture/test, SSR, and frontend/server constraints. Presence of files is not proof of baseline readiness.
 - Convert the known Yahoo evidence into small maintained contract cases. Do not depend on disappeared `/tmp` reports, copy old implementation code, or include real cookies/account data.
 - Confirm supported NFL/NHL period/lock/roster rules and Yahoo's exact fantasy-day rollover. Verify bench versus total-roster capacity and same-roster reserve eligibility before final solver formulation.
-- Verify local-helper pairing/auth-library support in a bounded design spike. Do not assume the hosted agent's browser is the user's computer or expose arbitrary CDP remotely.
+- Verify hosted browser streaming and the local-helper fallback in bounded spikes. Do not assume the hosted agent's browser is the user's computer. The hosted browser is ephemeral, owner-bound, and egress-restricted; never expose arbitrary CDP remotely.
 - Specify the proposed public seams in TESTING.md for approval with this plan. Technical implementation selection is the assistant's job; return only genuine product tradeoffs.
 - Inspect current package/source/license options for exact weighted assignment/min-cost flow, lexicographic objectives, and runtime footprint. No dependency installation just to decorate a plan.
 - Complete a quota worksheet for fresh Neon application data, protected Alchemy state, Cloud Run, Tasks/Scheduler, secrets, image storage, logs, and email. Check shared-account allocations before claiming free-tier fit.
@@ -61,7 +61,7 @@ Tasks:
 
 Vertical slices:
 
-1. Start/expire/cancel a user-owned pairing attempt using the local helper.
+1. Start/expire/cancel a hosted browser linking session, with the local helper as fallback.
 2. Complete one-use approved linking, validate provider session, and encrypt minimal credentials.
 3. List safe connection metadata and reconnect/disconnect through the connection machine.
 4. Discover exact NFL/NHL teams and persist stable identity/configuration; multiple teams in one league must coexist.
@@ -70,7 +70,7 @@ Vertical slices:
 Security/IO:
 
 - Provider-specific extraction and Yahoo request construction stay private. All production Yahoo HTTP uses PublicInternet with exact authorization and scoped response consumption.
-- Dedicated local browser workspace, no provider passwords collected, no browser extension/hosted login infrastructure, no secrets in commands/MCP/logs.
+- Dedicated ephemeral browser workspace with owner-bound transport, restricted provider egress, no persisted recordings, and no secrets in commands/MCP/logs. The local helper keeps its dedicated temporary profile.
 - Test wrong owner, pairing replay/expiry, tampered credentials, connection generation, missing ranks/statuses, non-editable rosters, and synthetic-provider structural differences.
 
 **Exit:** safe query-only connection and team discovery work locally through the public seam; linking feasibility and account ownership are proven without code from AutoCoach. Adapter read endpoints and payload shapes were verified against the live provider on 2026-10-25; acceptance through the product's own linking seam remains open.

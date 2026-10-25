@@ -12,7 +12,7 @@ An independent, provider-neutral fantasy-management product, prepared from a fre
 4. [Planning index](docs/fantasy-manager/README.md): all decisions, research, glossary, MCP/architecture/hosting proposals, UX brief, and ADRs.
 5. [Setup provenance](docs/SETUP.md) and [release readiness](docs/release-readiness.md).
 
-**Current state:** independent repository on the approved brand/design system, with retained starter authentication, local-helper pairing, owner-scoped encrypted Yahoo connections, team discovery, bounded provider queries, durable native `set_lineup` runs, hourly current-period automation, and reconnect notifications. The Notes demo is removed. Scoring/solver work remains Phase 2. The `cloud-run` stage is deployed in `lineupkeep-prod`; [the deployed environment](docs/deployment.md#deployed-environment-2026-10-25) and [the redacted live acceptance record](docs/phase-1-acceptance-2026-10-25.md) own the inventory, evidence and remaining gates. The current dependency baseline still has a documented critical publication blocker and an applied temporary backport; deployment is not blanket security acceptance.
+**Current state:** independent repository on the approved brand/design system, with retained starter authentication, hosted browser linking with a local-helper fallback, owner-scoped encrypted Yahoo connections, team discovery, bounded provider queries, durable native `set_lineup` runs, hourly current-period automation, and reconnect notifications. The Notes demo is removed. Scoring/solver work remains Phase 2. The `cloud-run` stage is deployed in `lineupkeep-prod`; [the deployed environment](docs/deployment.md#deployed-environment-2026-10-25) and [the redacted live acceptance record](docs/phase-1-acceptance-2026-10-25.md) own the inventory, evidence and remaining gates. The current dependency baseline still has a documented critical publication blocker and an applied temporary backport; deployment is not blanket security acceptance.
 
 The lowercase wordmark is **lineupkeep**; ordinary prose uses **Lineupkeep**. The approved palette is **royal violet and gold**, with complete light/dark themes. No domain has been purchased; the deployed Cloud Run origin is the configured public origin.
 
@@ -31,6 +31,7 @@ Install the Node and Bun versions pinned in `.nvmrc` and `package.json`, plus Do
 ```sh
 cp .env.example .env
 bun install
+bunx playwright install chromium   # once, for hosted browser sign-in
 bun run dev
 ```
 
@@ -70,15 +71,15 @@ The owner has chosen to proceed with local implementation on the current pinned 
 
 ## Link a Yahoo account
 
-The first-party local helper links a Yahoo session without collecting your provider password in Lineupkeep. Keep the app running, then:
+Open **Connections** and choose **Connect Yahoo**. A private browser opens inside the page; sign in there once. Lineupkeep never stores your password, and keystrokes are relayed only to that temporary browser. When Yahoo accepts the sign-in, the connection becomes ready, teams are discovered automatically, and the app opens **Teams**. No install, code copy, or second approval is required. The temporary browser profile is destroyed when the session ends.
+
+Hosted sign-in runs on the Node target. The Cloudflare target returns `hosted_browser.unsupported`; the dedicated production browser service is [planned but not provisioned](docs/fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md). The local helper remains the fallback when hosted sign-in is unavailable:
 
 ```sh
-bun install
-bunx playwright install chromium   # once per machine
 ./node_modules/.bin/lineupkeep link
 ```
 
-The helper prints a public pairing code and the app's Connections URL. Open that URL, sign in to Lineupkeep, enter the code, and approve the helper. It then opens Yahoo in a temporary Chromium profile; sign in there and leave the window open until the helper reports success. The app validates the session and stores an encrypted connection. The helper removes the temporary profile when it finishes.
+The helper prints a public pairing code and the app's Connections URL. Open that URL, sign in to Lineupkeep, enter the code, and approve the helper. It opens Yahoo in a dedicated temporary Chromium profile; sign in there and leave the window open until the helper reports success. The app validates the session and stores an encrypted connection, and the helper removes the temporary profile when it finishes.
 
 Use `--app-url <origin>` (or `LINEUPKEEP_APP_URL`) when the app is not at `http://localhost:5173`, and `--help` for the full usage. The helper keeps the device code and access token in memory, never in command arguments or output, and never reads your normal browser profile. The token authorizes only the credential upload and expires on its own. Live linking requires a Yahoo account and is not part of the automated test suite; see [the helper README](apps/linking-helper/README.md).
 

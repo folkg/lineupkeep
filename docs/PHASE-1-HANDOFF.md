@@ -99,11 +99,11 @@ Remaining gates before full Phase 1 acceptance:
 ## Execution sequence
 
 1. Inspect jj status and current authoritative documents. Preserve unrelated work. Confirm the pinned Node/Bun toolchain and baseline checks; do not recopy the starter or reinitialize history.
-2. Prove local-helper pairing feasibility. Build encrypted, owned, multi-account connections and exact NFL/NHL team discovery with behavioral provider fakes and disposable migrated PostgreSQL.
+2. Prove hosted-browser streaming and local-helper pairing feasibility. Build encrypted, owned, multi-account connections and exact NFL/NHL team discovery with behavioral provider fakes and disposable migrated PostgreSQL.
 3. Complete rich bounded provider-neutral query MCP and transaction-review links. Validate exact resource/period semantics, missing versus zero, ownership, scopes, whole-record paging, and byte limits.
 4. Implement durable native `set_lineup`, bounded waiting/status references, outbox/queue recovery, per-team coordination, write intent/readback, and uncertain-outcome reconciliation. Never blindly replay or undo a provider write.
 5. Finish operational UI in the approved royal violet/gold design, hourly current-period automation, enable/disable/provider-day pause, reconnect incidents/email, and enforced 30-day outcomes/seven-day normalized-diagnostic retention.
-6. Resolve the coherent security upgrade and cloud/access gates. Implement two min-zero request-billed Cloud Run services, IAM-private worker, bounded Tasks/Scheduler, fresh Neon storage and protected state with least privilege. Do not inherit min-one/instance-billing defaults.
+6. Resolve the coherent security upgrade and cloud/access gates. Implement two min-zero request-billed Cloud Run services, IAM-private worker, bounded Tasks/Scheduler, fresh Neon storage and protected state with least privilege. Plan the IAM-private hosted-browser service; do not inherit min-one/instance-billing defaults.
 7. Perform scoped live acceptance when authorized, deploy if all gates pass, verify production and hosted Muse, and hand over operations/recovery/cost evidence. If an external gate remains, finish all independent work and deliver the tested candidate instead of claiming launch success.
 
 Resolve feasibility at its owning seam, not as a reason to stop all implementation. Phase 2 scoring/solver, legal reserve optimization, explicit-assignment writes, and direct optimizer cutover are excluded. Do not let their evidence requirements block the Phase 1 native action.

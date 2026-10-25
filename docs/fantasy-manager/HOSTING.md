@@ -46,7 +46,7 @@ Sources: inspected `infra/hosts/cloudRun.ts`, `infra/database/neon.ts`, and Goog
 - Workflows Free: 3,000 steps/day, 10 ms CPU per invocation, with requests shared with Workers. Workflows is not a blanket escape from free Worker CPU limits.
 - SQLite-backed Durable Objects are available on Free, with their own storage/duration quotas. The limits page lists 30-second default CPU and also cross-references Worker invocation limits. Verify the exact free-account behavior before proposing Durable Objects as a CPU solution. A DO-centered execution design is a real architecture choice, not proof that the current app fits Free.
 - D1 has a free allowance but is SQLite, not the starter's Postgres database. Its availability does not make a database port free engineering work.
-- No server-hosted browser is required by the agreed local-helper linking approach.
+- The primary linking flow adds an IAM-private, scale-to-zero hosted-browser service with restricted provider egress; the local helper remains a fallback. Its websocket duration, cold start, memory, egress, and cost are deployment gates in [the hosted browser infrastructure plan](HOSTED-BROWSER-INFRA-PLAN.md).
 
 ### GCP
 

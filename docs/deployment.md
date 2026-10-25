@@ -189,6 +189,36 @@ Planned keyring rotation without re-linking: deploy a release that decrypts reta
 
 Choose client-address headers from actual trusted ingress: Cloudflare's `cf-connecting-ip` or a reviewed Cloud Run forwarding/proxy policy. Header names alone do not prevent spoofing. Set `AUTH_TRUSTED_PROXIES` only to actual trusted ranges and verify address attribution/rate limiting under that topology. Rate-limit `/api/telemetry` at ingress as well.
 
+### Hosted browser linking (planned, not provisioned)
+
+The local Node target runs Playwright Chromium inside the web process for
+development and tests. The deployed Cloud Run image does not install Chromium,
+and the Cloudflare target has no browser runtime, so hosted sign-in is not a
+production capability yet. The local-helper fallback remains available.
+
+The target service is an IAM-private, WebSocket-capable, scale-to-zero Cloud Run
+service with one browser per instance, a dedicated runtime account, and no
+public ingress. It is reached only through the web service with a Cloud Run ID
+token and a short-lived session descriptor. Chromium uses a fresh temporary
+profile per owner-bound session and restricted provider/asset egress; metadata,
+link-local, private, and internal addresses are denied. The browser is killed
+and the profile removed on capture, cancel, expiry, disconnect, or fault. The
+web process, not the browser service, completes the connection and stores the
+encrypted provider session.
+
+Do not expose the service through Cloudflare or a public tunnel. Do not put the
+application database URL or connection encryption key in its environment. Logs
+and traces carry session ids and outcomes only, never frames, keystrokes,
+cookies, crumbs, page content, or passwords. Provider material is relayed
+transiently to the web service and is not persisted by the browser service.
+
+The full topology, Alchemy composition, limits, and deployment gates are in
+[the hosted browser infrastructure plan](fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md).
+Owner authorization, a fresh plan review, a manual live Yahoo sign-in, egress
+proof, WebSocket duration/cold-start evidence, and profile-cleanup evidence are
+required before apply. Until then the service stays dark and the helper path is
+the supported fallback.
+
 ### Sign-in providers
 
 Email codes are the default; Google is optional. Codes resist mail-link scanners and let people choose the signing-in device. First verified sign-in creates an account; provider linking requires verified addresses. Production requires Resend rather than logging codes. Development may use console delivery; tests use an injected outbox or fake Resend, never real mail. Avoiding password hashing does not guarantee a platform CPU budget; review delivery latency, abuse, and unconfirmed-outcome recovery before changing authentication.
