@@ -3,6 +3,7 @@ import { Automation } from "@lineupkeep/backend/connections/Automation";
 import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import { LineupDispatcher, LineupWorker } from "@lineupkeep/backend/connections/LineupWork";
 import { Notifications } from "@lineupkeep/backend/connections/Notifications";
+import { FeedbackRetention } from "@lineupkeep/backend/feedback/FeedbackRetention";
 import { DateTime, Config, Effect, Option, Schema } from "effect";
 
 import { runBackend } from "./backendEntry.ts";
@@ -55,6 +56,8 @@ export function handleLineupWorkerRequest(request: Request): Promise<Response> {
             Effect.succeed(new Response("The automation tick could not finish", { status: 503 })),
           "notifications.failed": () =>
             Effect.succeed(new Response("Notifications could not be delivered", { status: 503 })),
+          "feedback.persistence_failed": () =>
+            Effect.succeed(new Response("Feedback retention could not finish", { status: 503 })),
         }),
       );
     }),
@@ -67,8 +70,9 @@ function execute(
   Response,
   | import("@lineupkeep/backend/connections/LineupRun").LineupPersistenceFailed
   | import("@lineupkeep/backend/connections/Notifications").NotificationsFailed
+  | import("@lineupkeep/backend/feedback/Feedback").FeedbackPersistenceFailed
   | AutomationFailed,
-  LineupWorker | LineupDispatcher | Automation | Notifications
+  LineupWorker | LineupDispatcher | Automation | Notifications | FeedbackRetention
 > {
   return Effect.gen(function* () {
     switch (request.action) {
@@ -85,9 +89,18 @@ function execute(
       case "tick": {
         const automation = yield* Automation;
         const notifications = yield* Notifications;
+        const feedbackRetention = yield* FeedbackRetention;
+        const at = yield* DateTime.now;
         const summary = yield* automation.run(request.limit ?? 50);
-        const delivered = yield* notifications.run(request.limit ?? 50, yield* DateTime.now);
-        return json({ status: "ok", action: request.action, ...summary, notifications: delivered });
+        const delivered = yield* notifications.run(request.limit ?? 50, at);
+        const feedback = yield* feedbackRetention.run(request.limit ?? 50, at);
+        return json({
+          status: "ok",
+          action: request.action,
+          ...summary,
+          notifications: delivered,
+          feedback,
+        });
       }
     }
   });

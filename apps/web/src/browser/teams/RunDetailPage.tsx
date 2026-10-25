@@ -100,6 +100,10 @@ function RunDetail(props: {
         </Show>
       </DefinitionList>
 
+      <TextLink search={{ surface: "run", team: props.teamId }} to="/feedback">
+        Report a problem with this run
+      </TextLink>
+
       <Show when={props.run.outcome}>
         {(outcome) => (
           <Stack gap="sm">

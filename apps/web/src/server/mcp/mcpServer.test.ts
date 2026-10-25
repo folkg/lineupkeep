@@ -16,6 +16,14 @@ import { Teams } from "@lineupkeep/backend/connections/Teams";
 import type { ReviewLinksData } from "@lineupkeep/backend/connections/TransactionReview";
 import type { TransactionReviewsShape } from "@lineupkeep/backend/connections/TransactionReview";
 import { TransactionReviews } from "@lineupkeep/backend/connections/TransactionReview";
+import {
+  Feedback,
+  FeedbackContentInvalid,
+  FeedbackId,
+  FeedbackRateLimited,
+} from "@lineupkeep/backend/feedback/Feedback";
+import type { FeedbackShape } from "@lineupkeep/backend/feedback/Feedback";
+import { FeedbackPersistenceFailed } from "@lineupkeep/backend/feedback/Feedback";
 import { DateTime, Effect, Layer, Schema } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { expect, it } from "vitest";
@@ -193,6 +201,9 @@ it("lists only the read-only connection tool without exposing account identity",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
+    "submit_feedback",
+    "list_feedback",
+    "triage_feedback",
   ]);
 });
 
@@ -256,6 +267,7 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
     Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
@@ -300,6 +312,7 @@ it("reaches search_players with an empty query and returns the remedy instead of
     Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
   );
   const response = await handleMcpRequest(
     request(
@@ -356,6 +369,7 @@ it("requires transaction review scope and returns human-review-only links", asyn
     Layer.succeed(TransactionReviews)(reviews),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
@@ -431,6 +445,7 @@ it("returns a durable queued lineup reference without claiming success", async (
     Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(LineupRuns)(lineups),
     Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
   );
   const call = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
@@ -498,6 +513,7 @@ it("requires teams:manage and changes automation through the shared team service
     Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(teams),
+    Layer.succeed(Feedback)(unavailableFeedback),
   );
   const call = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
@@ -536,6 +552,250 @@ it("requires teams:manage and changes automation through the shared team service
   expect(enabled).toBe(true);
 });
 
+it("requires feedback:manage and records agent feedback for the authenticated account", async () => {
+  const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
+  const submitted: Array<{ readonly userId: string; readonly submitter: unknown }> = [];
+  const feedback: FeedbackShape = {
+    ...unavailableFeedback,
+    submit: (userId, submitter, submissions) => {
+      submitted.push({ userId, submitter });
+      return Effect.succeed(
+        submissions.map(() => ({
+          id: Schema.decodeSync(FeedbackId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
+          submitter,
+          kind: "bug" as const,
+          status: "open" as const,
+          title: "Week is wrong",
+          body: "The run used the next week.",
+          context: { tool: "get_rosters", surface: "mcp" as const },
+          createdAt: at,
+          updatedAt: at,
+        })),
+      );
+    },
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(unavailableQueries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(feedback),
+  );
+  const call = (invocation: Request): Promise<Response> =>
+    handleMcpRequest(invocation, (_request, _operation, program) =>
+      Effect.runPromise(Effect.provide(program, services)),
+    );
+  const arguments_ = {
+    kind: "bug",
+    title: "Week is wrong",
+    body: "The run used the next week.",
+    context: { tool: "get_rosters", surface: "mcp" },
+  };
+
+  const denied = await call(
+    request("tools/call", { name: "submit_feedback", arguments: arguments_ }, "read"),
+  );
+
+  expect(denied.status).toBe(403);
+  expect(denied.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+  expect(submitted).toEqual([]);
+
+  const allowed = await call(
+    request("tools/call", { name: "submit_feedback", arguments: arguments_ }, "feedback"),
+  );
+  const body = await json(allowed);
+
+  expect(allowed.status).toBe(200);
+  expect(body).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        feedback: {
+          id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3",
+          status: "open",
+          kind: "bug",
+        },
+      },
+    },
+  });
+  expect(submitted).toEqual([{ userId: "reader", submitter: { kind: "agent", reference: "mcp" } }]);
+  expect(JSON.stringify(body)).not.toContain("cause");
+});
+
+it("returns an actionable failure for refused feedback instead of leaking persistence details", async () => {
+  const limited: FeedbackShape = {
+    ...unavailableFeedback,
+    submit: () => Effect.fail(FeedbackRateLimited.make({ retryAfterSeconds: 900 })),
+  };
+  const rejected: FeedbackShape = {
+    ...unavailableFeedback,
+    submit: () =>
+      Effect.fail(FeedbackContentInvalid.make({ detail: "Remove control characters." })),
+  };
+  const broken: FeedbackShape = {
+    ...unavailableFeedback,
+    list: () =>
+      Effect.fail(
+        FeedbackPersistenceFailed.make({ cause: new Error("private database password") }),
+      ),
+  };
+  const run = (
+    service: FeedbackShape,
+    name: string,
+    arguments_: Record<string, unknown>,
+  ): Promise<Response> =>
+    handleMcpRequest(
+      request("tools/call", { name, arguments: arguments_ }, "feedback"),
+      (_request, _operation, program) =>
+        Effect.runPromise(
+          Effect.provide(
+            program,
+            Layer.mergeAll(
+              authentication,
+              Layer.succeed(Connections)(unavailableConnections),
+              Layer.succeed(FantasyQueries)(unavailableQueries),
+              Layer.succeed(TransactionReviews)(unavailableReviews),
+              Layer.succeed(LineupRuns)(unavailableLineups),
+              Layer.succeed(Teams)(unavailableTeams),
+              Layer.succeed(Feedback)(service),
+            ),
+          ),
+        ),
+    );
+  const submission = { kind: "bug", title: "Title", body: "Body" };
+
+  const throttled = await run(limited, "submit_feedback", submission);
+  const invalid = await run(rejected, "submit_feedback", submission);
+  const failed = await run(broken, "list_feedback", {});
+  const invalidLimit = await run(broken, "list_feedback", { limit: 0 });
+
+  const throttledBody = await json(throttled);
+  const invalidBody = await json(invalid);
+  expect(throttledBody).toMatchObject({ result: { isError: true } });
+  expect(JSON.stringify(throttledBody)).toContain("900 seconds");
+  expect(invalidBody).toMatchObject({ result: { isError: true } });
+  expect(JSON.stringify(invalidBody)).toContain("control characters");
+  const failedBody = await json(failed);
+  expect(failed.status).toBe(200);
+  expect(JSON.stringify(failedBody)).not.toContain("private database");
+  expect(JSON.stringify(failedBody)).toContain("internal server error");
+  expect(invalidLimit.status).toBe(400);
+  expect(await json(invalidLimit)).toMatchObject({ error: { code: -32602 } });
+});
+
+it("triages owned feedback through the shared service and reports each outcome", async () => {
+  const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
+  const triaged: Array<ReadonlyArray<unknown>> = [];
+  const feedback: FeedbackShape = {
+    ...unavailableFeedback,
+    triage: (_userId, inputs) => {
+      triaged.push(inputs);
+      return Effect.succeed(
+        inputs.map((input) => ({
+          outcome: "changed" as const,
+          feedback: {
+            id: input.feedback,
+            submitter: { kind: "agent" as const, reference: "mcp" },
+            kind: "bug" as const,
+            status: input.action === "resolve" ? ("resolved" as const) : ("acknowledged" as const),
+            title: "Week is wrong",
+            body: "The run used the next week.",
+            context: {},
+            ...(input.action === "resolve" && "note" in input
+              ? { resolutionNote: input.note }
+              : {}),
+            ...(input.action === "resolve" ? { closedAt: at } : {}),
+            createdAt: at,
+            updatedAt: at,
+          },
+          action: input.action,
+          detail: "Recorded.",
+        })),
+      );
+    },
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(unavailableQueries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(feedback),
+  );
+  const response = await handleMcpRequest(
+    request(
+      "tools/call",
+      {
+        name: "triage_feedback",
+        arguments: {
+          feedback: [
+            { feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" },
+            {
+              feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b4",
+              action: "resolve",
+              note: "Fixed the week mapping.",
+            },
+          ],
+        },
+      },
+      "feedback",
+    ),
+    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+  );
+  const duplicate = await handleMcpRequest(
+    request(
+      "tools/call",
+      {
+        name: "triage_feedback",
+        arguments: {
+          feedback: [
+            { feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" },
+            { feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "wontfix" },
+          ],
+        },
+      },
+      "feedback",
+    ),
+    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+  );
+  const body = await json(response);
+
+  expect(response.status).toBe(200);
+  expect(body).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        results: [
+          { outcome: "changed", action: "acknowledge", feedback: { status: "acknowledged" } },
+          {
+            outcome: "changed",
+            action: "resolve",
+            feedback: { status: "resolved", resolutionNote: "Fixed the week mapping." },
+          },
+        ],
+      },
+    },
+  });
+  expect(triaged).toEqual([
+    [
+      { feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" },
+      {
+        feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b4",
+        action: "resolve",
+        note: "Fixed the week mapping.",
+      },
+    ],
+  ]);
+  const duplicateBody = await json(duplicate);
+  expect(duplicate.status).toBe(200);
+  expect(duplicateBody).toMatchObject({ result: { isError: true } });
+  expect(JSON.stringify(duplicateBody)).toContain("once per triage");
+  expect(triaged).toHaveLength(1);
+});
+
 const authentication = Layer.succeed(AuthService)({
   signInMethods: { google: false },
   oauthResource: "https://connections.example/mcp",
@@ -559,7 +819,9 @@ const authentication = Layer.succeed(AuthService)({
           ? ["fantasy:read"]
           : token === "review"
             ? ["transactions:review"]
-            : scopes;
+            : token === "feedback"
+              ? ["feedback:manage"]
+              : scopes;
     return Effect.succeed(
       scopes.every((scope) => granted.includes(scope))
         ? { status: "authenticated" as const, userId: decodeUserId("reader") }
@@ -591,6 +853,7 @@ function handle(
     Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
   );
   return handleMcpRequest(request, (_request, _operation, program) =>
     Effect.runPromise(Effect.provide(program, services)),
@@ -620,6 +883,11 @@ const unavailableTeams: TeamsShape = {
   list: () => Effect.die(new Error("teams unavailable")),
   get: () => Effect.die(new Error("teams unavailable")),
   control: () => Effect.die(new Error("teams unavailable")),
+};
+const unavailableFeedback: FeedbackShape = {
+  submit: () => Effect.die(new Error("feedback unavailable")),
+  list: () => Effect.die(new Error("feedback unavailable")),
+  triage: () => Effect.die(new Error("feedback unavailable")),
 };
 
 function request(

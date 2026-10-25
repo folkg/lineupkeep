@@ -55,6 +55,9 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
+    "submit_feedback",
+    "list_feedback",
+    "triage_feedback",
   ]);
 });
 
@@ -113,6 +116,12 @@ test("serves every tool scope after one consent for the documented scope set", a
     ],
     ["get_lineup_runs", {}],
     ["set_team_automation", { teams: [{ team, action: "enable" }] }],
+    [
+      "submit_feedback",
+      { kind: "friction", title: "Scope probe", body: "Checking the feedback surface." },
+    ],
+    ["list_feedback", { limit: 5 }],
+    ["triage_feedback", { feedback: [{ feedback: randomUUID(), action: "acknowledge" }] }],
   ] as const;
   const statuses: Array<[string, number]> = [];
   for (const [name, arguments_] of calls) {
@@ -158,6 +167,82 @@ test("lists the owner's connection status over MCP without exposing account iden
   const hidden = await otherClient.callTool("list_connections", {});
 
   expect(hidden.structuredContent).toEqual({ connections: [] });
+});
+
+test("reports, retrieves, and closes feedback for the acting account only", async ({
+  page,
+  baseURL,
+  newUser,
+}) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+  const { credentials } = await authorize(page, origin, documentedScopes);
+  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
+
+  const submitted = await client.callTool("submit_feedback", {
+    kind: "data-issue",
+    title: "Roster totals disagree",
+    body: "The category totals on the roster page differ from the provider page.",
+    context: { tool: "get_rosters", surface: "mcp", client: "e2e" },
+  });
+
+  expect(submitted.isError).toBe(false);
+  const report = Schema.decodeUnknownSync(
+    Schema.Struct({ feedback: Schema.Struct({ id: Schema.String, status: Schema.String }) }),
+  )(submitted.structuredContent).feedback;
+  expect(report.status).toBe("open");
+  const feedback = report.id;
+
+  const listed = await client.callTool("list_feedback", { statuses: ["open"], limit: 5 });
+  expect(JSON.stringify(listed.structuredContent)).toContain(feedback);
+
+  const acknowledged = await client.callTool("triage_feedback", {
+    feedback: [{ feedback, action: "acknowledge" }],
+  });
+  expect(acknowledged.structuredContent).toMatchObject({
+    results: [{ outcome: "changed", feedback: { status: "acknowledged" } }],
+  });
+
+  const resolved = await client.callTool("triage_feedback", {
+    feedback: [{ feedback, action: "resolve", note: "Fixed by the week-mapping change." }],
+  });
+  expect(resolved.structuredContent).toMatchObject({
+    results: [
+      {
+        outcome: "changed",
+        feedback: { status: "resolved", resolutionNote: "Fixed by the week-mapping change." },
+      },
+    ],
+  });
+  expect(JSON.stringify(resolved)).not.toContain("cause");
+
+  const repeated = await client.callTool("triage_feedback", {
+    feedback: [{ feedback, action: "resolve", note: "A replacement note." }],
+  });
+  expect(repeated.structuredContent).toMatchObject({
+    results: [
+      {
+        outcome: "unchanged",
+        feedback: { status: "resolved", resolutionNote: "Fixed by the week-mapping change." },
+      },
+    ],
+  });
+
+  const other = await newUser();
+  await signUp(other);
+  const otherAuthorization = await authorize(other, origin, documentedScopes);
+  const otherClient = mcpClient(mcpEndpoint(origin), otherAuthorization.credentials.access_token);
+  const hidden = await otherClient.callTool("list_feedback", {});
+  const refused = await otherClient.callTool("triage_feedback", {
+    feedback: [{ feedback, action: "acknowledge" }],
+  });
+
+  expect(hidden.structuredContent).toMatchObject({ feedback: [], page: { returned: 0 } });
+  expect(refused.structuredContent).toMatchObject({ results: [{ outcome: "not_found" }] });
+
+  await page.goto("/feedback");
+  await expect(page.getByText("Roster totals disagree")).toBeVisible();
+  await expect(page.getByText("Data issue · Resolved")).toBeVisible();
 });
 
 test("enforces fantasy read and transaction review scopes over MCP", async ({ page, baseURL }) => {
@@ -554,7 +639,7 @@ function documentedHeaders(method: string): Record<string, string> {
 
 const protocolVersion = "2026-07-28";
 const documentedScopes =
-  "connections:read fantasy:read transactions:review lineups:write teams:manage offline_access";
+  "connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access";
 
 async function authorize(
   page: Page,

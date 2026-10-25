@@ -54,6 +54,16 @@ Availability is separate from enrollment. An unavailable team keeps the requeste
 
 This tool changes only durable Lineupkeep automation state; it never contacts the provider. `set_lineup` remains the sole provider mutation and continues to bypass enrollment for a manual run while honoring ownership, connection readiness, availability, locks, and uncertain-write protection.
 
+## Feedback behavior
+
+Feedback is one owner-scoped record for a bug, data issue, friction report, or wishlist item. `submit_feedback` records the acting account's report and returns its id and `open` status; `list_feedback` returns that account's reports in newest-first order with optional status, kind, and start-time filters; `triage_feedback` acknowledges, resolves with a note, or closes as not planned.
+
+An agent acting for a person may read and close that person's reports, because the account granted `feedback:manage` and every query is filtered to its owner. There is no agent-wide, operator, or support queue, and no tool widens access to another account's reports: a foreign report id is `not_found`, not a forbidden-with-details response. The owner's intent is that the person's own agent can file, follow up, and close without the product owner relaying messages by hand.
+
+Status is `open`, `acknowledged`, `resolved`, or `wontfix`. `resolve` requires a resolution note and sets the closure time; `wontfix` accepts an optional note. Repeating the current action is an `unchanged` no-op with the resulting record, and an action that contradicts a closed report is `rejected`: closure is final, so report the problem again if it returns. Results echo each requested action in order with its outcome, status, note, and a safe explanation.
+
+Submission is bounded and rate-limited: title ≤ 120 characters, body ≤ 4000, note ≤ 2000, control characters removed, and user text always returned as plain text. An account may submit 20 reports per clock hour and one acting client label may submit 10; the per-account limit is the backstop, so a client that renames itself cannot exceed it, and a refusal names the retry delay in seconds. Reports must never contain passwords, provider cookies, account identifiers, or raw provider payloads. Open and acknowledged reports are retained as current work; resolved and not-planned reports are deleted 180 days after closure.
+
 ## Budgets and paging
 
 Initial service policy: aim for about 12 KiB and enforce a 16 KiB model-facing application-result ceiling. These are our proposed application budgets, not claimed Muse/MCP limits. The measurement counts both representations a client receives: `structuredContent` and the JSON text copy that a text-only client reads. Keeping the text copy follows the specification's backwards-compatibility recommendation, so a structured page fills about half the ceiling instead of dropping the copy and halving what a text-only client can use.
@@ -93,12 +103,12 @@ Return a clear human-review instruction and no guarantee of add/drop/trade eligi
 The documented set a client requests on its first authorization:
 
 ```text
-connections:read fantasy:read transactions:review lineups:write teams:manage offline_access
+connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access
 ```
 
-`connections:read` reads connection status; `fantasy:read`, `transactions:review`, `lineups:write`, and `teams:manage` cover the query, review-link, lineup, and automation-control tools; `offline_access` buys a refresh token. Requesting a subset authorizes and then fails the tools whose scope it omitted, so the whole set is the supported request.
+`connections:read` reads connection status; `fantasy:read`, `transactions:review`, `lineups:write`, `teams:manage`, and `feedback:manage` cover the query, review-link, lineup, automation-control, and feedback tools; `offline_access` buys a refresh token. Requesting a subset authorizes and then fails the tools whose scope it omitted, so the whole set is the supported request.
 
-The unauthenticated `401` advertises the whole set in its `scope` parameter and body, and a `403` names the missing scope in the body as well as the challenge header. `server/discover` answers without a token and publishes only the product name, supported protocol versions, and capabilities. Authorization-server metadata publishes all six scopes; protected-resource metadata publishes the five resource scopes, because `offline_access` addresses the authorization server rather than the resource. A scope-coverage test asserts the documented set against the required scope of every shipped tool.
+The unauthenticated `401` advertises the whole set in its `scope` parameter and body, and a `403` names the missing scope in the body as well as the challenge header. `server/discover` answers without a token and publishes only the product name, supported protocol versions, and capabilities. Authorization-server metadata publishes all seven scopes; protected-resource metadata publishes the six resource scopes, because `offline_access` addresses the authorization server rather than the resource. A scope-coverage test asserts the documented set against the required scope of every shipped tool.
 
 Dynamic registration records the advertised set as the client's allowed scope, while an authorization grant is exactly the scope an authorize request asks for. Both are needed: registration allows the grant, the request narrows it. Complete first-request examples, header and `_meta` requirements, and the registration fallback are in the [client setup](../../README.md#connecting-an-mcp-client).
 

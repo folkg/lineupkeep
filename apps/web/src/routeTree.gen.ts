@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ConnectionsRouteImport } from './routes/connections'
 import { Route as ConsentRouteImport } from './routes/consent'
+import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known.$'
 import { Route as ApiTelemetryRouteImport } from './routes/api/telemetry'
@@ -42,6 +43,11 @@ const ConnectionsRoute = ConnectionsRouteImport.update({
 const ConsentRoute = ConsentRouteImport.update({
   id: '/consent',
   path: '/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeedbackRoute = FeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const McpRoute = McpRouteImport.update({
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/connections': typeof ConnectionsRoute
   '/consent': typeof ConsentRoute
+  '/feedback': typeof FeedbackRoute
   '/mcp': typeof McpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
@@ -116,6 +123,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/connections': typeof ConnectionsRoute
   '/consent': typeof ConsentRoute
+  '/feedback': typeof FeedbackRoute
   '/mcp': typeof McpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/connections': typeof ConnectionsRoute
   '/consent': typeof ConsentRoute
+  '/feedback': typeof FeedbackRoute
   '/mcp': typeof McpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/connections'
     | '/consent'
+    | '/feedback'
     | '/mcp'
     | '/.well-known/$'
     | '/api/telemetry'
@@ -167,6 +177,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/connections'
     | '/consent'
+    | '/feedback'
     | '/mcp'
     | '/.well-known/$'
     | '/api/telemetry'
@@ -183,6 +194,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/connections'
     | '/consent'
+    | '/feedback'
     | '/mcp'
     | '/.well-known/$'
     | '/api/telemetry'
@@ -200,6 +212,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ConnectionsRoute: typeof ConnectionsRoute
   ConsentRoute: typeof ConsentRoute
+  FeedbackRoute: typeof FeedbackRoute
   McpRoute: typeof McpRoute
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   ApiTelemetryRoute: typeof ApiTelemetryRoute
@@ -240,6 +253,13 @@ declare module '@tanstack/solid-router' {
       path: '/consent'
       fullPath: '/consent'
       preLoaderRoute: typeof ConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/feedback': {
+      id: '/feedback'
+      path: '/feedback'
+      fullPath: '/feedback'
+      preLoaderRoute: typeof FeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mcp': {
@@ -320,6 +340,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ConnectionsRoute: ConnectionsRoute,
   ConsentRoute: ConsentRoute,
+  FeedbackRoute: FeedbackRoute,
   McpRoute: McpRoute,
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   ApiTelemetryRoute: ApiTelemetryRoute,

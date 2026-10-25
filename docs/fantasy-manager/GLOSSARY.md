@@ -89,6 +89,19 @@ An unresolved provider-access problem requiring the user to act, such as reconne
 **Uncertain lineup result**:
 A lineup attempt whose provider acceptance or resulting assignments cannot be established reliably. It is neither verified success nor proof that no change occurred.
 
+## Feedback
+
+**Feedback report**:
+A bug, data issue, friction report, or wishlist item submitted by a signed-in person or by an agent acting for that person. It records who submitted it, its kind, its status, its text, and bounded optional context; it never contains credentials, provider payloads, or another person's data.
+_Avoid_: Ticket, issue, comment thread
+
+**Feedback status**:
+The lifecycle state of a feedback report. An open report is unreviewed; an acknowledged report is being worked on; a resolved or not-planned report is closed with an optional note and cannot change again.
+_Avoid_: Priority, milestone
+
+**Feedback submission quota**:
+The bounded number of feedback reports one account, and one acting client label, may submit within a clock hour. It is an abuse control, not an allowance a person spends.
+
 ## Actions
 
 **Native start-active action**:

@@ -12,7 +12,7 @@ An independent, provider-neutral fantasy-management product, prepared from a fre
 4. [Planning index](docs/fantasy-manager/README.md): all decisions, research, glossary, MCP/architecture/hosting proposals, UX brief, and ADRs.
 5. [Setup provenance](docs/SETUP.md) and [release readiness](docs/release-readiness.md).
 
-**Current state:** independent repository on the approved brand/design system, with retained starter authentication, hosted browser linking with a local-helper fallback, owner-scoped encrypted Yahoo connections, team discovery, bounded provider queries, durable native `set_lineup` runs, hourly current-period automation, and reconnect notifications. The Notes demo is removed. Scoring/solver work remains Phase 2. The `cloud-run` stage is deployed in `lineupkeep-prod`; [the deployed environment](docs/deployment.md#deployed-environment-2026-10-25) and [the redacted live acceptance record](docs/phase-1-acceptance-2026-10-25.md) own the inventory, evidence and remaining gates. The current dependency baseline still has a documented critical publication blocker and an applied temporary backport; deployment is not blanket security acceptance.
+**Current state:** independent repository on the approved brand/design system, with retained starter authentication, hosted browser linking with a local-helper fallback, owner-scoped encrypted Yahoo connections, team discovery, bounded provider queries, durable native `set_lineup` runs, hourly current-period automation, reconnect notifications, and owner-scoped feedback from the app and MCP clients. The Notes demo is removed. Scoring/solver work remains Phase 2. The `cloud-run` stage is deployed in `lineupkeep-prod`; [the deployed environment](docs/deployment.md#deployed-environment-2026-10-25) and [the redacted live acceptance record](docs/phase-1-acceptance-2026-10-25.md) own the inventory, evidence and remaining gates. The current dependency baseline still has a documented critical publication blocker and an applied temporary backport; deployment is not blanket security acceptance.
 
 The lowercase wordmark is **lineupkeep**; ordinary prose uses **Lineupkeep**. The approved palette is **royal violet and gold**, with complete light/dark themes. No domain has been purchased; the deployed Cloud Run origin is the configured public origin.
 
@@ -100,10 +100,10 @@ Connect a stateless **MCP 2026-07-28** client to `https://<host>/mcp`; earlier s
 ### Request this scope set on the first authorization
 
 ```text
-connections:read fantasy:read transactions:review lineups:write teams:manage offline_access
+connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access
 ```
 
-One consent with every scope above covers all shipped tools and renewable access. A narrower request still authorizes, then fails the tools whose scopes it omitted: the `401` challenge and the `403` body both name scopes so a client that surfaces only a response body can still see what is missing. Authorization-server metadata publishes this list; protected-resource metadata publishes the five resource scopes, because `offline_access` buys a refresh token from the authorization server rather than access to the resource.
+One consent with every scope above covers all shipped tools and renewable access. A narrower request still authorizes, then fails the tools whose scopes it omitted: the `401` challenge and the `403` body both name scopes so a client that surfaces only a response body can still see what is missing. Authorization-server metadata publishes this list; protected-resource metadata publishes the six resource scopes, because `offline_access` buys a refresh token from the authorization server rather than access to the resource.
 
 ### First requests
 

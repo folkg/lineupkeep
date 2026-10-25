@@ -35,6 +35,7 @@ function AppActions(): JSX.Element {
       <Nav label="Primary navigation">
         <NavLink to="/teams">Teams</NavLink>
         <NavLink to="/connections">Connections</NavLink>
+        <NavLink to="/feedback">Feedback</NavLink>
         <Show fallback={<NavLink to="/auth">Sign in</NavLink>} when={session.isSignedIn()}>
           <Button
             pending={session.isSigningOut()}

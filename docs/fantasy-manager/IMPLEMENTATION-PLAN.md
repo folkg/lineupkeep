@@ -72,9 +72,9 @@ Use a hosted browser as the primary linking/reconnect flow, with the user-local 
 
 Expired login suspends writes but preserves enrollment. Show reconnect-required and send one action-required email per unresolved connection incident, not per team/hourly run. No reminder campaign initially.
 
-Minimal frontend on the starter stack, rewritten/redesigned with Impeccable: open passwordless email-code registration/sign-in, connections, teams, enable/disable/pause, last-run status, and small inline recent activity. No allowlist/invitation gate, old Angular port, feedback/about pages, transaction suggestion UI, or analytics dashboard.
+Minimal frontend on the starter stack, rewritten/redesigned with Impeccable: open passwordless email-code registration/sign-in, connections, teams, enable/disable/pause, last-run status, small inline recent activity, and an owner-scoped feedback form with its report list. No allowlist/invitation gate, old Angular port, marketing/about pages, transaction suggestion UI, or analytics dashboard.
 
-Retain concise outcomes/explanations for 30 days, minimal normalized diagnostics for seven days, and no raw provider dumps by default. Enforce deletion across all copies rather than hiding expired data behind soft deletion.
+Retain concise outcomes/explanations for 30 days, minimal normalized diagnostics for seven days, closed feedback for 180 days, and no raw provider dumps by default. Keep open feedback and unresolved incidents as current work rather than history. Enforce deletion across all copies rather than hiding expired data behind soft deletion.
 
 ## Recommended technical decisions for review
 

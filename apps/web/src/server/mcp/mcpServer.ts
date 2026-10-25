@@ -4,6 +4,7 @@ import type { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQuer
 import type { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import type { Teams } from "@lineupkeep/backend/connections/Teams";
 import type { TransactionReviews } from "@lineupkeep/backend/connections/TransactionReview";
+import type { Feedback } from "@lineupkeep/backend/feedback/Feedback";
 import { productName } from "@lineupkeep/brand/product";
 import { Layer } from "effect";
 import type { Tool } from "effect/ai";
@@ -13,6 +14,7 @@ import { runBackend } from "#server/backendEntry.ts";
 
 import { connectionToolHandlers, connectionTools } from "./connectionTools";
 import { fantasyQueryToolHandlers, fantasyQueryTools } from "./fantasyQueryTools";
+import { feedbackToolHandlers, feedbackTools } from "./feedbackTools";
 import { lineupToolHandlers, lineupTools } from "./lineupTools";
 import { mcpRequest } from "./mcpEndpoint";
 import { teamToolHandlers, teamTools } from "./teamTools";
@@ -24,13 +26,14 @@ export const applicationTools = Toolkit.merge(
   transactionTools,
   lineupTools,
   teamTools,
+  feedbackTools,
 );
 const applicationHandlers = (
   userId: UserId,
 ): Layer.Layer<
   Tool.HandlersFor<Toolkit.Tools<typeof applicationTools>>,
   never,
-  Connections | FantasyQueries | TransactionReviews | LineupRuns | Teams
+  Connections | FantasyQueries | TransactionReviews | LineupRuns | Teams | Feedback
 > =>
   Layer.mergeAll(
     connectionToolHandlers(userId),
@@ -38,6 +41,7 @@ const applicationHandlers = (
     transactionToolHandlers(userId),
     lineupToolHandlers(userId),
     teamToolHandlers(userId),
+    feedbackToolHandlers(userId),
   );
 
 export function handleMcpRequest(

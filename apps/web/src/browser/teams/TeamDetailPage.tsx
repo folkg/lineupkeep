@@ -135,6 +135,9 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
             <TextLink to="/connections">Reconnect Yahoo</TextLink>
           </Show>
         </Inline>
+        <TextLink search={{ surface: "team", team: props.team.team.id }} to="/feedback">
+          Report a problem with this team
+        </TextLink>
       </Stack>
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">

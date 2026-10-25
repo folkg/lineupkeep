@@ -213,8 +213,11 @@ Minimal persistent responsibilities:
 - Run state/version, request identity, attempts, implementation/policy version, concise result.
 - Minimal diagnostic inputs, expiring after seven days.
 - Delivery/notification intents and their stable identities.
+- Feedback reports owned by one application user, with a bounded submission quota per owner and acting client.
 
 Concise run outcomes/explanations expire after 30 days. Do not preserve their full content forever through soft-deleted rows, event tables, traces, backups, or abandoned outbox payloads. Define cleanup for every copy. Current configuration and unresolved incidents are not historical run retention.
+
+A feedback report keeps the submitter kind and surface, kind, status, title, body, bounded optional context (tool, team reference, client, surface), and an optional resolution note with its closure time. Open and acknowledged reports are current work and stay. Resolved and not-planned reports are deleted 180 days after they close, and submission-quota rows are deleted once their hour can no longer accept a report; there is no soft-deleted feedback copy. Reports carry no credentials, provider payloads, email addresses, or account identity beyond the opaque owner. The hourly worker runs the sweep beside the existing retention sweep, and the service bounds text length, strips control characters, and stores user text as plain text that is never rendered as markup.
 
 Use real migrations, owned-row predicates, pragmatic owner/filter/order/expiry indexes, stable ordering, bounded pages, and idempotent creates. Add uniqueness for actual identities, not league-only identities that overwrite two teams in one league.
 
@@ -250,7 +253,7 @@ Review links support add, add/drop, drop, and trade, with exact provider-host al
 
 ## 11. MCP and frontend
 
-See [MCP.md](MCP.md), [UX-BRIEF.md](UX-BRIEF.md), and [TESTING.md](TESTING.md). Both surfaces call the same public use cases, not separate implementations.
+See [MCP.md](MCP.md), [UX-BRIEF.md](UX-BRIEF.md), and [TESTING.md](TESTING.md). Both surfaces call the same public use cases, not separate implementations. Feedback is the one domain both a signed-in person and an agent report and follow up through the same owner-scoped service: a tool grant is always the acting account's own reports, and no agent-wide or operator queue exists.
 
 Retain the starter's application-user/client authorization, OAuth consent, ownership, narrow read/write scopes, and runtime/Effect-free browser boundaries. A future HTTP dataset adapter is not required now. Hosted Muse remains the primary client acceptance target; do not change to stateful/legacy MCP for older Pi.
 

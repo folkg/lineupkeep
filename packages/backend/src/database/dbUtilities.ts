@@ -15,6 +15,10 @@ export function anyOf<Column extends PgColumn>(
   return sql`${column} = ANY(${arrayParameter(column, values)})`;
 }
 
+export function addedToExcluded(column: PgColumn): SQL {
+  return sql`${column} + excluded.${sql.identifier(column.name)}`;
+}
+
 export function scheduledPendingPredicate(table: {
   readonly trigger: PgColumn;
   readonly status: PgColumn;

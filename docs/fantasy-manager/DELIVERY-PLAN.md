@@ -188,4 +188,4 @@ Tasks:
 - Let agents explore public sources, players, statistics, and candidate transactions through MCP; evaluate whether the workflow actually produces useful suggestions.
 - Record successful repeatable decision steps before deciding whether to productize them.
 - Future recommendation workflows should compose with existing connections, query snapshots, policy provenance, run records, and human transaction-review links, rather than embed an LLM inside the solver.
-- Further product decisions are required before server-side LLM use, transaction suggestions, feedback loops, new providers/sports, multi-period/category optimization, player pins, or transaction execution. None are silently included in these stages.
+- Further product decisions are required before server-side LLM use, transaction suggestions, cross-account feedback triage or analytics, new providers/sports, multi-period/category optimization, player pins, or transaction execution. None are silently included in these stages.

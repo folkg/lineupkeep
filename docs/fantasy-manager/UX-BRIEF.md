@@ -31,13 +31,17 @@ A compact connection surface supports link, status, reconnect, and disconnect. T
 
 An expired connection supplies one clear reconnect action, identifies affected teams safely, retains enrollment, and opens one deduplicated action-required email incident. An inaccessible team retains configuration rather than disappearing silently.
 
+### Feedback
+
+A compact feedback surface records a bug, data issue, friction, or wishlist item from the signed-in account and lists that account's reports with their status. The kind, title, and details are validated beside their fields; a rejected submission keeps the draft; a rate-limited submission explains that the account has sent several reports this hour. Contextual entry points on a team and a lineup run carry that reference into the form without adding error text or provider payloads to the report. A report renders as plain text with its closure note; nothing in a report is rendered as markup. Agents report and follow up through MCP using the same owner scope, and the page shows agent-submitted reports beside the person's own.
+
 ### MCP consent
 
 Keep the starter's normal OAuth consent and scope descriptions. Distinguish reads, lineup writes, and review-link generation. A prefilled human transaction page is not authorization for the app to submit a transaction.
 
 ## Scope exclusions
 
-No transaction suggestions, transaction execution UI, feedback, marketing/about pages, custom scoring controls, onboarding questionnaire, social/community features, or admin/invitation console. No old Angular implementation port.
+No transaction suggestions, transaction execution UI, marketing/about pages, custom scoring controls, onboarding questionnaire, social/community features, or admin/invitation console. Feedback is a capture-and-status surface only: no labels, assignment, comment threads, notifications, email, voting, attachments, or cross-account support queue. No old Angular implementation port.
 
 ## State and accessibility acceptance
 

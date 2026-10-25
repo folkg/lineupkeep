@@ -41,6 +41,12 @@ import type { Notifications } from "#contexts/connections/Notifications.ts";
 import type { RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { Teams } from "#contexts/connections/Teams.ts";
 import type { TransactionReviews } from "#contexts/connections/TransactionReview.ts";
+import type { Feedback } from "#contexts/feedback/Feedback.ts";
+import type { FeedbackRetention } from "#contexts/feedback/FeedbackRetention.ts";
+import { FeedbackDatabase } from "#contexts/feedback/internal/FeedbackDatabase.ts";
+import { FeedbackLive } from "#contexts/feedback/internal/FeedbackLive.ts";
+import { FeedbackRepository } from "#contexts/feedback/internal/FeedbackRepository.ts";
+import { FeedbackRetentionLive } from "#contexts/feedback/internal/FeedbackRetentionLive.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
 import { advertisedScopes } from "#runtime/ApplicationScopes.ts";
@@ -125,6 +131,11 @@ const NotificationsLayer = NotificationsLive.pipe(
   Layer.provide(UserDirectoryLayer),
   Layer.provide(EmailDeliveryLayer),
 );
+const FeedbackRepositoryLayer = FeedbackRepository.layer.pipe(
+  Layer.provide(FeedbackDatabase.layer),
+);
+const FeedbackLayer = FeedbackLive.pipe(Layer.provide(FeedbackRepositoryLayer));
+const FeedbackRetentionLayer = FeedbackRetentionLive.pipe(Layer.provide(FeedbackRepositoryLayer));
 export const ApplicationLayer = Layer.mergeAll(
   ConnectionsLayer,
   HostedLinkingLayer,
@@ -136,6 +147,8 @@ export const ApplicationLayer = Layer.mergeAll(
   RetentionSweepLayer,
   LineupDispatcherLayer,
   LineupWorkerLayer,
+  FeedbackLayer,
+  FeedbackRetentionLayer,
   AuthLayer,
   ProviderLayer,
   CredentialEncryptionLayer,
@@ -154,4 +167,6 @@ export type BackendServices =
   | Notifications
   | RetentionSweep
   | LineupDispatcher
-  | LineupWorker;
+  | LineupWorker
+  | Feedback
+  | FeedbackRetention;

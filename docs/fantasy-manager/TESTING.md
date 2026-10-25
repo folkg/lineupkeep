@@ -16,6 +16,8 @@ Status: proposed seams and acceptance criteria for final plan approval. No appli
 
 Do not create a test-only public interface to reach internals. A solver and policy are real calculation seams used by production; an independent validator/oracle belongs in tests and is not another implementation dependency.
 
+Feedback uses three layers rather than one: the public service with migrated storage proves submission normalization, owner isolation, filtering, quota, lifecycle repeats and rejections, and the closed-report sweep; the actual MCP protocol test proves scope enforcement, no owner identity in results, and submit/list/triage serialization; the built app proves the form, accessible field errors, plain-text rendering, listing with status, reload persistence, and the contextual team reference.
+
 ## 2. TDD discipline
 
 - Vitest/@effect/vitest, existing Effect-machine test support, and Effect Arbitrary first. Do not add another property library merely because examples use it; fast-check is already useful where the starter uses it in browser workflows.
