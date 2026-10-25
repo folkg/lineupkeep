@@ -13,12 +13,15 @@ import type { Automation } from "#contexts/connections/Automation.ts";
 import type { Connections } from "#contexts/connections/Connections.ts";
 import { connectionScopes } from "#contexts/connections/ConnectionScopes.ts";
 import type { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
+import type { HostedLinking } from "#contexts/connections/HostedLinking.ts";
 import { AutomationLive } from "#contexts/connections/internal/AutomationLive.ts";
 import { ConnectionCredentialEncryption } from "#contexts/connections/internal/ConnectionCredentialEncryption.ts";
 import { ConnectionRepository } from "#contexts/connections/internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "#contexts/connections/internal/ConnectionsDatabase.ts";
 import { ConnectionsLive } from "#contexts/connections/internal/ConnectionsLive.ts";
 import { FantasyQueriesLive } from "#contexts/connections/internal/FantasyQueriesLive.ts";
+import { HostedLinkingLive } from "#contexts/connections/internal/HostedLinkingLive.ts";
+import { HostedLinkingRepository } from "#contexts/connections/internal/HostedLinkingRepository.ts";
 import { LineupDeliveryCloudTasks } from "#contexts/connections/internal/LineupDeliveryCloudTasks.ts";
 import { LineupDeliveryLocal } from "#contexts/connections/internal/LineupDeliveryLocal.ts";
 import { LineupDispatcherLive } from "#contexts/connections/internal/LineupDispatcherLive.ts";
@@ -65,6 +68,13 @@ const ConnectionsLayer = ConnectionsLive.pipe(
   Layer.provide(RepositoryLayer),
   Layer.provide(ProviderLayer),
   Layer.provide(CredentialEncryptionLayer),
+);
+const HostedLinkingRepositoryLayer = HostedLinkingRepository.layer.pipe(
+  Layer.provide(ConnectionsDatabase.layer),
+);
+const HostedLinkingLayer = HostedLinkingLive.pipe(
+  Layer.provide(HostedLinkingRepositoryLayer),
+  Layer.provide(ConnectionsLayer),
 );
 const QueryRepositoryLayer = QueryRepository.layer.pipe(
   Layer.provide(RepositoryLayer),
@@ -125,6 +135,7 @@ const NotificationsLayer = NotificationsLive.pipe(
 );
 export const ApplicationLayer = Layer.mergeAll(
   ConnectionsLayer,
+  HostedLinkingLayer,
   QueriesLayer,
   LineupRunsLayer,
   TeamsLayer,
@@ -142,6 +153,7 @@ export const ApplicationLayer = Layer.mergeAll(
 export type BackendServices =
   | AuthService
   | Connections
+  | HostedLinking
   | FantasyQueries
   | TransactionReviews
   | LineupRuns
