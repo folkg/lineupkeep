@@ -16,14 +16,28 @@ const invariants = [
     ({ snapshot }) => "expiresAt" in snapshot.state.value === (snapshot.state.path === "Linking"),
   ),
   define.state(
+    "only Ready owns approvedAt",
+    ({ snapshot }) => "approvedAt" in snapshot.state.value === (snapshot.state.path === "Ready"),
+  ),
+  define.state(
     "only Disconnected owns disconnectedAt",
     ({ snapshot }) =>
       "disconnectedAt" in snapshot.state.value === (snapshot.state.path === "Disconnected"),
   ),
   define.step(
+    "an accepted approval timestamps the event",
+    ({ before, after, event }) =>
+      before.state.path !== "Linking" ||
+      event._tag !== "LinkApproved" ||
+      (after.state.value._tag === "Ready" &&
+        DateTime.Equivalence(after.state.value.approvedAt, event.at) &&
+        DateTime.Equivalence(after.state.value.updatedAt, event.at)),
+  ),
+  define.step(
     "an accepted cancellation timestamps the event",
     ({ before, after, event }) =>
       before.state.path === "Disconnected" ||
+      event._tag !== "LinkCancelled" ||
       (after.state.value._tag === "Disconnected" &&
         DateTime.Equivalence(after.state.value.disconnectedAt, event.at) &&
         DateTime.Equivalence(after.state.value.updatedAt, event.at)),
@@ -32,7 +46,7 @@ const invariants = [
     if (snapshot.state.path !== "Disconnected") {
       return true;
     }
-    return [cancel].every((event: ConnectionLifecycleRequest) => {
+    return [approve, cancel].every((event: ConnectionLifecycleRequest) => {
       const planned = Effect.runSync(Machine.plan(ConnectionLifecycleWorkflow, snapshot, event));
       return (
         planned.microsteps.every((step) => step.transitions.length === 0) &&
@@ -49,7 +63,7 @@ it.effect("explores every connection transition without retaining startup data",
   Effect.gen(function* () {
     const explored = yield* MachineTest.explore(ConnectionLifecycleWorkflow, {
       input,
-      events: () => [cancel],
+      events: () => [approve, cancel],
       stateKey: ({ snapshot }) => snapshot.state.path,
       invariants,
     });
@@ -67,7 +81,7 @@ it.effect.each(invariants)("preserves $name across generated scenarios", (invari
         millis: Schema.Int.check(
           Schema.isBetween({ minimum: -8_640_000_000_000_000, maximum: 8_640_000_000_000_000 }),
         ),
-        kind: Schema.Literals(["LinkCancelled"]),
+        kind: Schema.Literals(["LinkApproved", "LinkCancelled"]),
       }),
     ).pipe(
       Arbitrary.map(({ millis, kind }) => ({
@@ -114,4 +128,5 @@ const input = {
   expiresAt: DateTime.makeUnsafe("2026-01-01T00:10:00Z"),
   updatedAt: at,
 };
+const approve = { _tag: "LinkApproved" as const, at: DateTime.makeUnsafe("2026-01-02T00:00:00Z") };
 const cancel = { _tag: "LinkCancelled" as const, at: DateTime.makeUnsafe("2026-01-02T00:00:00Z") };

@@ -22,7 +22,7 @@ These are local reference paths, not build-time dependencies.
 - Independent jj repository: one flattened starter baseline, then a Lineupkeep identity/preparation change.
 - All 17 planning documents copied, with current setup/name annotations where appropriate.
 - Product/brand guidance, the owner-selected royal violet and gold palette, semantic light/dark tokens, self-hosted typography, wordmark, favicon, and an Impeccable design sidecar.
-- Retained starter platform with the first connections vertical; the Notes demo is removed and no fantasy-provider integration is implemented.
+- Retained starter platform with a helper-pairing connections vertical; the Notes demo is removed and no provider-credential integration is implemented.
 - Independent package namespace, local resource labels, stack/resource identities, and telemetry names. No existing cloud state was renamed or imported.
 - Fresh dependencies; source dependencies, environment, outputs, browser sessions, cloud state, and VCS history were not copied.
 

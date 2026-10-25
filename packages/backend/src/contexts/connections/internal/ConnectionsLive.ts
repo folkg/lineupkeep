@@ -40,6 +40,16 @@ export const ConnectionsLive = Layer.effect(
                 : Effect.void,
             ),
           ),
+      approveLinking: (userId: UserId, inputs: ReadonlyArray<ConnectionIdInput>) =>
+        repository
+          .approveLinking(userId, inputs)
+          .pipe(
+            Effect.tap((connections) =>
+              connections.length === 1
+                ? Effect.annotateCurrentSpan("connection.id", Array.getUnsafe(connections, 0).id)
+                : Effect.void,
+            ),
+          ),
     });
   }),
 );

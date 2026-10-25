@@ -83,10 +83,12 @@ function mapOutcome<A>(
   return program.pipe(
     Effect.catch((error) => {
       switch (error._tag) {
+        case "connection.link_expired":
+        case "connection.link_rejected":
         case "connection.not_found":
           return reject(
             error._tag,
-            "Connection not found. List your connections to choose an available identifier.",
+            "Connection not found or no longer awaiting approval. List your connections again.",
           );
         case "connection.create_failed":
         case "connection.persistence_failed":

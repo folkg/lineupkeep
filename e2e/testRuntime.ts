@@ -17,7 +17,11 @@ export const BackendRuntime = {
             client_id: request.url,
             client_name: "Lineupkeep test client",
             redirect_uris: ["http://127.0.0.1:19999/callback"],
-            grant_types: ["authorization_code", "refresh_token"],
+            grant_types: [
+              "authorization_code",
+              "refresh_token",
+              "urn:ietf:params:oauth:grant-type:device_code",
+            ],
             response_types: ["code"],
             token_endpoint_auth_method: "none",
           }),

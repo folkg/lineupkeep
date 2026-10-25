@@ -17,6 +17,7 @@ test("authorizes named browser personas independently through the fixture", asyn
   await services.exercise(page, "start the owner's link", "startLinking", {
     requestId: randomUUID(),
     provider: "yahoo",
+    pairingCode: "ABCD2345",
   });
   const ownerClient = await mcp(["connections:read"], page);
   const otherClient = await mcp(["connections:read"], other);

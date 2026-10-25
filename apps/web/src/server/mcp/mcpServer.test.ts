@@ -182,6 +182,9 @@ const authentication = Layer.succeed(AuthService)({
   handle: () => Effect.succeed(new Response()),
   getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
   consent: () => Effect.succeed("https://client.test/callback"),
+  claimDeviceAuthorization: () => Effect.succeed({ clientId: "helper", scope: "connections:read" }),
+  approveDeviceAuthorization: () => Effect.void,
+  denyDeviceAuthorization: () => Effect.void,
   resolveAccessToken: (token, scopes) =>
     Effect.succeed(
       token === "read" && scopes.some((scope) => scope.endsWith(":write"))
@@ -193,6 +196,7 @@ const unavailableConnections: ConnectionsShape = {
   list: () => Effect.succeed([]),
   startLinking: () => Effect.succeed([]),
   cancelLinking: () => Effect.succeed([]),
+  approveLinking: () => Effect.succeed([]),
 };
 
 function handle(

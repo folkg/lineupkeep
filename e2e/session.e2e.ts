@@ -34,6 +34,7 @@ test("returns home on sign-out and back to the account's connections on sign-in"
   await services.exercise(page, "start the owner's link", "startLinking", {
     requestId: randomUUID(),
     provider: "yahoo",
+    pairingCode: "ABCD2345",
   });
 
   await page.getByRole("button", { name: "Sign out" }).click();

@@ -18,6 +18,8 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
   const connections = useQuery(() => props.connectionsQuery());
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
+  const [pairingCode, setPairingCode] = createSignal("");
+  const [approvingId, setApprovingId] = createSignal<string>();
   const [cancelingId, setCancelingId] = createSignal<string>();
   let pendingRequestId: string | undefined;
 
@@ -35,15 +37,25 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
       storeRefreshedConnections(change, variables, onMutateResult, context);
       pendingRequestId = undefined;
-      setFeedback({ type: "success", message: "Link started." });
+      setPairingCode("");
+      setFeedback({ type: "success", message: "Helper pairing started." });
     },
     onError: reportFailure,
+  }));
+  const approve = useMutation(() => ({
+    ...connectionMutations.approve(props.remote()),
+    onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
+      storeRefreshedConnections(change, variables, onMutateResult, context);
+      setFeedback({ type: "success", message: "Helper approved." });
+    },
+    onError: reportFailure,
+    onSettled: () => setApprovingId(undefined),
   }));
   const cancel = useMutation(() => ({
     ...connectionMutations.cancel(props.remote()),
     onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
       storeRefreshedConnections(change, variables, onMutateResult, context);
-      setFeedback({ type: "success", message: "Link cancelled." });
+      setFeedback({ type: "success", message: "Pairing cancelled." });
     },
     onError: reportFailure,
     onSettled: () => setCancelingId(undefined),
@@ -54,17 +66,33 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     isLoading: () => connections.isPending,
     loadFailure: () => connections.error,
     feedback,
+    pairingCode,
     isStarting: () => start.isPending,
+    approvingId,
     cancelingId,
     refresh: () => props.onRefresh(),
+    changePairingCode: (value: string) => setPairingCode(value),
     startLinking: () => {
+      const code = pairingCode().trim();
+      if (code.length === 0) {
+        setFeedback({
+          type: "attention",
+          message: "Enter the pairing code shown by the local helper.",
+        });
+        return;
+      }
       pendingRequestId ??= crypto.randomUUID();
-      setFeedback({ type: "pending", message: "Starting link…" });
-      void start.mutate({ requestId: pendingRequestId, provider: "yahoo" });
+      setFeedback({ type: "pending", message: "Starting helper pairing…" });
+      void start.mutate({ requestId: pendingRequestId, provider: "yahoo", pairingCode: code });
+    },
+    approveLinking: (connection: ConnectionView) => {
+      setApprovingId(connection.id);
+      setFeedback({ type: "pending", message: "Approving helper…" });
+      void approve.mutate({ id: connection.id });
     },
     cancelLinking: (connection: ConnectionView) => {
       setCancelingId(connection.id);
-      setFeedback({ type: "pending", message: "Cancelling link…" });
+      setFeedback({ type: "pending", message: "Cancelling pairing…" });
       void cancel.mutate({ id: connection.id });
     },
   };
@@ -75,10 +103,14 @@ export type ConnectionsPageController = {
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
+  readonly pairingCode: Accessor<string>;
   readonly isStarting: Accessor<boolean>;
+  readonly approvingId: Accessor<string | undefined>;
   readonly cancelingId: Accessor<string | undefined>;
   readonly refresh: () => Promise<void>;
+  readonly changePairingCode: (value: string) => void;
   readonly startLinking: () => void;
+  readonly approveLinking: (connection: ConnectionView) => void;
   readonly cancelLinking: (connection: ConnectionView) => void;
 };
 

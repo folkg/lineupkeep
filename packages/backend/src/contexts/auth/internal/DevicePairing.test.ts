@@ -263,3 +263,25 @@ function jsonOf<S extends Schema.Top & { readonly DecodingServices: never }>(
     Effect.orDie,
   );
 }
+
+it.effect(
+  "claims and approves a device request through the auth service methods",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const owner = yield* signIn(adapter, "service-owner@example.test");
+      const grant = yield* startDeviceAuthorization(adapter);
+
+      const review = yield* adapter.claimDeviceAuthorization(
+        new Headers({ cookie: owner }),
+        grant.user_code,
+      );
+      assert.deepStrictEqual(review, { clientId: helperClientId, scope: "connections:read" });
+
+      yield* adapter.approveDeviceAuthorization(new Headers({ cookie: owner }), grant.user_code);
+
+      const redeemed = yield* adapter.handle(deviceTokenRequest(grant.device_code, helperClientId));
+      assert.strictEqual(redeemed.status, 200);
+    }).pipe(Effect.provide(adapterLayer())),
+  30_000,
+);

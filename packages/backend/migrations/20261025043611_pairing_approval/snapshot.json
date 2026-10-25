@@ -1,0 +1,63 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "31348521-c757-45e2-a7e2-588526f066bc",
+  "prevIds": ["b26bbb98-0f1e-4c50-b174-35f2d9e6f443"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "provider_connections", "pairing_code"],
+      "writes": [
+        "s|col|public.provider_connections.pairing_code",
+        "n|col|public.provider_connections.pairing_code",
+        "e|col|public.provider_connections.pairing_code"
+      ],
+      "reads": ["n|tbl|public.provider_connections", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "provider_connections", "approved_at"],
+      "writes": [
+        "s|col|public.provider_connections.approved_at",
+        "n|col|public.provider_connections.approved_at",
+        "e|col|public.provider_connections.approved_at"
+      ],
+      "reads": ["n|tbl|public.provider_connections", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_connections",
+        "name": "pairing_code",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_connections",
+        "name": "approved_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

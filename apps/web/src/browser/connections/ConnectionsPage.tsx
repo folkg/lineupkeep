@@ -9,6 +9,7 @@ import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
+import { TextField } from "#browser/shared-ui/TextField.tsx";
 
 import { ConnectionList } from "./ConnectionList";
 import type { ConnectionListQueryOptions } from "./connectionQueries";
@@ -30,24 +31,34 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
       >
         <Stack gap="lg">
           <ConnectionList
+            approvingId={page.approvingId}
             cancelingId={page.cancelingId}
             connections={page.connections}
             isLoading={page.isLoading}
             loadFailure={page.loadFailure}
+            onApprove={page.approveLinking}
             onCancel={page.cancelLinking}
             onRefresh={page.refresh}
           />
           <Stack as="section" gap="sm" labelledBy="link-provider-title">
             <Heading id="link-provider-title" level={2} size="section">
-              Link a provider
+              Pair the local helper
             </Heading>
             <Text size="body" tone="muted">
-              Start a link, then finish signing in with the local helper. A link request expires
-              after ten minutes.
+              Run the Lineupkeep helper on your computer and enter the pairing code it shows. The
+              request expires after ten minutes, and the helper signs in to the provider itself.
             </Text>
             <Form gap="sm" onSubmit={page.startLinking}>
-              <Button pending={page.isStarting()} pendingLabel="Starting…" type="submit">
-                Link Yahoo
+              <TextField
+                autocomplete="off"
+                autocapitalize="characters"
+                label="Pairing code"
+                spellcheck={false}
+                value={page.pairingCode()}
+                onInput={(event) => page.changePairingCode(event.currentTarget.value)}
+              />
+              <Button pending={page.isStarting()} pendingLabel="Pairing…" type="submit">
+                Pair helper
               </Button>
             </Form>
             <ActionFeedback feedback={page.feedback()} />

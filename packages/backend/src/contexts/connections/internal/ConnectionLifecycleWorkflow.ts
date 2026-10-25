@@ -13,6 +13,10 @@ export const ConnectionLifecycleState = Schema.TaggedUnion({
     ...ConnectionContent,
     expiresAt: Schema.DateTimeUtc,
   },
+  Ready: {
+    ...ConnectionContent,
+    approvedAt: Schema.DateTimeUtc,
+  },
   Disconnected: {
     ...ConnectionContent,
     disconnectedAt: Schema.DateTimeUtc,
@@ -22,6 +26,7 @@ export const ConnectionLifecycleState = Schema.TaggedUnion({
 export const ConnectionLifecycleStates = Machine.state({
   states: {
     Linking: ConnectionLifecycleState.cases.Linking,
+    Ready: ConnectionLifecycleState.cases.Ready,
     Disconnected: {
       type: "final",
       schema: ConnectionLifecycleState.cases.Disconnected,
@@ -30,6 +35,7 @@ export const ConnectionLifecycleStates = Machine.state({
 });
 
 export const ConnectionLifecycleEvents = Schema.TaggedUnion({
+  LinkApproved: { at: Schema.DateTimeUtc },
   LinkCancelled: { at: Schema.DateTimeUtc },
 });
 
@@ -41,6 +47,26 @@ export const ConnectionLifecycleWorkflow = Machine.make({
   initial: { target: "Linking", data: ({ input }) => input },
   states: {
     Linking: {
+      on: {
+        LinkApproved: {
+          target: "Ready",
+          data: ({ state, event }) => ({
+            provider: state.provider,
+            approvedAt: event.at,
+            updatedAt: event.at,
+          }),
+        },
+        LinkCancelled: {
+          target: "Disconnected",
+          data: ({ state, event }) => ({
+            provider: state.provider,
+            disconnectedAt: event.at,
+            updatedAt: event.at,
+          }),
+        },
+      },
+    },
+    Ready: {
       on: {
         LinkCancelled: {
           target: "Disconnected",

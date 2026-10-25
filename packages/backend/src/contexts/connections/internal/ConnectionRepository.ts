@@ -5,6 +5,8 @@ import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect"
 import { UserId } from "#contexts/auth/User.ts";
 import {
   ConnectionCreateFailed,
+  ConnectionLinkExpired,
+  ConnectionLinkRejected,
   ConnectionNotFound,
   ConnectionPersistenceFailed,
   decodeConnectionId,
@@ -72,7 +74,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
             requestId: input.requestId,
             provider: input.provider,
             status: "linking" as const,
+            pairingCode: input.pairingCode,
             expiresAt: DateTime.toDateUtc(expiresAt),
+            approvedAt: null,
             disconnectedAt: null,
             createdAt: DateTime.toDateUtc(now),
             updatedAt: DateTime.toDateUtc(now),
@@ -202,7 +206,78 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           );
       });
 
-      return { listConnections, startLinking, cancelLinking };
+      const approveLinking = Effect.fn("ConnectionRepository.approveLinking")(function* (
+        userId: UserId,
+        inputs: ReadonlyArray<ConnectionIdInput>,
+      ) {
+        const ids = [...new Set(inputs.map((input) => input.id))];
+        if (!Array.isArrayNonEmpty(ids)) {
+          return [];
+        }
+        const now = yield* DateTime.now;
+        return yield* database
+          .transaction((transaction) =>
+            mutateRows(transaction, providerConnections, {
+              where: eq(providerConnections.userId, userId),
+              ids,
+              codec: ConnectionRow,
+              plan: (locked) =>
+                Effect.gen(function* () {
+                  const targets: Array<{
+                    readonly id: (typeof ids)[number];
+                    readonly record: typeof ConnectionRow.Type;
+                    readonly snapshot: Machine.Snapshot<typeof ConnectionLifecycleStates>;
+                  }> = [];
+                  for (const id of ids) {
+                    const record = locked.get(id);
+                    if (record === undefined) {
+                      return yield* ConnectionNotFound.make({ id });
+                    }
+                    if (record.state._tag !== "Linking") {
+                      return yield* ConnectionLinkRejected.make({
+                        id,
+                        status: record.state._tag === "Ready" ? "ready" : "disconnected",
+                      });
+                    }
+                    if (
+                      DateTime.toEpochMillis(record.state.expiresAt) <= DateTime.toEpochMillis(now)
+                    ) {
+                      return yield* ConnectionLinkExpired.make({ id });
+                    }
+                    const snapshot = yield* snapshotOf(
+                      ConnectionLifecycleWorkflow,
+                      record.state,
+                    ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+                    targets.push({ id, record, snapshot });
+                  }
+                  const approved = yield* planBatch(
+                    ConnectionLifecycleWorkflow,
+                    targets,
+                    (_target) => ConnectionLifecycleEvents.cases.LinkApproved.make({ at: now }),
+                  ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+                  return approved.map(({ row, snapshot }) => ({
+                    ...row.record,
+                    state: snapshot.state.value,
+                  }));
+                }),
+            }),
+          )
+          .pipe(
+            Effect.mapError((cause) =>
+              cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
+            ),
+            mapTransactionError,
+            Effect.map((rows) => {
+              const byId = new Map(rows.map((row) => [row.id, row]));
+              return ids.flatMap((id) => {
+                const row = byId.get(id);
+                return row === undefined ? [] : [recordToConnection(row, row.state)];
+              });
+            }),
+          );
+      });
+
+      return { listConnections, startLinking, cancelLinking, approveLinking };
     }),
   },
 ) {
@@ -223,6 +298,8 @@ function mapTransactionError<A, R>(
         case "EffectDrizzleQueryError":
           return ConnectionPersistenceFailed.make({ cause });
         case "connection.create_failed":
+        case "connection.link_expired":
+        case "connection.link_rejected":
         case "connection.not_found":
         case "connection.persistence_failed":
           return cause;
@@ -242,7 +319,12 @@ const toConnection: (
 );
 
 function recordToConnection(
-  { id, userId, createdAt }: Pick<typeof ConnectionRow.Type, "id" | "userId" | "createdAt">,
+  {
+    id,
+    userId,
+    pairingCode,
+    createdAt,
+  }: Pick<typeof ConnectionRow.Type, "id" | "userId" | "pairingCode" | "createdAt">,
   state: typeof ConnectionRow.Type.state,
 ): ProviderConnection {
   const content = {
@@ -254,7 +336,14 @@ function recordToConnection(
   };
   switch (state._tag) {
     case "Linking":
-      return { ...content, status: "linking", linkingExpiresAt: state.expiresAt };
+      return {
+        ...content,
+        status: "linking",
+        pairingCode,
+        linkingExpiresAt: state.expiresAt,
+      };
+    case "Ready":
+      return { ...content, status: "ready", approvedAt: state.approvedAt };
     case "Disconnected":
       return { ...content, status: "disconnected", disconnectedAt: state.disconnectedAt };
   }

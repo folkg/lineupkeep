@@ -12,7 +12,7 @@ An independent, provider-neutral fantasy-management product, prepared from a fre
 4. [Planning index](docs/fantasy-manager/README.md): all decisions, research, glossary, MCP/architecture/hosting proposals, UX brief, and ADRs.
 5. [Setup provenance](docs/SETUP.md) and [release readiness](docs/release-readiness.md).
 
-**Current state:** independent repository, brand/design-system foundation, retained starter authentication, and a first connections vertical that starts and cancels provider-link requests. The Notes demo is removed. Provider-linking completion, provider queries, lineup setting, scheduling, and optimization are **not implemented**. The current dependency baseline has a documented critical publication blocker. The [autonomous Phase 1 mandate](docs/PHASE-1-HANDOFF.md) records implementation/setup authority and conditional rollout gates; current checks are not release acceptance.
+**Current state:** independent repository, brand/design-system foundation, retained starter authentication, and a first connections vertical that pairs a local helper through device authorization, then approves or cancels the connection. The Notes demo is removed. Provider-credential linking, provider queries, lineup setting, scheduling, and optimization are **not implemented**. The current dependency baseline has a documented critical publication blocker. The [autonomous Phase 1 mandate](docs/PHASE-1-HANDOFF.md) records implementation/setup authority and conditional rollout gates; current checks are not release acceptance.
 
 The lowercase wordmark is **lineupkeep**; ordinary prose uses **Lineupkeep**. The approved palette is **royal violet and gold**, with complete light/dark themes. No domain has been purchased or production origin configured.
 

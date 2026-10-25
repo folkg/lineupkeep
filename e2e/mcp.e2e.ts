@@ -56,6 +56,7 @@ test("lists the owner's connection status over MCP without exposing account iden
     await services.exercise(page, "start the owner's link", "startLinking", {
       requestId: randomUUID(),
       provider: "yahoo",
+      pairingCode: "ABCD2345",
     }),
   );
   const { credentials } = await authorize(page, origin);

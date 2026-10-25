@@ -15,9 +15,13 @@ export function toConnectionView(connection: ProviderConnection): ConnectionView
     id: connection.id,
     provider: connection.provider,
     status: connection.status,
+    ...(connection.pairingCode === undefined ? {} : { pairingCode: connection.pairingCode }),
     ...(connection.linkingExpiresAt === undefined
       ? {}
       : { linkingExpiresAt: DateTime.formatIso(connection.linkingExpiresAt) }),
+    ...(connection.approvedAt === undefined
+      ? {}
+      : { approvedAt: DateTime.formatIso(connection.approvedAt) }),
     ...(connection.disconnectedAt === undefined
       ? {}
       : { disconnectedAt: DateTime.formatIso(connection.disconnectedAt) }),
@@ -27,11 +31,15 @@ export function toConnectionView(connection: ProviderConnection): ConnectionView
 }
 
 export function mapConnectionError(
-  error: ConnectionError | ConnectionInputInvalid,
+  error: ConnectionError | ConnectionDeviceRejected | ConnectionInputInvalid,
 ): ExpectedFailure<ConnectionMutationError["type"]> {
   switch (error._tag) {
+    case "ConnectionDeviceRejected":
+      return { type: "connection.device_rejected", outcome: "rejected" };
     case "ConnectionInputInvalid":
       return { type: "connection.input_invalid", outcome: "rejected" };
+    case "connection.link_expired":
+    case "connection.link_rejected":
     case "connection.not_found":
       return { type: error._tag, outcome: "rejected" };
     case "connection.create_failed":
@@ -39,6 +47,13 @@ export function mapConnectionError(
       return { type: error._tag, outcome: "failure" };
   }
 }
+
+export class ConnectionDeviceRejected extends Schema.TaggedError<
+  ConnectionDeviceRejected,
+  { readonly brand: unique symbol }
+>()("ConnectionDeviceRejected", {
+  reason: Schema.String,
+}) {}
 
 export class ConnectionInputInvalid extends Schema.TaggedError<
   ConnectionInputInvalid,

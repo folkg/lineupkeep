@@ -13,7 +13,7 @@ it.effect("round-trips every explored lifecycle state through its row codec", ()
   Effect.gen(function* () {
     const explored = yield* MachineTest.explore(ConnectionLifecycleWorkflow, {
       input,
-      events: () => [cancel],
+      events: () => [approve, cancel],
       stateKey: ({ snapshot }) => JSON.stringify(snapshot),
     });
     assert.strictEqual(explored.completeness._tag, "Complete");
@@ -23,6 +23,7 @@ it.effect("round-trips every explored lifecycle state through its row codec", ()
         id: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
         userId: yield* Schema.decodeEffect(UserId)("owner"),
         requestId: "request",
+        pairingCode: "ABCD2345",
         createdAt: at,
         state: snapshot.state.value,
       };
@@ -60,6 +61,7 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
             id: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
             userId: yield* Schema.decodeEffect(UserId)("owner"),
             requestId: "request",
+            pairingCode: "ABCD2345",
             createdAt: time,
             state: {
               _tag: "Linking" as const,
@@ -70,6 +72,12 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
           };
           for (const state of [
             record.state,
+            {
+              _tag: "Ready" as const,
+              provider: "yahoo" as const,
+              approvedAt: time,
+              updatedAt: time,
+            },
             {
               _tag: "Disconnected" as const,
               provider: "yahoo" as const,
@@ -94,21 +102,39 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
   }),
 );
 
-it.effect("rejects a linking row without an expiry through its codec", () =>
+it.effect("rejects incomplete lifecycle rows through the codec", () =>
   Effect.gen(function* () {
-    const malformed = {
+    const base = {
       id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
       userId: "owner",
       requestId: "request",
+      pairingCode: "ABCD2345",
       provider: "yahoo",
-      status: "linking",
-      expiresAt: null,
-      disconnectedAt: null,
+      expiresAt: at,
+      approvedAt: at,
+      disconnectedAt: at,
       createdAt: at,
       updatedAt: at,
     };
 
-    assert.isTrue(yield* Effect.isFailure(Schema.decodeUnknownEffect(ConnectionRow)(malformed)));
+    assert.isTrue(
+      yield* Effect.isFailure(
+        Schema.decodeUnknownEffect(ConnectionRow)({
+          ...base,
+          status: "linking",
+          expiresAt: null,
+        }),
+      ),
+    );
+    assert.isTrue(
+      yield* Effect.isFailure(
+        Schema.decodeUnknownEffect(ConnectionRow)({
+          ...base,
+          status: "ready",
+          approvedAt: null,
+        }),
+      ),
+    );
   }),
 );
 
@@ -116,7 +142,9 @@ const at = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
 const input = {
   _tag: "Linking" as const,
   provider: "yahoo" as const,
+  pairingCode: "ABCD2345",
   expiresAt: DateTime.makeUnsafe("2026-01-01T00:10:00Z"),
   updatedAt: at,
 };
+const approve = { _tag: "LinkApproved" as const, at: DateTime.makeUnsafe("2026-01-02T00:00:00Z") };
 const cancel = { _tag: "LinkCancelled" as const, at: DateTime.makeUnsafe("2026-01-02T00:00:00Z") };

@@ -14,8 +14,10 @@ export const providerConnections = pgTable(
     userId: text("user_id").notNull(),
     requestId: text("request_id").notNull(),
     provider: text("provider", { enum: ["yahoo"] }).notNull(),
-    status: text("status", { enum: ["linking", "disconnected"] }).notNull(),
+    status: text("status", { enum: ["linking", "ready", "disconnected"] }).notNull(),
+    pairingCode: text("pairing_code").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
     disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -29,13 +31,15 @@ export const providerConnections = pgTable(
 const Row = createSelectSchema(providerConnections, {
   id: ConnectionId,
   userId: UserId,
+  pairingCode: Schema.String,
   expiresAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  approvedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   disconnectedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   createdAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
 });
 
-const Identity = Struct.pick(Row.fields, ["id", "userId", "requestId", "createdAt"]);
+const Identity = Struct.pick(Row.fields, ["id", "userId", "requestId", "pairingCode", "createdAt"]);
 const LifecycleConnection = Schema.Struct({ ...Identity, state: ConnectionLifecycleState }).pipe(
   Schema.toType,
 );
@@ -53,6 +57,8 @@ export const ConnectionRow = Row.pipe(
           switch (row.status) {
             case "linking":
               return { _tag: "Linking", ...content, expiresAt: row.expiresAt };
+            case "ready":
+              return { _tag: "Ready", ...content, approvedAt: row.approvedAt };
             case "disconnected":
               return { _tag: "Disconnected", ...content, disconnectedAt: row.disconnectedAt };
           }
@@ -62,6 +68,7 @@ export const ConnectionRow = Row.pipe(
             id: row.id,
             userId: row.userId,
             requestId: row.requestId,
+            pairingCode: row.pairingCode,
             createdAt: row.createdAt,
             state,
           })),
@@ -77,6 +84,17 @@ export const ConnectionRow = Row.pipe(
                   provider: state.provider,
                   status: "linking" as const,
                   expiresAt: state.expiresAt,
+                  approvedAt: null,
+                  disconnectedAt: null,
+                  updatedAt: state.updatedAt,
+                };
+              case "Ready":
+                return {
+                  ...identity,
+                  provider: state.provider,
+                  status: "ready" as const,
+                  expiresAt: null,
+                  approvedAt: state.approvedAt,
                   disconnectedAt: null,
                   updatedAt: state.updatedAt,
                 };
@@ -86,6 +104,7 @@ export const ConnectionRow = Row.pipe(
                   provider: state.provider,
                   status: "disconnected" as const,
                   expiresAt: null,
+                  approvedAt: null,
                   disconnectedAt: state.disconnectedAt,
                   updatedAt: state.updatedAt,
                 };

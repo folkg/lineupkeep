@@ -27,4 +27,9 @@ export type ConnectionsShape = {
     userId: UserId,
     inputs: ReadonlyArray<ConnectionIdInput>,
   ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
+
+  readonly approveLinking: (
+    userId: UserId,
+    inputs: ReadonlyArray<ConnectionIdInput>,
+  ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
 };

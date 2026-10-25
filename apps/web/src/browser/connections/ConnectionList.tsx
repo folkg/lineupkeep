@@ -50,8 +50,10 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
               <For each={props.connections()}>
                 {(connection) => (
                   <ConnectionCard
+                    approving={props.approvingId() === connection.id}
                     canceling={props.cancelingId() === connection.id}
                     connection={connection}
+                    onApprove={() => props.onApprove(connection)}
                     onCancel={() => props.onCancel(connection)}
                   />
                 )}
@@ -68,7 +70,9 @@ type ConnectionListProps = {
   readonly connections: Accessor<ReadonlyArray<ConnectionView>>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
+  readonly approvingId: Accessor<string | undefined>;
   readonly cancelingId: Accessor<string | undefined>;
+  readonly onApprove: (connection: ConnectionView) => void;
   readonly onCancel: (connection: ConnectionView) => void;
   readonly onRefresh: () => Promise<void>;
 };

@@ -120,7 +120,10 @@ function execute(signedIn: boolean): Effect.Effect<
       error: {
         type:
           | "connection.create_failed"
+          | "connection.device_rejected"
           | "connection.input_invalid"
+          | "connection.link_expired"
+          | "connection.link_rejected"
           | "connection.not_found"
           | "connection.persistence_failed";
       };
@@ -167,6 +170,10 @@ function authentication(
           getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
           consent: () => Effect.succeed("https://client.test/callback"),
           handle: () => Effect.succeed(new Response()),
+          claimDeviceAuthorization: () =>
+            Effect.succeed({ clientId: "helper", scope: "connections:read" }),
+          approveDeviceAuthorization: () => Effect.void,
+          denyDeviceAuthorization: () => Effect.void,
           getSession: () =>
             Effect.succeed(
               signedIn

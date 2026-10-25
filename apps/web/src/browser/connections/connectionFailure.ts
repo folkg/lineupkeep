@@ -31,6 +31,18 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
   }
   if (error instanceof ConnectionWriteFailure) {
     switch (error.reason.type) {
+      case "connection.device_rejected":
+        return {
+          kind: "rejected",
+          message:
+            "The helper request was rejected, expired, or already used. Start a new pairing request from the helper.",
+        };
+      case "connection.link_expired":
+        return {
+          kind: "rejected",
+          message: "This pairing attempt expired. Start a new pairing request from the helper.",
+        };
+      case "connection.link_rejected":
       case "connection.input_invalid":
       case "connection.not_found":
         return {
