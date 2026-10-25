@@ -6,6 +6,7 @@ import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
 import type {
   TeamChangeView,
+  TeamControlData,
   TeamRefreshView,
   TeamSummaryView,
 } from "#contracts/connections/teamContract.ts";
@@ -31,20 +32,11 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     });
   };
 
-  const setEnabled = useMutation(() => ({
-    ...teamMutations.setEnabled(props.remote()),
-    onSuccess: (change: TeamChangeView, variables, onMutateResult, context) => {
+  const control = useMutation(() => ({
+    ...teamMutations.control(props.remote()),
+    onSuccess: (change: TeamChangeView, variables: TeamControlData, onMutateResult, context) => {
       storeRefreshedTeams(change, variables, onMutateResult, context);
-      setFeedback({ type: "success", message: "Automation setting saved." });
-    },
-    onError: reportFailure,
-    onSettled: () => setPendingTeam(undefined),
-  }));
-  const pause = useMutation(() => ({
-    ...teamMutations.pause(props.remote()),
-    onSuccess: (change: TeamChangeView, variables, onMutateResult, context) => {
-      storeRefreshedTeams(change, variables, onMutateResult, context);
-      setFeedback({ type: "success", message: "Paused for the rest of this fantasy day." });
+      setFeedback({ type: "success", message: successMessage(variables.action) });
     },
     onError: reportFailure,
     onSettled: () => setPendingTeam(undefined),
@@ -59,13 +51,10 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     onSettled: () => setRefreshing(false),
   }));
 
-  const changeEnabled = (team: TeamSummaryView, enabled: boolean): void => {
+  const changeAutomation = (team: TeamSummaryView, action: TeamControlData["action"]): void => {
     setPendingTeam(team.team.id);
-    setFeedback({
-      type: "pending",
-      message: enabled ? "Enabling automation…" : "Disabling automation…",
-    });
-    void setEnabled.mutate({ team: team.team.id, enabled });
+    setFeedback({ type: "pending", message: pendingMessage(action) });
+    void control.mutate({ team: team.team.id, action });
   };
 
   return {
@@ -81,12 +70,9 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
       setFeedback({ type: "pending", message: "Refreshing teams from Yahoo…" });
       void refreshTeams.mutate(undefined);
     },
-    setEnabled: changeEnabled,
-    pause: (team) => {
-      setPendingTeam(team.team.id);
-      setFeedback({ type: "pending", message: "Pausing for the rest of this fantasy day…" });
-      void pause.mutate({ team: team.team.id });
-    },
+    setEnabled: (team, enabled) => changeAutomation(team, enabled ? "enable" : "disable"),
+    pause: (team) => changeAutomation(team, "pause-today"),
+    resume: (team) => changeAutomation(team, "resume"),
   };
 }
 
@@ -101,6 +87,7 @@ export type TeamsPageController = {
   readonly refreshTeams: () => void;
   readonly setEnabled: (team: TeamSummaryView, enabled: boolean) => void;
   readonly pause: (team: TeamSummaryView) => void;
+  readonly resume: (team: TeamSummaryView) => void;
 };
 
 type TeamsPageOptions = {
@@ -108,3 +95,29 @@ type TeamsPageOptions = {
   readonly remote: Accessor<TeamRemote>;
   readonly onRefresh: () => Promise<void>;
 };
+
+function pendingMessage(action: TeamControlData["action"]): string {
+  switch (action) {
+    case "enable":
+      return "Enabling automation…";
+    case "disable":
+      return "Disabling automation…";
+    case "pause-today":
+      return "Pausing for the rest of this fantasy day…";
+    case "resume":
+      return "Resuming automation…";
+  }
+}
+
+function successMessage(action: TeamControlData["action"]): string {
+  switch (action) {
+    case "enable":
+      return "Automation enabled.";
+    case "disable":
+      return "Automation disabled.";
+    case "pause-today":
+      return "Paused for the rest of this fantasy day.";
+    case "resume":
+      return "Automation resumed.";
+  }
+}

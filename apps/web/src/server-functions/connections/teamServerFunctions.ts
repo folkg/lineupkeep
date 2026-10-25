@@ -1,11 +1,15 @@
 import { Connections } from "@lineupkeep/backend/connections/Connections";
 import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
-import { TeamEnabledInput, TeamPauseInput } from "@lineupkeep/backend/connections/Teams";
-import { Teams } from "@lineupkeep/backend/connections/Teams";
+import {
+  TeamControlInput,
+  TeamControlRejected,
+  TeamNotFound,
+  Teams,
+} from "@lineupkeep/backend/connections/Teams";
 import { createServerFn } from "@tanstack/solid-start";
 import { getRequest } from "@tanstack/solid-start/server";
-import { Effect, Schema } from "effect";
+import { Array, Effect, Schema } from "effect";
 
 import type { TeamChangeView, TeamRefreshView } from "#contracts/connections/teamContract.ts";
 import { runUseCase } from "#server/backendEntry.ts";
@@ -55,48 +59,41 @@ export const refreshTeamsServerFn = createServerFn({ method: "POST" }).handler((
   );
 });
 
-export const setTeamEnabledServerFn = createServerFn({ method: "POST" })
-  .validator((raw: typeof TeamEnabledInput.Encoded) => Schema.decodeResult(TeamEnabledInput)(raw))
+export const controlTeamServerFn = createServerFn({ method: "POST" })
+  .validator((raw: typeof TeamControlInput.Encoded) => Schema.decodeResult(TeamControlInput)(raw))
   .handler(({ data }) => {
     const request = getRequest();
     return runUseCase(
       request,
-      "teams.set_enabled",
+      "teams.control",
       (userId) =>
         Effect.gen(function* () {
           const input = yield* Effect.fromResult(data).pipe(
             Effect.mapError(() => TeamInputInvalid.make({})),
           );
-          const changed = yield* Teams.use((teams) => teams.setEnabled(userId, [input]));
-          const all = yield* Teams.use((teams) => teams.list(userId));
-          return {
-            changed: changed.map(toTeamSummaryView),
-            teams: all.map(toTeamSummaryView),
-          } satisfies TeamChangeView;
-        }),
-      (error) =>
-        error._tag === "TeamInputInvalid"
-          ? { type: "team.input_invalid", outcome: "rejected" }
-          : mapTeamError(error),
-    );
-  });
-
-export const pauseTeamServerFn = createServerFn({ method: "POST" })
-  .validator((raw: typeof TeamPauseInput.Encoded) => Schema.decodeResult(TeamPauseInput)(raw))
-  .handler(({ data }) => {
-    const request = getRequest();
-    return runUseCase(
-      request,
-      "teams.pause",
-      (userId) =>
-        Effect.gen(function* () {
-          const input = yield* Effect.fromResult(data).pipe(
-            Effect.mapError(() => TeamInputInvalid.make({})),
+          yield* Effect.annotateCurrentSpan({ "automation.action": input.action });
+          const result = Array.getUnsafe(
+            yield* Teams.use((teams) => teams.control(userId, [input])),
+            0,
           );
-          const changed = yield* Teams.use((teams) => teams.pause(userId, [input]));
+          switch (result.outcome) {
+            case "not_found":
+              return yield* TeamNotFound.make({ team: input.team });
+            case "rejected":
+              return yield* TeamControlRejected.make({
+                team: input.team,
+                status: result.automation.status,
+              });
+            case "changed":
+            case "unchanged":
+              break;
+          }
           const all = yield* Teams.use((teams) => teams.list(userId));
           return {
-            changed: changed.map(toTeamSummaryView),
+            changed:
+              result.outcome === "changed"
+                ? all.filter((team) => team.team.id === input.team).map(toTeamSummaryView)
+                : [],
             teams: all.map(toTeamSummaryView),
           } satisfies TeamChangeView;
         }),

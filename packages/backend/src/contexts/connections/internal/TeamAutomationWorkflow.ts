@@ -30,6 +30,7 @@ export const TeamAutomationEvent = Schema.TaggedUnion({
     fantasyDay: Schema.NonEmptyString,
     policyVersion: Schema.NonEmptyString,
   },
+  Resumed: { at: Schema.DateTimeUtc },
   PauseExpired: { at: Schema.DateTimeUtc },
 });
 
@@ -77,6 +78,10 @@ export const TeamAutomationWorkflow = Machine.make({
       on: {
         Disabled: {
           target: "Disabled",
+          data: ({ event }) => ({ changedAt: event.at }),
+        },
+        Resumed: {
+          target: "Enabled",
           data: ({ event }) => ({ changedAt: event.at }),
         },
         PauseExpired: {

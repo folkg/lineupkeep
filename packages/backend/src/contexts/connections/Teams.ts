@@ -3,7 +3,13 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 import { ConnectionStatus } from "./Connection.ts";
-import { FantasyTeam, TeamAutomationStatus, TeamId } from "./FantasyTeam.ts";
+import {
+  FantasyTeam,
+  TeamAvailability,
+  TeamAutomation,
+  TeamAutomationStatus,
+  TeamId,
+} from "./FantasyTeam.ts";
 import { LineupRun } from "./LineupRun.ts";
 
 export const TeamSummary = Schema.Struct({
@@ -14,16 +20,37 @@ export const TeamSummary = Schema.Struct({
 });
 export type TeamSummary = typeof TeamSummary.Type;
 
-export const TeamEnabledInput = Schema.Struct({
-  team: TeamId,
-  enabled: Schema.Boolean,
-});
-export type TeamEnabledInput = typeof TeamEnabledInput.Type;
+export const TeamAutomationAction = Schema.Literals(["enable", "disable", "pause-today", "resume"]);
+export type TeamAutomationAction = typeof TeamAutomationAction.Type;
 
-export const TeamPauseInput = Schema.Struct({
+export const TeamControlInput = Schema.Struct({
   team: TeamId,
+  action: TeamAutomationAction,
 });
-export type TeamPauseInput = typeof TeamPauseInput.Type;
+export type TeamControlInput = typeof TeamControlInput.Type;
+
+const ControlledTeam = Schema.Struct({
+  team: TeamId,
+  action: TeamAutomationAction,
+  enrolled: Schema.Boolean,
+  availability: TeamAvailability,
+  automation: TeamAutomation,
+  detail: Schema.NonEmptyString,
+});
+
+const MissingTeam = Schema.Struct({
+  team: TeamId,
+  action: TeamAutomationAction,
+  detail: Schema.NonEmptyString,
+});
+
+export const TeamControlResult = Schema.Union([
+  Schema.Struct({ outcome: Schema.Literal("changed"), ...ControlledTeam.fields }),
+  Schema.Struct({ outcome: Schema.Literal("unchanged"), ...ControlledTeam.fields }),
+  Schema.Struct({ outcome: Schema.Literal("rejected"), ...ControlledTeam.fields }),
+  Schema.Struct({ outcome: Schema.Literal("not_found"), ...MissingTeam.fields }),
+]);
+export type TeamControlResult = typeof TeamControlResult.Type;
 
 export type TeamError = TeamNotFound | TeamControlRejected | TeamPersistenceFailed;
 
@@ -58,13 +85,8 @@ export type TeamsShape = {
 
   readonly get: (userId: UserId, team: TeamId) => Effect.Effect<TeamSummary, TeamError>;
 
-  readonly setEnabled: (
+  readonly control: (
     userId: UserId,
-    inputs: ReadonlyArray<TeamEnabledInput>,
-  ) => Effect.Effect<ReadonlyArray<TeamSummary>, TeamError>;
-
-  readonly pause: (
-    userId: UserId,
-    inputs: ReadonlyArray<TeamPauseInput>,
-  ) => Effect.Effect<ReadonlyArray<TeamSummary>, TeamError>;
+    inputs: ReadonlyArray<TeamControlInput>,
+  ) => Effect.Effect<ReadonlyArray<TeamControlResult>, TeamPersistenceFailed>;
 };

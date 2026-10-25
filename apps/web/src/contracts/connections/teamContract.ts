@@ -10,7 +10,7 @@ import type {
   LineupTargetPeriod,
   LineupTrigger,
 } from "@lineupkeep/backend/connections/LineupRun";
-import type { TeamEnabledInput, TeamPauseInput } from "@lineupkeep/backend/connections/Teams";
+import type { TeamControlInput } from "@lineupkeep/backend/connections/Teams";
 
 import type { AuthenticationFailure } from "#contracts/auth/authContract.ts";
 import type { UseCaseResult } from "#contracts/useCaseContract.ts";
@@ -98,8 +98,7 @@ export type TeamRefreshView = {
   readonly teams: ReadonlyArray<TeamSummaryView>;
 };
 
-export type TeamEnabledData = typeof TeamEnabledInput.Encoded;
-export type TeamPauseData = typeof TeamPauseInput.Encoded;
+export type TeamControlData = typeof TeamControlInput.Encoded;
 
 export type TeamMutationError = {
   readonly type:

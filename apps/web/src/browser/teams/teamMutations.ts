@@ -7,16 +7,10 @@ import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 
 export const teamMutations = {
-  setEnabled: (remote: TeamRemote) =>
+  control: (remote: TeamRemote) =>
     mutationOptions({
-      mutationKey: ["teams", "set-enabled"],
-      mutationFn: remote.setEnabled,
-      onSuccess: storeRefreshedTeams,
-    }),
-  pause: (remote: TeamRemote) =>
-    mutationOptions({
-      mutationKey: ["teams", "pause"],
-      mutationFn: remote.pause,
+      mutationKey: ["teams", "control"],
+      mutationFn: remote.control,
       onSuccess: storeRefreshedTeams,
     }),
   refresh: (remote: TeamRemote) =>

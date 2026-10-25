@@ -31,7 +31,7 @@ const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String 
 export const fantasyQueryTools = Toolkit.make(
   Tool.make("list_teams", {
     description:
-      "List your linked fantasy teams with stable paging and optional sport, season, or connection filters. Each row carries a private team id for the other query tools; provider keys are never returned.",
+      "List your linked fantasy teams with stable paging and optional sport, season, or connection filters. Each row carries a private team id for the other query tools, its current automation status, and the pause expiry when one is active; provider keys are never returned.",
     parameters: ListTeamsInput,
     success: Schema.toCodecJson(ListTeamsResult),
     failure: ToolFailure,

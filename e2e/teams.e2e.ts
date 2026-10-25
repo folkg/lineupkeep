@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { expect, signUp, test } from "./support";
 import { captureCheckpoint } from "./verify/capture";
 
@@ -15,6 +17,31 @@ test("renders the empty teams surface and links back to provider linking", async
   );
   await expect(page.getByRole("link", { name: "Teams", exact: true })).toBeVisible();
   await captureCheckpoint(page, info, "teams-empty");
+});
+
+test("enables, pauses, resumes, and disables a team through the automation controls", async ({
+  page,
+  services,
+}) => {
+  await signUp(page);
+  await services.exercise(
+    page,
+    "link the provider fake and discover teams",
+    "connectYahooAndDiscoverTeams",
+    { requestId: randomUUID(), pairingCode: "ABCD2345" },
+  );
+  await page.goto("/teams");
+  const row = page.getByRole("listitem").filter({ hasText: "Embedded Browser Team" });
+
+  await expect(row.getByText("Automation off")).toBeVisible();
+  await row.getByRole("button", { name: "Enable automation" }).click();
+  await expect(row.getByText("Automation on")).toBeVisible();
+  await row.getByRole("button", { name: "Pause for rest of fantasy day" }).click();
+  await expect(row.getByText("Paused for the rest of this fantasy day")).toBeVisible();
+  await row.getByRole("button", { name: "Resume automation" }).click();
+  await expect(row.getByText("Automation on")).toBeVisible();
+  await row.getByRole("button", { name: "Disable" }).click();
+  await expect(row.getByText("Automation off")).toBeVisible();
 });
 
 test("renders the teams surface before client scripts and hydrates its navigation", async ({

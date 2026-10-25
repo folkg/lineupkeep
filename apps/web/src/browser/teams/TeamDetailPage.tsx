@@ -65,6 +65,7 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
                   onDisable={() => page.setEnabled(summary(), false)}
                   onEnable={() => page.setEnabled(summary(), true)}
                   onPause={() => page.pause(summary())}
+                  onResume={() => page.resume(summary())}
                 />
               )}
             </Show>
@@ -117,7 +118,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
                 </Button>
               }
             >
-              <Button pending={props.pending} pendingLabel="Resuming…" onClick={props.onEnable}>
+              <Button pending={props.pending} pendingLabel="Resuming…" onClick={props.onResume}>
                 Resume automation
               </Button>
             </Show>
@@ -197,4 +198,5 @@ type TeamDetailProps = {
   readonly onEnable: () => void;
   readonly onDisable: () => void;
   readonly onPause: () => void;
+  readonly onResume: () => void;
 };

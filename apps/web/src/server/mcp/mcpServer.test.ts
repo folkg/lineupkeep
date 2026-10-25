@@ -11,6 +11,8 @@ import type { LineupSubmitData } from "@lineupkeep/backend/connections/LineupRun
 import type { LineupRunsShape } from "@lineupkeep/backend/connections/LineupRuns";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import { PlayerRef, QuerySelectionInvalid } from "@lineupkeep/backend/connections/QueryValues";
+import type { TeamsShape } from "@lineupkeep/backend/connections/Teams";
+import { Teams } from "@lineupkeep/backend/connections/Teams";
 import type { ReviewLinksData } from "@lineupkeep/backend/connections/TransactionReview";
 import type { TransactionReviewsShape } from "@lineupkeep/backend/connections/TransactionReview";
 import { TransactionReviews } from "@lineupkeep/backend/connections/TransactionReview";
@@ -190,6 +192,7 @@ it("lists only the read-only connection tool without exposing account identity",
     "generate_transaction_review_links",
     "set_lineup",
     "get_lineup_runs",
+    "set_team_automation",
   ]);
 });
 
@@ -252,6 +255,7 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
@@ -295,6 +299,7 @@ it("reaches search_players with an empty query and returns the remedy instead of
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
   );
   const response = await handleMcpRequest(
     request(
@@ -350,6 +355,7 @@ it("requires transaction review scope and returns human-review-only links", asyn
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(reviews),
     Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
@@ -424,6 +430,7 @@ it("returns a durable queued lineup reference without claiming success", async (
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(LineupRuns)(lineups),
+    Layer.succeed(Teams)(unavailableTeams),
   );
   const call = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
@@ -457,6 +464,76 @@ it("returns a durable queued lineup reference without claiming success", async (
     },
   });
   expect(JSON.stringify(body)).not.toContain("completed");
+});
+
+it("requires teams:manage and changes automation through the shared team service", async () => {
+  const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
+  const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164c0");
+  let enabled = false;
+  const teams: TeamsShape = {
+    ...unavailableTeams,
+    control: (_userId, inputs) =>
+      Effect.succeed(
+        inputs.map((input) => {
+          enabled = input.action === "enable";
+          return {
+            outcome: "changed" as const,
+            team: input.team,
+            action: input.action,
+            enrolled: enabled,
+            availability: "available" as const,
+            automation: {
+              status: enabled ? ("enabled" as const) : ("disabled" as const),
+              changedAt: at,
+            },
+            detail: enabled ? "Automation is enabled." : "Automation is disabled.",
+          };
+        }),
+      ),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(unavailableQueries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(teams),
+  );
+  const call = (invocation: Request): Promise<Response> =>
+    handleMcpRequest(invocation, (_request, _operation, program) =>
+      Effect.runPromise(Effect.provide(program, services)),
+    );
+  const arguments_ = { teams: [{ team, action: "enable" }] };
+
+  const denied = await call(
+    request("tools/call", { name: "set_team_automation", arguments: arguments_ }, "read"),
+  );
+
+  expect(denied.status).toBe(403);
+  expect(denied.headers.get("www-authenticate")).toContain('scope="teams:manage"');
+  expect(enabled).toBe(false);
+
+  const allowed = await call(
+    request("tools/call", { name: "set_team_automation", arguments: arguments_ }, "teams"),
+  );
+
+  expect(allowed.status).toBe(200);
+  expect(await allowed.json()).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        teams: [
+          {
+            outcome: "changed",
+            enrolled: true,
+            availability: "available",
+            automation: { status: "enabled" },
+          },
+        ],
+      },
+    },
+  });
+  expect(enabled).toBe(true);
 });
 
 const authentication = Layer.succeed(AuthService)({
@@ -513,6 +590,7 @@ function handle(
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
   );
   return handleMcpRequest(request, (_request, _operation, program) =>
     Effect.runPromise(Effect.provide(program, services)),
@@ -537,6 +615,11 @@ const unavailableLineups: LineupRunsShape = {
   get: () => Effect.die(new Error("lineups unavailable")),
   wait: () => Effect.die(new Error("lineups unavailable")),
   runsForRequest: () => Effect.die(new Error("lineups unavailable")),
+};
+const unavailableTeams: TeamsShape = {
+  list: () => Effect.die(new Error("teams unavailable")),
+  get: () => Effect.die(new Error("teams unavailable")),
+  control: () => Effect.die(new Error("teams unavailable")),
 };
 
 function request(

@@ -43,7 +43,7 @@ it.effect("runs one current-period automation per team per hour", () =>
     const fake = yield* FakeProviderWorld;
     const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
     const teams = yield* Teams;
-    yield* teams.setEnabled(owner, [{ team, enabled: true }]);
+    yield* teams.control(owner, [{ team, action: "enable" }]);
 
     const first = yield* automation.run(10);
     const current = yield* runs.get(owner, { team });
@@ -74,7 +74,7 @@ it.effect("collapses several missed hourly ticks into one current run", () =>
     const fake = yield* FakeProviderWorld;
     const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
     const teams = yield* Teams;
-    yield* teams.setEnabled(owner, [{ team, enabled: true }]);
+    yield* teams.control(owner, [{ team, action: "enable" }]);
 
     yield* TestClock.adjust(5 * 3_600_000);
     const summary = yield* automation.run(10);
@@ -94,11 +94,11 @@ it.effect("excludes disabled, paused, unavailable, and reconnecting teams", () =
     const disabled = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
     const paused = yield* seedTeam(fake, "461.l.1000.t.2", "Beta");
     const unavailable = yield* seedTeam(fake, "461.l.1000.t.3", "Gamma");
-    yield* teams.setEnabled(owner, [
-      { team: paused, enabled: true },
-      { team: unavailable, enabled: true },
+    yield* teams.control(owner, [
+      { team: paused, action: "enable" },
+      { team: unavailable, action: "enable" },
     ]);
-    yield* teams.pause(owner, [{ team: paused }]);
+    yield* teams.control(owner, [{ team: paused, action: "pause-today" }]);
     yield* database
       .update(providerTeams)
       .set({ availability: "unavailable" })
@@ -140,7 +140,7 @@ it.effect("repairs an undispatched scheduled delivery before scheduling another"
     const fake = yield* FakeProviderWorld;
     const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
     const teams = yield* Teams;
-    yield* teams.setEnabled(owner, [{ team, enabled: true }]);
+    yield* teams.control(owner, [{ team, action: "enable" }]);
     const now = yield* DateTime.now;
     const pending = yield* repository.createScheduledRuns({
       userId: owner,

@@ -58,7 +58,9 @@ it.effect("generates event sequences without violating automation invariants", (
     const generated = MachineTest.scenarios(TeamAutomationWorkflow, {
       inputArbitrary: Arbitrary.schema(Schema.Literal("disabled")).pipe(Arbitrary.map(() => input)),
       eventsArbitrary: Arbitrary.array(
-        Arbitrary.schema(Schema.Literals(["Enabled", "Disabled", "Paused", "PauseExpired"])).pipe(
+        Arbitrary.schema(
+          Schema.Literals(["Enabled", "Disabled", "Paused", "Resumed", "PauseExpired"]),
+        ).pipe(
           Arbitrary.map((kind): TeamAutomationEvent => {
             switch (kind) {
               case "Enabled":
@@ -74,6 +76,8 @@ it.effect("generates event sequences without violating automation invariants", (
                   fantasyDay: "2026-10-25",
                   policyVersion: "yahoo-pacific-midnight/1",
                 };
+              case "Resumed":
+                return { _tag: "Resumed", at };
               case "PauseExpired":
                 return { _tag: "PauseExpired", at: nextDay };
             }
@@ -95,6 +99,21 @@ it.effect("generates event sequences without violating automation invariants", (
     );
 
     assert.strictEqual(result._tag, "Passed", Arbitrary.formatCheckFailure(result));
+  }),
+);
+
+it.effect("resumes a paused team before its fantasy-day boundary", () =>
+  Effect.gen(function* () {
+    const trace = yield* MachineTest.run(TeamAutomationWorkflow, {
+      input,
+      events: [
+        { _tag: "Enabled", at },
+        paused,
+        { _tag: "Resumed", at: DateTime.subtractDuration(nextDay, "1 millis") },
+      ],
+    });
+
+    assert.strictEqual(trace.final.state.path, "Enabled");
   }),
 );
 
@@ -128,6 +147,7 @@ const events: ReadonlyArray<TeamAutomationEvent> = [
   { _tag: "Enabled", at },
   { _tag: "Disabled", at },
   paused,
+  { _tag: "Resumed", at },
   { _tag: "PauseExpired", at: nextDay },
 ];
 const states: ReadonlyArray<TeamAutomationState> = [

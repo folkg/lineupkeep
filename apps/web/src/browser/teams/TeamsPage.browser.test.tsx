@@ -45,18 +45,36 @@ const baseTeam: TeamSummaryView = {
   recentRuns: [],
 };
 
+const enabledTeam: TeamSummaryView = {
+  ...baseTeam,
+  team: {
+    ...baseTeam.team,
+    automation: { changedAt: baseTeam.team.automation.changedAt, status: "enabled" },
+  },
+};
+
+const pausedTeam: TeamSummaryView = {
+  ...enabledTeam,
+  team: {
+    ...enabledTeam.team,
+    automation: {
+      status: "paused-until-fantasy-day-end",
+      changedAt: "2026-10-25T08:00:00.000Z",
+      pausedAt: "2026-10-25T08:00:00.000Z",
+      resumesAt: "2026-10-26T07:00:00.000Z",
+      timeZone: "America/Los_Angeles",
+      fantasyDay: "2026-10-25",
+      policyVersion: "yahoo-pacific-midnight/1",
+    },
+  },
+};
+
 it("enables a disabled team and shows the confirmed state", async () => {
-  const changes: Array<{ readonly team: string; readonly enabled: boolean }> = [];
+  const changes: Array<{ readonly team: string; readonly action: string }> = [];
   using _app = setupTeamsPage([baseTeam], {
-    setEnabled: (input) => {
+    control: (input) => {
       changes.push(input);
-      const enabled = {
-        ...baseTeam,
-        team: {
-          ...baseTeam.team,
-          automation: { changedAt: baseTeam.team.automation.changedAt, status: "enabled" as const },
-        },
-      };
+      const enabled = enabledTeam;
       return Promise.resolve({ changed: [enabled], teams: [enabled] });
     },
   });
@@ -65,31 +83,39 @@ it("enables a disabled team and shows the confirmed state", async () => {
   await page.getByRole("button", { name: "Enable automation" }).click();
 
   await expect.element(page.getByText("Automation on")).toBeVisible();
-  expect(changes).toEqual([{ team: baseTeam.team.id, enabled: true }]);
+  expect(changes).toEqual([{ team: baseTeam.team.id, action: "enable" }]);
 });
 
-it("labels a pause as the rest of the fantasy day and offers resume", async () => {
-  using _app = setupTeamsPage([
-    {
-      ...baseTeam,
-      team: {
-        ...baseTeam.team,
-        automation: {
-          status: "paused-until-fantasy-day-end",
-          changedAt: "2026-10-25T08:00:00.000Z",
-          pausedAt: "2026-10-25T08:00:00.000Z",
-          resumesAt: "2026-10-26T07:00:00.000Z",
-          timeZone: "America/Los_Angeles",
-          fantasyDay: "2026-10-25",
-          policyVersion: "yahoo-pacific-midnight/1",
-        },
-      },
+it("labels a pause as the rest of the fantasy day and resumes through the control action", async () => {
+  const changes: Array<{ readonly team: string; readonly action: string }> = [];
+  using _app = setupTeamsPage([pausedTeam], {
+    control: (input) => {
+      changes.push(input);
+      return Promise.resolve({ changed: [enabledTeam], teams: [enabledTeam] });
     },
-  ]);
+  });
 
   await expect.element(page.getByText("Paused for the rest of this fantasy day")).toBeVisible();
   await expect.element(page.getByText(/Resumes .*America\/Los_Angeles/)).toBeVisible();
-  await expect.element(page.getByRole("button", { name: "Resume automation" })).toBeVisible();
+  await page.getByRole("button", { name: "Resume automation" }).click();
+
+  await expect.element(page.getByText("Automation on")).toBeVisible();
+  expect(changes).toEqual([{ team: pausedTeam.team.id, action: "resume" }]);
+});
+
+it("pauses an enabled team for the rest of the fantasy day", async () => {
+  const changes: Array<{ readonly team: string; readonly action: string }> = [];
+  using _app = setupTeamsPage([enabledTeam], {
+    control: (input) => {
+      changes.push(input);
+      return Promise.resolve({ changed: [pausedTeam], teams: [pausedTeam] });
+    },
+  });
+
+  await page.getByRole("button", { name: "Pause for rest of fantasy day" }).click();
+
+  await expect.element(page.getByText("Paused for the rest of this fantasy day")).toBeVisible();
+  expect(changes).toEqual([{ team: enabledTeam.team.id, action: "pause-today" }]);
 });
 
 it("shows a reconnect action without flattening it into disabled", async () => {
@@ -163,14 +189,13 @@ it("keeps the list and reports a failed refresh", async () => {
 
 function setupTeamsPage(
   teams: ReadonlyArray<TeamSummaryView>,
-  overrides: Partial<Pick<TeamRemote, "list" | "refresh" | "setEnabled" | "pause">> = {},
+  overrides: Partial<Pick<TeamRemote, "list" | "refresh" | "control">> = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
     list: overrides.list ?? (() => Promise.resolve(teams)),
     refresh: overrides.refresh ?? (() => Promise.resolve({ teams })),
-    setEnabled: overrides.setEnabled ?? (() => Promise.resolve({ changed: [], teams })),
-    pause: overrides.pause ?? (() => Promise.resolve({ changed: [], teams })),
+    control: overrides.control ?? (() => Promise.resolve({ changed: [], teams })),
     readRun: () => Promise.reject(new Error("Unexpected run read")),
   };
   const teamsQuery = teamQueries.list(remote);

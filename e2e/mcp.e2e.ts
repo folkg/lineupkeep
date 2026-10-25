@@ -54,6 +54,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "generate_transaction_review_links",
     "set_lineup",
     "get_lineup_runs",
+    "set_team_automation",
   ]);
 });
 
@@ -111,6 +112,7 @@ test("serves every tool scope after one consent for the documented scope set", a
       { requestId: randomUUID(), teams: [{ team, period: { coverage: "week", week: 3 } }] },
     ],
     ["get_lineup_runs", {}],
+    ["set_team_automation", { teams: [{ team, action: "enable" }] }],
   ] as const;
   const statuses: Array<[string, number]> = [];
   for (const [name, arguments_] of calls) {
@@ -194,6 +196,13 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   expect(lineupDenied.status).toBe(403);
   expect(lineupDenied.headers.get("www-authenticate")).toContain('scope="lineups:write"');
 
+  const automationDenied = await client.request("tools/call", {
+    name: "set_team_automation",
+    arguments: { teams: [{ team: randomUUID(), action: "enable" }] },
+  });
+  expect(automationDenied.status).toBe(403);
+  expect(automationDenied.headers.get("www-authenticate")).toContain('scope="teams:manage"');
+
   const readAuthorization = await authorize(page, origin, "fantasy:read");
   const reader = mcpClient(mcpEndpoint(origin), readAuthorization.credentials.access_token);
   const teams = await reader.callTool("list_teams", {});
@@ -221,6 +230,110 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   });
   expect(missingTeam.isError).toBe(true);
   expect(JSON.stringify(missingTeam)).not.toContain("completed");
+});
+
+test("changes automation over MCP and reports it through list_teams", async ({
+  page,
+  baseURL,
+  services,
+}) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+  const discovered = Schema.decodeUnknownSync(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        name: Schema.String,
+        availability: Schema.String,
+        automation: Schema.Struct({ status: Schema.String }),
+      }),
+    ),
+  )(
+    await services.exercise(
+      page,
+      "link the provider fake and discover teams",
+      "connectYahooAndDiscoverTeams",
+      { requestId: randomUUID(), pairingCode: "ABCD2345" },
+    ),
+  );
+  const team = discovered[0]?.id;
+  expect(team, "a discovered team").toBeDefined();
+  if (team === undefined) {
+    return;
+  }
+
+  const { credentials } = await authorize(page, origin, "fantasy:read teams:manage");
+  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
+  const initial = await client.callTool("list_teams", {});
+  expect(teamAutomation(initial, team)).toMatchObject({
+    availability: "available",
+    automation: { status: "disabled" },
+  });
+
+  const enabled = await client.callTool("set_team_automation", {
+    teams: [{ team, action: "enable" }],
+  });
+  expect(enabled.isError).toBe(false);
+  expect(enabled.structuredContent).toMatchObject({
+    teams: [
+      {
+        team,
+        action: "enable",
+        outcome: "changed",
+        enrolled: true,
+        availability: "available",
+        automation: { status: "enabled" },
+      },
+    ],
+  });
+  expect(teamAutomation(await client.callTool("list_teams", {}), team)).toMatchObject({
+    automation: { status: "enabled" },
+  });
+
+  const paused = await client.callTool("set_team_automation", {
+    teams: [{ team, action: "pause-today" }],
+  });
+  expect(teamAutomation(paused, team)).toMatchObject({
+    automation: { status: "paused-until-fantasy-day-end" },
+  });
+  expect(
+    teamAutomation(paused, team).automation?.resumesAt,
+    "a provider fantasy-day resume boundary",
+  ).toBeDefined();
+  expect(teamAutomation(await client.callTool("list_teams", {}), team)).toMatchObject({
+    automation: {
+      status: "paused-until-fantasy-day-end",
+      resumesAt: teamAutomation(paused, team).automation?.resumesAt,
+    },
+  });
+
+  const resumed = await client.callTool("set_team_automation", {
+    teams: [{ team, action: "resume" }],
+  });
+  expect(teamAutomation(resumed, team)).toMatchObject({
+    automation: { status: "enabled" },
+  });
+
+  const disabled = await client.callTool("set_team_automation", {
+    teams: [{ team, action: "disable" }],
+  });
+  expect(teamAutomation(disabled, team)).toMatchObject({
+    outcome: "changed",
+    enrolled: false,
+    automation: { status: "disabled" },
+  });
+
+  const readOnly = await authorize(page, origin, "fantasy:read connections:read");
+  const reader = mcpClient(mcpEndpoint(origin), readOnly.credentials.access_token);
+  const denied = await reader.request("tools/call", {
+    name: "set_team_automation",
+    arguments: { teams: [{ team, action: "enable" }] },
+  });
+  expect(denied.status).toBe(403);
+  expect(denied.headers.get("www-authenticate")).toContain('scope="teams:manage"');
+  expect(teamAutomation(await reader.callTool("list_teams", {}), team)).toMatchObject({
+    automation: { status: "disabled" },
+  });
 });
 
 test("returns access_denied and the original state when consent is denied", async ({
@@ -377,6 +490,40 @@ test("rotates refresh credentials and rejects the spent token after the retry wi
     .toEqual({ status: 400, error: "invalid_grant" });
 });
 
+function teamAutomation(
+  result: {
+    readonly isError?: boolean | undefined;
+    readonly structuredContent?:
+      | {
+          readonly [x: string]: unknown;
+        }
+      | undefined;
+  },
+  team: string,
+): {
+  readonly availability?: string | undefined;
+  readonly outcome?: string | undefined;
+  readonly enrolled?: boolean | undefined;
+  readonly automation?: { readonly status?: string; readonly resumesAt?: string } | undefined;
+} {
+  const body = result.structuredContent as
+    | {
+        readonly teams?: ReadonlyArray<{
+          readonly team?: string;
+          readonly availability?: string;
+          readonly outcome?: string;
+          readonly enrolled?: boolean;
+          readonly automation?: { readonly status?: string; readonly resumesAt?: string };
+        }>;
+      }
+    | undefined;
+  const row = body?.teams?.find((candidate) => candidate.team === team);
+  if (row === undefined) {
+    throw new Error(`No team ${team} in the MCP result`);
+  }
+  return row;
+}
+
 function documentedDiscoveryRequest(origin: string): Promise<Response> {
   return fetch(new URL("/mcp", origin), {
     method: "POST",
@@ -407,7 +554,7 @@ function documentedHeaders(method: string): Record<string, string> {
 
 const protocolVersion = "2026-07-28";
 const documentedScopes =
-  "connections:read fantasy:read transactions:review lineups:write offline_access";
+  "connections:read fantasy:read transactions:review lineups:write teams:manage offline_access";
 
 async function authorize(
   page: Page,

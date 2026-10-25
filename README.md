@@ -100,10 +100,10 @@ Connect a stateless **MCP 2026-07-28** client to `https://<host>/mcp`; earlier s
 ### Request this scope set on the first authorization
 
 ```text
-connections:read fantasy:read transactions:review lineups:write offline_access
+connections:read fantasy:read transactions:review lineups:write teams:manage offline_access
 ```
 
-One consent with every scope above covers all shipped tools and renewable access. A narrower request still authorizes, then fails the tools whose scopes it omitted: the `401` challenge and the `403` body both name scopes so a client that surfaces only a response body can still see what is missing. Authorization-server metadata publishes this list; protected-resource metadata publishes the four resource scopes, because `offline_access` buys a refresh token from the authorization server rather than access to the resource.
+One consent with every scope above covers all shipped tools and renewable access. A narrower request still authorizes, then fails the tools whose scopes it omitted: the `401` challenge and the `403` body both name scopes so a client that surfaces only a response body can still see what is missing. Authorization-server metadata publishes this list; protected-resource metadata publishes the five resource scopes, because `offline_access` buys a refresh token from the authorization server rather than access to the resource.
 
 ### First requests
 

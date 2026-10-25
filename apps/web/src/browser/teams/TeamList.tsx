@@ -76,6 +76,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
                     onDisable={() => props.onSetEnabled(team, false)}
                     onEnable={() => props.onSetEnabled(team, true)}
                     onPause={() => props.onPause(team)}
+                    onResume={() => props.onResume(team)}
                   />
                 )}
               </For>
@@ -138,7 +139,7 @@ function TeamRow(props: TeamRowProps): JSX.Element {
               </Button>
             }
           >
-            <Button pending={props.pending} pendingLabel="Resuming…" onClick={props.onEnable}>
+            <Button pending={props.pending} pendingLabel="Resuming…" onClick={props.onResume}>
               Resume automation
             </Button>
           </Show>
@@ -212,6 +213,7 @@ type TeamListProps = {
   readonly onRefreshTeams: () => void;
   readonly onSetEnabled: (team: TeamSummaryView, enabled: boolean) => void;
   readonly onPause: (team: TeamSummaryView) => void;
+  readonly onResume: (team: TeamSummaryView) => void;
 };
 
 type TeamRowProps = {
@@ -220,4 +222,5 @@ type TeamRowProps = {
   readonly onEnable: () => void;
   readonly onDisable: () => void;
   readonly onPause: () => void;
+  readonly onResume: () => void;
 };

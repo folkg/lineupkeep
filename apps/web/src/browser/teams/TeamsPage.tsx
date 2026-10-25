@@ -34,6 +34,7 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
             onPause={page.pause}
             onRefresh={page.refresh}
             onRefreshTeams={page.refreshTeams}
+            onResume={page.resume}
             onSetEnabled={page.setEnabled}
           />
           <ActionFeedback feedback={page.feedback()} />

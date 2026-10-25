@@ -14,22 +14,23 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 
 ## Proposed tool families
 
-| Tool                                | Purpose and important limits                                                                                |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `list_connections`                  | Safe owned provider connection metadata/status only                                                         |
-| `list_teams`                        | Compact owned team discovery with season/sport/connection filters; stable paging                            |
-| `get_calendar`                      | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence         |
-| `get_league`                        | Selected league settings, scoring definitions, roster rules, standings/team summaries; bounded groups/pages |
-| `get_rosters`                       | Exact selected team/period rosters, compact by default; rich detail single-team by default                  |
-| `search_players`                    | Bounded league/sport-context player search, available/free-agent/waiver filters and validated sorts         |
-| `get_players`                       | Bounded selected-player hydration including generic stats/projections/availability groups                   |
-| `get_matchups`                      | Selected matchup/scoreboard data with explicit period                                                       |
-| `get_transactions`                  | Read transaction history; no execution                                                                      |
-| `generate_transaction_review_links` | Typed add/add-drop/drop/trade review intents; return provider human-review URLs only                        |
-| `set_lineup`                        | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes      |
-| `get_lineup_runs`                   | Owned run status, safe concise explanations, observed changes, and unresolved conditions                    |
+| Tool                                | Purpose and important limits                                                                                     |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `list_connections`                  | Safe owned provider connection metadata/status only                                                              |
+| `list_teams`                        | Compact owned team discovery with season/sport/connection filters; stable paging                                 |
+| `get_calendar`                      | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence              |
+| `get_league`                        | Selected league settings, scoring definitions, roster rules, standings/team summaries; bounded groups/pages      |
+| `get_rosters`                       | Exact selected team/period rosters, compact by default; rich detail single-team by default                       |
+| `search_players`                    | Bounded league/sport-context player search, available/free-agent/waiver filters and validated sorts              |
+| `get_players`                       | Bounded selected-player hydration including generic stats/projections/availability groups                        |
+| `get_matchups`                      | Selected matchup/scoreboard data with explicit period                                                            |
+| `get_transactions`                  | Read transaction history; no execution                                                                           |
+| `generate_transaction_review_links` | Typed add/add-drop/drop/trade review intents; return provider human-review URLs only                             |
+| `set_lineup`                        | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes           |
+| `set_team_automation`               | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state |
+| `get_lineup_runs`                   | Owned run status, safe concise explanations, observed changes, and unresolved conditions                         |
 
-Do not expose a general policy-mode selector, native/premium action selector, custom formula, or fallback override. Return the implementation actually used. The initial MCP need not expose registration, helper secret upload, automation enrollment editing, or every frontend control as tools.
+Do not expose a general policy-mode selector, native/premium action selector, custom formula, or fallback override. Return the implementation actually used. The MCP surface covers automation enrollment, pause, and resume because an agent must be able to manage a team it owns; it still does not expose registration, helper secret upload, or every frontend control as tools.
 
 A league/opponent read requires verified access through the user's connection; it does not permit managing another team's lineup. Tool annotations and scopes do not replace ownership enforcement in backend services.
 
@@ -42,6 +43,16 @@ Phase 1 uses the provider's native start-active action; Phase 2 uses the custom 
 Response includes per-team run reference, status, implementation, target period, observation time, and safe change/no-op/blocked/pending explanations. A bounded wait may return pending work; `get_lineup_runs` retrieves the result later. Do not report success merely because work was queued or a provider returned HTTP 200 with invalid coverage.
 
 Manual authorized requests may run while paused/disabled without enabling automation. They still obey ownership, connection availability, legal/locked assignments, and unresolved-write protection.
+
+## `set_team_automation` behavior
+
+Inputs: a bounded batch of owned private team ids, each with exactly one action: `enable`, `disable`, `pause-today`, or `resume`. Provider team keys, league ids, and connection ids are never accepted here.
+
+`enable` and `disable` change enrollment without deleting team configuration. `pause-today` suspends scheduled work until the end of the team's provider fantasy day, computed with Effect DateTime named-zone arithmetic, and returns the resulting `resumesAt`, time zone, and fantasy day. `resume` clears an active pause. A repeated action is an `unchanged` no-op with the same resulting state, not an error; an action that contradicts the current state is `rejected` with the reason and the unchanged state.
+
+Availability is separate from enrollment. An unavailable team keeps the requested automation setting, reports `availability: "unavailable"`, and remains skipped by scheduled checks. Ownership is enforced in the team service, so another owner's id is `not_found`, not a forbidden-with-details response. Responses report each input in order with its outcome, enrollment, availability, and full automation state, so an agent does not need to re-read before the next action.
+
+This tool changes only durable Lineupkeep automation state; it never contacts the provider. `set_lineup` remains the sole provider mutation and continues to bypass enrollment for a manual run while honoring ownership, connection readiness, availability, locks, and uncertain-write protection.
 
 ## Budgets and paging
 
@@ -82,12 +93,12 @@ Return a clear human-review instruction and no guarantee of add/drop/trade eligi
 The documented set a client requests on its first authorization:
 
 ```text
-connections:read fantasy:read transactions:review lineups:write offline_access
+connections:read fantasy:read transactions:review lineups:write teams:manage offline_access
 ```
 
-`connections:read` reads connection status; `fantasy:read`, `transactions:review`, and `lineups:write` cover the query, review-link, and lineup tools; `offline_access` buys a refresh token. Requesting a subset authorizes and then fails the tools whose scope it omitted, so the whole set is the supported request.
+`connections:read` reads connection status; `fantasy:read`, `transactions:review`, `lineups:write`, and `teams:manage` cover the query, review-link, lineup, and automation-control tools; `offline_access` buys a refresh token. Requesting a subset authorizes and then fails the tools whose scope it omitted, so the whole set is the supported request.
 
-The unauthenticated `401` advertises the whole set in its `scope` parameter and body, and a `403` names the missing scope in the body as well as the challenge header. `server/discover` answers without a token and publishes only the product name, supported protocol versions, and capabilities. Authorization-server metadata publishes all five scopes; protected-resource metadata publishes the four resource scopes, because `offline_access` addresses the authorization server rather than the resource. A scope-coverage test asserts the documented set against the required scope of every shipped tool.
+The unauthenticated `401` advertises the whole set in its `scope` parameter and body, and a `403` names the missing scope in the body as well as the challenge header. `server/discover` answers without a token and publishes only the product name, supported protocol versions, and capabilities. Authorization-server metadata publishes all six scopes; protected-resource metadata publishes the five resource scopes, because `offline_access` addresses the authorization server rather than the resource. A scope-coverage test asserts the documented set against the required scope of every shipped tool.
 
 Dynamic registration records the advertised set as the client's allowed scope, while an authorization grant is exactly the scope an authorize request asks for. Both are needed: registration allows the grant, the request narrows it. Complete first-request examples, header and `_meta` requirements, and the registration fallback are in the [client setup](../../README.md#connecting-an-mcp-client).
 

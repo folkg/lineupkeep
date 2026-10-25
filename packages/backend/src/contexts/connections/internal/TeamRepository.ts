@@ -12,11 +12,8 @@ import {
   nextFantasyDayBoundary,
 } from "#contexts/connections/FantasyDay.ts";
 import { FantasyTeam, TeamId } from "#contexts/connections/FantasyTeam.ts";
-import {
-  TeamControlRejected,
-  TeamNotFound,
-  TeamPersistenceFailed,
-} from "#contexts/connections/Teams.ts";
+import { TeamNotFound, TeamPersistenceFailed } from "#contexts/connections/Teams.ts";
+import type { TeamAutomationAction, TeamControlInput } from "#contexts/connections/Teams.ts";
 import { anyOf, excludedValues } from "#database/dbUtilities.ts";
 import { snapshotOf } from "#utilities/machine.ts";
 
@@ -37,12 +34,38 @@ export type TeamRecord = {
   readonly connection: Pick<ProviderConnection, "id" | "status">;
 };
 
-type SetEnabledCommand = {
-  readonly team: TeamId;
-  readonly enabled: boolean;
-};
+type TeamControlRejection = "already-paused" | "not-enabled";
 
-type TeamControlFailure = TeamNotFound | TeamControlRejected | TeamPersistenceFailed;
+export type TeamControlRecord =
+  | {
+      readonly team: TeamId;
+      readonly action: TeamAutomationAction;
+      readonly outcome: "changed";
+      readonly teamState: FantasyTeam;
+    }
+  | {
+      readonly team: TeamId;
+      readonly action: TeamAutomationAction;
+      readonly outcome: "unchanged";
+      readonly teamState: FantasyTeam;
+    }
+  | {
+      readonly team: TeamId;
+      readonly action: TeamAutomationAction;
+      readonly outcome: "rejected";
+      readonly teamState: FantasyTeam;
+      readonly rejection: TeamControlRejection;
+    }
+  | {
+      readonly team: TeamId;
+      readonly action: TeamAutomationAction;
+      readonly outcome: "not_found";
+    };
+
+type ControlPlan =
+  | { readonly _tag: "Changed"; readonly team: FantasyTeam }
+  | { readonly _tag: "Unchanged" }
+  | { readonly _tag: "Rejected"; readonly rejection: TeamControlRejection };
 
 export class TeamRepository extends Context.Service<TeamRepository>()(
   "@lineupkeep/backend/contexts/connections/internal/TeamRepository",
@@ -136,15 +159,14 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
         });
       });
 
-      const setEnabled = Effect.fn("TeamRepository.setEnabled")(function* (
+      const control = Effect.fn("TeamRepository.control")(function* (
         userId: UserId,
-        commands: ReadonlyArray<SetEnabledCommand>,
+        inputs: ReadonlyArray<TeamControlInput>,
       ) {
-        const ids = [...new Set(commands.map((command) => command.team))];
+        const ids = [...new Set(inputs.map((input) => input.team))];
         if (!Array.isArrayNonEmpty(ids)) {
           return [];
         }
-        const byId = new Map(commands.map((command) => [command.team, command]));
         const now = yield* DateTime.now;
         return yield* database
           .transaction((tx) =>
@@ -163,32 +185,55 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                   ),
                 ),
               );
-              const changed: Array<{
-                readonly row: typeof providerTeams.$inferSelect;
-                readonly team: FantasyTeam;
-              }> = [];
-              for (const id of ids) {
-                const command = byId.get(id);
-                const entry = locked.get(id);
-                if (command === undefined || entry === undefined) {
-                  return yield* TeamNotFound.make({ team: id });
+              const changedById = new Map<
+                TeamId,
+                {
+                  readonly row: typeof providerTeams.$inferSelect;
+                  readonly team: FantasyTeam;
                 }
-                const status = entry.team.automation.status;
-                if (command.enabled && status === "paused-until-fantasy-day-end") {
-                  return yield* TeamControlRejected.make({ team: id, status });
-                }
-                if (
-                  (command.enabled && status === "enabled") ||
-                  (!command.enabled && status === "disabled")
-                ) {
+              >();
+              const results: Array<TeamControlRecord> = [];
+              for (const input of inputs) {
+                const entry = locked.get(input.team);
+                if (entry === undefined) {
+                  results.push({
+                    team: input.team,
+                    action: input.action,
+                    outcome: "not_found",
+                  });
                   continue;
                 }
-                const next = yield* planAutomation(
-                  automationStateOf(entry.team),
-                  command.enabled ? { _tag: "Enabled", at: now } : { _tag: "Disabled", at: now },
-                ).pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-                changed.push({ row: entry.row, team: applyAutomation(entry.team, next, now) });
+                const plan = yield* planControl(entry.team, input.action, now);
+                switch (plan._tag) {
+                  case "Changed":
+                    results.push({
+                      team: input.team,
+                      action: input.action,
+                      outcome: "changed",
+                      teamState: plan.team,
+                    });
+                    changedById.set(input.team, { row: entry.row, team: plan.team });
+                    break;
+                  case "Unchanged":
+                    results.push({
+                      team: input.team,
+                      action: input.action,
+                      outcome: "unchanged",
+                      teamState: entry.team,
+                    });
+                    break;
+                  case "Rejected":
+                    results.push({
+                      team: input.team,
+                      action: input.action,
+                      outcome: "rejected",
+                      teamState: entry.team,
+                      rejection: plan.rejection,
+                    });
+                    break;
+                }
               }
+              const changed = [...changedById.values()];
               if (changed.length > 0) {
                 yield* tx
                   .insert(providerTeams)
@@ -210,91 +255,10 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                     ]),
                   });
               }
-              return changed.map(({ team }) => team);
+              return results;
             }),
           )
-          .pipe(Effect.mapError(mapTransactionalError));
-      });
-
-      const pause = Effect.fn("TeamRepository.pause")(function* (
-        userId: UserId,
-        ids: ReadonlyArray<TeamId>,
-      ) {
-        const uniqueIds = [...new Set(ids)];
-        if (!Array.isArrayNonEmpty(uniqueIds)) {
-          return [];
-        }
-        const now = yield* DateTime.now;
-        return yield* database
-          .transaction((tx) =>
-            Effect.gen(function* () {
-              const rows = yield* tx
-                .select()
-                .from(providerTeams)
-                .where(and(eq(providerTeams.userId, userId), anyOf(providerTeams.id, uniqueIds)))
-                .orderBy(asc(providerTeams.id))
-                .for("update");
-              const locked = new Map(
-                yield* Effect.forEach(rows, (row) =>
-                  Schema.decodeEffect(FantasyTeamRow)(row).pipe(
-                    Effect.map((team) => [team.id, { row, team }] as const),
-                    Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
-                  ),
-                ),
-              );
-              const changed: Array<{
-                readonly row: typeof providerTeams.$inferSelect;
-                readonly team: FantasyTeam;
-              }> = [];
-              for (const id of uniqueIds) {
-                const entry = locked.get(id);
-                if (entry === undefined) {
-                  return yield* TeamNotFound.make({ team: id });
-                }
-                if (entry.team.automation.status === "paused-until-fantasy-day-end") {
-                  continue;
-                }
-                if (entry.team.automation.status !== "enabled") {
-                  return yield* TeamControlRejected.make({
-                    team: id,
-                    status: entry.team.automation.status,
-                  });
-                }
-                const policy = fantasyDayPolicy(entry.team.provider, entry.team.league);
-                const next = yield* planAutomation(automationStateOf(entry.team), {
-                  _tag: "Paused",
-                  at: now,
-                  resumesAt: nextFantasyDayBoundary(now, policy),
-                  timeZone: policy.timeZone,
-                  fantasyDay: fantasyDayLabel(now, policy),
-                  policyVersion: policy.version,
-                }).pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-                changed.push({ row: entry.row, team: applyAutomation(entry.team, next, now) });
-              }
-              if (changed.length > 0) {
-                yield* tx
-                  .insert(providerTeams)
-                  .values(
-                    changed.map(({ row, team }) => ({
-                      ...row,
-                      automationState: encodeAutomation(automationStateOf(team)),
-                      automationStatus: team.automation.status,
-                      updatedAt: DateTime.toDateUtc(now),
-                    })),
-                  )
-                  .onConflictDoUpdate({
-                    target: [providerTeams.connectionId, providerTeams.providerTeamKey],
-                    set: excludedValues(providerTeams, [
-                      "automationState",
-                      "automationStatus",
-                      "updatedAt",
-                    ]),
-                  });
-              }
-              return changed.map(({ team }) => team);
-            }),
-          )
-          .pipe(Effect.mapError(mapTransactionalError));
+          .pipe(Effect.mapError(mapPersistenceError));
       });
 
       const expirePauses = Effect.fn("TeamRepository.expirePauses")(function* (
@@ -329,7 +293,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                 const next = yield* planAutomation(automationStateOf(team), {
                   _tag: "PauseExpired",
                   at: now,
-                }).pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
+                });
                 changed.push({ row, team: applyAutomation(team, next, now) });
               }
               if (changed.length > 0) {
@@ -355,7 +319,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
               return changed.map(({ team }) => team);
             }),
           )
-          .pipe(Effect.mapError(mapTransactionalError));
+          .pipe(Effect.mapError(mapPersistenceError));
       });
 
       const eligible = Effect.fn("TeamRepository.eligible")(function* (limit: number) {
@@ -407,7 +371,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
         );
       });
 
-      return { list, load, setEnabled, pause, expirePauses, eligible };
+      return { list, load, control, expirePauses, eligible };
     }),
   },
 ) {
@@ -493,7 +457,7 @@ function applyAutomation(
 function planAutomation(
   state: TeamAutomationState,
   event: TeamAutomationEvent,
-): Effect.Effect<TeamAutomationState, unknown> {
+): Effect.Effect<TeamAutomationState> {
   return Effect.gen(function* () {
     const snapshot = yield* snapshotOf(TeamAutomationWorkflow, state);
     const planned = yield* Machine.plan(TeamAutomationWorkflow, snapshot, event);
@@ -502,20 +466,99 @@ function planAutomation(
       return yield* Effect.die(new Error("Team automation rejected the requested transition"));
     }
     return yield* Schema.decodeEffect(TeamAutomationState)(planned.next.state.value);
-  });
+  }).pipe(Effect.orDie);
 }
 
 function encodeAutomation(state: TeamAutomationState): unknown {
   return Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))(state);
 }
 
-function mapTransactionalError(cause: unknown): TeamControlFailure {
-  if (
-    Schema.is(TeamPersistenceFailed)(cause) ||
-    Schema.is(TeamNotFound)(cause) ||
-    Schema.is(TeamControlRejected)(cause)
-  ) {
-    return cause;
+function mapPersistenceError(cause: unknown): TeamPersistenceFailed {
+  return Schema.is(TeamPersistenceFailed)(cause) ? cause : TeamPersistenceFailed.make({ cause });
+}
+
+function planControl(
+  team: FantasyTeam,
+  action: TeamAutomationAction,
+  now: DateTime.Utc,
+): Effect.Effect<ControlPlan> {
+  switch (action) {
+    case "enable":
+      return planEnable(team, now);
+    case "disable":
+      return planDisable(team, now);
+    case "pause-today":
+      return planPauseToday(team, now);
+    case "resume":
+      return planResume(team, now);
   }
-  return TeamPersistenceFailed.make({ cause });
+}
+
+function planEnable(team: FantasyTeam, now: DateTime.Utc): Effect.Effect<ControlPlan> {
+  switch (team.automation.status) {
+    case "disabled":
+      return transition(team, { _tag: "Enabled", at: now }, now);
+    case "enabled":
+      return Effect.succeed({ _tag: "Unchanged" });
+    case "paused-until-fantasy-day-end":
+      return Effect.succeed({ _tag: "Rejected", rejection: "already-paused" });
+  }
+}
+
+function planDisable(team: FantasyTeam, now: DateTime.Utc): Effect.Effect<ControlPlan> {
+  switch (team.automation.status) {
+    case "disabled":
+      return Effect.succeed({ _tag: "Unchanged" });
+    case "enabled":
+    case "paused-until-fantasy-day-end":
+      return transition(team, { _tag: "Disabled", at: now }, now);
+  }
+}
+
+function planPauseToday(team: FantasyTeam, now: DateTime.Utc): Effect.Effect<ControlPlan> {
+  switch (team.automation.status) {
+    case "enabled": {
+      const policy = fantasyDayPolicy(team.provider, team.league);
+      return transition(
+        team,
+        {
+          _tag: "Paused",
+          at: now,
+          resumesAt: nextFantasyDayBoundary(now, policy),
+          timeZone: policy.timeZone,
+          fantasyDay: fantasyDayLabel(now, policy),
+          policyVersion: policy.version,
+        },
+        now,
+      );
+    }
+    case "paused-until-fantasy-day-end":
+      return Effect.succeed({ _tag: "Unchanged" });
+    case "disabled":
+      return Effect.succeed({ _tag: "Rejected", rejection: "not-enabled" });
+  }
+}
+
+function planResume(team: FantasyTeam, now: DateTime.Utc): Effect.Effect<ControlPlan> {
+  switch (team.automation.status) {
+    case "paused-until-fantasy-day-end":
+      return transition(team, { _tag: "Resumed", at: now }, now);
+    case "enabled":
+      return Effect.succeed({ _tag: "Unchanged" });
+    case "disabled":
+      return Effect.succeed({ _tag: "Rejected", rejection: "not-enabled" });
+  }
+}
+
+function transition(
+  team: FantasyTeam,
+  event: TeamAutomationEvent,
+  now: DateTime.Utc,
+): Effect.Effect<ControlPlan> {
+  return planAutomation(automationStateOf(team), event).pipe(
+    Effect.map((state) => ({
+      _tag: "Changed" as const,
+      team: applyAutomation(team, state, now),
+    })),
+  );
 }
