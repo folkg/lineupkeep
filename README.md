@@ -105,6 +105,50 @@ connections:read fantasy:read transactions:review lineups:write offline_access
 
 One consent with every scope above covers all shipped tools and renewable access. A narrower request still authorizes, then fails the tools whose scopes it omitted: the `401` challenge and the `403` body both name scopes so a client that surfaces only a response body can still see what is missing. Authorization-server metadata publishes this list; protected-resource metadata publishes the four resource scopes, because `offline_access` buys a refresh token from the authorization server rather than access to the resource.
 
+### First requests
+
+`server/discover` needs no token and returns only the product name, supported protocol versions, and capabilities:
+
+```sh
+curl -sS https://<host>/mcp \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H 'mcp-protocol-version: 2026-07-28' \
+  -H 'mcp-method: server/discover' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
+```
+
+Every other method needs a bearer access token, the protocol version in both the header and the `_meta` block, and the method and tool name in headers:
+
+```sh
+curl -sS https://<host>/mcp \
+  -H 'authorization: Bearer <access-token>' \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H 'mcp-protocol-version: 2026-07-28' \
+  -H 'mcp-method: tools/call' \
+  -H 'mcp-name: list_connections' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_connections","arguments":{},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+```
+
+A tool result carries the payload twice: `structuredContent` for clients that read it, and the same JSON as text content for clients that only read text. Both copies count against the page budget, so a page fills about half of the 16 KiB ceiling; narrow with filters or `groups` rather than expecting more records per call.
+
+### Registration
+
+Dynamic Client Registration is enabled for public clients at `POST /api/auth/oauth2/register`; PKCE is required and redirect URIs are validated. Registration records the full scope set by default, but a grant is exactly the scope the authorization request asks for, so still request the whole set above. When a client asks for a Client ID anyway, register one and paste the returned `client_id`; there is no client secret:
+
+```sh
+curl -sS -X POST https://<host>/api/auth/oauth2/register \
+  -H 'content-type: application/json' \
+  --data '{"client_name":"Lineupkeep curl","redirect_uris":["http://127.0.0.1:19999/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none","application_type":"native"}'
+```
+
+Clients that cannot self-register may instead use an HTTPS client metadata document as their `client_id`. Metadata fetches never follow redirects: serve the document at the exact HTTPS URL, because a redirect is refused by policy and reported separately from a network failure. Private destinations are rejected and native loopback callbacks are allowed.
+
+A `*.run.app` hostname is long enough to truncate in some client consent forms. A short custom domain is the remedy; nothing in the protocol depends on the hostname.
+
+### After connecting
+
 Use `tools/list` for live schemas/scopes/hints. Retry unconfirmed creation only with the same request identity/content; inspect current state before repeating other writes. Store rotated refresh tokens.
 Browser sign-out does not revoke offline grants: disconnect through `/api/auth/oauth2/revoke`. Issued access tokens may remain valid until expiry. OAuth setup proves no tool behavior; local workerd proves no production routing guarantee.
 

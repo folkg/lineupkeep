@@ -91,6 +91,36 @@ test("answers the documented token-free discovery request with the same document
   );
 });
 
+test("serves every tool scope after one consent for the documented scope set", async ({
+  page,
+  baseURL,
+}) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+  const { credentials } = await authorize(page, origin, documentedScopes);
+  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
+
+  const team = randomUUID();
+  const calls = [
+    ["list_connections", {}],
+    ["list_teams", {}],
+    ["get_calendar", { team }],
+    ["generate_transaction_review_links", { team, intents: [{ kind: "add", add: "r1.test" }] }],
+    [
+      "set_lineup",
+      { requestId: randomUUID(), teams: [{ team, period: { coverage: "week", week: 3 } }] },
+    ],
+    ["get_lineup_runs", {}],
+  ] as const;
+  const statuses: Array<[string, number]> = [];
+  for (const [name, arguments_] of calls) {
+    const response = await client.request("tools/call", { name, arguments: arguments_ });
+    statuses.push([name, response.status]);
+  }
+
+  expect(statuses).toEqual(calls.map(([name]) => [name, 200]));
+});
+
 test("lists the owner's connection status over MCP without exposing account identity", async ({
   page,
   baseURL,
@@ -257,6 +287,8 @@ test("rejects legacy protocols and registers dynamic clients", async ({ page, ba
   expect(legacy.headers.has("mcp-session-id")).toBe(false);
   expect(registration.status, "dynamic client registration is open for public clients").toBe(201);
   expect(isRecord(registered) && typeof registered["client_id"] === "string").toBe(true);
+  expect(isRecord(registered) ? registered["scope"] : undefined).toBe(documentedScopes);
+  expect(isRecord(registered) ? registered["client_secret"] : undefined).toBeUndefined();
 });
 
 test("authorizes a dynamically registered client through consent", async ({ page, baseURL }) => {
