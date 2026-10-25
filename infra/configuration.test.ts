@@ -6,7 +6,7 @@ import { expect } from "vitest";
 
 import { applicationConfig, developmentApplicationConfig } from "./config.ts";
 import { externalDatabase } from "./database/external.ts";
-import { cloudRunContainer } from "./hosts/cloudRun.ts";
+import { cloudRunContainer, partitionEnvironment } from "./hosts/cloudRun.ts";
 import { containerRelayNetwork } from "./hosts/localContainer.ts";
 import { DatabaseDeployment } from "./services/DatabaseDeployment.ts";
 import { assertLocalStage, stageSpec } from "./stage.ts";
@@ -62,10 +62,21 @@ it.each([
   );
 });
 
-it("configures Cloud Run image mode for process-lifetime CPU", () => {
+it("keeps Cloud Run request-billed with CPU allocated only during requests", () => {
   const container = cloudRunContainer();
 
-  expect(container.resources.cpuIdle).toBe(false);
+  expect(container.resources.cpuIdle).toBe(true);
+});
+
+it("routes plain configuration to environment entries and secrets to Secret Manager", () => {
+  const environment = partitionEnvironment({
+    BETTER_AUTH_URL: "https://app.example.com",
+    BETTER_AUTH_SECRET: Redacted.make("private-auth-secret"),
+  });
+
+  expect(environment.plain).toEqual([["BETTER_AUTH_URL", "https://app.example.com"]]);
+  expect(environment.secrets.map(([name]) => name)).toEqual(["BETTER_AUTH_SECRET"]);
+  expect(Redacted.isRedacted(environment.secrets[0]?.[1])).toBe(true);
 });
 
 it.effect("requires a separate direct URL for externally managed databases", () =>

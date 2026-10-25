@@ -33,8 +33,9 @@ export function cloudRunHost(
       const account = yield* GCP.IAM.ServiceAccount("Runtime", {
         displayName: "Lineupkeep web runtime",
       });
-      const secrets = yield* Effect.all(
-        Object.entries(environment).map(([name, value]) => runtimeSecret(name, value, account)),
+      const { plain, secrets } = partitionEnvironment(environment);
+      const secretEntries = yield* Effect.forEach(secrets, ([name, value]) =>
+        runtimeSecret(name, value, account),
       );
       const image = yield* publishCloudRunImage(
         Output.map(registry.registryUri, (uri) => {
@@ -56,15 +57,18 @@ export function cloudRunHost(
             {
               ...cloudRunContainer(),
               image,
-              env: secrets.map(({ name, secret, version }) => ({
-                name,
-                valueSource: {
-                  secretKeyRef: {
-                    secret: secret.name,
-                    version,
+              env: [
+                ...plain.map(([name, value]) => ({ name, value })),
+                ...secretEntries.map(({ name, secret, version }) => ({
+                  name,
+                  valueSource: {
+                    secretKeyRef: {
+                      secret: secret.name,
+                      version,
+                    },
                   },
-                },
-              })),
+                })),
+              ],
             },
           ],
         },
@@ -78,6 +82,22 @@ export function cloudRunHost(
   );
 }
 
+export function partitionEnvironment(environment: HostEnvironment): {
+  readonly plain: ReadonlyArray<readonly [string, string]>;
+  readonly secrets: ReadonlyArray<readonly [string, Input<string | Redacted.Redacted<string>>]>;
+} {
+  const plain: [string, string][] = [];
+  const secrets: [string, Input<string | Redacted.Redacted<string>>][] = [];
+  for (const [name, value] of Object.entries(environment)) {
+    if (typeof value === "string") {
+      plain.push([name, value]);
+    } else {
+      secrets.push([name, value]);
+    }
+  }
+  return { plain, secrets };
+}
+
 function cloudRunTemplate(): {
   timeout: string;
   maxInstanceRequestConcurrency: number;
@@ -89,7 +109,7 @@ function cloudRunTemplate(): {
   return {
     timeout: "300s",
     maxInstanceRequestConcurrency: 20,
-    scaling: { minInstanceCount: 1, maxInstanceCount: 3 },
+    scaling: { minInstanceCount: 0, maxInstanceCount: 3 },
   };
 }
 
@@ -124,7 +144,7 @@ export function cloudRunContainer(): {
       { name: "HOST", value: "0.0.0.0" },
       { name: "NODE_ENV", value: "production" },
     ],
-    resources: { limits: { cpu: "1", memory: "512Mi" }, cpuIdle: false, startupCpuBoost: true },
+    resources: { limits: { cpu: "1", memory: "512Mi" }, cpuIdle: true, startupCpuBoost: true },
     startupProbe: { httpGet: { path: "/", port: 8080 }, periodSeconds: 5, failureThreshold: 12 },
   };
 }
