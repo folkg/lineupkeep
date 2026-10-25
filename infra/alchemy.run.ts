@@ -3,12 +3,12 @@ import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
 import * as Docker from "alchemy/Docker";
-import * as GCP from "alchemy/GCP";
 import * as Secrets from "alchemy/Secrets";
 import { Stage } from "alchemy/Stage";
 import { Effect, Layer } from "effect";
 
 import { applicationConfig } from "./config.ts";
+import { gcpProviders } from "./gcpProviders.ts";
 import { postgresProvider } from "./local/Postgres.ts";
 import { migrate } from "./migrations.ts";
 import { DatabaseDeployment } from "./services/DatabaseDeployment.ts";
@@ -22,10 +22,7 @@ export const localProviders = Layer.mergeAll(
   Docker.providers(),
   postgresProvider,
 );
-const providers = Layer.mergeAll(
-  localProviders,
-  Layer.effect(GCP.Providers)(GCP.Providers.pipe(Effect.provide(GCP.providers()))),
-);
+const providers = Layer.mergeAll(localProviders, gcpProviders);
 
 export default Alchemy.Stack(
   "LineupkeepWeb",
