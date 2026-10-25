@@ -5,6 +5,7 @@ Bun applies these through `patchedDependencies` in `package.json` and `bun.lock`
 | Patch                                          | Why                                                                                                                                         |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@better-auth%2Foauth-provider@1.7.12.patch`   | Retained cause-chain fix for concurrent CIMD registration.                                                                                  |
+| `@better-auth%2Fcimd@1.7.12.patch`             | Names a policy-refused client-metadata redirect separately from a network failure, and says redirects are not followed.                     |
 | `@tanstack%2Fsolid-start@2.0.0-rc.8.patch`     | Retained rc.8 action-URL names under the Solid rc.13 hold.                                                                                  |
 | `@tanstack%2Frouter-core@1.171.22.patch`       | Temporary response-validation backport ([GHSA-qx66-fv34-fjm8](https://github.com/TanStack/router/security/advisories/GHSA-qx66-fv34-fjm8)). |
 | `@tanstack%2Fstart-client-core@1.170.22.patch` | Same backport.                                                                                                                              |

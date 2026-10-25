@@ -10,12 +10,15 @@ import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
 import {
+  Cause,
   Config,
+  Data,
   ConfigProvider,
   Context,
   DateTime,
   Duration,
   Effect,
+  Exit,
   Layer,
   Option,
   Redacted,
@@ -44,7 +47,7 @@ import { UserId } from "#contexts/auth/User.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
 import type { EmailDeliveryFailed, EmailMessage } from "#email/EmailDelivery.ts";
 import { BackgroundWork } from "#runtime/BackgroundWork.ts";
-import { PublicInternet } from "#runtime/PublicInternet.ts";
+import { PublicInternet, PublicInternetUnavailable } from "#runtime/PublicInternet.ts";
 
 import { AuthDatabase } from "./AuthDatabase.ts";
 import * as authSchema from "./AuthTables.ts";
@@ -107,7 +110,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       const runAuthHandler = Effect.fnUntraced(function* (request: Request) {
         const auth = yield* loadAuth;
         const run = Effect.runPromiseWith(yield* Effect.context<Scope.Scope>());
-        metadataRequests.set(request, (metadata) => run(internet.request(metadata)));
+        metadataRequests.set(request, (metadata) => clientMetadataRequest(run, internet, metadata));
         return yield* Effect.tryPromise({
           try: () => auth.handler(request),
           catch: (cause) => AuthenticationUnavailable.make({ cause }),
@@ -429,6 +432,24 @@ function initializeAuth(
     Effect.retry({ times: 1, while: (error) => Schema.is(ResourceSeedConflict)(error.cause) }),
   );
 }
+
+function clientMetadataRequest(
+  run: <A, E>(effect: Effect.Effect<A, E, Scope.Scope>) => Promise<A>,
+  internet: PublicInternet["Service"],
+  request: Request,
+): Promise<Response> {
+  return run(Effect.exit(internet.request(request))).then((exit) => {
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+    const failure = Cause.squash(exit.cause);
+    throw Schema.is(PublicInternetUnavailable)(failure) && failure.reason === "blocked_redirect"
+      ? new ClientMetadataRedirectRefused()
+      : failure;
+  });
+}
+
+class ClientMetadataRedirectRefused extends Data.TaggedError("ClientMetadataRedirectRefused") {}
 
 function seedLinkingHelperClient(
   database: AuthDatabase["Service"],

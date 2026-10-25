@@ -612,6 +612,45 @@ it.effect(
 );
 
 it.effect(
+  "names a refused client-metadata redirect instead of a network failure",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+
+      const response = yield* adapter.handle(metadataClientAuthorization());
+
+      assert.strictEqual(response.status, 400);
+      assert.deepStrictEqual(yield* jsonOf(response, ErrorDescription), {
+        error: "invalid_client",
+        error_description:
+          "Metadata document fetch was refused: redirects are not followed by policy",
+      });
+    }).pipe(
+      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, redirectingMetadata, testScopes)),
+    ),
+  databaseTestTimeout,
+);
+
+it.effect(
+  "reports an unreachable client-metadata document as a network failure",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+
+      const response = yield* adapter.handle(metadataClientAuthorization());
+
+      assert.strictEqual(response.status, 400);
+      assert.deepStrictEqual(yield* jsonOf(response, ErrorDescription), {
+        error: "invalid_client",
+        error_description: "Failed to fetch metadata document (network error)",
+      });
+    }).pipe(
+      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, unreachableMetadata, testScopes)),
+    ),
+  databaseTestTimeout,
+);
+
+it.effect(
   "publishes one scope set to the authorization server and the resource scopes to the protected resource",
   () =>
     Effect.gen(function* () {
@@ -900,6 +939,19 @@ it.effect(
   databaseTestTimeout,
 );
 
+const redirectingMetadata = PublicInternet.fromTransport(() =>
+  Promise.resolve(
+    new Response(null, {
+      status: 302,
+      headers: { location: "https://elsewhere.test/client.json" },
+    }),
+  ),
+);
+
+const unreachableMetadata = PublicInternet.fromTransport(() =>
+  Promise.reject(new Error("connection refused")),
+);
+
 const testMetadata = PublicInternet.fromTransport((request) =>
   Promise.resolve(
     Response.json({
@@ -983,6 +1035,20 @@ const instanceLayer = Layer.fresh(BetterAuthAdapter.layer).pipe(
   Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(baseConfig))),
 );
 
+function metadataClientAuthorization(): Request {
+  return new Request(
+    `http://localhost:5173/api/auth/oauth2/authorize?${new URLSearchParams({
+      response_type: "code",
+      client_id: "https://connections-client.test/client.json",
+      redirect_uri: "http://127.0.0.1:19999/callback",
+      scope: "connections:read",
+      resource: "http://localhost:5173/mcp",
+      code_challenge: "a".repeat(43),
+      code_challenge_method: "S256",
+    })}`,
+  );
+}
+
 function latestCode(email: string): Effect.Effect<string, never, EmailOutbox> {
   return Effect.map(EmailOutbox, (outbox) => outbox.messages).pipe(
     Effect.flatten,
@@ -1051,6 +1117,10 @@ function jsonOf<S extends Schema.Top & { readonly DecodingServices: never }>(
 }
 
 const ErrorBody = Schema.Struct({ code: Schema.optional(Schema.String) });
+const ErrorDescription = Schema.Struct({
+  error: Schema.String,
+  error_description: Schema.String,
+});
 
 function cookieHeader(response: Response): string {
   return response.headers

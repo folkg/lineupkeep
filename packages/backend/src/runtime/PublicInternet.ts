@@ -39,7 +39,9 @@ export class PublicInternet extends Context.Service<
 export class PublicInternetUnavailable extends Schema.TaggedError<
   PublicInternetUnavailable,
   { readonly brand: unique symbol }
->()("PublicInternetUnavailable", {}) {}
+>()("PublicInternetUnavailable", {
+  reason: Schema.optional(Schema.Literal("blocked_redirect")),
+}) {}
 
 function decodeLimits(options: PublicInternetOptions): Effect.Effect<
   {
@@ -115,7 +117,7 @@ function rejectRedirect(
         try: () => response.body?.cancel() ?? Promise.resolve(),
         catch: () => PublicInternetUnavailable.make(),
       }).pipe(Effect.ensuring(Effect.sync(() => abort.abort(PublicInternetUnavailable.make()))));
-      return yield* PublicInternetUnavailable.make();
+      return yield* PublicInternetUnavailable.make({ reason: "blocked_redirect" });
     }
   });
 }

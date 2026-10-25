@@ -1,0 +1,25 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 7adb40fbb98ad27d8fb46a13cb01f1e8748377d7..4d5e40fdbff5304ee0418ea610aecb62ddfada1d 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -250,7 +250,8 @@ function validateCimdMetadata(clientIdUrl, raw, options = {}) {
+ const FETCH_TIMEOUT_MS = 5e3;
+ const MAX_RESPONSE_BYTES = 5 * 1024;
+ const JSON_CONTENT_TYPE_RE = /^application\/(?:[-\w.]+\+)?json\s*(?:;|$)/i;
+-const FETCH_FAILURE_DESCRIPTION = "Failed to fetch metadata document (network error or redirect blocked)";
++const FETCH_FAILURE_DESCRIPTION = "Failed to fetch metadata document (network error)";
++const REDIRECT_REFUSED_DESCRIPTION = "Metadata document fetch was refused: redirects are not followed by policy";
+ const CIMD_CLIENT_DISCOVERY_ID = "cimd";
+ function invalidClient$1(description) {
+ 	return new APIError("BAD_REQUEST", {
+@@ -344,8 +345,8 @@ async function fetchClientMetadataDocument(ctx, clientIdUrl, cimdOptions, valida
+ 				redirect: "error",
+ 				signal: controller.signal
+ 			});
+-		} catch {
+-			throw invalidClient$1(didTimeOut ? `Metadata document fetch timed out after ${FETCH_TIMEOUT_MS}ms` : FETCH_FAILURE_DESCRIPTION);
++		} catch (error) {
++			throw invalidClient$1(didTimeOut ? `Metadata document fetch timed out after ${FETCH_TIMEOUT_MS}ms` : error?.name === "ClientMetadataRedirectRefused" ? REDIRECT_REFUSED_DESCRIPTION : FETCH_FAILURE_DESCRIPTION);
+ 		}
+ 		if (response.redirected) throw invalidClient$1("Metadata document fetch must not follow redirects");
+ 		const cacheHeaders = readResponseCacheHeaders(response.headers);

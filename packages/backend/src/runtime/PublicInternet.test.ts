@@ -119,6 +119,21 @@ it.effect(
   },
 );
 
+it.effect("refuses a redirect and says why it refused", () => {
+  const layer = PublicInternet.fromTransport(() =>
+    Promise.resolve(
+      new Response(null, { status: 307, headers: { location: "https://elsewhere.test/next" } }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const internet = yield* PublicInternet;
+
+    const error = yield* Effect.flip(internet.request(new Request("https://client.test/move")));
+
+    assert.strictEqual(error.reason, "blocked_redirect");
+  }).pipe(Effect.provide(layer));
+});
+
 it.effect("scrubs streamed failures before callers can export their causes", () =>
   Effect.gen(function* () {
     const internet = yield* PublicInternet;
