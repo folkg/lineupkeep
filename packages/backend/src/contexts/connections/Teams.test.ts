@@ -1,0 +1,272 @@
+import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
+import { assert, it } from "@effect/vitest";
+import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { and, eq } from "drizzle-orm";
+import { Array, Crypto, Effect, Layer, Redacted, Schema } from "effect";
+
+import {
+  ConnectionCredentialGeneration,
+  type ConnectionError,
+  type ConnectionId,
+  ConnectionLinkRejected,
+  ConnectionNotFound,
+  ConnectionProviderRejected,
+  ConnectionProviderUnavailable,
+  StartLinkingInput,
+} from "./Connection.ts";
+import { Connections } from "./Connections.ts";
+import type { FantasyTeam } from "./FantasyTeam.ts";
+import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
+import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
+import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
+import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
+import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
+import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
+import { providerCredentials, providerTeams } from "./internal/ConnectionTables.ts";
+import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
+import { ProviderGateway } from "./Provider.ts";
+import type { ProviderTeam } from "./Provider.ts";
+
+it.effect("discovers multiple teams in one league and persists them disabled", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    const teams = [team("nhl.l.1.t.1", "First Skate"), team("nhl.l.1.t.2", "Second Skate")];
+    yield* fake.setTeams(teams);
+
+    const discovered = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+
+    assert.strictEqual(discovered.length, 2);
+    assert.deepStrictEqual(
+      discovered.map((row) => row.providerTeamKey),
+      ["nhl.l.1.t.1", "nhl.l.1.t.2"],
+    );
+    assert.isTrue(discovered.every((row) => row.league === "nhl"));
+    assert.isTrue(discovered.every((row) => row.providerLeagueKey === "nhl"));
+    assert.isTrue(discovered.every((row) => row.automationEnabled === false));
+    assert.isTrue(discovered.every((row) => row.availability === "available"));
+    assert.deepStrictEqual(yield* connections.listTeams(owner), discovered);
+    assert.deepStrictEqual(yield* connections.listTeams(other), []);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("refreshes availability, restores teams, and preserves configuration", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    const first = team("nhl.l.1.t.1", "First Skate");
+    const second = team("nhl.l.1.t.2", "Second Skate");
+    yield* fake.setTeams([first, second]);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    yield* database
+      .update(providerTeams)
+      .set({ automationEnabled: true })
+      .where(
+        and(
+          eq(providerTeams.userId, owner),
+          eq(providerTeams.connectionId, ready.id),
+          eq(providerTeams.providerTeamKey, first.providerTeamKey),
+        ),
+      );
+
+    yield* fake.setTeams([{ ...first, name: "Renamed Skate" }]);
+    const refreshed = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    const renamed = findTeam(refreshed, first.providerTeamKey);
+    const unavailable = findTeam(refreshed, second.providerTeamKey);
+
+    assert.strictEqual(renamed.name, "Renamed Skate");
+    assert.strictEqual(renamed.availability, "available");
+    assert.strictEqual(renamed.automationEnabled, true);
+    assert.strictEqual(unavailable.name, "Second Skate");
+    assert.strictEqual(unavailable.availability, "unavailable");
+    assert.strictEqual(unavailable.automationEnabled, false);
+
+    const third = team("nhl.l.1.t.3", "Third Skate");
+    yield* fake.setTeams([first, second, third]);
+    const restored = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+
+    assert.isTrue(restored.every((row) => row.availability === "available"));
+    assert.strictEqual(findTeam(restored, first.providerTeamKey).automationEnabled, true);
+    assert.strictEqual(findTeam(restored, third.providerTeamKey).automationEnabled, false);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("requires a new credential generation after the provider rejects discovery", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    yield* fake.setTeams([team("nhl.l.1.t.1", "First Skate")]);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    yield* fake.rejectSession(true);
+
+    const rejected = yield* Effect.flip(connections.discoverTeams(owner, [{ id: ready.id }]));
+    const reconnectRequired = Array.getUnsafe(yield* connections.list(owner), 0);
+    const retained = yield* connections.listTeams(owner);
+
+    assert.instanceOf(rejected, ConnectionProviderRejected);
+    assert.strictEqual(reconnectRequired.status, "reconnect-required");
+    assert.strictEqual(reconnectRequired.credentialGeneration, 1);
+    assert.strictEqual(retained.length, 1);
+    assert.strictEqual(Array.getUnsafe(retained, 0).availability, "unavailable");
+
+    yield* fake.rejectSession(false);
+    const recovered = Array.getUnsafe(
+      yield* connections.reconnect(owner, [
+        {
+          id: ready.id,
+          provider: "yahoo",
+          session,
+          expectedGeneration: makeGeneration(1),
+        },
+      ]),
+      0,
+    );
+    const rediscovered = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+
+    assert.strictEqual(recovered.status, "ready");
+    assert.strictEqual(recovered.credentialGeneration, 2);
+    assert.strictEqual(Array.getUnsafe(rediscovered, 0).availability, "available");
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("rejects discovery before a connection is ready and for another owner", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [startInput]), 0);
+    const ready = yield* connect(connections);
+
+    const notReady = yield* Effect.flip(connections.discoverTeams(owner, [{ id: linking.id }]));
+    const foreign = yield* Effect.flip(connections.discoverTeams(other, [{ id: ready.id }]));
+
+    assert.instanceOf(notReady, ConnectionLinkRejected);
+    assert.strictEqual(notReady.status, "linking");
+    assert.instanceOf(foreign, ConnectionNotFound);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("marks teams unavailable when their connection is disconnected", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    yield* fake.setTeams([team("nhl.l.1.t.1", "First Skate")]);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+
+    yield* connections.disconnect(owner, [{ id: ready.id }]);
+    const teams = yield* connections.listTeams(owner);
+
+    assert.strictEqual(Array.getUnsafe(teams, 0).availability, "unavailable");
+    assert.strictEqual(Array.getUnsafe(teams, 0).automationEnabled, false);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("rejects tampered credentials without exposing their contents", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const ready = yield* connect(connections);
+    yield* database
+      .update(providerCredentials)
+      .set({ envelope: "tampered-envelope" })
+      .where(eq(providerCredentials.connectionId, ready.id));
+
+    const error = yield* Effect.flip(connections.discoverTeams(owner, [{ id: ready.id }]));
+
+    assert.strictEqual(error._tag, "connection.persistence_failed");
+    assert.notInclude(String(error), "tampered-envelope");
+    assert.deepStrictEqual(yield* connections.listTeams(owner), []);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("leaves stored teams unchanged when the provider is unavailable", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    yield* fake.setTeams([team("nhl.l.1.t.1", "First Skate")]);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    yield* fake.failRequests("unavailable");
+
+    const error = yield* Effect.flip(connections.discoverTeams(owner, [{ id: ready.id }]));
+    const teams = yield* connections.listTeams(owner);
+
+    assert.instanceOf(error, ConnectionProviderUnavailable);
+    assert.strictEqual(Array.getUnsafe(teams, 0).availability, "available");
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+function connect(
+  connections: Connections["Service"],
+): Effect.Effect<{ readonly id: ConnectionId }, ConnectionError> {
+  return Effect.gen(function* () {
+    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [connectInput]), 0);
+    const ready = Array.getUnsafe(
+      yield* connections.completeLinking(owner, [{ id: linking.id, provider: "yahoo", session }]),
+      0,
+    );
+    return { id: ready.id };
+  });
+}
+
+function team(providerTeamKey: string, name: string): ProviderTeam {
+  return {
+    provider: "yahoo",
+    providerTeamKey,
+    providerLeagueKey: "nhl",
+    league: "nhl",
+    sport: "hockey",
+    season: 2026,
+    name,
+  };
+}
+
+function makeGeneration(value: number): ConnectionCredentialGeneration {
+  return Schema.decodeSync(ConnectionCredentialGeneration)(value);
+}
+
+function findTeam(teams: ReadonlyArray<FantasyTeam>, providerTeamKey: string): FantasyTeam {
+  const found = teams.find((row) => row.providerTeamKey === providerTeamKey);
+  if (found === undefined) {
+    throw new Error(`missing team ${providerTeamKey}`);
+  }
+  return found;
+}
+
+function ConnectionsLayerFor(
+  crypto: Layer.Layer<Crypto.Crypto>,
+): Layer.Layer<Connections | ConnectionsDatabase | FakeProviderWorld | ProviderGateway> {
+  return ConnectionsLive.pipe(
+    Layer.provide(ConnectionRepository.layer),
+    Layer.provideMerge(ConnectionsDatabaseTest),
+    Layer.provideMerge(ProviderFakeTest),
+    Layer.provide(EncryptionTestLayer),
+    Layer.provide(crypto),
+    Layer.orDie,
+  );
+}
+
+const owner = decodeUserId("owner");
+const other = decodeUserId("other");
+const session = Redacted.make("A1=test-session-cookie");
+const startInput = Schema.decodeSync(StartLinkingInput)({
+  requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
+  provider: "yahoo",
+  pairingCode: "ABCD2345",
+});
+const connectInput = Schema.decodeSync(StartLinkingInput)({
+  requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",
+  provider: "yahoo",
+  pairingCode: "WXYZ6789",
+});
+const EncryptionTestLayer = ConnectionCredentialEncryption.forKey(
+  ConnectionEncryptionKey.fromBytes({
+    bytes: new TextEncoder().encode("abcdefghijklmnopqrstuvwxyz012345"),
+    keyVersion: 1,
+  }),
+).pipe(Layer.provide(NodeCrypto.layer));
+
+const ConnectionsTestLayer = ConnectionsLayerFor(NodeCrypto.layer);

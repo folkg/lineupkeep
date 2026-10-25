@@ -47,6 +47,16 @@ export function unnestRows<
 
 const postgresMaxBindParameters = 65_535;
 
+export function excludedValues<
+  Table extends PgTable,
+  Keys extends keyof InferSelectModel<Table> & string,
+>(table: Table, keys: ReadonlyArray<Keys>): Record<string, SQL> {
+  const columns = getTableColumns(table) as Record<Keys, PgColumn>;
+  return Object.fromEntries(
+    keys.map((key) => [key, sql`excluded.${sql.identifier(columns[key].name)}`] as const),
+  );
+}
+
 export function maxInsertRows(table: PgTable): number {
   const columns = Object.values(getTableColumns(table)).filter(
     (column) => column.generated === undefined && column.generatedIdentity?.type !== "always",

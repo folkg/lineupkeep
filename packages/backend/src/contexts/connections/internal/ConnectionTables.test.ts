@@ -10,7 +10,7 @@ import {
 import { snapshotOf } from "#utilities/machine.ts";
 
 import { ConnectionLifecycleWorkflow } from "./ConnectionLifecycleWorkflow.ts";
-import { ConnectionRow } from "./ConnectionTables.ts";
+import { ConnectionRow, FantasyTeamRow } from "./ConnectionTables.ts";
 
 it.effect("round-trips every explored lifecycle state through its row codec", () =>
   Effect.gen(function* () {
@@ -111,6 +111,37 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
     );
 
     assert.strictEqual(result._tag, "Passed", Arbitrary.formatCheckFailure(result));
+  }),
+);
+
+it.effect("round-trips discovered team rows through the codec", () =>
+  Effect.gen(function* () {
+    const atDate = DateTime.toDateUtc(at);
+    const row = {
+      connectionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
+      userId: "owner",
+      provider: "yahoo" as const,
+      providerTeamKey: "461.l.1000.t.1",
+      providerLeagueKey: "461.l.1000",
+      league: "nfl" as const,
+      sport: "football" as const,
+      season: 2026,
+      name: "Alpha",
+      availability: "available" as const,
+      automationEnabled: false,
+      lastSeenAt: atDate,
+      createdAt: atDate,
+      updatedAt: atDate,
+    };
+    const decoded = yield* Schema.decodeEffect(FantasyTeamRow)(row);
+
+    assert.strictEqual(decoded.providerTeamKey, "461.l.1000.t.1");
+    assert.strictEqual(decoded.league, "nfl");
+    assert.strictEqual(decoded.automationEnabled, false);
+    assert.deepStrictEqual(decoded.lastSeenAt, at);
+    assert.isTrue(
+      yield* Effect.isFailure(Schema.decodeEffect(FantasyTeamRow)({ ...row, season: 1800 })),
+    );
   }),
 );
 

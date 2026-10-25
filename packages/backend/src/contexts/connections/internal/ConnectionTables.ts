@@ -1,9 +1,27 @@
 import { createSelectSchema } from "drizzle-orm/effect-schema";
-import { index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { Effect, Schema, SchemaParser, SchemaTransformation, Struct } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
-import { ConnectionCredentialGeneration, ConnectionId } from "#contexts/connections/Connection.ts";
+import {
+  ConnectionCredentialGeneration,
+  ConnectionId,
+  Provider,
+} from "#contexts/connections/Connection.ts";
+import {
+  FantasyLeague,
+  FantasySport,
+  TeamAvailability,
+} from "#contexts/connections/FantasyTeam.ts";
 
 import { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
 
@@ -47,6 +65,47 @@ export const providerCredentials = pgTable(
     index("provider_credentials_user_id_connection_id_idx").on(table.userId, table.connectionId),
   ],
 );
+
+export const providerTeams = pgTable(
+  "provider_teams",
+  {
+    connectionId: text("connection_id").notNull(),
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: ["yahoo"] }).notNull(),
+    providerTeamKey: text("provider_team_key").notNull(),
+    providerLeagueKey: text("provider_league_key").notNull(),
+    league: text("league", { enum: ["nfl", "nhl"] }).notNull(),
+    sport: text("sport", { enum: ["football", "hockey"] }).notNull(),
+    season: integer("season").notNull(),
+    name: text("name").notNull(),
+    availability: text("availability", { enum: ["available", "unavailable"] })
+      .notNull()
+      .default("available"),
+    automationEnabled: boolean("automation_enabled").notNull().default(false),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.connectionId, table.providerTeamKey] }),
+    index("provider_teams_user_id_league_name_idx").on(table.userId, table.league, table.name),
+  ],
+);
+
+export const FantasyTeamRow = createSelectSchema(providerTeams, {
+  connectionId: ConnectionId,
+  provider: Provider,
+  providerTeamKey: Schema.NonEmptyString,
+  providerLeagueKey: Schema.NonEmptyString,
+  league: FantasyLeague,
+  sport: FantasySport,
+  season: Schema.Int.check(Schema.isGreaterThan(1900)),
+  name: Schema.NonEmptyString,
+  availability: TeamAvailability,
+  lastSeenAt: Schema.DateTimeUtcFromDate,
+  createdAt: Schema.DateTimeUtcFromDate,
+  updatedAt: Schema.DateTimeUtcFromDate,
+});
 
 const Row = createSelectSchema(providerConnections, {
   id: ConnectionId,

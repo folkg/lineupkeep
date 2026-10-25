@@ -18,6 +18,15 @@ A provider-hosted fantasy competition with its own roster, scoring, and particip
 A participant's team within a particular league on a particular provider.
 _Avoid_: Professional team, account
 
+**Provider team key**:
+A provider's stable identifier for a fantasy team within one provider connection. The same provider team key may appear under a different connection without referring to the same accessible team.
+
+**Provider league key**:
+A provider's stable identifier for the league that contains a fantasy team.
+
+**Team availability**:
+Whether the provider still reports a discovered fantasy team through its connection. An unavailable team keeps its configuration and is not treated as deleted.
+
 **Roster**:
 The players held by a fantasy team, including starters, bench players, and reserve players.
 

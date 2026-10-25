@@ -1,0 +1,328 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "a51c758d-b3d9-440f-ad9d-23873e368cc3",
+  "prevIds": ["5ae67f87-1393-415e-aaff-6e46ed3142d7"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "provider_teams"],
+      "writes": [
+        "s|tbl|public.provider_teams",
+        "n|tbl|public.provider_teams",
+        "e|tbl|public.provider_teams",
+        "n|rel|public.provider_teams",
+        "n|type|public.provider_teams",
+        "n|rel|public.provider_teams_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "provider_teams",
+        "provider_teams_user_id_league_name_idx"
+      ],
+      "writes": [
+        "s|idx|public.provider_teams_user_id_league_name_idx",
+        "n|idx|public.provider_teams_user_id_league_name_idx",
+        "e|idx|public.provider_teams_user_id_league_name_idx",
+        "n|rel|public.provider_teams_user_id_league_name_idx"
+      ],
+      "reads": [
+        "n|tbl|public.provider_teams",
+        "n|sch|public",
+        "n|col|public.provider_teams.user_id",
+        "n|col|public.provider_teams.league",
+        "n|col|public.provider_teams.name"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "provider_teams",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "connection_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "provider",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "provider_team_key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "provider_league_key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "league",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "sport",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "season",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "availability",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'available'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "automation_enabled",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "last_seen_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "provider_teams_user_id_league_name_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "league",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "name",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "provider_teams_pkey",
+        "columns": ["connection_id", "provider_team_key"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

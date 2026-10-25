@@ -10,6 +10,7 @@ import type {
   ReconnectInput,
   StartLinkingInput,
 } from "./Connection.ts";
+import type { FantasyTeam } from "./FantasyTeam.ts";
 
 export class Connections extends Context.Service<Connections, ConnectionsShape>()(
   "@lineupkeep/backend/contexts/connections/Connections",
@@ -44,4 +45,13 @@ export type ConnectionsShape = {
     userId: UserId,
     inputs: ReadonlyArray<ConnectionIdInput>,
   ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
+
+  readonly discoverTeams: (
+    userId: UserId,
+    inputs: ReadonlyArray<ConnectionIdInput>,
+  ) => Effect.Effect<ReadonlyArray<FantasyTeam>, ConnectionError>;
+
+  readonly listTeams: (
+    userId: UserId,
+  ) => Effect.Effect<ReadonlyArray<FantasyTeam>, ConnectionError>;
 };

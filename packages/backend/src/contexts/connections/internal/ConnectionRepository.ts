@@ -1,5 +1,5 @@
 import { Machine } from "@typeonce/effect-machine";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, notInArray } from "drizzle-orm";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
@@ -26,7 +26,9 @@ import {
   connectionLinkingWindowMillis,
   connectionListLimit,
 } from "#contexts/connections/ConnectionLimits.ts";
-import { anyOf, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
+import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
+import type { ProviderTeam } from "#contexts/connections/Provider.ts";
+import { anyOf, excludedValues, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
 import { planBatch, snapshotOf } from "#utilities/machine.ts";
 
@@ -37,7 +39,13 @@ import {
 } from "./ConnectionLifecycleWorkflow.ts";
 import type { ConnectionLifecycleRequest } from "./ConnectionLifecycleWorkflow.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
-import { ConnectionRow, providerConnections, providerCredentials } from "./ConnectionTables.ts";
+import {
+  ConnectionRow,
+  FantasyTeamRow,
+  providerConnections,
+  providerCredentials,
+  providerTeams,
+} from "./ConnectionTables.ts";
 
 export type CompleteLinkingCommand = {
   readonly id: ConnectionId;
@@ -52,6 +60,18 @@ export type ReconnectCommand = CompleteLinkingCommand & {
 type ReconnectRequiredCommand = {
   readonly id: ConnectionId;
   readonly expectedGeneration: ConnectionCredentialGeneration;
+};
+
+export type ReadyCredential = {
+  readonly connectionId: ConnectionId;
+  readonly provider: Provider;
+  readonly generation: ConnectionCredentialGeneration;
+  readonly envelope: string;
+};
+
+export type TeamDiscovery = {
+  readonly connectionId: ConnectionId;
+  readonly teams: ReadonlyArray<ProviderTeam>;
 };
 
 export class ConnectionRepository extends Context.Service<ConnectionRepository>()(
@@ -555,6 +575,12 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     anyOf(providerCredentials.connectionId, ids),
                   ),
                 );
+              yield* transaction
+                .update(providerTeams)
+                .set({ availability: "unavailable", updatedAt: DateTime.toDateUtc(at) })
+                .where(
+                  and(eq(providerTeams.userId, userId), anyOf(providerTeams.connectionId, ids)),
+                );
               return orderConnections(rows, ids);
             }),
           )
@@ -653,6 +679,180 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         },
       );
 
+      const loadCredentials = Effect.fn("ConnectionRepository.loadCredentials")(function* (
+        userId: UserId,
+        ids: ReadonlyArray<ConnectionId>,
+      ) {
+        const uniqueIds = [...new Set(ids)];
+        if (!Array.isArrayNonEmpty(uniqueIds)) {
+          return [];
+        }
+        const rows = yield* database
+          .select({
+            connectionId: providerCredentials.connectionId,
+            provider: providerCredentials.provider,
+            generation: providerCredentials.generation,
+            envelope: providerCredentials.envelope,
+          })
+          .from(providerCredentials)
+          .innerJoin(
+            providerConnections,
+            eq(providerCredentials.connectionId, providerConnections.id),
+          )
+          .where(
+            and(
+              eq(providerCredentials.userId, userId),
+              eq(providerConnections.userId, userId),
+              anyOf(providerCredentials.connectionId, uniqueIds),
+              eq(providerConnections.status, "ready"),
+            ),
+          )
+          .orderBy(asc(providerCredentials.connectionId))
+          .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+        const byId = new Map(
+          yield* Effect.forEach(rows, (row) =>
+            Schema.decodeEffect(ReadyCredentialRow)(row).pipe(
+              Effect.map((credential) => [credential.connectionId, credential] as const),
+              Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+            ),
+          ),
+        );
+        return yield* Effect.forEach(ids, (id) => {
+          const credential = byId.get(id);
+          return credential === undefined
+            ? ConnectionPersistenceFailed.make({
+                cause: new Error("ready connection is missing its credential"),
+              })
+            : Effect.succeed(credential);
+        });
+      });
+
+      const recordDiscoveries = Effect.fn("ConnectionRepository.recordDiscoveries")(function* (
+        userId: UserId,
+        discoveries: ReadonlyArray<TeamDiscovery>,
+        at: DateTime.Utc,
+      ) {
+        if (discoveries.length === 0) {
+          return;
+        }
+        const ids = [...new Set(discoveries.map((discovery) => discovery.connectionId))];
+        if (!Array.isArrayNonEmpty(ids)) {
+          return;
+        }
+        const atDate = DateTime.toDateUtc(at);
+        const rows = discoveries.flatMap(({ connectionId, teams }) =>
+          teams.map((team) => ({
+            connectionId,
+            userId,
+            provider: team.provider,
+            providerTeamKey: team.providerTeamKey,
+            providerLeagueKey: team.providerLeagueKey,
+            league: team.league,
+            sport: team.sport,
+            season: team.season,
+            name: team.name,
+            availability: "available" as const,
+            automationEnabled: false,
+            lastSeenAt: atDate,
+            createdAt: atDate,
+            updatedAt: atDate,
+          })),
+        );
+        yield* database
+          .transaction((tx) =>
+            Effect.gen(function* () {
+              const owned = yield* tx
+                .select({ id: providerConnections.id })
+                .from(providerConnections)
+                .where(
+                  and(eq(providerConnections.userId, userId), anyOf(providerConnections.id, ids)),
+                );
+              const ownedIds = new Set(owned.map((row) => row.id));
+              for (const id of ids) {
+                if (!ownedIds.has(id)) {
+                  return yield* ConnectionNotFound.make({ id });
+                }
+              }
+              if (rows.length > 0) {
+                yield* chunked(rows, maxInsertRows(providerTeams), (chunk) =>
+                  tx
+                    .insert(providerTeams)
+                    .values(chunk)
+                    .onConflictDoUpdate({
+                      target: [providerTeams.connectionId, providerTeams.providerTeamKey],
+                      set: excludedValues(providerTeams, [
+                        "providerLeagueKey",
+                        "league",
+                        "sport",
+                        "season",
+                        "name",
+                        "availability",
+                        "lastSeenAt",
+                        "updatedAt",
+                      ]),
+                    })
+                    .returning(),
+                );
+              }
+              for (const { connectionId, teams } of discoveries) {
+                const keys = teams.map((team) => team.providerTeamKey);
+                yield* tx
+                  .update(providerTeams)
+                  .set({ availability: "unavailable", updatedAt: atDate })
+                  .where(
+                    keys.length === 0
+                      ? and(
+                          eq(providerTeams.userId, userId),
+                          eq(providerTeams.connectionId, connectionId),
+                        )
+                      : and(
+                          eq(providerTeams.userId, userId),
+                          eq(providerTeams.connectionId, connectionId),
+                          notInArray(providerTeams.providerTeamKey, keys),
+                        ),
+                  );
+              }
+            }),
+          )
+          .pipe(mapTransactionError);
+      });
+
+      const listTeams = Effect.fn("ConnectionRepository.listTeams")(function* (userId: UserId) {
+        const rows = yield* database
+          .select()
+          .from(providerTeams)
+          .where(eq(providerTeams.userId, userId))
+          .orderBy(
+            asc(providerTeams.league),
+            asc(providerTeams.name),
+            asc(providerTeams.providerTeamKey),
+          )
+          .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+        return yield* Effect.forEach(rows, toFantasyTeam);
+      });
+
+      const listTeamsForConnections = Effect.fn("ConnectionRepository.listTeamsForConnections")(
+        function* (userId: UserId, ids: ReadonlyArray<ConnectionId>) {
+          const uniqueIds = [...new Set(ids)];
+          if (!Array.isArrayNonEmpty(uniqueIds)) {
+            return [];
+          }
+          const rows = yield* database
+            .select()
+            .from(providerTeams)
+            .where(
+              and(eq(providerTeams.userId, userId), anyOf(providerTeams.connectionId, uniqueIds)),
+            )
+            .orderBy(
+              asc(providerTeams.league),
+              asc(providerTeams.name),
+              asc(providerTeams.providerTeamKey),
+            )
+            .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+          return yield* Effect.forEach(rows, toFantasyTeam);
+        },
+      );
+
       return {
         listConnections,
         loadOwned,
@@ -663,6 +863,10 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         reconnect,
         disconnect,
         markReconnectRequired,
+        loadCredentials,
+        recordDiscoveries,
+        listTeams,
+        listTeamsForConnections,
       };
     }),
   },
@@ -756,6 +960,15 @@ function mapTransactionError<A, R>(
   );
 }
 
+const toFantasyTeam: (row: unknown) => Effect.Effect<FantasyTeam, ConnectionPersistenceFailed> =
+  Effect.fnUntraced(
+    function* (row: unknown) {
+      return yield* Schema.decodeUnknownEffect(FantasyTeamRow)(row);
+    },
+    (effect) =>
+      effect.pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
+  );
+
 const toConnection: (
   row: unknown,
 ) => Effect.Effect<ProviderConnection, ConnectionPersistenceFailed> = Effect.fnUntraced(
@@ -814,6 +1027,13 @@ type LockedTarget = {
   readonly record: typeof ConnectionRow.Type;
   readonly snapshot: Machine.Snapshot<typeof ConnectionLifecycleStates>;
 };
+
+const ReadyCredentialRow = Schema.Struct({
+  connectionId: ConnectionId,
+  provider: Provider,
+  generation: ConnectionCredentialGeneration,
+  envelope: Schema.String,
+});
 
 const ActiveCredential = Schema.Struct({
   provider: Provider,

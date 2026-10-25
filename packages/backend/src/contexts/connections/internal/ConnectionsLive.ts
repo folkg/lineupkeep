@@ -5,6 +5,7 @@ import {
   ConnectionCredentialGenerationStale,
   ConnectionLinkExpired,
   ConnectionLinkRejected,
+  ConnectionNotFound,
   ConnectionPersistenceFailed,
   ConnectionProviderRejected,
   ConnectionProviderUnavailable,
@@ -20,13 +21,19 @@ import type {
   StartLinkingInput,
 } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
+import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import { ProviderGateway } from "#contexts/connections/Provider.ts";
 import type { ProviderFailure } from "#contexts/connections/Provider.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import type { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
 import { ConnectionRepository } from "./ConnectionRepository.ts";
-import type { CompleteLinkingCommand, ReconnectCommand } from "./ConnectionRepository.ts";
+import type {
+  CompleteLinkingCommand,
+  ReadyCredential,
+  ReconnectCommand,
+  TeamDiscovery,
+} from "./ConnectionRepository.ts";
 
 export const ConnectionsLive = Layer.effect(
   Connections,
@@ -174,6 +181,110 @@ export const ConnectionsLive = Layer.effect(
           .pipe(Effect.tap(annotateOneConnection));
       });
 
+    const listTeams = (
+      userId: UserId,
+    ): Effect.Effect<ReadonlyArray<FantasyTeam>, ConnectionError> =>
+      repository
+        .listTeams(userId)
+        .pipe(
+          Effect.tap((teams) => Effect.annotateCurrentSpan("connections.team_count", teams.length)),
+        );
+
+    const discoverTeams = (
+      userId: UserId,
+      inputs: ReadonlyArray<ConnectionIdInput>,
+    ): Effect.Effect<ReadonlyArray<FantasyTeam>, ConnectionError> =>
+      Effect.gen(function* () {
+        const ids = [...new Set(inputs.map((input) => input.id))];
+        if (ids.length === 0) {
+          return [];
+        }
+        const owned = yield* repository.loadOwned(userId, ids);
+        const byId = new Map(owned.map((record) => [record.id, record]));
+        for (const id of ids) {
+          const record = byId.get(id);
+          if (record === undefined) {
+            return yield* ConnectionNotFound.make({ id });
+          }
+          if (record.state._tag !== "Ready") {
+            return yield* ConnectionLinkRejected.make({
+              id,
+              status: statusOf(record),
+            });
+          }
+        }
+        const credentials = yield* repository.loadCredentials(userId, ids);
+        for (const credential of credentials) {
+          const record = byId.get(credential.connectionId);
+          if (
+            record?.state._tag !== "Ready" ||
+            record.state.credentialGeneration !== credential.generation
+          ) {
+            return yield* credentialPersistenceFailure();
+          }
+        }
+        const at = yield* DateTime.now;
+        const discoveries = yield* Effect.forEach(
+          credentials,
+          (credential) => discoverConnection(userId, credential, at),
+          { concurrency: 1 },
+        );
+        yield* repository.recordDiscoveries(userId, discoveries, at);
+        const teams = yield* repository.listTeamsForConnections(userId, ids);
+        yield* Effect.annotateCurrentSpan("connections.team_count", teams.length);
+        return teams;
+      });
+
+    const discoverConnection = (
+      userId: UserId,
+      credential: ReadyCredential,
+      at: DateTime.Utc,
+    ): Effect.Effect<TeamDiscovery, ConnectionError> =>
+      Effect.gen(function* () {
+        const session = yield* encryption
+          .decrypt({
+            userId,
+            connectionId: credential.connectionId,
+            provider: credential.provider,
+            envelope: credential.envelope,
+          })
+          .pipe(Effect.mapError(() => credentialPersistenceFailure()));
+        const teams = yield* provider
+          .discoverTeams({ provider: credential.provider, session })
+          .pipe(
+            Effect.catch((error) => {
+              if (error._tag !== "provider.session_rejected") {
+                return Effect.fail(connectionProviderError(credential.connectionId, error));
+              }
+              return Effect.gen(function* () {
+                const marked = yield* Effect.result(
+                  repository.markReconnectRequired(userId, [
+                    {
+                      id: credential.connectionId,
+                      expectedGeneration: credential.generation,
+                    },
+                  ]),
+                );
+                if (marked._tag === "Failure") {
+                  if (marked.failure._tag !== "connection.credential_generation_stale") {
+                    return yield* marked.failure;
+                  }
+                  return yield* ConnectionProviderRejected.make({
+                    id: credential.connectionId,
+                  });
+                }
+                yield* repository.recordDiscoveries(
+                  userId,
+                  [{ connectionId: credential.connectionId, teams: [] }],
+                  at,
+                );
+                return yield* ConnectionProviderRejected.make({ id: credential.connectionId });
+              });
+            }),
+          );
+        return { connectionId: credential.connectionId, teams };
+      });
+
     return Connections.of({
       list,
       startLinking,
@@ -181,6 +292,8 @@ export const ConnectionsLive = Layer.effect(
       completeLinking,
       reconnect,
       disconnect,
+      discoverTeams,
+      listTeams,
     });
   }),
 );
