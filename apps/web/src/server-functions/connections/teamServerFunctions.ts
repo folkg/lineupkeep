@@ -1,3 +1,4 @@
+import { Connections } from "@lineupkeep/backend/connections/Connections";
 import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import { TeamEnabledInput, TeamPauseInput } from "@lineupkeep/backend/connections/Teams";
@@ -6,13 +7,14 @@ import { createServerFn } from "@tanstack/solid-start";
 import { getRequest } from "@tanstack/solid-start/server";
 import { Effect, Schema } from "effect";
 
-import type { TeamChangeView } from "#contracts/connections/teamContract.ts";
+import type { TeamChangeView, TeamRefreshView } from "#contracts/connections/teamContract.ts";
 import { runUseCase } from "#server/backendEntry.ts";
 import {
   LineupRunInputInvalid,
   TeamInputInvalid,
   mapLineupError,
   mapTeamError,
+  mapTeamRefreshError,
   toLineupRunView,
   toTeamSummaryView,
 } from "#server/connections/teamPresentation.ts";
@@ -28,6 +30,30 @@ export const listTeamsServerFn = createServerFn({ method: "GET" }).handler(() =>
     mapTeamError,
   ),
 );
+
+export const refreshTeamsServerFn = createServerFn({ method: "POST" }).handler(() => {
+  const request = getRequest();
+  return runUseCase(
+    request,
+    "teams.refresh",
+    (userId) =>
+      Effect.gen(function* () {
+        const connections = yield* Connections;
+        const ready = (yield* connections.list(userId)).filter(
+          (connection) => connection.status === "ready",
+        );
+        if (ready.length > 0) {
+          yield* connections.discoverTeams(
+            userId,
+            ready.map((connection) => ({ id: connection.id })),
+          );
+        }
+        const all = yield* Teams.use((teams) => teams.list(userId));
+        return { teams: all.map(toTeamSummaryView) } satisfies TeamRefreshView;
+      }),
+    mapTeamRefreshError,
+  );
+});
 
 export const setTeamEnabledServerFn = createServerFn({ method: "POST" })
   .validator((raw: typeof TeamEnabledInput.Encoded) => Schema.decodeResult(TeamEnabledInput)(raw))

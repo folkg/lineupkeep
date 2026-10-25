@@ -25,9 +25,19 @@ import {
 export function TeamList(props: TeamListProps): JSX.Element {
   return (
     <Stack as="section" gap="md" labelledBy="teams-list-title">
-      <Heading id="teams-list-title" level={2} size="section">
-        Your teams
-      </Heading>
+      <Inline gap="sm" justify="between">
+        <Heading id="teams-list-title" level={2} size="section">
+          Your teams
+        </Heading>
+        <Button
+          pending={props.refreshing()}
+          pendingLabel="Refreshing teams…"
+          variant="secondary"
+          onClick={props.onRefreshTeams}
+        >
+          Refresh teams
+        </Button>
+      </Inline>
       <Show
         fallback={<LoadingState label="Loading teams">Loading your teams…</LoadingState>}
         when={!props.isLoading()}
@@ -51,8 +61,8 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No teams yet.">
-                <TextLink to="/connections">Link Yahoo</TextLink> to discover the teams this account
-                can manage.
+                <TextLink to="/connections">Link Yahoo</TextLink>, then refresh to import the teams
+                this account can manage.
               </EmptyState>
             }
             when={props.teams().length > 0}
@@ -197,7 +207,9 @@ type TeamListProps = {
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly pendingTeam: Accessor<string | undefined>;
+  readonly refreshing: Accessor<boolean>;
   readonly onRefresh: () => Promise<void>;
+  readonly onRefreshTeams: () => void;
   readonly onSetEnabled: (team: TeamSummaryView, enabled: boolean) => void;
   readonly onPause: (team: TeamSummaryView) => void;
 };

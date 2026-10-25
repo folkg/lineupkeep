@@ -4,10 +4,14 @@ import type { Accessor } from "solid-js";
 
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
-import type { TeamChangeView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import type {
+  TeamChangeView,
+  TeamRefreshView,
+  TeamSummaryView,
+} from "#contracts/connections/teamContract.ts";
 
 import { describeTeamFailure } from "./teamFailure";
-import { storeRefreshedTeams, teamMutations } from "./teamMutations";
+import { storeRefreshedTeamList, storeRefreshedTeams, teamMutations } from "./teamMutations";
 import type { TeamListQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 
@@ -16,6 +20,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [pendingTeam, setPendingTeam] = createSignal<string>();
+  const [refreshing, setRefreshing] = createSignal(false);
 
   const reportFailure = (error: unknown): void => {
     const failure = describeTeamFailure(error);
@@ -44,6 +49,15 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     onError: reportFailure,
     onSettled: () => setPendingTeam(undefined),
   }));
+  const refreshTeams = useMutation(() => ({
+    ...teamMutations.refresh(props.remote()),
+    onSuccess: (view: TeamRefreshView, variables, onMutateResult, context) => {
+      storeRefreshedTeamList(view, variables, onMutateResult, context);
+      setFeedback({ type: "success", message: "Teams refreshed from Yahoo." });
+    },
+    onError: reportFailure,
+    onSettled: () => setRefreshing(false),
+  }));
 
   const changeEnabled = (team: TeamSummaryView, enabled: boolean): void => {
     setPendingTeam(team.team.id);
@@ -60,7 +74,13 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     loadFailure: () => teams.error,
     feedback,
     pendingTeam,
+    refreshing,
     refresh: () => props.onRefresh(),
+    refreshTeams: () => {
+      setRefreshing(true);
+      setFeedback({ type: "pending", message: "Refreshing teams from Yahoo…" });
+      void refreshTeams.mutate(undefined);
+    },
     setEnabled: changeEnabled,
     pause: (team) => {
       setPendingTeam(team.team.id);
@@ -76,7 +96,9 @@ export type TeamsPageController = {
   readonly loadFailure: Accessor<Error | null>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
   readonly pendingTeam: Accessor<string | undefined>;
+  readonly refreshing: Accessor<boolean>;
   readonly refresh: () => Promise<void>;
+  readonly refreshTeams: () => void;
   readonly setEnabled: (team: TeamSummaryView, enabled: boolean) => void;
   readonly pause: (team: TeamSummaryView) => void;
 };

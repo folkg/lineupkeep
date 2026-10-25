@@ -64,6 +64,11 @@ export function describeTeamFailure(error: unknown): TeamFailure {
         };
       case "team.persistence_failed":
         break;
+      case "team.refresh_failed":
+        return {
+          kind: "unconfirmed",
+          message: "We could not refresh teams from Yahoo. Try again.",
+        };
     }
   }
   return {

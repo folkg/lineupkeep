@@ -94,6 +94,10 @@ export type TeamChangeView = {
   readonly teams: ReadonlyArray<TeamSummaryView>;
 };
 
+export type TeamRefreshView = {
+  readonly teams: ReadonlyArray<TeamSummaryView>;
+};
+
 export type TeamEnabledData = typeof TeamEnabledInput.Encoded;
 export type TeamPauseData = typeof TeamPauseInput.Encoded;
 
@@ -102,6 +106,7 @@ export type TeamMutationError = {
     | "team.not_found"
     | "team.control_rejected"
     | "team.persistence_failed"
+    | "team.refresh_failed"
     | "team.input_invalid";
 };
 export type TeamRequestResult<A> =

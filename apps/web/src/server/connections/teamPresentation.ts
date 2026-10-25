@@ -1,3 +1,4 @@
+import type { ConnectionError } from "@lineupkeep/backend/connections/Connection";
 import type { LineupRun } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupError } from "@lineupkeep/backend/connections/LineupRun";
 import type { TeamSummary } from "@lineupkeep/backend/connections/Teams";
@@ -102,6 +103,21 @@ export function mapTeamError(error: TeamError): ExpectedFailure<TeamMutationErro
     case "team.persistence_failed":
       return { type: "team.persistence_failed", outcome: "failure" };
   }
+}
+
+export function mapTeamRefreshError(
+  error: ConnectionError | TeamError,
+): ExpectedFailure<TeamMutationError["type"]> {
+  if (error._tag === "team.not_found") {
+    return { type: "team.not_found", outcome: "rejected" };
+  }
+  if (error._tag === "team.control_rejected") {
+    return { type: "team.control_rejected", outcome: "conflict" };
+  }
+  if (error._tag === "team.persistence_failed") {
+    return { type: "team.persistence_failed", outcome: "failure" };
+  }
+  return { type: "team.refresh_failed", outcome: "failure" };
 }
 
 export function mapLineupError(

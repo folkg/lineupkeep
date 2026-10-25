@@ -16,6 +16,7 @@ import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
+import { requireTeamSuccess } from "./teamFailure";
 import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 import { TeamsPage } from "./TeamsPage";
@@ -128,13 +129,46 @@ it("shows a loading state while the team list is pending", async () => {
   await expect.element(page.getByText("No teams yet.")).toBeVisible();
 });
 
+it("imports provider teams when the owner refreshes discovery", async () => {
+  const discovered = {
+    ...baseTeam,
+    team: { ...baseTeam.team, id: crypto.randomUUID(), name: "Beta" },
+  };
+  using _empty = setupTeamsPage([], {
+    refresh: () => Promise.resolve({ teams: [discovered] }),
+  });
+
+  await expect.element(page.getByText("No teams yet.")).toBeVisible();
+  await page.getByRole("button", { name: "Refresh teams" }).click();
+
+  await expect.element(page.getByRole("link", { name: "Beta", exact: true })).toBeVisible();
+  await expect.element(page.getByText("Teams refreshed from Yahoo.")).toBeVisible();
+});
+
+it("keeps the list and reports a failed refresh", async () => {
+  using _app = setupTeamsPage([baseTeam], {
+    refresh: () =>
+      Promise.resolve(
+        requireTeamSuccess({ type: "error", error: { type: "team.refresh_failed" } }),
+      ),
+  });
+
+  await page.getByRole("button", { name: "Refresh teams" }).click();
+
+  await expect
+    .element(page.getByText("We could not refresh teams from Yahoo. Try again."))
+    .toBeVisible();
+  await expect.element(page.getByRole("link", { name: "Alpha", exact: true })).toBeVisible();
+});
+
 function setupTeamsPage(
   teams: ReadonlyArray<TeamSummaryView>,
-  overrides: Partial<Pick<TeamRemote, "list" | "setEnabled" | "pause">> = {},
+  overrides: Partial<Pick<TeamRemote, "list" | "refresh" | "setEnabled" | "pause">> = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
     list: overrides.list ?? (() => Promise.resolve(teams)),
+    refresh: overrides.refresh ?? (() => Promise.resolve({ teams })),
     setEnabled: overrides.setEnabled ?? (() => Promise.resolve({ changed: [], teams })),
     pause: overrides.pause ?? (() => Promise.resolve({ changed: [], teams })),
     readRun: () => Promise.reject(new Error("Unexpected run read")),
