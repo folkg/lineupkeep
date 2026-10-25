@@ -25,8 +25,8 @@ import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
-import { LineupRequestConflict, LineupRequestInput, LineupRunNotFound } from "./LineupRun.ts";
 import { TeamAutomationState } from "./internal/TeamAutomationWorkflow.ts";
+import { LineupRequestConflict, LineupRequestInput, LineupRunNotFound } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import { LineupWorker } from "./LineupWork.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
@@ -147,7 +147,7 @@ it.effect("lets a manual run bypass pause and enrollment after observation", () 
     yield* database
       .update(providerTeams)
       .set({
-        automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
+        automationState: yield* Schema.encodeEffect(Schema.toCodecJson(TeamAutomationState))({
           _tag: "PausedUntilFantasyDayEnd",
           changedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
           pausedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),

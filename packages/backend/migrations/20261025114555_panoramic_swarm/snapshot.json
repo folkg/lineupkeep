@@ -3,17 +3,11 @@
   "version": "9",
   "dialect": "postgres",
   "id": "45d6450e-23cb-4791-8ce8-6aded578c62e",
-  "prevIds": [
-    "1c0ebc6e-0d77-40ed-86bf-a12d687c1d3d"
-  ],
+  "prevIds": ["1c0ebc6e-0d77-40ed-86bf-a12d687c1d3d"],
   "footprints": [
     {
       "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "lineup_run_diagnostics"
-      ],
+      "statementTarget": ["table", "public", "lineup_run_diagnostics"],
       "writes": [
         "s|tbl|public.lineup_run_diagnostics",
         "n|tbl|public.lineup_run_diagnostics",
@@ -22,9 +16,7 @@
         "n|type|public.lineup_run_diagnostics",
         "n|rel|public.lineup_run_diagnostics_pkey"
       ],
-      "reads": [
-        "n|sch|public"
-      ]
+      "reads": ["n|sch|public"]
     },
     {
       "statementType": "create_index",
@@ -80,11 +72,7 @@
         "e|idx|public.lineup_runs_one_scheduled_pending_idx",
         "n|rel|public.lineup_runs_one_scheduled_pending_idx"
       ],
-      "reads": [
-        "n|tbl|public.lineup_runs",
-        "n|sch|public",
-        "n|col|public.lineup_runs.team_id"
-      ]
+      "reads": ["n|tbl|public.lineup_runs", "n|sch|public", "n|col|public.lineup_runs.team_id"]
     }
   ],
   "deltas": [
@@ -319,9 +307,7 @@
         "schema": "public",
         "table": "lineup_run_diagnostics",
         "name": "lineup_run_diagnostics_pkey",
-        "columns": [
-          "id"
-        ],
+        "columns": ["id"],
         "nameExplicit": false,
         "entityType": "pks"
       }

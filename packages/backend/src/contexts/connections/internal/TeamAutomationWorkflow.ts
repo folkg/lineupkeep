@@ -89,16 +89,3 @@ export const TeamAutomationWorkflow = Machine.make({
     },
   },
 });
-
-export function teamAutomationStatus(
-  state: TeamAutomationState,
-): import("../FantasyTeam.ts").TeamAutomationStatus {
-  switch (state._tag) {
-    case "Disabled":
-      return "disabled";
-    case "Enabled":
-      return "enabled";
-    case "PausedUntilFantasyDayEnd":
-      return "paused-until-fantasy-day-end";
-  }
-}

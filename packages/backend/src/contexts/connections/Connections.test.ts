@@ -482,9 +482,7 @@ it.effect("starts one explicit reconnect intent and completes it through a new s
     const connections = yield* Connections;
     const ready = Array.getUnsafe(yield* connections.startLinking(owner, [startInput]), 0);
     const linked = Array.getUnsafe(
-      yield* connections.completeLinking(owner, [
-        { id: ready.id, provider: "yahoo", session },
-      ]),
+      yield* connections.completeLinking(owner, [{ id: ready.id, provider: "yahoo", session }]),
       0,
     );
     const intent = yield* Schema.decodeEffect(StartReconnectInput)({
@@ -495,9 +493,10 @@ it.effect("starts one explicit reconnect intent and completes it through a new s
 
     const started = Array.getUnsafe(yield* connections.startReconnect(owner, [intent]), 0);
     const replayed = Array.getUnsafe(yield* connections.startReconnect(owner, [intent]), 0);
-    const completed = Array.getUnsafe(yield* connections.completeReconnect(owner, [
-      { id: linked.id, provider: "yahoo", session },
-    ]), 0);
+    const completed = Array.getUnsafe(
+      yield* connections.completeReconnect(owner, [{ id: linked.id, provider: "yahoo", session }]),
+      0,
+    );
 
     assert.strictEqual(started.reconnectCode, "WXYZ6789");
     assert.isDefined(started.reconnectExpiresAt);

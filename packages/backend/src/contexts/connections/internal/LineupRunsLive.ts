@@ -21,9 +21,9 @@ import { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import type { LineupRunsShape } from "#contexts/connections/LineupRuns.ts";
 import { LineupDispatcher } from "#contexts/connections/LineupWork.ts";
 
-import { isSettled, toLineupRun } from "./LineupRunView.ts";
 import type { NewLineupRun, RunQuery } from "./LineupRunRepository.ts";
 import { LineupRunRepository } from "./LineupRunRepository.ts";
+import { isSettled, toLineupRun } from "./LineupRunViewRepository.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 import type { OwnedTeam } from "./QueryRepository.ts";
 

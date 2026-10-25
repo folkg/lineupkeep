@@ -10,15 +10,13 @@ const invariants = [
   define.state(
     "only a paused team owns a resume boundary",
     ({ snapshot }) =>
-      ("resumesAt" in snapshot.state.value) ===
-      (snapshot.state.path === "PausedUntilFantasyDayEnd"),
+      "resumesAt" in snapshot.state.value === (snapshot.state.path === "PausedUntilFantasyDayEnd"),
   ),
   define.state(
     "a paused team owns its fantasy-day context",
     ({ snapshot }) =>
-      ["timeZone", "fantasyDay", "policyVersion"].every(
-        (key) => key in snapshot.state.value,
-      ) === (snapshot.state.path === "PausedUntilFantasyDayEnd"),
+      ["timeZone", "fantasyDay", "policyVersion"].every((key) => key in snapshot.state.value) ===
+      (snapshot.state.path === "PausedUntilFantasyDayEnd"),
   ),
   define.step(
     "pause expiry is accepted only at or after the stored boundary",
@@ -50,7 +48,7 @@ it("round-trips every automation state through its JSON codec", () => {
   const codec = Schema.toCodecJson(TeamAutomationState);
   for (const state of states) {
     const encoded = Schema.encodeSync(codec)(state);
-    const decoded = Schema.decodeUnknownSync(codec)(encoded);
+    const decoded = Schema.decodeSync(codec)(encoded);
     assert.deepStrictEqual(decoded, state);
   }
 });
@@ -58,13 +56,9 @@ it("round-trips every automation state through its JSON codec", () => {
 it.effect("generates event sequences without violating automation invariants", () =>
   Effect.gen(function* () {
     const generated = MachineTest.scenarios(TeamAutomationWorkflow, {
-      inputArbitrary: Arbitrary.schema(Schema.Literal("disabled")).pipe(
-        Arbitrary.map(() => input),
-      ),
+      inputArbitrary: Arbitrary.schema(Schema.Literal("disabled")).pipe(Arbitrary.map(() => input)),
       eventsArbitrary: Arbitrary.array(
-        Arbitrary.schema(
-          Schema.Literals(["Enabled", "Disabled", "Paused", "PauseExpired"]),
-        ).pipe(
+        Arbitrary.schema(Schema.Literals(["Enabled", "Disabled", "Paused", "PauseExpired"])).pipe(
           Arbitrary.map((kind): TeamAutomationEvent => {
             switch (kind) {
               case "Enabled":

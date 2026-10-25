@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import { createSelectSchema } from "drizzle-orm/effect-schema";
 import {
   index,
@@ -25,6 +24,7 @@ import {
   LineupTrigger,
   LineupImplementation,
 } from "#contexts/connections/LineupRun.ts";
+import { scheduledPendingPredicate } from "#database/dbUtilities.ts";
 
 import { LineupObservedPlayer, LineupRunState, lineupRunStatus } from "./LineupRunWorkflow.ts";
 
@@ -90,9 +90,7 @@ export const lineupRuns = pgTable(
     uniqueIndex("lineup_runs_team_schedule_key_idx").on(table.teamId, table.scheduleKey),
     uniqueIndex("lineup_runs_one_scheduled_pending_idx")
       .on(table.teamId)
-      .where(
-        sql`${table.trigger} = 'scheduled' and ${table.status} in ('queued', 'reading', 'planning', 'validating', 'applying', 'verifying', 'retry-wait', 'uncertain')`,
-      ),
+      .where(scheduledPendingPredicate(table)),
   ],
 );
 

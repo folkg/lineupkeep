@@ -894,6 +894,7 @@ const unavailableEmail = Layer.merge(
   EmailDeliveryTest,
   Layer.succeed(EmailDelivery)({
     send: () => Effect.fail(EmailDeliveryFailed.make({ reason: "unavailable" })),
+    sendMany: () => Effect.succeed([]),
   }),
 );
 

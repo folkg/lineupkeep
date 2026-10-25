@@ -1,10 +1,10 @@
 import { Machine } from "@typeonce/effect-machine";
-import { and, asc, desc, eq, getTableColumns, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, ne, or } from "drizzle-orm";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
 import type { ConnectionId } from "#contexts/connections/Connection.ts";
-import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupRunOutcome } from "#contexts/connections/LineupRun.ts";
 import {
   LineupPersistenceFailed,
@@ -42,13 +42,9 @@ import type {
 
 export type { LineupWriteIntentRecord };
 import { LineupRunState, LineupRunWorkflow, lineupRunStatus } from "./LineupRunWorkflow.ts";
-import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 import { LineupObservation } from "./LineupRunWorkflow.ts";
-import type {
-  LineupLeaseRef,
-  LineupNativePlan,
-  LineupRunEvent,
-} from "./LineupRunWorkflow.ts";
+import type { LineupLeaseRef, LineupNativePlan, LineupRunEvent } from "./LineupRunWorkflow.ts";
+import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
 const lineupLeaseDurationMillis = 45_000;
 const lineupDeliveryStaleMillis = 60_000;
@@ -241,54 +237,51 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           if (input.runs.length === 0) {
             return { created: false, runs: [] as ReadonlyArray<LineupRunRecord> };
           }
-          const requestId = yield* newId.pipe(
-            Effect.flatMap((id) => Schema.decodeEffect(LineupRequestId)(id)),
-            Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
-          );
-          const deliveryId = yield* newId.pipe(
-            Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
-          );
-          const at = DateTime.toDateUtc(input.at);
-          const records: ReadonlyArray<LineupRunRecord> = yield* Effect.forEach(
-            input.runs,
-            (run) =>
-              Effect.gen(function* () {
-                const state: LineupRunState = {
-                  _tag: "Queued",
-                  team: run.team,
-                  target: { coverage: "current" },
-                  trigger: "scheduled",
-                  implementation: nativeLineupImplementation,
-                  implementationVersion: providerNativeImplementationVersion,
-                  queuedAt: input.at,
-                  updatedAt: input.at,
-                };
-                return {
-                  id: yield* Schema.decodeEffect(LineupRunId)(yield* newId),
-                  userId: input.userId,
-                  requestId,
-                  teamId: run.team,
-                  connectionId: run.connectionId,
-                  trigger: "scheduled" as const,
-                  scheduleKey: hourKey(input.at),
-                  target: { coverage: "current" as const },
-                  status: lineupRunStatus(state),
-                  state,
-                  implementation: nativeLineupImplementation,
-                  implementationVersion: providerNativeImplementationVersion,
-                  attempts: 0,
-                  nextActionAt: null,
-                  createdAt: input.at,
-                  updatedAt: input.at,
-                } satisfies LineupRunRecord;
-              }),
-            { concurrency: 1 },
-          ).pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
-          const rows = yield* Effect.forEach(records, (record) =>
-            Schema.encodeEffect(LineupRunRow)(record),
-          ).pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
-          return yield* database
-            .transaction((tx) =>
+          return yield* Effect.gen(function* () {
+            const [requestId, deliveryId] = yield* Effect.all([
+              newId.pipe(Effect.flatMap((id) => Schema.decodeEffect(LineupRequestId)(id))),
+              newId,
+            ]);
+            const at = DateTime.toDateUtc(input.at);
+            const records: ReadonlyArray<LineupRunRecord> = yield* Effect.forEach(
+              input.runs,
+              (run) =>
+                Effect.gen(function* () {
+                  const state: LineupRunState = {
+                    _tag: "Queued",
+                    team: run.team,
+                    target: { coverage: "current" },
+                    trigger: "scheduled",
+                    implementation: nativeLineupImplementation,
+                    implementationVersion: providerNativeImplementationVersion,
+                    queuedAt: input.at,
+                    updatedAt: input.at,
+                  };
+                  return {
+                    id: yield* Schema.decodeEffect(LineupRunId)(yield* newId),
+                    userId: input.userId,
+                    requestId,
+                    teamId: run.team,
+                    connectionId: run.connectionId,
+                    trigger: "scheduled" as const,
+                    scheduleKey: hourKey(input.at),
+                    target: { coverage: "current" as const },
+                    status: lineupRunStatus(state),
+                    state,
+                    implementation: nativeLineupImplementation,
+                    implementationVersion: providerNativeImplementationVersion,
+                    attempts: 0,
+                    nextActionAt: null,
+                    createdAt: input.at,
+                    updatedAt: input.at,
+                  } satisfies LineupRunRecord;
+                }),
+              { concurrency: 1 },
+            );
+            const rows = yield* Effect.forEach(records, (record) =>
+              Schema.encodeEffect(LineupRunRow)(record),
+            );
+            return yield* database.transaction((tx) =>
               Effect.gen(function* () {
                 const inserted = yield* tx
                   .insert(lineupRuns)
@@ -299,10 +292,14 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   return { created: false, runs: [] as ReadonlyArray<LineupRunRecord> };
                 }
                 const created = yield* Effect.forEach(inserted, (row) => decodeRun(row));
+                const intent = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+                  trigger: "scheduled",
+                  target: { coverage: "current" },
+                });
                 yield* tx.insert(lineupRequests).values({
                   userId: input.userId,
                   id: requestId,
-                  intent: JSON.stringify({ trigger: "scheduled", target: { coverage: "current" } }),
+                  intent,
                   createdAt: at,
                   updatedAt: at,
                 });
@@ -320,10 +317,29 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 });
                 return { created: true, runs: created };
               }),
-            )
-            .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+            );
+          }).pipe(Effect.mapError(mapPersistenceFailure));
         },
       );
+
+      const createScheduledRunsForOwners = Effect.fn(
+        "LineupRunRepository.createScheduledRunsForOwners",
+      )(function* (
+        inputs: ReadonlyArray<{
+          readonly userId: UserId;
+          readonly at: DateTime.Utc;
+          readonly runs: ReadonlyArray<NewScheduledLineupRun>;
+        }>,
+      ) {
+        const results: Array<{
+          readonly created: boolean;
+          readonly runs: ReadonlyArray<LineupRunRecord>;
+        }> = [];
+        for (const input of inputs) {
+          results.push(yield* createScheduledRuns(input));
+        }
+        return results;
+      });
 
       const scheduledTeamIds = Effect.fn("LineupRunRepository.scheduledTeamIds")(function* (
         teamIds: ReadonlyArray<TeamId>,
@@ -342,7 +358,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               anyOf(lineupRuns.status, nonTerminalRunStatuses),
             ),
           )
-          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          .pipe(Effect.mapError(mapPersistenceFailure));
         return new Set(rows.map((row) => row.teamId));
       });
 
@@ -367,7 +383,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           .where(and(...filters))
           .orderBy(desc(lineupRuns.createdAt), asc(lineupRuns.id))
           .limit(query.limit + 1)
-          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          .pipe(Effect.mapError(mapPersistenceFailure));
         const records = yield* Effect.forEach(rows.slice(0, query.limit), (row) => decodeRun(row));
         if (query.runs !== undefined) {
           const byId = new Map(records.map((record) => [record.id, record]));
@@ -389,26 +405,31 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         if (!Array.isArrayNonEmpty(ids)) {
           return new Map<TeamId, ReadonlyArray<LineupRunRecord>>();
         }
-        const ranked = database
-          .select({
-            ...getTableColumns(lineupRuns),
-            rank: sql<number>`row_number() over (partition by ${lineupRuns.teamId} order by ${lineupRuns.createdAt} desc, ${lineupRuns.id} asc)`.as(
-              "rank",
-            ),
-          })
-          .from(lineupRuns)
-          .where(and(eq(lineupRuns.userId, userId), anyOf(lineupRuns.teamId, ids)))
-          .as("ranked_runs");
+        const cutoff = DateTime.toDateUtc(
+          DateTime.subtractDuration(yield* DateTime.now, 30 * 24 * 60 * 60 * 1000),
+        );
         const rows = yield* database
           .select()
-          .from(ranked)
-          .where(lte(ranked.rank, perTeam))
-          .orderBy(asc(ranked.teamId), desc(ranked.createdAt), asc(ranked.id))
-          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          .from(lineupRuns)
+          .where(
+            and(
+              eq(lineupRuns.userId, userId),
+              anyOf(lineupRuns.teamId, ids),
+              gte(lineupRuns.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(lineupRuns.teamId), desc(lineupRuns.createdAt), asc(lineupRuns.id))
+          .pipe(Effect.mapError(mapPersistenceFailure));
         const grouped = new Map<TeamId, Array<LineupRunRecord>>();
         for (const row of rows) {
+          const teamId = yield* Schema.decodeEffect(TeamId)(row.teamId).pipe(
+            Effect.mapError(mapPersistenceFailure),
+          );
+          const existing = grouped.get(teamId) ?? [];
+          if (existing.length >= perTeam) {
+            continue;
+          }
           const record = yield* decodeRun(row);
-          const existing = grouped.get(record.teamId) ?? [];
           existing.push(record);
           grouped.set(record.teamId, existing);
         }
@@ -424,7 +445,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           .from(lineupRuns)
           .where(and(eq(lineupRuns.userId, userId), eq(lineupRuns.requestId, requestId)))
           .orderBy(asc(lineupRuns.createdAt), asc(lineupRuns.id))
-          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          .pipe(Effect.mapError(mapPersistenceFailure));
         return yield* Effect.forEach(rows, (row) => Schema.decodeEffect(LineupRunId)(row.id));
       });
 
@@ -529,7 +550,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               });
             }),
           )
-          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          .pipe(Effect.mapError(mapPersistenceFailure));
       });
 
       const loadWriteIntent = (
@@ -612,7 +633,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   ? undefined
                   : yield* Schema.decodeUnknownEffect(Schema.toCodecJson(TeamAutomationState))(
                       ownedControl.automationState,
-                    ).pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+                    ).pipe(Effect.mapError(mapPersistenceFailure));
               if (
                 ownedControl === undefined ||
                 ownedControl.availability !== "available" ||
@@ -699,7 +720,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               return { status: "started" as const, intent };
             }),
           )
-          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          .pipe(Effect.mapError(mapPersistenceFailure));
       });
 
       const recordObservation = Effect.fn("LineupRunRepository.recordObservation")(
@@ -709,9 +730,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           readonly observation: LineupObservation;
           readonly at: DateTime.Utc;
         }) {
-          const diagnosticId = yield* newId.pipe(
-            Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
-          );
+          const diagnosticId = yield* newId.pipe(Effect.mapError(mapPersistenceFailure));
           yield* mutateClaimed(input.runId, input.lease, (record, tx) =>
             Effect.gen(function* () {
               yield* transition(
@@ -720,6 +739,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 { _tag: "ObservationRecorded", at: input.at, observation: input.observation },
                 input.at,
               );
+              const observationData = yield* Schema.encodeEffect(
+                Schema.toCodecJson(LineupObservation),
+              )(input.observation).pipe(Effect.mapError(mapPersistenceFailure));
               yield* tx
                 .insert(lineupRunDiagnostics)
                 .values({
@@ -729,15 +751,13 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   userId: record.userId,
                   teamId: record.teamId,
                   kind: "observation",
-                  data: Schema.encodeSync(Schema.toCodecJson(LineupObservation))(
-                    input.observation,
-                  ),
+                  data: observationData,
                   createdAt: DateTime.toDateUtc(input.at),
                   expiresAt: DateTime.toDateUtc(
                     DateTime.addDuration(input.at, lineupDiagnosticRetentionMillis),
                   ),
                 })
-                .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+                .pipe(Effect.mapError(mapPersistenceFailure));
             }),
           );
         },
@@ -1014,7 +1034,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
             and(eq(lineupDeliveries.userId, userId), eq(lineupDeliveries.requestId, requestId)),
           )
           .limit(1)
-          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          .pipe(Effect.mapError(mapPersistenceFailure));
         const row = rows[0];
         return row === undefined ? undefined : yield* decodeDelivery(row);
       });
@@ -1122,7 +1142,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           .update(lineupRunAttempts)
           .set({ finishedAt: DateTime.toDateUtc(at), outcome })
           .where(and(eq(lineupRunAttempts.runId, runId), eq(lineupRunAttempts.attempt, attempt)))
-          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          .pipe(Effect.mapError(mapPersistenceFailure));
       });
 
       const mutateClaimed = (
@@ -1211,7 +1231,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                     eq(lineupRunAttempts.attempt, record.attempts),
                   ),
                 )
-                .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+                .pipe(Effect.mapError(mapPersistenceFailure));
             }),
           ).pipe(Effect.asVoid);
       }
@@ -1219,6 +1239,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
       return {
         createRequest,
         createScheduledRuns,
+        createScheduledRunsForOwners,
         scheduledTeamIds,
         loadRuns,
         runsForRequest,
@@ -1320,10 +1341,10 @@ function planState(
 ): Effect.Effect<LineupRunState, LineupPersistenceFailed> {
   return Effect.gen(function* () {
     const snapshot = yield* snapshotOf(LineupRunWorkflow, state).pipe(
-      Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
+      Effect.mapError(mapPersistenceFailure),
     );
     const planned = yield* Machine.plan(LineupRunWorkflow, snapshot, event).pipe(
-      Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
+      Effect.mapError(mapPersistenceFailure),
     );
     const handled = planned.microsteps.some((step) => step.transitions.length > 0);
     if (!handled) {
@@ -1332,7 +1353,7 @@ function planState(
       });
     }
     return yield* Schema.decodeEffect(LineupRunState)(planned.next.state.value).pipe(
-      Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
+      Effect.mapError(mapPersistenceFailure),
     );
   });
 }
@@ -1355,7 +1376,7 @@ function updateRunState(
   return Effect.gen(function* () {
     const row = yield* Schema.encodeEffect(LineupRunRow)(next);
     yield* tx.update(lineupRuns).set(row).where(eq(lineupRuns.id, record.id));
-  }).pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+  }).pipe(Effect.mapError(mapPersistenceFailure));
 }
 
 function lockClaimedRun(
@@ -1406,7 +1427,7 @@ function updateIntentStatus(
         eq(lineupWriteIntents.leaseGeneration, lease.generation),
       ),
     )
-    .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+    .pipe(Effect.mapError(mapPersistenceFailure));
 }
 
 function loadRequestRuns(
@@ -1431,17 +1452,13 @@ function loadRequestRuns(
 function decodeRun(
   row: typeof lineupRuns.$inferSelect,
 ): Effect.Effect<LineupRunRecord, LineupPersistenceFailed> {
-  return Schema.decodeEffect(LineupRunRow)(row).pipe(
-    Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
-  );
+  return Schema.decodeEffect(LineupRunRow)(row).pipe(Effect.mapError(mapPersistenceFailure));
 }
 
 function decodeDelivery(
   row: typeof lineupDeliveries.$inferSelect,
 ): Effect.Effect<LineupDeliveryRecord, LineupPersistenceFailed> {
-  return Schema.decodeEffect(LineupDeliveryRow)(row).pipe(
-    Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
-  );
+  return Schema.decodeEffect(LineupDeliveryRow)(row).pipe(Effect.mapError(mapPersistenceFailure));
 }
 
 type TerminalInput = {
@@ -1451,3 +1468,7 @@ type TerminalInput = {
   readonly at: DateTime.Utc;
   readonly intent?: { readonly id: string; readonly status: IntentStatus };
 };
+
+function mapPersistenceFailure(cause: unknown): LineupPersistenceFailed {
+  return LineupPersistenceFailed.make({ cause });
+}

@@ -13,6 +13,10 @@ export const EmailDeliveryTest: Layer.Layer<EmailDelivery | EmailOutbox> = Layer
     Layer.merge(
       Layer.succeed(EmailDelivery)({
         send: (message) => Ref.update(sent, (messages) => [...messages, message]),
+        sendMany: (messages) =>
+          Ref.update(sent, (existing) => [...existing, ...messages]).pipe(
+            Effect.as(messages.map(() => ({ _tag: "sent" as const }))),
+          ),
       }),
       Layer.succeed(EmailOutbox)({ messages: Ref.get(sent) }),
     ),

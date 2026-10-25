@@ -3,36 +3,21 @@
   "version": "9",
   "dialect": "postgres",
   "id": "132adc9a-eac4-4c41-8088-4525e77258b0",
-  "prevIds": [
-    "45d6450e-23cb-4791-8ce8-6aded578c62e"
-  ],
+  "prevIds": ["45d6450e-23cb-4791-8ce8-6aded578c62e"],
   "footprints": [
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "lineup_runs",
-        "schedule_key"
-      ],
+      "statementTarget": ["column", "public", "lineup_runs", "schedule_key"],
       "writes": [
         "s|col|public.lineup_runs.schedule_key",
         "n|col|public.lineup_runs.schedule_key",
         "e|col|public.lineup_runs.schedule_key"
       ],
-      "reads": [
-        "n|tbl|public.lineup_runs",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.lineup_runs", "n|sch|public"]
     },
     {
       "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "lineup_runs",
-        "lineup_runs_team_schedule_key_idx"
-      ],
+      "statementTarget": ["index", "public", "lineup_runs", "lineup_runs_team_schedule_key_idx"],
       "writes": [
         "s|idx|public.lineup_runs_team_schedule_key_idx",
         "n|idx|public.lineup_runs_team_schedule_key_idx",

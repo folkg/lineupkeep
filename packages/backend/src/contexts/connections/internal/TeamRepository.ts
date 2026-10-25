@@ -1,13 +1,11 @@
 import { Machine } from "@typeonce/effect-machine";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import { UserId as UserIdSchema } from "#contexts/auth/User.ts";
 import type { ProviderConnection } from "#contexts/connections/Connection.ts";
-import {
-  ConnectionStatus,
-  decodeConnectionId,
-} from "#contexts/connections/Connection.ts";
+import { ConnectionStatus, decodeConnectionId } from "#contexts/connections/Connection.ts";
 import {
   fantasyDayLabel,
   fantasyDayPolicy,
@@ -19,8 +17,7 @@ import {
   TeamNotFound,
   TeamPersistenceFailed,
 } from "#contexts/connections/Teams.ts";
-import { UserId as UserIdSchema } from "#contexts/auth/User.ts";
-import { anyOf } from "#database/dbUtilities.ts";
+import { anyOf, excludedValues } from "#database/dbUtilities.ts";
 import { snapshotOf } from "#utilities/machine.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
@@ -40,12 +37,12 @@ export type TeamRecord = {
   readonly connection: Pick<ProviderConnection, "id" | "status">;
 };
 
-export type SetEnabledCommand = {
+type SetEnabledCommand = {
   readonly team: TeamId;
   readonly enabled: boolean;
 };
 
-export type TeamControlFailure = TeamNotFound | TeamControlRejected | TeamPersistenceFailed;
+type TeamControlFailure = TeamNotFound | TeamControlRejected | TeamPersistenceFailed;
 
 export class TeamRepository extends Context.Service<TeamRepository>()(
   "@lineupkeep/backend/contexts/connections/internal/TeamRepository",
@@ -188,9 +185,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                 }
                 const next = yield* planAutomation(
                   automationStateOf(entry.team),
-                  command.enabled
-                    ? { _tag: "Enabled", at: now }
-                    : { _tag: "Disabled", at: now },
+                  command.enabled ? { _tag: "Enabled", at: now } : { _tag: "Disabled", at: now },
                 ).pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
                 changed.push({ row: entry.row, team: applyAutomation(entry.team, next, now) });
               }
@@ -208,11 +203,11 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                   )
                   .onConflictDoUpdate({
                     target: [providerTeams.connectionId, providerTeams.providerTeamKey],
-                    set: {
-                      automationState: sql`excluded.automation_state`,
-                      automationStatus: sql`excluded.automation_status`,
-                      updatedAt: sql`excluded.updated_at`,
-                    },
+                    set: excludedValues(providerTeams, [
+                      "automationState",
+                      "automationStatus",
+                      "updatedAt",
+                    ]),
                   });
               }
               return changed.map(({ team }) => team);
@@ -289,11 +284,11 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                   )
                   .onConflictDoUpdate({
                     target: [providerTeams.connectionId, providerTeams.providerTeamKey],
-                    set: {
-                      automationState: sql`excluded.automation_state`,
-                      automationStatus: sql`excluded.automation_status`,
-                      updatedAt: sql`excluded.updated_at`,
-                    },
+                    set: excludedValues(providerTeams, [
+                      "automationState",
+                      "automationStatus",
+                      "updatedAt",
+                    ]),
                   });
               }
               return changed.map(({ team }) => team);
@@ -313,7 +308,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                 .select()
                 .from(providerTeams)
                 .where(eq(providerTeams.automationStatus, "paused-until-fantasy-day-end"))
-                .orderBy(sql`${providerTeams.automationState}->>'resumesAt' asc`)
+                .orderBy(asc(providerTeams.updatedAt))
                 .limit(limit)
                 .for("update");
               const changed: Array<{
@@ -325,7 +320,10 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                   Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
                 );
                 const resumesAt = team.automation.resumesAt;
-                if (resumesAt === undefined || DateTime.toEpochMillis(resumesAt) > DateTime.toEpochMillis(now)) {
+                if (
+                  resumesAt === undefined ||
+                  DateTime.toEpochMillis(resumesAt) > DateTime.toEpochMillis(now)
+                ) {
                   continue;
                 }
                 const next = yield* planAutomation(automationStateOf(team), {
@@ -347,11 +345,11 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                   )
                   .onConflictDoUpdate({
                     target: [providerTeams.connectionId, providerTeams.providerTeamKey],
-                    set: {
-                      automationState: sql`excluded.automation_state`,
-                      automationStatus: sql`excluded.automation_status`,
-                      updatedAt: sql`excluded.updated_at`,
-                    },
+                    set: excludedValues(providerTeams, [
+                      "automationState",
+                      "automationStatus",
+                      "updatedAt",
+                    ]),
                   });
               }
               return changed.map(({ team }) => team);
@@ -382,10 +380,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
             connectionStatus: providerConnections.status,
           })
           .from(providerTeams)
-          .innerJoin(
-            providerConnections,
-            eq(providerConnections.id, providerTeams.connectionId),
-          )
+          .innerJoin(providerConnections, eq(providerConnections.id, providerTeams.connectionId))
           .innerJoin(
             providerCredentials,
             and(
@@ -419,9 +414,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
   static readonly layer = Layer.effect(this)(this.make);
 }
 
-function toTeamRecord(
-  row: unknown,
-): Effect.Effect<TeamRecord, TeamPersistenceFailed> {
+function toTeamRecord(row: unknown): Effect.Effect<TeamRecord, TeamPersistenceFailed> {
   return Effect.gen(function* () {
     const raw = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
@@ -429,13 +422,9 @@ function toTeamRecord(
         connectionId: Schema.String,
         connectionStatus: Schema.String,
       }),
-    )(row).pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-    const team = yield* Schema.decodeUnknownEffect(FantasyTeamRow)(row).pipe(
-      Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
-    );
-    const status = yield* Schema.decodeUnknownEffect(ConnectionStatus)(raw.connectionStatus).pipe(
-      Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
-    );
+    )(row);
+    const team = yield* Schema.decodeUnknownEffect(FantasyTeamRow)(row);
+    const status = yield* Schema.decodeUnknownEffect(ConnectionStatus)(raw.connectionStatus);
     return {
       team,
       connection: {
@@ -443,7 +432,7 @@ function toTeamRecord(
         status,
       },
     } satisfies TeamRecord;
-  });
+  }).pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
 }
 
 function automationStateOf(team: FantasyTeam): TeamAutomationState {
@@ -512,7 +501,7 @@ function planAutomation(
     if (!handled) {
       return yield* Effect.die(new Error("Team automation rejected the requested transition"));
     }
-    return yield* Schema.decodeUnknownEffect(TeamAutomationState)(planned.next.state.value);
+    return yield* Schema.decodeEffect(TeamAutomationState)(planned.next.state.value);
   });
 }
 

@@ -136,7 +136,7 @@ it.effect("round-trips discovered team rows through the codec", () =>
       season: 2026,
       name: "Alpha",
       availability: "available" as const,
-      automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
+      automationState: yield* Schema.encodeEffect(Schema.toCodecJson(TeamAutomationState))({
         _tag: "Disabled",
         changedAt: at,
       }),

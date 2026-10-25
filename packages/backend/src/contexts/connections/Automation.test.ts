@@ -1,10 +1,10 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, beforeEach, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
-import { Array, Config, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { eq } from "drizzle-orm";
-import { TestClock } from "effect/testing";
+import { Array, Config, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { DateTime } from "effect";
+import { TestClock } from "effect/testing";
 
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
@@ -13,6 +13,7 @@ import { Automation } from "./Automation.ts";
 import { StartLinkingInput } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import type { TeamId } from "./FantasyTeam.ts";
+import { AutomationLive } from "./internal/AutomationLive.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
 import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
@@ -20,7 +21,6 @@ import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { providerTeams } from "./internal/ConnectionTables.ts";
-import { AutomationLive } from "./internal/AutomationLive.ts";
 import { LineupDeliveryLocal } from "./internal/LineupDeliveryLocal.ts";
 import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
@@ -28,13 +28,13 @@ import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
-import { RetentionSweepLive } from "./internal/RetentionSweepLive.ts";
+import { RetentionSweepLive } from "./internal/RetentionSweepRepository.ts";
 import { TeamRepository } from "./internal/TeamRepository.ts";
 import { TeamsLive } from "./internal/TeamsLive.ts";
 import { LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
-import { Teams } from "./Teams.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
+import { Teams } from "./Teams.ts";
 
 it.effect("runs one current-period automation per team per hour", () =>
   Effect.gen(function* () {
@@ -189,10 +189,12 @@ function nextRequestId(): string {
 }
 
 let owner = decodeUserId("automation-tick-owner-1");
+let ownerSerial = 0;
 const session = Redacted.make("A1=test-session-cookie");
 
 beforeEach(() => {
-  owner = decodeUserId(`automation-tick-owner-${String(Math.random())}`);
+  ownerSerial += 1;
+  owner = decodeUserId(`automation-tick-owner-${String(ownerSerial)}`);
 });
 
 const teamFixture: ProviderTeam = {

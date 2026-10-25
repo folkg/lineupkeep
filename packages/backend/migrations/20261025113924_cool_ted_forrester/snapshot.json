@@ -3,135 +3,77 @@
   "version": "9",
   "dialect": "postgres",
   "id": "1c0ebc6e-0d77-40ed-86bf-a12d687c1d3d",
-  "prevIds": [
-    "bd1633b3-92f0-4fa3-8464-d3072879d61c"
-  ],
+  "prevIds": ["bd1633b3-92f0-4fa3-8464-d3072879d61c"],
   "footprints": [
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "provider_connections",
-        "reconnect_code"
-      ],
+      "statementTarget": ["column", "public", "provider_connections", "reconnect_code"],
       "writes": [
         "s|col|public.provider_connections.reconnect_code",
         "n|col|public.provider_connections.reconnect_code",
         "e|col|public.provider_connections.reconnect_code"
       ],
-      "reads": [
-        "n|tbl|public.provider_connections",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.provider_connections", "n|sch|public"]
     },
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "provider_connections",
-        "reconnect_expires_at"
-      ],
+      "statementTarget": ["column", "public", "provider_connections", "reconnect_expires_at"],
       "writes": [
         "s|col|public.provider_connections.reconnect_expires_at",
         "n|col|public.provider_connections.reconnect_expires_at",
         "e|col|public.provider_connections.reconnect_expires_at"
       ],
-      "reads": [
-        "n|tbl|public.provider_connections",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.provider_connections", "n|sch|public"]
     },
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "provider_connections",
-        "reconnect_request_id"
-      ],
+      "statementTarget": ["column", "public", "provider_connections", "reconnect_request_id"],
       "writes": [
         "s|col|public.provider_connections.reconnect_request_id",
         "n|col|public.provider_connections.reconnect_request_id",
         "e|col|public.provider_connections.reconnect_request_id"
       ],
-      "reads": [
-        "n|tbl|public.provider_connections",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.provider_connections", "n|sch|public"]
     },
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "provider_teams",
-        "automation_state"
-      ],
+      "statementTarget": ["column", "public", "provider_teams", "automation_state"],
       "writes": [
         "s|col|public.provider_teams.automation_state",
         "n|col|public.provider_teams.automation_state",
         "e|col|public.provider_teams.automation_state"
       ],
-      "reads": [
-        "n|tbl|public.provider_teams",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
     },
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "provider_teams",
-        "automation_status"
-      ],
+      "statementTarget": ["column", "public", "provider_teams", "automation_status"],
       "writes": [
         "s|col|public.provider_teams.automation_status",
         "n|col|public.provider_teams.automation_status",
         "e|col|public.provider_teams.automation_status"
       ],
-      "reads": [
-        "n|tbl|public.provider_teams",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
     },
     {
       "statementType": "drop_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "provider_teams",
-        "automation_enabled"
-      ],
+      "statementTarget": ["column", "public", "provider_teams", "automation_enabled"],
       "writes": [
         "s|col|public.provider_teams.automation_enabled",
         "n|col|public.provider_teams.automation_enabled",
         "e|col|public.provider_teams.automation_enabled"
       ],
-      "reads": [
-        "n|tbl|public.provider_teams",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
     },
     {
       "statementType": "drop_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "provider_teams",
-        "paused_until"
-      ],
+      "statementTarget": ["column", "public", "provider_teams", "paused_until"],
       "writes": [
         "s|col|public.provider_teams.paused_until",
         "n|col|public.provider_teams.paused_until",
         "e|col|public.provider_teams.paused_until"
       ],
-      "reads": [
-        "n|tbl|public.provider_teams",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
     },
     {
       "statementType": "create_index",

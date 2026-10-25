@@ -3,11 +3,7 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 import { ConnectionStatus } from "./Connection.ts";
-import {
-  FantasyTeam,
-  TeamAutomationStatus,
-  TeamId,
-} from "./FantasyTeam.ts";
+import { FantasyTeam, TeamAutomationStatus, TeamId } from "./FantasyTeam.ts";
 import { LineupRun } from "./LineupRun.ts";
 
 export const TeamSummary = Schema.Struct({

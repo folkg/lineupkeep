@@ -1,3 +1,5 @@
+import { env } from "node:process";
+
 import { assert, it } from "@effect/vitest";
 import { DateTime } from "effect";
 
@@ -34,13 +36,13 @@ it("uses 23-hour and 25-hour calendar days across both DST transitions", () => {
 
 it("is independent of the server and user process timezone", () => {
   const now = DateTime.makeUnsafe("2026-11-01T08:30:00Z");
-  const original = process.env["TZ"];
+  const original = env["TZ"];
   try {
-    process.env["TZ"] = "Asia/Tokyo";
+    env["TZ"] = "Asia/Tokyo";
     const tokyo = nextFantasyDayBoundary(now, policy);
-    process.env["TZ"] = "Europe/Berlin";
+    env["TZ"] = "Europe/Berlin";
     const berlin = nextFantasyDayBoundary(now, policy);
-    process.env["TZ"] = "UTC";
+    env["TZ"] = "UTC";
     const utc = nextFantasyDayBoundary(now, policy);
 
     assert.strictEqual(DateTime.formatIso(tokyo), "2026-11-02T08:00:00.000Z");
@@ -48,9 +50,9 @@ it("is independent of the server and user process timezone", () => {
     assert.strictEqual(DateTime.formatIso(utc), DateTime.formatIso(tokyo));
   } finally {
     if (original === undefined) {
-      delete process.env["TZ"];
+      delete env["TZ"];
     } else {
-      process.env["TZ"] = original;
+      env["TZ"] = original;
     }
   }
 });

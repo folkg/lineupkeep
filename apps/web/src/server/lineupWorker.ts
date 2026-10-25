@@ -2,7 +2,8 @@ import type { AutomationFailed } from "@lineupkeep/backend/connections/Automatio
 import { Automation } from "@lineupkeep/backend/connections/Automation";
 import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import { LineupDispatcher, LineupWorker } from "@lineupkeep/backend/connections/LineupWork";
-import { Config, Effect, Option, Schema } from "effect";
+import { Notifications } from "@lineupkeep/backend/connections/Notifications";
+import { DateTime, Config, Effect, Option, Schema } from "effect";
 
 import { runBackend } from "./backendEntry.ts";
 
@@ -52,6 +53,8 @@ export function handleLineupWorkerRequest(request: Request): Promise<Response> {
             ),
           "automation.failed": () =>
             Effect.succeed(new Response("The automation tick could not finish", { status: 503 })),
+          "notifications.failed": () =>
+            Effect.succeed(new Response("Notifications could not be delivered", { status: 503 })),
         }),
       );
     }),
@@ -63,8 +66,9 @@ function execute(
 ): Effect.Effect<
   Response,
   | import("@lineupkeep/backend/connections/LineupRun").LineupPersistenceFailed
+  | import("@lineupkeep/backend/connections/Notifications").NotificationsFailed
   | AutomationFailed,
-  LineupWorker | LineupDispatcher | Automation
+  LineupWorker | LineupDispatcher | Automation | Notifications
 > {
   return Effect.gen(function* () {
     switch (request.action) {
@@ -80,8 +84,10 @@ function execute(
       }
       case "tick": {
         const automation = yield* Automation;
+        const notifications = yield* Notifications;
         const summary = yield* automation.run(request.limit ?? 50);
-        return json({ status: "ok", action: request.action, ...summary });
+        const delivered = yield* notifications.run(request.limit ?? 50, yield* DateTime.now);
+        return json({ status: "ok", action: request.action, ...summary, notifications: delivered });
       }
     }
   });

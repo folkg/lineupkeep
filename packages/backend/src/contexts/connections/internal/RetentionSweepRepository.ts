@@ -1,11 +1,8 @@
-import { and, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer } from "effect";
 
 import type { LineupRunStatus } from "#contexts/connections/LineupRun.ts";
-import {
-  RetentionPersistenceFailed,
-  RetentionSweep,
-} from "#contexts/connections/Retention.ts";
+import { RetentionPersistenceFailed, RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { RetentionSummary } from "#contexts/connections/Retention.ts";
 import { anyOf } from "#database/dbUtilities.ts";
 
@@ -113,9 +110,7 @@ export const RetentionSweepLive = Layer.effect(
             return summary;
           }),
         )
-        .pipe(
-          Effect.mapError((cause) => RetentionPersistenceFailed.make({ cause })),
-        );
+        .pipe(Effect.mapError((cause) => RetentionPersistenceFailed.make({ cause })));
     });
 
     return RetentionSweep.of({ run });
@@ -137,7 +132,10 @@ function deleteIds(
     .delete(table)
     .where(anyOf(table.id, ids))
     .returning({ id: table.id })
-    .pipe(Effect.orDie, Effect.map((deleted) => deleted.length));
+    .pipe(
+      Effect.orDie,
+      Effect.map((deleted) => deleted.length),
+    );
 }
 
 function deleteRunChildren(
@@ -153,7 +151,10 @@ function deleteRunChildren(
     .delete(table)
     .where(anyOf(table.runId, ids))
     .returning({ runId: table.runId })
-    .pipe(Effect.orDie, Effect.map((deleted) => deleted.length));
+    .pipe(
+      Effect.orDie,
+      Effect.map((deleted) => deleted.length),
+    );
 }
 
 function deleteRequestIds(
@@ -166,11 +167,15 @@ function deleteRequestIds(
   return tx
     .delete(lineupRequests)
     .where(
-      sql`(${sql.join(
-        requests.map((request) => sql`(${lineupRequests.userId} = ${request.userId} and ${lineupRequests.id} = ${request.id})`),
-        sql` or `,
-      )})`,
+      or(
+        ...requests.map((request) =>
+          and(eq(lineupRequests.userId, request.userId), eq(lineupRequests.id, request.id)),
+        ),
+      ),
     )
     .returning({ id: lineupRequests.id })
-    .pipe(Effect.orDie, Effect.map((deleted) => deleted.length));
+    .pipe(
+      Effect.orDie,
+      Effect.map((deleted) => deleted.length),
+    );
 }

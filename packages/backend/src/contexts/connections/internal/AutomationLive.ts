@@ -26,20 +26,15 @@ export const AutomationLive = Layer.effect(
       const busy = yield* runs.scheduledTeamIds(eligible.map((entry) => entry.team.id));
       const available = eligible.filter((entry) => !busy.has(entry.team.id));
       const grouped = groupByOwner(available);
-      const scheduled = yield* Effect.forEach(
-        grouped,
-        (entries, index) =>
-          runs.createScheduledRuns({
-            userId: ownerOf(entries, index),
-            at: now,
-            runs: entries.map(
-              ({ team }): NewScheduledLineupRun => ({
-                team: team.id,
-                connectionId: team.connectionId,
-              }),
-            ),
-          }),
-        { concurrency: 2 },
+      const scheduled = yield* runs.createScheduledRunsForOwners(
+        grouped.map((entries, index) => ({
+          userId: ownerOf(entries, index),
+          at: now,
+          runs: entries.map(({ team }): NewScheduledLineupRun => ({
+            team: team.id,
+            connectionId: team.connectionId,
+          })),
+        })),
       );
       const scheduledRuns = scheduled.reduce((total, result) => total + result.runs.length, 0);
       const repaired = yield* dispatcher.repair(limit);
@@ -61,10 +56,7 @@ export const AutomationLive = Layer.effect(
     });
 
     return Automation.of({
-      run: (limit) =>
-        run(limit).pipe(
-          Effect.mapError((cause) => AutomationFailed.make({ cause })),
-        ),
+      run: (limit) => run(limit).pipe(Effect.mapError((cause) => AutomationFailed.make({ cause }))),
     });
   }),
 );

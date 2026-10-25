@@ -15,6 +15,13 @@ export function anyOf<Column extends PgColumn>(
   return sql`${column} = ANY(${arrayParameter(column, values)})`;
 }
 
+export function scheduledPendingPredicate(table: {
+  readonly trigger: PgColumn;
+  readonly status: PgColumn;
+}): SQL<boolean> {
+  return sql`${table.trigger} = 'scheduled' and ${table.status} in ('queued', 'reading', 'planning', 'validating', 'applying', 'verifying', 'retry-wait', 'uncertain')`;
+}
+
 export function unnestRows<
   Table extends PgTable,
   Key extends keyof InferSelectModel<Table> & string,

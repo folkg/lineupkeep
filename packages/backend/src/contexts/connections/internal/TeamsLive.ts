@@ -3,15 +3,11 @@ import { Effect, Layer } from "effect";
 import type { UserId } from "#contexts/auth/User.ts";
 import type { FantasyTeam, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupRun } from "#contexts/connections/LineupRun.ts";
-import {
-  TeamNotFound,
-  TeamPersistenceFailed,
-  Teams,
-} from "#contexts/connections/Teams.ts";
+import { TeamNotFound, TeamPersistenceFailed, Teams } from "#contexts/connections/Teams.ts";
 import type { TeamError, TeamSummary, TeamsShape } from "#contexts/connections/Teams.ts";
 
 import { LineupRunRepository } from "./LineupRunRepository.ts";
-import { toLineupRun } from "./LineupRunView.ts";
+import { toLineupRun } from "./LineupRunViewRepository.ts";
 import { TeamRepository } from "./TeamRepository.ts";
 import type { TeamRecord } from "./TeamRepository.ts";
 

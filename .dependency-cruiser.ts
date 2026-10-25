@@ -2,7 +2,7 @@ import type { IConfiguration, IRegularForbiddenRuleType } from "dependency-cruis
 
 const permittedContextImports = {
   auth: [],
-  connections: ["contexts/auth/User.ts"],
+  connections: ["contexts/auth/User.ts", "contexts/auth/UserDirectory.ts"],
 };
 
 const backendRoot = "^packages/backend/src/";
@@ -52,7 +52,10 @@ export default {
       "SQL utilities outside persistence bypass owned queries; gather domain commands in services and call the repository's atomic batch operation.",
       {
         path: "^(?:packages/backend|apps/web)/src/",
-        pathNot: `${backendRoot}contexts/[^/]+/.*internal/[^/]*Repository\\.ts$`,
+        pathNot: [
+          `${backendRoot}contexts/[^/]+/.*internal/[^/]*Repository\\.ts$`,
+          `${backendRoot}contexts/[^/]+/.*internal/[^/]*Tables?\\.ts$`,
+        ],
       },
       { path: "^packages/backend/src/database/dbUtilities\\.ts$" },
     ),

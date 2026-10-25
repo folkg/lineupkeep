@@ -22,11 +22,11 @@ import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
-import { RetentionSweepLive } from "./internal/RetentionSweepLive.ts";
+import { RetentionSweepLive } from "./internal/RetentionSweepRepository.ts";
 import { LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
-import { RetentionSweep } from "./Retention.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
+import { RetentionSweep } from "./Retention.ts";
 
 it.effect("removes expired diagnostics and outcomes without touching unresolved work", () =>
   Effect.gen(function* () {
@@ -48,7 +48,10 @@ it.effect("removes expired diagnostics and outcomes without touching unresolved 
     assert.strictEqual(queued.runs.length, 1);
 
     const sixDays = yield* retention.run(10, DateTime.addDuration(startedAt, 6 * 86_400_000));
-    const sevenDays = yield* retention.run(10, DateTime.addDuration(startedAt, 7 * 86_400_000 + 60_000));
+    const sevenDays = yield* retention.run(
+      10,
+      DateTime.addDuration(startedAt, 7 * 86_400_000 + 60_000),
+    );
     const thirtyDays = yield* retention.run(
       10,
       DateTime.addDuration(startedAt, 30 * 86_400_000 + 60_000),
@@ -120,10 +123,12 @@ function seedTeam(
 }
 
 let owner = decodeUserId("retention-owner-1");
+let ownerSerial = 0;
 const session = Redacted.make("A1=test-session-cookie");
 
 beforeEach(() => {
-  owner = decodeUserId(`retention-owner-${String(Math.random())}`);
+  ownerSerial += 1;
+  owner = decodeUserId(`retention-owner-${String(ownerSerial)}`);
 });
 
 const teamFixture: ProviderTeam = {
@@ -262,7 +267,6 @@ const RetentionTestLayer = Layer.mergeAll(
   ConnectionsTest,
   ProviderFakeTest,
   LineupRepositoryTest,
-  DatabaseLayer,
 ).pipe(
   Layer.provideMerge(DatabaseLayer),
   Layer.provideMerge(ProviderFakeTest),

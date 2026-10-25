@@ -103,10 +103,7 @@ export const providerTeams = pgTable(
     primaryKey({ columns: [table.connectionId, table.providerTeamKey] }),
     uniqueIndex("provider_teams_id_idx").on(table.id),
     index("provider_teams_user_id_league_name_idx").on(table.userId, table.league, table.name),
-    index("provider_teams_user_id_automation_status_idx").on(
-      table.userId,
-      table.automationStatus,
-    ),
+    index("provider_teams_user_id_automation_status_idx").on(table.userId, table.automationStatus),
     index("provider_teams_automation_status_availability_idx").on(
       table.automationStatus,
       table.availability,
@@ -197,7 +194,7 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
   ),
 );
 
-export function teamAutomationStateStatus(state: TeamAutomationState): TeamAutomationStatus {
+function teamAutomationStateStatus(state: TeamAutomationState): TeamAutomationStatus {
   switch (state._tag) {
     case "Disabled":
       return "disabled";

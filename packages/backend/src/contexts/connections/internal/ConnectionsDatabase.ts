@@ -6,6 +6,7 @@ import type { PgEffectDatabase } from "drizzle-orm/pg-core/effect/db";
 import { Context, Layer } from "effect";
 
 import { providerConnections } from "./ConnectionTables.ts";
+import { connectionIncidents, notifications } from "./IncidentTables.ts";
 import {
   lineupDeliveries,
   lineupRequests,
@@ -18,6 +19,8 @@ import {
 
 export const connectionsRelations = defineRelations({
   providerConnections,
+  connectionIncidents,
+  notifications,
   lineupRequests,
   lineupRuns,
   lineupDeliveries,

@@ -38,7 +38,6 @@ import {
   ConnectionLifecycleStates,
   ConnectionLifecycleWorkflow,
 } from "./ConnectionLifecycleWorkflow.ts";
-import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 import type { ConnectionLifecycleRequest } from "./ConnectionLifecycleWorkflow.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import {
@@ -48,6 +47,10 @@ import {
   providerCredentials,
   providerTeams,
 } from "./ConnectionTables.ts";
+import { connectionIncidents, notifications } from "./IncidentTables.ts";
+import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
+
+type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transaction"]>[0]>[0];
 
 export type CompleteLinkingCommand = {
   readonly id: ConnectionId;
@@ -86,6 +89,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         Effect.map(decodeConnectionId),
         Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
       );
+      const newNotificationId = crypto
+        .randomUUIDv7()
+        .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
 
       const listConnections = Effect.fn("ConnectionRepository.listConnections")(function* (
         userId: UserId,
@@ -245,9 +251,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
 
       const startReconnect = Effect.fn("ConnectionRepository.startReconnect")(function* (
         userId: UserId,
-        inputs: ReadonlyArray<
-          import("#contexts/connections/Connection.ts").StartReconnectInput
-        >,
+        inputs: ReadonlyArray<import("#contexts/connections/Connection.ts").StartReconnectInput>,
       ) {
         const ids = [...new Set(inputs.map((input) => input.id))];
         if (!Array.isArrayNonEmpty(ids)) {
@@ -284,7 +288,8 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                       record.reconnectRequestId === input.requestId &&
                       record.reconnectCode === input.pairingCode &&
                       record.reconnectExpiresAt !== null &&
-                      DateTime.toEpochMillis(record.reconnectExpiresAt) > DateTime.toEpochMillis(now)
+                      DateTime.toEpochMillis(record.reconnectExpiresAt) >
+                        DateTime.toEpochMillis(now)
                     ) {
                       planned.push(record);
                       continue;
@@ -469,6 +474,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
               yield* chunked(credentials, maxInsertRows(providerCredentials), (chunk) =>
                 transaction.insert(providerCredentials).values(chunk).returning(),
               );
+              yield* resolveIncidents(transaction, ids, now, "reconnected");
               return orderConnections(rows, ids);
             }),
           )
@@ -574,6 +580,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
               yield* chunked(credentials, maxInsertRows(providerCredentials), (chunk) =>
                 transaction.insert(providerCredentials).values(chunk).returning(),
               );
+
               return orderConnections(rows, ids);
             }),
           )
@@ -664,6 +671,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                 .where(
                   and(eq(providerTeams.userId, userId), anyOf(providerTeams.connectionId, ids)),
                 );
+
               return orderConnections(rows, ids);
             }),
           )
@@ -742,7 +750,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                       targets,
                       (_target) => required,
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-                    return [
+                    const next = [
                       ...unchanged.map((row) => ({
                         ...row,
                         reconnectCode: null,
@@ -757,6 +765,75 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                         state: snapshot.state.value,
                       })),
                     ];
+                    const candidates: Array<typeof connectionIncidents.$inferInsert> = next.flatMap(
+                      (record) =>
+                        record.state._tag === "ReconnectRequired"
+                          ? [
+                              {
+                                userId: record.userId,
+                                connectionId: record.id,
+                                credentialGeneration: record.state.credentialGeneration,
+                                status: "open" as const,
+                                openedAt: DateTime.toDateUtc(at),
+                                resolvedAt: null,
+                                resolution: null,
+                              },
+                            ]
+                          : [],
+                    );
+                    if (candidates.length > 0) {
+                      yield* transaction
+                        .insert(connectionIncidents)
+                        .values(candidates)
+                        .onConflictDoNothing({
+                          target: [
+                            connectionIncidents.connectionId,
+                            connectionIncidents.credentialGeneration,
+                          ],
+                        });
+                    }
+                    const incidentConnectionIds: string[] = [
+                      ...new Set(candidates.map((candidate) => candidate.connectionId)),
+                    ];
+                    if (Array.isArrayNonEmpty(incidentConnectionIds)) {
+                      const open = yield* transaction
+                        .select({
+                          id: connectionIncidents.id,
+                          userId: connectionIncidents.userId,
+                        })
+                        .from(connectionIncidents)
+                        .where(
+                          and(
+                            eq(connectionIncidents.status, "open"),
+                            anyOf(connectionIncidents.connectionId, incidentConnectionIds),
+                          ),
+                        );
+                      if (Array.isArrayNonEmpty(open)) {
+                        const pending = yield* Effect.forEach(open, (incident) =>
+                          Effect.map(
+                            newNotificationId,
+                            (id): typeof notifications.$inferInsert => ({
+                              id,
+                              userId: incident.userId,
+                              incidentId: incident.id,
+                              kind: "connection_reconnect_required",
+                              status: "pending",
+                              attempts: 0,
+                              nextAttemptAt: DateTime.toDateUtc(at),
+                              lastError: null,
+                              createdAt: DateTime.toDateUtc(at),
+                              updatedAt: DateTime.toDateUtc(at),
+                              sentAt: null,
+                            }),
+                          ),
+                        );
+                        yield* transaction
+                          .insert(notifications)
+                          .values(pending)
+                          .onConflictDoNothing({ target: notifications.incidentId });
+                      }
+                    }
+                    return next;
                   }),
               }),
             )
@@ -851,9 +928,10 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     season: team.season,
                     name: team.name,
                     availability: "available" as const,
-                    automationState: Schema.encodeSync(
-                      Schema.toCodecJson(TeamAutomationState),
-                    )({ _tag: "Disabled" as const, changedAt: at }),
+                    automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
+                      _tag: "Disabled" as const,
+                      changedAt: at,
+                    }),
                     automationStatus: "disabled" as const,
                     lastSeenAt: atDate,
                     createdAt: atDate,
@@ -971,6 +1049,41 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
   },
 ) {
   static readonly layer = Layer.effect(this)(this.make);
+}
+
+function resolveIncidents(
+  tx: Transaction,
+  connectionIds: ReadonlyArray<ConnectionId>,
+  at: DateTime.Utc,
+  resolution: "reconnected" | "disconnected",
+): Effect.Effect<void, ConnectionPersistenceFailed> {
+  const ids = [...connectionIds];
+  if (!Array.isArrayNonEmpty(ids)) {
+    return Effect.void;
+  }
+  return Effect.gen(function* () {
+    const resolved = yield* tx
+      .update(connectionIncidents)
+      .set({
+        status: "resolved",
+        resolvedAt: DateTime.toDateUtc(at),
+        resolution,
+      })
+      .where(
+        and(eq(connectionIncidents.status, "open"), anyOf(connectionIncidents.connectionId, ids)),
+      )
+      .returning({ id: connectionIncidents.id });
+    const incidentIds: string[] = resolved.map((row) => row.id);
+    if (!Array.isArrayNonEmpty(incidentIds)) {
+      return;
+    }
+    yield* tx
+      .update(notifications)
+      .set({ status: "cancelled", updatedAt: DateTime.toDateUtc(at) })
+      .where(
+        and(eq(notifications.status, "pending"), anyOf(notifications.incidentId, incidentIds)),
+      );
+  }).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
 }
 
 function connectionStatus(state: typeof ConnectionRow.Type.state): ConnectionStatus {

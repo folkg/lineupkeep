@@ -28,8 +28,8 @@ import { TeamRepository } from "./internal/TeamRepository.ts";
 import { TeamsLive } from "./internal/TeamsLive.ts";
 import { LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
-import { TeamControlRejected, TeamNotFound, Teams } from "./Teams.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
+import { TeamControlRejected, TeamNotFound, Teams } from "./Teams.ts";
 
 it.effect("enrolls, pauses through the provider day, and keeps availability separate", () =>
   Effect.gen(function* () {
@@ -57,10 +57,7 @@ it.effect("enrolls, pauses through the provider day, and keeps availability sepa
     );
 
     const replayed = yield* teams.pause(owner, [{ team: seeded }]);
-    assert.deepStrictEqual(
-      Array.getUnsafe(replayed, 0).team.automation.resumesAt,
-      first.resumesAt,
-    );
+    assert.deepStrictEqual(Array.getUnsafe(replayed, 0).team.automation.resumesAt, first.resumesAt);
 
     yield* database
       .update(providerTeams)
@@ -81,9 +78,7 @@ it.effect("disables a paused team and rejects enabling it without clearing the p
     yield* teams.setEnabled(owner, [{ team: seeded, enabled: true }]);
     yield* teams.pause(owner, [{ team: seeded }]);
 
-    const rejected = yield* Effect.flip(
-      teams.setEnabled(owner, [{ team: seeded, enabled: true }]),
-    );
+    const rejected = yield* Effect.flip(teams.setEnabled(owner, [{ team: seeded, enabled: true }]));
     const disabled = yield* teams.setEnabled(owner, [{ team: seeded, enabled: false }]);
     const reenabled = yield* teams.setEnabled(owner, [{ team: seeded, enabled: true }]);
 
@@ -111,7 +106,9 @@ it.effect("serializes competing controls and keeps another owner out", () =>
     const foreign = yield* Effect.flip(teams.get(other, seeded));
 
     assert.strictEqual(changes.length, 2);
-    assert.isTrue(["disabled", "paused-until-fantasy-day-end"].includes(current.team.automation.status));
+    assert.isTrue(
+      ["disabled", "paused-until-fantasy-day-end"].includes(current.team.automation.status),
+    );
     assert.instanceOf(foreign, TeamNotFound);
     assert.deepStrictEqual(yield* teams.list(other), []);
   }).pipe(Effect.provide(TeamsTestLayer)),
@@ -197,8 +194,10 @@ let owner = decodeUserId("automation-owner-1");
 const other = decodeUserId("automation-other");
 const session = Redacted.make("A1=test-session-cookie");
 
+let ownerSerial = 0;
 beforeEach(() => {
-  owner = decodeUserId(`automation-owner-${String(Math.random())}`);
+  ownerSerial += 1;
+  owner = decodeUserId(`automation-owner-${String(ownerSerial)}`);
 });
 
 const teamFixture: ProviderTeam = {

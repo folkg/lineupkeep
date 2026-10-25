@@ -68,7 +68,7 @@ it.effect("refreshes availability, restores teams, and preserves configuration",
     yield* database
       .update(providerTeams)
       .set({
-        automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
+        automationState: yield* Schema.encodeEffect(Schema.toCodecJson(TeamAutomationState))({
           _tag: "Enabled",
           changedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
         }),

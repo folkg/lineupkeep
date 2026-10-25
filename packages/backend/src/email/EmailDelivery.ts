@@ -58,9 +58,11 @@ export class EmailDelivery extends Context.Service<EmailDelivery, EmailDeliveryS
             "email.provider": "resend",
             "email.purpose": message.purpose,
           });
-          const idempotencyKey = yield* crypto
-            .randomUUIDv4()
-            .pipe(Effect.mapError(() => EmailDeliveryFailed.make({ reason: "unavailable" })));
+          const idempotencyKey =
+            message.idempotencyKey ??
+            (yield* crypto
+              .randomUUIDv4()
+              .pipe(Effect.mapError(() => EmailDeliveryFailed.make({ reason: "unavailable" }))));
           const response = yield* HttpClientRequest.post("/emails").pipe(
             HttpClientRequest.setHeader("idempotency-key", idempotencyKey),
             HttpClientRequest.bodyJsonUnsafe({
@@ -76,21 +78,49 @@ export class EmailDelivery extends Context.Service<EmailDelivery, EmailDeliveryS
           yield* Effect.annotateCurrentSpan("email.provider_message_id", response.id);
         });
 
-        return { send };
+        const sendMany = (
+          messages: ReadonlyArray<EmailMessage>,
+        ): Effect.Effect<ReadonlyArray<EmailDeliveryResult>> =>
+          Effect.forEach(
+            messages,
+            (message) =>
+              send(message).pipe(
+                Effect.as({ _tag: "sent" as const }),
+                Effect.catchTag("EmailDeliveryFailed", (failure) =>
+                  Effect.succeed({ _tag: "failed" as const, reason: failure.reason }),
+                ),
+              ),
+            { concurrency: 2 },
+          );
+        return { send, sendMany };
       }),
     );
 
-  static readonly console: Layer.Layer<EmailDelivery> = Layer.succeed(EmailDelivery)({
-    send: Effect.fn("email.send")(function* (message: EmailMessage) {
-      yield* Effect.annotateCurrentSpan({
-        "email.provider": "console",
-        "email.purpose": message.purpose,
+  static readonly console: Layer.Layer<EmailDelivery> = Layer.succeed(
+    EmailDelivery,
+    (() => {
+      const send = Effect.fn("email.send")(function* (message: EmailMessage) {
+        yield* Effect.annotateCurrentSpan({
+          "email.provider": "console",
+          "email.purpose": message.purpose,
+        });
+        yield* Console.log(
+          [`✉ To: ${message.to}`, `  Subject: ${message.subject}`, "", message.text].join("\n"),
+        );
       });
-      yield* Console.log(
-        [`✉ To: ${message.to}`, `  Subject: ${message.subject}`, "", message.text].join("\n"),
-      );
-    }),
-  });
+      return {
+        send,
+        sendMany: (messages: ReadonlyArray<EmailMessage>) =>
+          Effect.forEach(
+            messages,
+            (message) => send(message).pipe(Effect.as({ _tag: "sent" as const })),
+            {
+              concurrency: 2,
+            },
+          ),
+      };
+    })(),
+  );
 }
 
 export class EmailDeliveryFailed extends Schema.TaggedError<
@@ -122,12 +152,19 @@ export type EmailTransport = HttpClient.HttpClient | Crypto.Crypto;
 
 export type EmailDeliveryShape = {
   readonly send: (message: EmailMessage) => Effect.Effect<void, EmailDeliveryFailed>;
+  readonly sendMany: (
+    messages: ReadonlyArray<EmailMessage>,
+  ) => Effect.Effect<ReadonlyArray<EmailDeliveryResult>>;
 };
+
+type EmailDeliveryResult =
+  | { readonly _tag: "sent" }
+  | { readonly _tag: "failed"; readonly reason: "rejected" | "unavailable" };
 
 export type EmailMessage = {
   readonly to: string;
   readonly subject: string;
   readonly text: string;
-
   readonly purpose: string;
+  readonly idempotencyKey?: string;
 };
