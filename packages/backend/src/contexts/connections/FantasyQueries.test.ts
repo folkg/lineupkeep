@@ -18,6 +18,7 @@ import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
 import { TransactionReviewsLive } from "./internal/TransactionReviewsLive.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
+import { ProviderResponseInvalid } from "./Provider.ts";
 import { QueryTeamNotFound } from "./QueryValues.ts";
 import { TransactionReviews } from "./TransactionReview.ts";
 
@@ -136,6 +137,107 @@ it.effect("returns league scoring, roster rules, and explicit standings coverage
         (entry) => entry.resource === "standings" && entry.status === "unsupported",
       ),
     );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("keeps roster, calendar, and matchup reads with degraded league coverage", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.failLeague(
+      ProviderResponseInvalid.make({ operation: "read_league", field: "league.num_teams" }),
+    );
+
+    const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
+    const matchups = yield* queries.getMatchups(owner, { team: teamId, period: { week: 3 } });
+    const calendar = yield* queries.getCalendar(owner, { team: teamId });
+
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status === "ok") {
+      assert.strictEqual(roster.players.length, 2);
+      assert.strictEqual(roster.period?.week, 3);
+      const league = roster.coverage.find((entry) => entry.resource === "league");
+      assert.strictEqual(league?.status, "degraded");
+      assert.include(league?.detail, "league.num_teams");
+      assert.deepStrictEqual(
+        roster.failures.map((failure) => [failure.code, failure.resource]),
+        [["provider_invalid_response", "league"]],
+      );
+    }
+
+    assert.strictEqual(matchups.status, "ok");
+    if (matchups.status === "ok") {
+      assert.strictEqual(matchups.matchups.length, 1);
+      assert.strictEqual(
+        matchups.coverage.find((entry) => entry.resource === "league")?.status,
+        "degraded",
+      );
+    }
+
+    assert.strictEqual(calendar.status, "failed");
+    if (calendar.status === "failed") {
+      assert.isTrue(
+        calendar.coverage.some(
+          (entry) => entry.resource === "league" && entry.status === "degraded",
+        ),
+      );
+      assert.include(Array.getUnsafe(calendar.failures, 0).message, "league.num_teams");
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports a league without a scoring-week window instead of inventing periods", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
+      league: {
+        ...leagueFixture,
+        providerLeagueKey: "465.l.2000",
+        webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
+        periodWindow: undefined,
+      },
+      roster: rosterFixture({
+        count: 2,
+        coverage: { type: "date", date: "2026-10-25" },
+        providerTeamKey: "465.l.2000.t.9",
+        providerLeagueKey: "465.l.2000",
+      }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const calendar = yield* queries.getCalendar(owner, { team: teamId });
+    const league = yield* queries.getLeague(owner, { team: teamId, groups: ["overview"] });
+    const roster = yield* queries.getRosters(owner, { team: teamId });
+
+    assert.strictEqual(calendar.status, "unsupported");
+    if (calendar.status === "unsupported") {
+      assert.deepStrictEqual(calendar.periods, []);
+      assert.strictEqual(calendar.window, undefined);
+      assert.isTrue(
+        calendar.coverage.some(
+          (entry) =>
+            entry.resource === "calendar" &&
+            entry.status === "unsupported" &&
+            entry.detail?.includes("no scoring-week window") === true,
+        ),
+      );
+      assert.deepStrictEqual(calendar.failures, []);
+    }
+
+    assert.strictEqual(league.status, "ok");
+    if (league.status === "ok") {
+      assert.strictEqual(league.overview?.currentWeek, undefined);
+      assert.strictEqual(league.overview?.scoringType, "head");
+    }
+
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status === "ok") {
+      assert.strictEqual(roster.players.length, 2);
+      assert.strictEqual(roster.period, undefined);
+    }
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -655,9 +757,7 @@ const leagueFixture: ProviderLeagueSettings = {
   name: "Alpha League",
   webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
   season: 2026,
-  currentWeek: 3,
-  startWeek: 1,
-  endWeek: 17,
+  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 17 },
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,
@@ -699,10 +799,12 @@ function rosterFixture(input: {
   readonly count: number;
   readonly name?: string;
   readonly coverage?: ProviderRoster["coverage"];
+  readonly providerTeamKey?: string;
+  readonly providerLeagueKey?: string;
 }): ProviderRoster {
   return {
-    providerTeamKey: "461.l.1000.t.1",
-    providerLeagueKey: "461.l.1000",
+    providerTeamKey: input.providerTeamKey ?? "461.l.1000.t.1",
+    providerLeagueKey: input.providerLeagueKey ?? "461.l.1000",
     coverage: input.coverage ?? { type: "week", week: 3 },
     players: globalThis.Array.from({ length: input.count }, (_, index) => ({
       providerPlayerKey: `461.p.${String(10001 + index)}`,

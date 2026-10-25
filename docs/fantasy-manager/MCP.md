@@ -67,6 +67,10 @@ Do not advertise multi-week aggregation, advanced-stat availability, diamond dat
 
 Separate roster membership reads from bounded player hydration. Live verification found no projected-statistics series in the provider's read surface: completed weeks report actual values, while the current and future weeks report zero rather than projections. Projections therefore stay typed unsupported unless a future verified read proves otherwise. See [live read endpoints](RESEARCH.md#live-yahoo-read-endpoints-2026-10-25).
 
+Actual statistics state their basis: `week` with the covered period when the provider publishes weekly series, otherwise `season`. A client must not compare a season total against a weekly value, and the read reports the basis it used rather than relabelling one as the other.
+
+A coverage entry has one of three states. `available` means the resource was read and verified. `unsupported` means the provider or league does not establish it, and the entry, or a typed group result beside it, carries the reason. `degraded` means a dependency could not be verified while the read still returned what does not depend on it: the entry names the failed field, the affected resource lists a bounded failure, and roster, calendar, or matchup reads are not erased because league settings failed. A group that declares itself unsupported never also reports a period failure; the two statements would contradict each other.
+
 ## Review-link safety
 
 Generate links from typed domain intents and verified relationships. Users may choose players/counterparty, not origins, endpoint stages, or submission parameters. Validate provider, league, owning team, membership, and numeric-ID mapping privately.

@@ -66,14 +66,17 @@ type ProviderStatModifier = {
   readonly points: string;
 };
 
+export type ProviderPeriodWindow = {
+  readonly currentWeek: number;
+  readonly startWeek: number;
+  readonly endWeek: number;
+};
+
 export type ProviderLeagueSettings = {
   readonly providerLeagueKey: string;
   readonly name: string;
   readonly webUrl: string;
   readonly season: number;
-  readonly currentWeek: number;
-  readonly startWeek: number;
-  readonly endWeek: number;
   readonly startDate: string | undefined;
   readonly endDate: string | undefined;
   readonly teamCount: number;
@@ -84,6 +87,7 @@ export type ProviderLeagueSettings = {
   readonly waiverRule: string | undefined;
   readonly usesFaab: boolean | undefined;
   readonly draftStatus: string | undefined;
+  readonly periodWindow: ProviderPeriodWindow | undefined;
   readonly rosterPositions: ReadonlyArray<ProviderRosterPosition>;
   readonly statCategories: ReadonlyArray<ProviderStatCategory>;
   readonly statModifiers: ReadonlyArray<ProviderStatModifier>;
@@ -258,6 +262,7 @@ export class ProviderRequestFailed extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("provider.request_failed", {
   operation: ProviderOperation,
+  status: Schema.optional(Schema.Int),
 }) {}
 
 export class ProviderResponseInvalid extends Schema.TaggedError<
@@ -265,6 +270,7 @@ export class ProviderResponseInvalid extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("provider.response_invalid", {
   operation: ProviderOperation,
+  field: Schema.optional(Schema.String),
 }) {}
 
 export class ProviderCrumbUnavailable extends Schema.TaggedError<

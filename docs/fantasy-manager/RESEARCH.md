@@ -147,12 +147,59 @@ Confirmed live:
 Fixtures for each observed structure, without captured values, lock these rules in
 `YahooJson.test.ts` and `YahooProvider.test.ts`.
 
+### League-to-league variation across one account (2026-10-25)
+
+Five teams in one account expose five different league-settings payloads. Structure-only capture
+(field names, JSON types, cardinalities, empty placeholders; no values) found the differences that a
+single-league fixture cannot cover:
+
+- Head-to-head leagues publish `current_week`, `start_week`, `end_week`, and `matchup_week`; a
+  rotisserie NHL league publishes none of them and additionally carries `password`,
+  `short_invitation_url`, and a null `felo_tier`. Requiring the week window rejected that league's
+  settings and, because every later read needed the settings, failed roster, calendar, matchup, and
+  review-link reads for that team.
+- `settings` is a positional fragment list whose length varies: one fragment for the NFL league, a
+  `settings` fragment plus a `min_games_played`/`week_has_enough_qualifying_days` fragment for the
+  head-to-head NHL leagues, and a second **empty list** placeholder for the rotisserie league.
+- Cardinalities differ by league: 6, 9, 9, and 10 roster-position entries; 12, 12, 13, and 15 stat
+  categories. Some leagues omit `max_adds`/`max_weekly_adds`; one publishes points-based
+  `stat_modifiers` and the others omit it. Stat entries may carry `is_only_display_stat` at the
+  stat level, inside `stat_position_type`, or not at all.
+- `weekly_deadline` is an empty string on two leagues, and `num_teams` is a JSON number while
+  `start_week`/`end_week`/`max_teams` are numeric strings.
+
+The adapter therefore treats the week window as one optional unit — all three fields or none, with
+a partially published window refused by field name — and the request decoder reports the failing
+input path (for example `league.num_teams`) instead of an opaque invalid-response failure.
+
+### Player statistics basis and dropped players
+
+- Football exposes both bases: `stats.type=week&stats.week={week}` returns
+  `player_stats` with `coverage_type=week`, and `stats.type=season` returns
+  `coverage_type=season`. Hockey returns **no `player_stats` node at all** for a weekly request,
+  and season totals for a season request. Weekly hockey statistics are not merely empty; the field
+  is absent.
+- Stat values arrive as numbers on a completed current week and as numeric strings or the dashed
+  missing form on other reads; the adapter preserves missing as null.
+- Season statistics cost roughly 44–45 KB for three player keys, so selected-player reads stay
+  bounded at 25 keys.
+- `league/{league_key}/players;player_keys=...` returns identity for players who are not on any
+  roster (ownership `waivers` in the sample), so identity does not depend on roster membership.
+- A rotation of NHL roster reads confirmed **every** inspected NHL roster is date-scoped, not just
+  one league, and one team answered HTTP 400 for `;week=1` while its unqualified roster read
+  succeeded. A rejected week selector is uncovered period coverage, not a provider outage.
+- Transaction entries carry the dropped player's `name.full`, `display_position`, `position_type`,
+  and `editorial_team_abbr` alongside `transaction_data`, but no `primary_position` or
+  `eligible_positions`. That is enough to name the drop side of an add/drop without current roster
+  membership.
+
 ### Still unverified or unsupported
 
-- Projected player statistics: no read shape exposes them; the tool keeps a typed unsupported
-  result with the provider reason.
+- Projected player statistics: no read shape exposes them — `stats.type=projected`,
+  `out=projection`, and `out=projected_stats` are rejected with HTTP 400, and current or future
+  weekly reads report zeros rather than projections. The tool keeps a typed unsupported result
+  with the provider reason.
 - Trade and commissioner transaction player shapes; only add/drop was observed.
-- Weekly hockey player statistics; season statistics were available but weekly were not.
 - League standings, diamond/premium statistics, and multi-week aggregation.
 - All writes, crumb use, locks, and native start-active readback.
 

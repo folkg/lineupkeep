@@ -5,6 +5,7 @@ import { Connections } from "#contexts/connections/Connections.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import type {
   ProviderLeagueSettings,
+  ProviderPeriodWindow,
   ProviderPlayerDetail,
   ProviderPlayerStatGroup,
   ProviderReadFailure,
@@ -127,7 +128,9 @@ export const FantasyQueriesLive = Layer.effect(
                   code: "provider_invalid_response",
                   resource,
                   message:
-                    "The provider returned data that could not be verified for this request.",
+                    error.field === undefined
+                      ? "The provider returned data that could not be verified for this request."
+                      : `The provider returned data that could not be verified (field \`${error.field}\`).`,
                 },
               });
             case "provider.period_mismatch":
@@ -251,11 +254,15 @@ export const FantasyQueriesLive = Layer.effect(
       const fetchedAt = yield* DateTime.now;
       const outcome = yield* readLeague(context);
       if (outcome._tag !== "ok") {
-        return calendarWithoutData(team, fetchedAt, outcome);
+        return calendarWithoutWeekWindow(team, fetchedAt, outcome);
       }
       const league = outcome.value;
-      if (league.endWeek < league.startWeek) {
-        return calendarWithoutData(team, fetchedAt, {
+      const window = league.periodWindow;
+      if (window === undefined) {
+        return calendarWithoutWeekWindow(team, fetchedAt, outcome);
+      }
+      if (window.endWeek < window.startWeek) {
+        return calendarWithoutWeekWindow(team, fetchedAt, {
           _tag: "failed",
           failure: {
             code: "provider_invalid_response",
@@ -264,9 +271,9 @@ export const FantasyQueriesLive = Layer.effect(
           },
         });
       }
-      const periods = Array.from({ length: league.endWeek - league.startWeek + 1 }, (_, index) => {
-        const week = league.startWeek + index;
-        return { week, isCurrent: week === league.currentWeek };
+      const periods = Array.from({ length: window.endWeek - window.startWeek + 1 }, (_, index) => {
+        const week = window.startWeek + index;
+        return { week, isCurrent: week === window.currentWeek };
       });
       const fingerprintValue = yield* queryFingerprint(`calendar|team=${input.team}|order=week`);
       const now = yield* DateTime.now;
@@ -275,9 +282,9 @@ export const FantasyQueriesLive = Layer.effect(
         status: "ok" as const,
         team,
         window: {
-          currentWeek: league.currentWeek,
-          startWeek: league.startWeek,
-          endWeek: league.endWeek,
+          currentWeek: window.currentWeek,
+          startWeek: window.startWeek,
+          endWeek: window.endWeek,
         },
         dates: {
           ...(league.startDate === undefined ? {} : { start: league.startDate }),
@@ -383,25 +390,17 @@ export const FantasyQueriesLive = Layer.effect(
       const detail: RosterDetail = input.detail ?? "compact";
       const fetchedAt = yield* DateTime.now;
       const leagueOutcome = yield* readLeague(context);
-      if (leagueOutcome._tag !== "ok") {
-        return rosterWithoutData(team, input.period, fetchedAt, leagueOutcome);
-      }
-      const league = leagueOutcome.value;
-      if (input.period !== undefined && !withinSeason(input.period, league)) {
+      if (
+        input.period !== undefined &&
+        leagueOutcome._tag === "ok" &&
+        withinPeriodWindow(leagueOutcome.value.periodWindow, input.period) === false
+      ) {
         return yield* QuerySelectionInvalid.make({
           detail: "The requested period is outside the linked league's season.",
         });
       }
-      const period =
-        input.period ??
-        (league.currentWeek >= league.startWeek && league.currentWeek <= league.endWeek
-          ? { week: league.currentWeek }
-          : undefined);
-      if (period === undefined) {
-        return yield* QuerySelectionInvalid.make({
-          detail: "The linked league has no current period. Select a valid period explicitly.",
-        });
-      }
+      const window = leagueOutcome._tag === "ok" ? leagueOutcome.value.periodWindow : undefined;
+      const period = input.period ?? currentPeriod(window);
       const readRoster = (
         requested: { readonly week: number } | undefined,
       ): Effect.Effect<ReadOutcome<ProviderRoster>> =>
@@ -457,8 +456,8 @@ export const FantasyQueriesLive = Layer.effect(
         status: "ok",
         team,
         ...(roster.coverage.type === "week" ? { period: { week: roster.coverage.week } } : {}),
-        coverage: [coverage("league", "league_settings", fetchedAt), rosterCoverage],
-        failures: [],
+        coverage: [leagueCoverage(leagueOutcome, fetchedAt), rosterCoverage],
+        failures: leagueFailure(leagueOutcome),
         budget: queryBudget,
       };
       return yield* fitPage({
@@ -618,7 +617,16 @@ export const FantasyQueriesLive = Layer.effect(
           league = leagueOutcome.value;
           coverageEntries.push(coverage("scoring", "league_settings", fetchedAt));
         } else {
-          coverageEntries.push(unsupportedCoverage("scoring", "league_settings", fetchedAt));
+          coverageEntries.push(
+            leagueOutcome._tag === "failed"
+              ? degradedCoverage(
+                  "scoring",
+                  "league_settings",
+                  fetchedAt,
+                  leagueOutcome.failure.message,
+                )
+              : unsupportedCoverage("scoring", "league_settings", fetchedAt),
+          );
           if (leagueOutcome._tag === "failed") {
             failures.push(leagueOutcome.failure);
           }
@@ -667,7 +675,7 @@ export const FantasyQueriesLive = Layer.effect(
             providerLeagueKey: leagueKey,
             providerPlayerKeys: valid.map((row) => row.providerPlayerKey),
             period: requestedPeriod,
-            currentWeek: league?.currentWeek,
+            currentWeek: league?.periodWindow?.currentWeek,
           }),
         );
         if (detailsOutcome._tag === "ok") {
@@ -679,8 +687,8 @@ export const FantasyQueriesLive = Layer.effect(
               fetchedAt,
               undefined,
               requestedPeriod !== undefined &&
-                league !== undefined &&
-                requestedPeriod.week >= league.currentWeek
+                league?.periodWindow !== undefined &&
+                requestedPeriod.week >= league.periodWindow.currentWeek
                 ? "Week statistics are reported only after a period completes."
                 : undefined,
             ),
@@ -691,7 +699,10 @@ export const FantasyQueriesLive = Layer.effect(
               ? detailsOutcome.detail
               : detailsOutcome.failure.message;
           coverageEntries.push(unsupportedCoverage("players", "player_details", fetchedAt));
-          if (detailsOutcome._tag === "failed") {
+          if (
+            detailsOutcome._tag === "failed" &&
+            detailsOutcome.failure.code !== "period_unavailable"
+          ) {
             failures.push(detailsOutcome.failure);
           }
         }
@@ -905,10 +916,10 @@ export const FantasyQueriesLive = Layer.effect(
       const team = queryTeam(context.owned);
       const fetchedAt = yield* DateTime.now;
       const leagueOutcome = yield* readLeague(context);
-      if (leagueOutcome._tag !== "ok") {
-        return matchupsWithoutData(team, input.period, fetchedAt, leagueOutcome);
-      }
-      if (!withinSeason(input.period, leagueOutcome.value)) {
+      if (
+        leagueOutcome._tag === "ok" &&
+        withinPeriodWindow(leagueOutcome.value.periodWindow, input.period) === false
+      ) {
         return yield* QuerySelectionInvalid.make({
           detail: "The requested period is outside the linked league's season.",
         });
@@ -950,10 +961,10 @@ export const FantasyQueriesLive = Layer.effect(
         team,
         period: input.period,
         coverage: [
-          coverage("league", "league_settings", fetchedAt),
+          leagueCoverage(leagueOutcome, fetchedAt),
           coverage("matchups", "matchups", fetchedAt, input.period),
         ],
-        failures: [],
+        failures: leagueFailure(leagueOutcome),
         budget: queryBudget,
       };
       return yield* fitPage({
@@ -1101,29 +1112,75 @@ function unsupportedCoverage(
   return { resource, status: "unsupported", source, fetchedAt };
 }
 
+function degradedCoverage(
+  resource: string,
+  source: string,
+  fetchedAt: DateTime.Utc,
+  detail: string,
+): QueryCoverage {
+  return { resource, status: "degraded", source, fetchedAt, detail };
+}
+
+function leagueCoverage(
+  outcome: ReadOutcome<ProviderLeagueSettings>,
+  fetchedAt: DateTime.Utc,
+): QueryCoverage {
+  switch (outcome._tag) {
+    case "ok":
+      return coverage("league", "league_settings", fetchedAt);
+    case "unsupported":
+      return unsupportedCoverage("league", "league_settings", fetchedAt);
+    case "failed":
+      return degradedCoverage("league", "league_settings", fetchedAt, outcome.failure.message);
+  }
+}
+
+function leagueFailure(outcome: ReadOutcome<ProviderLeagueSettings>): QueryFailure[] {
+  return outcome._tag === "failed" ? [outcome.failure] : [];
+}
+
 function emptyPage(): QueryPage {
   return { returned: 0, complete: true, remaining: 0 };
 }
 
-function calendarWithoutData(
+function calendarWithoutWeekWindow(
   team: QueryTeam,
   fetchedAt: DateTime.Utc,
   outcome: ReadOutcome<ProviderLeagueSettings>,
 ): CalendarData {
+  const failed = outcome._tag === "failed";
   return {
-    status: outcome._tag === "unsupported" ? "unsupported" : "failed",
+    status: failed ? "failed" : "unsupported",
     team,
     periods: [],
+    ...(outcome._tag === "ok"
+      ? {
+          dates: {
+            ...(outcome.value.startDate === undefined ? {} : { start: outcome.value.startDate }),
+            ...(outcome.value.endDate === undefined ? {} : { end: outcome.value.endDate }),
+          },
+        }
+      : {}),
     historical: {
       status: "unsupported",
       detail: "Only the linked team's current season is validated for this provider.",
     },
     coverage: [
-      outcome._tag === "ok"
-        ? coverage("league", "league_settings", fetchedAt)
-        : unsupportedCoverage("league", "league_settings", fetchedAt),
+      leagueCoverage(outcome, fetchedAt),
+      ...(outcome._tag === "ok"
+        ? [
+            {
+              resource: "calendar",
+              status: "unsupported" as const,
+              source: "league_settings",
+              fetchedAt,
+              detail:
+                "The provider reported no scoring-week window for this league, so week-scoped periods are unsupported.",
+            },
+          ]
+        : []),
     ],
-    failures: outcome._tag === "failed" ? [outcome.failure] : [],
+    failures: leagueFailure(outcome),
     page: emptyPage(),
     budget: queryBudget,
   };
@@ -1148,14 +1205,12 @@ function leagueWithoutData(
         }
       : {}),
     coverage: [
-      outcome._tag === "ok"
-        ? coverage("league", "league_settings", fetchedAt)
-        : unsupportedCoverage("league", "league_settings", fetchedAt),
+      leagueCoverage(outcome, fetchedAt),
       ...(groups.includes("standings")
         ? [unsupportedCoverage("standings", "standings", fetchedAt)]
         : []),
     ],
-    failures: outcome._tag === "failed" ? [outcome.failure] : [],
+    failures: leagueFailure(outcome),
     page: emptyPage(),
     budget: queryBudget,
   };
@@ -1245,8 +1300,21 @@ function transactionsWithoutData(
   };
 }
 
-function withinSeason(period: QueryPeriod, league: ProviderLeagueSettings): boolean {
-  return period.week >= league.startWeek && period.week <= league.endWeek;
+function withinPeriodWindow(
+  window: ProviderPeriodWindow | undefined,
+  period: QueryPeriod,
+): boolean | undefined {
+  return window === undefined
+    ? undefined
+    : period.week >= window.startWeek && period.week <= window.endWeek;
+}
+
+function currentPeriod(window: ProviderPeriodWindow | undefined): QueryPeriod | undefined {
+  return window !== undefined &&
+    window.currentWeek >= window.startWeek &&
+    window.currentWeek <= window.endWeek
+    ? { week: window.currentWeek }
+    : undefined;
 }
 
 function leagueOverview(league: ProviderLeagueSettings): NonNullable<LeagueData["overview"]> {
@@ -1255,9 +1323,13 @@ function leagueOverview(league: ProviderLeagueSettings): NonNullable<LeagueData[
     teamCount: league.teamCount,
     scoringType: league.scoringType,
     ...(league.scoringLabel === undefined ? {} : { scoringLabel: league.scoringLabel }),
-    currentWeek: league.currentWeek,
-    startWeek: league.startWeek,
-    endWeek: league.endWeek,
+    ...(league.periodWindow === undefined
+      ? {}
+      : {
+          currentWeek: league.periodWindow.currentWeek,
+          startWeek: league.periodWindow.startWeek,
+          endWeek: league.periodWindow.endWeek,
+        }),
     ...(league.startDate === undefined ? {} : { startDate: league.startDate }),
     ...(league.endDate === undefined ? {} : { endDate: league.endDate }),
     ...(league.weeklyDeadline === undefined ? {} : { weeklyDeadline: league.weeklyDeadline }),

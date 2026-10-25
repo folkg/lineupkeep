@@ -39,6 +39,7 @@ type FakeProviderState = {
   readonly discoveryGate: Option.Option<FakeGate>;
   readonly rosterReadGate: Option.Option<FakeGate>;
   readonly league: ProviderLeagueSettings | undefined;
+  readonly leagueFailure: ProviderResponseInvalid | undefined;
   readonly roster: ProviderRoster | undefined;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
   readonly matchups: ReadonlyArray<ProviderMatchup>;
@@ -63,6 +64,7 @@ export type FakeProviderWorldShape = {
   readonly blockRosterRead: Effect.Effect<FakeGate>;
   readonly unblockRosterRead: Effect.Effect<void>;
   readonly setLeague: (league: ProviderLeagueSettings | undefined) => Effect.Effect<void>;
+  readonly failLeague: (failure: ProviderResponseInvalid | undefined) => Effect.Effect<void>;
   readonly setRoster: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
   readonly setMatchups: (matchups: ReadonlyArray<ProviderMatchup>) => Effect.Effect<void>;
@@ -94,6 +96,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         discoveryGate: Option.none(),
         rosterReadGate: Option.none(),
         league: undefined,
+        leagueFailure: undefined,
         roster: undefined,
         playerDetails: [],
         matchups: [],
@@ -136,6 +139,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         }),
         unblockRosterRead: modify((current) => ({ ...current, rosterReadGate: Option.none() })),
         setLeague: (league) => modify((current) => ({ ...current, league })),
+        failLeague: (leagueFailure) => modify((current) => ({ ...current, leagueFailure })),
         setRoster: (roster) => modify((current) => ({ ...current, roster })),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
         setMatchups: (matchups) => modify((current) => ({ ...current, matchups })),
@@ -223,6 +227,14 @@ export const ProviderFakeTest = Layer.effect(
       }),
       readLeague: Effect.fn("FakeProvider.readLeague")(function* (input) {
         const current = yield* prepare(input, "read_league");
+        if (current.leagueFailure !== undefined) {
+          return yield* ProviderResponseInvalid.make({
+            operation: "read_league",
+            ...(current.leagueFailure.field === undefined
+              ? {}
+              : { field: current.leagueFailure.field }),
+          });
+        }
         if (current.league === undefined) {
           return yield* ProviderOperationUnsupported.make({
             operation: "read_league",

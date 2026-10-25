@@ -15,6 +15,16 @@ import {
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 import type { PublicInternetOptions } from "#runtime/PublicInternet.ts";
 
+import {
+  yahooNflLeagueSettings,
+  yahooNflLeagueSettingsForAnotherLeague,
+  yahooNflLeagueSettingsWithTextTeamCount,
+  yahooNflLeagueSettingsWithoutEndWeek,
+  yahooNhlLeagueSettings,
+  yahooNhlRoster,
+  yahooNhlRotoLeagueSettings,
+  yahooNflRoster,
+} from "./YahooPayloadFixturesTest.ts";
 import { YahooProvider } from "./YahooProvider.ts";
 
 it.effect("validates a session with one exact read request", () => {
@@ -319,124 +329,169 @@ it.effect("keeps cookies, crumbs, and raw payloads out of spans", () => {
   );
 });
 
-it.effect("reads verified league settings with one exact request", () => {
-  const internet = recordingInternet(() => jsonResponse(rawLeagueSettings));
+it.effect("reads an NFL league whose settings publish extra and renamed fields", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueSettings));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const league = yield* provider.readLeague({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
+      providerLeagueKey: "466.l.4000",
       sport: "football",
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/461.l.1000/settings?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/settings?format=json",
     );
     assert.strictEqual(internet.calls[0]?.headers["cookie"], Redacted.value(sessionInput.session));
-    assert.deepStrictEqual(league, {
-      providerLeagueKey: "461.l.1000",
-      name: "Alpha League",
-      webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
-      season: 2026,
-      currentWeek: 3,
-      startWeek: 1,
-      endWeek: 17,
-      startDate: "2026-09-03",
-      endDate: "2026-12-28",
-      teamCount: 10,
-      scoringType: "head",
-      scoringLabel: "H2H",
-      weeklyDeadline: undefined,
-      waiverType: "FR",
-      waiverRule: "continuous",
-      usesFaab: false,
-      draftStatus: "postdraft",
-      rosterPositions: [
-        {
-          position: "QB",
-          positionType: "O",
-          count: 1,
-          isStarting: true,
-        },
-        {
-          position: "BN",
-          positionType: "B",
-          count: 6,
-          isStarting: false,
-        },
+    assert.strictEqual(league.name, "Synthetic NFL League");
+    assert.deepStrictEqual(league.periodWindow, { currentWeek: 6, startWeek: 1, endWeek: 17 });
+    assert.strictEqual(league.weeklyDeadline, undefined);
+    assert.deepStrictEqual(
+      league.rosterPositions.map((position) => [
+        position.position,
+        position.count,
+        position.isStarting,
+      ]),
+      [
+        ["QB", 1, true],
+        ["WR", 2, true],
+        ["W/R/T", 1, true],
+        ["BN", 6, false],
+        ["IR", 1, false],
       ],
-      statCategories: [
-        {
-          statId: 4,
-          name: "Passing Yards",
-          displayName: "Pass Yds",
-          abbreviation: "PY",
-          group: "passing",
-          enabled: true,
-          positionTypes: ["O"],
-        },
+    );
+    assert.deepStrictEqual(
+      league.statCategories.map((category) => [
+        category.statId,
+        category.name,
+        category.enabled,
+        category.positionTypes,
+      ]),
+      [
+        [4, "Passing Yards", true, ["O"]],
+        [9, "Rushing Touchdowns", true, ["O"]],
+        [13, "Receptions", false, ["O"]],
       ],
-      statModifiers: [{ statId: 4, points: "0.04" }],
-    });
+    );
+    assert.deepStrictEqual(league.statModifiers, [
+      { statId: 4, points: "0.04" },
+      { statId: 9, points: "6" },
+      { statId: 13, points: "0.5" },
+    ]);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
-it.effect("reads a category league that omits stat modifiers", () => {
-  const internet = recordingInternet(() => jsonResponse(rawLeagueSettingsWithoutModifiers));
+it.effect("reads an NHL head-to-head league with qualifying-days settings and no modifiers", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlLeagueSettings));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const league = yield* provider.readLeague({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
-      sport: "football",
+      providerLeagueKey: "466.l.4001",
+      sport: "hockey",
     });
 
+    assert.deepStrictEqual(league.periodWindow, { currentWeek: 3, startWeek: 1, endWeek: 24 });
+    assert.strictEqual(league.webUrl, "https://hockey.fantasysports.yahoo.com/hockey/4001");
+    assert.strictEqual(league.weeklyDeadline, "game");
+    assert.deepStrictEqual(
+      league.rosterPositions.map((position) => position.positionType),
+      ["P", "P", "G", undefined, undefined],
+    );
     assert.deepStrictEqual(league.statModifiers, []);
-    assert.strictEqual(league.statCategories.length, 1);
+    assert.strictEqual(league.statCategories.length, 3);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
-it.effect("reads a one-entry stat position type collection", () => {
-  const internet = recordingInternet(() => jsonResponse(rawLeagueSettingsWithSinglePositionType));
+it.effect("reads a rotisserie league that publishes no scoring-week window", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlRotoLeagueSettings));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const league = yield* provider.readLeague({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
-      sport: "football",
+      providerLeagueKey: "466.l.4002",
+      sport: "hockey",
     });
 
-    assert.deepStrictEqual(league.statCategories[0]?.positionTypes, ["O"]);
+    assert.strictEqual(league.periodWindow, undefined);
+    assert.strictEqual(league.scoringType, "roto");
+    assert.strictEqual(league.teamCount, 12);
+    assert.strictEqual(league.startDate, "2026-10-01");
+    assert.strictEqual(league.weeklyDeadline, undefined);
+    assert.strictEqual(league.waiverType, "FR");
+    assert.deepStrictEqual(
+      league.rosterPositions.map((position) => position.position),
+      ["C", "LW", "D", "BN", "IR"],
+    );
+    assert.deepStrictEqual(league.statModifiers, []);
+    assert.deepStrictEqual(
+      league.statCategories.map((category) => [category.name, category.enabled]),
+      [
+        ["Goals", true],
+        ["Assists", true],
+        ["Shots on Goal", true],
+      ],
+    );
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
-it.effect("rejects a league response for another league without exposing the payload", () => {
-  const internet = recordingInternet(() =>
-    jsonResponse({
-      ...rawLeagueSettings.fantasy_content,
-      league: [
-        { ...rawLeagueAttributes, league_key: "461.l.9999" },
-        ...rawLeagueSettings.fantasy_content.league.slice(1),
-      ],
-    }),
-  );
+it.effect("names the week-window field when only part of the window is published", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueSettingsWithoutEndWeek));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const error = yield* Effect.flip(
       provider.readLeague({
         ...sessionInput,
-        providerLeagueKey: "461.l.1000",
+        providerLeagueKey: "466.l.4000",
         sport: "football",
       }),
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
-    assert.notInclude(String(error), "Alpha League");
+    assert.strictEqual(error.field, "league.end_week");
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("names the field that is genuinely unverifiable", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueSettingsWithTextTeamCount));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readLeague({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        sport: "football",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.num_teams");
+    assert.notInclude(String(error), "Synthetic NFL League");
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("rejects a league response for another league and names the identity field", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueSettingsForAnotherLeague));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readLeague({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        sport: "football",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.league_key");
+    assert.notInclude(String(error), "Synthetic NFL League");
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -490,20 +545,30 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
-it.effect("reads a roster container that declares its covered week", () => {
-  const internet = recordingInternet(() => jsonResponse(rawRosterContainerWithCoverage));
+it.effect("reads a week-scoped roster container from a captured payload", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const roster = yield* provider.readRoster({
       ...sessionInput,
-      providerTeamKey: "461.l.1000.t.1",
-      period: { week: 3 },
+      providerTeamKey: "466.l.4000.t.1",
+      period: { week: 6 },
     });
 
-    assert.deepStrictEqual(roster.coverage, { type: "week", week: 3 });
-    assert.strictEqual(roster.players.length, 1);
-    assert.strictEqual(roster.players[0]?.providerPlayerKey, "461.p.10001");
+    assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
+    assert.deepStrictEqual(
+      roster.players.map((player) => [
+        player.name,
+        player.slot,
+        player.isEditable,
+        player.injuryCode,
+      ]),
+      [
+        ["Synthetic Starter", "QB", true, undefined],
+        ["Synthetic Reserve", "BN", false, "O"],
+      ],
+    );
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -559,6 +624,51 @@ it.effect("refuses to relabel a date-scoped roster as a week", () => {
 
     assert.instanceOf(error, ProviderPeriodMismatch);
     assert.strictEqual(error.coveredWeek, null);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("treats a rejected week selector as uncovered period coverage", () => {
+  const internet = recordingInternet((request) =>
+    request.url.pathname.endsWith("/roster;week=6")
+      ? jsonResponse({ error: { description: "Synthetic provider rejection" } }, 400)
+      : jsonResponse(yahooNhlRoster),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "466.l.4002.t.3",
+        period: { week: 6 },
+      }),
+    );
+
+    assert.instanceOf(error, ProviderPeriodMismatch);
+    assert.strictEqual(error.coveredWeek, null);
+    assert.strictEqual(internet.calls.length, 1);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reads a date-scoped roster from a captured payload", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const roster = yield* provider.readRoster({
+      ...sessionInput,
+      providerTeamKey: "466.l.4002.t.3",
+      period: undefined,
+    });
+
+    assert.deepStrictEqual(roster.coverage, { type: "date", date: "2026-10-25" });
+    assert.deepStrictEqual(
+      roster.players.map((player) => [player.name, player.slot, player.eligiblePositions]),
+      [
+        ["Synthetic Skater", "C", ["C", "LW"]],
+        ["Synthetic Goalie", "BN", ["G"]],
+      ],
+    );
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -1036,87 +1146,6 @@ function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status });
 }
 
-const rawLeagueAttributes = {
-  league_key: "461.l.1000",
-  name: "Alpha League",
-  url: "https://football.fantasysports.yahoo.com/f1/1000",
-  num_teams: 10,
-  current_week: 3,
-  start_week: "1",
-  end_week: "17",
-  start_date: "2026-09-03",
-  end_date: "2026-12-28",
-  scoring_type: "head",
-  scoring_label: "H2H",
-  weekly_deadline: "",
-  season: "2026",
-  draft_status: "postdraft",
-};
-
-const rawLeagueSettings = {
-  fantasy_content: {
-    league: [
-      rawLeagueAttributes,
-      {
-        settings: {
-          "0": {
-            roster_type: "head",
-            waiver_type: "FR",
-            waiver_rule: "continuous",
-            uses_faab: "0",
-            roster_positions: {
-              "0": {
-                roster_position: {
-                  position: "QB",
-                  position_type: "O",
-                  count: 1,
-                  is_starting_position: 1,
-                },
-              },
-              "1": {
-                roster_position: {
-                  position: "BN",
-                  position_type: "B",
-                  count: 6,
-                  is_starting_position: 0,
-                },
-              },
-              count: 2,
-            },
-            stat_categories: {
-              stats: {
-                "0": {
-                  stat: {
-                    stat_id: 4,
-                    name: "Passing Yards",
-                    display_name: "Pass Yds",
-                    group: "passing",
-                    abbr: "PY",
-                    enabled: "1",
-                    position_type: "O",
-                    stat_position_types: {
-                      "0": { stat_position_type: { position_type: "O" } },
-                      count: 1,
-                    },
-                  },
-                },
-                count: 1,
-              },
-            },
-            stat_modifiers: {
-              stats: {
-                "0": { stat: { stat_id: 4, value: "0.04" } },
-                count: 1,
-              },
-            },
-          },
-          count: 1,
-        },
-      },
-    ],
-  },
-};
-
 const rawRoster = {
   fantasy_content: {
     team: [
@@ -1175,125 +1204,6 @@ const rawRoster = {
               },
               count: 2,
             },
-          },
-          count: 1,
-        },
-      },
-    ],
-  },
-};
-
-const rawRosterContainerWithCoverage = {
-  fantasy_content: {
-    team: [
-      { team_key: "461.l.1000.t.1" },
-      {
-        roster: {
-          "0": {
-            players: {
-              "0": {
-                player: [
-                  [
-                    { player_key: "461.p.10001" },
-                    { name: { full: "Synthetic Player" } },
-                    { display_position: "QB" },
-                    { primary_position: "QB" },
-                    { position_type: "O" },
-                    { eligible_positions: { "0": { position: "QB" }, count: 1 } },
-                    { bye_weeks: { week: "7" } },
-                    { is_undroppable: "0" },
-                  ],
-                  {
-                    selected_position: [{ coverage_type: "week", week: "3" }, { position: "QB" }],
-                  },
-                  { is_editable: "1" },
-                ],
-              },
-              count: 1,
-            },
-          },
-          coverage_type: "week",
-          week: "3",
-          is_prescoring: 0,
-          is_editable: 1,
-          bye_week_sponsor: { sponsor_name: "Synthetic Sponsor" },
-        },
-      },
-    ],
-  },
-};
-
-const rawLeagueSettingsWithoutModifiers = {
-  fantasy_content: {
-    league: [
-      rawLeagueAttributes,
-      {
-        settings: {
-          "0": {
-            roster_type: "head",
-            waiver_type: "FR",
-            waiver_rule: "continuous",
-            uses_faab: "0",
-            roster_positions: {
-              "0": {
-                roster_position: {
-                  position: "QB",
-                  position_type: "O",
-                  count: 1,
-                  is_starting_position: 1,
-                },
-              },
-              count: 1,
-            },
-            stat_categories: {
-              stats: {
-                "0": {
-                  stat: {
-                    stat_id: 4,
-                    name: "Passing Yards",
-                    display_name: "Pass Yds",
-                    group: "passing",
-                    abbr: "PY",
-                    enabled: "1",
-                  },
-                },
-                count: 1,
-              },
-            },
-          },
-          count: 1,
-        },
-      },
-    ],
-  },
-};
-
-const rawLeagueSettingsWithSinglePositionType = {
-  fantasy_content: {
-    league: [
-      rawLeagueAttributes,
-      {
-        settings: {
-          "0": {
-            roster_type: "head",
-            roster_positions: { count: 0 },
-            stat_categories: {
-              stats: {
-                "0": {
-                  stat: {
-                    stat_id: 4,
-                    name: "Passing Yards",
-                    display_name: "Pass Yds",
-                    group: "passing",
-                    abbr: "PY",
-                    enabled: "1",
-                    stat_position_types: [{ stat_position_type: { position_type: "O" } }],
-                  },
-                },
-                count: 1,
-              },
-            },
-            stat_modifiers: { stats: { count: 0 } },
           },
           count: 1,
         },

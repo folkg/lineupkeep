@@ -584,9 +584,12 @@ function resolveTarget(
   requested: import("#contexts/connections/LineupRun.ts").LineupTargetPeriod,
   league: ProviderLeagueSettings,
 ): import("#contexts/connections/LineupRun.ts").LineupTargetPeriod | undefined {
+  const window = league.periodWindow;
   if (requested.coverage === "current") {
-    return league.currentWeek >= league.startWeek && league.currentWeek <= league.endWeek
-      ? { coverage: "week", week: league.currentWeek }
+    return window !== undefined &&
+      window.currentWeek >= window.startWeek &&
+      window.currentWeek <= window.endWeek
+      ? { coverage: "week", week: window.currentWeek }
       : undefined;
   }
   if (requested.coverage === "date") {
@@ -597,9 +600,10 @@ function resolveTarget(
       ? requested
       : undefined;
   }
-  return requested.week >= league.startWeek &&
-    requested.week <= league.endWeek &&
-    requested.week === league.currentWeek
+  return window !== undefined &&
+    requested.week >= window.startWeek &&
+    requested.week <= window.endWeek &&
+    requested.week === window.currentWeek
     ? requested
     : undefined;
 }
@@ -615,11 +619,16 @@ function observe(
     slot: player.slot,
     editable: player.isEditable === true,
   }));
+  const window = league.periodWindow;
   return {
     target,
-    leagueCurrentWeek: league.currentWeek,
-    leagueStartWeek: league.startWeek,
-    leagueEndWeek: league.endWeek,
+    ...(window === undefined
+      ? {}
+      : {
+          leagueCurrentWeek: window.currentWeek,
+          leagueStartWeek: window.startWeek,
+          leagueEndWeek: window.endWeek,
+        }),
     starterSlots: league.rosterPositions
       .filter((position) => position.isStarting)
       .map((position) => position.position),

@@ -1,4 +1,13 @@
-import { DateTime, Effect, Layer, Option, Redacted, Schema, SchemaTransformation } from "effect";
+import {
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+  SchemaIssue,
+  SchemaTransformation,
+} from "effect";
 
 import {
   ProviderCrumbUnavailable,
@@ -18,6 +27,7 @@ import type {
   ProviderNativeTarget,
   ProviderOperation,
   ProviderPeriod,
+  ProviderPeriodWindow,
   ProviderPlayerDetail,
   ProviderPlayerSearchInput,
   ProviderPlayerSearchResult,
@@ -191,7 +201,18 @@ export const YahooProvider = Layer.effect(
         query: { format: "json" },
         cookie,
         normalize: true,
-      });
+      }).pipe(
+        Effect.catchIf(
+          (error): error is ProviderRequestFailed =>
+            error._tag === "provider.request_failed" && error.status === 400 && week !== undefined,
+          () =>
+            ProviderPeriodMismatch.make({
+              operation: "read_roster",
+              requestedWeek: week ?? 1,
+              coveredWeek: null,
+            }),
+        ),
+      );
       const decoded = yield* decodePayload(TeamRosterPayload, payload, "read_roster");
       const roster = yield* rosterFromPayload(decoded, input.providerTeamKey, input.period);
       yield* Effect.annotateCurrentSpan("provider.player_count", roster.players.length);
@@ -522,7 +543,10 @@ function readJson(
       }
       if (!response.ok) {
         yield* discardBody(response);
-        return yield* ProviderRequestFailed.make({ operation: request.operation });
+        return yield* ProviderRequestFailed.make({
+          operation: request.operation,
+          status: response.status,
+        });
       }
 
       const text = yield* Effect.tryPromise({
@@ -617,8 +641,50 @@ function decodePayload<A, E>(
   operation: ProviderOperation,
 ): Effect.Effect<A, ProviderResponseInvalid> {
   return Schema.decodeUnknownEffect(schema)(payload).pipe(
-    Effect.mapError(() => ProviderResponseInvalid.make({ operation })),
+    Effect.mapError((error) =>
+      ProviderResponseInvalid.make({ operation, field: invalidField(error.issue) }),
+    ),
   );
+}
+
+function invalidField(issue: SchemaIssue.Issue): string | undefined {
+  const path = issuePath(issue);
+  return path.length === 0 ? undefined : path.map(String).join(".");
+}
+
+function issuePath(root: SchemaIssue.Issue): ReadonlyArray<PropertyKey> {
+  const path: Array<PropertyKey> = [];
+  const pending: Array<SchemaIssue.Issue> = [root];
+  for (let current = pending.pop(); current !== undefined; current = pending.pop()) {
+    switch (current._tag) {
+      case "Pointer":
+        for (const segment of current.path) {
+          path.push(segment);
+        }
+        pending.push(current.issue);
+        break;
+      case "Filter":
+      case "Encoding":
+        pending.push(current.issue);
+        break;
+      case "Composite":
+      case "AnyOf": {
+        const first = current.issues.at(0);
+        if (first !== undefined) {
+          pending.push(first);
+        }
+        break;
+      }
+      case "Forbidden":
+      case "InvalidType":
+      case "InvalidValue":
+      case "MissingKey":
+      case "OneOf":
+      case "UnexpectedKey":
+        break;
+    }
+  }
+  return path;
 }
 
 function teamsFromPayload(
@@ -658,20 +724,21 @@ function leagueSettings(
     const attributes = payload.league;
     const settings = singleEntry(attributes.settings);
     if (settings === undefined || attributes.league_key !== requestedLeagueKey) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_league" });
+      return yield* ProviderResponseInvalid.make({
+        operation: "read_league",
+        field: "league.league_key",
+      });
     }
+    const periodWindow = yield* weekWindow(attributes);
     const webUrl = yield* Effect.try({
       try: () => reviewBase(attributes.url, sport, leagueIdFromKey(attributes.league_key)).href,
-      catch: () => ProviderResponseInvalid.make({ operation: "read_league" }),
+      catch: () => ProviderResponseInvalid.make({ operation: "read_league", field: "league.url" }),
     });
     return {
       providerLeagueKey: attributes.league_key,
       name: attributes.name,
       webUrl,
       season: attributes.season,
-      currentWeek: attributes.current_week,
-      startWeek: attributes.start_week,
-      endWeek: attributes.end_week,
       startDate: optionalNonEmpty(attributes.start_date),
       endDate: optionalNonEmpty(attributes.end_date),
       teamCount: attributes.num_teams,
@@ -682,6 +749,7 @@ function leagueSettings(
       waiverRule: optionalNonEmpty(settings.waiver_rule),
       usesFaab: settings.uses_faab,
       draftStatus: optionalNonEmpty(attributes.draft_status),
+      periodWindow,
       rosterPositions: settings.roster_positions.map(({ roster_position }) => ({
         position: roster_position.position,
         positionType: optionalNonEmpty(roster_position.position_type),
@@ -704,6 +772,29 @@ function leagueSettings(
         points: String(stat.value),
       })),
     };
+  });
+}
+
+function weekWindow(
+  attributes: (typeof LeaguePayload.Type)["league"],
+): Effect.Effect<ProviderPeriodWindow | undefined, ProviderResponseInvalid> {
+  const currentWeek = attributes.current_week;
+  const startWeek = attributes.start_week;
+  const endWeek = attributes.end_week;
+  if (currentWeek !== undefined && startWeek !== undefined && endWeek !== undefined) {
+    return Effect.succeed({ currentWeek, startWeek, endWeek });
+  }
+  if (currentWeek === undefined && startWeek === undefined && endWeek === undefined) {
+    return Effect.as(Effect.void, undefined);
+  }
+  return ProviderResponseInvalid.make({
+    operation: "read_league",
+    field:
+      currentWeek === undefined
+        ? "league.current_week"
+        : startWeek === undefined
+          ? "league.start_week"
+          : "league.end_week",
   });
 }
 
@@ -1325,9 +1416,9 @@ const LeagueAttributes = Schema.Struct({
   name: Schema.NonEmptyString,
   url: Schema.String,
   num_teams: IntFromStringOrNumber,
-  current_week: IntFromStringOrNumber,
-  start_week: IntFromStringOrNumber,
-  end_week: IntFromStringOrNumber,
+  current_week: Schema.optional(IntFromStringOrNumber),
+  start_week: Schema.optional(IntFromStringOrNumber),
+  end_week: Schema.optional(IntFromStringOrNumber),
   start_date: Schema.optional(Schema.String),
   end_date: Schema.optional(Schema.String),
   scoring_type: Schema.NonEmptyString,

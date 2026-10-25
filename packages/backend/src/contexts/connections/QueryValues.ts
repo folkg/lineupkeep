@@ -37,7 +37,7 @@ export type StatRef = typeof StatRef.Type;
 
 export const QueryCoverage = Schema.Struct({
   resource: Schema.NonEmptyString,
-  status: Schema.Literals(["available", "unsupported"]),
+  status: Schema.Literals(["available", "unsupported", "degraded"]),
   source: Schema.NonEmptyString,
   fetchedAt: Schema.DateTimeUtc,
   period: Schema.optional(QueryPeriod),

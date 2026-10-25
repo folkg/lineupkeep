@@ -26,9 +26,9 @@ export type LineupObservedPlayer = typeof LineupObservedPlayer.Type;
 
 export const LineupObservation = Schema.Struct({
   target: LineupTargetPeriod,
-  leagueCurrentWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  leagueStartWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  leagueEndWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  leagueCurrentWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  leagueStartWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  leagueEndWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   starterSlots: Schema.Array(Schema.NonEmptyString),
   players: Schema.Array(LineupObservedPlayer),
   lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
