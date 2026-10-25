@@ -57,6 +57,40 @@ test("discovers and authorizes a stateless client through email sign-in, consent
   ]);
 });
 
+test("answers the documented token-free discovery request with the same document", async ({
+  page,
+  baseURL,
+}) => {
+  const origin = requiredOrigin(baseURL);
+  const discovery = await documentedDiscoveryRequest(origin);
+
+  expect(discovery.status).toBe(200);
+  const document = Schema.decodeUnknownSync(DiscoveryResponse)(await discovery.json());
+  expect(Object.keys(document.result).sort()).toEqual([
+    "_meta",
+    "cacheScope",
+    "capabilities",
+    "resultType",
+    "supportedVersions",
+    "ttlMs",
+  ]);
+  expect(document.result).toMatchObject({
+    _meta: { "io.modelcontextprotocol/serverInfo": { name: "Lineupkeep" } },
+    supportedVersions: ["2026-07-28"],
+    capabilities: { tools: {} },
+  });
+
+  await signUp(page);
+  const { credentials } = await authorize(page, origin);
+  const authenticated = await mcpClient(mcpEndpoint(origin), credentials.access_token).request(
+    "server/discover",
+  );
+
+  expect(Schema.decodeUnknownSync(DiscoveryResponse)(await authenticated.json()).result).toEqual(
+    document.result,
+  );
+});
+
 test("lists the owner's connection status over MCP without exposing account identity", async ({
   page,
   baseURL,
@@ -311,6 +345,35 @@ test("rotates refresh credentials and rejects the spent token after the retry wi
     .toEqual({ status: 400, error: "invalid_grant" });
 });
 
+function documentedDiscoveryRequest(origin: string): Promise<Response> {
+  return fetch(new URL("/mcp", origin), {
+    method: "POST",
+    headers: documentedHeaders("server/discover"),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "server/discover",
+      params: {
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": protocolVersion,
+          "io.modelcontextprotocol/clientInfo": { name: "curl", version: "1.0.0" },
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      },
+    }),
+  });
+}
+
+function documentedHeaders(method: string): Record<string, string> {
+  return {
+    "content-type": "application/json",
+    accept: "application/json, text/event-stream",
+    "mcp-protocol-version": protocolVersion,
+    "mcp-method": method,
+  };
+}
+
+const protocolVersion = "2026-07-28";
 const documentedScopes =
   "connections:read fantasy:read transactions:review lineups:write offline_access";
 
@@ -365,6 +428,9 @@ function requiredOrigin(value: string | undefined): string {
 }
 
 const callbackPattern = new RegExp(`^${callback.replaceAll(".", "\\.")}\\?`);
+const DiscoveryResponse = Schema.Struct({
+  result: Schema.Record(Schema.String, Schema.Unknown),
+});
 const RefreshCredentials = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.String,

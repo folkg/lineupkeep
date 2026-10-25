@@ -17,6 +17,11 @@ export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<stri
   const auth = yield* AuthService;
   const resource = new URL(auth.oauthResource);
   const invocation = yield* readInvocation(request, toolkit);
+
+  if (Option.isSome(invocation.rpc) && invocation.rpc.value.method === discoveryMethod) {
+    return yield* discoveryResponse(invocation.rpc.value, application);
+  }
+
   const scopes = requiredScopes(invocation.tool);
   const bearer = bearerToken(request.headers);
   const identity =
@@ -50,13 +55,16 @@ function readInvocation<Tools extends Record<string, Tool.Any>>(
       try: () => request.clone().json(),
       catch: () => "invalid_json" as const,
     }).pipe(Effect.option);
-    const call = Option.isSome(input)
-      ? Schema.decodeUnknownOption(ToolCall)(input.value)
+    const rpc = Option.isSome(input)
+      ? Schema.decodeUnknownOption(RpcRequest)(input.value)
+      : Option.none();
+    const call = Option.isSome(rpc)
+      ? Schema.decodeUnknownOption(ToolCall)(rpc.value)
       : Option.none();
     const tool = Option.isSome(call)
       ? Object.values(toolkit.tools).find((tool) => tool.name === call.value.params.name)
       : undefined;
-    return { call, tool };
+    return { rpc, call, tool };
   });
 }
 
@@ -67,6 +75,61 @@ function requiredScopes(tool: Tool.Any | undefined): ReadonlyArray<string> {
 function bearerToken(headers: Headers): string | undefined {
   const authorization = headers.get("authorization");
   return authorization === null ? undefined : /^Bearer ([^\s]+)$/iu.exec(authorization)?.[1];
+}
+
+function discoveryResponse(
+  rpc: RpcRequest,
+  application: ApplicationIdentity,
+): Effect.Effect<Response, never, never> {
+  return Effect.gen(function* () {
+    const requested = requestedProtocolVersion(rpc.params);
+    if (requested !== undefined && requested !== supportedProtocolVersion) {
+      yield* Effect.annotateCurrentSpan({
+        "app.outcome": "rejected",
+        "http.response.status_code": 400,
+      });
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          id: rpc.id ?? null,
+          error: {
+            code: unsupportedProtocolVersionCode,
+            message: `Unsupported protocol version '${requested}'`,
+            data: { supported: [supportedProtocolVersion], requested },
+          },
+        },
+        { status: 400 },
+      );
+    }
+    yield* Effect.annotateCurrentSpan({
+      "app.outcome": "success",
+      "http.response.status_code": 200,
+      "mcp.method": discoveryMethod,
+    });
+    return Response.json({
+      jsonrpc: "2.0",
+      id: rpc.id ?? null,
+      result: {
+        _meta: { "io.modelcontextprotocol/serverInfo": application },
+        resultType: "complete",
+        ttlMs: 0,
+        cacheScope: "private",
+        supportedVersions: [supportedProtocolVersion],
+        capabilities: {
+          logging: {},
+          completions: {},
+          tools: { listChanged: true },
+        },
+      },
+    });
+  });
+}
+
+function requestedProtocolVersion(params: unknown): string | undefined {
+  const metadata = Schema.decodeUnknownOption(RequestMetadata)(params);
+  return Option.isSome(metadata)
+    ? metadata.value._meta?.["io.modelcontextprotocol/protocolVersion"]
+    : undefined;
 }
 
 function challengeResponse(
@@ -159,6 +222,25 @@ const serveToolkit = Effect.fnUntraced(function* <Tools extends Record<string, T
   return HttpServerResponse.toWeb(response);
 });
 
+const discoveryMethod = "server/discover";
+const supportedProtocolVersion = "2026-07-28";
+const unsupportedProtocolVersionCode = -32_022;
+
+const RpcRequest = Schema.Struct({
+  id: Schema.optional(Schema.Union([Schema.String, Schema.Finite, Schema.Null])),
+  method: Schema.String,
+  params: Schema.optional(Schema.Unknown),
+});
+type RpcRequest = typeof RpcRequest.Type;
+
+const RequestMetadata = Schema.Struct({
+  _meta: Schema.optional(
+    Schema.Struct({
+      "io.modelcontextprotocol/protocolVersion": Schema.optional(Schema.String),
+    }),
+  ),
+});
+
 const ToolCall = Schema.Struct({
   id: Schema.optional(Schema.Union([Schema.String, Schema.Finite, Schema.Null])),
   method: Schema.Literal("tools/call"),
@@ -166,6 +248,7 @@ const ToolCall = Schema.Struct({
 });
 
 type Invocation = {
+  readonly rpc: Option.Option<RpcRequest>;
   readonly call: Option.Option<typeof ToolCall.Type>;
   readonly tool: Tool.Any | undefined;
 };

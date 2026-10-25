@@ -35,6 +35,26 @@ it("identifies the product during protocol discovery", async () => {
   });
 });
 
+it("answers server discovery without a token and publishes the same document", async () => {
+  const anonymous = await handle(request("server/discover"));
+  const authenticated = await handle(request("server/discover", {}, "read"));
+
+  expect(anonymous.status).toBe(200);
+  expect(await anonymous.json()).toEqual(await authenticated.json());
+});
+
+it.each(["2025-03-26", "2025-11-25"])(
+  "rejects unsupported protocol %s for token-free discovery",
+  async (version) => {
+    const response = await handle(request("server/discover", {}, undefined, version));
+
+    expect(response.status).toBe(400);
+    expect(await json(response)).toMatchObject({
+      error: { code: -32_022, data: { requested: version } },
+    });
+  },
+);
+
 it("derives the endpoint path and discovery challenge from the Auth resource", async () => {
   const tools = Toolkit.make();
   const run = (invocation: Request): Promise<Response> =>
