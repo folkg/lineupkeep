@@ -227,20 +227,11 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         const params = new URLSearchParams(query);
         const clientId = params.get("client_id");
         const signature = params.get("sig");
-        if (
-          clientId === null ||
-          !URL.canParse(clientId) ||
-          signature === null ||
-          signature === ""
-        ) {
+        if (clientId === null || clientId === "" || signature === null || signature === "") {
           return { status: "invalid" } as const;
         }
-        const identifier = new URL(clientId);
-        if (
-          identifier.protocol !== "https:" ||
-          identifier.username !== "" ||
-          identifier.password !== ""
-        ) {
+        const metadataHost = URL.canParse(clientId) ? clientMetadataHost(clientId) : undefined;
+        if (metadataHost === undefined && !OpaqueClientId.test(clientId)) {
           return { status: "invalid" } as const;
         }
 
@@ -290,7 +281,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           client: {
             id: client.client_id,
             name: client.client_name ?? null,
-            host: new URL(client.client_id).host,
+            host: metadataHost ?? client.client_name ?? "an unverified client",
           },
           scopes: scopes.filter((scope) => requested.has(scope.name)),
         } as const;
@@ -757,6 +748,17 @@ const ResourceSeedConflict = Schema.Struct({
     }),
   ]),
 });
+
+const OpaqueClientId = /^[A-Za-z0-9._~-]{1,128}$/u;
+
+function clientMetadataHost(clientId: string): string | undefined {
+  const identifier = new URL(clientId);
+  return identifier.protocol === "https:" &&
+    identifier.username === "" &&
+    identifier.password === ""
+    ? identifier.host
+    : undefined;
+}
 
 const ConsentLookup = Schema.fromJsonString(
   Schema.Struct({ client_id: Schema.String, oauth_query: Schema.String }),

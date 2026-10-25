@@ -218,6 +218,47 @@ test("rejects legacy protocols and registers dynamic clients", async ({ page, ba
   expect(isRecord(registered) && typeof registered["client_id"] === "string").toBe(true);
 });
 
+test("authorizes a dynamically registered client through consent", async ({ page, baseURL }) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+
+  const registration = await fetch(new URL("/api/auth/oauth2/register", origin), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      client_name: "Muse probe",
+      redirect_uris: [callback],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      application_type: "native",
+    }),
+  });
+  const registered: unknown = await registration.json();
+  expect(registration.status).toBe(201);
+  expect(isRecord(registered) && typeof registered["client_id"] === "string").toBe(true);
+  const clientId = isRecord(registered) ? String(registered["client_id"]) : "";
+
+  const authorization = await beginAuthorization(
+    page,
+    mcpEndpoint(origin),
+    "fantasy:read lineups:write",
+    fetch,
+    clientId,
+  );
+  await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
+  await expect(
+    page.getByText("Calls itself “Muse probe” — names are not verified.", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Allow access", exact: true }).click();
+  await expect(page).toHaveURL(callbackPattern);
+
+  const credentials = await exchangeCode(page, authorization);
+  expect(credentials.scope.split(" ")).toEqual(
+    expect.arrayContaining(["fantasy:read", "lineups:write"]),
+  );
+});
+
 test("rotates refresh credentials and rejects the spent token after the retry window", async ({
   page,
   baseURL,
@@ -276,6 +317,7 @@ async function authorize(
     readonly refresh_token?: string | undefined;
   };
   authorization: {
+    clientId: string;
     verifier: string;
     state: `${string}-${string}-${string}-${string}-${string}`;
     tokenEndpoint: string;

@@ -40,7 +40,7 @@ export function ConsentPage(props: {
                   <Text tone="muted">Calls itself “{name()}” — names are not verified.</Text>
                 )}
               </Show>
-              <Text tone="muted">Client metadata address</Text>
+              <Text tone="muted">Client identifier</Text>
               <Text wrap="preserve">{request().client.id}</Text>
               <For each={request().scopes}>{(scope) => <Text>{scope.description}</Text>}</For>
               <Form

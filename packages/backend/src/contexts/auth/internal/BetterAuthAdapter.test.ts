@@ -61,8 +61,9 @@ it.effect(
       for (const query of [
         "",
         "client_id=",
-        "client_id=not-a-url&sig=forged",
+        "client_id=not%20a%20url&sig=forged",
         "client_id=http%3A%2F%2Fclient.test%2Fmeta&sig=forged",
+        `client_id=${"a".repeat(129)}&sig=forged`,
       ]) {
         assert.deepStrictEqual(yield* adapter.getConsentRequest(new Headers(), query), {
           status: "invalid",

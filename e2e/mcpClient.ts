@@ -85,7 +85,9 @@ export async function beginAuthorization(
   endpoint: string | URL,
   scope: string,
   transport: McpTransport = fetch,
+  requestedClientId: string = clientId,
 ): Promise<{
+  clientId: string;
   verifier: string;
   state: `${string}-${string}-${string}-${string}-${string}`;
   tokenEndpoint: string;
@@ -98,7 +100,7 @@ export async function beginAuthorization(
   const authorization = new URL(discovery.authorizationEndpoint);
   authorization.search = new URLSearchParams({
     response_type: "code",
-    client_id: clientId,
+    client_id: requestedClientId,
     redirect_uri: callback,
     resource: discovery.resource,
     scope,
@@ -115,6 +117,7 @@ export async function beginAuthorization(
   );
   await page.goto(authorization.href);
   return {
+    clientId: requestedClientId,
     verifier,
     state,
     tokenEndpoint: discovery.tokenEndpoint,
@@ -152,7 +155,7 @@ export async function exchangeCode(
     },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: clientId,
+      client_id: authorization.clientId,
       redirect_uri: callback,
       code,
       code_verifier: authorization.verifier,
