@@ -45,6 +45,9 @@ const IsoDate = Schema.String.pipe(
 
 export const LineupTargetPeriod = Schema.Union([
   Schema.Struct({
+    coverage: Schema.Literal("current"),
+  }),
+  Schema.Struct({
     coverage: Schema.Literal("week"),
     week: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(99)),
   }),

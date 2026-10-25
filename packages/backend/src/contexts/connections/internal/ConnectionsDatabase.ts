@@ -10,6 +10,7 @@ import {
   lineupDeliveries,
   lineupRequests,
   lineupRunAttempts,
+  lineupRunDiagnostics,
   lineupRuns,
   lineupTeamLeases,
   lineupWriteIntents,
@@ -22,6 +23,7 @@ export const connectionsRelations = defineRelations({
   lineupDeliveries,
   lineupTeamLeases,
   lineupRunAttempts,
+  lineupRunDiagnostics,
   lineupWriteIntents,
 });
 

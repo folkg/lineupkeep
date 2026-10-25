@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { createSelectSchema } from "drizzle-orm/effect-schema";
 import {
   index,
@@ -48,6 +49,7 @@ export const lineupRuns = pgTable(
     teamId: uuid("team_id").notNull(),
     connectionId: text("connection_id").notNull(),
     trigger: text("trigger", { enum: ["manual", "scheduled"] }).notNull(),
+    scheduleKey: text("schedule_key"),
     target: jsonb("target").notNull(),
     status: text("status", {
       enum: [
@@ -85,6 +87,12 @@ export const lineupRuns = pgTable(
     index("lineup_runs_user_id_created_at_idx").on(table.userId, table.createdAt),
     index("lineup_runs_status_updated_at_idx").on(table.status, table.updatedAt),
     index("lineup_runs_status_next_action_at_idx").on(table.status, table.nextActionAt),
+    uniqueIndex("lineup_runs_team_schedule_key_idx").on(table.teamId, table.scheduleKey),
+    uniqueIndex("lineup_runs_one_scheduled_pending_idx")
+      .on(table.teamId)
+      .where(
+        sql`${table.trigger} = 'scheduled' and ${table.status} in ('queued', 'reading', 'planning', 'validating', 'applying', 'verifying', 'retry-wait', 'uncertain')`,
+      ),
   ],
 );
 
@@ -136,6 +144,25 @@ export const lineupRunAttempts = pgTable(
   (table) => [primaryKey({ columns: [table.runId, table.attempt] })],
 );
 
+export const lineupRunDiagnostics = pgTable(
+  "lineup_run_diagnostics",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id").notNull(),
+    attempt: integer("attempt").notNull(),
+    userId: text("user_id").notNull(),
+    teamId: uuid("team_id").notNull(),
+    kind: text("kind", { enum: ["observation", "verification"] }).notNull(),
+    data: jsonb("data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index("lineup_run_diagnostics_run_id_idx").on(table.runId),
+    index("lineup_run_diagnostics_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
 export const lineupWriteIntents = pgTable(
   "lineup_write_intents",
   {
@@ -183,6 +210,7 @@ const LineupRunRecordSchema = Schema.Struct({
   teamId: TeamId,
   connectionId: ConnectionId,
   trigger: LineupTrigger,
+  scheduleKey: Schema.NullOr(Schema.String),
   target: LineupTargetPeriod,
   status: LineupRunStatus,
   state: LineupRunState,
@@ -202,6 +230,7 @@ const LineupRunSelect = createSelectSchema(lineupRuns, {
   teamId: TeamId,
   connectionId: ConnectionId,
   trigger: LineupTrigger,
+  scheduleKey: Schema.NullOr(Schema.String),
   target: Schema.Unknown,
   status: LineupRunStatus,
   state: Schema.Unknown,

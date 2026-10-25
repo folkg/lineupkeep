@@ -14,6 +14,7 @@ import type { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import { ConnectionCredentialEncryption } from "#contexts/connections/internal/ConnectionCredentialEncryption.ts";
 import { ConnectionRepository } from "#contexts/connections/internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "#contexts/connections/internal/ConnectionsDatabase.ts";
+import { AutomationLive } from "#contexts/connections/internal/AutomationLive.ts";
 import { ConnectionsLive } from "#contexts/connections/internal/ConnectionsLive.ts";
 import { FantasyQueriesLive } from "#contexts/connections/internal/FantasyQueriesLive.ts";
 import { LineupDeliveryCloudTasks } from "#contexts/connections/internal/LineupDeliveryCloudTasks.ts";
@@ -23,6 +24,7 @@ import { LineupRunRepository } from "#contexts/connections/internal/LineupRunRep
 import { LineupRunsLive } from "#contexts/connections/internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "#contexts/connections/internal/LineupWorkerLive.ts";
 import { QueryRepository } from "#contexts/connections/internal/QueryRepository.ts";
+import { RetentionSweepLive } from "#contexts/connections/internal/RetentionSweepLive.ts";
 import { TeamRepository } from "#contexts/connections/internal/TeamRepository.ts";
 import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
 import { QueryTokens } from "#contexts/connections/internal/QueryTokens.ts";
@@ -31,6 +33,8 @@ import { YahooProvider } from "#contexts/connections/internal/yahoo/YahooProvide
 import type { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import { lineupScopes } from "#contexts/connections/LineupScopes.ts";
 import type { LineupDispatcher, LineupWorker } from "#contexts/connections/LineupWork.ts";
+import type { Automation } from "#contexts/connections/Automation.ts";
+import type { RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { Teams } from "#contexts/connections/Teams.ts";
 import { fantasyQueryScopes } from "#contexts/connections/QueryScopes.ts";
 import type { TransactionReviews } from "#contexts/connections/TransactionReview.ts";
@@ -103,11 +107,22 @@ const TeamsLayer = TeamsLive.pipe(
   Layer.provide(TeamRepositoryLayer),
   Layer.provide(LineupRepositoryLayer),
 );
+const RetentionSweepLayer = RetentionSweepLive.pipe(
+  Layer.provide(ConnectionsDatabase.layer),
+);
+const AutomationLayer = AutomationLive.pipe(
+  Layer.provide(TeamRepositoryLayer),
+  Layer.provide(LineupRepositoryLayer),
+  Layer.provide(LineupDispatcherLayer),
+  Layer.provide(RetentionSweepLayer),
+);
 export const ApplicationLayer = Layer.mergeAll(
   ConnectionsLayer,
   QueriesLayer,
   LineupRunsLayer,
   TeamsLayer,
+  AutomationLayer,
+  RetentionSweepLayer,
   LineupDispatcherLayer,
   LineupWorkerLayer,
   AuthLayer,
@@ -123,5 +138,7 @@ export type BackendServices =
   | TransactionReviews
   | LineupRuns
   | Teams
+  | Automation
+  | RetentionSweep
   | LineupDispatcher
   | LineupWorker;

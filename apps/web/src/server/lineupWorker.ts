@@ -1,3 +1,5 @@
+import type { AutomationFailed } from "@lineupkeep/backend/connections/Automation";
+import { Automation } from "@lineupkeep/backend/connections/Automation";
 import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import { LineupDispatcher, LineupWorker } from "@lineupkeep/backend/connections/LineupWork";
 import { Config, Effect, Option, Schema } from "effect";
@@ -13,6 +15,12 @@ const LineupWorkerRequest = Schema.Union([
   }),
   Schema.Struct({
     action: Schema.Literal("repair"),
+    limit: Schema.optional(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100)),
+    ),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("tick"),
     limit: Schema.optional(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100)),
     ),
@@ -37,9 +45,14 @@ export function handleLineupWorkerRequest(request: Request): Promise<Response> {
         return new Response("Invalid worker request", { status: 400 });
       }
       return yield* execute(decoded.value).pipe(
-        Effect.catchTag("lineup.persistence_failed", () =>
-          Effect.succeed(new Response("The worker could not persist its result", { status: 503 })),
-        ),
+        Effect.catchTags({
+          "lineup.persistence_failed": () =>
+            Effect.succeed(
+              new Response("The worker could not persist its result", { status: 503 }),
+            ),
+          "automation.failed": () =>
+            Effect.succeed(new Response("The automation tick could not finish", { status: 503 })),
+        }),
       );
     }),
   );
@@ -49,8 +62,9 @@ function execute(
   request: typeof LineupWorkerRequest.Type,
 ): Effect.Effect<
   Response,
-  import("@lineupkeep/backend/connections/LineupRun").LineupPersistenceFailed,
-  LineupWorker | LineupDispatcher
+  | import("@lineupkeep/backend/connections/LineupRun").LineupPersistenceFailed
+  | AutomationFailed,
+  LineupWorker | LineupDispatcher | Automation
 > {
   return Effect.gen(function* () {
     switch (request.action) {
@@ -62,6 +76,11 @@ function execute(
       case "repair": {
         const dispatcher = yield* LineupDispatcher;
         const summary = yield* dispatcher.repair(request.limit ?? 50);
+        return json({ status: "ok", action: request.action, ...summary });
+      }
+      case "tick": {
+        const automation = yield* Automation;
+        const summary = yield* automation.run(request.limit ?? 50);
         return json({ status: "ok", action: request.action, ...summary });
       }
     }

@@ -29,6 +29,7 @@ import {
   lineupDeliveries,
   lineupRequests,
   lineupRunAttempts,
+  lineupRunDiagnostics,
   lineupRuns,
   lineupTeamLeases,
   lineupWriteIntents,
@@ -42,15 +43,16 @@ import type {
 export type { LineupWriteIntentRecord };
 import { LineupRunState, LineupRunWorkflow, lineupRunStatus } from "./LineupRunWorkflow.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
+import { LineupObservation } from "./LineupRunWorkflow.ts";
 import type {
   LineupLeaseRef,
   LineupNativePlan,
-  LineupObservation,
   LineupRunEvent,
 } from "./LineupRunWorkflow.ts";
 
 const lineupLeaseDurationMillis = 45_000;
 const lineupDeliveryStaleMillis = 60_000;
+const lineupDiagnosticRetentionMillis = 7 * 24 * 60 * 60 * 1000;
 
 export type NewLineupRun = {
   readonly team: TeamId;
@@ -62,6 +64,22 @@ export type NewLineupRun = {
 type CreatedLineupRequest = {
   readonly created: boolean;
   readonly runs: ReadonlyArray<LineupRunRecord>;
+};
+
+const nonTerminalRunStatuses = [
+  "queued",
+  "reading",
+  "planning",
+  "validating",
+  "applying",
+  "verifying",
+  "retry-wait",
+  "uncertain",
+] as const;
+
+export type NewScheduledLineupRun = {
+  readonly team: TeamId;
+  readonly connectionId: ConnectionId;
 };
 
 export type ClaimedLineupRun = {
@@ -168,6 +186,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                       teamId: run.team,
                       connectionId: run.connectionId,
                       trigger: run.trigger,
+                      scheduleKey: null,
                       target: run.target,
                       status: lineupRunStatus(state),
                       state,
@@ -211,6 +230,120 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 : LineupPersistenceFailed.make({ cause }),
             ),
           );
+      });
+
+      const createScheduledRuns = Effect.fn("LineupRunRepository.createScheduledRuns")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly at: DateTime.Utc;
+          readonly runs: ReadonlyArray<NewScheduledLineupRun>;
+        }) {
+          if (input.runs.length === 0) {
+            return { created: false, runs: [] as ReadonlyArray<LineupRunRecord> };
+          }
+          const requestId = yield* newId.pipe(
+            Effect.flatMap((id) => Schema.decodeEffect(LineupRequestId)(id)),
+            Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
+          );
+          const deliveryId = yield* newId.pipe(
+            Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
+          );
+          const at = DateTime.toDateUtc(input.at);
+          const records: ReadonlyArray<LineupRunRecord> = yield* Effect.forEach(
+            input.runs,
+            (run) =>
+              Effect.gen(function* () {
+                const state: LineupRunState = {
+                  _tag: "Queued",
+                  team: run.team,
+                  target: { coverage: "current" },
+                  trigger: "scheduled",
+                  implementation: nativeLineupImplementation,
+                  implementationVersion: providerNativeImplementationVersion,
+                  queuedAt: input.at,
+                  updatedAt: input.at,
+                };
+                return {
+                  id: yield* Schema.decodeEffect(LineupRunId)(yield* newId),
+                  userId: input.userId,
+                  requestId,
+                  teamId: run.team,
+                  connectionId: run.connectionId,
+                  trigger: "scheduled" as const,
+                  scheduleKey: hourKey(input.at),
+                  target: { coverage: "current" as const },
+                  status: lineupRunStatus(state),
+                  state,
+                  implementation: nativeLineupImplementation,
+                  implementationVersion: providerNativeImplementationVersion,
+                  attempts: 0,
+                  nextActionAt: null,
+                  createdAt: input.at,
+                  updatedAt: input.at,
+                } satisfies LineupRunRecord;
+              }),
+            { concurrency: 1 },
+          ).pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          const rows = yield* Effect.forEach(records, (record) =>
+            Schema.encodeEffect(LineupRunRow)(record),
+          ).pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+          return yield* database
+            .transaction((tx) =>
+              Effect.gen(function* () {
+                const inserted = yield* tx
+                  .insert(lineupRuns)
+                  .values(rows)
+                  .onConflictDoNothing()
+                  .returning();
+                if (inserted.length === 0) {
+                  return { created: false, runs: [] as ReadonlyArray<LineupRunRecord> };
+                }
+                const created = yield* Effect.forEach(inserted, (row) => decodeRun(row));
+                yield* tx.insert(lineupRequests).values({
+                  userId: input.userId,
+                  id: requestId,
+                  intent: JSON.stringify({ trigger: "scheduled", target: { coverage: "current" } }),
+                  createdAt: at,
+                  updatedAt: at,
+                });
+                yield* tx.insert(lineupDeliveries).values({
+                  id: deliveryId,
+                  userId: input.userId,
+                  requestId,
+                  status: "pending",
+                  attempts: 0,
+                  runIds: created.map((record) => record.id),
+                  lastError: null,
+                  createdAt: at,
+                  updatedAt: at,
+                  dispatchedAt: null,
+                });
+                return { created: true, runs: created };
+              }),
+            )
+            .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+        },
+      );
+
+      const scheduledTeamIds = Effect.fn("LineupRunRepository.scheduledTeamIds")(function* (
+        teamIds: ReadonlyArray<TeamId>,
+      ) {
+        const ids = [...new Set(teamIds)];
+        if (!Array.isArrayNonEmpty(ids)) {
+          return new Set<TeamId>();
+        }
+        const rows = yield* database
+          .selectDistinct({ teamId: lineupRuns.teamId })
+          .from(lineupRuns)
+          .where(
+            and(
+              anyOf(lineupRuns.teamId, ids),
+              eq(lineupRuns.trigger, "scheduled"),
+              anyOf(lineupRuns.status, nonTerminalRunStatuses),
+            ),
+          )
+          .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+        return new Set(rows.map((row) => row.teamId));
       });
 
       const loadRuns = Effect.fn("LineupRunRepository.loadRuns")(function* (
@@ -576,13 +709,36 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           readonly observation: LineupObservation;
           readonly at: DateTime.Utc;
         }) {
+          const diagnosticId = yield* newId.pipe(
+            Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })),
+          );
           yield* mutateClaimed(input.runId, input.lease, (record, tx) =>
-            transition(
-              tx,
-              record,
-              { _tag: "ObservationRecorded", at: input.at, observation: input.observation },
-              input.at,
-            ),
+            Effect.gen(function* () {
+              yield* transition(
+                tx,
+                record,
+                { _tag: "ObservationRecorded", at: input.at, observation: input.observation },
+                input.at,
+              );
+              yield* tx
+                .insert(lineupRunDiagnostics)
+                .values({
+                  id: diagnosticId,
+                  runId: record.id,
+                  attempt: record.attempts,
+                  userId: record.userId,
+                  teamId: record.teamId,
+                  kind: "observation",
+                  data: Schema.encodeSync(Schema.toCodecJson(LineupObservation))(
+                    input.observation,
+                  ),
+                  createdAt: DateTime.toDateUtc(input.at),
+                  expiresAt: DateTime.toDateUtc(
+                    DateTime.addDuration(input.at, lineupDiagnosticRetentionMillis),
+                  ),
+                })
+                .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+            }),
           );
         },
       );
@@ -1062,6 +1218,8 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
 
       return {
         createRequest,
+        createScheduledRuns,
+        scheduledTeamIds,
         loadRuns,
         runsForRequest,
         loadTeamActivity,
@@ -1090,6 +1248,10 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
   },
 ) {
   static readonly layer = Layer.effect(this)(this.make);
+}
+
+function hourKey(at: DateTime.Utc): string {
+  return DateTime.formatIso(DateTime.startOf(at, "hour"));
 }
 
 function claimEvent(

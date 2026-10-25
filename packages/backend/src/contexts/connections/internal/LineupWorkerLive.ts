@@ -584,6 +584,11 @@ function resolveTarget(
   requested: import("#contexts/connections/LineupRun.ts").LineupTargetPeriod,
   league: ProviderLeagueSettings,
 ): import("#contexts/connections/LineupRun.ts").LineupTargetPeriod | undefined {
+  if (requested.coverage === "current") {
+    return league.currentWeek >= league.startWeek && league.currentWeek <= league.endWeek
+      ? { coverage: "week", week: league.currentWeek }
+      : undefined;
+  }
   if (requested.coverage === "date") {
     return league.startDate !== undefined &&
       league.endDate !== undefined &&
@@ -668,17 +673,27 @@ function covers(
   roster: ProviderRoster,
   target: import("#contexts/connections/LineupRun.ts").LineupTargetPeriod,
 ): boolean {
-  return target.coverage === "week"
-    ? roster.coverage.type === "week" && roster.coverage.week === target.week
-    : roster.coverage.type === "date" && roster.coverage.date === target.date;
+  switch (target.coverage) {
+    case "current":
+      return false;
+    case "week":
+      return roster.coverage.type === "week" && roster.coverage.week === target.week;
+    case "date":
+      return roster.coverage.type === "date" && roster.coverage.date === target.date;
+  }
 }
 
 function providerTarget(
   target: import("#contexts/connections/LineupRun.ts").LineupTargetPeriod,
 ): ProviderNativeTarget {
-  return target.coverage === "week"
-    ? { type: "week", week: target.week }
-    : { type: "date", date: target.date };
+  switch (target.coverage) {
+    case "current":
+      throw new Error("A provider write requires a resolved lineup period");
+    case "week":
+      return { type: "week", week: target.week };
+    case "date":
+      return { type: "date", date: target.date };
+  }
 }
 
 function writeIntentOf(state: LineupRunState): LineupWriteIntentRef | undefined {

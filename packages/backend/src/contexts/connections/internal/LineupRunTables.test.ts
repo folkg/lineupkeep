@@ -24,6 +24,7 @@ it.effect("round-trips a queued run through the JSON row codec", () =>
       teamId: decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a4"),
       connectionId: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a5"),
       trigger: "manual",
+      scheduleKey: null,
       target: { coverage: "week", week: 3 },
       status: "queued",
       state: {
@@ -119,6 +120,7 @@ it.effect("rejects a stored run whose status disagrees with its state", () =>
       teamId,
       connectionId: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a5"),
       trigger: "manual" as const,
+      scheduleKey: null,
       target: { coverage: "week" as const, week: 3 },
       status: "completed" as const,
       state: {
