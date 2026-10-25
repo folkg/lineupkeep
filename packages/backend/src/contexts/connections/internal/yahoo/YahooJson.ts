@@ -59,7 +59,7 @@ function normalizeFragments(fragments: ReadonlyArray<unknown>): unknown {
   if (!attributeFragments.every(isRecord) || !hasOnlyDistinctFields(attributeFragments)) {
     return fragments.map(normalizeValue);
   }
-  return Object.assign({}, ...attributeFragments.map(normalizeCollectionItem));
+  return Object.assign({}, ...attributeFragments.map(normalizeValue));
 }
 
 function hasOnlyDistinctFields(records: ReadonlyArray<Record<string, unknown>>): boolean {

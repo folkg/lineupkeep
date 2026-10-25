@@ -35,11 +35,23 @@ test("discovers and authorizes a stateless client through email sign-in, consent
 
   expect(tools.status).toBe(200);
   expect(tools.headers.has("mcp-session-id")).toBe(false);
-  expect(await tools.json()).toMatchObject({
-    result: {
-      tools: [{ name: "list_connections" }],
-    },
-  });
+  const listedTools = Schema.decodeUnknownSync(
+    Schema.Struct({
+      result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }),
+    }),
+  )(await tools.json());
+  expect(listedTools.result.tools.map((tool) => tool.name)).toEqual([
+    "list_connections",
+    "list_teams",
+    "get_calendar",
+    "get_league",
+    "get_rosters",
+    "search_players",
+    "get_players",
+    "get_matchups",
+    "get_transactions",
+    "generate_transaction_review_links",
+  ]);
 });
 
 test("lists the owner's connection status over MCP without exposing account identity", async ({
@@ -77,6 +89,46 @@ test("lists the owner's connection status over MCP without exposing account iden
   const hidden = await otherClient.callTool("list_connections", {});
 
   expect(hidden.structuredContent).toEqual({ connections: [] });
+});
+
+test("enforces fantasy read and transaction review scopes over MCP", async ({ page, baseURL }) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+  const { credentials } = await authorize(page, origin, "connections:read");
+  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
+
+  const readDenied = await client.request("tools/call", {
+    name: "list_teams",
+    arguments: {},
+  });
+  expect(readDenied.status).toBe(403);
+  expect(readDenied.headers.get("www-authenticate")).toContain('scope="fantasy:read"');
+
+  const reviewDenied = await client.request("tools/call", {
+    name: "generate_transaction_review_links",
+    arguments: { team: randomUUID(), intents: [{ kind: "add", add: "r1.invalid" }] },
+  });
+  expect(reviewDenied.status).toBe(403);
+  expect(reviewDenied.headers.get("www-authenticate")).toContain('scope="transactions:review"');
+
+  const readAuthorization = await authorize(page, origin, "fantasy:read");
+  const reader = mcpClient(mcpEndpoint(origin), readAuthorization.credentials.access_token);
+  const teams = await reader.callTool("list_teams", {});
+  expect(teams.isError).toBe(false);
+  expect(teams.structuredContent).toMatchObject({ status: "ok", teams: [] });
+
+  const missing = await reader.callTool("get_calendar", { team: randomUUID() });
+  expect(missing.isError).toBe(true);
+  expect(JSON.stringify(missing)).not.toContain("cause");
+
+  const reviewAuthorization = await authorize(page, origin, "transactions:review");
+  const reviewer = mcpClient(mcpEndpoint(origin), reviewAuthorization.credentials.access_token);
+  const review = await reviewer.callTool("generate_transaction_review_links", {
+    team: randomUUID(),
+    intents: [{ kind: "add", add: "r1.invalid" }],
+  });
+  expect(review.isError).toBe(true);
+  expect(JSON.stringify(review)).not.toContain("submit");
 });
 
 test("returns access_denied and the original state when consent is denied", async ({

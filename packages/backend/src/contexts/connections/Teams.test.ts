@@ -42,6 +42,8 @@ it.effect("discovers multiple teams in one league and persists them disabled", (
       discovered.map((row) => row.providerTeamKey),
       ["nhl.l.1.t.1", "nhl.l.1.t.2"],
     );
+    assert.isTrue(discovered.every((row) => row.id.length > 0));
+    assert.strictEqual(new Set(discovered.map((row) => row.id)).size, 2);
     assert.isTrue(discovered.every((row) => row.league === "nhl"));
     assert.isTrue(discovered.every((row) => row.providerLeagueKey === "nhl"));
     assert.isTrue(discovered.every((row) => row.automationEnabled === false));
@@ -61,6 +63,7 @@ it.effect("refreshes availability, restores teams, and preserves configuration",
     const second = team("nhl.l.1.t.2", "Second Skate");
     yield* fake.setTeams([first, second]);
     yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    const originalId = findTeam(yield* connections.listTeams(owner), first.providerTeamKey).id;
     yield* database
       .update(providerTeams)
       .set({ automationEnabled: true })
@@ -78,6 +81,7 @@ it.effect("refreshes availability, restores teams, and preserves configuration",
     const unavailable = findTeam(refreshed, second.providerTeamKey);
 
     assert.strictEqual(renamed.name, "Renamed Skate");
+    assert.strictEqual(renamed.id, originalId);
     assert.strictEqual(renamed.availability, "available");
     assert.strictEqual(renamed.automationEnabled, true);
     assert.strictEqual(unavailable.name, "Second Skate");

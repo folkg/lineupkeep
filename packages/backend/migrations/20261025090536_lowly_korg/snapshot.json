@@ -1,0 +1,72 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "9d48defb-6d5d-4fa3-a20b-ebb76d20f93b",
+  "prevIds": ["a51c758d-b3d9-440f-ad9d-23873e368cc3"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "provider_teams", "id"],
+      "writes": [
+        "s|col|public.provider_teams.id",
+        "n|col|public.provider_teams.id",
+        "e|col|public.provider_teams.id"
+      ],
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "provider_teams", "provider_teams_id_idx"],
+      "writes": [
+        "s|idx|public.provider_teams_id_idx",
+        "n|idx|public.provider_teams_id_idx",
+        "e|idx|public.provider_teams_id_idx",
+        "n|rel|public.provider_teams_id_idx"
+      ],
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public", "n|col|public.provider_teams.id"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "provider_teams_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

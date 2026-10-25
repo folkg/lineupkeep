@@ -27,6 +27,7 @@ import {
   connectionListLimit,
 } from "#contexts/connections/ConnectionLimits.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
+import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { ProviderTeam } from "#contexts/connections/Provider.ts";
 import { anyOf, excludedValues, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
@@ -740,24 +741,36 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           return;
         }
         const atDate = DateTime.toDateUtc(at);
-        const rows = discoveries.flatMap(({ connectionId, teams }) =>
-          teams.map((team) => ({
-            connectionId,
-            userId,
-            provider: team.provider,
-            providerTeamKey: team.providerTeamKey,
-            providerLeagueKey: team.providerLeagueKey,
-            league: team.league,
-            sport: team.sport,
-            season: team.season,
-            name: team.name,
-            availability: "available" as const,
-            automationEnabled: false,
-            lastSeenAt: atDate,
-            createdAt: atDate,
-            updatedAt: atDate,
-          })),
-        );
+        const rows = yield* Effect.forEach(
+          discoveries,
+          ({ connectionId, teams }) =>
+            Effect.forEach(
+              teams,
+              (team) =>
+                crypto.randomUUIDv7().pipe(
+                  Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                  Effect.map((id) => ({
+                    id: decodeTeamId(id),
+                    connectionId,
+                    userId,
+                    provider: team.provider,
+                    providerTeamKey: team.providerTeamKey,
+                    providerLeagueKey: team.providerLeagueKey,
+                    league: team.league,
+                    sport: team.sport,
+                    season: team.season,
+                    name: team.name,
+                    availability: "available" as const,
+                    automationEnabled: false,
+                    lastSeenAt: atDate,
+                    createdAt: atDate,
+                    updatedAt: atDate,
+                  })),
+                ),
+              { concurrency: 1 },
+            ),
+          { concurrency: 1 },
+        ).pipe(Effect.map((nested) => nested.flat()));
         yield* database
           .transaction((tx) =>
             Effect.gen(function* () {
@@ -822,11 +835,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           .select()
           .from(providerTeams)
           .where(eq(providerTeams.userId, userId))
-          .orderBy(
-            asc(providerTeams.league),
-            asc(providerTeams.name),
-            asc(providerTeams.providerTeamKey),
-          )
+          .orderBy(asc(providerTeams.league), asc(providerTeams.name), asc(providerTeams.id))
           .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
         return yield* Effect.forEach(rows, toFantasyTeam);
       });
@@ -843,11 +852,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
             .where(
               and(eq(providerTeams.userId, userId), anyOf(providerTeams.connectionId, uniqueIds)),
             )
-            .orderBy(
-              asc(providerTeams.league),
-              asc(providerTeams.name),
-              asc(providerTeams.providerTeamKey),
-            )
+            .orderBy(asc(providerTeams.league), asc(providerTeams.name), asc(providerTeams.id))
             .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
           return yield* Effect.forEach(rows, toFantasyTeam);
         },

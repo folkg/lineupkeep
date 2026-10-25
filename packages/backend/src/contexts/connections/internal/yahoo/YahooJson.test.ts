@@ -77,6 +77,27 @@ it("keeps repeated single-key attribute entries in order instead of merging them
   });
 });
 
+it("keeps nested roster resources while merging team attribute fragments", () => {
+  const normalized = normalizeYahooJson(rawRoster);
+
+  assert.deepStrictEqual(normalized, {
+    team: {
+      team_key: "461.l.1000.t.1",
+      roster: [
+        {
+          players: [
+            {
+              player_key: "461.p.10001",
+              selected_position: { coverage_type: "week", week: "3", position: "QB" },
+              is_editable: "1",
+            },
+          ],
+        },
+      ],
+    },
+  });
+});
+
 it("preserves empty successful collections and ignores non-JSON content", () => {
   assert.deepStrictEqual(normalizeYahooJson({ fantasy_content: { users: { count: 0 } } }), {
     users: [],
@@ -84,6 +105,33 @@ it("preserves empty successful collections and ignores non-JSON content", () => 
   assert.isUndefined(normalizeYahooJson({ error: { description: "private" } }));
   assert.isUndefined(normalizeYahooJson("not an object"));
 });
+
+const rawRoster = {
+  fantasy_content: {
+    team: [
+      { team_key: "461.l.1000.t.1" },
+      {
+        roster: {
+          "0": {
+            players: {
+              "0": {
+                player: [
+                  [{ player_key: "461.p.10001" }],
+                  {
+                    selected_position: [{ coverage_type: "week", week: "3" }, { position: "QB" }],
+                  },
+                  { is_editable: "1" },
+                ],
+              },
+              count: 1,
+            },
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
 
 const rawSession = {
   fantasy_content: {

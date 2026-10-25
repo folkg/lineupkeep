@@ -3,6 +3,13 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { ConnectionPersistenceFailed } from "@lineupkeep/backend/connections/Connection";
 import type { ConnectionsShape } from "@lineupkeep/backend/connections/Connections";
 import { Connections } from "@lineupkeep/backend/connections/Connections";
+import type { FantasyQueriesShape } from "@lineupkeep/backend/connections/FantasyQueries";
+import { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
+import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
+import { PlayerRef } from "@lineupkeep/backend/connections/QueryValues";
+import type { ReviewLinksData } from "@lineupkeep/backend/connections/TransactionReview";
+import type { TransactionReviewsShape } from "@lineupkeep/backend/connections/TransactionReview";
+import { TransactionReviews } from "@lineupkeep/backend/connections/TransactionReview";
 import { Effect, Layer, Schema } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { expect, it } from "vitest";
@@ -130,7 +137,18 @@ it("lists only the read-only connection tool without exposing account identity",
       result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }),
     }),
   )(body);
-  expect(decoded.result.tools.map((tool) => tool.name)).toEqual(["list_connections"]);
+  expect(decoded.result.tools.map((tool) => tool.name)).toEqual([
+    "list_connections",
+    "list_teams",
+    "get_calendar",
+    "get_league",
+    "get_rosters",
+    "search_players",
+    "get_players",
+    "get_matchups",
+    "get_transactions",
+    "generate_transaction_review_links",
+  ]);
 });
 
 it("rejects unexpected connection arguments as JSON-RPC invalid-params", async () => {
@@ -175,6 +193,125 @@ it("scrubs unexpected persistence details from the tool response", async () => {
   expect(JSON.stringify(body)).not.toContain("private database");
 });
 
+it("enforces fantasy read scope and serves bounded query results over MCP", async () => {
+  const queries: FantasyQueriesShape = {
+    ...unavailableQueries,
+    listTeams: () =>
+      Effect.succeed({
+        status: "ok",
+        teams: [],
+        page: { returned: 0, complete: true, remaining: 0 },
+        budget: { targetBytes: 12_288, hardLimitBytes: 16_384 },
+      }),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(queries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+  );
+  const run = (invocation: Request): Promise<Response> =>
+    handleMcpRequest(invocation, (_request, _operation, program) =>
+      Effect.runPromise(Effect.provide(program, services)),
+    );
+
+  const denied = await run(request("tools/call", { name: "list_teams", arguments: {} }, "read"));
+  const listed = await run(request("tools/call", { name: "list_teams", arguments: {} }, "fantasy"));
+  const invalid = await run(
+    request("tools/call", { name: "list_teams", arguments: { limit: 0 } }, "fantasy"),
+  );
+
+  expect(denied.status).toBe(403);
+  expect(denied.headers.get("www-authenticate")).toContain('scope="fantasy:read"');
+  expect(listed.status).toBe(200);
+  expect(await listed.json()).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: { status: "ok", teams: [] },
+    },
+  });
+  expect(invalid.status).toBe(400);
+  expect(await json(invalid)).toMatchObject({ error: { code: -32602 } });
+});
+
+it("requires transaction review scope and returns human-review-only links", async () => {
+  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const reviewData: ReviewLinksData = {
+    status: "ok",
+    team: {
+      id: teamId,
+      name: "Alpha",
+      provider: "yahoo",
+      league: "nfl",
+      sport: "football",
+      season: 2026,
+    },
+    links: [
+      {
+        status: "review_only",
+        index: 0,
+        kind: "add",
+        url: "https://football.fantasysports.yahoo.com/f1/1000/add?apid=10001",
+        players: [Schema.decodeSync(PlayerRef)("r1.test")],
+        humanReview: "Review this proposal in the provider interface.",
+      },
+    ],
+    instruction: "Review each proposal in the provider interface.",
+    coverage: [],
+    failures: [],
+    page: { returned: 1, complete: true, remaining: 0 },
+    budget: { targetBytes: 12_288, hardLimitBytes: 16_384 },
+  };
+  const reviews: TransactionReviewsShape = {
+    ...unavailableReviews,
+    generate: () => Effect.succeed(reviewData),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(unavailableQueries),
+    Layer.succeed(TransactionReviews)(reviews),
+  );
+  const run = (invocation: Request): Promise<Response> =>
+    handleMcpRequest(invocation, (_request, _operation, program) =>
+      Effect.runPromise(Effect.provide(program, services)),
+    );
+  const arguments_ = {
+    team: teamId,
+    intents: [{ kind: "add", add: Schema.decodeSync(PlayerRef)("r1.test") }],
+  };
+
+  const denied = await run(
+    request(
+      "tools/call",
+      { name: "generate_transaction_review_links", arguments: arguments_ },
+      "fantasy",
+    ),
+  );
+  const allowed = await run(
+    request(
+      "tools/call",
+      { name: "generate_transaction_review_links", arguments: arguments_ },
+      "review",
+    ),
+  );
+
+  expect(denied.status).toBe(403);
+  expect(denied.headers.get("www-authenticate")).toContain('scope="transactions:review"');
+  expect(allowed.status).toBe(200);
+  const body = await json(allowed);
+  expect(body).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        status: "ok",
+        links: [{ status: "review_only", kind: "add" }],
+      },
+    },
+  });
+  expect(JSON.stringify(body)).not.toContain("submit");
+});
+
 const authentication = Layer.succeed(AuthService)({
   signInMethods: { google: false },
   oauthResource: "https://connections.example/mcp",
@@ -185,12 +322,21 @@ const authentication = Layer.succeed(AuthService)({
   claimDeviceAuthorization: () => Effect.succeed({ clientId: "helper", scope: "connections:read" }),
   approveDeviceAuthorization: () => Effect.void,
   denyDeviceAuthorization: () => Effect.void,
-  resolveAccessToken: (token, scopes) =>
-    Effect.succeed(
-      token === "read" && scopes.some((scope) => scope.endsWith(":write"))
-        ? { status: "insufficient_scope" as const }
-        : { status: "authenticated" as const, userId: decodeUserId("reader") },
-    ),
+  resolveAccessToken: (token, scopes) => {
+    const granted =
+      token === "read"
+        ? ["connections:read", "example:read"]
+        : token === "fantasy"
+          ? ["fantasy:read"]
+          : token === "review"
+            ? ["transactions:review"]
+            : scopes;
+    return Effect.succeed(
+      scopes.every((scope) => granted.includes(scope))
+        ? { status: "authenticated" as const, userId: decodeUserId("reader") }
+        : { status: "insufficient_scope" as const },
+    );
+  },
 });
 const unavailableConnections: ConnectionsShape = {
   list: () => Effect.succeed([]),
@@ -207,11 +353,30 @@ function handle(
   request: Request,
   connections: ConnectionsShape = unavailableConnections,
 ): Promise<Response> {
-  const services = Layer.merge(authentication, Layer.succeed(Connections)(connections));
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(connections),
+    Layer.succeed(FantasyQueries)(unavailableQueries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+  );
   return handleMcpRequest(request, (_request, _operation, program) =>
     Effect.runPromise(Effect.provide(program, services)),
   );
 }
+
+const unavailableQueries: FantasyQueriesShape = {
+  listTeams: () => Effect.die(new Error("queries unavailable")),
+  getCalendar: () => Effect.die(new Error("queries unavailable")),
+  getLeague: () => Effect.die(new Error("queries unavailable")),
+  getRosters: () => Effect.die(new Error("queries unavailable")),
+  searchPlayers: () => Effect.die(new Error("queries unavailable")),
+  getPlayers: () => Effect.die(new Error("queries unavailable")),
+  getMatchups: () => Effect.die(new Error("queries unavailable")),
+  getTransactions: () => Effect.die(new Error("queries unavailable")),
+};
+const unavailableReviews: TransactionReviewsShape = {
+  generate: () => Effect.die(new Error("reviews unavailable")),
+};
 
 function request(
   method: string,

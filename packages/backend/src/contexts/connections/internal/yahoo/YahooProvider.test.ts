@@ -5,10 +5,14 @@ import { Cause, Effect, Exit, Layer, Redacted, Tracer as EffectTracer } from "ef
 import {
   ProviderCrumbUnavailable,
   ProviderGateway,
+  ProviderOperationUnsupported,
+  ProviderPeriodMismatch,
   ProviderRequestFailed,
   ProviderResponseInvalid,
+  ProviderReviewLinkInvalid,
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
+import type { ProviderReadFailure } from "#contexts/connections/Provider.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 import type { PublicInternetOptions } from "#runtime/PublicInternet.ts";
 
@@ -264,6 +268,321 @@ it.effect("keeps cookies, crumbs, and raw payloads out of spans", () => {
   );
 });
 
+it.effect("reads verified league settings with one exact request", () => {
+  const internet = recordingInternet(() => jsonResponse(rawLeagueSettings));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      sport: "football",
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/461.l.1000/settings?format=json",
+    );
+    assert.strictEqual(internet.calls[0]?.headers["cookie"], Redacted.value(sessionInput.session));
+    assert.deepStrictEqual(league, {
+      providerLeagueKey: "461.l.1000",
+      name: "Alpha League",
+      webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
+      season: 2026,
+      currentWeek: 3,
+      startWeek: 1,
+      endWeek: 17,
+      startDate: "2026-09-03",
+      endDate: "2026-12-28",
+      teamCount: 10,
+      scoringType: "head",
+      scoringLabel: "H2H",
+      weeklyDeadline: undefined,
+      waiverType: "FR",
+      waiverRule: "continuous",
+      usesFaab: false,
+      draftStatus: "postdraft",
+      rosterPositions: [
+        {
+          position: "QB",
+          positionType: "O",
+          count: 1,
+          isStarting: true,
+        },
+        {
+          position: "BN",
+          positionType: "B",
+          count: 6,
+          isStarting: false,
+        },
+      ],
+      statCategories: [
+        {
+          statId: 4,
+          name: "Passing Yards",
+          displayName: "Pass Yds",
+          abbreviation: "PY",
+          group: "passing",
+          enabled: true,
+          positionTypes: ["O"],
+        },
+      ],
+      statModifiers: [{ statId: 4, points: "0.04" }],
+    });
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("rejects a league response for another league without exposing the payload", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse({
+      ...rawLeagueSettings.fantasy_content,
+      league: [
+        { ...rawLeagueAttributes, league_key: "461.l.9999" },
+        ...rawLeagueSettings.fantasy_content.league.slice(1),
+      ],
+    }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readLeague({
+        ...sessionInput,
+        providerLeagueKey: "461.l.1000",
+        sport: "football",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.notInclude(String(error), "Alpha League");
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reads an exact selected week roster with whole verified fields", () => {
+  const internet = recordingInternet(() => jsonResponse(rawRoster));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const roster = yield* provider.readRoster({
+      ...sessionInput,
+      providerTeamKey: "461.l.1000.t.1",
+      period: { week: 3 },
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/461.l.1000.t.1/roster;week=3?format=json",
+    );
+    assert.deepStrictEqual(roster.coverage, { type: "week", week: 3 });
+    assert.strictEqual(roster.players.length, 2);
+    assert.deepStrictEqual(roster.players[0], {
+      providerPlayerKey: "461.p.10001",
+      name: "Synthetic Player",
+      displayPosition: "QB",
+      primaryPosition: "QB",
+      positionType: "O",
+      eligiblePositions: ["QB", "W/R"],
+      slot: "QB",
+      isFlex: false,
+      isEditable: true,
+      injuryCode: undefined,
+      injuryDetail: undefined,
+      byeWeek: 7,
+      undroppable: false,
+    });
+    assert.deepStrictEqual(roster.players[1], {
+      providerPlayerKey: "461.p.10002",
+      name: "Synthetic Reserve",
+      displayPosition: "RB",
+      primaryPosition: "RB",
+      positionType: "O",
+      eligiblePositions: ["RB"],
+      slot: "IR",
+      isFlex: null,
+      isEditable: false,
+      injuryCode: "O",
+      injuryDetail: "Out for the synthetic test",
+      byeWeek: null,
+      undroppable: true,
+    });
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reports a period mismatch instead of relabelling another week", () => {
+  const internet = recordingInternet(() => jsonResponse(rawRoster));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "461.l.1000.t.1",
+        period: { week: 4 },
+      }),
+    );
+
+    assert.instanceOf(error, ProviderPeriodMismatch);
+    assert.strictEqual(error.requestedWeek, 4);
+    assert.strictEqual(error.coveredWeek, 3);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("rejects an empty roster as an unestablished period", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse({
+      fantasy_content: {
+        team: [{ team_key: "461.l.1000.t.1" }, { roster: [{ players: [] }] }],
+      },
+    }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "461.l.1000.t.1",
+        period: undefined,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect.each([
+  "read_player_details",
+  "search_players",
+  "read_matchups",
+  "read_transactions",
+  "read_league_teams",
+] as const)("returns typed unsupported coverage for %s without a request", (operation) => {
+  const internet = recordingInternet(() => jsonResponse({}));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+    const program: Effect.Effect<unknown, ProviderReadFailure> =
+      operation === "search_players"
+        ? provider.searchPlayers({
+            ...sessionInput,
+            providerLeagueKey: "461.l.1000",
+            query: undefined,
+            availability: "all",
+            sort: "name",
+            limit: 10,
+          })
+        : operation === "read_player_details"
+          ? provider.readPlayerDetails({
+              ...sessionInput,
+              providerLeagueKey: "461.l.1000",
+              providerPlayerKeys: ["461.p.10001"],
+              period: { week: 3 },
+            })
+          : operation === "read_matchups"
+            ? provider.readMatchups({
+                ...sessionInput,
+                providerLeagueKey: "461.l.1000",
+                period: { week: 3 },
+              })
+            : operation === "read_transactions"
+              ? provider.readTransactions({
+                  ...sessionInput,
+                  providerLeagueKey: "461.l.1000",
+                  limit: 10,
+                })
+              : provider.readLeagueTeams({
+                  ...sessionInput,
+                  providerLeagueKey: "461.l.1000",
+                });
+
+    const error = yield* program.pipe(Effect.catch((failure) => Effect.succeed(failure)));
+
+    assert.instanceOf(error, ProviderOperationUnsupported);
+    assert.strictEqual(error.operation, operation);
+    assert.deepStrictEqual(internet.calls, []);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect.each([
+  {
+    name: "add",
+    intent: { kind: "add" as const, add: "461.p.10001" },
+    expected: "apid=10001",
+  },
+  {
+    name: "add/drop",
+    intent: { kind: "add_drop" as const, add: "461.p.10001", drop: "461.p.10002" },
+    expected: "apid=10001&dpid=10002",
+  },
+  {
+    name: "drop",
+    intent: { kind: "drop" as const, drop: "461.p.10002" },
+    expected: "dpid=10002",
+  },
+  {
+    name: "trade",
+    intent: {
+      kind: "trade" as const,
+      send: ["461.p.10001", "461.p.10003"],
+      receive: ["461.p.10002"],
+    },
+    expected: "apid=10001&apid=10003&dpid=10002",
+  },
+])("builds a review-only $name link on the exact provider host", ({ intent, expected }) =>
+  Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const link = yield* provider.buildReviewLink({
+      providerLeagueKey: "461.l.1000",
+      leagueWebUrl: "https://football.fantasysports.yahoo.com/f1/1000",
+      sport: "football",
+      intent,
+    });
+
+    const url = new URL(link);
+    assert.strictEqual(url.origin, "https://football.fantasysports.yahoo.com");
+    assert.strictEqual(url.pathname, intent.kind === "trade" ? "/f1/1000/trade" : "/f1/1000/add");
+    assert.strictEqual(url.search, `?${expected}`);
+    assert.notInclude(url.pathname, "submit");
+    assert.notInclude(url.pathname, "confirm");
+  }).pipe(
+    Effect.provide(
+      YahooProvider.pipe(Layer.provide(recordingInternet(() => jsonResponse({})).layer)),
+    ),
+  ),
+);
+
+it.effect("rejects review links for a foreign host or a non-numeric player key", () =>
+  Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const foreign = yield* Effect.flip(
+      provider.buildReviewLink({
+        providerLeagueKey: "461.l.1000",
+        leagueWebUrl: "https://evil.test/f1/1000",
+        sport: "football",
+        intent: { kind: "add", add: "461.p.10001" },
+      }),
+    );
+    const nonNumeric = yield* Effect.flip(
+      provider.buildReviewLink({
+        providerLeagueKey: "461.l.1000",
+        leagueWebUrl: "https://football.fantasysports.yahoo.com/f1/1000",
+        sport: "football",
+        intent: { kind: "add", add: "461.p.not-a-number" },
+      }),
+    );
+
+    assert.instanceOf(foreign, ProviderReviewLinkInvalid);
+    assert.strictEqual(foreign.reason, "unsupported-league-url");
+    assert.instanceOf(nonNumeric, ProviderReviewLinkInvalid);
+    assert.strictEqual(nonNumeric.reason, "unsupported-player-key");
+  }).pipe(
+    Effect.provide(
+      YahooProvider.pipe(Layer.provide(recordingInternet(() => jsonResponse({})).layer)),
+    ),
+  ),
+);
+
 type RecordedRequest = {
   readonly url: URL;
   readonly method: string;
@@ -299,6 +618,153 @@ function recordingInternet(respond: (request: RecordedRequest) => Response): {
 function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status });
 }
+
+const rawLeagueAttributes = {
+  league_key: "461.l.1000",
+  name: "Alpha League",
+  url: "https://football.fantasysports.yahoo.com/f1/1000",
+  num_teams: 10,
+  current_week: 3,
+  start_week: "1",
+  end_week: "17",
+  start_date: "2026-09-03",
+  end_date: "2026-12-28",
+  scoring_type: "head",
+  scoring_label: "H2H",
+  weekly_deadline: "",
+  season: "2026",
+  draft_status: "postdraft",
+};
+
+const rawLeagueSettings = {
+  fantasy_content: {
+    league: [
+      rawLeagueAttributes,
+      {
+        settings: {
+          "0": {
+            roster_type: "head",
+            waiver_type: "FR",
+            waiver_rule: "continuous",
+            uses_faab: "0",
+            roster_positions: {
+              "0": {
+                roster_position: {
+                  position: "QB",
+                  position_type: "O",
+                  count: 1,
+                  is_starting_position: 1,
+                },
+              },
+              "1": {
+                roster_position: {
+                  position: "BN",
+                  position_type: "B",
+                  count: 6,
+                  is_starting_position: 0,
+                },
+              },
+              count: 2,
+            },
+            stat_categories: {
+              stats: {
+                "0": {
+                  stat: {
+                    stat_id: 4,
+                    name: "Passing Yards",
+                    display_name: "Pass Yds",
+                    group: "passing",
+                    abbr: "PY",
+                    enabled: "1",
+                    position_type: "O",
+                    stat_position_types: {
+                      "0": { stat_position_type: { position_type: "O" } },
+                      count: 1,
+                    },
+                  },
+                },
+                count: 1,
+              },
+            },
+            stat_modifiers: {
+              stats: {
+                "0": { stat: { stat_id: 4, value: "0.04" } },
+                count: 1,
+              },
+            },
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
+const rawRoster = {
+  fantasy_content: {
+    team: [
+      { team_key: "461.l.1000.t.1" },
+      {
+        roster: {
+          "0": {
+            players: {
+              "0": {
+                player: [
+                  [
+                    { player_key: "461.p.10001" },
+                    { name: { full: "Synthetic Player" } },
+                    { display_position: "QB" },
+                    { primary_position: "QB" },
+                    { position_type: "O" },
+                    {
+                      eligible_positions: {
+                        "0": { position: "QB" },
+                        "1": { position: "W/R" },
+                        count: 2,
+                      },
+                    },
+                    { bye_weeks: { week: "7" } },
+                    { is_undroppable: "0" },
+                  ],
+                  {
+                    selected_position: [
+                      { coverage_type: "week", week: "3" },
+                      { position: "QB" },
+                      { is_flex: 0 },
+                    ],
+                  },
+                  { is_editable: "1" },
+                ],
+              },
+              "1": {
+                player: [
+                  [
+                    { player_key: "461.p.10002" },
+                    { name: { full: "Synthetic Reserve" } },
+                    { display_position: "RB" },
+                    { primary_position: "RB" },
+                    { position_type: "O" },
+                    { eligible_positions: { "0": { position: "RB" }, count: 1 } },
+                    { status: "O" },
+                    { status_full: "Out" },
+                    { injury_note: "Out for the synthetic test" },
+                    { is_undroppable: "1" },
+                  ],
+                  {
+                    selected_position: [{ coverage_type: "week", week: "3" }, { position: "IR" }],
+                  },
+                  { is_editable: "0" },
+                ],
+              },
+              count: 2,
+            },
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
 
 const sessionInput = {
   provider: "yahoo" as const,

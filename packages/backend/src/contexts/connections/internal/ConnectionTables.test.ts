@@ -118,6 +118,7 @@ it.effect("round-trips discovered team rows through the codec", () =>
   Effect.gen(function* () {
     const atDate = DateTime.toDateUtc(at);
     const row = {
+      id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b2",
       connectionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
       userId: "owner",
       provider: "yahoo" as const,

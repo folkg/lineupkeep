@@ -8,6 +8,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { Effect, Schema, SchemaParser, SchemaTransformation, Struct } from "effect";
 
@@ -21,6 +22,7 @@ import {
   FantasyLeague,
   FantasySport,
   TeamAvailability,
+  TeamId,
 } from "#contexts/connections/FantasyTeam.ts";
 
 import { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
@@ -69,6 +71,7 @@ export const providerCredentials = pgTable(
 export const providerTeams = pgTable(
   "provider_teams",
   {
+    id: uuid("id").notNull().defaultRandom(),
     connectionId: text("connection_id").notNull(),
     userId: text("user_id").notNull(),
     provider: text("provider", { enum: ["yahoo"] }).notNull(),
@@ -88,11 +91,13 @@ export const providerTeams = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.connectionId, table.providerTeamKey] }),
+    uniqueIndex("provider_teams_id_idx").on(table.id),
     index("provider_teams_user_id_league_name_idx").on(table.userId, table.league, table.name),
   ],
 );
 
 export const FantasyTeamRow = createSelectSchema(providerTeams, {
+  id: TeamId,
   connectionId: ConnectionId,
   provider: Provider,
   providerTeamKey: Schema.NonEmptyString,
