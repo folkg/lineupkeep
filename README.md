@@ -95,8 +95,16 @@ Use `--app-url <origin>` (or `LINEUPKEEP_APP_URL`) when the app is not at `http:
 
 ## Connecting an MCP client
 
-Connect a stateless **MCP 2026-07-28** client to `https://<host>/mcp`; earlier session-based revisions are unsupported. Follow challenge/resource metadata and authorization-server discovery; use authorization code with S256 PKCE, endpoint `resource`, and explicit scope consent. Request `offline_access` for renewable access.
-Dynamic Client Registration is enabled for public clients at `POST /api/auth/oauth2/register`; PKCE is required and redirect URIs are validated. Clients that cannot self-register may instead use an HTTPS client metadata document as their `client_id`. Metadata redirects/private destinations are rejected; native loopback callbacks are allowed.
+Connect a stateless **MCP 2026-07-28** client to `https://<host>/mcp`; earlier session-based revisions are unsupported. Follow the `401` challenge and resource metadata, then use authorization code with S256 PKCE, the endpoint `resource`, and explicit scope consent.
+
+### Request this scope set on the first authorization
+
+```text
+connections:read fantasy:read transactions:review lineups:write offline_access
+```
+
+One consent with every scope above covers all shipped tools and renewable access. A narrower request still authorizes, then fails the tools whose scopes it omitted: the `401` challenge and the `403` body both name scopes so a client that surfaces only a response body can still see what is missing. Authorization-server metadata publishes this list; protected-resource metadata publishes the four resource scopes, because `offline_access` buys a refresh token from the authorization server rather than access to the resource.
+
 Use `tools/list` for live schemas/scopes/hints. Retry unconfirmed creation only with the same request identity/content; inspect current state before repeating other writes. Store rotated refresh tokens.
 Browser sign-out does not revoke offline grants: disconnect through `/api/auth/oauth2/revoke`. Issued access tokens may remain valid until expiry. OAuth setup proves no tool behavior; local workerd proves no production routing guarantee.
 

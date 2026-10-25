@@ -38,7 +38,6 @@ import {
   AuthorizationScopes,
   linkingHelperClient,
   linkingHelperScope,
-  offlineAccess,
 } from "#contexts/auth/AuthorizationScopes.ts";
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import { UserId } from "#contexts/auth/User.ts";
@@ -67,7 +66,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       const environment = yield* appEnvironmentConfig;
       const clientAddress = yield* clientAddressConfig;
       const google = yield* googleConfig;
-      const scopes = [...(yield* AuthorizationScopes), offlineAccess];
+      const scopes = yield* AuthorizationScopes;
       const oauthResource = new URL("/mcp", baseUrl).href;
 
       const rateLimitEnabled = environment !== "development";
@@ -394,6 +393,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       return {
         signInMethods: { google: Option.isSome(google) },
         oauthResource,
+        advertisedScopes: scopes,
         handle,
         getSession,
         resolveAccessToken,

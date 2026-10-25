@@ -86,6 +86,7 @@ const productionTestSeams: Record<string, Array<"exports" | "types">> = {
   "packages/backend/src/**/*Test.ts": ["exports", "types"],
   "packages/backend/src/database/dbUtilities.ts": ["exports"],
   "packages/backend/src/contexts/auth/User.ts": ["exports"],
+  "packages/backend/src/runtime/ApplicationScopes.ts": ["exports"],
   "packages/backend/src/contexts/auth/AuthSession.ts": ["types"],
   "packages/backend/src/contexts/connections/Connection.ts": ["exports"],
   "apps/web/src/browser/session/authClient.ts": ["exports"],

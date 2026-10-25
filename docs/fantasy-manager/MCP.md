@@ -45,7 +45,7 @@ Manual authorized requests may run while paused/disabled without enabling automa
 
 ## Budgets and paging
 
-Initial service policy: aim for about 12 KiB and enforce a 16 KiB model-facing application-result ceiling. These are our proposed application budgets, not claimed Muse/MCP limits. Validate actual client serialization, including any duplicate text/structured representations, before finalizing the measurement.
+Initial service policy: aim for about 12 KiB and enforce a 16 KiB model-facing application-result ceiling. These are our proposed application budgets, not claimed Muse/MCP limits. The measurement counts both representations a client receives: `structuredContent` and the JSON text copy that a text-only client reads. Keeping the text copy follows the specification's backwards-compatibility recommendation, so a structured page fills about half the ceiling instead of dropping the copy and halving what a text-only client can use.
 
 - Bound both row counts and encoded UTF-8 bytes, including metadata and continuation information.
 - Return complete records. Do not truncate strings midway, silently drop requested fields, or mark omitted values zero.
@@ -76,6 +76,20 @@ A coverage entry has one of three states. `available` means the resource was rea
 Generate links from typed domain intents and verified relationships. Users may choose players/counterparty, not origins, endpoint stages, or submission parameters. Validate provider, league, owning team, membership, and numeric-ID mapping privately.
 
 Return a clear human-review instruction and no guarantee of add/drop/trade eligibility. No POST/PUT execution, final confirmation automation, waivers/bid submission, or multi-add/drop behavior not validated by the adapter.
+
+## Client onboarding
+
+The documented set a client requests on its first authorization:
+
+```text
+connections:read fantasy:read transactions:review lineups:write offline_access
+```
+
+`connections:read` reads connection status; `fantasy:read`, `transactions:review`, and `lineups:write` cover the query, review-link, and lineup tools; `offline_access` buys a refresh token. Requesting a subset authorizes and then fails the tools whose scope it omitted, so the whole set is the supported request.
+
+The unauthenticated `401` advertises the whole set in its `scope` parameter and body, and a `403` names the missing scope in the body as well as the challenge header. `server/discover` answers without a token and publishes only the product name, supported protocol versions, and capabilities. Authorization-server metadata publishes all five scopes; protected-resource metadata publishes the four resource scopes, because `offline_access` addresses the authorization server rather than the resource. A scope-coverage test asserts the documented set against the required scope of every shipped tool.
+
+Dynamic registration records the advertised set as the client's allowed scope, while an authorization grant is exactly the scope an authorize request asks for. Both are needed: registration allows the grant, the request narrows it. Complete first-request examples, header and `_meta` requirements, and the registration fallback are in the [client setup](../../README.md#connecting-an-mcp-client).
 
 ## Client acceptance
 

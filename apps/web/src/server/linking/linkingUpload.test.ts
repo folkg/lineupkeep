@@ -382,6 +382,7 @@ const TestLayer = ConnectionsLayer.pipe(
 const authServiceFake: AuthServiceShape = {
   signInMethods: { google: false },
   oauthResource: "http://localhost:5173/mcp",
+  advertisedScopes: [linkingHelperScope],
   resolveAccessToken: () => Effect.succeed({ status: "invalid" as const }),
   getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
   consent: () => Effect.succeed("http://localhost:5173/connections"),

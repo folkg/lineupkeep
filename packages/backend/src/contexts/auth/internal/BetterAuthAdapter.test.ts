@@ -17,10 +17,11 @@ import {
 } from "effect";
 import { vi } from "vitest";
 
-import { AuthorizationScopes } from "#contexts/auth/AuthorizationScopes.ts";
+import { AuthorizationScopes, offlineAccess } from "#contexts/auth/AuthorizationScopes.ts";
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
+import { advertisedScopes, resourceScopes } from "#runtime/ApplicationScopes.ts";
 import { BackgroundWork } from "#runtime/BackgroundWork.ts";
 import { publicInternetProcess } from "#runtime/public-internet/transport/node/PublicInternetProcess.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
@@ -611,6 +612,47 @@ it.effect(
 );
 
 it.effect(
+  "publishes one scope set to the authorization server and the resource scopes to the protected resource",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+
+      const authorizationServer = yield* jsonOf(
+        yield* adapter.handle(
+          new Request("http://localhost:5173/.well-known/oauth-authorization-server/api/auth"),
+        ),
+        Schema.Struct({ scopes_supported: Schema.Array(Schema.String) }),
+      );
+      const protectedResource = yield* jsonOf(
+        yield* adapter.handle(
+          new Request("http://localhost:5173/.well-known/oauth-protected-resource/mcp"),
+        ),
+        Schema.Struct({ scopes_supported: Schema.Array(Schema.String) }),
+      );
+
+      assert.deepStrictEqual(
+        authorizationServer.scopes_supported,
+        advertisedScopes.map((scope) => scope.name),
+      );
+      assert.deepStrictEqual(
+        protectedResource.scopes_supported,
+        resourceScopes.map((scope) => scope.name),
+      );
+      assert.deepStrictEqual(
+        authorizationServer.scopes_supported.filter(
+          (scope) => !protectedResource.scopes_supported.includes(scope),
+        ),
+        ["offline_access"],
+      );
+    }).pipe(
+      Effect.provide(
+        adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),
+      ),
+    ),
+  databaseTestTimeout,
+);
+
+it.effect(
   "approves a signed authorization query and exchanges its code with PKCE",
   () =>
     Effect.gen(function* () {
@@ -875,7 +917,8 @@ const testScopeDefinitions = [
   { name: "connections:read", description: "Read test documents." },
   { name: "connections:write", description: "Change test documents." },
 ] as const;
-const testScopes = Layer.succeed(AuthorizationScopes)(testScopeDefinitions);
+const testScopes = Layer.succeed(AuthorizationScopes)([...testScopeDefinitions, offlineAccess]);
+const realScopes = Layer.succeed(AuthorizationScopes)(advertisedScopes);
 
 const baseConfig = {
   DATABASE_URL: "postgres://test:test@localhost:1/lineupkeep_test",
@@ -903,6 +946,7 @@ function adapterLayer(
   config: Record<string, string>,
   email: Layer.Layer<EmailDelivery | EmailOutbox> = EmailDeliveryTest,
   internet: Layer.Layer<PublicInternet> = publicInternetProcess,
+  scopes: Layer.Layer<AuthorizationScopes> = testScopes,
 ): Layer.Layer<
   | AuthDatabase
   | AuthDatabaseStatements
@@ -918,7 +962,7 @@ function adapterLayer(
 > {
   return BetterAuthAdapter.layer.pipe(
     Layer.provideMerge(SignInCodeQuotaRepository.layer),
-    Layer.provide(testScopes),
+    Layer.provide(scopes),
     Layer.provideMerge(
       Layer.mergeAll(
         AuthDatabaseTest,

@@ -70,6 +70,8 @@ export type AuthServiceShape = {
 
   readonly oauthResource: string;
 
+  readonly advertisedScopes: ReadonlyArray<AuthorizationScope>;
+
   readonly resolveAccessToken: (
     token: string,
     requiredScopes: ReadonlyArray<string>,

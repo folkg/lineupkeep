@@ -109,13 +109,30 @@ it("serves composed feature toolkits without requiring connection services", asy
   expect(rejected.headers.get("www-authenticate")).toContain('scope="example:write"');
 });
 
-it("challenges an unauthenticated client with protected-resource discovery", async () => {
+it("challenges an unauthenticated client with protected-resource discovery and the whole scope set", async () => {
   const response = await handle(request("tools/list"));
+  const body = await json(response);
 
   expect(response.status).toBe(401);
   expect(response.headers.get("www-authenticate")).toBe(
-    'Bearer resource_metadata="https://connections.example/.well-known/oauth-protected-resource/mcp"',
+    'Bearer resource_metadata="https://connections.example/.well-known/oauth-protected-resource/mcp", scope="connections:read fantasy:read example:write"',
   );
+  expect(body).toMatchObject({
+    error: "unauthorized",
+    scope: "connections:read fantasy:read example:write",
+    resource_metadata: "https://connections.example/.well-known/oauth-protected-resource/mcp",
+  });
+});
+
+it("names the required scope in a 403 body and points at the full advertised set", async () => {
+  const response = await handle(
+    request("tools/call", { name: "set_lineup", arguments: {} }, "read"),
+  );
+  const body = await json(response);
+
+  expect(response.status).toBe(403);
+  expect(body).toMatchObject({ error: "insufficient_scope", scope: "lineups:write" });
+  expect(JSON.stringify(body)).toContain("connections:read fantasy:read example:write");
 });
 
 it.each(["2025-03-26", "2025-06-18", "2025-11-25"])(
@@ -425,6 +442,11 @@ it("returns a durable queued lineup reference without claiming success", async (
 const authentication = Layer.succeed(AuthService)({
   signInMethods: { google: false },
   oauthResource: "https://connections.example/mcp",
+  advertisedScopes: [
+    { name: "connections:read", description: "Read connections." },
+    { name: "fantasy:read", description: "Read fantasy data." },
+    { name: "example:write", description: "Change examples." },
+  ],
   getSession: () => Effect.void.pipe(Effect.as(undefined)),
   handle: () => Effect.succeed(new Response()),
   getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),

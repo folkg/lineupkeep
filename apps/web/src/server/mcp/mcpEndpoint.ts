@@ -1,4 +1,5 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
+import type { AuthorizationScope } from "@lineupkeep/backend/auth/AuthorizationScopes";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { McpProtocol, McpServer } from "effect/ai";
@@ -15,7 +16,7 @@ export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<stri
 ) {
   const auth = yield* AuthService;
   const resource = new URL(auth.oauthResource);
-  const invocation = yield* requestTool(request, toolkit);
+  const invocation = yield* readInvocation(request, toolkit);
   const scopes = requiredScopes(invocation.tool);
   const bearer = bearerToken(request.headers);
   const identity =
@@ -23,7 +24,7 @@ export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<stri
       ? { status: "invalid" as const }
       : yield* auth.resolveAccessToken(bearer, scopes);
   if (identity.status !== "authenticated") {
-    return yield* challengeResponse(resource, identity.status, scopes);
+    return yield* challengeResponse(resource, identity.status, scopes, auth.advertisedScopes);
   }
   yield* Effect.annotateCurrentSpan({
     "auth.state": "authenticated",
@@ -40,33 +41,10 @@ export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<stri
   return yield* serveToolkit(request, toolkit, handlers(identity.userId), resource, application);
 }, Effect.scoped);
 
-function requestTool<Tools extends Record<string, Tool.Any>>(
+function readInvocation<Tools extends Record<string, Tool.Any>>(
   request: Request,
   toolkit: Toolkit.Toolkit<Tools>,
-): Effect.Effect<
-  {
-    call:
-      | Option.None<{
-          readonly id?: string | number | null | undefined;
-          readonly method: "tools/call";
-          readonly params: {
-            readonly name: string;
-            readonly arguments?: unknown;
-          };
-        }>
-      | Option.Some<{
-          readonly id?: string | number | null | undefined;
-          readonly method: "tools/call";
-          readonly params: {
-            readonly name: string;
-            readonly arguments?: unknown;
-          };
-        }>;
-    tool: Tool.Any | undefined;
-  },
-  never,
-  never
-> {
+): Effect.Effect<Invocation, never, never> {
   return Effect.gen(function* () {
     const input = yield* Effect.tryPromise({
       try: () => request.clone().json(),
@@ -94,15 +72,19 @@ function bearerToken(headers: Headers): string | undefined {
 function challengeResponse(
   resource: URL,
   status: "invalid" | "insufficient_scope",
-  scopes: ReadonlyArray<string>,
+  requiredScopes: ReadonlyArray<string>,
+  advertisedScopes: ReadonlyArray<AuthorizationScope>,
 ): Effect.Effect<Response, never, never> {
   return Effect.gen(function* () {
     const insufficient = status === "insufficient_scope";
     const metadata = new URL(`/.well-known/oauth-protected-resource${resource.pathname}`, resource)
       .href;
+    const advertised = advertisedScopes.map((scope) => scope.name).join(" ");
+    const scope = insufficient ? requiredScopes.join(" ") : advertised;
     const challenge = [
       `Bearer resource_metadata="${metadata}"`,
-      ...(insufficient ? ['error="insufficient_scope"', `scope="${scopes.join(" ")}"`] : []),
+      ...(insufficient ? ['error="insufficient_scope"'] : []),
+      `scope="${scope}"`,
     ].join(", ");
     yield* Effect.annotateCurrentSpan({
       "app.outcome": "rejected",
@@ -110,7 +92,18 @@ function challengeResponse(
       "http.response.status_code": insufficient ? 403 : 401,
     });
     return Response.json(
-      { error: insufficient ? "insufficient_scope" : "unauthorized" },
+      insufficient
+        ? {
+            error: "insufficient_scope",
+            scope,
+            error_description: `This access token does not grant the ${scope} scope. Authorize again and request every advertised scope (${advertised}).`,
+          }
+        : {
+            error: "unauthorized",
+            scope,
+            resource_metadata: metadata,
+            error_description: `Authorize against the resource metadata, request every advertised scope (${advertised}), and send the access token as a bearer token.`,
+          },
       {
         status: insufficient ? 403 : 401,
         headers: { "WWW-Authenticate": challenge, "Cache-Control": "no-store" },
@@ -119,10 +112,7 @@ function challengeResponse(
   });
 }
 
-function invalidArgumentsResponse(invocation: {
-  readonly call: Option.Option<typeof ToolCall.Type>;
-  readonly tool: Tool.Any | undefined;
-}): Response | undefined {
+function invalidArgumentsResponse(invocation: Invocation): Response | undefined {
   if (
     invocation.tool === undefined ||
     Option.isNone(invocation.call) ||
@@ -174,5 +164,10 @@ const ToolCall = Schema.Struct({
   method: Schema.Literal("tools/call"),
   params: Schema.Struct({ name: Schema.String, arguments: Schema.optional(Schema.Unknown) }),
 });
+
+type Invocation = {
+  readonly call: Option.Option<typeof ToolCall.Type>;
+  readonly tool: Tool.Any | undefined;
+};
 
 type ApplicationIdentity = { readonly name: string; readonly version: string };

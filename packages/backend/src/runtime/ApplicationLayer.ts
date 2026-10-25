@@ -11,7 +11,6 @@ import { SignInCodeQuotaRepository } from "#contexts/auth/internal/SignInCodeQuo
 import { UserDirectoryLive } from "#contexts/auth/internal/UserDirectoryRepository.ts";
 import type { Automation } from "#contexts/connections/Automation.ts";
 import type { Connections } from "#contexts/connections/Connections.ts";
-import { connectionScopes } from "#contexts/connections/ConnectionScopes.ts";
 import type { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import type { HostedLinking } from "#contexts/connections/HostedLinking.ts";
 import { AutomationLive } from "#contexts/connections/internal/AutomationLive.ts";
@@ -37,26 +36,19 @@ import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
 import { TransactionReviewsLive } from "#contexts/connections/internal/TransactionReviewsLive.ts";
 import { YahooProvider } from "#contexts/connections/internal/yahoo/YahooProvider.ts";
 import type { LineupRuns } from "#contexts/connections/LineupRuns.ts";
-import { lineupScopes } from "#contexts/connections/LineupScopes.ts";
 import type { LineupDispatcher, LineupWorker } from "#contexts/connections/LineupWork.ts";
 import type { Notifications } from "#contexts/connections/Notifications.ts";
-import { fantasyQueryScopes } from "#contexts/connections/QueryScopes.ts";
 import type { RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { Teams } from "#contexts/connections/Teams.ts";
 import type { TransactionReviews } from "#contexts/connections/TransactionReview.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
+import { advertisedScopes } from "#runtime/ApplicationScopes.ts";
 
 const EmailDeliveryLayer = EmailDelivery.fromConfig.pipe(Layer.provide(FetchHttpClient.layer));
 const AuthLayer = AuthLive.pipe(
   Layer.provide(BetterAuthAdapter.layer),
-  Layer.provide(
-    Layer.succeed(AuthorizationScopes)([
-      ...Object.values(connectionScopes),
-      ...Object.values(fantasyQueryScopes),
-      ...Object.values(lineupScopes),
-    ]),
-  ),
+  Layer.provide(Layer.succeed(AuthorizationScopes)(advertisedScopes)),
   Layer.provide(SignInCodeQuotaRepository.layer),
   Layer.provide(AuthDatabase.layer),
   Layer.provide(EmailDeliveryLayer),

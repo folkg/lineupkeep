@@ -22,6 +22,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
   expect(anonymous.headers.get("www-authenticate")).toContain(
     `${origin}/.well-known/oauth-protected-resource/mcp`,
   );
+  expect(anonymous.headers.get("www-authenticate")).toContain(`scope="${documentedScopes}"`);
 
   const { credentials } = await authorize(
     page,
@@ -105,6 +106,12 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   });
   expect(readDenied.status).toBe(403);
   expect(readDenied.headers.get("www-authenticate")).toContain('scope="fantasy:read"');
+  const denial = Schema.decodeUnknownSync(
+    Schema.Struct({ error: Schema.String, scope: Schema.String, error_description: Schema.String }),
+  )(await readDenied.json());
+  expect(denial.scope).toBe("fantasy:read");
+  expect(denial.error).toBe("insufficient_scope");
+  expect(denial.error_description).toContain(documentedScopes);
 
   const reviewDenied = await client.request("tools/call", {
     name: "generate_transaction_review_links",
@@ -303,6 +310,9 @@ test("rotates refresh credentials and rejects the spent token after the retry wi
     )
     .toEqual({ status: 400, error: "invalid_grant" });
 });
+
+const documentedScopes =
+  "connections:read fantasy:read transactions:review lineups:write offline_access";
 
 async function authorize(
   page: Page,
