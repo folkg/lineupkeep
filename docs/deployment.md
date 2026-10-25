@@ -2,6 +2,30 @@
 
 This runbook explains safe operation, not authorization. [The Phase 1 mandate](PHASE-1-HANDOFF.md) records the owner's GCP CLI setup permission and conditional rollout authority. Review and record the exact plan; do not apply until its billing/budget, access, and publication-security gates are satisfied. A material scope/cost change needs owner approval. Local checks cannot establish cloud credentials, IAM, routing, delivery, or restoration.
 
+## Provisioned environment (2026-10-25)
+
+Bootstrap, outside Alchemy (Alchemy has no billing-link provider, and state cannot store itself):
+
+- GCP project `lineupkeep-prod` (number `602042678335`), billing account `0139E5-D27389-43F1F2`, region `us-east1`. The gcloud CLI's active project is the unrelated `auto-gm-372620`; pass `--project=lineupkeep-prod` explicitly and do not change global config.
+- Protected Alchemy state in the owner's shared Neon project `alchemy-state` (`spring-cell-62836171`): database and role `lineupkeep_state`, direct endpoint, `sslmode=verify-full`.
+- Provisioning inputs: `~/.config/lineupkeep/infra.env` (mode 600, outside the repository) with `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `EMAIL_FROM`, `RESEND_API_KEY`, `AUTH_CLIENT_IP_HEADERS`. Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token` and never echo it.
+- Alchemy-managed: application Neon project (`database.run.ts`, stage `production`), project APIs and the CAD 5/month budget with 50/90/100% alerts (`platform.run.ts`, stage `production`), and the Cloud Run web service (`alchemy.run.ts`, stage `cloud-run`).
+- Email uses Resend's test sender `onboarding@resend.dev`, which delivers only to the owner's account address; a verified domain is a launch gate for open registration.
+
+Deploy shape:
+
+```sh
+set -a && . ~/.config/lineupkeep/infra.env && set +a
+export GOOGLE_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+cd infra
+env -u npm_execpath node ../node_modules/alchemy/bin/cli.js plan  database.run.ts --stage production
+env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy database.run.ts --stage production --yes
+env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy platform.run.ts --stage production --yes
+env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy alchemy.run.ts --stage cloud-run --yes
+```
+
+`BETTER_AUTH_URL` must equal the deployed origin, so the first web deploy establishes the Cloud Run URL and a follow-up deploy sets it; never ship a placeholder origin. Docker must be authenticated to `${GCP_REGION}-docker.pkg.dev` before the web stack publishes an image.
+
 ## Select a stage and lifecycle
 
 [infra/stage.ts](../infra/stage.ts) owns host/database selection. [infra/config.ts](../infra/config.ts) owns the runtime allowlist; [.env.example](../.env.example) is its annotated input reference. Do not infer a runtime setting from a variable merely existing in the provisioning shell.
