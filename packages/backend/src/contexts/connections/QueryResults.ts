@@ -271,7 +271,14 @@ export const GetPlayersInput = Schema.Struct({
     Schema.check(Schema.isMinLength(1), Schema.isMaxLength(25)),
   ),
   period: Schema.optional(QueryPeriod),
-  groups: Schema.optional(Schema.Array(PlayerGroup)),
+  groups: Schema.optional(
+    Schema.Array(PlayerGroup).pipe(
+      Schema.annotate({
+        description:
+          "Groups to hydrate. `actual_stats` states its basis: weekly where the Yahoo sport publishes weekly series, otherwise season totals. `projections` is always unsupported for Yahoo, which exposes no projected player statistics.",
+      }),
+    ),
+  ),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
 });
@@ -285,7 +292,8 @@ const StatValue = Schema.Struct({
 const StatGroup = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("available"),
-    period: QueryPeriod,
+    basis: Schema.Literals(["week", "season"]),
+    period: Schema.optional(QueryPeriod),
     stats: Schema.Array(StatValue),
   }),
   Schema.Struct({

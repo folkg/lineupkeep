@@ -96,7 +96,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_players", {
     description:
-      "Hydrate a bounded selection of up to 25 private player references for one linked team. Choose identity, availability, eligibility, actual stats, projections, or scoring context groups. Actual and projected values stay separate, and missing stats remain null rather than zero.",
+      "Hydrate a bounded selection of up to 25 private player references for one linked team. Choose identity, availability, eligibility, actual stats, or scoring context groups. Actual statistics declare a week or season basis; Yahoo exposes no projected player statistics, so the projections group always reports unsupported. Missing stats remain null rather than zero.",
     parameters: GetPlayersInput,
     success: Schema.toCodecJson(PlayersResult),
     failure: ToolFailure,

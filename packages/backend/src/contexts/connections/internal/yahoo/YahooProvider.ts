@@ -12,7 +12,6 @@ import {
 import {
   ProviderCrumbUnavailable,
   ProviderGateway,
-  ProviderOperationUnsupported,
   ProviderPeriodMismatch,
   ProviderRequestFailed,
   ProviderResponseInvalid,
@@ -22,6 +21,7 @@ import {
 } from "#contexts/connections/Provider.ts";
 import type {
   ProviderLeagueSettings,
+  ProviderStatBasis,
   ProviderMatchup,
   ProviderNativeActionResult,
   ProviderNativeTarget,
@@ -296,16 +296,11 @@ export const YahooProvider = Layer.effect(
       return { status: "accepted" as const };
     });
 
-    const unsupported = (
-      operation: ProviderOperation,
-      reason: string,
-    ): Effect.Effect<never, ProviderOperationUnsupported> =>
-      ProviderOperationUnsupported.make({ operation, reason });
-
     const readPlayerDetails = Effect.fn("YahooProvider.readPlayerDetails")(function* (
       input: ProviderSessionMaterial & {
         readonly providerLeagueKey: string;
         readonly providerPlayerKeys: ReadonlyArray<string>;
+        readonly sport: "football" | "hockey";
         readonly period: ProviderPeriod | undefined;
         readonly currentWeek: number | undefined;
       },
@@ -313,25 +308,27 @@ export const YahooProvider = Layer.effect(
       yield* Effect.annotateCurrentSpan("provider.operation", "read_player_details");
       const cookie = yield* sessionCookie(input, "read_player_details");
       const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_details");
-      if (input.period === undefined) {
-        return yield* unsupported(
-          "read_player_details",
-          "This provider reports player statistics by week; no week was requested.",
-        );
-      }
-      const week = yield* ValidWeek(input.period.week);
+      const period =
+        input.period === undefined ? undefined : { week: yield* ValidWeek(input.period.week) };
       const playerKeys = yield* ValidPlayerKeys(input.providerPlayerKeys, "read_player_details");
+      const basis = statBasis(input.sport, period, input.currentWeek);
       const payload = yield* readJson(internet, {
         operation: "read_player_details",
         origin: readOrigin,
         path: `/fantasy/v2/league/${leagueKey}/players;player_keys=${playerKeys.join(",")};out=stats,ownership`,
-        query: { format: "json", "stats.type": "week", "stats.week": String(week) },
+        query:
+          basis.type === "week"
+            ? { format: "json", "stats.type": "week", "stats.week": String(basis.week) }
+            : { format: "json", "stats.type": "season" },
         cookie,
         normalize: true,
       });
       const decoded = yield* decodePayload(PlayerDetailsPayload, payload, "read_player_details");
-      const details = yield* playerDetailsFromPayload(decoded, leagueKey, week, input.currentWeek);
-      yield* Effect.annotateCurrentSpan("provider.player_count", details.length);
+      const details = yield* playerDetailsFromPayload(decoded, leagueKey, basis);
+      yield* Effect.annotateCurrentSpan({
+        "provider.player_count": details.length,
+        "provider.stat_basis": basis.type,
+      });
       return details;
     });
 
@@ -916,23 +913,24 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
 function playerDetailsFromPayload(
   payload: typeof PlayerDetailsPayload.Type,
   requestedLeagueKey: string,
-  requestedWeek: number,
-  currentWeek: number | undefined,
+  basis: ProviderStatBasis,
 ): Effect.Effect<
   ReadonlyArray<ProviderPlayerDetail>,
   ProviderResponseInvalid | ProviderPeriodMismatch
 > {
   return Effect.gen(function* () {
     if (payload.league.league_key !== requestedLeagueKey) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_player_details" });
+      return yield* ProviderResponseInvalid.make({
+        operation: "read_player_details",
+        field: "league.league_key",
+      });
     }
-    const completed = currentWeek !== undefined && requestedWeek < currentWeek;
     const details: ProviderPlayerDetail[] = [];
     for (const player of payload.league.players) {
       const series =
         player.player_stats === undefined
           ? undefined
-          : yield* statSeries(player.player_stats, requestedWeek);
+          : yield* statSeries(player.player_stats, basis);
       details.push({
         providerPlayerKey: player.player_key,
         name: optionalNonEmpty(player.name?.full ?? ""),
@@ -943,10 +941,7 @@ function playerDetailsFromPayload(
             ? undefined
             : player.eligible_positions.map(({ position }) => position),
         rosterStatus: rosterStatusOf(player.ownership?.ownership_type),
-        actual:
-          completed && series !== undefined
-            ? { period: { week: requestedWeek }, stats: series }
-            : undefined,
+        actual: series === undefined ? undefined : { basis, stats: series },
         projected: undefined,
       });
     }
@@ -954,9 +949,24 @@ function playerDetailsFromPayload(
   });
 }
 
+function statBasis(
+  sport: "football" | "hockey",
+  period: ProviderPeriod | undefined,
+  currentWeek: number | undefined,
+): ProviderStatBasis {
+  if (
+    sport === "football" &&
+    period !== undefined &&
+    (currentWeek === undefined || period.week < currentWeek)
+  ) {
+    return { type: "week", week: period.week };
+  }
+  return { type: "season" };
+}
+
 function statSeries(
   stats: typeof PlayerStats.Type,
-  requestedWeek: number,
+  basis: ProviderStatBasis,
 ): Effect.Effect<
   ReadonlyArray<{ readonly statId: number; readonly value: number | null }>,
   ProviderResponseInvalid | ProviderPeriodMismatch
@@ -966,16 +976,18 @@ function statSeries(
     if (
       stats.entries.length !== 1 ||
       coverage === undefined ||
-      coverage.coverage_type !== "week" ||
-      coverage.week === undefined
+      coverage.coverage_type !== basis.type
     ) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_player_details" });
+      return yield* ProviderResponseInvalid.make({
+        operation: "read_player_details",
+        field: "player_stats",
+      });
     }
-    if (coverage.week !== requestedWeek) {
+    if (basis.type === "week" && coverage.week !== basis.week) {
       return yield* ProviderPeriodMismatch.make({
         operation: "read_player_details",
-        requestedWeek,
-        coveredWeek: coverage.week,
+        requestedWeek: basis.week,
+        coveredWeek: coverage.week ?? null,
       });
     }
     return stats.stats.map(({ stat }) => ({

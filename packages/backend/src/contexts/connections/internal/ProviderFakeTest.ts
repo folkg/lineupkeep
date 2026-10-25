@@ -42,6 +42,7 @@ type FakeProviderState = {
   readonly leagueFailure: ProviderResponseInvalid | undefined;
   readonly roster: ProviderRoster | undefined;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
+  readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
   readonly matchups: ReadonlyArray<ProviderMatchup>;
   readonly transactions: ReadonlyArray<ProviderTransaction>;
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
@@ -67,6 +68,7 @@ export type FakeProviderWorldShape = {
   readonly failLeague: (failure: ProviderResponseInvalid | undefined) => Effect.Effect<void>;
   readonly setRoster: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
+  readonly failPlayerDetails: (failure: ProviderPeriodMismatch | undefined) => Effect.Effect<void>;
   readonly setMatchups: (matchups: ReadonlyArray<ProviderMatchup>) => Effect.Effect<void>;
   readonly setTransactions: (
     transactions: ReadonlyArray<ProviderTransaction>,
@@ -99,6 +101,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         leagueFailure: undefined,
         roster: undefined,
         playerDetails: [],
+        playerDetailsFailure: undefined,
         matchups: [],
         transactions: [],
         leagueTeams: [],
@@ -142,6 +145,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         failLeague: (leagueFailure) => modify((current) => ({ ...current, leagueFailure })),
         setRoster: (roster) => modify((current) => ({ ...current, roster })),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
+        failPlayerDetails: (playerDetailsFailure) =>
+          modify((current) => ({ ...current, playerDetailsFailure })),
         setMatchups: (matchups) => modify((current) => ({ ...current, matchups })),
         setTransactions: (transactions) => modify((current) => ({ ...current, transactions })),
         setLeagueTeams: (leagueTeams) => modify((current) => ({ ...current, leagueTeams })),
@@ -327,6 +332,13 @@ export const ProviderFakeTest = Layer.effect(
       }),
       readPlayerDetails: Effect.fn("FakeProvider.readPlayerDetails")(function* (input) {
         const current = yield* prepare(input, "read_player_details");
+        if (current.playerDetailsFailure !== undefined) {
+          return yield* ProviderPeriodMismatch.make({
+            operation: "read_player_details",
+            requestedWeek: current.playerDetailsFailure.requestedWeek,
+            coveredWeek: current.playerDetailsFailure.coveredWeek,
+          });
+        }
         const requested = new Set(input.providerPlayerKeys);
         return current.playerDetails.filter((player) => requested.has(player.providerPlayerKey));
       }),

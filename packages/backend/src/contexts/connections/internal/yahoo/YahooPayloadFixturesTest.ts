@@ -701,3 +701,260 @@ export const yahooNhlRoster = {
     ],
   },
 };
+
+const playerIdentityFragments = [
+  { player_key: "466.p.20001" },
+  { player_id: "20001" },
+  {
+    name: {
+      full: "Synthetic Starter",
+      first: "Synthetic",
+      last: "Starter",
+      ascii_first: "Synthetic",
+      ascii_last: "Starter",
+    },
+  },
+  { url: "https://sports.yahoo.com/synthetic-player" },
+  { editorial_player_key: "466.p.20001" },
+  { editorial_team_key: "466.l.5000" },
+  { editorial_team_full_name: "Synthetic City" },
+  { editorial_team_abbr: "SYN" },
+  { editorial_team_url: "https://sports.yahoo.com/synthetic-team" },
+  { is_keeper: "0" },
+  { uniform_number: "12" },
+  { display_position: "QB" },
+  { headshot: { image_url: "https://s.yimg.com/synthetic-headshot.png" } },
+  { is_undroppable: "0" },
+  { position_type: "O" },
+  { primary_position: "QB" },
+  { eligible_positions: [{ position: "QB" }] },
+  { eligible_positions_to_add: [] },
+  [],
+  { has_player_notes: "0" },
+  [],
+  { player_notes_last_timestamp: "0" },
+];
+
+export const yahooNflWeekPlayerDetails = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        players: {
+          "0": {
+            player: [
+              playerIdentityFragments,
+              {
+                player_stats: {
+                  "0": { coverage_type: "week", week: "6" },
+                  stats: [
+                    { stat: { stat_id: 4, value: "287" } },
+                    { stat: { stat_id: 9, value: 2 } },
+                    { stat: { stat_id: 79, value: "-" } },
+                  ],
+                },
+                player_points: {
+                  "0": { coverage_type: "week", week: "6" },
+                  total: "24.48",
+                },
+              },
+              {
+                ownership: {
+                  "0": {
+                    teams: {
+                      "0": {
+                        team: [
+                          [
+                            { team_key: "466.l.4000.t.1" },
+                            { team_id: "1" },
+                            { name: "Synthetic Team" },
+                            { is_owned_by_current_login: 1 },
+                            { url: "https://football.fantasysports.yahoo.com/f1/4000/1" },
+                          ],
+                        ],
+                      },
+                      count: 1,
+                    },
+                  },
+                  ownership_type: "team",
+                  owner_team_key: "466.l.4000.t.1",
+                  owner_team_name: "Synthetic Team",
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooNflSeasonPlayerDetails = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        players: {
+          "0": {
+            player: [
+              playerIdentityFragments,
+              {
+                player_stats: {
+                  "0": { coverage_type: "season", season: "2026" },
+                  stats: [
+                    { stat: { stat_id: 4, value: "1640" } },
+                    { stat: { stat_id: 9, value: "11" } },
+                    { stat: { stat_id: 79, value: "-" } },
+                  ],
+                },
+                player_advanced_stats: {
+                  "0": { coverage_type: "season", season: "2026" },
+                  stats: [{ stat: { stat_id: 81, value: "12.5" } }],
+                },
+                player_points: {
+                  "0": { coverage_type: "season", season: "2026" },
+                  total: "142.1",
+                },
+              },
+              {
+                ownership: {
+                  ownership_type: "freeagents",
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooNhlSeasonPlayerDetails = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4002",
+        league_id: "4002",
+        name: "Synthetic Roto League",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
+      },
+      {
+        players: {
+          "0": {
+            player: [
+              [
+                { player_key: "466.p.30001" },
+                { player_id: "30001" },
+                {
+                  name: {
+                    full: "Synthetic Skater",
+                    first: "Synthetic",
+                    last: "Skater",
+                    ascii_first: "Synthetic",
+                    ascii_last: "Skater",
+                  },
+                },
+                { url: "https://sports.yahoo.com/synthetic-skater" },
+                { editorial_player_key: "466.p.30001" },
+                { editorial_team_key: "466.l.5001" },
+                { editorial_team_full_name: "Synthetic City" },
+                { editorial_team_abbr: "SYN" },
+                { editorial_team_url: "https://sports.yahoo.com/synthetic-skater-team" },
+                { is_keeper: "0" },
+                { uniform_number: "11" },
+                { display_position: "C,LW" },
+                { headshot: { image_url: "https://s.yimg.com/synthetic-skater.png" } },
+                { is_undroppable: "0" },
+                { position_type: "P" },
+                { primary_position: "C" },
+                { eligible_positions: [{ position: "C" }, { position: "LW" }] },
+                { eligible_positions_to_add: [] },
+                [],
+                { has_player_notes: "0" },
+                [],
+                { player_notes_last_timestamp: "0" },
+              ],
+              {
+                player_stats: {
+                  "0": { coverage_type: "season", season: "2026" },
+                  stats: [
+                    { stat: { stat_id: 11, value: "4" } },
+                    { stat: { stat_id: 12, value: "6" } },
+                    { stat: { stat_id: 31, value: "23" } },
+                  ],
+                },
+                player_advanced_stats: {
+                  "0": { coverage_type: "season", season: "2026" },
+                  stats: [{ stat: { stat_id: 35, value: "18:24" } }],
+                },
+              },
+              {
+                ownership: {
+                  ownership_type: "waivers",
+                  owner_team_key: "466.l.4002.t.3",
+                  owner_team_name: "Synthetic Team",
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooNhlWeekPlayerDetails = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4002",
+        league_id: "4002",
+        name: "Synthetic Roto League",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
+      },
+      {
+        players: {
+          "0": {
+            player: [
+              [
+                { player_key: "466.p.30001" },
+                { player_id: "30001" },
+                { name: { full: "Synthetic Skater", first: "Synthetic", last: "Skater" } },
+                { display_position: "C,LW" },
+                { position_type: "P" },
+                { primary_position: "C" },
+                { eligible_positions: [{ position: "C" }, { position: "LW" }] },
+                { is_undroppable: "0" },
+              ],
+              {
+                ownership: {
+                  ownership_type: "team",
+                  owner_team_key: "466.l.4002.t.3",
+                  owner_team_name: "Synthetic Team",
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};

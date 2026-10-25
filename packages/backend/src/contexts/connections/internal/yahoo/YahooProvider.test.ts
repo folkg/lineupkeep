@@ -5,7 +5,6 @@ import { Cause, Effect, Exit, Layer, Redacted, Tracer as EffectTracer } from "ef
 import {
   ProviderCrumbUnavailable,
   ProviderGateway,
-  ProviderOperationUnsupported,
   ProviderPeriodMismatch,
   ProviderRequestFailed,
   ProviderResponseInvalid,
@@ -17,12 +16,16 @@ import type { PublicInternetOptions } from "#runtime/PublicInternet.ts";
 
 import {
   yahooNflLeagueSettings,
+  yahooNflSeasonPlayerDetails,
+  yahooNflWeekPlayerDetails,
+  yahooNhlSeasonPlayerDetails,
   yahooNflLeagueSettingsForAnotherLeague,
   yahooNflLeagueSettingsWithTextTeamCount,
   yahooNflLeagueSettingsWithoutEndWeek,
   yahooNhlLeagueSettings,
   yahooNhlRoster,
   yahooNhlRotoLeagueSettings,
+  yahooNhlWeekPlayerDetails,
   yahooNflRoster,
 } from "./YahooPayloadFixturesTest.ts";
 import { YahooProvider } from "./YahooProvider.ts";
@@ -818,36 +821,38 @@ it.effect("rejects an unbounded player search without a request", () => {
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
-it.effect("reads completed-week player statistics with honest missing values", () => {
-  const internet = recordingInternet(() => jsonResponse(rawPlayerDetails));
+it.effect("reads completed-week football statistics on a weekly basis", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflWeekPlayerDetails));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
-      providerPlayerKeys: ["461.p.10001"],
-      period: { week: 3 },
-      currentWeek: 4,
+      providerLeagueKey: "466.l.4000",
+      providerPlayerKeys: ["466.p.20001"],
+      sport: "football",
+      period: { week: 6 },
+      currentWeek: 7,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/461.l.1000/players;player_keys=461.p.10001;out=stats,ownership?format=json&stats.type=week&stats.week=3",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=week&stats.week=6",
     );
     assert.deepStrictEqual(details, [
       {
-        providerPlayerKey: "461.p.10001",
-        name: "Synthetic Player",
+        providerPlayerKey: "466.p.20001",
+        name: "Synthetic Starter",
         primaryPosition: "QB",
         displayPosition: "QB",
         eligiblePositions: ["QB"],
         rosterStatus: "rostered",
         actual: {
-          period: { week: 3 },
+          basis: { type: "week", week: 6 },
           stats: [
-            { statId: 4, value: 12.5 },
-            { statId: 5, value: null },
+            { statId: 4, value: 287 },
+            { statId: 9, value: 2 },
+            { statId: 79, value: null },
           ],
         },
         projected: undefined,
@@ -856,62 +861,84 @@ it.effect("reads completed-week player statistics with honest missing values", (
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
-it.effect("does not present an incomplete week as completed statistics", () => {
-  const internet = recordingInternet(() => jsonResponse(rawPlayerDetails));
+it.effect("reads season statistics on a season basis when no completed week is available", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
-      providerPlayerKeys: ["461.p.10001"],
-      period: { week: 3 },
-      currentWeek: 3,
+      providerLeagueKey: "466.l.4000",
+      providerPlayerKeys: ["466.p.20001"],
+      sport: "football",
+      period: { week: 6 },
+      currentWeek: 6,
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=season",
+    );
+    assert.deepStrictEqual(details[0]?.actual, {
+      basis: { type: "season" },
+      stats: [
+        { statId: 4, value: 1640 },
+        { statId: 9, value: 11 },
+        { statId: 79, value: null },
+      ],
+    });
+    assert.strictEqual(details[0]?.rosterStatus, "free_agent");
+    assert.strictEqual(details[0]?.projected, undefined);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reads season statistics for hockey instead of requesting a weekly series", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlSeasonPlayerDetails));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const details = yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+      providerPlayerKeys: ["466.p.30001"],
+      sport: "hockey",
+      period: { week: 6 },
+      currentWeek: 7,
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/players;player_keys=466.p.30001;out=stats,ownership?format=json&stats.type=season",
+    );
+    assert.deepStrictEqual(details[0]?.actual, {
+      basis: { type: "season" },
+      stats: [
+        { statId: 11, value: 4 },
+        { statId: 12, value: 6 },
+        { statId: 31, value: 23 },
+      ],
+    });
+    assert.strictEqual(details[0]?.rosterStatus, "waiver");
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reports no actual statistics when the provider omits the series", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlWeekPlayerDetails));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const details = yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+      providerPlayerKeys: ["466.p.30001"],
+      sport: "hockey",
+      period: undefined,
+      currentWeek: undefined,
     });
 
     assert.strictEqual(details[0]?.actual, undefined);
+    assert.strictEqual(details[0]?.name, "Synthetic Skater");
     assert.strictEqual(details[0]?.projected, undefined);
-    assert.strictEqual(details[0]?.rosterStatus, "rostered");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
-});
-
-it.effect("reports player-statistics period mismatch", () => {
-  const internet = recordingInternet(() => jsonResponse(rawPlayerDetails));
-  return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
-
-    const error = yield* Effect.flip(
-      provider.readPlayerDetails({
-        ...sessionInput,
-        providerLeagueKey: "461.l.1000",
-        providerPlayerKeys: ["461.p.10001"],
-        period: { week: 4 },
-        currentWeek: 5,
-      }),
-    );
-
-    assert.instanceOf(error, ProviderPeriodMismatch);
-    assert.strictEqual(error.coveredWeek, 3);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
-});
-
-it.effect("requires a week before reading player statistics", () => {
-  const internet = recordingInternet(() => jsonResponse({}));
-  return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
-
-    const error = yield* Effect.flip(
-      provider.readPlayerDetails({
-        ...sessionInput,
-        providerLeagueKey: "461.l.1000",
-        providerPlayerKeys: ["461.p.10001"],
-        period: undefined,
-        currentWeek: 4,
-      }),
-    );
-
-    assert.instanceOf(error, ProviderOperationUnsupported);
-    assert.deepStrictEqual(internet.calls, []);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -1286,41 +1313,6 @@ const rawFreeAgents = {
             ],
           },
           count: 2,
-        },
-      },
-    ],
-  },
-};
-
-const rawPlayerDetails = {
-  fantasy_content: {
-    league: [
-      { league_key: "461.l.1000" },
-      {
-        players: {
-          "0": {
-            player: [
-              [
-                { player_key: "461.p.10001" },
-                { name: { full: "Synthetic Player" } },
-                { primary_position: "QB" },
-                { display_position: "QB" },
-                { eligible_positions: { "0": { position: "QB" }, count: 1 } },
-              ],
-              { ownership: { ownership_type: "team" } },
-              {
-                player_stats: {
-                  "0": { coverage_type: "week", week: "3" },
-                  stats: {
-                    "0": { stat: { stat_id: 4, value: 12.5 } },
-                    "1": { stat: { stat_id: 5, value: "-" } },
-                    count: 2,
-                  },
-                },
-              },
-            ],
-          },
-          count: 1,
         },
       },
     ],

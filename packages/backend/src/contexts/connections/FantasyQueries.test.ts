@@ -17,8 +17,13 @@ import { ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
 import { TransactionReviewsLive } from "./internal/TransactionReviewsLive.ts";
-import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
-import { ProviderResponseInvalid } from "./Provider.ts";
+import type {
+  ProviderLeagueSettings,
+  ProviderPlayerDetail,
+  ProviderRoster,
+  ProviderTeam,
+} from "./Provider.ts";
+import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
 import { QueryTeamNotFound } from "./QueryValues.ts";
 import { TransactionReviews } from "./TransactionReview.ts";
 
@@ -346,15 +351,125 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
     const hydratedPlayer = Array.getUnsafe(hydrated.players, 0);
     assert.strictEqual(hydratedPlayer.identity?.name, "Free Agent");
     assert.strictEqual(hydratedPlayer.actualStats?.status, "available");
-    assert.strictEqual(hydratedPlayer.projections?.status, "available");
     if (hydratedPlayer.actualStats?.status === "available") {
+      assert.strictEqual(hydratedPlayer.actualStats.basis, "week");
+      assert.deepStrictEqual(hydratedPlayer.actualStats.period, { week: 3 });
       assert.strictEqual(Array.getUnsafe(hydratedPlayer.actualStats.stats, 0).value, 0);
     }
-    if (hydratedPlayer.projections?.status === "available") {
-      assert.strictEqual(Array.getUnsafe(hydratedPlayer.projections.stats, 0).value, null);
-    }
+    assert.deepStrictEqual(hydratedPlayer.projections, {
+      status: "unsupported",
+      detail: "This provider does not expose projected player statistics.",
+    });
+    assert.deepStrictEqual(hydrated.failures, []);
+    assert.deepStrictEqual(hydrated.period, { week: 3 });
     assert.strictEqual(hydrated.dictionary.length, 1);
     assert.strictEqual(Array.getUnsafe(hydrated.dictionary, 0).name, "Passing Yards");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect(
+  "states the season basis hockey uses and rejects projections without a period failure",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
+        league: {
+          ...leagueFixture,
+          providerLeagueKey: "465.l.2000",
+          webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
+        },
+        roster: rosterFixture({
+          count: 1,
+          coverage: { type: "date", date: "2026-10-25" },
+          providerTeamKey: "465.l.2000.t.9",
+          providerLeagueKey: "465.l.2000",
+        }),
+        playerDetails: [
+          {
+            providerPlayerKey: "461.p.10001",
+            name: "Synthetic 0",
+            primaryPosition: "QB",
+            displayPosition: "QB",
+            eligiblePositions: ["QB"],
+            rosterStatus: "rostered",
+            actual: { basis: { type: "season" }, stats: [{ statId: 11, value: 4 }] },
+            projected: undefined,
+          },
+        ],
+      });
+      const teamId = Array.getUnsafe(seeded, 0).id;
+      const roster = yield* queries.getRosters(owner, { team: teamId });
+      assert.strictEqual(roster.status, "ok");
+      if (roster.status !== "ok") {
+        return;
+      }
+
+      const hydrated = yield* queries.getPlayers(owner, {
+        team: teamId,
+        players: [Array.getUnsafe(roster.players, 0).player],
+        groups: ["actual_stats", "projections"],
+      });
+
+      assert.strictEqual(hydrated.status, "ok");
+      if (hydrated.status !== "ok") {
+        return;
+      }
+      const player = Array.getUnsafe(hydrated.players, 0);
+      assert.strictEqual(player.actualStats?.status, "available");
+      if (player.actualStats?.status === "available") {
+        assert.strictEqual(player.actualStats.basis, "season");
+        assert.strictEqual(player.actualStats.period, undefined);
+        assert.strictEqual(Array.getUnsafe(player.actualStats.stats, 0).value, 4);
+      }
+      assert.strictEqual(player.projections?.status, "unsupported");
+      assert.strictEqual(hydrated.period, undefined);
+      assert.deepStrictEqual(hydrated.failures, []);
+      assert.isTrue(
+        hydrated.coverage.some(
+          (entry) =>
+            entry.resource === "players" &&
+            entry.detail === "Actual statistics use the season basis.",
+        ),
+      );
+    }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("never pairs an unsupported stat group with a period failure", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok") {
+      return;
+    }
+    const ref = Array.getUnsafe(roster.players, 0).player;
+    yield* fake.failPlayerDetails(
+      ProviderPeriodMismatch.make({
+        operation: "read_player_details",
+        requestedWeek: 3,
+        coveredWeek: null,
+      }),
+    );
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players: [ref],
+      period: { week: 3 },
+      groups: ["actual_stats", "projections"],
+    });
+
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    const player = Array.getUnsafe(hydrated.players, 0);
+    assert.strictEqual(player.actualStats?.status, "unsupported");
+    assert.strictEqual(player.projections?.status, "unsupported");
+    assert.deepStrictEqual(hydrated.failures, []);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -698,6 +813,7 @@ function seed(
   options: {
     readonly roster?: ProviderRoster;
     readonly league?: ProviderLeagueSettings;
+    readonly playerDetails?: ReadonlyArray<ProviderPlayerDetail>;
   } = {},
 ): Effect.Effect<
   ReadonlyArray<{ readonly id: import("./FantasyTeam.ts").TeamId }>,
@@ -709,7 +825,7 @@ function seed(
     yield* fake.setTeams(teams);
     yield* fake.setLeague(options.league ?? leagueFixture);
     yield* fake.setRoster(options.roster ?? rosterFixture({ count: 2 }));
-    yield* fake.setPlayerDetails(playerDetails);
+    yield* fake.setPlayerDetails(options.playerDetails ?? playerDetails);
     yield* fake.setMatchups([
       {
         period: { week: 3 },
@@ -833,8 +949,8 @@ const playerDetails = [
     displayPosition: "QB",
     eligiblePositions: ["QB"],
     rosterStatus: "rostered" as const,
-    actual: { period: { week: 3 }, stats: [{ statId: 4, value: 275 }] },
-    projected: { period: { week: 3 }, stats: [{ statId: 4, value: 250 }] },
+    actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 275 }] },
+    projected: undefined,
   },
   {
     providerPlayerKey: "461.p.10002",
@@ -843,8 +959,8 @@ const playerDetails = [
     displayPosition: "QB",
     eligiblePositions: ["QB"],
     rosterStatus: "rostered" as const,
-    actual: { period: { week: 3 }, stats: [{ statId: 4, value: 0 }] },
-    projected: { period: { week: 3 }, stats: [{ statId: 4, value: null }] },
+    actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 0 }] },
+    projected: undefined,
   },
   {
     providerPlayerKey: "461.p.10003",
@@ -853,8 +969,8 @@ const playerDetails = [
     displayPosition: "RB",
     eligiblePositions: ["RB", "W/R"],
     rosterStatus: "free_agent" as const,
-    actual: { period: { week: 3 }, stats: [{ statId: 4, value: 0 }] },
-    projected: { period: { week: 3 }, stats: [{ statId: 4, value: null }] },
+    actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 0 }] },
+    projected: undefined,
   },
 ];
 

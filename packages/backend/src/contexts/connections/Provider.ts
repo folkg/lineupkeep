@@ -140,8 +140,12 @@ type ProviderStatValue = {
   readonly value: number | null;
 };
 
+export type ProviderStatBasis =
+  | { readonly type: "week"; readonly week: number }
+  | { readonly type: "season" };
+
 export type ProviderPlayerStatGroup = {
-  readonly period: ProviderPeriod;
+  readonly basis: ProviderStatBasis;
   readonly stats: ReadonlyArray<ProviderStatValue>;
 };
 
@@ -346,6 +350,7 @@ export type ProviderGatewayShape = {
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
       readonly providerPlayerKeys: ReadonlyArray<string>;
+      readonly sport: ProviderSport;
       readonly period: ProviderPeriod | undefined;
       readonly currentWeek: number | undefined;
     },

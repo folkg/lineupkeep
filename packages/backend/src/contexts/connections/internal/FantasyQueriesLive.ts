@@ -666,7 +666,7 @@ export const FantasyQueriesLive = Layer.effect(
         (roster?.coverage.type === "week" ? { week: roster.coverage.week } : undefined);
       let details: ReadonlyArray<ProviderPlayerDetail> = [];
       let detailsUnsupported: string | undefined;
-      if (groups.includes("actual_stats") || groups.includes("projections")) {
+      if (groups.includes("actual_stats")) {
         const detailsOutcome = yield* readOutcome(
           context,
           "players",
@@ -674,23 +674,21 @@ export const FantasyQueriesLive = Layer.effect(
             ...providerIdentity(context),
             providerLeagueKey: leagueKey,
             providerPlayerKeys: valid.map((row) => row.providerPlayerKey),
+            sport: context.owned.team.sport,
             period: requestedPeriod,
             currentWeek: league?.periodWindow?.currentWeek,
           }),
         );
         if (detailsOutcome._tag === "ok") {
           details = detailsOutcome.value;
+          const basis = details.find((player) => player.actual !== undefined)?.actual?.basis;
           coverageEntries.push(
             coverage(
               "players",
               "player_details",
               fetchedAt,
               undefined,
-              requestedPeriod !== undefined &&
-                league?.periodWindow !== undefined &&
-                requestedPeriod.week >= league.periodWindow.currentWeek
-                ? "Week statistics are reported only after a period completes."
-                : undefined,
+              basis === undefined ? undefined : `Actual statistics use the ${basis.type} basis.`,
             ),
           );
         } else {
@@ -804,38 +802,27 @@ export const FantasyQueriesLive = Layer.effect(
                 : detail?.actual === undefined
                   ? {
                       status: "unsupported" as const,
-                      detail:
-                        "The provider reported no actual statistics for this player and period.",
+                      detail: "The provider reported no actual statistics for this player.",
                     }
                   : {
                       status: "available" as const,
-                      period: detail.actual.period,
+                      basis: detail.actual.basis.type,
+                      ...(detail.actual.basis.type === "week"
+                        ? { period: { week: detail.actual.basis.week } }
+                        : {}),
                       stats: yield* statValues(detail.actual.stats),
                     };
             const projections = !groups.includes("projections")
               ? undefined
-              : detailsUnsupported !== undefined
-                ? { status: "unsupported" as const, detail: detailsUnsupported }
-                : detail?.projected === undefined
-                  ? {
-                      status: "unsupported" as const,
-                      detail: "This provider does not expose projected player statistics.",
-                    }
-                  : {
-                      status: "available" as const,
-                      period: detail.projected.period,
-                      stats: yield* statValues(detail.projected.stats),
-                    };
+              : {
+                  status: "unsupported" as const,
+                  detail: "This provider does not expose projected player statistics.",
+                };
             const scoringContext = !groups.includes("scoring_context")
               ? undefined
               : yield* scoringFor(rosterPlayer);
             if (actualStats?.status === "available") {
               for (const stat of detail?.actual?.stats ?? []) {
-                dictionaryStatIds.add(stat.statId);
-              }
-            }
-            if (projections?.status === "available") {
-              for (const stat of detail?.projected?.stats ?? []) {
                 dictionaryStatIds.add(stat.statId);
               }
             }
@@ -864,12 +851,14 @@ export const FantasyQueriesLive = Layer.effect(
           statRefFor(statId).pipe(Effect.map((ref) => dictionaryEntry(statId, ref, league))),
         { concurrency: 1 },
       );
-      const period = requestedPeriod;
+      const weekBasis = details.flatMap((player) =>
+        player.actual?.basis.type === "week" ? [player.actual.basis.week] : [],
+      );
+      const period = weekBasis.length === 0 ? undefined : { week: weekBasis[0] ?? 1 };
       const hasData = playerRows.some(
         (row) =>
           row.identity !== undefined ||
           row.actualStats?.status === "available" ||
-          row.projections?.status === "available" ||
           row.scoringContext?.status === "available",
       );
       const status: QueryStatus = valid.length === 0 ? "failed" : hasData ? "ok" : "unsupported";
