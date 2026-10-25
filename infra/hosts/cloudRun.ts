@@ -46,6 +46,99 @@ export function cloudRunHost(
         }),
         region,
       );
+      const runtimeEnv = [
+        ...plain.map(([name, value]) => ({ name, value })),
+        ...secretEntries.map(({ name, secret, version }) => ({
+          name,
+          valueSource: {
+            secretKeyRef: {
+              secret: secret.name,
+              version,
+            },
+          },
+        })),
+      ];
+      const workerAccount = yield* GCP.IAM.ServiceAccount("WorkerRuntime", {
+        displayName: "Lineupkeep private lineup worker",
+      });
+      const queueEnqueuer = yield* GCP.IAM.ServiceAccount("QueueEnqueuer", {
+        displayName: "Lineupkeep queue enqueuer and scheduler invoker",
+      });
+      const queue = yield* GCP.CloudTasks.Queue("LineupWorkerQueue", {
+        location: region,
+        retryConfig: {
+          maxAttempts: 5,
+          minBackoff: "10s",
+          maxBackoff: "300s",
+          maxDoublings: 3,
+        },
+        rateLimits: { maxDispatchesPerSecond: 5, maxConcurrentDispatches: 4 },
+      });
+      const worker = yield* GCP.Run.Service("Worker", {
+        location: region,
+        ingress: "INGRESS_TRAFFIC_ALL",
+        invokerIamDisabled: false,
+        template: {
+          timeout: "900s",
+          maxInstanceRequestConcurrency: 2,
+          scaling: { minInstanceCount: 0, maxInstanceCount: 2 },
+          serviceAccount: workerAccount.email,
+          containers: [
+            {
+              ...cloudRunContainer(),
+              image,
+              env: [...runtimeEnv, { name: "LINEUP_WORKER_ENABLED", value: "true" }],
+            },
+          ],
+        },
+      });
+      const workerUrl = Output.map(worker.uri, (uri) => {
+        if (uri === undefined) {
+          throw new Error("Cloud Run did not return a worker URI");
+        }
+        return uri;
+      });
+      yield* GCP.IAM.Member("WorkerInvoker", {
+        kind: "run.service",
+        name: worker.name,
+        role: "roles/run.invoker",
+        member: Output.map(queueEnqueuer.email, (email) => `serviceAccount:${email}`),
+      });
+      yield* GCP.IAM.Member("QueueEnqueuer", {
+        kind: "cloudtasks.queue",
+        name: queue.name,
+        role: "roles/cloudtasks.enqueuer",
+        member: Output.map(account.email, (email) => `serviceAccount:${email}`),
+      });
+      yield* GCP.IAM.Member("QueueActAs", {
+        kind: "iam.serviceAccount",
+        name: queueEnqueuer.name,
+        role: "roles/iam.serviceAccountUser",
+        member: Output.map(account.email, (email) => `serviceAccount:${email}`),
+      });
+      yield* GCP.CloudScheduler.Job("LineupRepair", {
+        location: region,
+        schedule: "0 * * * *",
+        timeZone: "UTC",
+        attemptDeadline: "60s",
+        retryConfig: {
+          retryCount: 2,
+          maxRetryDuration: "300s",
+          maxDoublings: 2,
+          minBackoffDuration: "30s",
+          maxBackoffDuration: "300s",
+        },
+        httpTarget: {
+          uri: Output.interpolate`${workerUrl}/api/internal/lineup-worker`,
+          httpMethod: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "repair", limit: 50 }),
+          oidcToken: {
+            serviceAccountEmail: queueEnqueuer.email,
+            audience: workerUrl,
+          },
+        },
+      });
       const service = yield* GCP.Run.Service("Web", {
         location: region,
         ingress: "INGRESS_TRAFFIC_ALL",
@@ -58,16 +151,10 @@ export function cloudRunHost(
               ...cloudRunContainer(),
               image,
               env: [
-                ...plain.map(([name, value]) => ({ name, value })),
-                ...secretEntries.map(({ name, secret, version }) => ({
-                  name,
-                  valueSource: {
-                    secretKeyRef: {
-                      secret: secret.name,
-                      version,
-                    },
-                  },
-                })),
+                ...runtimeEnv,
+                { name: "LINEUP_CLOUD_TASKS_QUEUE", value: queue.name },
+                { name: "LINEUP_WORKER_URL", value: workerUrl },
+                { name: "LINEUP_QUEUE_SERVICE_ACCOUNT", value: queueEnqueuer.email },
               ],
             },
           ],
