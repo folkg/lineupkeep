@@ -51,6 +51,8 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "get_matchups",
     "get_transactions",
     "generate_transaction_review_links",
+    "set_lineup",
+    "get_lineup_runs",
   ]);
 });
 
@@ -111,6 +113,16 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   expect(reviewDenied.status).toBe(403);
   expect(reviewDenied.headers.get("www-authenticate")).toContain('scope="transactions:review"');
 
+  const lineupDenied = await client.request("tools/call", {
+    name: "set_lineup",
+    arguments: {
+      requestId: randomUUID(),
+      teams: [{ team: randomUUID(), period: { coverage: "week", week: 3 } }],
+    },
+  });
+  expect(lineupDenied.status).toBe(403);
+  expect(lineupDenied.headers.get("www-authenticate")).toContain('scope="lineups:write"');
+
   const readAuthorization = await authorize(page, origin, "fantasy:read");
   const reader = mcpClient(mcpEndpoint(origin), readAuthorization.credentials.access_token);
   const teams = await reader.callTool("list_teams", {});
@@ -129,6 +141,15 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   });
   expect(review.isError).toBe(true);
   expect(JSON.stringify(review)).not.toContain("submit");
+
+  const lineupAuthorization = await authorize(page, origin, "lineups:write");
+  const lineupWriter = mcpClient(mcpEndpoint(origin), lineupAuthorization.credentials.access_token);
+  const missingTeam = await lineupWriter.callTool("set_lineup", {
+    requestId: randomUUID(),
+    teams: [{ team: randomUUID(), period: { coverage: "week", week: 3 } }],
+  });
+  expect(missingTeam.isError).toBe(true);
+  expect(JSON.stringify(missingTeam)).not.toContain("completed");
 });
 
 test("returns access_denied and the original state when consent is denied", async ({

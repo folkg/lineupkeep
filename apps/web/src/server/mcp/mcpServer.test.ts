@@ -5,12 +5,16 @@ import type { ConnectionsShape } from "@lineupkeep/backend/connections/Connectio
 import { Connections } from "@lineupkeep/backend/connections/Connections";
 import type { FantasyQueriesShape } from "@lineupkeep/backend/connections/FantasyQueries";
 import { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
-import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
+import { TeamId, decodeTeamId } from "@lineupkeep/backend/connections/FantasyTeam";
+import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
+import type { LineupSubmitData } from "@lineupkeep/backend/connections/LineupRun";
+import type { LineupRunsShape } from "@lineupkeep/backend/connections/LineupRuns";
+import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import { PlayerRef } from "@lineupkeep/backend/connections/QueryValues";
 import type { ReviewLinksData } from "@lineupkeep/backend/connections/TransactionReview";
 import type { TransactionReviewsShape } from "@lineupkeep/backend/connections/TransactionReview";
 import { TransactionReviews } from "@lineupkeep/backend/connections/TransactionReview";
-import { Effect, Layer, Schema } from "effect";
+import { DateTime, Effect, Layer, Schema } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { expect, it } from "vitest";
 
@@ -131,7 +135,6 @@ it("lists only the read-only connection tool without exposing account identity",
   expect(response.status).toBe(200);
   expect(JSON.stringify(body)).toContain('"readOnlyHint":true');
   expect(JSON.stringify(body)).not.toContain('"userId"');
-  expect(JSON.stringify(body)).not.toContain('"requestId"');
   const decoded = Schema.decodeUnknownSync(
     Schema.Struct({
       result: Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: Schema.String })) }),
@@ -148,6 +151,8 @@ it("lists only the read-only connection tool without exposing account identity",
     "get_matchups",
     "get_transactions",
     "generate_transaction_review_links",
+    "set_lineup",
+    "get_lineup_runs",
   ]);
 });
 
@@ -209,6 +214,7 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(LineupRuns)(unavailableLineups),
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
@@ -271,6 +277,7 @@ it("requires transaction review scope and returns human-review-only links", asyn
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(reviews),
+    Layer.succeed(LineupRuns)(unavailableLineups),
   );
   const run = (invocation: Request): Promise<Response> =>
     handleMcpRequest(invocation, (_request, _operation, program) =>
@@ -310,6 +317,74 @@ it("requires transaction review scope and returns human-review-only links", asyn
     },
   });
   expect(JSON.stringify(body)).not.toContain("submit");
+});
+
+it("returns a durable queued lineup reference without claiming success", async () => {
+  const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
+  const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164b0");
+  const lineups: LineupRunsShape = {
+    ...unavailableLineups,
+    submit: (_userId, input) =>
+      Effect.succeed({
+        request: input.requestId,
+        delivery: "queued",
+        runs: [
+          {
+            run: Schema.decodeSync(LineupRunId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b1"),
+            request: input.requestId,
+            team,
+            target: { coverage: "week", week: 3 },
+            trigger: "manual",
+            implementation: "provider_native",
+            implementationVersion: "provider-native/1",
+            status: "queued",
+            attempts: 0,
+            createdAt: at,
+            updatedAt: at,
+            pending: { reason: "queued", detail: "The durable run is in progress." },
+          },
+        ],
+      } satisfies LineupSubmitData),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(unavailableQueries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(LineupRuns)(lineups),
+  );
+  const call = (invocation: Request): Promise<Response> =>
+    handleMcpRequest(invocation, (_request, _operation, program) =>
+      Effect.runPromise(Effect.provide(program, services)),
+    );
+
+  const response = await call(
+    request(
+      "tools/call",
+      {
+        name: "set_lineup",
+        arguments: {
+          requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b2",
+          teams: [{ team, period: { coverage: "week", week: 3 } }],
+        },
+      },
+      "write",
+    ),
+  );
+  const body = await json(response);
+
+  expect(response.status).toBe(200);
+  expect(body).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        delivery: "queued",
+        runs: [{ status: "queued" }],
+        wait: { timeoutMs: 0, settled: false },
+      },
+    },
+  });
+  expect(JSON.stringify(body)).not.toContain("completed");
 });
 
 const authentication = Layer.succeed(AuthService)({
@@ -358,6 +433,7 @@ function handle(
     Layer.succeed(Connections)(connections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(LineupRuns)(unavailableLineups),
   );
   return handleMcpRequest(request, (_request, _operation, program) =>
     Effect.runPromise(Effect.provide(program, services)),
@@ -376,6 +452,12 @@ const unavailableQueries: FantasyQueriesShape = {
 };
 const unavailableReviews: TransactionReviewsShape = {
   generate: () => Effect.die(new Error("reviews unavailable")),
+};
+const unavailableLineups: LineupRunsShape = {
+  submit: () => Effect.die(new Error("lineups unavailable")),
+  get: () => Effect.die(new Error("lineups unavailable")),
+  wait: () => Effect.die(new Error("lineups unavailable")),
+  runsForRequest: () => Effect.die(new Error("lineups unavailable")),
 };
 
 function request(
