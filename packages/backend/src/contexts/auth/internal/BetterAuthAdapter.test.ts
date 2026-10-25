@@ -592,8 +592,10 @@ it.effect(
         ["first", "second"],
       );
       const clients = yield* Effect.promise(() => database.select().from(oauthClient));
-      assert.strictEqual(clients.length, 1);
-      assert.strictEqual(clients[0]?.clientId, "https://connections-client.test/client.json");
+      const metadataClients = clients.filter(
+        (client) => client.clientId === "https://connections-client.test/client.json",
+      );
+      assert.strictEqual(metadataClients.length, 1);
     }).pipe(
       Effect.provide(
         Layer.mergeAll(

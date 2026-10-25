@@ -3,7 +3,12 @@ import { assert, it } from "@effect/vitest";
 import { eq } from "drizzle-orm";
 import { ConfigProvider, DateTime, Effect, Layer, Schema } from "effect";
 
-import { AuthorizationScopes } from "#contexts/auth/AuthorizationScopes.ts";
+import {
+  AuthorizationScopes,
+  linkingHelperClient,
+  linkingHelperScope,
+} from "#contexts/auth/AuthorizationScopes.ts";
+import { decodeUserId } from "#contexts/auth/User.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
 import { BackgroundWork } from "#runtime/BackgroundWork.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
@@ -157,10 +162,17 @@ const deviceMetadata = PublicInternet.fromTransport((request) =>
   ),
 );
 
-function startDeviceAuthorization(adapter: AuthHandler): Effect.Effect<
+function startDeviceAuthorization(
+  adapter: AuthHandler,
+  clientId: string = helperClientId,
+  scope: string = "connections:read",
+  resource?: string,
+): Effect.Effect<
   {
     readonly device_code: string;
     readonly user_code: string;
+    readonly verification_uri: string;
+    readonly verification_uri_complete: string;
     readonly expires_in: number;
     readonly interval: number;
   },
@@ -170,8 +182,9 @@ function startDeviceAuthorization(adapter: AuthHandler): Effect.Effect<
   return Effect.gen(function* () {
     const response = yield* adapter.handle(
       authRequest("/device/code", {
-        client_id: helperClientId,
-        scope: "connections:read",
+        client_id: clientId,
+        scope,
+        ...(resource === undefined ? {} : { resource }),
       }),
     );
     assert.strictEqual(response.status, 200);
@@ -282,6 +295,86 @@ it.effect(
 
       const redeemed = yield* adapter.handle(deviceTokenRequest(grant.device_code, helperClientId));
       assert.strictEqual(redeemed.status, 200);
+    }).pipe(Effect.provide(adapterLayer())),
+  30_000,
+);
+
+it.effect(
+  "registers the first-party linking helper for one narrow scope and binds its tokens to that client",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const owner = yield* signIn(adapter, "linking-helper-owner@example.test");
+      const session = yield* adapter.getSession(new Headers({ cookie: owner }));
+      if (session === undefined) {
+        return yield* Effect.die("the owner is signed in");
+      }
+
+      const grant = yield* startDeviceAuthorization(
+        adapter,
+        linkingHelperClient.clientId,
+        linkingHelperScope.name,
+        "http://localhost:5173/mcp",
+      );
+      assert.strictEqual(grant.verification_uri, "http://localhost:5173/connections");
+      assert.include(grant.verification_uri_complete, "user_code=");
+
+      const review = yield* adapter.claimDeviceAuthorization(
+        new Headers({ cookie: owner }),
+        grant.user_code,
+      );
+      assert.deepStrictEqual(review, {
+        clientId: linkingHelperClient.clientId,
+        scope: linkingHelperScope.name,
+      });
+      yield* adapter.approveDeviceAuthorization(new Headers({ cookie: owner }), grant.user_code);
+
+      const exchanged = yield* adapter.handle(
+        deviceTokenRequest(grant.device_code, linkingHelperClient.clientId),
+      );
+      const credentials = yield* jsonOf(
+        exchanged,
+        Schema.Struct({ access_token: Schema.String, scope: Schema.String }),
+      );
+      assert.strictEqual(exchanged.status, 200);
+      assert.strictEqual(credentials.scope, linkingHelperScope.name);
+
+      assert.deepStrictEqual(
+        yield* adapter.resolveAccessToken(
+          credentials.access_token,
+          [linkingHelperScope.name],
+          linkingHelperClient.clientId,
+        ),
+        { status: "authenticated", userId: decodeUserId(session.user.id) },
+      );
+      assert.deepStrictEqual(
+        yield* adapter.resolveAccessToken(
+          credentials.access_token,
+          [linkingHelperScope.name],
+          "https://other-client.test/client.json",
+        ),
+        { status: "invalid" },
+      );
+      assert.deepStrictEqual(
+        yield* adapter.resolveAccessToken(
+          credentials.access_token,
+          ["connections:read"],
+          linkingHelperClient.clientId,
+        ),
+        { status: "insufficient_scope" },
+      );
+
+      const broader = yield* adapter.handle(
+        authRequest("/device/code", {
+          client_id: linkingHelperClient.clientId,
+          scope: "connections:read",
+        }),
+      );
+      assert.strictEqual(broader.status, 400);
+      assert.strictEqual(
+        (yield* jsonOf(broader, Schema.Struct({ error: Schema.String }))).error,
+        "invalid_scope",
+      );
     }).pipe(Effect.provide(adapterLayer())),
   30_000,
 );

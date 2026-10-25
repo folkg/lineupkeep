@@ -11,6 +11,17 @@ export const offlineAccess = {
     "Stay connected with renewable access until this authorization expires or is revoked.",
 } as const;
 
+export const linkingHelperClient = {
+  clientId: "lineupkeep-linking-helper",
+  name: "Lineupkeep local helper",
+} as const;
+
+export const linkingHelperScope = {
+  name: "connections:link",
+  description:
+    "Send one provider session from the local helper you approved to finish linking a connection.",
+} as const;
+
 export type AuthorizationScope = {
   readonly name: string;
   readonly description: string;

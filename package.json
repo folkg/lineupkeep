@@ -39,7 +39,7 @@
     "build:node": "DEPLOY_TARGET=node bun run build",
     "build:cloudflare": "DEPLOY_TARGET=cloudflare bun run build",
     "build:all": "bun run build:node && bun run build:cloudflare",
-    "architecture": "depcruise packages/backend/src packages/brand/src apps/web/src e2e infra tools scripts --output-type err-long && bun --filter @lineupkeep/backend architecture",
+    "architecture": "depcruise packages/backend/src packages/brand/src apps/web/src apps/linking-helper/src e2e infra tools scripts --output-type err-long && bun --filter @lineupkeep/backend architecture",
     "checks": "time sh -c 'bun run fix && bun run architecture && bun run knip && bun run knip:production && bun run test && bun run build:all'",
     "checks:ci": "bun run lint:check && bun run format:check && bun run architecture && bun run knip && bun run knip:production && bun run test && bun run build:all",
     "db:generate": "drizzle-kit generate --config=packages/backend/drizzle.config.ts",

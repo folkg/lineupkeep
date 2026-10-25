@@ -12,7 +12,7 @@ An independent, provider-neutral fantasy-management product, prepared from a fre
 4. [Planning index](docs/fantasy-manager/README.md): all decisions, research, glossary, MCP/architecture/hosting proposals, UX brief, and ADRs.
 5. [Setup provenance](docs/SETUP.md) and [release readiness](docs/release-readiness.md).
 
-**Current state:** independent repository, brand/design-system foundation, retained starter authentication, and a first connections vertical that pairs a local helper through device authorization, then approves or cancels the connection. The Notes demo is removed. Provider-credential linking, provider queries, lineup setting, scheduling, and optimization are **not implemented**. The current dependency baseline has a documented critical publication blocker. The [autonomous Phase 1 mandate](docs/PHASE-1-HANDOFF.md) records implementation/setup authority and conditional rollout gates; current checks are not release acceptance.
+**Current state:** independent repository, brand/design-system foundation, retained starter authentication, and a first connections vertical that pairs a local helper through device authorization. The first-party `lineupkeep` helper signs in to Yahoo through a temporary Chromium profile, validates the session through the app, and stores it as an encrypted, owner-scoped connection. The Notes demo is removed. Rich provider queries, lineup setting, scheduling, and optimization are **not implemented**. Live Yahoo acceptance is separate from the automated checks. The current dependency baseline has a documented critical publication blocker. The [autonomous Phase 1 mandate](docs/PHASE-1-HANDOFF.md) records implementation/setup authority and conditional rollout gates; current checks are not release acceptance.
 
 The lowercase wordmark is **lineupkeep**; ordinary prose uses **Lineupkeep**. The approved palette is **royal violet and gold**, with complete light/dark themes. No domain has been purchased or production origin configured.
 
@@ -67,6 +67,20 @@ Use `./module` for same-directory imports, package-owned `#…` imports for othe
 ## Next work
 
 The owner has chosen to proceed with local implementation on the current pinned baseline while awaiting a coherent security fix. Follow the [delivery stages](docs/fantasy-manager/DELIVERY-PLAN.md), resolving feasibility at each owning slice; keep the security fix as a pre-publication gate rather than a blanket local-development stop. Remain loopback-only and do not publicly tunnel the vulnerable transport. Use the [autonomous Phase 1 handoff](docs/PHASE-1-HANDOFF.md) for the complete assignment, authorized GCP CLI setup, secure credential provisioning, and conditional deployment gates. Do not ask for a new assignment after each internal slice. The Notes demo is removed; the connections vertical is scaffolding for linking, not a finished product surface.
+
+## Link a Yahoo account
+
+The first-party local helper links a Yahoo session without collecting your provider password in Lineupkeep. Keep the app running, then:
+
+```sh
+bun install
+bunx playwright install chromium   # once per machine
+./node_modules/.bin/lineupkeep link
+```
+
+The helper prints a public pairing code and the app's Connections URL. Open that URL, sign in to Lineupkeep, enter the code, and approve the helper. It then opens Yahoo in a temporary Chromium profile; sign in there and leave the window open until the helper reports success. The app validates the session and stores an encrypted connection. The helper removes the temporary profile when it finishes.
+
+Use `--app-url <origin>` (or `LINEUPKEEP_APP_URL`) when the app is not at `http://localhost:5173`, and `--help` for the full usage. The helper keeps the device code and access token in memory, never in command arguments or output, and never reads your normal browser profile. The token authorizes only the credential upload and expires on its own. Live linking requires a Yahoo account and is not part of the automated test suite; see [the helper README](apps/linking-helper/README.md).
 
 ## Connecting an MCP client
 

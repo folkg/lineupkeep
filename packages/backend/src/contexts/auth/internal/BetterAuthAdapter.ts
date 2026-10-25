@@ -3,7 +3,7 @@ import { getCurrentAuthEndpointContext } from "@better-auth/core/context";
 import type { DB } from "@better-auth/drizzle-adapter/relations-v2";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { mcp } from "@better-auth/mcp";
-import { oauthDeviceAuthorization } from "@better-auth/oauth-provider";
+import { DEVICE_CODE_GRANT_TYPE, oauthDeviceAuthorization } from "@better-auth/oauth-provider";
 import { productName } from "@lineupkeep/brand/product";
 import { getSessionCookie } from "better-auth/cookies";
 import { betterAuth } from "better-auth/minimal";
@@ -13,6 +13,7 @@ import {
   Config,
   ConfigProvider,
   Context,
+  DateTime,
   Duration,
   Effect,
   Layer,
@@ -33,7 +34,12 @@ import type {
   AuthenticationSession,
   AccessTokenResolution,
 } from "#contexts/auth/Auth.ts";
-import { AuthorizationScopes, offlineAccess } from "#contexts/auth/AuthorizationScopes.ts";
+import {
+  AuthorizationScopes,
+  linkingHelperClient,
+  linkingHelperScope,
+  offlineAccess,
+} from "#contexts/auth/AuthorizationScopes.ts";
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import { UserId } from "#contexts/auth/User.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
@@ -44,6 +50,7 @@ import { PublicInternet } from "#runtime/PublicInternet.ts";
 import { AuthDatabase } from "./AuthDatabase.ts";
 import * as authSchema from "./AuthTables.ts";
 import * as oauthSchema from "./OAuthTables.ts";
+import { oauthClient, oauthClientResource } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
 
 export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
@@ -90,7 +97,13 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         runInBackground: background.extend,
         requestSignInCode: (request, code) => requestedCodes.set(request, code),
       };
-      const loadAuth = yield* Effect.cached(initializeAuth(authOptions));
+      const loadAuth = yield* Effect.cached(
+        Effect.gen(function* () {
+          const auth = yield* initializeAuth(authOptions);
+          yield* seedLinkingHelperClient(database, oauthResource);
+          return auth;
+        }),
+      );
 
       const runAuthHandler = Effect.fnUntraced(function* (request: Request) {
         const auth = yield* loadAuth;
@@ -186,6 +199,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       const resolveAccessToken = Effect.fn("AuthService.resolveAccessToken")(function* (
         token: string,
         requiredScopes: ReadonlyArray<string>,
+        expectedClientId?: string,
       ): Effect.fn.Return<AccessTokenResolution, AuthenticationUnavailable> {
         const auth = yield* loadAuth;
         const { payload } = yield* Effect.tryPromise({
@@ -194,7 +208,11 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           catch: (cause) => AuthenticationUnavailable.make({ cause }),
         });
         const claims = Schema.decodeUnknownOption(AccessTokenClaims)(payload);
-        if (Option.isNone(claims) || claims.value.cnf !== undefined) {
+        if (
+          Option.isNone(claims) ||
+          claims.value.cnf !== undefined ||
+          (expectedClientId !== undefined && claims.value.client_id !== expectedClientId)
+        ) {
           return { status: "invalid" };
         }
         if (!requiredScopes.every((scope) => claims.value.scope.split(" ").includes(scope))) {
@@ -421,6 +439,57 @@ function initializeAuth(
   );
 }
 
+function seedLinkingHelperClient(
+  database: AuthDatabase["Service"],
+  resource: string,
+): Effect.Effect<void, AuthenticationUnavailable> {
+  return Effect.gen(function* () {
+    const now = DateTime.toDateUtc(yield* DateTime.now);
+    const registration = {
+      clientId: linkingHelperClient.clientId,
+      name: linkingHelperClient.name,
+      redirectUris: [],
+      grantTypes: [DEVICE_CODE_GRANT_TYPE],
+      responseTypes: [],
+      tokenEndpointAuthMethod: "none",
+      applicationType: "native",
+      scopes: [linkingHelperScope.name],
+      disabled: false,
+    };
+    yield* Effect.tryPromise({
+      try: () =>
+        database
+          .insert(oauthClient)
+          .values({
+            ...registration,
+            id: linkingHelperClient.clientId,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: oauthClient.clientId,
+            set: { ...registration, updatedAt: now },
+          })
+          .then(() => undefined),
+      catch: (cause) => AuthenticationUnavailable.make({ cause }),
+    });
+    yield* Effect.tryPromise({
+      try: () =>
+        database
+          .insert(oauthClientResource)
+          .values({
+            id: `${linkingHelperClient.clientId}:${resource}`,
+            clientId: linkingHelperClient.clientId,
+            resourceId: resource,
+            createdAt: now,
+          })
+          .onConflictDoNothing()
+          .then(() => undefined),
+      catch: (cause) => AuthenticationUnavailable.make({ cause }),
+    });
+  });
+}
+
 function createAuth(options: AuthFactoryOptions): ApplicationAuth {
   return betterAuth<ApplicationAuthOptions>({
     appName: productName,
@@ -470,6 +539,7 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
       oauthDeviceAuthorization({
         expiresIn: "10 minutes",
         interval: "5 seconds",
+        verificationUri: new URL("/connections", options.baseUrl).href,
       }),
       emailOTP({
         otpLength: 6,
@@ -717,6 +787,7 @@ const AccessTokenClaims = Schema.Struct({
   sub: UserId,
   scope: Schema.String,
   exp: Schema.Finite,
+  client_id: Schema.optional(Schema.String),
   cnf: Schema.optional(Schema.Unknown),
 });
 

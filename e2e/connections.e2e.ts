@@ -148,6 +148,23 @@ test("keeps another person's connections invisible", async ({ page, newUser, ser
   await expect(other.getByRole("article")).toHaveCount(0);
 });
 
+test("refuses an unauthenticated helper upload with a safe error", async ({ request, baseURL }) => {
+  const origin = requiredOrigin(baseURL);
+
+  const response = await request.post(`${origin}/api/linking/complete`, {
+    data: {
+      userCode: "ABCD2345",
+      provider: "yahoo",
+      session: "T=test-session-canary; Y=test-user-canary",
+    },
+    headers: { origin },
+  });
+
+  expect(response.status()).toBe(401);
+  expect(response.headers()["cache-control"]).toContain("no-store");
+  expect(await response.json()).toEqual({ error: "unauthorized" });
+});
+
 function requiredOrigin(value: string | undefined): string {
   if (value === undefined) {
     throw new Error("Missing test origin");

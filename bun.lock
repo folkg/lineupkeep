@@ -36,6 +36,21 @@
         "vitest": "catalog:",
       },
     },
+    "apps/linking-helper": {
+      "name": "@lineupkeep/linking-helper",
+      "bin": {
+        "lineupkeep": "./src/main.ts",
+      },
+      "dependencies": {
+        "@lineupkeep/backend": "workspace:*",
+        "effect": "catalog:",
+        "playwright": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/platform-node-shared": "catalog:",
+        "@effect/vitest": "catalog:",
+      },
+    },
     "apps/web": {
       "name": "@lineupkeep/web",
       "dependencies": {
@@ -557,6 +572,8 @@
     "@lineupkeep/brand": ["@lineupkeep/brand@workspace:packages/brand"],
 
     "@lineupkeep/infra": ["@lineupkeep/infra@workspace:infra"],
+
+    "@lineupkeep/linking-helper": ["@lineupkeep/linking-helper@workspace:apps/linking-helper"],
 
     "@lineupkeep/tools": ["@lineupkeep/tools@workspace:tools"],
 

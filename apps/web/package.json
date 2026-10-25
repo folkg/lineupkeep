@@ -46,6 +46,7 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare-runtime": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
     "@solidjs/diagnostics": "catalog:",
     "fast-check": "4.10.2",
     "nitro": "catalog:"

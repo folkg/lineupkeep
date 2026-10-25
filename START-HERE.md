@@ -22,7 +22,7 @@ These are local reference paths, not build-time dependencies.
 - Independent jj repository: one flattened starter baseline, then a Lineupkeep identity/preparation change.
 - All 17 planning documents copied, with current setup/name annotations where appropriate.
 - Product/brand guidance, the owner-selected royal violet and gold palette, semantic light/dark tokens, self-hosted typography, wordmark, favicon, and an Impeccable design sidecar.
-- Retained starter platform with a helper-pairing connections vertical; the Notes demo is removed and no provider-credential integration is implemented.
+- Retained starter platform with a device-paired connections vertical and a first-party local CLI that links a Yahoo session through a temporary browser profile into an encrypted, owner-scoped connection. The Notes demo is removed.
 - Independent package namespace, local resource labels, stack/resource identities, and telemetry names. No existing cloud state was renamed or imported.
 - Fresh dependencies; source dependencies, environment, outputs, browser sessions, cloud state, and VCS history were not copied.
 
@@ -44,7 +44,7 @@ The owner wants one autonomous assignment covering all Phase 1 and permits use o
 The product scope, name, destination, and visual direction are settled. **Local implementation may proceed while the security fix is pending.** Complete Stage 0 feasibility work at the seam it affects; do not wait for every later-stage fact before building the first slice.
 
 - **Publication gate, not a local-development stop:** the installed `start-server-core` is still `1.169.26`; the inherited release tracker identifies this closure as vulnerable. Keep development loopback-only and use synthetic data for automated provider tests. Do not expose this transport through a public deployment or tunnel. A temporary checked-in response-validation backport closes the reported vector in the meantime; [release readiness](docs/release-readiness.md#temporary-response-validation-backport-applied-2026-10-25) owns its record and removal condition. Adopt a coherent upstream fix with installed-source inspection and real-transport/SSR/single-flight regression acceptance before publication; a version bump alone is not acceptance.
-- **Before the relevant Phase 1 slices:** review the proposed public seams and prove local-helper pairing, supported provider periods/locks, bounded query contracts, and native-action readback/recovery. Live probes require separate permission.
+- **Before later Phase 1 slices:** the local-helper pairing seam is proved. Review the remaining public seams and prove supported provider periods/locks, bounded query contracts, and native-action readback/recovery. Live probes require separate permission.
 - **Later gates, not blockers for every first slice:** meaningful custom scoring/reserve evidence and explicit-assignment acceptance belong to Phase 2. Hosted Muse, cloud egress/IAM, quotas, and actual deployment acceptance remain gates before launch.
 
 The autonomous handoff does not waive publication security, billing authorization, or scoped live-provider acceptance. Deployment is conditional on those gates, not on the owner supervising each implementation slice.

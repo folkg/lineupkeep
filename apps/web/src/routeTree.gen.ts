@@ -17,6 +17,7 @@ import { Route as McpRouteImport } from './routes/mcp'
 import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known.$'
 import { Route as ApiTelemetryRouteImport } from './routes/api/telemetry'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiLinkingCompleteRouteImport } from './routes/api/linking/complete'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -58,6 +59,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLinkingCompleteRoute = ApiLinkingCompleteRouteImport.update({
+  id: '/api/linking/complete',
+  path: '/api/linking/complete',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -78,6 +85,7 @@ export interface FileRoutesByTo {
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,6 +110,7 @@ export interface FileRouteTypes {
     | '/.well-known/$'
     | '/api/telemetry'
     | '/api/auth/$'
+    | '/api/linking/complete'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
     | '/.well-known/$'
     | '/api/telemetry'
     | '/api/auth/$'
+    | '/api/linking/complete'
   id:
     | '__root__'
     | '/'
@@ -121,6 +132,7 @@ export interface FileRouteTypes {
     | '/.well-known/$'
     | '/api/telemetry'
     | '/api/auth/$'
+    | '/api/linking/complete'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -132,6 +144,7 @@ export interface RootRouteChildren {
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   ApiTelemetryRoute: typeof ApiTelemetryRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiLinkingCompleteRoute: typeof ApiLinkingCompleteRoute
 }
 
 declare module '@tanstack/solid-router' {
@@ -192,6 +205,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/linking/complete': {
+      id: '/api/linking/complete'
+      path: '/api/linking/complete'
+      fullPath: '/api/linking/complete'
+      preLoaderRoute: typeof ApiLinkingCompleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -204,6 +224,7 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   ApiTelemetryRoute: ApiTelemetryRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiLinkingCompleteRoute: ApiLinkingCompleteRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

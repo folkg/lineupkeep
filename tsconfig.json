@@ -31,6 +31,7 @@
         "allowedUnstableApis": [
           "@effect/vitest",
           "@effect/platform-node-shared/NodeCrypto",
+          "@effect/platform-node-shared/NodeRuntime",
           "@effect/platform-node/NodeServices",
           "effect/ai",
           "effect/http",

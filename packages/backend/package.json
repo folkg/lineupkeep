@@ -14,7 +14,8 @@
   "exports": {
     "./scripts/*": "./scripts/*",
     "./runtime/*": "./src/runtime/*.ts",
-    "./*": "./src/contexts/*.ts"
+    "./*": "./src/contexts/*.ts",
+    "./email/internal/*": "./src/email/internal/*.ts"
   },
   "scripts": {
     "architecture": "node scripts/check-table-ownership.ts"

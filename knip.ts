@@ -40,6 +40,9 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
       ],
       project: ["**/*.ts"],
     },
+    "apps/linking-helper": {
+      project: ["src/**/*.ts!"],
+    },
     "apps/web": {
       ...(production === true ? { ignore: productionTestOnlyFiles } : {}),
       ignoreDependencies: [
@@ -83,7 +86,13 @@ const productionTestSeams: Record<string, Array<"exports" | "types">> = {
   "apps/web/src/browser/telemetry/telemetry.ts": ["exports", "types"],
   "apps/web/src/server/mcp/mcpServer.ts": ["exports"],
   "apps/web/src/server/telemetry/telemetryServer.ts": ["exports"],
+  "apps/linking-helper/src/AppTransport.ts": ["exports", "types"],
+  "apps/linking-helper/src/Cli.ts": ["exports"],
+  "apps/linking-helper/src/DeviceAuthorization.ts": ["exports"],
+  "apps/linking-helper/src/LinkingUpload.ts": ["exports"],
+  "apps/linking-helper/src/ProviderBrowser.ts": ["exports"],
   "apps/web/src/server/backendEntry.ts": ["exports"],
+  "apps/web/src/server/linking/linkingUpload.ts": ["exports"],
   "packages/backend/src/runtime/public-internet/transport/node/PublicInternetProcess.ts": [
     "exports",
   ],

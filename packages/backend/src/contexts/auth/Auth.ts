@@ -73,6 +73,7 @@ export type AuthServiceShape = {
   readonly resolveAccessToken: (
     token: string,
     requiredScopes: ReadonlyArray<string>,
+    expectedClientId?: string,
   ) => Effect.Effect<AccessTokenResolution, AuthenticationError>;
 
   readonly getConsentRequest: (
