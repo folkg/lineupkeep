@@ -13,7 +13,7 @@ import { BetterAuthAdapter } from "@lineupkeep/backend/auth/internal/BetterAuthA
 import { SignInCodeQuotaRepository } from "@lineupkeep/backend/auth/internal/SignInCodeQuotaRepository";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import type { ProviderConnection } from "@lineupkeep/backend/connections/Connection";
-import { StartLinkingInput } from "@lineupkeep/backend/connections/Connection";
+import { StartLinkingInput, StartReconnectInput } from "@lineupkeep/backend/connections/Connection";
 import { connectionLinkingWindowMillis } from "@lineupkeep/backend/connections/ConnectionLimits";
 import { Connections } from "@lineupkeep/backend/connections/Connections";
 import type { ConnectionsShape } from "@lineupkeep/backend/connections/Connections";
@@ -80,6 +80,52 @@ it.effect(
         teams.map((team) => team.providerTeamKey),
         ["nfl.l.123.t.1"],
       );
+    }).pipe(Effect.provide(TestLayer)),
+  30_000,
+);
+
+it.effect(
+  "completes an explicit reconnect through the same approved helper upload",
+  () =>
+    Effect.gen(function* () {
+      const auth = yield* AuthService;
+      const connections = yield* Connections;
+      const owner = yield* signIn(auth, "reconnect-owner@example.test");
+      const firstGrant = yield* startDeviceAuthorization(auth, linkingHelperClient.clientId);
+      yield* approve(auth, firstGrant.user_code, owner.cookie);
+      const firstToken = yield* redeem(auth, firstGrant.device_code, linkingHelperClient.clientId);
+      const linking = yield* startLinking(connections, owner.id, firstGrant.user_code);
+      yield* upload(firstToken, {
+        userCode: firstGrant.user_code,
+        provider: "yahoo",
+        session: sessionValue,
+      });
+
+      const secondGrant = yield* startDeviceAuthorization(auth, linkingHelperClient.clientId);
+      yield* approve(auth, secondGrant.user_code, owner.cookie);
+      const secondToken = yield* redeem(
+        auth,
+        secondGrant.device_code,
+        linkingHelperClient.clientId,
+      );
+      const intent = yield* Schema.decodeEffect(StartReconnectInput)({
+        requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9167a2",
+        id: linking.id,
+        pairingCode: secondGrant.user_code,
+      });
+      yield* connections.startReconnect(owner.id, [intent]);
+
+      const { response, text } = yield* upload(secondToken, {
+        userCode: secondGrant.user_code,
+        provider: "yahoo",
+        session: sessionValue,
+      });
+      const listed = yield* connections.list(owner.id);
+
+      assert.strictEqual(response.status, 200);
+      assert.deepStrictEqual(yield* jsonOfText(text), { status: "ready", provider: "yahoo" });
+      assert.strictEqual(listed[0]?.status, "ready");
+      assert.strictEqual(listed[0]?.credentialGeneration, 2);
     }).pipe(Effect.provide(TestLayer)),
   30_000,
 );

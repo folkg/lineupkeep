@@ -4,6 +4,7 @@ import {
   ConnectionIdInput,
   ReconnectInput,
   StartLinkingInput,
+  StartReconnectInput,
 } from "@lineupkeep/backend/connections/Connection";
 import { Connections } from "@lineupkeep/backend/connections/Connections";
 import { createServerFn } from "@tanstack/solid-start";
@@ -123,6 +124,52 @@ export const completeLinkingServerFn = createServerFn({ method: "POST" })
           const all = yield* Connections.use((service) => service.list(userId));
           return {
             connection: toConnectionView(Array.getUnsafe(completed, 0)),
+            connections: all.map(toConnectionView),
+          } satisfies ConnectionChangeView;
+        }),
+      mapConnectionError,
+    );
+  });
+
+export const startReconnectServerFn = createServerFn({ method: "POST" })
+  .validator((raw: typeof StartReconnectInput.Encoded) =>
+    Schema.decodeResult(StartReconnectInput)(raw),
+  )
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "connections.start_reconnect",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => ConnectionInputInvalid.make({})),
+          );
+          const auth = yield* AuthService;
+          yield* auth.claimDeviceAuthorization(request.headers, input.pairingCode).pipe(
+            Effect.catchTags({
+              DeviceAuthorizationRejected: (error) =>
+                Effect.fail(ConnectionDeviceRejected.make({ reason: error.reason })),
+              AuthenticationUnavailable: (error) => Effect.die(error),
+              AuthenticationInvalidResponse: (error) => Effect.die(error),
+            }),
+          );
+          const started = yield* Connections.use((service) =>
+            service.startReconnect(userId, [input]),
+          );
+          yield* auth.approveDeviceAuthorization(request.headers, input.pairingCode).pipe(
+            Effect.catchTags({
+              DeviceAuthorizationRejected: (error) =>
+                error.reason === "invalid_request"
+                  ? Effect.void
+                  : Effect.fail(ConnectionDeviceRejected.make({ reason: error.reason })),
+              AuthenticationUnavailable: (error) => Effect.die(error),
+              AuthenticationInvalidResponse: (error) => Effect.die(error),
+            }),
+          );
+          const all = yield* Connections.use((service) => service.list(userId));
+          return {
+            connection: toConnectionView(Array.getUnsafe(started, 0)),
             connections: all.map(toConnectionView),
           } satisfies ConnectionChangeView;
         }),

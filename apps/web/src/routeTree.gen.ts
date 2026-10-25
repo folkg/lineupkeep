@@ -16,6 +16,9 @@ import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known.$'
 import { Route as ApiTelemetryRouteImport } from './routes/api/telemetry'
+import { Route as RunsRunIdRouteImport } from './routes/runs.$runId'
+import { Route as TeamsIndexRouteImport } from './routes/teams.index'
+import { Route as TeamsTeamIdRouteImport } from './routes/teams.$teamId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiInternalLineupWorkerRouteImport } from './routes/api/internal/lineup-worker'
 import { Route as ApiLinkingCompleteRouteImport } from './routes/api/linking/complete'
@@ -55,6 +58,21 @@ const ApiTelemetryRoute = ApiTelemetryRouteImport.update({
   path: '/api/telemetry',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RunsRunIdRoute = RunsRunIdRouteImport.update({
+  id: '/runs/$runId',
+  path: '/runs/$runId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamsIndexRoute = TeamsIndexRouteImport.update({
+  id: '/teams/',
+  path: '/teams/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamsTeamIdRoute = TeamsTeamIdRouteImport.update({
+  id: '/teams/$teamId',
+  path: '/teams/$teamId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -79,6 +97,9 @@ export interface FileRoutesByFullPath {
   '/mcp': typeof McpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
+  '/runs/$runId': typeof RunsRunIdRoute
+  '/teams/$teamId': typeof TeamsTeamIdRoute
+  '/teams/': typeof TeamsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
   '/api/linking/complete': typeof ApiLinkingCompleteRoute
@@ -91,6 +112,9 @@ export interface FileRoutesByTo {
   '/mcp': typeof McpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
+  '/runs/$runId': typeof RunsRunIdRoute
+  '/teams/$teamId': typeof TeamsTeamIdRoute
+  '/teams': typeof TeamsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
   '/api/linking/complete': typeof ApiLinkingCompleteRoute
@@ -104,6 +128,9 @@ export interface FileRoutesById {
   '/mcp': typeof McpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
+  '/runs/$runId': typeof RunsRunIdRoute
+  '/teams/$teamId': typeof TeamsTeamIdRoute
+  '/teams/': typeof TeamsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
   '/api/linking/complete': typeof ApiLinkingCompleteRoute
@@ -118,6 +145,9 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/.well-known/$'
     | '/api/telemetry'
+    | '/runs/$runId'
+    | '/teams/$teamId'
+    | '/teams/'
     | '/api/auth/$'
     | '/api/internal/lineup-worker'
     | '/api/linking/complete'
@@ -130,6 +160,9 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/.well-known/$'
     | '/api/telemetry'
+    | '/runs/$runId'
+    | '/teams/$teamId'
+    | '/teams'
     | '/api/auth/$'
     | '/api/internal/lineup-worker'
     | '/api/linking/complete'
@@ -142,6 +175,9 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/.well-known/$'
     | '/api/telemetry'
+    | '/runs/$runId'
+    | '/teams/$teamId'
+    | '/teams/'
     | '/api/auth/$'
     | '/api/internal/lineup-worker'
     | '/api/linking/complete'
@@ -155,6 +191,9 @@ export interface RootRouteChildren {
   McpRoute: typeof McpRoute
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   ApiTelemetryRoute: typeof ApiTelemetryRoute
+  RunsRunIdRoute: typeof RunsRunIdRoute
+  TeamsTeamIdRoute: typeof TeamsTeamIdRoute
+  TeamsIndexRoute: typeof TeamsIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiInternalLineupWorkerRoute: typeof ApiInternalLineupWorkerRoute
   ApiLinkingCompleteRoute: typeof ApiLinkingCompleteRoute
@@ -211,6 +250,27 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ApiTelemetryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/runs/$runId': {
+      id: '/runs/$runId'
+      path: '/runs/$runId'
+      fullPath: '/runs/$runId'
+      preLoaderRoute: typeof RunsRunIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teams/': {
+      id: '/teams/'
+      path: '/teams'
+      fullPath: '/teams/'
+      preLoaderRoute: typeof TeamsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teams/$teamId': {
+      id: '/teams/$teamId'
+      path: '/teams/$teamId'
+      fullPath: '/teams/$teamId'
+      preLoaderRoute: typeof TeamsTeamIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -243,6 +303,9 @@ const rootRouteChildren: RootRouteChildren = {
   McpRoute: McpRoute,
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   ApiTelemetryRoute: ApiTelemetryRoute,
+  RunsRunIdRoute: RunsRunIdRoute,
+  TeamsTeamIdRoute: TeamsTeamIdRoute,
+  TeamsIndexRoute: TeamsIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiInternalLineupWorkerRoute: ApiInternalLineupWorkerRoute,
   ApiLinkingCompleteRoute: ApiLinkingCompleteRoute,

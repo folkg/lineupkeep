@@ -13,6 +13,12 @@ export const connectionMutations = {
       mutationFn: remote.start,
       onSuccess: storeRefreshedConnections,
     }),
+  startReconnect: (remote: ConnectionRemote) =>
+    mutationOptions({
+      mutationKey: ["connections", "start-reconnect"],
+      mutationFn: remote.startReconnect,
+      onSuccess: storeRefreshedConnections,
+    }),
   approve: (remote: ConnectionRemote) =>
     mutationOptions({
       mutationKey: ["connections", "approve"],

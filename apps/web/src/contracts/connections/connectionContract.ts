@@ -6,6 +6,7 @@ import type {
   Provider,
   ReconnectInput,
   StartLinkingInput,
+  StartReconnectInput,
 } from "@lineupkeep/backend/connections/Connection";
 
 import type { AuthenticationFailure } from "#contracts/auth/authContract.ts";
@@ -31,6 +32,7 @@ export type ConnectionChangeView = {
 };
 
 export type StartLinkingData = typeof StartLinkingInput.Encoded;
+export type StartReconnectData = typeof StartReconnectInput.Encoded;
 export type ConnectionIdData = typeof ConnectionIdInput.Encoded;
 export type CompleteLinkingData = typeof CompleteLinkingInput.Encoded;
 export type ReconnectData = typeof ReconnectInput.Encoded;

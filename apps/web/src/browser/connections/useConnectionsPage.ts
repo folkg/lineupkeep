@@ -22,7 +22,10 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
   const [approvingId, setApprovingId] = createSignal<string>();
   const [cancelingId, setCancelingId] = createSignal<string>();
   const [disconnectingId, setDisconnectingId] = createSignal<string>();
+  const [reconnectingId, setReconnectingId] = createSignal<string>();
+  const [reconnectCodes, setReconnectCodes] = createSignal<ReadonlyMap<string, string>>(new Map());
   let pendingRequestId: string | undefined;
+  const reconnectRequestIds = new Map<string, string>();
 
   const reportFailure = (error: unknown): void => {
     const failure = describeConnectionFailure(error);
@@ -51,6 +54,24 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     },
     onError: reportFailure,
     onSettled: () => setApprovingId(undefined),
+  }));
+  const startReconnect = useMutation(() => ({
+    ...connectionMutations.startReconnect(props.remote()),
+    onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
+      storeRefreshedConnections(change, variables, onMutateResult, context);
+      setFeedback({
+        type: "success",
+        message:
+          "Reconnect started. Finish the Yahoo sign-in in the helper, then refresh this page.",
+        recovery: {
+          label: "Refresh status",
+          pendingLabel: "Refreshing…",
+          onAction: () => props.onRefresh(),
+        },
+      });
+    },
+    onError: reportFailure,
+    onSettled: () => setReconnectingId(undefined),
   }));
   const disconnect = useMutation(() => ({
     ...connectionMutations.disconnect(props.remote()),
@@ -81,6 +102,7 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     approvingId,
     cancelingId,
     disconnectingId,
+    reconnectingId,
     refresh: () => props.onRefresh(),
     changePairingCode: (value: string) => setPairingCode(value),
     startLinking: () => {
@@ -106,6 +128,30 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
       setFeedback({ type: "pending", message: "Cancelling pairing…" });
       void cancel.mutate({ id: connection.id });
     },
+    reconnectCode: (connectionId) => reconnectCodes().get(connectionId) ?? "",
+    changeReconnectCode: (connectionId, value) => {
+      setReconnectCodes((current) => new Map(current).set(connectionId, value));
+    },
+    reconnectLinking: (connection: ConnectionView) => {
+      const code = (reconnectCodes().get(connection.id) ?? "").trim();
+      if (code.length === 0) {
+        setFeedback({
+          type: "attention",
+          message: "Enter the pairing code shown by the local helper.",
+        });
+        return;
+      }
+      const requestId = reconnectRequestIds.get(connection.id) ?? crypto.randomUUID();
+      reconnectRequestIds.set(connection.id, requestId);
+      setReconnectingId(connection.id);
+      setFeedback({ type: "pending", message: "Starting reconnect…" });
+      void startReconnect.mutate({ requestId, id: connection.id, pairingCode: code });
+      setReconnectCodes((current) => {
+        const next = new Map(current);
+        next.delete(connection.id);
+        return next;
+      });
+    },
     disconnectLinking: (connection: ConnectionView) => {
       setDisconnectingId(connection.id);
       setFeedback({ type: "pending", message: "Disconnecting…" });
@@ -124,11 +170,15 @@ export type ConnectionsPageController = {
   readonly approvingId: Accessor<string | undefined>;
   readonly cancelingId: Accessor<string | undefined>;
   readonly disconnectingId: Accessor<string | undefined>;
+  readonly reconnectingId: Accessor<string | undefined>;
   readonly refresh: () => Promise<void>;
   readonly changePairingCode: (value: string) => void;
   readonly startLinking: () => void;
   readonly approveLinking: (connection: ConnectionView) => void;
   readonly cancelLinking: (connection: ConnectionView) => void;
+  readonly reconnectCode: (connectionId: string) => string;
+  readonly changeReconnectCode: (connectionId: string, value: string) => void;
+  readonly reconnectLinking: (connection: ConnectionView) => void;
   readonly disconnectLinking: (connection: ConnectionView) => void;
 };
 

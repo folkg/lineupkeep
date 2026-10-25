@@ -33,6 +33,7 @@ function AppActions(): JSX.Element {
   return (
     <>
       <Nav label="Primary navigation">
+        <NavLink to="/teams">Teams</NavLink>
         <NavLink to="/connections">Connections</NavLink>
         <Show fallback={<NavLink to="/auth">Sign in</NavLink>} when={session.isSignedIn()}>
           <Button

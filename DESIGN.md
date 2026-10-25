@@ -140,7 +140,7 @@ components:
 
 An assured fantasy-team instrument with sporting energy: royal violet actions, golden yellow accents, and deep violet ink. A continuous lowercase wordmark, one self-hosted family, and ruled information keep the identity professional and solid.
 
-This is an Operate product: familiar navigation, native controls, direct labels, and information before spectacle. Light supports daytime checks and dark supports evening use. The brand foundation is implemented; the fantasy product is not.
+This is an Operate product: familiar navigation, native controls, direct labels, and information before spectacle. Light supports daytime checks and dark supports evening use. The operational teams, connections, and lineup-run surfaces are implemented on this foundation.
 
 **Key Characteristics:**
 
@@ -219,11 +219,19 @@ TextField, TextArea, and SearchField keep persistent labels, visible boundaries,
 
 Badge is labelled metadata, not a rank sticker. Its gold treatment adds emphasis; quieter supporting states can use action-soft without inventing another status palette. IntroPanel/Panel are occasional dark companion surfaces, not a site-wide card recipe. Entry remains a starter primitive; do not derive the fantasy domain by renaming starter components.
 
-### Future operational states
+### Operational states
 
-Connection health, team automation, actionable period, and run outcome must be explicit in later team/run rows. Automation off, paused, reconnect required, unavailable, queued, checking, verified unchanged, verified updated, and needs reconciliation are distinct. Never flatten them into green/red or Done.
+Connection health, team automation, actionable period, and run outcome are explicit in team and run rows. Automation off, paused, reconnect required, unavailable, queued, checking, verified unchanged, verified updated, and needs reconciliation are distinct. Never flatten them into green/red or Done.
 
-This is product guidance, not a claim that these components or workflows exist. A pause is not a disable, expired connection is not lost enrollment, unavailable is not deleted, and sent is not verified.
+A pause is not a disable, expired connection is not lost enrollment, unavailable is not deleted, and sent is not verified. Paused rows name the rest of the fantasy day and show the resume time and named zone. Reconnect-required rows retain enrollment and expose one explicit reconnect path.
+
+### Teams and runs
+
+Teams are a ruled list, not a grid of marketing cards. Each row carries the team name, sport/league/provider, availability, automation state, connection state, and the last run's status with its safe explanation. The team detail keeps the same controls and adds the five most recent runs. A run detail shows the target period, trigger, attempts, verified outcome, changes, and pending reason without exposing credentials, cookies, provider GUIDs, raw payloads, or raw errors.
+
+### Connections and incidents
+
+The connection surface keeps the helper pairing flow and adds an explicit reconnect action for an expired session. The helper uploads the replacement session; the person never types a password here. One connection expiration opens one durable incident, and the paired action-required email uses a stable logical idempotency identity so retries cannot multiply reminders.
 
 ### Browser surfaces
 

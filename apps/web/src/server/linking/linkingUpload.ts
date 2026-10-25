@@ -73,18 +73,39 @@ export const completeLinkingHelperUpload = Effect.fn("connections.completeLinkin
     if (listed._tag === "Failure") {
       return yield* connectionFailure(listed.failure);
     }
-    const connection = listed.success.find(
+    const linking = listed.success.find(
       (candidate) =>
         candidate.pairingCode === body.value.userCode && candidate.status === "linking",
     );
-    if (connection === undefined) {
+    if (linking !== undefined) {
+      const completed = yield* connections
+        .completeLinking(identity.userId, [
+          {
+            id: linking.id,
+            provider: body.value.provider,
+            session: body.value.session,
+          },
+        ])
+        .pipe(Effect.result);
+      if (completed._tag === "Failure") {
+        return yield* connectionFailure(completed.failure);
+      }
+      return yield* success(body.value.provider);
+    }
+
+    const reconnecting = listed.success.find(
+      (candidate) =>
+        candidate.reconnectCode === body.value.userCode &&
+        (candidate.status === "ready" || candidate.status === "reconnect-required"),
+    );
+    if (reconnecting === undefined) {
       return yield* refusal("connection_not_found", 404);
     }
 
     const completed = yield* connections
-      .completeLinking(identity.userId, [
+      .completeReconnect(identity.userId, [
         {
-          id: connection.id,
+          id: reconnecting.id,
           provider: body.value.provider,
           session: body.value.session,
         },

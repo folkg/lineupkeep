@@ -54,9 +54,15 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
                     canceling={props.cancelingId() === connection.id}
                     connection={connection}
                     disconnecting={props.disconnectingId() === connection.id}
+                    reconnecting={props.reconnectingId() === connection.id}
                     onApprove={() => props.onApprove(connection)}
                     onCancel={() => props.onCancel(connection)}
                     onDisconnect={() => props.onDisconnect(connection)}
+                    reconnectCode={props.reconnectCode(connection.id)}
+                    onChangeReconnectCode={(value) =>
+                      props.onChangeReconnectCode(connection.id, value)
+                    }
+                    onReconnect={() => props.onReconnect(connection)}
                   />
                 )}
               </For>
@@ -75,8 +81,12 @@ type ConnectionListProps = {
   readonly approvingId: Accessor<string | undefined>;
   readonly cancelingId: Accessor<string | undefined>;
   readonly disconnectingId: Accessor<string | undefined>;
+  readonly reconnectingId: Accessor<string | undefined>;
   readonly onApprove: (connection: ConnectionView) => void;
   readonly onCancel: (connection: ConnectionView) => void;
   readonly onDisconnect: (connection: ConnectionView) => void;
+  readonly reconnectCode: (connectionId: string) => string;
+  readonly onChangeReconnectCode: (connectionId: string, value: string) => void;
+  readonly onReconnect: (connection: ConnectionView) => void;
   readonly onRefresh: () => Promise<void>;
 };

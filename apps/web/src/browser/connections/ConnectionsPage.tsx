@@ -35,11 +35,15 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
             cancelingId={page.cancelingId}
             connections={page.connections}
             disconnectingId={page.disconnectingId}
+            reconnectingId={page.reconnectingId}
+            reconnectCode={page.reconnectCode}
             isLoading={page.isLoading}
             loadFailure={page.loadFailure}
             onApprove={page.approveLinking}
             onCancel={page.cancelLinking}
             onDisconnect={page.disconnectLinking}
+            onReconnect={page.reconnectLinking}
+            onChangeReconnectCode={page.changeReconnectCode}
             onRefresh={page.refresh}
           />
           <Stack as="section" gap="sm" labelledBy="link-provider-title">

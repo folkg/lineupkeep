@@ -1,4 +1,5 @@
 import type { JSX } from "@solidjs/web";
+import { dynamic } from "@solidjs/web";
 import type { Element } from "solid-js";
 
 import { cx } from "./cx";
@@ -7,16 +8,18 @@ import type { Surface } from "./Surface";
 
 export function Text(props: TextProps): JSX.Element {
   const surface = useSurface();
+  const Tag = dynamic(() => props.as ?? "p");
   return (
-    <p
+    <Tag
       class={cx(
         sizeClass[props.size ?? "body"],
         toneClass[surface][props.tone ?? "default"],
+        props.weight === "semibold" && "font-semibold",
         props.wrap === "preserve" && "break-words whitespace-pre-wrap",
       )}
     >
       {props.children}
-    </p>
+    </Tag>
   );
 }
 
@@ -38,5 +41,7 @@ type TextProps = {
   readonly tone?: TextTone;
 
   readonly wrap?: "preserve";
+  readonly as?: "p" | "span";
+  readonly weight?: "normal" | "semibold";
   readonly children: Element;
 };
