@@ -13,6 +13,7 @@ import { connectionScopes } from "#contexts/connections/ConnectionScopes.ts";
 import { ConnectionRepository } from "#contexts/connections/internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "#contexts/connections/internal/ConnectionsDatabase.ts";
 import { ConnectionsLive } from "#contexts/connections/internal/ConnectionsLive.ts";
+import { YahooProvider } from "#contexts/connections/internal/yahoo/YahooProvider.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
 
@@ -28,7 +29,7 @@ const ConnectionsLayer = ConnectionsLive.pipe(
   Layer.provide(ConnectionRepository.layer),
   Layer.provide(ConnectionsDatabase.layer),
 );
-export const ApplicationLayer = Layer.mergeAll(ConnectionsLayer, AuthLayer).pipe(
+export const ApplicationLayer = Layer.mergeAll(ConnectionsLayer, AuthLayer, YahooProvider).pipe(
   Layer.provide(PostgresLive),
   Layer.provide(NodeCrypto.layer),
 );
