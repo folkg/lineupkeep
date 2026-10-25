@@ -39,6 +39,8 @@
     "@tanstack/solid-start": "catalog:",
     "better-auth": "catalog:",
     "effect": "catalog:",
+    "h3": "catalog:",
+    "playwright": "catalog:",
     "solid-js": "catalog:",
     "tailwindcss": "catalog:",
     "vite": "catalog:",
@@ -48,6 +50,7 @@
     "@alchemy.run/cloudflare-runtime": "catalog:",
     "@effect/platform-node-shared": "catalog:",
     "@solidjs/diagnostics": "catalog:",
+    "crossws": "0.4.15",
     "fast-check": "4.10.2",
     "nitro": "catalog:"
   }

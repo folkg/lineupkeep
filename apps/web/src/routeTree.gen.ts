@@ -20,6 +20,7 @@ import { Route as RunsRunIdRouteImport } from './routes/runs.$runId'
 import { Route as TeamsIndexRouteImport } from './routes/teams.index'
 import { Route as TeamsTeamIdRouteImport } from './routes/teams.$teamId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiDevProviderLoginRouteImport } from './routes/api/dev/provider-login'
 import { Route as ApiInternalLineupWorkerRouteImport } from './routes/api/internal/lineup-worker'
 import { Route as ApiLinkingCompleteRouteImport } from './routes/api/linking/complete'
 
@@ -78,6 +79,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDevProviderLoginRoute = ApiDevProviderLoginRouteImport.update({
+  id: '/api/dev/provider-login',
+  path: '/api/dev/provider-login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiInternalLineupWorkerRoute = ApiInternalLineupWorkerRouteImport.update({
   id: '/api/internal/lineup-worker',
   path: '/api/internal/lineup-worker',
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/teams/': typeof TeamsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
   '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
@@ -116,6 +123,7 @@ export interface FileRoutesByTo {
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/teams': typeof TeamsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
   '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/teams/': typeof TeamsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
   '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
@@ -149,6 +158,7 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/teams/'
     | '/api/auth/$'
+    | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
     | '/api/linking/complete'
   fileRoutesByTo: FileRoutesByTo
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/teams'
     | '/api/auth/$'
+    | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
     | '/api/linking/complete'
   id:
@@ -179,6 +190,7 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/teams/'
     | '/api/auth/$'
+    | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
     | '/api/linking/complete'
   fileRoutesById: FileRoutesById
@@ -195,6 +207,7 @@ export interface RootRouteChildren {
   TeamsTeamIdRoute: typeof TeamsTeamIdRoute
   TeamsIndexRoute: typeof TeamsIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiDevProviderLoginRoute: typeof ApiDevProviderLoginRoute
   ApiInternalLineupWorkerRoute: typeof ApiInternalLineupWorkerRoute
   ApiLinkingCompleteRoute: typeof ApiLinkingCompleteRoute
 }
@@ -278,6 +291,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/dev/provider-login': {
+      id: '/api/dev/provider-login'
+      path: '/api/dev/provider-login'
+      fullPath: '/api/dev/provider-login'
+      preLoaderRoute: typeof ApiDevProviderLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/internal/lineup-worker': {
       id: '/api/internal/lineup-worker'
       path: '/api/internal/lineup-worker'
@@ -307,6 +327,7 @@ const rootRouteChildren: RootRouteChildren = {
   TeamsTeamIdRoute: TeamsTeamIdRoute,
   TeamsIndexRoute: TeamsIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiDevProviderLoginRoute: ApiDevProviderLoginRoute,
   ApiInternalLineupWorkerRoute: ApiInternalLineupWorkerRoute,
   ApiLinkingCompleteRoute: ApiLinkingCompleteRoute,
 }

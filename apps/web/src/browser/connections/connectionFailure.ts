@@ -63,6 +63,35 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
       case "connection.persistence_failed":
       case "connection.provider_unavailable":
         break;
+      case "hosted_browser.unsupported":
+        return {
+          kind: "rejected",
+          message: "Hosted sign-in is unavailable here. Use the local helper below.",
+        };
+      case "hosted_linking.session_active":
+        return {
+          kind: "rejected",
+          message: "A hosted sign-in is already open. Finish or cancel it first.",
+        };
+      case "hosted_linking.rate_limited":
+        return {
+          kind: "rejected",
+          message: "Too many sign-in attempts. Wait a minute and try again.",
+        };
+      case "hosted_linking.expired":
+      case "hosted_linking.not_active":
+      case "hosted_linking.not_found":
+      case "hosted_linking.ticket_rejected":
+      case "hosted_linking.input_invalid":
+        return {
+          kind: "rejected",
+          message: "This hosted sign-in session ended. Start a new one.",
+        };
+      case "hosted_linking.persistence_failed":
+        return {
+          kind: "unconfirmed",
+          message: "We could not start the secure browser. Try again or use the local helper.",
+        };
     }
   }
   return {

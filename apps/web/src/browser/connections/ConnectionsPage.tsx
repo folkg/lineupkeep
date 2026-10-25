@@ -14,7 +14,9 @@ import { TextField } from "#browser/shared-ui/TextField.tsx";
 import { ConnectionList } from "./ConnectionList";
 import type { ConnectionListQueryOptions } from "./connectionQueries";
 import type { ConnectionRemote } from "./connectionRemote";
+import { HostedBrowserPanel } from "./HostedBrowserPanel";
 import { useConnectionsPage } from "./useConnectionsPage";
+import { useHostedLinking } from "./useHostedLinking";
 
 export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
   const page = useConnectionsPage({
@@ -22,14 +24,19 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
     remote: () => props.remote,
     onRefresh: () => props.onRefresh(),
   });
+  const hosted = useHostedLinking({
+    remote: () => props.remote,
+    onRefresh: () => props.onRefresh(),
+  });
 
   return (
     <AppShell>
       <Page
-        lede="Link Yahoo through the local helper on your computer. Lineupkeep never sees your provider password."
+        lede="Connect Yahoo once in a private browser session, or use the local helper on your computer. Lineupkeep never stores your provider password."
         title="Connections"
       >
         <Stack gap="lg">
+          <HostedBrowserPanel controller={hosted} />
           <ConnectionList
             approvingId={page.approvingId}
             cancelingId={page.cancelingId}
@@ -48,11 +55,12 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
           />
           <Stack as="section" gap="sm" labelledBy="link-provider-title">
             <Heading id="link-provider-title" level={2} size="section">
-              Pair the local helper
+              Fallback: pair the local helper
             </Heading>
             <Text size="body" tone="muted">
-              Run the Lineupkeep helper on your computer and enter the pairing code it shows. The
-              request expires after ten minutes, and the helper signs in to the provider itself.
+              If the hosted sign-in is unavailable, run the Lineupkeep helper on your computer and
+              enter the pairing code it shows. The request expires after ten minutes, and the helper
+              signs in to the provider itself.
             </Text>
             <Form gap="sm" onSubmit={page.startLinking}>
               <TextField

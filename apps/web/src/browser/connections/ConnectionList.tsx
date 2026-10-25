@@ -11,6 +11,17 @@ import type { ConnectionView } from "#contracts/connections/connectionContract.t
 import { ConnectionCard } from "./ConnectionCard";
 
 export function ConnectionList(props: ConnectionListProps): JSX.Element {
+  const visibleConnections = (): ReadonlyArray<ConnectionView> =>
+    props
+      .connections()
+      .filter(
+        (connection) =>
+          !(
+            connection.status === "linking" &&
+            (connection.pairingCode?.startsWith("hosted-") ?? false)
+          ),
+      );
+
   return (
     <Stack as="section" gap="md" labelledBy="connections-list-title">
       <Heading id="connections-list-title" level={2} size="section">
@@ -41,13 +52,13 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No connections yet.">
-                Link Yahoo to let the local helper sign in on your computer.
+                Connect Yahoo above, or pair the local helper below.
               </EmptyState>
             }
-            when={props.connections().length > 0}
+            when={visibleConnections().length > 0}
           >
             <Stack gap="md">
-              <For each={props.connections()}>
+              <For each={visibleConnections()}>
                 {(connection) => (
                   <ConnectionCard
                     approving={props.approvingId() === connection.id}

@@ -588,6 +588,13 @@ const primitives = ["apps/web/src/browser/shared-ui/**/*.{ts,tsx}"];
 const compositions = ["apps/web/src/browser/brand-ui/**/*.{ts,tsx}"];
 const tests = ["**/*.test.{ts,tsx}"];
 const nodeTransport = ["packages/backend/src/runtime/public-internet/transport/node/**/*.ts"];
+const hostedBrowserShell = [
+  "apps/web/src/server/hostedLinking/playwrightHostedBrowser.ts",
+  "apps/web/src/server/hostedLinking/hostedLinkingStream.ts",
+];
+const hostedBrowserShellTests = [
+  "apps/web/src/server/hostedLinking/playwrightHostedBrowser.test.ts",
+];
 const isolateTransport = ["packages/backend/src/runtime/public-internet/transport/isolate/**/*.ts"];
 const transportTests = ["packages/backend/src/runtime/public-internet/transport/**/*.test.ts"];
 const timing = ["apps/web/src/browser/timing/**"];
@@ -750,6 +757,25 @@ export default defineConfig({
         "effecttsgo/node-builtin-import": "off",
         "effecttsgo/async-function": "off",
         "effecttsgo/new-promise": "off",
+      },
+    },
+    {
+      files: hostedBrowserShell,
+      rules: {
+        "effecttsgo/async-function": "off",
+        "effecttsgo/global-date": "off",
+        "effecttsgo/global-timers": "off",
+        "effecttsgo/new-promise": "off",
+        "effecttsgo/node-builtin-import": "off",
+      },
+    },
+    {
+      files: hostedBrowserShellTests,
+      rules: {
+        "effecttsgo/global-error-in-effect-catch": "off",
+        "effecttsgo/global-error-in-effect-failure": "off",
+        "effecttsgo/new-promise": "off",
+        "effecttsgo/node-builtin-import": "off",
       },
     },
     {
