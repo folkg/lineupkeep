@@ -26,6 +26,7 @@ import {
   yahooNhlRoster,
   yahooNhlRotoLeagueSettings,
   yahooNhlWeekPlayerDetails,
+  yahooNflTransactions,
   yahooNflRoster,
 } from "./YahooPayloadFixturesTest.ts";
 import { YahooProvider } from "./YahooProvider.ts";
@@ -992,44 +993,61 @@ it.effect("reports a scoreboard period mismatch", () => {
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
-it.effect("reads bounded league transaction history", () => {
-  const internet = recordingInternet(() => jsonResponse(rawTransactions));
+it.effect("reads bounded league transaction history with dropped-player identity", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const transactions = yield* provider.readTransactions({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
+      providerLeagueKey: "466.l.4000",
       limit: 25,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/461.l.1000/transactions;count=25?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;count=25?format=json",
     );
     assert.deepStrictEqual(transactions, [
       {
-        occurredAt: "2025-10-27T21:20:00.000Z",
+        occurredAt: "2026-10-03T04:00:00.000Z",
         type: "add_drop",
         status: "successful",
-        teams: [
-          { providerTeamKey: "461.l.1000.t.1", name: "Alpha" },
-          { providerTeamKey: "461.l.1000.t.2", name: "Beta" },
-        ],
+        teams: [{ providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" }],
         players: [
-          { providerPlayerKey: "461.p.10001", direction: "add" },
-          { providerPlayerKey: "461.p.10002", direction: "drop" },
+          {
+            providerPlayerKey: "466.p.20003",
+            direction: "add",
+            name: "Synthetic Addition",
+            primaryPosition: undefined,
+            displayPosition: "WR",
+            eligiblePositions: undefined,
+          },
+          {
+            providerPlayerKey: "466.p.20004",
+            direction: "drop",
+            name: "Synthetic Drop",
+            primaryPosition: undefined,
+            displayPosition: "RB",
+            eligiblePositions: undefined,
+          },
         ],
       },
       {
-        occurredAt: "2025-10-27T21:21:40.000Z",
-        type: "trade",
-        status: undefined,
-        teams: [
-          { providerTeamKey: "461.l.1000.t.1", name: "Alpha" },
-          { providerTeamKey: "461.l.1000.t.2", name: "Beta" },
+        occurredAt: "2026-10-02T00:13:20.000Z",
+        type: "drop",
+        status: "successful",
+        teams: [{ providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" }],
+        players: [
+          {
+            providerPlayerKey: "466.p.20005",
+            direction: "drop",
+            name: "Synthetic Retired",
+            primaryPosition: undefined,
+            displayPosition: "TE",
+            eligiblePositions: undefined,
+          },
         ],
-        players: [{ providerPlayerKey: "461.p.10003", direction: "incoming" }],
       },
     ]);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
@@ -1373,90 +1391,6 @@ const rawMatchups = {
             },
           },
           week: "3",
-        },
-      },
-    ],
-  },
-};
-
-const rawTransactions = {
-  fantasy_content: {
-    league: [
-      { league_key: "461.l.1000" },
-      {
-        transactions: {
-          "0": {
-            transaction: [
-              { type: "add/drop" },
-              { status: "successful" },
-              { timestamp: "1761600000" },
-              {
-                players: {
-                  "0": {
-                    player: [
-                      [
-                        { player_key: "461.p.10001" },
-                        {
-                          transaction_data: [
-                            { type: "add" },
-                            { source_type: "freeagents" },
-                            { destination_type: "team" },
-                            { destination_team_key: "461.l.1000.t.1" },
-                            { destination_team_name: "Alpha" },
-                          ],
-                        },
-                      ],
-                    ],
-                  },
-                  "1": {
-                    player: [
-                      [
-                        { player_key: "461.p.10002" },
-                        {
-                          transaction_data: [
-                            { type: "drop" },
-                            { source_type: "team" },
-                            { source_team_key: "461.l.1000.t.2" },
-                            { source_team_name: "Beta" },
-                            { destination_type: "waivers" },
-                          ],
-                        },
-                      ],
-                    ],
-                  },
-                  count: 2,
-                },
-              },
-            ],
-          },
-          "1": {
-            transaction: [
-              { type: "trade" },
-              { timestamp: "1761600100" },
-              {
-                players: {
-                  "0": {
-                    player: [
-                      [
-                        { player_key: "461.p.10003" },
-                        {
-                          transaction_data: [
-                            { type: "trade" },
-                            { source_team_key: "461.l.1000.t.1" },
-                            { source_team_name: "Alpha" },
-                            { destination_team_key: "461.l.1000.t.2" },
-                            { destination_team_name: "Beta" },
-                          ],
-                        },
-                      ],
-                    ],
-                  },
-                  count: 1,
-                },
-              },
-            ],
-          },
-          count: 2,
         },
       },
     ],

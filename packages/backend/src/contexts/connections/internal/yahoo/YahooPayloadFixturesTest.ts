@@ -958,3 +958,143 @@ export const yahooNhlWeekPlayerDetails = {
     ],
   },
 };
+
+export const yahooNflTransactions = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        transactions: {
+          "0": {
+            transaction: [
+              {
+                transaction_key: "466.l.4000.tr.1",
+                transaction_id: "1",
+                type: "add/drop",
+                status: "successful",
+                timestamp: "1791000000",
+              },
+              {
+                players: {
+                  "0": {
+                    player: [
+                      [
+                        { player_key: "466.p.20003" },
+                        { player_id: "20003" },
+                        {
+                          name: {
+                            full: "Synthetic Addition",
+                            first: "Synthetic",
+                            last: "Addition",
+                            ascii_first: "Synthetic",
+                            ascii_last: "Addition",
+                          },
+                        },
+                        { editorial_team_abbr: "SYN" },
+                        { display_position: "WR" },
+                        { position_type: "O" },
+                      ],
+                      {
+                        transaction_data: [
+                          {
+                            type: "add",
+                            source_type: "freeagents",
+                            destination_type: "team",
+                            destination_team_key: "466.l.4000.t.1",
+                            destination_team_name: "Synthetic Team",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  "1": {
+                    player: [
+                      [
+                        { player_key: "466.p.20004" },
+                        { player_id: "20004" },
+                        {
+                          name: {
+                            full: "Synthetic Drop",
+                            first: "Synthetic",
+                            last: "",
+                            ascii_first: "Synthetic",
+                            ascii_last: "",
+                          },
+                        },
+                        { editorial_team_abbr: "SYN" },
+                        { display_position: "RB" },
+                        { position_type: "O" },
+                      ],
+                      {
+                        transaction_data: {
+                          type: "drop",
+                          source_type: "team",
+                          source_team_key: "466.l.4000.t.1",
+                          source_team_name: "Synthetic Team",
+                          destination_type: "waivers",
+                        },
+                      },
+                    ],
+                  },
+                  count: 2,
+                },
+              },
+            ],
+          },
+          "1": {
+            transaction: [
+              {
+                transaction_key: "466.l.4000.tr.2",
+                transaction_id: "2",
+                type: "drop",
+                status: "successful",
+                timestamp: "1790900000",
+              },
+              {
+                players: {
+                  "0": {
+                    player: [
+                      [
+                        { player_key: "466.p.20005" },
+                        { player_id: "20005" },
+                        {
+                          name: {
+                            full: "Synthetic Retired",
+                            first: "Synthetic",
+                            last: "Retired",
+                            ascii_first: "Synthetic",
+                            ascii_last: "Retired",
+                          },
+                        },
+                        { editorial_team_abbr: "SYN" },
+                        { display_position: "TE" },
+                        { position_type: "O" },
+                      ],
+                      {
+                        transaction_data: {
+                          type: "drop",
+                          source_type: "team",
+                          source_team_key: "466.l.4000.t.2",
+                          source_team_name: "Synthetic Rival",
+                          destination_type: "freeagents",
+                        },
+                      },
+                    ],
+                  },
+                  count: 1,
+                },
+              },
+            ],
+          },
+          count: 2,
+        },
+      },
+    ],
+  },
+};

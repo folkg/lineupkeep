@@ -196,6 +196,10 @@ export type ProviderMatchup = {
 type ProviderTransactionPlayer = {
   readonly providerPlayerKey: string;
   readonly direction: "add" | "drop" | "incoming" | "outgoing";
+  readonly name: string | undefined;
+  readonly primaryPosition: string | undefined;
+  readonly displayPosition: string | undefined;
+  readonly eligiblePositions: ReadonlyArray<string> | undefined;
 };
 
 type ProviderTransactionTeam = {

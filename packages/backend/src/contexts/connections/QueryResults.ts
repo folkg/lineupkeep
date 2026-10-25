@@ -324,7 +324,7 @@ const PlayerAvailability = Schema.Struct({
 
 const PlayerIdentity = Schema.Struct({
   name: Schema.NonEmptyString,
-  primaryPosition: Schema.NonEmptyString,
+  primaryPosition: Schema.optional(Schema.NonEmptyString),
   displayPosition: Schema.NonEmptyString,
 });
 

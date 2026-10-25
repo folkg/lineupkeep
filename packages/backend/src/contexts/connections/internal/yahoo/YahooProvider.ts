@@ -1114,6 +1114,13 @@ function decodeTransactions(
         players: players.map((player) => ({
           providerPlayerKey: player.player_key,
           direction: playerDirection(player.transaction_data),
+          name: optionalNonEmpty(player.name?.full ?? ""),
+          primaryPosition: optionalNonEmpty(player.primary_position ?? ""),
+          displayPosition: optionalNonEmpty(player.display_position ?? ""),
+          eligiblePositions:
+            player.eligible_positions === undefined
+              ? undefined
+              : player.eligible_positions.map(({ position }) => position),
         })),
       });
     }
@@ -1634,6 +1641,10 @@ const MatchupsPayload = Schema.Struct({
 
 const TransactionPlayerPayload = Schema.Struct({
   player_key: PlayerKey,
+  name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
+  display_position: Schema.optional(Schema.String),
+  primary_position: Schema.optional(Schema.String),
+  eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   transaction_data: Schema.Struct({
     type: Schema.NonEmptyString,
     source_type: Schema.optional(Schema.String),

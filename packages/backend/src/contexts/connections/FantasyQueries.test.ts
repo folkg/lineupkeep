@@ -19,6 +19,7 @@ import { QueryTokens } from "./internal/QueryTokens.ts";
 import { TransactionReviewsLive } from "./internal/TransactionReviewsLive.ts";
 import type {
   ProviderLeagueSettings,
+  ProviderTransaction,
   ProviderPlayerDetail,
   ProviderRoster,
   ProviderTeam,
@@ -315,6 +316,57 @@ it.effect("rejects a blank player search query with the remedy instead of a gene
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("resolves a dropped player's identity from transaction history", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setTransactions([
+      {
+        occurredAt: "2026-09-20T12:00:00.000Z",
+        type: "add_drop",
+        status: "successful",
+        teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
+        players: [
+          transactionPlayer("461.p.10003", "add", "Synthetic Addition"),
+          transactionPlayer("461.p.10004", "drop", "Dropped Veteran"),
+        ],
+      },
+    ]);
+
+    const transactions = yield* queries.getTransactions(owner, { team: teamId });
+    assert.strictEqual(transactions.status, "ok");
+    if (transactions.status !== "ok") {
+      return;
+    }
+    const dropped = Array.getUnsafe(Array.getUnsafe(transactions.transactions, 0).players, 1);
+    assert.strictEqual(dropped.direction, "drop");
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players: [dropped.player],
+      groups: ["identity", "eligibility"],
+    });
+
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(Array.getUnsafe(hydrated.players, 0).identity, {
+      name: "Dropped Veteran",
+      displayPosition: "WR",
+    });
+    assert.deepStrictEqual(hydrated.failures, []);
+    assert.isTrue(
+      hydrated.coverage.some(
+        (entry) => entry.resource === "players" && entry.source === "transactions",
+      ),
+    );
+    assert.isFalse(includesText(hydrated, "461.p.10004"));
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("searches bounded free agents and preserves zero versus missing stats", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -511,8 +563,8 @@ it.effect("reports add/drop transactions without inventing execution", () =>
           { providerTeamKey: "461.l.1000.t.2", name: "Beta" },
         ],
         players: [
-          { providerPlayerKey: "461.p.10003", direction: "add" },
-          { providerPlayerKey: "461.p.10001", direction: "drop" },
+          transactionPlayer("461.p.10003", "add", "Synthetic Addition"),
+          transactionPlayer("461.p.10001", "drop", "Synthetic Drop"),
         ],
       },
     ]);
@@ -804,6 +856,21 @@ it.effect("marks a drop link unsupported when the player is not on the roster", 
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+function transactionPlayer(
+  providerPlayerKey: string,
+  direction: "add" | "drop" | "incoming" | "outgoing",
+  name: string,
+): ProviderTransaction["players"][number] {
+  return {
+    providerPlayerKey,
+    direction,
+    name,
+    primaryPosition: undefined,
+    displayPosition: "WR",
+    eligiblePositions: undefined,
+  };
+}
+
 const owner = decodeUserId("owner");
 const session = Redacted.make("A1=test-session-cookie");
 
@@ -840,7 +907,7 @@ function seed(
         type: "add",
         status: "successful",
         teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
-        players: [{ providerPlayerKey: "461.p.10003", direction: "add" }],
+        players: [transactionPlayer("461.p.10003", "add", "Synthetic Addition")],
       },
     ]);
     const linkingInput = yield* Schema.decodeEffect(StartLinkingInput)({

@@ -173,6 +173,63 @@ export const FantasyQueriesLive = Layer.effect(
         };
       });
 
+    const transactionIdentityIndex = (
+      context: TeamContext,
+      fetchedAt: DateTime.Utc,
+      coverageEntries: Array<QueryCoverage>,
+      unresolvedKeys: ReadonlyArray<string>,
+    ): Effect.Effect<ReadonlyMap<string, TransactionIdentity>> =>
+      Effect.gen(function* () {
+        const wanted = new Set(unresolvedKeys);
+        const identities = new Map<string, TransactionIdentity>();
+        if (wanted.size === 0) {
+          return identities;
+        }
+        const outcome = yield* readOutcome(
+          context,
+          "transactions",
+          provider.readTransactions({
+            ...providerIdentity(context),
+            providerLeagueKey: context.owned.team.providerLeagueKey,
+            limit: 50,
+          }),
+        );
+        if (outcome._tag !== "ok") {
+          coverageEntries.push(
+            outcome._tag === "failed"
+              ? degradedCoverage("players", "transactions", fetchedAt, outcome.failure.message)
+              : unsupportedCoverage("players", "transactions", fetchedAt),
+          );
+          return identities;
+        }
+        for (const transaction of outcome.value) {
+          for (const player of transaction.players) {
+            if (!wanted.has(player.providerPlayerKey) || identities.has(player.providerPlayerKey)) {
+              continue;
+            }
+            const identity = playerIdentity(player);
+            if (identity !== undefined) {
+              identities.set(player.providerPlayerKey, {
+                identity,
+                eligiblePositions: player.eligiblePositions,
+              });
+            }
+          }
+        }
+        if (identities.size > 0) {
+          coverageEntries.push(
+            coverage(
+              "players",
+              "transactions",
+              fetchedAt,
+              undefined,
+              "Identity for players outside the current roster comes from transaction history.",
+            ),
+          );
+        }
+        return identities;
+      });
+
     const openOffset = (
       userId: UserId,
       fingerprint: string,
@@ -709,6 +766,18 @@ export const FantasyQueriesLive = Layer.effect(
         (roster?.players ?? []).map((player) => [player.providerPlayerKey, player]),
       );
       const detailsByKey = new Map(details.map((player) => [player.providerPlayerKey, player]));
+      const transactionIdentities = yield* transactionIdentityIndex(
+        context,
+        fetchedAt,
+        coverageEntries,
+        valid
+          .map((row) => row.providerPlayerKey)
+          .filter(
+            (key) =>
+              playerIdentity(rosterByKey.get(key)) === undefined &&
+              playerIdentity(detailsByKey.get(key)) === undefined,
+          ),
+      );
       const statRefs = new Map<number, StatRef>();
       const dictionaryStatIds = new Set<number>();
       const statRefFor = (statId: number): Effect.Effect<StatRef> =>
@@ -766,28 +835,16 @@ export const FantasyQueriesLive = Layer.effect(
           Effect.gen(function* () {
             const rosterPlayer = rosterByKey.get(row.providerPlayerKey);
             const detail = detailsByKey.get(row.providerPlayerKey);
+            const transactionIdentity = transactionIdentities.get(row.providerPlayerKey);
             const identity =
+              playerIdentity(rosterPlayer) ??
+              playerIdentity(detail) ??
+              transactionIdentity?.identity;
+            const eligiblePositions =
               rosterPlayer !== undefined
-                ? {
-                    name: rosterPlayer.name,
-                    primaryPosition: rosterPlayer.primaryPosition,
-                    displayPosition: rosterPlayer.displayPosition,
-                  }
-                : detail?.name !== undefined &&
-                    detail.primaryPosition !== undefined &&
-                    detail.displayPosition !== undefined
-                  ? {
-                      name: detail.name,
-                      primaryPosition: detail.primaryPosition,
-                      displayPosition: detail.displayPosition,
-                    }
-                  : undefined;
-            const eligibility =
-              rosterPlayer !== undefined
-                ? { eligiblePositions: rosterPlayer.eligiblePositions }
-                : detail?.eligiblePositions === undefined
-                  ? undefined
-                  : { eligiblePositions: detail.eligiblePositions };
+                ? rosterPlayer.eligiblePositions
+                : (detail?.eligiblePositions ?? transactionIdentity?.eligiblePositions);
+            const eligibility = eligiblePositions === undefined ? undefined : { eligiblePositions };
             const availability = !groups.includes("availability")
               ? undefined
               : rosterPlayer !== undefined
@@ -1381,6 +1438,36 @@ function rosterRules(league: ProviderLeagueSettings): NonNullable<LeagueData["ro
     reserveCount: positions
       .filter((position) => position.kind === "reserve")
       .reduce((total, position) => total + position.count, 0),
+  };
+}
+
+type PlayerIdentityView = {
+  readonly name: string;
+  readonly displayPosition: string;
+  readonly primaryPosition?: string;
+};
+
+type TransactionIdentity = {
+  readonly identity: PlayerIdentityView;
+  readonly eligiblePositions: ReadonlyArray<string> | undefined;
+};
+
+function playerIdentity(
+  source:
+    | {
+        readonly name?: string | undefined;
+        readonly primaryPosition?: string | undefined;
+        readonly displayPosition?: string | undefined;
+      }
+    | undefined,
+): PlayerIdentityView | undefined {
+  if (source?.name === undefined || source.displayPosition === undefined) {
+    return undefined;
+  }
+  return {
+    name: source.name,
+    displayPosition: source.displayPosition,
+    ...(source.primaryPosition === undefined ? {} : { primaryPosition: source.primaryPosition }),
   };
 }
 
