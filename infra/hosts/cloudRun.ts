@@ -116,11 +116,11 @@ export function cloudRunHost(
         role: "roles/iam.serviceAccountUser",
         member: Output.map(account.email, (email) => `serviceAccount:${email}`),
       });
-      yield* GCP.CloudScheduler.Job("LineupRepair", {
+      yield* GCP.CloudScheduler.Job("LineupTick", {
         location: region,
         schedule: "0 * * * *",
         timeZone: "UTC",
-        attemptDeadline: "60s",
+        attemptDeadline: "300s",
         retryConfig: {
           retryCount: 2,
           maxRetryDuration: "300s",
@@ -132,7 +132,7 @@ export function cloudRunHost(
           uri: Output.interpolate`${workerUrl}/api/internal/lineup-worker`,
           httpMethod: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "repair", limit: 50 }),
+          body: JSON.stringify({ action: "tick", limit: 50 }),
           oidcToken: {
             serviceAccountEmail: queueEnqueuer.email,
             audience: workerUrl,
