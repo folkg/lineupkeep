@@ -13,6 +13,11 @@ const settings: Readonly<Record<string, ApplicationSetting>> = {
     development: true,
   },
   EMAIL_FROM: { config: Config.String("EMAIL_FROM"), production: "required", development: true },
+  CONNECTION_ENCRYPTION_KEY: {
+    config: Config.Redacted("CONNECTION_ENCRYPTION_KEY"),
+    production: "required",
+    development: true,
+  },
   RESEND_API_KEY: {
     config: Config.Redacted("RESEND_API_KEY"),
     production: "required",

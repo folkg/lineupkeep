@@ -100,6 +100,7 @@ it.effect(
           ConfigProvider.fromUnknown({
             BETTER_AUTH_URL: "https://app.example.com",
             BETTER_AUTH_SECRET: "private-auth-secret",
+            CONNECTION_ENCRYPTION_KEY: "private-connection-encryption-key",
             RESEND_API_KEY: "private-email-secret",
             EMAIL_FROM: "Lineupkeep <lineupkeep@example.com>",
             AUTH_CLIENT_IP_HEADERS: "cf-connecting-ip",
@@ -111,6 +112,7 @@ it.effect(
       Effect.map((config) => {
         expect(Redacted.isRedacted(config["BETTER_AUTH_SECRET"])).toBe(true);
         expect(Redacted.isRedacted(config["RESEND_API_KEY"])).toBe(true);
+        expect(Redacted.isRedacted(config["CONNECTION_ENCRYPTION_KEY"])).toBe(true);
         expect(config).not.toHaveProperty("CLOUDFLARE_API_TOKEN");
       }),
     ),
@@ -124,6 +126,7 @@ it.effect("exports traces using the forwarded production configuration", () =>
           ConfigProvider.fromUnknown({
             BETTER_AUTH_URL: "https://app.example.com",
             BETTER_AUTH_SECRET: "private-auth-secret",
+            CONNECTION_ENCRYPTION_KEY: "private-connection-encryption-key",
             RESEND_API_KEY: "private-email-secret",
             EMAIL_FROM: "Lineupkeep <lineupkeep@example.com>",
             AUTH_CLIENT_IP_HEADERS: "cf-connecting-ip",
@@ -190,6 +193,7 @@ it.effect("selects optional development settings with explicitly redacted secret
       ConfigProvider.layer(
         ConfigProvider.fromUnknown({
           BETTER_AUTH_SECRET: "private-auth-secret",
+          CONNECTION_ENCRYPTION_KEY: "private-connection-encryption-key",
           GOOGLE_CLIENT_ID: "public-google-client",
           GOOGLE_CLIENT_SECRET: "private-google-secret",
           OTEL_EXPORTER_OTLP_HEADERS: "authorization=private-exporter-secret",
@@ -204,6 +208,7 @@ it.effect("selects optional development settings with explicitly redacted secret
 
     Effect.map((config) => {
       expect(Redacted.isRedacted(config["BETTER_AUTH_SECRET"])).toBe(true);
+      expect(Redacted.isRedacted(config["CONNECTION_ENCRYPTION_KEY"])).toBe(true);
       expect(Redacted.isRedacted(config["GOOGLE_CLIENT_SECRET"])).toBe(true);
       expect(Redacted.isRedacted(config["OTEL_EXPORTER_OTLP_HEADERS"])).toBe(true);
       expect(config["GOOGLE_CLIENT_ID"]).toBe("public-google-client");
@@ -224,6 +229,7 @@ it.effect("requires production email configuration even when development needs n
         ConfigProvider.fromUnknown({
           BETTER_AUTH_URL: "https://app.example.com",
           BETTER_AUTH_SECRET: "private-auth-secret",
+          CONNECTION_ENCRYPTION_KEY: "private-connection-encryption-key",
           EMAIL_FROM: "Lineupkeep <lineupkeep@example.com>",
           AUTH_CLIENT_IP_HEADERS: "cf-connecting-ip",
         }),

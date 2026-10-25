@@ -10,6 +10,7 @@ import { BetterAuthAdapter } from "#contexts/auth/internal/BetterAuthAdapter.ts"
 import { SignInCodeQuotaRepository } from "#contexts/auth/internal/SignInCodeQuotaRepository.ts";
 import type { Connections } from "#contexts/connections/Connections.ts";
 import { connectionScopes } from "#contexts/connections/ConnectionScopes.ts";
+import { ConnectionCredentialEncryption } from "#contexts/connections/internal/ConnectionCredentialEncryption.ts";
 import { ConnectionRepository } from "#contexts/connections/internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "#contexts/connections/internal/ConnectionsDatabase.ts";
 import { ConnectionsLive } from "#contexts/connections/internal/ConnectionsLive.ts";
@@ -29,9 +30,11 @@ const ConnectionsLayer = ConnectionsLive.pipe(
   Layer.provide(ConnectionRepository.layer),
   Layer.provide(ConnectionsDatabase.layer),
 );
-export const ApplicationLayer = Layer.mergeAll(ConnectionsLayer, AuthLayer, YahooProvider).pipe(
-  Layer.provide(PostgresLive),
-  Layer.provide(NodeCrypto.layer),
-);
+export const ApplicationLayer = Layer.mergeAll(
+  ConnectionsLayer,
+  AuthLayer,
+  YahooProvider,
+  ConnectionCredentialEncryption.layer,
+).pipe(Layer.provide(PostgresLive), Layer.provide(NodeCrypto.layer));
 
 export type BackendServices = AuthService | Connections;
