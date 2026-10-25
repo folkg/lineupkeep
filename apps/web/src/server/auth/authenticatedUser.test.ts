@@ -1,0 +1,59 @@
+import { assert, it } from "@effect/vitest";
+import { AuthService } from "@sourdough/backend/auth/Auth";
+import type { AuthenticationSession } from "@sourdough/backend/auth/Auth";
+import { makeRequestContext, requestContextLayer } from "@sourdough/backend/runtime/RequestContext";
+import { Effect, Layer, Ref } from "effect";
+
+import { withAuthenticatedUser } from "./authenticatedUser";
+
+it.effect("rejects an expired session before running the use case", () =>
+  Effect.gen(function* () {
+    const owners = yield* Ref.make<ReadonlyArray<string>>([]);
+    const context = yield* makeRequestContext(
+      new Request("http://localhost/notes", { headers: { "x-request-id": "test-entry" } }),
+    );
+    const authentication = authenticationLayer(undefined);
+
+    const result = yield* withAuthenticatedUser((owner) =>
+      Ref.update(owners, (values) => [...values, owner]).pipe(Effect.as("saved")),
+    ).pipe(Effect.provide(Layer.merge(authentication, requestContextLayer(context))));
+
+    assert.deepStrictEqual(result, { type: "error", error: { type: "auth.required" } });
+    assert.deepStrictEqual(yield* Ref.get(owners), []);
+  }),
+);
+
+it.effect("runs the use case for the authenticated user", () =>
+  Effect.gen(function* () {
+    const owners = yield* Ref.make<ReadonlyArray<string>>([]);
+    const context = yield* makeRequestContext(
+      new Request("http://localhost/notes", { headers: { "x-request-id": "test-entry" } }),
+    );
+    const authentication = authenticationLayer({
+      user: { id: "signed-in-user", email: "person@example.test", name: "Person" },
+    });
+
+    const result = yield* withAuthenticatedUser((owner) =>
+      Ref.update(owners, (values) => [...values, owner]).pipe(Effect.as("saved")),
+    ).pipe(Effect.provide(Layer.merge(authentication, requestContextLayer(context))));
+
+    assert.strictEqual(result, "saved");
+    assert.deepStrictEqual(yield* Ref.get(owners), ["signed-in-user"]);
+  }),
+);
+
+function authenticationLayer(
+  session: AuthenticationSession | undefined,
+): Layer.Layer<AuthService, never, never> {
+  return Layer.succeed(AuthService)(
+    AuthService.of({
+      signInMethods: { google: false },
+      oauthResource: "https://example.com/mcp",
+      resolveAccessToken: () => Effect.succeed({ status: "invalid" as const }),
+      getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
+      consent: () => Effect.succeed("https://client.test/callback"),
+      handle: () => Effect.succeed(new Response()),
+      getSession: () => Effect.succeed(session),
+    }),
+  );
+}

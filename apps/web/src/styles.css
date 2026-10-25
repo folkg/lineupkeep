@@ -1,0 +1,58 @@
+@import "tailwindcss";
+@import "./theme/brand-theme.css";
+@import "./theme/design-system.css";
+
+@layer base {
+  :root {
+    --gutter-start: max(1rem, env(safe-area-inset-left));
+    --gutter-end: max(1rem, env(safe-area-inset-right));
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  @media (min-width: 37.5rem) {
+    :root {
+      --gutter-start: max(1.5rem, env(safe-area-inset-left));
+      --gutter-end: max(1.5rem, env(safe-area-inset-right));
+    }
+  }
+
+  html {
+    min-height: 100%;
+    background: var(--theme-canvas);
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100%;
+    margin: 0;
+    background: var(--theme-canvas);
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    color: var(--theme-paper);
+    background: var(--theme-action);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+}

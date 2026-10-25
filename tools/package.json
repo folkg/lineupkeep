@@ -1,0 +1,12 @@
+{
+  "name": "@sourdough/tools",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./*"
+  },
+  "dependencies": {
+    "effect": "catalog:",
+    "postgres": "catalog:"
+  }
+}

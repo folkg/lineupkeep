@@ -1,0 +1,13 @@
+diff --git a/dist/esm/server-functions-handler.js b/dist/esm/server-functions-handler.js
+index fc6d49794629fddf4241aa8548d819a332fa24da..925935125bf27683e593037a434478c22ec23993 100644
+--- a/dist/esm/server-functions-handler.js
++++ b/dist/esm/server-functions-handler.js
+@@ -1,7 +1,7 @@
+ import { getSolidStartServerFunctionCodec } from "./solid-rpc-codec.js";
+ import { collectSolidStartFlightData } from "./solid-rpc-flight-server.js";
+ import { redirect } from "@tanstack/solid-router";
+-import { configureServerFunctionsServer, createNoJSHandler, handleServerFunctionRequest, parseServerFunctionUrl, registerFlightDataSource, serverFunctionUrl } from "@solidjs/web/server-functions/server";
++import { configureServerFunctionsServer, createNoJSHandler, handleServerFunctionRequest, parseServerFunctionActionUrl as parseServerFunctionUrl, registerFlightDataSource, serverFunctionActionUrl as serverFunctionUrl } from "@solidjs/web/server-functions/server";
+ import { getServerFnById } from "#tanstack-start-server-fn-resolver";
+ import { provideRequestEvent } from "@solidjs/web/storage";
+ import { getStartContext, runWithStartContext } from "@tanstack/start-storage-context";

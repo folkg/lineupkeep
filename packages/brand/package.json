@@ -1,0 +1,8 @@
+{
+  "name": "@sourdough/brand",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./product": "./src/product.ts"
+  }
+}

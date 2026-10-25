@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-18T16:03:17.051Z",
+  "title": "Design System: Sourdough Starter",
+  "extensions": {
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Working Paper",
+        "canonical": "#f4f3ee",
+        "tonalRamp": [
+          "#24241f",
+          "#44443c",
+          "#65645b",
+          "#85847b",
+          "#a7a69d",
+          "#c8c7bf",
+          "#e2e1da",
+          "#f4f3ee"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Clean Sheet",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#262626",
+          "#464646",
+          "#666666",
+          "#878787",
+          "#a9a9a9",
+          "#cacaca",
+          "#e5e5e5",
+          "#ffffff"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Prompt Black",
+        "canonical": "#181a19",
+        "tonalRamp": [
+          "#181a19",
+          "#303330",
+          "#494c49",
+          "#626562",
+          "#7e817d",
+          "#a0a39f",
+          "#c9cbc7",
+          "#f1f2ef"
+        ]
+      },
+      "action": {
+        "role": "primary",
+        "displayName": "Action Cobalt",
+        "canonical": "#215cff",
+        "tonalRamp": [
+          "#061846",
+          "#0c2c7c",
+          "#1242b4",
+          "#1855e5",
+          "#4778ff",
+          "#7d9eff",
+          "#b9c9ff",
+          "#eef2ff"
+        ]
+      },
+      "accent": {
+        "role": "secondary",
+        "displayName": "Signal Lime",
+        "canonical": "#d8ff36",
+        "tonalRamp": [
+          "#1b2500",
+          "#344500",
+          "#506700",
+          "#6f8a00",
+          "#91af00",
+          "#b4d617",
+          "#d8ff36",
+          "#f4ffbd"
+        ]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Danger Red",
+        "canonical": "#b62f2f",
+        "tonalRamp": [
+          "#3b0808",
+          "#651313",
+          "#8e2020",
+          "#b62f2f",
+          "#d45454",
+          "#e98787",
+          "#f5bdbd",
+          "#fff0ee"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Compressed Display",
+        "purpose": "Landing promises and the largest authored statements."
+      },
+      "title": {
+        "displayName": "Route Title",
+        "purpose": "Route titles and prominent prompt-sheet content."
+      },
+      "body": {
+        "displayName": "Base Body",
+        "purpose": "Base field values; supporting reading text uses a separate token."
+      },
+      "supporting": {
+        "displayName": "Supporting Body",
+        "purpose": "Text body and reading copy."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Button labels."
+      }
+    },
+    "shadows": [
+      {
+        "name": "focal-lift",
+        "value": "0 18px 46px rgba(24, 26, 25, 0.12)",
+        "purpose": "Landing prompt sheet only."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 3px #f4f3ee, 0 0 0 6px #215cff",
+        "purpose": "Keyboard focus on interactive controls."
+      }
+    ],
+    "motion": [
+      {
+        "name": "quick",
+        "value": "150ms",
+        "purpose": "Control hover and state transitions."
+      },
+      {
+        "name": "reveal",
+        "value": "620ms",
+        "purpose": "Purposeful surface reveals."
+      },
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Theme ease-out."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stack",
+        "value": "900px"
+      },
+      {
+        "name": "compact",
+        "value": "600px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The route-level action in cobalt.",
+      "html": "<button class=\"ds-button-primary\">START WRITING <svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M7 17 17 7M8 7h9v9\" /></svg></button>",
+      "css": ".ds-button-primary { display:inline-flex; min-height:46px; align-items:center; justify-content:center; gap:9px; border:0; border-radius:5px; padding:0 18px; color:#fff; background:#215cff; font:700 .9rem ui-sans-serif,system-ui,sans-serif; transition:background 150ms cubic-bezier(.16,1,.3,1),transform 150ms cubic-bezier(.16,1,.3,1); } .ds-button-primary svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.8; } .ds-button-primary:hover { background:#1549d8; transform:translateY(-1px); } .ds-button-primary:focus-visible { outline:0; box-shadow:0 0 0 3px #f4f3ee,0 0 0 6px #215cff; }"
+    },
+    {
+      "name": "Accent Button",
+      "kind": "button",
+      "refersTo": "button-accent",
+      "description": "The next local action on a focused panel surface.",
+      "html": "<button class=\"ds-button-accent\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M12 5v14M5 12h14\" /></svg> ADD NOTE</button>",
+      "css": ".ds-button-accent { display:inline-flex; min-height:46px; align-items:center; justify-content:center; gap:9px; border:0; border-radius:5px; padding:0 18px; color:#162100; background:#d8ff36; font:700 .9rem ui-sans-serif,system-ui,sans-serif; transition:background 150ms cubic-bezier(.16,1,.3,1),transform 150ms cubic-bezier(.16,1,.3,1); } .ds-button-accent svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-width:1.8; } .ds-button-accent:hover { background:#c3ea24; transform:translateY(-1px); } .ds-button-accent:focus-visible { outline:0; box-shadow:0 0 0 3px #181a19,0 0 0 6px #215cff; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "A clean working field with a clear digital focus state.",
+      "html": "<label class=\"ds-field\">Title<input placeholder=\"Name the thought\" /></label>",
+      "css": ".ds-field { display:grid; gap:8px; color:#181a19; font:700 .8rem ui-sans-serif,system-ui,sans-serif; } .ds-field input { min-height:48px; border:1px solid #989b94; border-radius:5px; padding:0 12px; color:#181a19; background:#fff; font:400 1rem ui-sans-serif,system-ui,sans-serif; } .ds-field input:hover { border-color:#215cff; } .ds-field input:focus-visible { outline:0; border-color:#215cff; box-shadow:0 0 0 3px #f4f3ee,0 0 0 6px #215cff; }"
+    },
+    {
+      "name": "Note Index",
+      "kind": "chip",
+      "description": "A compact orientation marker, never a decorative pill.",
+      "html": "<span class=\"ds-note-index\">Note 001</span>",
+      "css": ".ds-note-index { display:inline-flex; min-height:27px; align-items:center; border-radius:2px; padding:0 9px; color:#162100; background:#d8ff36; font:700 .72rem ui-sans-serif,system-ui,sans-serif; }"
+    },
+    {
+      "name": "Note Entry",
+      "kind": "card",
+      "refersTo": "note-card",
+      "description": "One complete note and its local actions in a flat reading plane.",
+      "html": "<article class=\"ds-note\"><div><span>Note 001</span><button>EDIT</button></div><h2>Decide the smallest useful release</h2><p>Keep the useful edge clear and leave room for the next thought.</p><time>Updated Aug 11, 2026</time></article>",
+      "css": ".ds-note { display:grid; gap:18px; border:1px solid #989b94; border-radius:8px; padding:22px; color:#181a19; background:#fff; font-family:ui-sans-serif,system-ui,sans-serif; } .ds-note>div { display:flex; align-items:center; justify-content:space-between; gap:18px; } .ds-note span { border-radius:2px; padding:6px 9px; color:#162100; background:#d8ff36; font-size:.72rem; font-weight:700; } .ds-note button { border:0; color:#575b57; background:transparent; font-weight:600; } .ds-note button:hover { color:#181a19; background:#e8eeff; } .ds-note button:focus-visible { outline:0; box-shadow:0 0 0 3px #f4f3ee,0 0 0 6px #215cff; } .ds-note h2 { margin:0; font-size:1.16rem; letter-spacing:-.018em; } .ds-note p { max-width:68ch; margin:0; color:#575b57; line-height:1.7; } .ds-note time { color:#62665f; font-size:.72rem; font-weight:650; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Prompt Book",
+    "overview": "Sourdough Starter looks like a working document prepared for use: paper, black cue rails, decisive controls, and compressed headings locate the task. This is a replaceable reference identity, not a brand requirement for seeded apps.",
+    "keyCharacteristics": [
+      "Working paper and flat reading surfaces.",
+      "Compressed headings for orientation.",
+      "Distinct action and cue signals."
+    ],
+    "rules": [
+      {
+        "name": "The Two-Signal Rule",
+        "body": "Never swap action and cue roles for variety.",
+        "section": "colors"
+      },
+      {
+        "name": "The Native-Scroll Rule",
+        "body": "The document owns vertical scrolling; route content, lists, and cards remain overflow-visible.",
+        "section": "layout"
+      },
+      {
+        "name": "The One-Lift Rule",
+        "body": "Routine surfaces do not combine borders and ambient shadows.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do adapt semantic tokens before individual routes.",
+      "Do keep display type for orientation, not paragraphs."
+    ],
+    "donts": [
+      "Don't decorate with lime or turn every surface into a floating card.",
+      "Don't introduce nested vertical scrolling."
+    ]
+  }
+}

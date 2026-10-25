@@ -1,0 +1,3 @@
+[install]
+# SSR workspace chunks resolve their external dependencies from the application tree.
+linker = "hoisted"

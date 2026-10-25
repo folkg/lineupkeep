@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": false,
+  "jsxSingleQuote": false,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "bracketSameLine": false,
+  "arrowParens": "always",
+  "experimentalSortImports": {},
+  "embeddedLanguageFormatting": "auto",
+  "endOfLine": "lf",
+  "ignorePatterns": ["**/node_modules/**/*", "**/dist/**/*", "apps/web/src/routeTree.gen.ts"]
+}

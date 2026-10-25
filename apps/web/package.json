@@ -1,0 +1,53 @@
+{
+  "name": "@sourdough/web",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#browser/*": "./src/browser/*",
+    "#server/*": "./src/server/*",
+    "#server-functions/*": "./src/server-functions/*",
+    "#contracts/*": "./src/contracts/*",
+    "#routes/*": "./src/routes/*",
+    "#theme/*": "./src/theme/*",
+    "#web/*": "./src/*",
+    "#deploy/*": "./deploy/*",
+    "#deployment-target": "./src/server/targets/node.ts",
+    "#verification-route": "./src/server/verificationDisabled.ts",
+    "#backend-runtime": "@sourdough/backend/runtime/BackendRuntime"
+  },
+  "exports": {
+    "./deploy/*": "./deploy/*",
+    "./server/*": "./src/server/*"
+  },
+  "scripts": {
+    "build": "vite build",
+    "verify:node": "node deploy/node/verify.ts",
+    "verify:cloudflare": "node deploy/cloudflare/verify.ts"
+  },
+  "dependencies": {
+    "@better-auth/oauth-provider": "catalog:",
+    "@fontsource/barlow-condensed": "5.3.0",
+    "@kobalte/core": "2.0.0-alpha.2",
+    "@solidjs/vite-plugin": "catalog:",
+    "@solidjs/web": "catalog:",
+    "@sourdough/backend": "workspace:*",
+    "@sourdough/brand": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/solid-query": "catalog:",
+    "@tanstack/solid-router": "catalog:",
+    "@tanstack/solid-router-ssr-query": "catalog:",
+    "@tanstack/solid-start": "catalog:",
+    "better-auth": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:",
+    "xstate": "6.0.0-alpha.70"
+  },
+  "devDependencies": {
+    "@alchemy.run/cloudflare-runtime": "catalog:",
+    "@solidjs/diagnostics": "catalog:",
+    "fast-check": "4.10.2",
+    "nitro": "catalog:"
+  }
+}

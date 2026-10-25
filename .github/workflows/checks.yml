@@ -1,0 +1,97 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - run: bun run checks:ci
+
+  # Validates production artifacts without cloud credentials: marker scans and a Worker dry run.
+  targets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run targets:verify
+
+  e2e:
+    name: e2e (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node runs Nitro directly; container packages the same artifact; Cloudflare uses workerd.
+        target: [node, cloudflare, container]
+    # Each run starts its own disposable PostgreSQL container with the runner's Docker.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run target E2E and owned infrastructure safety suites
+        run: node e2e/test.ts --target ${{ matrix.target }}
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: playwright-report-${{ matrix.target }}
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+            .artifacts/e2e
+          archive: true
+          retention-days: 7
+          # The run's logs and cleanup record live under the hidden .artifacts directory.
+          include-hidden-files: true

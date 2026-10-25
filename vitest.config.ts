@@ -1,0 +1,139 @@
+import solidPlugin from "@solidjs/vite-plugin";
+import { playwright } from "@vitest/browser-playwright";
+import Icons from "unplugin-icons/vite";
+import { defineConfig } from "vitest/config";
+
+const solidWebRuntime = new URL("./node_modules/@solidjs/web/dist/server.js", import.meta.url)
+  .pathname;
+
+const toolingFixtures = [
+  "scripts/dependencyCruiser.test.ts",
+  "scripts/oxlint.test.ts",
+  "scripts/tooling.test.ts",
+  "scripts/architectureFixture.test.ts",
+  "scripts/server-function-compiler.test.ts",
+];
+
+export default defineConfig({
+  test: {
+    projects: [
+      ...(process.env["INFRA_SAFETY_MANIFEST"] === undefined
+        ? []
+        : [
+            {
+              test: {
+                name: "safety-node",
+                include: ["infra/local/*.safety.test.ts"],
+                fileParallelism: false,
+                maxWorkers: 1,
+                testTimeout: 180_000,
+                hookTimeout: 120_000,
+              },
+            },
+            {
+              test: {
+                name: "safety-container",
+                include: ["infra/local/*.container-safety.test.ts"],
+                fileParallelism: false,
+                maxWorkers: 1,
+                testTimeout: 180_000,
+                hookTimeout: 120_000,
+              },
+            },
+          ]),
+      {
+        mode: "production",
+        ssr: {
+          noExternal: ["@tanstack/solid-query"],
+        },
+        resolve: {
+          conditions: ["import", "module", "node"],
+          alias: {
+            "solid-js/web": solidWebRuntime,
+            "solid-js/store": "solid-js",
+            "solid-js/html": "@solidjs/web",
+            "solid-js/h": "@solidjs/web",
+          },
+        },
+        test: {
+          name: "node",
+          maxWorkers: 2,
+          sequence: { groupOrder: 0 },
+          deps: {
+            optimizer: {
+              ssr: { enabled: false },
+            },
+          },
+          include: [
+            "apps/**/*.test.ts",
+            "apps/**/*.test.tsx",
+            "packages/**/*.test.ts",
+            "packages/**/*.test.tsx",
+            "scripts/**/*.test.ts",
+            "infra/**/*.test.ts",
+          ],
+          exclude: [
+            ...toolingFixtures,
+            "infra/local/*.safety.test.ts",
+            "infra/local/*.container-safety.test.ts",
+            "node_modules/**",
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/*.browser.test.ts",
+            "**/*.browser.test.tsx",
+          ],
+        },
+      },
+      {
+        test: {
+          name: "tooling",
+          include: toolingFixtures,
+          maxWorkers: 1,
+          sequence: { groupOrder: 2 },
+        },
+      },
+      {
+        plugins: [
+          solidPlugin({
+            dev: false,
+            hot: false,
+            observe: true,
+            solid: { moduleName: "@solidjs/web" },
+          }),
+          Icons({
+            compiler: "solid",
+            iconCustomizer: (_collection, _icon, props) => {
+              props["aria-hidden"] = "true";
+            },
+          }),
+        ],
+        resolve: {
+          tsconfigPaths: true,
+          alias: {
+            "solid-js/web": "@solidjs/web",
+            "solid-js/store": "solid-js",
+            "solid-js/html": "@solidjs/web",
+            "solid-js/h": "@solidjs/web",
+          },
+        },
+        test: {
+          name: "browser",
+          sequence: { groupOrder: 1 },
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: [{ browser: "chromium" }],
+          },
+          include: [
+            "apps/**/*.browser.test.ts",
+            "apps/**/*.browser.test.tsx",
+            "packages/**/*.browser.test.ts",
+            "packages/**/*.browser.test.tsx",
+          ],
+          exclude: ["node_modules/**", "**/node_modules/**", "**/dist/**"],
+        },
+      },
+    ],
+  },
+});

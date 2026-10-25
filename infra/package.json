@@ -1,0 +1,32 @@
+{
+  "name": "@sourdough/infra",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#infra/*": "./*"
+  },
+  "exports": {
+    "./*": "./*"
+  },
+  "scripts": {
+    "plan": "env -u npm_execpath node ../node_modules/alchemy/bin/cli.js plan alchemy.run.ts",
+    "deploy": "env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy alchemy.run.ts",
+    "plan:database": "env -u npm_execpath node ../node_modules/alchemy/bin/cli.js plan database.run.ts",
+    "deploy:database": "env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy database.run.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/frontend-frameworks": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@effect/sql-pg": "catalog:",
+    "@sourdough/tools": "workspace:*",
+    "@sourdough/web": "workspace:*",
+    "alchemy": "catalog:",
+    "effect": "catalog:",
+    "vite": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

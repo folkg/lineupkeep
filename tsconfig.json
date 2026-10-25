@@ -1,0 +1,59 @@
+{
+  "$schema": "./node_modules/@effect/tsgo/schema.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "jsx": "preserve",
+    "jsxImportSource": "@solidjs/web",
+    "allowJs": false,
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnostics": false,
+        "allowedUnstableApis": [
+          "@effect/vitest",
+          "@effect/platform-node-shared/NodeCrypto",
+          "@effect/platform-node/NodeServices",
+          "effect/ai",
+          "effect/http",
+          "effect/observability",
+          "effect/Crypto",
+          "effect/Arbitrary",
+          "effect/testing",
+          "@effect/sql-pg",
+          "@effect/sql-pglite"
+        ]
+      }
+    ]
+  },
+  "include": [
+    "*.ts",
+    "apps/**/*.ts",
+    "e2e/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "scripts/**/*.ts",
+    "tools/**/*.ts",
+    "infra/**/*.ts"
+  ],
+  "exclude": ["**/node_modules", "**/dist", "**/.output", "**/.alchemy", "**/.tanstack", "**/.vite"]
+}

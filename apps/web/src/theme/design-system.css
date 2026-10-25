@@ -1,0 +1,166 @@
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --leading-*: initial;
+  --tracking-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --ease-*: initial;
+}
+
+@theme inline {
+  --color-canvas: var(--theme-canvas);
+  --color-paper: var(--theme-paper);
+  --color-ink: var(--theme-ink);
+  --color-ink-soft: var(--theme-ink-soft);
+  --color-ink-faint: var(--theme-ink-faint);
+  --color-rule: var(--theme-rule);
+  --color-rule-strong: var(--theme-rule-strong);
+  --color-action: var(--theme-action);
+  --color-action-hover: var(--theme-action-hover);
+  --color-action-soft: var(--theme-action-soft);
+  --color-accent: var(--theme-accent);
+  --color-accent-hover: var(--theme-accent-hover);
+  --color-on-accent: var(--theme-on-accent);
+  --color-danger: var(--theme-danger);
+  --color-danger-hover: var(--theme-danger-hover);
+  --color-danger-soft: var(--theme-danger-soft);
+  --color-danger-on-panel: var(--theme-danger-on-panel);
+  --color-panel: var(--theme-panel);
+  --color-on-panel: var(--theme-on-panel);
+  --color-on-panel-soft: var(--theme-on-panel-soft);
+  --color-panel-rule: var(--theme-panel-rule);
+
+  --color-google-fill: var(--brand-google-fill);
+  --color-google-stroke: var(--brand-google-stroke);
+  --color-google-ink: var(--brand-google-ink);
+
+  --font-display: var(--theme-font-display);
+  --font-google: "Google Sans", Roboto, Arial, sans-serif;
+  --font-sans: var(--theme-font-sans);
+
+  --text-display: var(--theme-text-display);
+  --text-display--line-height: var(--theme-text-display-line-height);
+  --text-display--letter-spacing: var(--theme-text-display-letter-spacing);
+  --text-statement: var(--theme-text-statement);
+  --text-statement--line-height: var(--theme-text-display-line-height);
+  --text-statement--letter-spacing: var(--theme-text-display-letter-spacing);
+  --text-headline: var(--theme-text-headline);
+  --text-headline--line-height: var(--theme-text-headline-line-height);
+  --text-headline--letter-spacing: var(--theme-text-headline-letter-spacing);
+  --text-title: var(--theme-text-title);
+  --text-title--line-height: 0.95;
+  --text-title--letter-spacing: var(--theme-tracking-tight);
+  --text-subtitle: var(--theme-text-subtitle);
+  --text-subtitle--line-height: 1;
+  --text-subtitle--letter-spacing: var(--theme-tracking-tight);
+  --text-section-title: var(--theme-text-section-title);
+  --text-section-title--line-height: 1.1;
+  --text-item: var(--theme-text-item);
+  --text-item--line-height: 1.3;
+  --text-item--letter-spacing: var(--theme-text-item-letter-spacing);
+  --text-lede: var(--theme-text-lede);
+  --text-lede--line-height: 1.68;
+  --text-base: var(--theme-text-base);
+  --text-base--line-height: 1.6;
+  --text-glyph: var(--theme-text-glyph);
+  --text-glyph--line-height: 1;
+  --text-supporting: var(--theme-text-supporting);
+  --text-supporting--line-height: 1.65;
+  --text-control: var(--theme-text-control);
+  --text-control--line-height: 1;
+  --text-label: var(--theme-text-label);
+  --text-label--line-height: 1;
+  --text-caption: var(--theme-text-caption);
+  --text-caption--line-height: 1.4;
+  --text-feedback: var(--theme-text-feedback);
+  --text-feedback--line-height: 1.4;
+  --text-metadata: var(--theme-text-metadata);
+  --text-google: 0.875rem;
+  --text-google--line-height: 1.25rem;
+  --text-metadata--line-height: 1.4;
+
+  --tracking-tight: var(--theme-tracking-tight);
+  --tracking-rail: var(--theme-tracking-rail);
+
+  --spacing-tap-target: var(--theme-size-tap-target);
+  --spacing-button: var(--theme-size-button);
+  --spacing-field: var(--theme-size-field);
+  --spacing-search-trailing: calc(var(--theme-size-tap-target) * 2);
+  --spacing-cue: var(--theme-size-cue);
+  --spacing-glyph: var(--theme-size-glyph);
+  --spacing-header: var(--theme-size-header);
+  --spacing-header-wide: var(--theme-size-header-wide);
+  --spacing-surface: var(--theme-space-surface);
+
+  --radius-tape: var(--theme-radius-tape);
+  --radius-sheet: var(--theme-radius-sheet);
+  --radius-control: var(--theme-radius-control);
+  --radius-surface: var(--theme-radius-surface);
+
+  --shadow-lift: 0 18px 46px var(--theme-lift);
+  --shadow-focus: 0 0 0 3px var(--theme-canvas), 0 0 0 6px var(--theme-action);
+
+  --ease-out-cubic: var(--theme-ease-out);
+
+  --breakpoint-sm: 37.5rem;
+  --breakpoint-md: 56.25rem;
+
+  --animate-prompt-in: prompt-in var(--theme-duration-reveal) var(--theme-ease-out) both;
+  --animate-overlay-in: overlay-in var(--theme-duration-quick) var(--theme-ease-out) both;
+  --animate-dialog-in: dialog-in var(--theme-duration-quick) var(--theme-ease-out) both;
+
+  @keyframes prompt-in {
+    from {
+      clip-path: inset(0 0 100% 0);
+    }
+
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
+  @keyframes overlay-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      scale: 0.95;
+    }
+
+    to {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+}
+
+:root {
+  --brand-google-fill: #ffffff;
+  --brand-google-stroke: #747775;
+  --brand-google-ink: #1f1f1f;
+}
+
+.dark {
+  --brand-google-fill: #131314;
+  --brand-google-stroke: #8e918f;
+  --brand-google-ink: #e3e3e3;
+}
+
+@utility duration-quick {
+  transition-duration: var(--theme-duration-quick);
+}

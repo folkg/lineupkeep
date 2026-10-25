@@ -1,0 +1,11 @@
+diff --git a/dist/authorize-D_jy3s-1.mjs b/dist/authorize-D_jy3s-1.mjs
+--- a/dist/authorize-D_jy3s-1.mjs
++++ b/dist/authorize-D_jy3s-1.mjs
+@@ -2233,6 +2233,7 @@ async function registerClientMetadataDocument(ctx, opts, input) {
+ function isUniqueConstraintError(error) {
+ 	if (!error || typeof error !== "object") return false;
+ 	const candidate = error;
++	if (isUniqueConstraintError(candidate.cause)) return true;
+ 	const code = String(candidate.code ?? candidate.errno ?? "");
+ 	if ([
+ 		"1062",

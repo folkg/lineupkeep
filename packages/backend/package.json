@@ -1,0 +1,40 @@
+{
+  "name": "@sourdough/backend",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#contexts/*": "./src/contexts/*",
+    "#database/*": "./src/database/*",
+    "#runtime/*": "./src/runtime/*",
+    "#config/*": "./src/config/*",
+    "#email/*": "./src/email/*",
+    "#utilities/*": "./src/utilities/*",
+    "#backend/*": "./src/*"
+  },
+  "exports": {
+    "./scripts/*": "./scripts/*",
+    "./runtime/*": "./src/runtime/*.ts",
+    "./*": "./src/contexts/*.ts"
+  },
+  "scripts": {
+    "architecture": "node scripts/check-table-ownership.ts"
+  },
+  "dependencies": {
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/core": "catalog:",
+    "@better-auth/drizzle-adapter": "catalog:",
+    "@better-auth/mcp": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
+    "@effect/sql-pg": "catalog:",
+    "@effect/sql-pglite": "catalog:",
+    "@electric-sql/pglite": "catalog:",
+    "@sourdough/brand": "workspace:*",
+    "@typeonce/effect-machine": "catalog:",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "pg": "8.23.1",
+    "postgres": "catalog:"
+  }
+}

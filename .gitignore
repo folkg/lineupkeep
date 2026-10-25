@@ -1,0 +1,59 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# end-to-end results
+e2e/test-results
+e2e/playwright-report
+
+# test-run records, application verification evidence, the checkout's run lock, and temporary scenarios
+.artifacts/
+e2e/scratch/
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+*.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+**/.tanstack/
+.vitest-attachments
+.vitest
+*.tsbuildinfo
+
+# local design tooling artifacts
+.impeccable/config.local.json
+.impeccable/questions/
+.impeccable/direction-options*.json
+.impeccable/*.png
+
+# local agent tooling
+.codex
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# deployment target output
+.output
+.wrangler
+.alchemy

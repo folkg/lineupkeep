@@ -1,0 +1,96 @@
+{
+  "language_servers": ["...", "oxc"],
+  "languages": {
+    "TypeScript": {
+      "language_servers": ["...", "oxc"],
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    },
+    "TSX": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    },
+    "JSON": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    },
+    "Markdown": {
+      "format_on_save": "on",
+      "prettier": {
+        "allowed": false
+      },
+      "formatter": [
+        {
+          "language_server": {
+            "name": "oxfmt"
+          }
+        }
+      ]
+    }
+  },
+  "formatter": {
+    "language_server": {
+      "name": "oxc"
+    }
+  },
+  "lsp": {
+    "oxlint": {
+      "initialization_options": {
+        "options": {
+          "configPath": null,
+          "run": "onType",
+          "typeAware": true,
+          "fixKind": "safe_fix",
+          "fmt.experimental": true
+        }
+      }
+    },
+    "oxfmt": {
+      "initialization_options": {
+        "settings": {
+          "configPath": null,
+          "run": "onSave"
+        }
+      }
+    }
+  },
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/.svn",
+    "**/.hg",
+    "**/.jj",
+    "**/CVS",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/.classpath",
+    "**/.settings",
+    "**/routeTree.gen.ts"
+  ]
+}
