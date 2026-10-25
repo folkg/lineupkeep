@@ -1,0 +1,15 @@
+{
+  "name": "@lineupkeep/hosted-browser-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run deploy/assemble.ts"
+  },
+  "dependencies": {
+    "@lineupkeep/hosted-browser": "workspace:*",
+    "ws": "catalog:"
+  },
+  "devDependencies": {
+    "@types/ws": "catalog:"
+  }
+}

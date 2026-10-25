@@ -70,7 +70,7 @@ const loginPage = `<!doctype html>
         <label>Username <input name="username" autofocus autocomplete="off"></label>
         <button type="submit">Sign in</button>
       </form>
-      <small>Lineupkeep never sees this page's credentials.</small>
+      <small>This stand-in page runs only in development and automated tests.</small>
     </main>
   </body>
 </html>`;

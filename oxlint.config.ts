@@ -590,10 +590,13 @@ const tests = ["**/*.test.{ts,tsx}"];
 const nodeTransport = ["packages/backend/src/runtime/public-internet/transport/node/**/*.ts"];
 const hostedBrowserShell = [
   "apps/web/src/server/hostedLinking/playwrightHostedBrowser.ts",
+  "apps/web/src/server/hostedLinking/remoteHostedBrowser.ts",
+  "apps/web/src/server/hostedLinking/cloudRunIdentity.ts",
   "apps/web/src/server/hostedLinking/hostedLinkingStream.ts",
 ];
 const hostedBrowserShellTests = [
   "apps/web/src/server/hostedLinking/playwrightHostedBrowser.test.ts",
+  "apps/web/src/server/hostedLinking/remoteHostedBrowser.test.ts",
 ];
 const isolateTransport = ["packages/backend/src/runtime/public-internet/transport/isolate/**/*.ts"];
 const transportTests = ["packages/backend/src/runtime/public-internet/transport/**/*.test.ts"];
@@ -764,16 +767,23 @@ export default defineConfig({
       rules: {
         "effecttsgo/async-function": "off",
         "effecttsgo/global-date": "off",
+        "effecttsgo/global-fetch": "off",
         "effecttsgo/global-timers": "off",
         "effecttsgo/new-promise": "off",
         "effecttsgo/node-builtin-import": "off",
       },
     },
     {
+      files: ["apps/web/src/server/targets/node.ts"],
+      rules: { "effecttsgo/process-env": "off" },
+    },
+    {
       files: hostedBrowserShellTests,
       rules: {
+        "effecttsgo/global-date": "off",
         "effecttsgo/global-error-in-effect-catch": "off",
         "effecttsgo/global-error-in-effect-failure": "off",
+        "effecttsgo/global-timers": "off",
         "effecttsgo/new-promise": "off",
         "effecttsgo/node-builtin-import": "off",
       },

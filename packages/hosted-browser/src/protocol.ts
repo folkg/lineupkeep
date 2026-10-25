@@ -1,0 +1,201 @@
+export const browserViewport = { width: 1100, height: 720 } as const;
+
+export type HostedBrowserInput =
+  | { readonly _tag: "Click"; readonly x: number; readonly y: number }
+  | { readonly _tag: "Text"; readonly text: string }
+  | { readonly _tag: "Key"; readonly key: HostedBrowserKey }
+  | { readonly _tag: "Scroll"; readonly deltaY: number };
+
+export type HostedBrowserKey =
+  | "Enter"
+  | "Tab"
+  | "Backspace"
+  | "Delete"
+  | "Escape"
+  | "ArrowUp"
+  | "ArrowDown"
+  | "ArrowLeft"
+  | "ArrowRight"
+  | "Home"
+  | "End"
+  | "PageUp"
+  | "PageDown";
+
+export type HostedBrowserStatus = "starting" | "loading" | "waiting" | "two-factor" | "blocked";
+
+export type HostedBrowserFailure =
+  | "browser_unavailable"
+  | "page_unavailable"
+  | "provider_unavailable"
+  | "session_rejected"
+  | "completion_failed"
+  | "expired";
+
+export type HostedBrowserMessage =
+  | { readonly _tag: "Status"; readonly status: HostedBrowserStatus }
+  | { readonly _tag: "Ready"; readonly connectionId: string; readonly teamsDiscovered: number }
+  | { readonly _tag: "Failed"; readonly reason: HostedBrowserFailure }
+  | { readonly _tag: "Expired" };
+
+export type HostedBrowserTransportMessage =
+  | { readonly _tag: "Status"; readonly status: HostedBrowserStatus }
+  | { readonly _tag: "Captured"; readonly session: string }
+  | { readonly _tag: "Failed"; readonly reason: HostedBrowserFailure }
+  | { readonly _tag: "Expired" };
+
+export function encodeHostedBrowserInput(input: HostedBrowserInput): string {
+  return JSON.stringify(input);
+}
+
+export function parseHostedBrowserInput(value: string): HostedBrowserInput | undefined {
+  const decoded = parseJson(value);
+  if (!isRecord(decoded) || typeof decoded["_tag"] !== "string") {
+    return undefined;
+  }
+  switch (decoded["_tag"]) {
+    case "Click": {
+      const x = decoded["x"];
+      const y = decoded["y"];
+      return isUnit(x) && isUnit(y) ? { _tag: "Click", x, y } : undefined;
+    }
+    case "Text": {
+      const text = decoded["text"];
+      return typeof text === "string" && text.length >= 1 && text.length <= 2_048
+        ? { _tag: "Text", text }
+        : undefined;
+    }
+    case "Key": {
+      const key = decoded["key"];
+      return isHostedBrowserKey(key) ? { _tag: "Key", key } : undefined;
+    }
+    case "Scroll": {
+      const deltaY = decoded["deltaY"];
+      return typeof deltaY === "number" && deltaY >= -2_000 && deltaY <= 2_000
+        ? { _tag: "Scroll", deltaY }
+        : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
+export function encodeHostedBrowserMessage(message: HostedBrowserMessage): string {
+  return JSON.stringify(message);
+}
+
+export function parseHostedBrowserMessage(value: string): HostedBrowserMessage | undefined {
+  const decoded = parseJson(value);
+  if (!isRecord(decoded) || typeof decoded["_tag"] !== "string") {
+    return undefined;
+  }
+  switch (decoded["_tag"]) {
+    case "Status":
+      return isHostedBrowserStatus(decoded["status"])
+        ? { _tag: "Status", status: decoded["status"] }
+        : undefined;
+    case "Ready": {
+      const connectionId = decoded["connectionId"];
+      const teamsDiscovered = decoded["teamsDiscovered"];
+      return typeof connectionId === "string" &&
+        typeof teamsDiscovered === "number" &&
+        Number.isInteger(teamsDiscovered) &&
+        teamsDiscovered >= 0
+        ? { _tag: "Ready", connectionId, teamsDiscovered }
+        : undefined;
+    }
+    case "Failed":
+      return isHostedBrowserFailure(decoded["reason"])
+        ? { _tag: "Failed", reason: decoded["reason"] }
+        : undefined;
+    case "Expired":
+      return { _tag: "Expired" };
+    default:
+      return undefined;
+  }
+}
+
+export function encodeTransportMessage(message: HostedBrowserTransportMessage): string {
+  return JSON.stringify(message);
+}
+
+export function parseTransportMessage(value: string): HostedBrowserTransportMessage | undefined {
+  const decoded = parseJson(value);
+  if (!isRecord(decoded) || typeof decoded["_tag"] !== "string") {
+    return undefined;
+  }
+  switch (decoded["_tag"]) {
+    case "Status":
+      return isHostedBrowserStatus(decoded["status"])
+        ? { _tag: "Status", status: decoded["status"] }
+        : undefined;
+    case "Captured": {
+      const session = decoded["session"];
+      return typeof session === "string" && session.length >= 1 && session.length <= 8_192
+        ? { _tag: "Captured", session }
+        : undefined;
+    }
+    case "Failed":
+      return isHostedBrowserFailure(decoded["reason"])
+        ? { _tag: "Failed", reason: decoded["reason"] }
+        : undefined;
+    case "Expired":
+      return { _tag: "Expired" };
+    default:
+      return undefined;
+  }
+}
+
+function parseJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function isUnit(value: unknown): value is number {
+  return typeof value === "number" && value >= 0 && value <= 1;
+}
+
+function isHostedBrowserKey(value: unknown): value is HostedBrowserKey {
+  return (
+    value === "Enter" ||
+    value === "Tab" ||
+    value === "Backspace" ||
+    value === "Delete" ||
+    value === "Escape" ||
+    value === "ArrowUp" ||
+    value === "ArrowDown" ||
+    value === "ArrowLeft" ||
+    value === "ArrowRight" ||
+    value === "Home" ||
+    value === "End" ||
+    value === "PageUp" ||
+    value === "PageDown"
+  );
+}
+
+function isHostedBrowserStatus(value: unknown): value is HostedBrowserStatus {
+  return (
+    value === "starting" ||
+    value === "loading" ||
+    value === "waiting" ||
+    value === "two-factor" ||
+    value === "blocked"
+  );
+}
+
+function isHostedBrowserFailure(value: unknown): value is HostedBrowserFailure {
+  return (
+    value === "browser_unavailable" ||
+    value === "page_unavailable" ||
+    value === "provider_unavailable" ||
+    value === "session_rejected" ||
+    value === "completion_failed" ||
+    value === "expired"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

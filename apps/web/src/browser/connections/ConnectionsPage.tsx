@@ -32,7 +32,7 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Connect Yahoo once in a private browser session, or use the local helper on your computer. Lineupkeep never stores your provider password."
+        lede="Connect Yahoo once in a temporary browser session, or use the local helper on your computer. Your provider password is never stored or logged."
         title="Connections"
       >
         <Stack gap="lg">

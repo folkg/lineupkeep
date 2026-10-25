@@ -8,6 +8,7 @@ import { Stage } from "alchemy/Stage";
 import { Config, Effect, Layer } from "effect";
 import type { Redacted } from "effect";
 
+import { buildHostedBrowserImage } from "#infra/build/hostedBrowser.ts";
 import { buildNodeImage } from "#infra/build/node.ts";
 import { HostDeployment } from "#infra/services/HostDeployment.ts";
 import type { HostEnvironment } from "#infra/services/HostDeployment.ts";
@@ -36,6 +37,9 @@ export function cloudRunHost(
       const workerAccount = yield* GCP.IAM.ServiceAccount("WorkerRuntime", {
         displayName: "Lineupkeep private lineup worker",
       });
+      const browserAccount = yield* GCP.IAM.ServiceAccount("HostedBrowserRuntime", {
+        displayName: "Lineupkeep hosted browser runtime",
+      });
       const { plain, secrets } = partitionEnvironment(environment);
       const secretEntries = yield* Effect.forEach(secrets, ([name, value]) =>
         runtimeSecret(name, value, [
@@ -43,13 +47,42 @@ export function cloudRunHost(
           { id: `Access-${name}-Worker`, account: workerAccount },
         ]),
       );
-      const image = yield* publishCloudRunImage(
-        Output.map(registry.registryUri, (uri) => {
-          if (uri === undefined) {
-            throw new Error("Artifact Registry did not return a registry URI");
-          }
-          return uri;
-        }),
+      const registryUri = Output.map(registry.registryUri, (uri) => {
+        if (uri === undefined) {
+          throw new Error("Artifact Registry did not return a registry URI");
+        }
+        return uri;
+      });
+      const descriptorKey = yield* Config.Redacted("HOSTED_BROWSER_DESCRIPTOR_KEY");
+      const descriptorSecret = yield* runtimeSecret(
+        "HOSTED_BROWSER_DESCRIPTOR_KEY",
+        descriptorKey,
+        [
+          { id: "Access-HOSTED_BROWSER_DESCRIPTOR_KEY", account },
+          { id: "Access-HOSTED_BROWSER_DESCRIPTOR_KEY-Browser", account: browserAccount },
+        ],
+      );
+      const descriptorEnv = {
+        name: "HOSTED_BROWSER_DESCRIPTOR_KEY",
+        valueSource: {
+          secretKeyRef: {
+            secret: descriptorSecret.secret.name,
+            version: descriptorSecret.version,
+          },
+        },
+      };
+      const image = yield* publishImage(
+        "PublishImage",
+        "web",
+        yield* buildNodeImage(),
+        registryUri,
+        region,
+      );
+      const browserImage = yield* publishImage(
+        "PublishHostedBrowserImage",
+        "browser",
+        yield* buildHostedBrowserImage(),
+        registryUri,
         region,
       );
       const runtimeEnv = [
@@ -142,6 +175,35 @@ export function cloudRunHost(
           },
         },
       });
+      const browser = yield* GCP.Run.Service("HostedBrowser", {
+        serviceId: "lineupkeep-hb",
+        location: region,
+        ingress: "INGRESS_TRAFFIC_ALL",
+        invokerIamDisabled: false,
+        template: {
+          ...hostedBrowserTemplate(),
+          serviceAccount: browserAccount.email,
+          containers: [
+            {
+              ...hostedBrowserContainer(),
+              image: browserImage,
+              env: [{ name: "NODE_ENV", value: "production" }, descriptorEnv],
+            },
+          ],
+        },
+      });
+      const browserUrl = Output.map(browser.uri, (uri) => {
+        if (uri === undefined) {
+          throw new Error("Cloud Run did not return a hosted browser URI");
+        }
+        return uri;
+      });
+      yield* GCP.IAM.Member("HostedBrowserInvoker", {
+        kind: "run.service",
+        name: browser.name,
+        role: "roles/run.invoker",
+        member: Output.map(account.email, (email) => `serviceAccount:${email}`),
+      });
       const service = yield* GCP.Run.Service("Web", {
         location: region,
         ingress: "INGRESS_TRAFFIC_ALL",
@@ -158,6 +220,8 @@ export function cloudRunHost(
                 { name: "LINEUP_CLOUD_TASKS_QUEUE", value: queue.name },
                 { name: "LINEUP_WORKER_URL", value: workerUrl },
                 { name: "LINEUP_QUEUE_SERVICE_ACCOUNT", value: queueEnqueuer.email },
+                { name: "HOSTED_BROWSER_URL", value: browserUrl },
+                descriptorEnv,
               ],
             },
           ],
@@ -203,6 +267,31 @@ function cloudRunTemplate(): {
   };
 }
 
+export function hostedBrowserTemplate(): {
+  timeout: string;
+  maxInstanceRequestConcurrency: number;
+  scaling: { minInstanceCount: number; maxInstanceCount: number };
+} {
+  return {
+    timeout: "780s",
+    maxInstanceRequestConcurrency: 1,
+    scaling: { minInstanceCount: 0, maxInstanceCount: 2 },
+  };
+}
+
+export function hostedBrowserContainer(): ReturnType<typeof cloudRunContainer> {
+  return {
+    ports: [{ containerPort: 8080 }],
+    env: [{ name: "NODE_ENV", value: "production" }],
+    resources: { limits: { cpu: "1", memory: "2Gi" }, cpuIdle: true, startupCpuBoost: true },
+    startupProbe: {
+      httpGet: { path: "/healthz", port: 8080 },
+      periodSeconds: 5,
+      failureThreshold: 30,
+    },
+  };
+}
+
 export function cloudRunContainer(): {
   ports: {
     containerPort: number;
@@ -239,22 +328,22 @@ export function cloudRunContainer(): {
   };
 }
 
-function publishCloudRunImage(
+function publishImage(
+  id: string,
+  tag: string,
+  build: import("alchemy/Docker").Image,
   registry: Output.Output<string>,
   region: string,
 ): Effect.Effect<
   Output.Output<string>,
   never,
-  | import("alchemy").Provider<Command.Build>
-  | import("alchemy").Provider<Command.Exec>
-  | import("alchemy/Docker/Providers").Providers
+  import("alchemy").Provider<Command.Exec> | import("alchemy/Docker/Providers").Providers
 > {
   return Effect.gen(function* () {
-    const build = yield* buildNodeImage();
     const image = Output.map(Output.all(registry, build.imageId), ([name, hash]) => {
-      return `${name}/web:${hash.replace("sha256:", "")}`;
+      return `${name}/${tag}:${hash.replace("sha256:", "")}`;
     });
-    const published = yield* Command.Exec("PublishImage", {
+    const published = yield* Command.Exec(id, {
       cwd: new URL("../../", import.meta.url).pathname,
       command: `gcloud auth configure-docker ${region}-docker.pkg.dev --quiet && docker tag "$LOCAL_IMAGE" "$IMAGE" && docker push "$IMAGE"`,
       shell: true,

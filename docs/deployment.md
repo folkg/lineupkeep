@@ -32,27 +32,45 @@ The `cloud-run` stage is deployed in `lineupkeep-prod` (`us-east1`) under the
 owner's CAD 5/month budget. `BETTER_AUTH_URL` and the canonical service origin
 are the same URL; the provisioned environment file now owns that value.
 
-| Item                              | Value                                                                                                                                                                                                                      |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public origin / `BETTER_AUTH_URL` | `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-hcfc7y3kha-ue.a.run.app`                                                                                                                                             |
-| Web service                       | `lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc` — public ingress, min 0 / max 3, concurrency 20, 1 vCPU / 512 MiB, request-based billing (`cpu-throttling=true`), startup CPU boost                                         |
-| Worker service                    | `lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y` — min 0 / max 2, concurrency 2, timeout 900 s, request-based billing, invoker IAM enforced (unauthenticated requests return 403)                                         |
-| Runtime accounts                  | Web: `alchemefdt2v24ebek3kk5bbglblvc@lineupkeep-prod.iam.gserviceaccount.com`; worker: `alchems6msjzkhxxseuglypqfudf7b@…`; queue/scheduler invoker: `alchem2r7pyg3ia7ujwxdkdpon7d5z@…`                                     |
-| Queue                             | `projects/lineupkeep-prod/locations/us-east1/queues/lineupkeepweb-lineupworkerqueue-cloud-run-vhxrepebzd4sojv4` — running, 5 dispatches/s, 4 concurrent, 5 attempts with 10–300 s backoff                                  |
-| Scheduler                         | `lineupkeepweb-lineuptick-cloud-run-ctseuiblv2wtwlwu` — `0 * * * *` UTC, OIDC to `POST /api/internal/lineup-worker` with `{action:"tick",limit:50}`, 300 s attempt deadline, 2 retries                                     |
-| Registry                          | `us-east1-docker.pkg.dev/lineupkeep-prod/lineupkeepweb-registry-cloud-run-u4rplfecdzi27v3w` (88.98 MB, 4 images)                                                                                                           |
-| Application database              | Alchemy-managed `LineupkeepDatabase` / `production` Neon Free project, independent of protected state                                                                                                                      |
-| Secret Manager                    | `lineupkeepweb-secret-better-auth-secret-cloud-run-zz7b4zbcg2rfo5fb`, `…-connection-encryption-key-cloud-run-ec7zelts3e7mtrtt`, `…-resend-api-key-cloud-run-6daiaqee2uvf6llx`, `…-database-url-cloud-run-2zpqgtvdba7gierc` |
-| Secret versions                   | 10 active (2 / 2 / 4 / 2) on 2026-10-25; revisions pin immutable version numbers                                                                                                                                           |
+| Item                              | Value                                                                                                                                                                                                                                                                                                     |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public origin / `BETTER_AUTH_URL` | `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-hcfc7y3kha-ue.a.run.app`                                                                                                                                                                                                                            |
+| Web service                       | `lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc` — public ingress, min 0 / max 3, concurrency 20, 1 vCPU / 512 MiB, request-based billing (`cpu-throttling=true`), startup CPU boost                                                                                                                        |
+| Worker service                    | `lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y` — min 0 / max 2, concurrency 2, timeout 900 s, request-based billing, invoker IAM enforced (unauthenticated requests return 403)                                                                                                                        |
+| Hosted browser service            | `lineupkeep-hb` — `https://lineupkeep-hb-hcfc7y3kha-ue.a.run.app`, current revision `lineupkeep-hb-00004-tb2`, min 0 / max 2, concurrency 1, 1 vCPU / 2 GiB, timeout 780 s, `/healthz` startup probe, request-based billing, invoker IAM enforced; only the web runtime account holds `roles/run.invoker` |
+| Runtime accounts                  | Web: `alchemefdt2v24ebek3kk5bbglblvc@lineupkeep-prod.iam.gserviceaccount.com`; worker: `alchems6msjzkhxxseuglypqfudf7b@…`; queue/scheduler invoker: `alchem2r7pyg3ia7ujwxdkdpon7d5z@…`; hosted browser: `alchemgx4kg3sc7lv6v6t2vmqz6g6v@…`                                                                |
+| Queue                             | `projects/lineupkeep-prod/locations/us-east1/queues/lineupkeepweb-lineupworkerqueue-cloud-run-vhxrepebzd4sojv4` — running, 5 dispatches/s, 4 concurrent, 5 attempts with 10–300 s backoff                                                                                                                 |
+| Scheduler                         | `lineupkeepweb-lineuptick-cloud-run-ctseuiblv2wtwlwu` — `0 * * * *` UTC, OIDC to `POST /api/internal/lineup-worker` with `{action:"tick",limit:50}`, 300 s attempt deadline, 2 retries                                                                                                                    |
+| Registry                          | `us-east1-docker.pkg.dev/lineupkeep-prod/lineupkeepweb-registry-cloud-run-u4rplfecdzi27v3w` — `web:*` and `browser:*` images; the browser image is about 853 MB expanded and replaces the Chromium headless deployment on every content change                                                            |
+| Application database              | Alchemy-managed `LineupkeepDatabase` / `production` Neon Free project, independent of protected state                                                                                                                                                                                                     |
+| Secret Manager                    | `lineupkeepweb-secret-better-auth-secret-cloud-run-zz7b4zbcg2rfo5fb`, `…-connection-encryption-key-cloud-run-ec7zelts3e7mtrtt`, `…-resend-api-key-cloud-run-6daiaqee2uvf6llx`, `…-database-url-cloud-run-2zpqgtvdba7gierc`, `…-hosted-browser-descriptor-key-cloud-run-ifx5uoc5omsxeu74`                  |
+| Secret versions                   | The web and browser revisions pin immutable versions; the descriptor key currently has three enabled versions and the live revisions pin version 3 on 2026-10-25. Keep only pinned versions after a rollback window.                                                                                      |
 
-**Plan review before apply:** the `cloud-run` plan proposed 26 resources, all
-creates — four secrets with their access bindings and immutable versions, three
-service accounts (web runtime, worker runtime, queue enqueuer), the Artifact
-Registry repository, image build and publish, the migration run, both Cloud Run
-services, the queue, the worker invoker binding, and the hourly Scheduler job.
-It proposed no updates, replacements or deletions and adopted no existing
-resource. The applied revisions were then read back with `gcloud` to confirm the
-settings in the table.
+**First plan review (2026-10-25):** the `cloud-run` plan proposed 26 resources,
+all creates — four secrets with their access bindings and immutable versions,
+three service accounts (web runtime, worker runtime, queue enqueuer), the
+Artifact Registry repository, image build and publish, the migration run, both
+Cloud Run services, the queue, the worker invoker binding, and the hourly
+Scheduler job. It proposed no updates, replacements or deletions and adopted no
+existing resource. The applied revisions were then read back with `gcloud` to
+confirm the settings in the table.
+
+**Hosted browser review (2026-10-25):** the plan reported 10 creates and 11
+updates, all reviewed. Creates: the hosted browser service account, secret with
+its two accessor bindings and immutable version, browser image build and
+publish, the browser Cloud Run service, and the web invoker binding. Updates:
+the web/worker revisions and image builds, the migration build, the scheduler
+job, and a new secret version for each existing runtime secret. No deletions and
+no adopted resources. The first apply used a generated long service id whose
+`*.a.run.app` hostname exceeded the DNS label limit and was therefore
+unroutable; the service id was fixed to `lineupkeep-hb`, a replacement was
+reviewed and applied, the temporary probe and orphaned services were deleted,
+and the invoker binding was reconverged by one more reviewed plan (one replace,
+12 updates). Three final code-follow-up plans each reported 12 updates (image
+rebuilds/publishes, service revisions, and one secret version); none created or
+deleted a resource. The final state was verified with `gcloud`, an authenticated
+WebSocket probe, and revision readback (`lineupkeep-hb-00004-tb2`, web
+`lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-00012-2qg`).
 
 The deterministic alias
 `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-602042678335.us-east1.run.app`
@@ -71,15 +89,16 @@ a version that the current web or worker revision references.
 Planning estimate for one owner and five teams, not a measured invoice or a
 zero-cost promise. The budget is a CAD 5/month alerting budget, not a hard cap.
 
-| Dimension         | Expectation                                                                                                                                                            |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cloud Run         | Hourly ticks, a few user requests, and month-end runs should stay inside the request-billed free allowances (2M requests, 180k vCPU-s, 360k GiB-s). Cold starts count. |
-| Cloud Tasks       | One small message per run plus retries; inside the free 1M operations.                                                                                                 |
-| Cloud Scheduler   | One job; inside the free three jobs per billing account unless other projects consume them, then $0.10/job/month.                                                      |
-| Secret Manager    | 10 active versions; up to about $0.24/month beyond the six free versions if the allowance is already used.                                                             |
-| Artifact Registry | 88.98 MB, inside the 0.5 GiB free allowance.                                                                                                                           |
-| Neon              | Free-plan quotas (100 CU-hours, 1 GB per project); hourly bursts must actually suspend to remain inside them.                                                          |
-| Resend            | Test sender only until a domain is verified; free 100/day and 3,000/month.                                                                                             |
+| Dimension         | Expectation                                                                                                                                                                                                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloud Run         | Hourly ticks, a few user requests, and month-end runs should stay inside the request-billed free allowances (2M requests, 180k vCPU-s, 360k GiB-s). Cold starts count.                                                                                                                                        |
+| Hosted browser    | One link is roughly 1–3 minutes of 1 vCPU / 2 GiB, about CAD 0.003–0.01 before free allowances; 120 vCPU-s and 240 GiB-s per two-minute session means roughly 1,500 sessions/month fit inside the 180k vCPU-s free allowance. Idle cost is zero at min 0. Two concurrent sessions are the configured ceiling. |
+| Cloud Tasks       | One small message per run plus retries; inside the free 1M operations.                                                                                                                                                                                                                                        |
+| Cloud Scheduler   | One job; inside the free three jobs per billing account unless other projects consume them, then $0.10/job/month.                                                                                                                                                                                             |
+| Secret Manager    | 13 active versions after the hosted browser deploy (six free per billing account); up to about CAD 0.24/month for the excess. Destroy superseded versions after rollback windows.                                                                                                                             |
+| Artifact Registry | The web image plus the ~853 MB expanded browser image (compressed layers are smaller). The repository may exceed the 0.5 GiB free allowance; storage is about CAD 0.10/GB-month, so the current pair is on the order of a few cents per month.                                                                |
+| Neon              | Free-plan quotas (100 CU-hours, 1 GB per project); hourly bursts must actually suspend to remain inside them.                                                                                                                                                                                                 |
+| Resend            | Test sender only until a domain is verified; free 100/day and 3,000/month.                                                                                                                                                                                                                                    |
 
 Budget alerts fire at 50 %, 90 % and 100 % of CAD 5. Review actual usage before
 adding users, teams or a sending domain.
@@ -101,9 +120,14 @@ env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy alchemy.run.t
 
 `BETTER_AUTH_URL` is already set to the deployed origin in the provisioning
 environment. A new origin requires a new value and a redeploy; never leave a
-placeholder in a live revision. The web stack builds and publishes its image,
-runs committed migrations before activation, and creates new secret versions.
-Treat the access token as short-lived and account for expiry during long runs.
+placeholder in a live revision. The web stack builds and publishes the web and
+browser images, runs committed migrations before activation, and creates new
+secret versions. `HOSTED_BROWSER_DESCRIPTOR_KEY` must exist in the provisioning
+environment; without it the plan fails closed. Treat the access token as
+short-lived and account for expiry during long runs. The browser image build
+runs `npm install` and `playwright install --with-deps chromium` on an amd64
+platform, so it takes a few minutes under emulation; its push is the slowest
+part of a cold deployment.
 
 Code rollback: deploy the previous source revision through Alchemy, or move
 traffic back to the previous ready Cloud Run revision while investigating:
@@ -113,6 +137,8 @@ gcloud run services update-traffic lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc 
   --project=lineupkeep-prod --region=us-east1 --to-revisions=<previous-web-revision>=100
 gcloud run services update-traffic lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y \
   --project=lineupkeep-prod --region=us-east1 --to-revisions=<previous-worker-revision>=100
+gcloud run services update-traffic lineupkeep-hb \
+  --project=lineupkeep-prod --region=us-east1 --to-revisions=<previous-browser-revision>=100
 ```
 
 Migrations are forward-only, so a code rollback must still tolerate the applied
@@ -137,10 +163,23 @@ before a risky change.
 - Both revisions were Ready with clean startup logs (only the HTTP listener and
   graceful shutdown messages).
 
+**Hosted browser smoke (2026-10-25):** the browser service reached `Ready` with
+its `/healthz` startup probe, an unauthenticated request was refused (Cloud Run
+logged `The request was not authenticated`; the frontend returns 404 for that
+refusal), and an operator WebSocket through `gcloud run services proxy` completed
+the signed-descriptor handshake, streamed seven JPEG frames (first frame 4,941
+bytes) with `starting`, `loading`, and `waiting` statuses, and loaded the real
+Yahoo login page through the service's egress. The operator closed the session;
+the log recorded `hosted_browser.session cancelled` with only session id,
+outcome, and duration. The temporary `run.invoker` binding used for the probe
+was removed immediately and the policy was re-read to confirm only the web
+runtime account remains. The descriptor key and IAM ID tokens were never printed
+or written to disk.
+
 Deployed product acceptance still needs the owner to sign in, link Yahoo through
-the helper against the deployed origin, and perform one live read/write run;
-hosted MCP-client acceptance and a verified sending domain remain open. See
-[the Phase 1 acceptance record](phase-1-acceptance-2026-10-25.md).
+the hosted browser (or the helper) against the deployed origin, and perform one
+live read/write run; hosted MCP-client acceptance and a verified sending domain
+remain open. See [the Phase 1 acceptance record](phase-1-acceptance-2026-10-25.md).
 
 ## Select a stage and lifecycle
 
@@ -189,35 +228,100 @@ Planned keyring rotation without re-linking: deploy a release that decrypts reta
 
 Choose client-address headers from actual trusted ingress: Cloudflare's `cf-connecting-ip` or a reviewed Cloud Run forwarding/proxy policy. Header names alone do not prevent spoofing. Set `AUTH_TRUSTED_PROXIES` only to actual trusted ranges and verify address attribution/rate limiting under that topology. Rate-limit `/api/telemetry` at ingress as well.
 
-### Hosted browser linking (planned, not provisioned)
+### Hosted browser linking (deployed)
 
-The local Node target runs Playwright Chromium inside the web process for
-development and tests. The deployed Cloud Run image does not install Chromium,
-and the Cloudflare target has no browser runtime, so hosted sign-in is not a
-production capability yet. The local-helper fallback remains available.
+The local Node target still runs Playwright Chromium in-process for development
+and tests. The `cloud-run` stage runs the dedicated IAM-only browser service
+`lineupkeep-hb` and the web service proxies each owner-bound session to it. The
+Cloudflare target returns `hosted_browser.unsupported`; the local-helper path
+remains available on every target.
 
-The target service is an IAM-private, WebSocket-capable, scale-to-zero Cloud Run
-service with one browser per instance, a dedicated runtime account, and no
-public ingress. It is reached only through the web service with a Cloud Run ID
-token and a short-lived session descriptor. Chromium uses a fresh temporary
-profile per owner-bound session and restricted provider/asset egress; metadata,
-link-local, private, and internal addresses are denied. The browser is killed
-and the profile removed on capture, cancel, expiry, disconnect, or fault. The
-web process, not the browser service, completes the connection and stores the
-encrypted provider session.
+The web mints a Cloud Run ID token for the exact service URL from the metadata
+server and opens WSS with an HMAC-signed descriptor (session id, expiry of at
+most 15 minutes, login URL, allowed origins). The browser service verifies the
+signature and the provider-origin subset, refuses reused session ids and a
+second browser, and accepts nothing else. `HOSTED_BROWSER_URL` and
+`HOSTED_BROWSER_DESCRIPTOR_KEY` are the only hosted-browser settings on the web;
+the browser service receives only the descriptor key and `NODE_ENV`. Do not put
+the database URL, connection encryption key, auth secret, or provider session
+material in its environment.
 
-Do not expose the service through Cloudflare or a public tunnel. Do not put the
-application database URL or connection encryption key in its environment. Logs
-and traces carry session ids and outcomes only, never frames, keystrokes,
-cookies, crumbs, page content, or passwords. Provider material is relayed
-transiently to the web service and is not persisted by the browser service.
+Privacy contract: keystrokes transit the web process into the ephemeral
+Chromium, but nothing is logged, traced, recorded, or written outside the
+temporary profile. Provider cookies are sent once over the authenticated
+internal stream after Chromium is killed and the profile removed. Cloud Logging
+contains `hosted_browser.session` records with session id, outcome, duration,
+and failure class only.
 
-The full topology, Alchemy composition, limits, and deployment gates are in
-[the hosted browser infrastructure plan](fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md).
-Owner authorization, a fresh plan review, a manual live Yahoo sign-in, egress
-proof, WebSocket duration/cold-start evidence, and profile-cleanup evidence are
-required before apply. Until then the service stays dark and the helper path is
-the supported fallback.
+Egress is enforced inside Chromium: an exact provider/asset origin allowlist on
+requests and WebSockets, and a resolver rule that fails every other hostname.
+Metadata, link-local, private, and arbitrary public destinations are refused by
+that policy. No VPC connector or Cloud NAT is provisioned because it would add a
+recurring charge above the owner's budget; this is a recorded limitation, not
+network isolation. Do not add a generic URL proxy, arbitrary CDP endpoint, or
+public tunnel.
+
+#### Start, stop, and rollback
+
+- **Start / recover:** the service scales to zero and starts on the first
+  session. If it is unhealthy, redeploy the stack or move traffic back to a
+  known-good revision.
+- **Stop the hosted path:** deploy the previous web revision, or remove the web
+  runtime account's `roles/run.invoker` binding on `lineupkeep-hb`. The web then
+  receives IAM refusals, fails the session with an actionable message, and the
+  helper remains usable. Do not remove the binding while expecting hosted
+  linking to work; do not add `allUsers`.
+- **Browser rollback:** move traffic to the previous browser revision, then
+  redeploy the matching source. The browser service is stateless, so this needs
+  no migration. Delete old browser images and superseded secret versions after a
+  rollback window.
+- **Descriptor-key rotation:** generate a new value in
+  `~/.config/lineupkeep/infra.env`, deploy the web stack, and confirm the browser
+  and web revisions pin the new secret version. Sessions started under the old
+  key fail verification; they expire within ten minutes and require no data
+  repair.
+
+#### Cold starts and cost
+
+- A warm session reached the first JPEG frame in 812 ms and the `waiting`
+  status in 941 ms in the operator probe.
+- A cold session (first request after the 15-minute idle window) reached the
+  first JPEG frame in 9,434 ms and the `waiting` status in 9,804 ms. The
+  instance start to `hosted_browser.ready` was 1.3 s and the startup probe
+  passed 5.4 s after instance start; the rest is image pull, Chromium launch,
+  and the provider page load. The service keeps no warm capacity, so the first
+  link after a quiet period is the slow one. Do not raise `minInstanceCount`
+  without a cost review.
+- A two-minute session costs roughly CAD 0.003–0.01 of 1 vCPU / 2 GiB before
+  free allowances; about 1,500 such sessions fit in the monthly Cloud Run free
+  vCPU-seconds. Idle cost is zero. The browser image adds a few cents per month
+  of Artifact Registry storage once the free allowance is used.
+- Concurrency is bounded by `containerConcurrency: 1` and max two instances, so
+  at most two browsers exist. A third concurrent start is refused as busy rather
+  than queued. The web keeps five starts per user per ten minutes and one active
+  session per owner.
+
+#### When a session hangs
+
+1. Cancel in the UI or close the tab; the web closes the upstream socket, the
+   service kills Chromium and removes the profile, and the session is cancelled.
+2. If the UI is gone, the ten-minute session clock and the 780 s Cloud Run
+   request timeout terminate the stream; the instance and its `/tmp` profile are
+   discarded with it. No cleanup command is required.
+3. Inspect `gcloud logging read 'resource.type="cloud_run_revision" AND
+   resource.labels.service_name="lineupkeep-hb"'` for the session outcome. A
+   repeated `failed`/`browser_unavailable` means the image or runtime is broken:
+   roll traffic back or redeploy.
+4. Never add a generic browser endpoint, extend the timeout without a review, or
+   reuse an instance profile to "unstick" a session.
+
+#### Monitoring
+
+Watch the browser service's revision readiness, instance count, 5xx rate, and
+`hosted_browser.session` outcomes. Alert on repeated `failed` or `cancelled`
+outcomes and on unauthenticated requests (which should exist only if IAM or the
+web's invoker binding regresses). The cost budget alerts at 50 %, 90 %, and
+100 % of CAD 5 remain the spending guard; they are not a hard cap.
 
 ### Sign-in providers
 

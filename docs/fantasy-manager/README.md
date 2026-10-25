@@ -13,7 +13,7 @@ Planning workspace for Lineupkeep, the independent provider-neutral rewrite. The
 - [Minimal UX brief](UX-BRIEF.md): functional surfaces and later design work.
 - [Grilling decisions](DECISIONS.md): all recorded rounds and corrections, including hosted browser linking.
 - [Hosting comparison](HOSTING.md): Cloudflare/GCP/AWS limits, illustrative sizing, and the proposed acceptance checks.
-- [Hosted browser infrastructure plan](HOSTED-BROWSER-INFRA-PLAN.md): planned IAM-private browser service, egress, limits, and deployment gates.
+- [Hosted browser infrastructure](HOSTED-BROWSER-INFRA-PLAN.md): deployed IAM-only browser service, egress, limits, and remaining gates.
 - [Research notes](RESEARCH.md): inspected code and primary-source evidence.
 - [Naming research](NAMING-RESEARCH.md): preliminary domain/commercial/US-Canadian screening; Lineupkeep is selected, not legally cleared or purchased.
 - Architecture decisions: [provider-neutral product](adr/0001-provider-neutral-product.md), [workflow machines and pure selection](adr/0002-workflow-machines-and-pure-selection.md), [independent product](adr/0003-independent-product.md), [Cloud Run first](adr/0004-cloud-run-first.md), and [free-tier Postgres](adr/0005-free-tier-postgres.md).
@@ -26,4 +26,4 @@ Previous research reports referenced under `/tmp` are no longer present on this 
 
 ## Decision process
 
-The recorded product-grilling rounds are complete. Do not reopen settled questions or present technical proposals as accepted implementation decisions; Round 10 records the owner's hosted-browser linking decision. Ask only for genuinely unresolved choices; resume through the delivery gates after explicit implementation authorization.
+The recorded product-grilling rounds are complete. Do not reopen settled questions or present technical proposals as accepted implementation decisions; Rounds 10–11 record the owner's hosted-browser linking and transient-relay decisions. Ask only for genuinely unresolved choices; resume through the delivery gates after explicit implementation authorization.

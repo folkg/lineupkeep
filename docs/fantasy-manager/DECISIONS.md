@@ -196,3 +196,43 @@ owner, replay). No live Yahoo login is performed by automated tests. Production
 still needs the dedicated service, a manual live sign-in, IAM/egress review,
 WebSocket duration/cold-start evidence, and the deployment gates recorded in
 the infra plan.
+
+## Round 11 — Transient keystroke relay in the hosted browser
+
+Status: owner-accepted, implemented, and deployed. This round records the
+security posture of the hosted browser service; it does not relax the
+owner-bound, one-use session, hashed-ticket, or egress contracts from Round 10.
+
+1. **Accepted: transient keystroke relay.** The hosted browser necessarily
+   relays input through our web process into the ephemeral Chromium: the user's
+   clicks, text, and keys travel over the authenticated WebSocket, through the
+   web service, and into the temporary browser. This is accepted rather than
+   hidden.
+2. **Never persisted.** Keystrokes, page text, frames, cookies, provider session
+   material, and passwords are never logged, traced, recorded, written to disk,
+   or retained by the application. The browser service logs only session id,
+   lifecycle outcome, duration, and failure class. The temporary browser,
+   profile, and Chromium scratch data are destroyed after capture, cancel,
+   expiry, disconnect, or fault.
+3. **Honest copy.** The Connections surface says the password is "entered
+   directly into Yahoo's page in a temporary browser; never stored or logged".
+   It must not claim that a password cannot transit our servers, and it must not
+   imply end-to-end encryption between the client and Chromium.
+4. **Deferred hardening.** End-to-end input encryption, a remote-attestation
+   story, or a direct client-to-browser transport would be a separate decision
+   with its own threat model. None of them is claimed today.
+5. **Runtime isolation.** The service runs one browser per instance behind
+   Cloud Run IAM, as a non-root user, with a fresh temporary profile under
+   `/tmp`, a read-only image, and no attached volumes. Chromium's namespace
+   sandbox is unavailable in the Cloud Run sandbox, so it runs with
+   `--no-sandbox`; the compensating controls are the single-tenant container,
+   non-root process, immutable image, ephemeral profile, exact-origin egress
+   allowlist, signed one-use session descriptor, and IAM-only invocation.
+6. **Egress without a VPC connector.** A VPC connector plus Cloud NAT would add
+   a recurring charge above the owner's CAD 5/month budget, so network-level
+   defense in depth is not deployed. Egress is enforced inside Chromium: exact
+   provider/asset origin allowlist on requests and WebSockets, a resolver rule
+   that fails every non-allowlisted hostname, and the absence of any generic
+   proxy. Metadata, link-local, private, and arbitrary public destinations are
+   refused by that policy. This gap is recorded in the infrastructure plan and
+   deployment runbook rather than presented as network isolation.

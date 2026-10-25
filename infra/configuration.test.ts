@@ -6,7 +6,12 @@ import { expect } from "vitest";
 
 import { applicationConfig, developmentApplicationConfig } from "./config.ts";
 import { externalDatabase } from "./database/external.ts";
-import { cloudRunContainer, partitionEnvironment } from "./hosts/cloudRun.ts";
+import {
+  cloudRunContainer,
+  hostedBrowserContainer,
+  hostedBrowserTemplate,
+  partitionEnvironment,
+} from "./hosts/cloudRun.ts";
 import { containerRelayNetwork } from "./hosts/localContainer.ts";
 import { DatabaseDeployment } from "./services/DatabaseDeployment.ts";
 import { assertLocalStage, stageSpec } from "./stage.ts";
@@ -66,6 +71,25 @@ it("keeps Cloud Run request-billed with CPU allocated only during requests", () 
   const container = cloudRunContainer();
 
   expect(container.resources.cpuIdle).toBe(true);
+});
+
+it("runs one hosted browser per instance inside Cloud Run IAM", () => {
+  const template = hostedBrowserTemplate();
+
+  expect(template.maxInstanceRequestConcurrency).toBe(1);
+  expect(template.scaling).toEqual({ minInstanceCount: 0, maxInstanceCount: 2 });
+  expect(template.timeout).toBe("780s");
+});
+
+it("sizes the hosted browser container for Chromium behind a readiness probe", () => {
+  const container = hostedBrowserContainer();
+
+  expect(container.resources).toEqual({
+    limits: { cpu: "1", memory: "2Gi" },
+    cpuIdle: true,
+    startupCpuBoost: true,
+  });
+  expect(container.startupProbe.httpGet.path).toBe("/healthz");
 });
 
 it("routes plain configuration to environment entries and secrets to Secret Manager", () => {

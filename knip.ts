@@ -43,6 +43,13 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
     "apps/linking-helper": {
       project: ["src/**/*.ts!"],
     },
+    "apps/hosted-browser": {
+      entry: ["src/main.ts!"],
+      project: ["src/**/*.ts!", "deploy/**/*.ts"],
+    },
+    "packages/hosted-browser": {
+      project: ["src/**/*.ts!"],
+    },
     "apps/web": {
       ...(production === true ? { ignore: productionTestOnlyFiles } : {}),
       ignoreDependencies: [
@@ -92,6 +99,7 @@ const productionTestSeams: Record<string, Array<"exports" | "types">> = {
   "apps/linking-helper/src/LinkingUpload.ts": ["exports"],
   "apps/linking-helper/src/ProviderBrowser.ts": ["exports"],
   "apps/web/src/server/backendEntry.ts": ["exports"],
+  "apps/hosted-browser/src/server.ts": ["types"],
   "apps/web/src/server/linking/linkingUpload.ts": ["exports"],
   "packages/backend/src/runtime/public-internet/transport/node/PublicInternetProcess.ts": [
     "exports",

@@ -59,11 +59,14 @@ Bootstrap outside Alchemy, because Alchemy has no billing-link provider and stat
 ### Deployed state and remaining gates (2026-10-25)
 
 The `cloud-run` stage is deployed to `lineupkeep-prod` / `us-east1`. The public
-origin, Cloud Run web and IAM-private worker, Cloud Tasks queue, hourly Cloud
-Scheduler job, secret names, cost expectation, and redeploy/rollback steps are
-recorded in [the deployed environment](deployment.md#deployed-environment-2026-10-25).
+origin, Cloud Run web, IAM-only worker and hosted browser, Cloud Tasks queue,
+hourly Cloud Scheduler job, secret names, cost expectation, and
+redeploy/rollback steps are recorded in
+[the deployed environment](deployment.md#deployed-environment-2026-10-25).
 The deployed smoke passed: landing page, MCP auth challenge and metadata,
-Scheduler-to-worker OIDC tick, worker IAM refusal, and Resend acceptance.
+Scheduler-to-worker OIDC tick, worker IAM refusal, Resend acceptance, and an
+IAM-admitted hosted-browser WebSocket that streamed the real Yahoo login page
+without completing a sign-in.
 
 Local live acceptance against the owner's Yahoo account passed through the
 product's linking upload, team discovery, the services behind all eight query
@@ -78,10 +81,11 @@ example was not present on this date.
 Remaining gates before full Phase 1 acceptance:
 
 - **Owner-only deployed sign-in and live product acceptance.** Sign in to the
-  deployed origin with the owner's mailbox code, link Yahoo through the helper
-  against that origin, then prove one live read and one native write with
+  deployed origin with the owner's mailbox code, link Yahoo through the hosted
+  browser (or the helper) against that origin, confirm the temporary browser and
+  profile are destroyed, then prove one live read and one native write with
   verified readback. The agent did not read the inbox or complete the owner's
-  sign-in.
+  sign-in. The hosted path is deployed and stream-verified but not live-signed-in.
 - **Hosted MCP client acceptance.** Local JSON-RPC calls are blocked by the
   deliberate public-HTTPS client-metadata requirement; publish a CIMD metadata
   document and verify consent, scopes and bounded results with the hosted client.
@@ -103,7 +107,7 @@ Remaining gates before full Phase 1 acceptance:
 3. Complete rich bounded provider-neutral query MCP and transaction-review links. Validate exact resource/period semantics, missing versus zero, ownership, scopes, whole-record paging, and byte limits.
 4. Implement durable native `set_lineup`, bounded waiting/status references, outbox/queue recovery, per-team coordination, write intent/readback, and uncertain-outcome reconciliation. Never blindly replay or undo a provider write.
 5. Finish operational UI in the approved royal violet/gold design, hourly current-period automation, enable/disable/provider-day pause, reconnect incidents/email, and enforced 30-day outcomes/seven-day normalized-diagnostic retention.
-6. Resolve the coherent security upgrade and cloud/access gates. Implement two min-zero request-billed Cloud Run services, IAM-private worker, bounded Tasks/Scheduler, fresh Neon storage and protected state with least privilege. Plan the IAM-private hosted-browser service; do not inherit min-one/instance-billing defaults.
+6. Resolve the coherent security upgrade and cloud/access gates. Implement two min-zero request-billed Cloud Run services, IAM-private worker, bounded Tasks/Scheduler, fresh Neon storage and protected state with least privilege. The IAM-private hosted-browser service is deployed with one browser per instance and min-zero request billing; keep those defaults.
 7. Perform scoped live acceptance when authorized, deploy if all gates pass, verify production and hosted Muse, and hand over operations/recovery/cost evidence. If an external gate remains, finish all independent work and deliver the tested candidate instead of claiming launch success.
 
 Resolve feasibility at its owning seam, not as a reason to stop all implementation. Phase 2 scoring/solver, legal reserve optimization, explicit-assignment writes, and direct optimizer cutover are excluded. Do not let their evidence requirements block the Phase 1 native action.

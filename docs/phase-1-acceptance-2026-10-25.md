@@ -113,10 +113,38 @@ Resend acceptance and clean startup logs are recorded under
 [Deployed environment](deployment.md#deployed-environment-2026-10-25).
 No owner sign-in was completed and no inbox was read.
 
+### Hosted browser stream (deployed)
+
+The IAM-only `lineupkeep-hb` service was deployed and probed without completing
+a sign-in:
+
+- Unauthenticated requests were refused by Cloud Run IAM; the request log
+  recorded the refusal and the only `roles/run.invoker` binding belongs to the
+  web runtime account.
+- An operator WebSocket through `gcloud run services proxy`, using a signed
+  one-use descriptor, completed the handshake, streamed 7 JPEG frames (first
+  frame 4,941 bytes) and reported `starting`, `loading`, `waiting` while the
+  real Yahoo login page loaded through the service's egress. The operator closed
+  it; the service logged `hosted_browser.session cancelled` with session id,
+  outcome and duration only.
+- The temporary operator `run.invoker` grant was removed immediately and the
+  policy was re-read. No descriptor key, identity token, cookie, frame, or
+  keystroke was printed, logged, or written to disk.
+- A warm session reached the first frame in 812 ms and `waiting` in 941 ms on
+  the same deploy. A cold session after the 15-minute idle window reached the
+  first frame in 9,434 ms and `waiting` in 9,804 ms; the instance took 1.3 s
+  from start to `hosted_browser.ready` and the startup probe passed 5.4 s after
+  instance start. Cloud Logging for the day contained no cookie, keystroke, or
+  password patterns.
+
+The live Yahoo credential entry through the deployed app remains owner-only and
+unperformed.
+
 ## Remaining acceptance
 
-1. Owner sign-in on the deployed origin and helper linking against that origin,
-   followed by one live read and one native write with verified readback.
+1. Owner sign-in on the deployed origin and hosted-browser (or helper) linking
+   against that origin, followed by one live read and one native write with
+   verified readback.
 2. Hosted MCP client acceptance with a public client-metadata document.
 3. A verified Resend sending domain before open registration; the current test
    sender only delivers to the owner's account address.

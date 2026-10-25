@@ -27,6 +27,7 @@ import type {
 } from "./HostedBrowser.ts";
 import { providerLoginConfig } from "./providerLogin.ts";
 
+const maximumPendingInputs = 64;
 const maximumStreamMessages = 500;
 const maximumStreamMessageBytes = 4_096;
 
@@ -93,6 +94,7 @@ async function authorizeStream(
   };
 
   let browser: HostedBrowserHandle | undefined;
+  const pendingInputs: HostedBrowserInput[] = [];
   let peerForHooks: StreamPeer | undefined;
   let settled = false;
   let closed = false;
@@ -106,7 +108,13 @@ async function authorizeStream(
     }
   };
   const sendInput = (input: HostedBrowserInput): void => {
-    browser?.input(input);
+    if (browser === undefined) {
+      if (pendingInputs.length < maximumPendingInputs) {
+        pendingInputs.push(input);
+      }
+      return;
+    }
+    browser.input(input);
   };
   const settle = (): void => {
     settled = true;
@@ -212,6 +220,10 @@ async function authorizeStream(
             return;
           }
           browser = opened;
+          for (const input of pendingInputs) {
+            browser.input(input);
+          }
+          pendingInputs.length = 0;
         } catch {
           await failStream(peer, "browser_unavailable");
         }

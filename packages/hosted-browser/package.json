@@ -1,0 +1,14 @@
+{
+  "name": "@lineupkeep/hosted-browser",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./protocol": "./src/protocol.ts",
+    "./provider": "./src/provider.ts",
+    "./descriptor": "./src/descriptor.ts",
+    "./browser": "./src/browser.ts"
+  },
+  "dependencies": {
+    "playwright": "catalog:"
+  }
+}

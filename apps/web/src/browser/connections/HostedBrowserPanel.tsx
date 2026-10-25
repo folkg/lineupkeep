@@ -19,9 +19,9 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
         Connect Yahoo
       </Heading>
       <Text size="body" tone="muted">
-        Sign in once in the secure browser below. Your password is relayed only to Yahoo inside the
-        private browser and is never stored or logged by Lineupkeep. We keep only the session tokens
-        Yahoo returns, encrypted.
+        Sign in once below. Your password is entered directly into Yahoo's page in a temporary
+        browser; it is never stored or logged by Lineupkeep. We keep only the session tokens Yahoo
+        returns, encrypted.
       </Text>
       <Show
         fallback={
@@ -58,7 +58,8 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
                 : statusMessage(props.controller.status())}
             </Text>
             <Text size="caption" tone="muted">
-              Keystrokes go to the private browser and are not stored or logged.
+              Keystrokes are typed into Yahoo's page through the temporary browser and are never
+              stored or logged.
             </Text>
             <Text size="caption" tone="muted">
               This sign-in expires at{" "}

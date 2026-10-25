@@ -36,6 +36,16 @@
         "vitest": "catalog:",
       },
     },
+    "apps/hosted-browser": {
+      "name": "@lineupkeep/hosted-browser-service",
+      "dependencies": {
+        "@lineupkeep/hosted-browser": "workspace:*",
+        "ws": "catalog:",
+      },
+      "devDependencies": {
+        "@types/ws": "catalog:",
+      },
+    },
     "apps/linking-helper": {
       "name": "@lineupkeep/linking-helper",
       "bin": {
@@ -59,6 +69,7 @@
         "@kobalte/core": "2.0.0-alpha.2",
         "@lineupkeep/backend": "workspace:*",
         "@lineupkeep/brand": "workspace:*",
+        "@lineupkeep/hosted-browser": "workspace:*",
         "@solidjs/vite-plugin": "catalog:",
         "@solidjs/web": "catalog:",
         "@tailwindcss/vite": "catalog:",
@@ -69,16 +80,17 @@
         "better-auth": "catalog:",
         "effect": "catalog:",
         "h3": "catalog:",
-        "playwright": "catalog:",
         "solid-js": "catalog:",
         "tailwindcss": "catalog:",
         "vite": "catalog:",
+        "ws": "catalog:",
         "xstate": "6.0.0-alpha.70",
       },
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "catalog:",
         "@effect/platform-node-shared": "catalog:",
         "@solidjs/diagnostics": "catalog:",
+        "@types/ws": "catalog:",
         "crossws": "0.4.15",
         "fast-check": "4.10.2",
         "nitro": "catalog:",
@@ -125,6 +137,12 @@
     },
     "packages/brand": {
       "name": "@lineupkeep/brand",
+    },
+    "packages/hosted-browser": {
+      "name": "@lineupkeep/hosted-browser",
+      "dependencies": {
+        "playwright": "catalog:",
+      },
     },
     "tools": {
       "name": "@lineupkeep/tools",
@@ -174,6 +192,7 @@
     "@tanstack/solid-start": "2.0.0-rc.8",
     "@typeonce/effect-machine": "0.41.1",
     "@typeonce/oxlint-plugin-effect-machine": "0.41.1",
+    "@types/ws": "8.18.2",
     "@vitest/browser-playwright": "5.0.5",
     "alchemy": "2.0.0-beta.83",
     "better-auth": "1.7.12",
@@ -190,6 +209,7 @@
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "5.0.5",
+    "ws": "8.22.0",
   },
   "packages": {
     "@alchemy.run/cloudflare-runtime": ["@alchemy.run/cloudflare-runtime@2.0.0-beta.83", "", { "dependencies": { "@alchemy.run/node-utils": "2.0.0-beta.83", "@cloudflare/unenv-preset": "^2.16.1", "@puppeteer/browsers": "^3.2.0", "capnp-es": "^0.0.16", "magic-string": "^0.30.21", "mime": "^4.0.7", "sharp": "^0.35.3", "unenv": "^2.0.0-rc.24", "workerd": "1.20261002.1", "yauzl": "^3.4.0" }, "peerDependencies": { "@distilled.cloud/cloudflare": "1.0.0-rc.15", "@effect/platform-bun": "^4.0.0", "@effect/platform-node": "^4.0.0", "effect": "^4.0.0", "rolldown": "1.2.5", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node", "rolldown", "vite"] }, "sha512-tchwc16KccR3Q8fmEZSqJcXRPJ0mV0Y3LEu7VbdE6R3e0VqKFNnz5xYiCfQWUAahB+QtJDtTu3/nkjOajE3ggQ=="],
@@ -575,6 +595,10 @@
     "@lineupkeep/backend": ["@lineupkeep/backend@workspace:packages/backend"],
 
     "@lineupkeep/brand": ["@lineupkeep/brand@workspace:packages/brand"],
+
+    "@lineupkeep/hosted-browser": ["@lineupkeep/hosted-browser@workspace:packages/hosted-browser"],
+
+    "@lineupkeep/hosted-browser-service": ["@lineupkeep/hosted-browser-service@workspace:apps/hosted-browser"],
 
     "@lineupkeep/infra": ["@lineupkeep/infra@workspace:infra"],
 
