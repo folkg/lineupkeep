@@ -164,9 +164,13 @@ before a risky change.
   graceful shutdown messages).
 
 **Hosted browser smoke (2026-10-25):** the browser service reached `Ready` with
-its `/healthz` startup probe, an unauthenticated request was refused (Cloud Run
-logged `The request was not authenticated`; the frontend returns 404 for that
-refusal), and an operator WebSocket through `gcloud run services proxy` completed
+its `/healthz` startup probe, invoker IAM refused unauthenticated requests (403
+for ordinary paths, 401 for a token without `run.invoker`), and an operator
+WebSocket through `gcloud run services proxy` completed
+The frontend answers `GET /healthz` with a Google 404 page for every caller, so
+that path is usable only by the internal startup probe; point external
+monitoring at the web service instead. Invoker IAM remains the boundary for
+`/` and `/session`.
 the signed-descriptor handshake, streamed seven JPEG frames (first frame 4,941
 bytes) with `starting`, `loading`, and `waiting` statuses, and loaded the real
 Yahoo login page through the service's egress. The operator closed the session;
