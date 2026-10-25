@@ -395,7 +395,7 @@ export type GetTransactionsInput = typeof GetTransactionsInput.Type;
 
 const Transaction = Schema.Struct({
   occurredAt: Schema.String,
-  type: Schema.Literals(["add", "drop", "trade", "commissioner", "other"]),
+  type: Schema.Literals(["add", "drop", "add_drop", "trade", "commissioner", "other"]),
   status: Schema.optional(Schema.String),
   teams: Schema.Array(Schema.Struct({ team: CounterpartyRef, name: Schema.NonEmptyString })),
   players: Schema.Array(

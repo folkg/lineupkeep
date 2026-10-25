@@ -65,7 +65,7 @@ A period reference must be resolved against the provider calendar, sport, season
 
 Do not advertise multi-week aggregation, advanced-stat availability, diamond data, all legacy sorts, or NHL projection completeness without proof. Rates, percentages, ratios, and time-on-ice averages are not summed like counts. Missing games/stats are not automatically zero.
 
-Separate roster membership reads from bounded player hydration where that is the verified way to obtain projections. Yahoo NFL selected-key weekly projections were demonstrated; requesting a projection flag on a roster did not prove projections were present.
+Separate roster membership reads from bounded player hydration. Live verification found no projected-statistics series in the provider's read surface: completed weeks report actual values, while the current and future weeks report zero rather than projections. Projections therefore stay typed unsupported unless a future verified read proves otherwise. See [live read endpoints](RESEARCH.md#live-yahoo-read-endpoints-2026-10-25).
 
 ## Review-link safety
 

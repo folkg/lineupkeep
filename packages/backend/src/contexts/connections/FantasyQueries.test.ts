@@ -229,6 +229,66 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("reads a date-scoped roster without inventing a week", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      roster: rosterFixture({ count: 2, coverage: { type: "date", date: "2026-10-25" } }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const roster = yield* queries.getRosters(owner, { team: teamId });
+
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(roster.period, undefined);
+    assert.strictEqual(roster.players.length, 2);
+    assert.isTrue(
+      roster.coverage.some((entry) => entry.resource === "roster" && entry.status === "available"),
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports add/drop transactions without inventing execution", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setTransactions([
+      {
+        occurredAt: "2026-09-20T12:00:00.000Z",
+        type: "add_drop",
+        status: "successful",
+        teams: [
+          { providerTeamKey: "461.l.1000.t.1", name: "Alpha" },
+          { providerTeamKey: "461.l.1000.t.2", name: "Beta" },
+        ],
+        players: [
+          { providerPlayerKey: "461.p.10003", direction: "add" },
+          { providerPlayerKey: "461.p.10001", direction: "drop" },
+        ],
+      },
+    ]);
+
+    const transactions = yield* queries.getTransactions(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+    });
+
+    assert.strictEqual(transactions.status, "ok");
+    if (transactions.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(transactions.transactions.length, 1);
+    const transaction = Array.getUnsafe(transactions.transactions, 0);
+    assert.strictEqual(transaction.type, "add_drop");
+    assert.strictEqual(transaction.teams.length, 2);
+    assert.strictEqual(transaction.players.length, 2);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("returns explicit unsupported coverage instead of empty success", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -608,11 +668,15 @@ const leagueFixture: ProviderLeagueSettings = {
   statModifiers: [{ statId: 4, points: "0.04" }],
 };
 
-function rosterFixture(input: { readonly count: number; readonly name?: string }): ProviderRoster {
+function rosterFixture(input: {
+  readonly count: number;
+  readonly name?: string;
+  readonly coverage?: ProviderRoster["coverage"];
+}): ProviderRoster {
   return {
     providerTeamKey: "461.l.1000.t.1",
     providerLeagueKey: "461.l.1000",
-    coverage: { type: "week", week: 3 },
+    coverage: input.coverage ?? { type: "week", week: 3 },
     players: globalThis.Array.from({ length: input.count }, (_, index) => ({
       providerPlayerKey: `461.p.${String(10001 + index)}`,
       name:

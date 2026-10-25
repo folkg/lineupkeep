@@ -73,6 +73,89 @@ Both rules are locked by fixtures built from the observed nesting and field name
 - Lock semantics beyond observing `is_editable: 0` on two NFL roster members.
 - Query byte and fan-out budgets at league scale (opponent rosters, player pools, statistics) and any hosted-client acceptance.
 
+## Live Yahoo read endpoints (2026-10-25)
+
+The owner authorized live read queries against their own teams, and a second gitignored harness
+(`.artifacts/live-yahoo-reads/`) exercised the committed adapter's search, matchup, transaction,
+team-membership, and selected-player reads through `PublicInternet` with the real transport. The
+`T`/`Y` cookies moved from browser memory to the harness process over loopback and were never
+printed, written, or committed. Retained evidence holds field names, scalar classes and lengths,
+masked identifier patterns, byte sizes, timings, and outcome tags only. No write, transaction, or
+premium action was attempted.
+
+| Adapter operation               | Request                                                                                                                                  | Status | Typical size                             | Typical time |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------- | ------------ |
+| `readLeagueTeams`               | `GET .../fantasy/v2/league/{league_key}/teams?format=json`                                                                               | 200    | 40–50 KB                                 | 200–240 ms   |
+| `readMatchups`                  | `GET .../league/{league_key}/scoreboard;week={week}?format=json`                                                                         | 200    | 91 KB NFL, 150 KB NHL                    | 220–250 ms   |
+| `readTransactions` (unbounded)  | `GET .../league/{league_key}/transactions?format=json`                                                                                   | 200    | 179–539 KB                               | 240–290 ms   |
+| `readTransactions` (`count=25`) | `GET .../league/{league_key}/transactions;count=25?format=json`                                                                          | 200    | ~114 KB                                  | 200–210 ms   |
+| `searchPlayers`                 | `GET .../league/{league_key}/players[;status=FA\|W];sort=NAME\|R_PO;count={≤50}[;search={term}];out=ownership,percent_owned?format=json` | 200    | 110–160 KB at 25 rows                    | 200–270 ms   |
+| `readPlayerDetails`             | `GET .../league/{league_key}/players;player_keys={≤25};out=stats,ownership?format=json&stats.type=week&stats.week={week}`                | 200    | ~33 KB weekly, ~46 KB season, for 3 keys | 200–330 ms   |
+| `readRoster`                    | `GET .../fantasy/v2/team/{team_key}/roster[;week={week}]?format=json`                                                                    | 200    | 107 KB NFL (15 players), 133 KB NHL (20) | 300+ ms      |
+
+Confirmed live:
+
+- `status=FA` returns only free agents, `status=W` only waiver players, and **omitting `status`**
+  returns the whole player pool including rostered players. `status=A` means "all available"
+  (free agents plus waivers), not all players; using it for an unfiltered search silently hides
+  rostered players. Availability comes from `ownership.ownership_type`: `team`, `freeagents`, or
+  `waivers`.
+- `sort=NAME` works for both sports; `sort=R_PO` orders by percent ownership descending for both.
+  `sort=PTS` is rejected for hockey (HTTP 400), so sport-specific sort codes are not assumed.
+  `percent_owned` is present only for a subset of rows (20/25 free agents, 4/25 waiver rows in one
+  sample), so an absent value is reported as missing, not zero.
+- Weekly player statistics are **actual-only**. A completed prior week reported nonzero values
+  (19/25 sampled players positive); the current week and the next week reported zero for every
+  sampled player. Requesting `stats.type=projected`, `out=projection`, or `out=projected_stats`
+  returns HTTP 400. No projected-statistics series is exposed through these reads, so projections
+  remain typed unsupported rather than being inferred from zero-filled future weeks. Weekly hockey
+  statistics were absent entirely in the samples; season statistics were present.
+- A player's weekly series carries `player_stats.stats[]` (`stat_id`, numeric value) plus a
+  coverage fragment (`coverage_type=week`, `week`); the dashed missing form is reported as null.
+  Season coverage uses `season` instead of `week`.
+- Scoreboards expose `scoreboard.week` and one entry per matchup group. Each matchup lists `week`,
+  `status` (`preevent`/`midevent`/`postevent`-style labels), and two teams with `team_key`, `name`,
+  and `team_points.total` as a formatted string. `team_projected_points` was present for NFL and
+  absent for NHL. `;out=scoreboard` is rejected (HTTP 400).
+- Transactions are ordered newest first and include `type` (`add`, `drop`, `add/drop` observed),
+  `status`, epoch-second `timestamp`, and per-player `transaction_data` with movement `type` and
+  `source_type`/`destination_type` in `{freeagents, waivers, team}` plus source/destination team
+  key and name. No trade or commissioner transaction appeared in either league's recent history,
+  so those player-level shapes stay unverified. Bounding with `;count=` is load-bearing: the
+  unbounded league history was 179–539 KB. Restricting `;types=add,drop,trade` produced the same
+  rows as the unfiltered sample, so filtering was not adopted.
+- League team membership is a bounded `teams` collection with `team_key` and `name`; the league
+  key is the prefix of each team key, as in discovery.
+- NFL rosters are week-scoped (`coverage_type=week`). The inspected NHL league is **date-scoped**
+  (`coverage_type=date`, `date`, per-player `selected_position.date`): requesting `;week=` did not
+  convert it to weekly coverage. The adapter reports date coverage as a date and refuses to
+  relabel it as a week.
+
+### Payload processing defects found and fixed
+
+- A one-entry nested collection such as `stat_position_types`, `team_logos`, or `managers` is a
+  positional array of wrapper records, but the normalizer merged single-element arrays of records
+  into one object. Real league settings then failed to decode. Collection fields now keep their
+  ordered entries; only known resource-fragment fields merge.
+- A roster container mixes numeric player entries with coverage metadata (`coverage_type`, `week`
+  or `date`, `is_prescoring`, `bye_week_sponsor`). It is not a pure count-keyed collection, so the
+  normalizer exposed metadata next to numeric keys. Numeric entries are now separated into an
+  `entries` array with metadata alongside, and the roster schema accepts week or date coverage.
+- Category leagues omit `stat_modifiers` entirely; the adapter decodes that as an empty modifier
+  list instead of rejecting the league. `stat_modifiers` only appears for points-based scoring.
+
+Fixtures for each observed structure, without captured values, lock these rules in
+`YahooJson.test.ts` and `YahooProvider.test.ts`.
+
+### Still unverified or unsupported
+
+- Projected player statistics: no read shape exposes them; the tool keeps a typed unsupported
+  result with the provider reason.
+- Trade and commissioner transaction player shapes; only add/drop was observed.
+- Weekly hockey player statistics; season statistics were available but weekly were not.
+- League standings, diamond/premium statistics, and multi-week aggregation.
+- All writes, crumb use, locks, and native start-active readback.
+
 ## Starter readiness observation
 
 Read the local `rush-hour/docs/release-readiness.md`, dated 2026-10-22. It explicitly records a critical Solid Start RPC publication blocker in the installed dependency closure and an owner decision to wait for a coherent published upstream fix. It also retains other compatibility limitations. This is a local tracker observation, not a fresh independent advisory reproduction or a declaration about every current upstream release. Treat the baseline as not publication-ready until its documented gates and stable handoff are satisfied.

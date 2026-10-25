@@ -49,8 +49,8 @@ it("merges nested attribute fragment lists and ignores absent placeholders", () 
               {
                 team_key: "461.l.1000.t.1",
                 name: "Alpha",
-                team_logos: { team_logo: { size: "large", url: "https://s.yimg.com" } },
-                managers: { manager: { manager_id: "1" } },
+                team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com" } }],
+                managers: [{ manager: { manager_id: "1" } }],
               },
             ],
           },
@@ -77,6 +77,32 @@ it("keeps repeated single-key attribute entries in order instead of merging them
   });
 });
 
+it("keeps one-entry nested collections while merging a settings fragment list", () => {
+  const normalized = normalizeYahooJson(rawLeagueSettingsWithSingleEntryCollections);
+
+  assert.deepStrictEqual(normalized, {
+    league: {
+      league_key: "465.l.2000",
+      settings: {
+        roster_positions: [
+          { roster_position: { position: "G", count: 1, is_starting_position: 1 } },
+        ],
+        stat_categories: {
+          stats: [
+            {
+              stat: {
+                stat_id: 31,
+                name: "Goals",
+                stat_position_types: [{ stat_position_type: { position_type: "P" } }],
+              },
+            },
+          ],
+        },
+      },
+    },
+  });
+});
+
 it("keeps nested roster resources while merging team attribute fragments", () => {
   const normalized = normalizeYahooJson(rawRoster);
 
@@ -94,6 +120,32 @@ it("keeps nested roster resources while merging team attribute fragments", () =>
           ],
         },
       ],
+    },
+  });
+});
+
+it("separates entries from sibling metadata in a mixed collection", () => {
+  const normalized = normalizeYahooJson(rawRosterWithCoverageMetadata);
+
+  assert.deepStrictEqual(normalized, {
+    team: {
+      team_key: "461.l.1000.t.1",
+      roster: {
+        coverage_type: "week",
+        week: "3",
+        is_prescoring: 0,
+        entries: [
+          {
+            players: [
+              {
+                player_key: "461.p.10001",
+                selected_position: { coverage_type: "week", week: "3", position: "QB" },
+                is_editable: "1",
+              },
+            ],
+          },
+        ],
+      },
     },
   });
 });
@@ -133,6 +185,35 @@ const rawRoster = {
   },
 };
 
+const rawRosterWithCoverageMetadata = {
+  fantasy_content: {
+    team: [
+      { team_key: "461.l.1000.t.1" },
+      {
+        roster: {
+          "0": {
+            players: {
+              "0": {
+                player: [
+                  [{ player_key: "461.p.10001" }],
+                  {
+                    selected_position: [{ coverage_type: "week", week: "3" }, { position: "QB" }],
+                  },
+                  { is_editable: "1" },
+                ],
+              },
+              count: 1,
+            },
+          },
+          coverage_type: "week",
+          week: "3",
+          is_prescoring: 0,
+        },
+      },
+    ],
+  },
+};
+
 const rawSession = {
   fantasy_content: {
     users: {
@@ -156,6 +237,36 @@ const rawLeagueSettings = {
               { roster_position: { position: "C", count: 2, is_starting_position: 1 } },
               { roster_position: { position: "BN", count: 6, is_starting_position: 0 } },
             ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+const rawLeagueSettingsWithSingleEntryCollections = {
+  fantasy_content: {
+    league: [
+      { league_key: "465.l.2000" },
+      {
+        settings: [
+          {
+            roster_positions: {
+              "0": { roster_position: { position: "G", count: 1, is_starting_position: 1 } },
+              count: 1,
+            },
+            stat_categories: {
+              stats: {
+                "0": {
+                  stat: {
+                    stat_id: 31,
+                    name: "Goals",
+                    stat_position_types: [{ stat_position_type: { position_type: "P" } }],
+                  },
+                },
+                count: 1,
+              },
+            },
           },
         ],
       },

@@ -217,11 +217,23 @@ export const ProviderFakeTest = Layer.effect(
         if (current.roster.providerTeamKey !== input.providerTeamKey) {
           return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
         }
-        if (input.period !== undefined && input.period.week !== current.roster.coverage.week) {
+        const coverage = current.roster.coverage;
+        if (input.period !== undefined && coverage.type === "date") {
           return yield* ProviderPeriodMismatch.make({
             operation: "read_roster",
             requestedWeek: input.period.week,
-            coveredWeek: current.roster.coverage.week,
+            coveredWeek: null,
+          });
+        }
+        if (
+          input.period !== undefined &&
+          coverage.type === "week" &&
+          input.period.week !== coverage.week
+        ) {
+          return yield* ProviderPeriodMismatch.make({
+            operation: "read_roster",
+            requestedWeek: input.period.week,
+            coveredWeek: coverage.week,
           });
         }
         return current.roster;

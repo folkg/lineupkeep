@@ -136,7 +136,10 @@ export const FantasyQueriesLive = Layer.effect(
                 failure: {
                   code: "period_unavailable",
                   resource,
-                  message: `The provider returned week ${String(error.coveredWeek ?? "unknown")} instead of the requested week ${String(error.requestedWeek)}.`,
+                  message:
+                    error.coveredWeek === null
+                      ? "The provider did not report a weekly period for this read."
+                      : `The provider returned week ${String(error.coveredWeek)} instead of the requested week ${String(error.requestedWeek)}.`,
                 },
               });
           }
@@ -399,36 +402,62 @@ export const FantasyQueriesLive = Layer.effect(
           detail: "The linked league has no current period. Select a valid period explicitly.",
         });
       }
-      const rosterOutcome = yield* readOutcome(
-        context,
-        "roster",
-        provider.readRoster({
-          ...providerIdentity(context),
-          providerTeamKey: context.owned.team.providerTeamKey,
-          period,
-        }),
-      );
+      const readRoster = (
+        requested: { readonly week: number } | undefined,
+      ): Effect.Effect<ReadOutcome<ProviderRoster>> =>
+        readOutcome(
+          context,
+          "roster",
+          provider.readRoster({
+            ...providerIdentity(context),
+            providerTeamKey: context.owned.team.providerTeamKey,
+            period: requested,
+          }),
+        );
+      let rosterOutcome = yield* readRoster(period);
+      if (
+        rosterOutcome._tag === "failed" &&
+        rosterOutcome.failure.code === "period_unavailable" &&
+        input.period === undefined
+      ) {
+        const current = yield* readRoster(undefined);
+        if (current._tag === "ok" && current.value.coverage.type === "date") {
+          rosterOutcome = current;
+        }
+      }
       if (rosterOutcome._tag !== "ok") {
         return rosterWithoutData(team, period, fetchedAt, rosterOutcome);
       }
+      const roster = rosterOutcome.value;
+      const rosterCoverage =
+        roster.coverage.type === "week"
+          ? coverage("roster", "roster", fetchedAt, { week: roster.coverage.week })
+          : coverage(
+              "roster",
+              "roster",
+              fetchedAt,
+              undefined,
+              `Date-scoped roster for ${roster.coverage.date}`,
+            );
+      const periodKey =
+        roster.coverage.type === "week"
+          ? String(roster.coverage.week)
+          : `date:${roster.coverage.date}`;
       const players = yield* Effect.forEach(
-        rosterOutcome.value.players,
+        roster.players,
         (player) => rosterPlayer(context, tokens, player, detail),
         { concurrency: 1 },
       );
       const fingerprintValue = yield* queryFingerprint(
-        `rosters|team=${input.team}|period=${String(period.week)}|detail=${detail}|order=slot,player`,
+        `rosters|team=${input.team}|period=${periodKey}|detail=${detail}|order=slot,player`,
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
       const base: Omit<RosterData, "players" | "page"> = {
         status: "ok",
         team,
-        period,
-        coverage: [
-          coverage("league", "league_settings", fetchedAt),
-          coverage("roster", "roster", fetchedAt, { week: rosterOutcome.value.coverage.week }),
-        ],
+        ...(roster.coverage.type === "week" ? { period: { week: roster.coverage.week } } : {}),
+        coverage: [coverage("league", "league_settings", fetchedAt), rosterCoverage],
         failures: [],
         budget: queryBudget,
       };
@@ -601,7 +630,15 @@ export const FantasyQueriesLive = Layer.effect(
       if (rosterOutcome._tag === "ok") {
         roster = rosterOutcome.value;
         coverageEntries.push(
-          coverage("roster", "roster", fetchedAt, { week: roster.coverage.week }),
+          roster.coverage.type === "week"
+            ? coverage("roster", "roster", fetchedAt, { week: roster.coverage.week })
+            : coverage(
+                "roster",
+                "roster",
+                fetchedAt,
+                undefined,
+                `Date-scoped roster for ${roster.coverage.date}`,
+              ),
         );
       } else {
         coverageEntries.push(unsupportedCoverage("roster", "roster", fetchedAt));
@@ -609,6 +646,9 @@ export const FantasyQueriesLive = Layer.effect(
           failures.push(rosterOutcome.failure);
         }
       }
+      const requestedPeriod =
+        input.period ??
+        (roster?.coverage.type === "week" ? { week: roster.coverage.week } : undefined);
       let details: ReadonlyArray<ProviderPlayerDetail> = [];
       let detailsUnsupported: string | undefined;
       if (groups.includes("actual_stats") || groups.includes("projections")) {
@@ -619,12 +659,25 @@ export const FantasyQueriesLive = Layer.effect(
             ...providerIdentity(context),
             providerLeagueKey: leagueKey,
             providerPlayerKeys: valid.map((row) => row.providerPlayerKey),
-            period: input.period,
+            period: requestedPeriod,
+            currentWeek: league?.currentWeek,
           }),
         );
         if (detailsOutcome._tag === "ok") {
           details = detailsOutcome.value;
-          coverageEntries.push(coverage("players", "player_details", fetchedAt));
+          coverageEntries.push(
+            coverage(
+              "players",
+              "player_details",
+              fetchedAt,
+              undefined,
+              requestedPeriod !== undefined &&
+                league !== undefined &&
+                requestedPeriod.week >= league.currentWeek
+                ? "Week statistics are reported only after a period completes."
+                : undefined,
+            ),
+          );
         } else {
           detailsUnsupported =
             detailsOutcome._tag === "unsupported"
@@ -734,7 +787,7 @@ export const FantasyQueriesLive = Layer.effect(
                   ? {
                       status: "unsupported" as const,
                       detail:
-                        "The provider did not report actual statistics for this player and period.",
+                        "The provider reported no actual statistics for this player and period.",
                     }
                   : {
                       status: "available" as const,
@@ -748,7 +801,7 @@ export const FantasyQueriesLive = Layer.effect(
                 : detail?.projected === undefined
                   ? {
                       status: "unsupported" as const,
-                      detail: "The provider did not report projections for this player and period.",
+                      detail: "This provider does not expose projected player statistics.",
                     }
                   : {
                       status: "available" as const,
@@ -793,8 +846,7 @@ export const FantasyQueriesLive = Layer.effect(
           statRefFor(statId).pipe(Effect.map((ref) => dictionaryEntry(statId, ref, league))),
         { concurrency: 1 },
       );
-      const period =
-        input.period ?? (roster === undefined ? undefined : { week: roster.coverage.week });
+      const period = requestedPeriod;
       const hasData = playerRows.some(
         (row) =>
           row.identity !== undefined ||

@@ -92,10 +92,9 @@ export type ProviderPeriod = {
   readonly week: number;
 };
 
-type ProviderRosterCoverage = {
-  readonly type: "week";
-  readonly week: number;
-};
+type ProviderRosterCoverage =
+  | { readonly type: "week"; readonly week: number }
+  | { readonly type: "date"; readonly date: string };
 
 export type ProviderRosterPlayer = {
   readonly providerPlayerKey: string;
@@ -149,7 +148,7 @@ export type ProviderPlayerSearchInput = ProviderSessionMaterial & {
   readonly limit: number;
 };
 
-type ProviderPlayerSearchResult = {
+export type ProviderPlayerSearchResult = {
   readonly players: ReadonlyArray<{
     readonly providerPlayerKey: string;
     readonly name: string;
@@ -161,7 +160,7 @@ type ProviderPlayerSearchResult = {
   }>;
 };
 
-type ProviderTeamScore = {
+export type ProviderTeamScore = {
   readonly providerTeamKey: string;
   readonly name: string;
   readonly points: number | null;
@@ -186,7 +185,7 @@ type ProviderTransactionTeam = {
 
 export type ProviderTransaction = {
   readonly occurredAt: string;
-  readonly type: "add" | "drop" | "trade" | "commissioner" | "other";
+  readonly type: "add" | "drop" | "add_drop" | "trade" | "commissioner" | "other";
   readonly status: string | undefined;
   readonly teams: ReadonlyArray<ProviderTransactionTeam>;
   readonly players: ReadonlyArray<ProviderTransactionPlayer>;
@@ -323,6 +322,7 @@ export type ProviderGatewayShape = {
       readonly providerLeagueKey: string;
       readonly providerPlayerKeys: ReadonlyArray<string>;
       readonly period: ProviderPeriod | undefined;
+      readonly currentWeek: number | undefined;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure>;
 
