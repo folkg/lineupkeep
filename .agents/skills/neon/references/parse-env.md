@@ -8,6 +8,7 @@ npm i @neon/env
 
 ```typescript
 import { parseEnv } from "@neon/env";
+
 import config from "./neon";
 
 const env = parseEnv(config);
@@ -20,6 +21,7 @@ By default `parseEnv` requires _every_ variable your config implies. When one of
 
 ```typescript
 import { parseEnv } from "@neon/env";
+
 import config from "./neon";
 
 // Only DATABASE_URL is required and returned; DATABASE_URL_UNPOOLED is not enforced.
