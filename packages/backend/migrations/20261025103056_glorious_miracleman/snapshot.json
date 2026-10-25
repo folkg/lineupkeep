@@ -1,0 +1,1735 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "bd1633b3-92f0-4fa3-8464-d3072879d61c",
+  "prevIds": ["9d48defb-6d5d-4fa3-a20b-ebb76d20f93b"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "lineup_deliveries"],
+      "writes": [
+        "s|tbl|public.lineup_deliveries",
+        "n|tbl|public.lineup_deliveries",
+        "e|tbl|public.lineup_deliveries",
+        "n|rel|public.lineup_deliveries",
+        "n|type|public.lineup_deliveries",
+        "n|rel|public.lineup_deliveries_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "lineup_requests"],
+      "writes": [
+        "s|tbl|public.lineup_requests",
+        "n|tbl|public.lineup_requests",
+        "e|tbl|public.lineup_requests",
+        "n|rel|public.lineup_requests",
+        "n|type|public.lineup_requests",
+        "n|rel|public.lineup_requests_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "lineup_run_attempts"],
+      "writes": [
+        "s|tbl|public.lineup_run_attempts",
+        "n|tbl|public.lineup_run_attempts",
+        "e|tbl|public.lineup_run_attempts",
+        "n|rel|public.lineup_run_attempts",
+        "n|type|public.lineup_run_attempts",
+        "n|rel|public.lineup_run_attempts_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "lineup_runs"],
+      "writes": [
+        "s|tbl|public.lineup_runs",
+        "n|tbl|public.lineup_runs",
+        "e|tbl|public.lineup_runs",
+        "n|rel|public.lineup_runs",
+        "n|type|public.lineup_runs",
+        "n|rel|public.lineup_runs_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "lineup_team_leases"],
+      "writes": [
+        "s|tbl|public.lineup_team_leases",
+        "n|tbl|public.lineup_team_leases",
+        "e|tbl|public.lineup_team_leases",
+        "n|rel|public.lineup_team_leases",
+        "n|type|public.lineup_team_leases",
+        "n|rel|public.lineup_team_leases_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "lineup_write_intents"],
+      "writes": [
+        "s|tbl|public.lineup_write_intents",
+        "n|tbl|public.lineup_write_intents",
+        "e|tbl|public.lineup_write_intents",
+        "n|rel|public.lineup_write_intents",
+        "n|type|public.lineup_write_intents",
+        "n|rel|public.lineup_write_intents_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "provider_teams", "paused_until"],
+      "writes": [
+        "s|col|public.provider_teams.paused_until",
+        "n|col|public.provider_teams.paused_until",
+        "e|col|public.provider_teams.paused_until"
+      ],
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lineup_deliveries",
+        "lineup_deliveries_user_id_request_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.lineup_deliveries_user_id_request_id_idx",
+        "n|idx|public.lineup_deliveries_user_id_request_id_idx",
+        "e|idx|public.lineup_deliveries_user_id_request_id_idx",
+        "n|rel|public.lineup_deliveries_user_id_request_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_deliveries",
+        "n|sch|public",
+        "n|col|public.lineup_deliveries.user_id",
+        "n|col|public.lineup_deliveries.request_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lineup_deliveries",
+        "lineup_deliveries_status_created_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.lineup_deliveries_status_created_at_idx",
+        "n|idx|public.lineup_deliveries_status_created_at_idx",
+        "e|idx|public.lineup_deliveries_status_created_at_idx",
+        "n|rel|public.lineup_deliveries_status_created_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_deliveries",
+        "n|sch|public",
+        "n|col|public.lineup_deliveries.status",
+        "n|col|public.lineup_deliveries.created_at"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "lineup_runs", "lineup_runs_id_idx"],
+      "writes": [
+        "s|idx|public.lineup_runs_id_idx",
+        "n|idx|public.lineup_runs_id_idx",
+        "e|idx|public.lineup_runs_id_idx",
+        "n|rel|public.lineup_runs_id_idx"
+      ],
+      "reads": ["n|tbl|public.lineup_runs", "n|sch|public", "n|col|public.lineup_runs.id"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "lineup_runs", "lineup_runs_user_id_request_id_idx"],
+      "writes": [
+        "s|idx|public.lineup_runs_user_id_request_id_idx",
+        "n|idx|public.lineup_runs_user_id_request_id_idx",
+        "e|idx|public.lineup_runs_user_id_request_id_idx",
+        "n|rel|public.lineup_runs_user_id_request_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_runs",
+        "n|sch|public",
+        "n|col|public.lineup_runs.user_id",
+        "n|col|public.lineup_runs.request_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lineup_runs",
+        "lineup_runs_user_id_team_id_created_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.lineup_runs_user_id_team_id_created_at_idx",
+        "n|idx|public.lineup_runs_user_id_team_id_created_at_idx",
+        "e|idx|public.lineup_runs_user_id_team_id_created_at_idx",
+        "n|rel|public.lineup_runs_user_id_team_id_created_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_runs",
+        "n|sch|public",
+        "n|col|public.lineup_runs.user_id",
+        "n|col|public.lineup_runs.team_id",
+        "n|col|public.lineup_runs.created_at"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "lineup_runs", "lineup_runs_user_id_created_at_idx"],
+      "writes": [
+        "s|idx|public.lineup_runs_user_id_created_at_idx",
+        "n|idx|public.lineup_runs_user_id_created_at_idx",
+        "e|idx|public.lineup_runs_user_id_created_at_idx",
+        "n|rel|public.lineup_runs_user_id_created_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_runs",
+        "n|sch|public",
+        "n|col|public.lineup_runs.user_id",
+        "n|col|public.lineup_runs.created_at"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "lineup_runs", "lineup_runs_status_updated_at_idx"],
+      "writes": [
+        "s|idx|public.lineup_runs_status_updated_at_idx",
+        "n|idx|public.lineup_runs_status_updated_at_idx",
+        "e|idx|public.lineup_runs_status_updated_at_idx",
+        "n|rel|public.lineup_runs_status_updated_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_runs",
+        "n|sch|public",
+        "n|col|public.lineup_runs.status",
+        "n|col|public.lineup_runs.updated_at"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lineup_runs",
+        "lineup_runs_status_next_action_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.lineup_runs_status_next_action_at_idx",
+        "n|idx|public.lineup_runs_status_next_action_at_idx",
+        "e|idx|public.lineup_runs_status_next_action_at_idx",
+        "n|rel|public.lineup_runs_status_next_action_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_runs",
+        "n|sch|public",
+        "n|col|public.lineup_runs.status",
+        "n|col|public.lineup_runs.next_action_at"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lineup_team_leases",
+        "lineup_team_leases_user_id_team_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.lineup_team_leases_user_id_team_id_idx",
+        "n|idx|public.lineup_team_leases_user_id_team_id_idx",
+        "e|idx|public.lineup_team_leases_user_id_team_id_idx",
+        "n|rel|public.lineup_team_leases_user_id_team_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_team_leases",
+        "n|sch|public",
+        "n|col|public.lineup_team_leases.user_id",
+        "n|col|public.lineup_team_leases.team_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lineup_write_intents",
+        "lineup_write_intents_run_id_attempt_idx"
+      ],
+      "writes": [
+        "s|idx|public.lineup_write_intents_run_id_attempt_idx",
+        "n|idx|public.lineup_write_intents_run_id_attempt_idx",
+        "e|idx|public.lineup_write_intents_run_id_attempt_idx",
+        "n|rel|public.lineup_write_intents_run_id_attempt_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_write_intents",
+        "n|sch|public",
+        "n|col|public.lineup_write_intents.run_id",
+        "n|col|public.lineup_write_intents.attempt"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "lineup_write_intents",
+        "lineup_write_intents_user_id_team_id_status_idx"
+      ],
+      "writes": [
+        "s|idx|public.lineup_write_intents_user_id_team_id_status_idx",
+        "n|idx|public.lineup_write_intents_user_id_team_id_status_idx",
+        "e|idx|public.lineup_write_intents_user_id_team_id_status_idx",
+        "n|rel|public.lineup_write_intents_user_id_team_id_status_idx"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_write_intents",
+        "n|sch|public",
+        "n|col|public.lineup_write_intents.user_id",
+        "n|col|public.lineup_write_intents.team_id",
+        "n|col|public.lineup_write_intents.status"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "lineup_deliveries",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "lineup_requests",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "lineup_run_attempts",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "lineup_runs",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "lineup_team_leases",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "lineup_write_intents",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "paused_until",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "request_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "attempts",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "run_ids",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "last_error",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "dispatched_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_requests",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_requests",
+        "name": "id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_requests",
+        "name": "intent",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_requests",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_requests",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_run_attempts",
+        "name": "run_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_run_attempts",
+        "name": "attempt",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_run_attempts",
+        "name": "lease_token",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_run_attempts",
+        "name": "lease_generation",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_run_attempts",
+        "name": "started_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_run_attempts",
+        "name": "finished_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_run_attempts",
+        "name": "outcome",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "request_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "team_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "connection_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "trigger",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "target",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "state",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "implementation",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "implementation_version",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "attempts",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "next_action_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_team_leases",
+        "name": "team_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_team_leases",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_team_leases",
+        "name": "run_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_team_leases",
+        "name": "token",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_team_leases",
+        "name": "generation",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_team_leases",
+        "name": "expires_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_team_leases",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "run_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "attempt",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "team_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "connection_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "connection_generation",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "lease_token",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "lease_generation",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "action",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "target",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "before",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "lineup_deliveries_user_id_request_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "request_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "lineup_deliveries_status_created_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "status",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "created_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "lineup_runs_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "lineup_runs_user_id_request_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "request_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "lineup_runs_user_id_team_id_created_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "team_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "created_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "lineup_runs_user_id_created_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "created_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "lineup_runs_status_updated_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "status",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "updated_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "lineup_runs_status_next_action_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "status",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "next_action_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_team_leases",
+        "name": "lineup_team_leases_user_id_team_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "team_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "lineup_write_intents_run_id_attempt_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "run_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "attempt",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "lineup_write_intents_user_id_team_id_status_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "team_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "status",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_requests",
+        "name": "lineup_requests_pkey",
+        "columns": ["user_id", "id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_run_attempts",
+        "name": "lineup_run_attempts_pkey",
+        "columns": ["run_id", "attempt"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_deliveries",
+        "name": "lineup_deliveries_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_runs",
+        "name": "lineup_runs_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_team_leases",
+        "name": "lineup_team_leases_pkey",
+        "columns": ["team_id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "lineup_write_intents_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

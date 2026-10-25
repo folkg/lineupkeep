@@ -6,8 +6,24 @@ import type { PgEffectDatabase } from "drizzle-orm/pg-core/effect/db";
 import { Context, Layer } from "effect";
 
 import { providerConnections } from "./ConnectionTables.ts";
+import {
+  lineupDeliveries,
+  lineupRequests,
+  lineupRunAttempts,
+  lineupRuns,
+  lineupTeamLeases,
+  lineupWriteIntents,
+} from "./LineupRunTables.ts";
 
-export const connectionsRelations = defineRelations({ providerConnections });
+export const connectionsRelations = defineRelations({
+  providerConnections,
+  lineupRequests,
+  lineupRuns,
+  lineupDeliveries,
+  lineupTeamLeases,
+  lineupRunAttempts,
+  lineupWriteIntents,
+});
 
 export class ConnectionsDatabase extends Context.Service<
   ConnectionsDatabase,

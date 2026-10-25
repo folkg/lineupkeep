@@ -1,0 +1,531 @@
+import { Machine } from "@typeonce/effect-machine";
+import { Schema } from "effect";
+
+import { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import {
+  LineupImplementation,
+  LineupRunOutcome,
+  LineupTargetPeriod,
+  LineupTrigger,
+  LineupUuid,
+} from "#contexts/connections/LineupRun.ts";
+
+export const LineupLeaseRef = Schema.Struct({
+  token: LineupUuid,
+  generation: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+});
+export type LineupLeaseRef = typeof LineupLeaseRef.Type;
+
+export const LineupObservedPlayer = Schema.Struct({
+  key: Schema.NonEmptyString,
+  name: Schema.NonEmptyString,
+  slot: Schema.NonEmptyString,
+  editable: Schema.Boolean,
+});
+export type LineupObservedPlayer = typeof LineupObservedPlayer.Type;
+
+export const LineupObservation = Schema.Struct({
+  target: LineupTargetPeriod,
+  leagueCurrentWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  leagueStartWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  leagueEndWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  starterSlots: Schema.Array(Schema.NonEmptyString),
+  players: Schema.Array(LineupObservedPlayer),
+  lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export type LineupObservation = typeof LineupObservation.Type;
+
+export const LineupNativePlan = Schema.Struct({
+  action: Schema.Literal("start_active_players"),
+  target: LineupTargetPeriod,
+  connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export type LineupNativePlan = typeof LineupNativePlan.Type;
+
+export const LineupWriteIntentRef = Schema.Struct({
+  id: LineupUuid,
+  attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+});
+export type LineupWriteIntentRef = typeof LineupWriteIntentRef.Type;
+
+const LineupProviderResponse = Schema.Literals(["accepted", "unknown"]);
+type LineupProviderResponse = typeof LineupProviderResponse.Type;
+
+const RunContent = {
+  team: TeamId,
+  target: LineupTargetPeriod,
+  trigger: LineupTrigger,
+  implementation: LineupImplementation,
+  implementationVersion: Schema.NonEmptyString,
+  updatedAt: Schema.DateTimeUtc,
+};
+
+const LeaseContent = {
+  lease: LineupLeaseRef,
+  attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+};
+
+const TerminalContent = {
+  ...RunContent,
+  outcome: LineupRunOutcome,
+};
+
+export const LineupRunState = Schema.TaggedUnion({
+  Queued: {
+    ...RunContent,
+    queuedAt: Schema.DateTimeUtc,
+  },
+  Reading: {
+    ...RunContent,
+    ...LeaseContent,
+    startedAt: Schema.DateTimeUtc,
+  },
+  Planning: {
+    ...RunContent,
+    ...LeaseContent,
+    observation: LineupObservation,
+  },
+  Validating: {
+    ...RunContent,
+    ...LeaseContent,
+    observation: LineupObservation,
+    plan: LineupNativePlan,
+  },
+  Applying: {
+    ...RunContent,
+    ...LeaseContent,
+    writeIntent: LineupWriteIntentRef,
+  },
+  Verifying: {
+    ...RunContent,
+    ...LeaseContent,
+    writeIntent: LineupWriteIntentRef,
+    providerResponse: LineupProviderResponse,
+  },
+  Completed: TerminalContent,
+  Skipped: TerminalContent,
+  Blocked: TerminalContent,
+  RetryWait: {
+    ...RunContent,
+    attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    reason: Schema.NonEmptyString,
+    detail: Schema.String,
+    retryAt: Schema.DateTimeUtc,
+    writeIntent: Schema.optional(LineupWriteIntentRef),
+  },
+  Failed: TerminalContent,
+  Uncertain: {
+    ...TerminalContent,
+    writeIntent: Schema.optional(LineupWriteIntentRef),
+  },
+  Superseded: TerminalContent,
+});
+export type LineupRunState = typeof LineupRunState.Type;
+
+const LineupRunStates = Machine.state({
+  states: {
+    Queued: LineupRunState.cases.Queued,
+    Reading: LineupRunState.cases.Reading,
+    Planning: LineupRunState.cases.Planning,
+    Validating: LineupRunState.cases.Validating,
+    Applying: LineupRunState.cases.Applying,
+    Verifying: LineupRunState.cases.Verifying,
+    Completed: { type: "final", schema: LineupRunState.cases.Completed },
+    Skipped: { type: "final", schema: LineupRunState.cases.Skipped },
+    Blocked: { type: "final", schema: LineupRunState.cases.Blocked },
+    RetryWait: LineupRunState.cases.RetryWait,
+    Failed: { type: "final", schema: LineupRunState.cases.Failed },
+    Uncertain: LineupRunState.cases.Uncertain,
+    Superseded: { type: "final", schema: LineupRunState.cases.Superseded },
+  },
+});
+
+const LineupRunEvents = Schema.TaggedUnion({
+  Claimed: { at: Schema.DateTimeUtc, ...LeaseContent },
+  Reclaimed: { at: Schema.DateTimeUtc, ...LeaseContent },
+  RetryClaimed: { at: Schema.DateTimeUtc, ...LeaseContent },
+  VerificationClaimed: { at: Schema.DateTimeUtc, ...LeaseContent },
+  ObservationRecorded: { at: Schema.DateTimeUtc, observation: LineupObservation },
+  PlanPrepared: { at: Schema.DateTimeUtc, plan: LineupNativePlan },
+  ApplyStarted: {
+    at: Schema.DateTimeUtc,
+    writeIntent: LineupWriteIntentRef,
+  },
+  ApplyResponded: {
+    at: Schema.DateTimeUtc,
+    providerResponse: LineupProviderResponse,
+  },
+  VerificationResumed: { at: Schema.DateTimeUtc, ...LeaseContent },
+  ReconciliationStarted: { at: Schema.DateTimeUtc, ...LeaseContent },
+  Verified: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
+  Blocked: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
+  Skipped: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
+  Failed: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
+  Superseded: { at: Schema.DateTimeUtc, outcome: LineupRunOutcome },
+  Uncertain: {
+    at: Schema.DateTimeUtc,
+    outcome: LineupRunOutcome,
+    writeIntent: Schema.optional(LineupWriteIntentRef),
+  },
+  RetryScheduled: {
+    at: Schema.DateTimeUtc,
+    attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    reason: Schema.NonEmptyString,
+    detail: Schema.String,
+    retryAt: Schema.DateTimeUtc,
+    writeIntent: Schema.optional(LineupWriteIntentRef),
+  },
+});
+export type LineupRunEvent = typeof LineupRunEvents.Type;
+
+const retryWait = {
+  target: "RetryWait" as const,
+  data: ({
+    state,
+    event,
+  }: {
+    readonly state: RunState;
+    readonly event: Extract<LineupRunEvent, { readonly _tag: "RetryScheduled" }>;
+  }): StateData<typeof LineupRunState.cases.RetryWait.Type> => ({
+    ...content(state),
+    attempt: event.attempt,
+    reason: event.reason,
+    detail: event.detail,
+    retryAt: event.retryAt,
+    ...(event.writeIntent === undefined ? {} : { writeIntent: event.writeIntent }),
+    updatedAt: event.at,
+  }),
+};
+
+export const LineupRunWorkflow = Machine.make({
+  root: LineupRunStates,
+  input: LineupRunState.cases.Queued,
+  events: Machine.eventsFromSchemas(LineupRunEvents),
+}).handle({
+  initial: { target: "Queued", data: ({ input }) => input },
+  states: {
+    Queued: {
+      on: {
+        Claimed: {
+          target: "Reading",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: event.lease,
+            attempt: event.attempt,
+            startedAt: event.at,
+            updatedAt: event.at,
+          }),
+        },
+        Skipped: terminal("Skipped"),
+        Superseded: terminal("Superseded"),
+      },
+    },
+    Reading: {
+      on: {
+        ObservationRecorded: {
+          target: "Planning",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: state.lease,
+            attempt: state.attempt,
+            observation: event.observation,
+            updatedAt: event.at,
+          }),
+        },
+        Reclaimed: {
+          target: "Reading",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: event.lease,
+            attempt: event.attempt,
+            startedAt: event.at,
+            updatedAt: event.at,
+          }),
+        },
+        RetryScheduled: retryWait,
+        Blocked: terminal("Blocked"),
+        Failed: terminal("Failed"),
+      },
+    },
+    Planning: {
+      on: {
+        PlanPrepared: {
+          target: "Validating",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: state.lease,
+            attempt: state.attempt,
+            observation: state.observation,
+            plan: event.plan,
+            updatedAt: event.at,
+          }),
+        },
+        Reclaimed: {
+          target: "Reading",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: event.lease,
+            attempt: event.attempt,
+            startedAt: event.at,
+            updatedAt: event.at,
+          }),
+        },
+        RetryScheduled: retryWait,
+        Blocked: terminal("Blocked"),
+        Failed: terminal("Failed"),
+      },
+    },
+    Validating: {
+      on: {
+        ApplyStarted: {
+          target: "Applying",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: state.lease,
+            attempt: state.attempt,
+            writeIntent: event.writeIntent,
+            updatedAt: event.at,
+          }),
+        },
+        Reclaimed: {
+          target: "Reading",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: event.lease,
+            attempt: event.attempt,
+            startedAt: event.at,
+            updatedAt: event.at,
+          }),
+        },
+        RetryScheduled: retryWait,
+        Blocked: terminal("Blocked"),
+        Failed: terminal("Failed"),
+      },
+    },
+    Applying: {
+      on: {
+        ApplyResponded: {
+          target: "Verifying",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: state.lease,
+            attempt: state.attempt,
+            writeIntent: state.writeIntent,
+            providerResponse: event.providerResponse,
+            updatedAt: event.at,
+          }),
+        },
+        VerificationResumed: {
+          target: "Verifying",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: event.lease,
+            attempt: event.attempt,
+            writeIntent: state.writeIntent,
+            providerResponse: "unknown",
+            updatedAt: event.at,
+          }),
+        },
+        RetryScheduled: retryWait,
+        Failed: terminal("Failed"),
+      },
+    },
+    Verifying: {
+      on: {
+        Verified: {
+          target: "Completed",
+          data: ({ state, event }) => ({
+            ...content(state),
+            outcome: event.outcome,
+            updatedAt: event.at,
+          }),
+        },
+        Uncertain: {
+          target: "Uncertain",
+          data: ({ state, event }) => ({
+            ...content(state),
+            outcome: event.outcome,
+            writeIntent: state.writeIntent,
+            updatedAt: event.at,
+          }),
+        },
+        VerificationResumed: {
+          target: "Verifying",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: event.lease,
+            attempt: event.attempt,
+            writeIntent: state.writeIntent,
+            providerResponse: state.providerResponse,
+            updatedAt: event.at,
+          }),
+        },
+        RetryScheduled: retryWait,
+        Failed: terminal("Failed"),
+      },
+    },
+    RetryWait: {
+      on: {
+        RetryClaimed: {
+          target: "Reading",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: event.lease,
+            attempt: event.attempt,
+            startedAt: event.at,
+            updatedAt: event.at,
+          }),
+        },
+        VerificationClaimed: {
+          guard: ({ state }) => state.writeIntent !== undefined,
+          target: "Verifying",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: event.lease,
+            attempt: event.attempt,
+            writeIntent: retryWriteIntent(state),
+            providerResponse: "unknown",
+            updatedAt: event.at,
+          }),
+        },
+        Skipped: terminal("Skipped"),
+        Superseded: terminal("Superseded"),
+        Blocked: terminal("Blocked"),
+      },
+    },
+    Uncertain: {
+      on: {
+        ReconciliationStarted: {
+          guard: ({ state }) => state.writeIntent !== undefined,
+          target: "Verifying",
+          data: ({ state, event }) => ({
+            ...content(state),
+            lease: event.lease,
+            attempt: event.attempt,
+            writeIntent: uncertainWriteIntent(state),
+            providerResponse: "unknown",
+            updatedAt: event.at,
+          }),
+        },
+        Superseded: terminal("Superseded"),
+      },
+    },
+    Completed: {},
+    Skipped: {},
+    Blocked: {},
+    Failed: {},
+    Superseded: {},
+  },
+});
+
+export function lineupRunStatus(
+  state: LineupRunState,
+): import("#contexts/connections/LineupRun.ts").LineupRunStatus {
+  switch (state._tag) {
+    case "Queued":
+      return "queued";
+    case "Reading":
+      return "reading";
+    case "Planning":
+      return "planning";
+    case "Validating":
+      return "validating";
+    case "Applying":
+      return "applying";
+    case "Verifying":
+      return "verifying";
+    case "Completed":
+      return "completed";
+    case "Skipped":
+      return "skipped";
+    case "Blocked":
+      return "blocked";
+    case "RetryWait":
+      return "retry-wait";
+    case "Failed":
+      return "failed";
+    case "Uncertain":
+      return "uncertain";
+    case "Superseded":
+      return "superseded";
+  }
+}
+
+function content(state: {
+  readonly team: TeamId;
+  readonly target: LineupTargetPeriod;
+  readonly trigger: LineupTrigger;
+  readonly implementation: LineupImplementation;
+  readonly implementationVersion: string;
+}): {
+  readonly team: TeamId;
+  readonly target: LineupTargetPeriod;
+  readonly trigger: LineupTrigger;
+  readonly implementation: LineupImplementation;
+  readonly implementationVersion: string;
+} {
+  return {
+    team: state.team,
+    target: state.target,
+    trigger: state.trigger,
+    implementation: state.implementation,
+    implementationVersion: state.implementationVersion,
+  };
+}
+
+function terminal<Target extends TerminalTarget>(
+  target: Target,
+): {
+  readonly target: Target;
+  readonly data: (input: {
+    readonly state: RunState;
+    readonly event: TerminalEvent;
+  }) => StateData<typeof LineupRunState.cases.Completed.Type>;
+} {
+  return {
+    target,
+    data: ({ state, event }) => ({
+      ...content(state),
+      outcome: event.outcome,
+      updatedAt: event.at,
+    }),
+  };
+}
+
+function retryWriteIntent(
+  state: Extract<LineupRunState, { readonly _tag: "RetryWait" }>,
+): LineupWriteIntentRef {
+  if (state.writeIntent === undefined) {
+    throw new Error("Verification cannot resume without a write intent");
+  }
+  return state.writeIntent;
+}
+
+function uncertainWriteIntent(
+  state: Extract<LineupRunState, { readonly _tag: "Uncertain" }>,
+): LineupWriteIntentRef {
+  if (state.writeIntent === undefined) {
+    throw new Error("Uncertain reconciliation requires a write intent");
+  }
+  return state.writeIntent;
+}
+
+type TerminalTarget = "Completed" | "Skipped" | "Blocked" | "Failed" | "Superseded";
+type StateData<State> = Omit<State, "_tag">;
+
+type RunState = {
+  readonly team: TeamId;
+  readonly target: LineupTargetPeriod;
+  readonly trigger: LineupTrigger;
+  readonly implementation: LineupImplementation;
+  readonly implementationVersion: string;
+};
+type TerminalEvent = Extract<
+  LineupRunEvent,
+  {
+    readonly _tag: "Blocked" | "Skipped" | "Failed" | "Superseded";
+  }
+>;

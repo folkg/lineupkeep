@@ -130,6 +130,7 @@ it.effect("round-trips discovered team rows through the codec", () =>
       name: "Alpha",
       availability: "available" as const,
       automationEnabled: false,
+      pausedUntil: null,
       lastSeenAt: atDate,
       createdAt: atDate,
       updatedAt: atDate,

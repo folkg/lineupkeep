@@ -17,6 +17,7 @@ import { Route as McpRouteImport } from './routes/mcp'
 import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known.$'
 import { Route as ApiTelemetryRouteImport } from './routes/api/telemetry'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiInternalLineupWorkerRouteImport } from './routes/api/internal/lineup-worker'
 import { Route as ApiLinkingCompleteRouteImport } from './routes/api/linking/complete'
 
 const IndexRoute = IndexRouteImport.update({
@@ -59,6 +60,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInternalLineupWorkerRoute = ApiInternalLineupWorkerRouteImport.update({
+  id: '/api/internal/lineup-worker',
+  path: '/api/internal/lineup-worker',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiLinkingCompleteRoute = ApiLinkingCompleteRouteImport.update({
   id: '/api/linking/complete',
   path: '/api/linking/complete',
@@ -74,6 +80,7 @@ export interface FileRoutesByFullPath {
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
   '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
 export interface FileRoutesByTo {
@@ -85,6 +92,7 @@ export interface FileRoutesByTo {
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
   '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
 export interface FileRoutesById {
@@ -97,6 +105,7 @@ export interface FileRoutesById {
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/api/telemetry': typeof ApiTelemetryRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
   '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
 export interface FileRouteTypes {
@@ -110,6 +119,7 @@ export interface FileRouteTypes {
     | '/.well-known/$'
     | '/api/telemetry'
     | '/api/auth/$'
+    | '/api/internal/lineup-worker'
     | '/api/linking/complete'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -121,6 +131,7 @@ export interface FileRouteTypes {
     | '/.well-known/$'
     | '/api/telemetry'
     | '/api/auth/$'
+    | '/api/internal/lineup-worker'
     | '/api/linking/complete'
   id:
     | '__root__'
@@ -132,6 +143,7 @@ export interface FileRouteTypes {
     | '/.well-known/$'
     | '/api/telemetry'
     | '/api/auth/$'
+    | '/api/internal/lineup-worker'
     | '/api/linking/complete'
   fileRoutesById: FileRoutesById
 }
@@ -144,6 +156,7 @@ export interface RootRouteChildren {
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   ApiTelemetryRoute: typeof ApiTelemetryRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiInternalLineupWorkerRoute: typeof ApiInternalLineupWorkerRoute
   ApiLinkingCompleteRoute: typeof ApiLinkingCompleteRoute
 }
 
@@ -205,6 +218,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/internal/lineup-worker': {
+      id: '/api/internal/lineup-worker'
+      path: '/api/internal/lineup-worker'
+      fullPath: '/api/internal/lineup-worker'
+      preLoaderRoute: typeof ApiInternalLineupWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/linking/complete': {
       id: '/api/linking/complete'
       path: '/api/linking/complete'
@@ -224,6 +244,7 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   ApiTelemetryRoute: ApiTelemetryRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiInternalLineupWorkerRoute: ApiInternalLineupWorkerRoute,
   ApiLinkingCompleteRoute: ApiLinkingCompleteRoute,
 }
 export const routeTree = rootRouteImport

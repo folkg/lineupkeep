@@ -85,6 +85,7 @@ export const providerTeams = pgTable(
       .notNull()
       .default("available"),
     automationEnabled: boolean("automation_enabled").notNull().default(false),
+    pausedUntil: timestamp("paused_until", { withTimezone: true }),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

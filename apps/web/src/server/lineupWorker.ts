@@ -1,0 +1,73 @@
+import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
+import { LineupDispatcher, LineupWorker } from "@lineupkeep/backend/connections/LineupWork";
+import { Config, Effect, Option, Schema } from "effect";
+
+import { runBackend } from "./backendEntry.ts";
+
+const LineupWorkerRequest = Schema.Union([
+  Schema.Struct({
+    action: Schema.Literal("deliver"),
+    runs: Schema.Array(LineupRunId).pipe(
+      Schema.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+    ),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("repair"),
+    limit: Schema.optional(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100)),
+    ),
+  }),
+]);
+const LineupWorkerRequestJson = Schema.fromJsonString(LineupWorkerRequest);
+
+export function handleLineupWorkerRequest(request: Request): Promise<Response> {
+  return runBackend(
+    request,
+    "lineup.worker",
+    Effect.gen(function* () {
+      const enabled = yield* Config.option(Config.String("LINEUP_WORKER_ENABLED"));
+      if (Option.isNone(enabled) || enabled.value !== "true") {
+        return new Response("Not found", { status: 404 });
+      }
+      const decoded = yield* Effect.tryPromise(() => request.text()).pipe(
+        Effect.flatMap((body) => Schema.decodeEffect(LineupWorkerRequestJson)(body)),
+        Effect.option,
+      );
+      if (Option.isNone(decoded)) {
+        return new Response("Invalid worker request", { status: 400 });
+      }
+      return yield* execute(decoded.value).pipe(
+        Effect.catchTag("lineup.persistence_failed", () =>
+          Effect.succeed(new Response("The worker could not persist its result", { status: 503 })),
+        ),
+      );
+    }),
+  );
+}
+
+function execute(
+  request: typeof LineupWorkerRequest.Type,
+): Effect.Effect<
+  Response,
+  import("@lineupkeep/backend/connections/LineupRun").LineupPersistenceFailed,
+  LineupWorker | LineupDispatcher
+> {
+  return Effect.gen(function* () {
+    switch (request.action) {
+      case "deliver": {
+        const worker = yield* LineupWorker;
+        yield* worker.deliver(request.runs);
+        return json({ status: "ok", action: request.action, processed: request.runs.length });
+      }
+      case "repair": {
+        const dispatcher = yield* LineupDispatcher;
+        const summary = yield* dispatcher.repair(request.limit ?? 50);
+        return json({ status: "ok", action: request.action, ...summary });
+      }
+    }
+  });
+}
+
+function json(value: unknown): Response {
+  return Response.json(value, { headers: { "cache-control": "no-store" } });
+}
