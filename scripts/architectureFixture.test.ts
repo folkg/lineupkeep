@@ -20,8 +20,8 @@ it("isolates architecture fixtures with the same paths without changing the work
   expect(process.cwd()).toBe(cwd);
 });
 
-it("checks fixture types as well as architecture rules", () => {
-  const result = checkLint({
+it("checks fixture types as well as architecture rules", async () => {
+  const result = await checkLint({
     "apps/web/src/routes/mcp.ts": 'import "effect"; export const count: number = "invalid";',
   });
 

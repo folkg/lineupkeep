@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   copyFileSync,
   mkdirSync,
@@ -43,12 +43,12 @@ export async function checkArchitecture(
   }
 }
 
-export function checkLint(
+export async function checkLint(
   files: Readonly<Record<string, string>>,
   fix = false,
-): CommandResult & { readonly sources: Readonly<Record<string, string>> } {
-  return withFixture(files, (cwd) => ({
-    ...runTool(cwd, join(repositoryRoot, "node_modules/oxlint/bin/oxlint"), [
+): Promise<CommandResult & { readonly sources: Readonly<Record<string, string>> }> {
+  return withFixture(files, async (cwd) => ({
+    ...(await runTool(cwd, join(repositoryRoot, "node_modules/oxlint/bin/oxlint"), [
       ...(fix ? ["--fix"] : []),
       "--config",
       "oxlint.config.ts",
@@ -58,18 +58,18 @@ export function checkLint(
       "--threads",
       "1",
       ...Object.keys(files),
-    ]),
+    ])),
     sources: Object.fromEntries(
       Object.keys(files).map((path) => [path, readFileSync(join(cwd, path), "utf8")]),
     ),
   }));
 }
 
-export function checkUnusedExports(
+export async function checkUnusedExports(
   files: Readonly<Record<string, string>>,
   production: boolean,
-): CommandResult {
-  return withFixture(files, (cwd) => {
+): Promise<CommandResult> {
+  return withFixture(files, async (cwd) => {
     copyFileSync(join(repositoryRoot, "knip.ts"), join(cwd, "knip.ts"));
     return runTool(cwd, join(repositoryRoot, "node_modules/knip/bin/knip.js"), [
       "--include",
@@ -80,8 +80,10 @@ export function checkUnusedExports(
   });
 }
 
-export function checkMigrationDiscovery(files: Readonly<Record<string, string>>): CommandResult {
-  return withFixture(files, (cwd) => {
+export async function checkMigrationDiscovery(
+  files: Readonly<Record<string, string>>,
+): Promise<CommandResult> {
+  return withFixture(files, async (cwd) => {
     copyFileSync(
       join(repositoryRoot, "packages/backend/drizzle.config.ts"),
       join(cwd, "packages/backend/drizzle.config.ts"),
@@ -100,8 +102,10 @@ export function checkMigrationDiscovery(files: Readonly<Record<string, string>>)
   });
 }
 
-export function checkTableOwnership(files: Readonly<Record<string, string>>): CommandResult {
-  return withFixture(files, (cwd) => {
+export async function checkTableOwnership(
+  files: Readonly<Record<string, string>>,
+): Promise<CommandResult> {
+  return withFixture(files, async (cwd) => {
     const scripts = "packages/backend/scripts";
     mkdirSync(join(cwd, scripts), { recursive: true });
     for (const file of ["check-table-ownership.ts", "tableOwnership.ts"]) {
@@ -111,13 +115,13 @@ export function checkTableOwnership(files: Readonly<Record<string, string>>): Co
   });
 }
 
-function withFixture<Result>(
+async function withFixture<Result>(
   files: Readonly<Record<string, string>>,
-  check: (cwd: string) => Result,
-): Result {
+  check: (cwd: string) => Promise<Result>,
+): Promise<Result> {
   const fixture = createFixture(files);
   try {
-    return check(fixture);
+    return await check(fixture);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
@@ -200,16 +204,22 @@ function createFixture(files: Readonly<Record<string, string>>): string {
   }
 }
 
-function runTool(cwd: string, tool: string, args: ReadonlyArray<string>): CommandResult {
-  const result = spawnSync(process.execPath, [tool, ...args], {
-    cwd,
-    encoding: "utf8",
-    timeout: 30_000,
+function runTool(cwd: string, tool: string, args: ReadonlyArray<string>): Promise<CommandResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [tool, ...args], {
+      cwd,
+      timeout: 30_000,
+    });
+    let output = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+      output += chunk;
+    });
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+      output += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (status) => resolve({ status, output }));
   });
-  if (result.error) {
-    throw result.error;
-  }
-  return { status: result.status, output: result.stdout + result.stderr };
 }
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));

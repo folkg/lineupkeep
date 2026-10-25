@@ -16,27 +16,33 @@ import {
   checkMigrationDiscovery,
   checkTableOwnership,
 } from "./architectureFixture.ts";
-it.each([false, true])("permits consumed backend exports with production=%s", (production) => {
-  const result = checkUnusedExports(consumedBackendFixture, production);
+it.each([false, true])(
+  "permits consumed backend exports with production=%s",
+  async (production) => {
+    const result = await checkUnusedExports(consumedBackendFixture, production);
 
-  expect(result.status, result.output).toBe(0);
-});
+    expect(result.status, result.output).toBe(0);
+  },
+);
 
-it.each([false, true])("keeps unused backend exports visible with production=%s", (production) => {
-  const result = checkUnusedExports(
-    {
-      ...consumedBackendFixture,
-      "packages/backend/src/contexts/calendar/internal/CalendarRepository.ts":
-        "export const forgotten = 1;",
-    },
-    production,
-  );
+it.each([false, true])(
+  "keeps unused backend exports visible with production=%s",
+  async (production) => {
+    const result = await checkUnusedExports(
+      {
+        ...consumedBackendFixture,
+        "packages/backend/src/contexts/calendar/internal/CalendarRepository.ts":
+          "export const forgotten = 1;",
+      },
+      production,
+    );
 
-  expect(result.status, result.output).toBeGreaterThan(0);
-  expect(result.output).toContain("forgotten");
-});
+    expect(result.status, result.output).toBeGreaterThan(0);
+    expect(result.output).toContain("forgotten");
+  },
+);
 
-it("discovers only owned table modules for migrations in an unlisted domain", () => {
+it("discovers only owned table modules for migrations in an unlisted domain", async () => {
   const files = {
     "packages/backend/src/contexts/calendar/internal/AppointmentTable.ts":
       "export const value = 1;",
@@ -49,7 +55,7 @@ it("discovers only owned table modules for migrations in an unlisted domain", ()
     "packages/backend/src/contexts/calendar/CalendarTable.ts": "export const value = 1;",
   };
 
-  const result = checkMigrationDiscovery(files);
+  const result = await checkMigrationDiscovery(files);
 
   expect(result.status, result.output).toBe(0);
   expect(JSON.parse(result.output)).toEqual([
@@ -58,7 +64,7 @@ it("discovers only owned table modules for migrations in an unlisted domain", ()
   ]);
 });
 
-it("discovers duplicate table declarations through the architecture command", () => {
+it("discovers duplicate table declarations through the architecture command", async () => {
   const files = {
     "packages/backend/src/contexts/auth/internal/AuthTables.ts":
       'import { pgTable, text } from "drizzle-orm/pg-core"; export const user = pgTable("user", { id: text().primaryKey() });',
@@ -66,7 +72,7 @@ it("discovers duplicate table declarations through the architecture command", ()
       'import { pgTable as table, text } from "drizzle-orm/pg-core"; export const user = table("user", { id: text().primaryKey() });',
   };
 
-  const result = checkTableOwnership(files);
+  const result = await checkTableOwnership(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("Table public.user is owned by auth, workspaces");

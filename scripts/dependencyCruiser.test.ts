@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 
 import { checkArchitecture, checkLint } from "./architectureFixture.ts";
 it("permits a view, its controller, and a pure workflow", async () => {
-  const lint = checkLint(referenceFeature);
+  const lint = await checkLint(referenceFeature);
   const architecture = await checkArchitecture(referenceFeature);
 
   expect(lint.status, lint.output).toBe(0);
@@ -251,9 +251,9 @@ it("permits server helpers in excluded protocol directories but not universal he
     "apps/web/src/shared/calendar/read.ts": 'export { read } from "#server/calendar/read.ts";',
   };
 
-  expect(checkLint(accepted).status).toBe(0);
+  expect((await checkLint(accepted)).status).toBe(0);
   expect((await checkArchitecture(accepted)).status).toBe(0);
-  expect(checkLint(rejected).status).toBeGreaterThan(0);
+  expect((await checkLint(rejected)).status).toBeGreaterThan(0);
   expect((await checkArchitecture(rejected)).status).toBeGreaterThan(0);
 });
 
@@ -429,7 +429,7 @@ it("rejects backend calls and Effect in the MCP route", async () => {
   const files = { "apps/web/src/routes/mcp.ts": 'import "effect";' };
 
   const architecture = await checkArchitecture(files);
-  const lint = checkLint(files);
+  const lint = await checkLint(files);
 
   expect(architecture.output).toContain("mcp-route-delegates-to-adapter");
   expect(architecture.output.replaceAll(/\s+/g, " ")).toContain(
@@ -559,7 +559,7 @@ it("permits a thin MCP route and Effect tools delegating to a public backend use
   };
 
   const architecture = await checkArchitecture(files);
-  const lint = checkLint(files);
+  const lint = await checkLint(files);
 
   expect(architecture.status, architecture.output).toBe(0);
   expect(lint.status, lint.output).toBe(0);
@@ -589,7 +589,7 @@ it("accepts a previously unnamed domain inside erased validators and handlers", 
     `,
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
   const architecture = await checkArchitecture(files);
 
   expect(result.status, result.output).toBe(0);
@@ -629,7 +629,7 @@ it("accepts browser-safe primitive limits in a previously unnamed domain", async
       'export { maxItems } from "@lineupkeep/backend/inventory/InventoryLimits";',
   };
 
-  const lint = checkLint(files);
+  const lint = await checkLint(files);
   const architecture = await checkArchitecture(files);
 
   expect(lint.status, lint.output).toBe(0);
@@ -751,7 +751,7 @@ it("permits backend domain types and server-function and API-handler adapters", 
     "apps/web/src/server/read.ts": "export const read = 1;",
   };
 
-  const lint = checkLint(files);
+  const lint = await checkLint(files);
   const architecture = await checkArchitecture(files);
 
   expect(lint.status, lint.output).toBe(0);
@@ -1243,7 +1243,7 @@ it("permits structured queries, local storage definitions, and type-only SQL con
       'export { migrate } from "drizzle-orm/effect-pglite/migrator";',
   };
 
-  const lint = checkLint(files);
+  const lint = await checkLint(files);
   const architecture = await checkArchitecture(files);
 
   expect(lint.status, lint.output).toBe(0);

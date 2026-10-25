@@ -6,13 +6,7 @@ import { defineConfig } from "vitest/config";
 const solidWebRuntime = new URL("./node_modules/@solidjs/web/dist/server.js", import.meta.url)
   .pathname;
 
-const toolingFixtures = [
-  "scripts/dependencyCruiser.test.ts",
-  "scripts/oxlint.test.ts",
-  "scripts/tooling.test.ts",
-  "scripts/architectureFixture.test.ts",
-  "scripts/server-function-compiler.test.ts",
-];
+const maxWorkers = "70%";
 
 export default defineConfig({
   test: {
@@ -57,7 +51,7 @@ export default defineConfig({
         },
         test: {
           name: "node",
-          maxWorkers: 2,
+          maxWorkers,
           sequence: { groupOrder: 0 },
           deps: {
             optimizer: {
@@ -73,7 +67,6 @@ export default defineConfig({
             "infra/**/*.test.ts",
           ],
           exclude: [
-            ...toolingFixtures,
             "infra/local/*.safety.test.ts",
             "infra/local/*.container-safety.test.ts",
             "node_modules/**",
@@ -82,14 +75,6 @@ export default defineConfig({
             "**/*.browser.test.ts",
             "**/*.browser.test.tsx",
           ],
-        },
-      },
-      {
-        test: {
-          name: "tooling",
-          include: toolingFixtures,
-          maxWorkers: 1,
-          sequence: { groupOrder: 2 },
         },
       },
       {
@@ -118,7 +103,8 @@ export default defineConfig({
         },
         test: {
           name: "browser",
-          sequence: { groupOrder: 1 },
+          maxWorkers,
+          sequence: { groupOrder: 0 },
           browser: {
             enabled: true,
             headless: true,

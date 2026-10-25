@@ -11,11 +11,11 @@ const workflowTestDeclarations = `
   export const check = (): boolean => true;
 `;
 
-it.each([
+it.concurrent.each([
   ["exploration", "fc.assert(fc.property(events, check));"],
   ["property test", "exploreWorkflow(workflow, options);"],
-])("names the missing workflow %s and its owner", (missing, test) => {
-  const result = checkLint({
+])("names the missing workflow %s and its owner", async (missing, test) => {
+  const result = await checkLint({
     "scripts/calendarWorkflow.ts": "export const workflow = 1;",
     "scripts/calendarWorkflow.test.ts": `import { workflow } from "./calendarWorkflow.ts"; export { workflow }; ${workflowTestDeclarations} ${test}`,
   });
@@ -26,8 +26,8 @@ it.each([
   expect(result.output).toContain("calendarWorkflow.test.ts");
 });
 
-it("rejects workflow markers hidden in strings and comments", () => {
-  const result = checkLint({
+it.concurrent("rejects workflow markers hidden in strings and comments", async () => {
+  const result = await checkLint({
     "scripts/calendarWorkflow.ts": "export const workflow = 1;",
     "scripts/calendarWorkflow.test.ts":
       'import { workflow } from "./calendarWorkflow.ts"; export const label = "exploreWorkflow fc.assert fc.property"; export { workflow }; /* MachineTest.explore(); MachineTest.scenarios(); */',
@@ -39,11 +39,11 @@ it("rejects workflow markers hidden in strings and comments", () => {
   expect(result.output.replaceAll(/\s+/g, " ")).toContain("add property test");
 });
 
-it.each([
+it.concurrent.each([
   "exploreWorkflow(workflow, options); fc.assert(fc.property(events, check));",
   "MachineTest.explore(workflow, options); MachineTest.scenarios(workflow);",
-])("accepts the workflow toolchain: %s", (test) => {
-  const result = checkLint({
+])("accepts the workflow toolchain: %s", async (test) => {
+  const result = await checkLint({
     "scripts/calendarWorkflow.ts": "export const workflow = 1;",
     "scripts/calendarWorkflow.test.ts": `import { workflow } from "./calendarWorkflow.ts"; export { workflow }; ${workflowTestDeclarations} ${test}`,
   });
@@ -63,13 +63,13 @@ const codecTestDeclarations = `
   };
 `;
 
-it.each([
+it.concurrent.each([
   'it("round-trips a row", () => { Schema.decodeEffect(CalendarRow)(1); });',
   'it("round-trips a row", () => { Schema.encodeEffect(CalendarRow)(1); });',
   'it("round-trips a row", () => { Schema.decodeEffect(CalendarRow)("Schema.encodeEffect(CalendarRow)(1)"); });',
   'it("round-trips a row", () => { Schema.decodeEffect(CalendarRow)(1); /* Schema.encodeEffect(CalendarRow)(1); */ });',
-])("requires owned machine row-codec round trips: %s", (test) => {
-  const result = checkLint({
+])("requires owned machine row-codec round trips: %s", async (test) => {
+  const result = await checkLint({
     ...codecFixture,
     "scripts/CalendarTables.test.ts": `${codecTestDeclarations} ${test}`,
   });
@@ -81,8 +81,8 @@ it.each([
   );
 });
 
-it("requires round trips for an aliased row-codec import", () => {
-  const result = checkLint({
+it.concurrent("requires round trips for an aliased row-codec import", async () => {
+  const result = await checkLint({
     ...codecFixture,
     "scripts/CalendarTables.test.ts":
       'import { CalendarRow as StoredRow } from "./CalendarTables.ts"; export { StoredRow };',
@@ -92,8 +92,8 @@ it("requires round trips for an aliased row-codec import", () => {
   expect(result.output).toContain("repository(codec-tests)");
 });
 
-it("accepts owned machine row-codec round trips", () => {
-  const result = checkLint({
+it.concurrent("accepts owned machine row-codec round trips", async () => {
+  const result = await checkLint({
     ...codecFixture,
     "scripts/CalendarTables.test.ts": `${codecTestDeclarations}
       it("round-trips a row", () => { Schema.encodeEffect(CalendarRow)(1); Schema.decodeEffect(CalendarRow)(1); });`,
@@ -102,15 +102,15 @@ it("accepts owned machine row-codec round trips", () => {
   expect(result.status, result.output).toBe(0);
 });
 
-it.each([
+it.concurrent.each([
   "export const label = 'import { CalendarRow } from \"./CalendarTables.ts\";';",
   '/* import { CalendarRow } from "./CalendarTables.ts"; */ export const value = 1;',
   'import type { CalendarRow } from "./CalendarTables.ts"; export type Value = CalendarRow;',
   'import { type CalendarRow } from "./CalendarTables.ts"; export type Value = CalendarRow;',
   'import { calendar } from "./CalendarTables.ts"; export { calendar };',
   'import { CalendarRow } from "./Calendar.ts"; export { CalendarRow };',
-])("ignores non-codec imports and import markers in test text: %s", (test) => {
-  const result = checkLint({
+])("ignores non-codec imports and import markers in test text: %s", async (test) => {
+  const result = await checkLint({
     "scripts/CalendarTables.ts": "export type CalendarRow = number; export const calendar = 1;",
     "scripts/Calendar.ts": "export const CalendarRow = 1;",
     "scripts/CalendarTables.test.ts": test,
@@ -125,16 +125,16 @@ it.each([
   }
 });
 
-it("checks workflow test contents without an implementation file", () => {
-  const result = checkLint({
+it.concurrent("checks workflow test contents without an implementation file", async () => {
+  const result = await checkLint({
     "scripts/calendarWorkflow.test.ts": `${workflowTestDeclarations} exploreWorkflow(1, options); fc.assert(fc.property(events, check));`,
   });
 
   expect(result.status, result.output).toBe(0);
 });
 
-it("accepts ordinary tests and workflow controller modules without workflow coverage", () => {
-  const result = checkLint({
+it.concurrent("accepts ordinary tests and workflow controller modules without workflow coverage", async () => {
+  const result = await checkLint({
     "scripts/ordinary.test.ts": "export const value = 1;",
     "scripts/useCalendarWorkflow.ts": "export const value = 1;",
   });
@@ -142,10 +142,10 @@ it("accepts ordinary tests and workflow controller modules without workflow cove
   expect(result.status, result.output).toBe(0);
 });
 
-it.each(["/* oxlint-disable */", "// oxlint-disable-next-line repository/no-comments"])(
+it.concurrent.each(["/* oxlint-disable */", "// oxlint-disable-next-line repository/no-comments"])(
   "rejects a standalone disable directive: %s",
-  (source) => {
-    const result = checkLint({ "scripts/example.ts": `${source}\nexport const value = 1;` });
+  async (source) => {
+    const result = await checkLint({ "scripts/example.ts": `${source}\nexport const value = 1;` });
 
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("repository(no-comments)");
@@ -153,26 +153,26 @@ it.each(["/* oxlint-disable */", "// oxlint-disable-next-line repository/no-comm
   },
 );
 
-it.each(["ts", "tsx", "js"])("rejects comments in %s sources", (extension) => {
-  const result = checkLint({ [`scripts/example.${extension}`]: "// explanation\n" });
+it.concurrent.each(["ts", "tsx", "js"])("rejects comments in %s sources", async (extension) => {
+  const result = await checkLint({ [`scripts/example.${extension}`]: "// explanation\n" });
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-comments)");
 });
 
-it.each([
+it.concurrent.each([
   "export const value = /* explanation */ 1;",
 
   '/// <reference types="node" />',
-])("rejects authored comments: %s", (source) => {
-  const result = checkLint({ "scripts/example.ts": source });
+])("rejects authored comments: %s", async (source) => {
+  const result = await checkLint({ "scripts/example.ts": source });
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-comments)");
 });
 
-it("rejects JSX comments", () => {
-  const result = checkLint({
+it.concurrent("rejects JSX comments", async () => {
+  const result = await checkLint({
     "scripts/example.tsx": "export const View = () => <>{/* explanation */}</>;",
   });
 
@@ -180,21 +180,21 @@ it("rejects JSX comments", () => {
   expect(result.output).toContain("repository(no-comments)");
 });
 
-it.each([
+it.concurrent.each([
   'export const values = ["https://example.com", `/* text */`, /\\/\\//];',
   "#!/usr/bin/env node\nexport const value = 1;",
-])("accepts comment-like literals and interpreter directives: %s", (source) => {
-  const result = checkLint({ "scripts/example.ts": source });
+])("accepts comment-like literals and interpreter directives: %s", async (source) => {
+  const result = await checkLint({ "scripts/example.ts": source });
 
   expect(result.status, result.output).toBe(0);
 });
 
-it("ignores the generated route tree without exempting authored gen modules", () => {
-  const generated = checkLint({
+it.concurrent("ignores the generated route tree without exempting authored gen modules", async () => {
+  const generated = await checkLint({
     "apps/web/src/routeTree.gen.ts": "// generated\nexport const value = 1;",
     "scripts/example.ts": "export const value = 1;",
   });
-  const authored = checkLint({
+  const authored = await checkLint({
     "apps/web/src/example.gen.ts": "// authored\nexport const value = 1;",
   });
 
@@ -203,8 +203,10 @@ it("ignores the generated route tree without exempting authored gen modules", ()
   expect(authored.output).toContain("repository(no-comments)");
 });
 
-it("reports policy diagnostics through Oxlint with a source location", () => {
-  const result = checkLint({ "scripts/example.ts": "export const value = 1;\n// explanation" });
+it.concurrent("reports policy diagnostics through Oxlint with a source location", async () => {
+  const result = await checkLint({
+    "scripts/example.ts": "export const value = 1;\n// explanation",
+  });
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-comments)");
@@ -213,8 +215,8 @@ it("reports policy diagnostics through Oxlint with a source location", () => {
   expect(result.output).toContain("scripts/example.ts:2:1");
 });
 
-it("accepts the required Vite reference through Oxlint", () => {
-  const result = checkLint({
+it.concurrent("accepts the required Vite reference through Oxlint", async () => {
+  const result = await checkLint({
     "apps/web/src/assets.d.ts": '/// <reference types="vite/client" />\n',
   });
 
@@ -229,9 +231,9 @@ const packageImportCases = [
   'export const load: () => Promise<typeof import("../shared/value.ts")> = () => import("../shared/value.ts");',
 ];
 
-it("rejects parent imports", () => {
+it.concurrent("rejects parent imports", async () => {
   const source = 'import { value } from "../shared/value.ts"; export { value };';
-  const result = checkLint({
+  const result = await checkLint({
     "packages/backend/src/config/example.ts": source,
     "packages/backend/src/shared/value.ts": "export const value = 1; export type Value = number;",
   });
@@ -241,24 +243,28 @@ it("rejects parent imports", () => {
   expect(result.output.replaceAll(/\s+/g, " ")).toContain("package.json imports");
 });
 
-it.each(packageImportCases)("autofixes parent imports through the owning package: %s", (source) => {
-  const result = checkLint(
-    {
-      "packages/backend/src/config/example.ts": source,
-      "packages/backend/src/shared/value.ts": "export const value = 1; export type Value = number;",
-    },
-    true,
-  );
+it.concurrent.each(packageImportCases)(
+  "autofixes parent imports through the owning package: %s",
+  async (source) => {
+    const result = await checkLint(
+      {
+        "packages/backend/src/config/example.ts": source,
+        "packages/backend/src/shared/value.ts":
+          "export const value = 1; export type Value = number;",
+      },
+      true,
+    );
 
-  expect(result.status, result.output).toBe(0);
-  expect(result.sources["packages/backend/src/config/example.ts"]).toContain(
-    '"#backend/shared/value.ts"',
-  );
-  expect(result.sources["packages/backend/src/config/example.ts"]).not.toContain("../");
-});
+    expect(result.status, result.output).toBe(0);
+    expect(result.sources["packages/backend/src/config/example.ts"]).toContain(
+      '"#backend/shared/value.ts"',
+    );
+    expect(result.sources["packages/backend/src/config/example.ts"]).not.toContain("../");
+  },
+);
 
-it("autofixes extensionless imports and uses package exports across packages", () => {
-  const result = checkLint(
+it.concurrent("autofixes extensionless imports and uses package exports across packages", async () => {
+  const result = await checkLint(
     {
       "infra/local/example.ts":
         'export { value } from "../../tools/local-stack/value.ts"; export { stage } from "../stage";',
@@ -275,9 +281,9 @@ it("autofixes extensionless imports and uses package exports across packages", (
   expect(result.sources["infra/local/example.ts"]).toContain('"#infra/stage.ts"');
 });
 
-it("explains missing aliases without rewriting an unexported cross-package target", () => {
+it.concurrent("explains missing aliases without rewriting an unexported cross-package target", async () => {
   const source = 'export { value } from "../packages/backend/src/config/value.ts";';
-  const result = checkLint(
+  const result = await checkLint(
     {
       "scripts/example.ts": source,
       "packages/backend/src/config/value.ts": "export const value = 1;",
@@ -292,7 +298,7 @@ it("explains missing aliases without rewriting an unexported cross-package targe
   expect(result.sources["scripts/example.ts"]).toBe(source);
 });
 
-it("keeps same-directory imports and package imports unchanged", () => {
+it.concurrent("keeps same-directory imports and package imports unchanged", async () => {
   const files = {
     "packages/backend/src/config/example.ts":
       'import { value } from "./value.ts"; export { value }; export type { UserId } from "@lineupkeep/backend/auth/User";',
@@ -300,13 +306,13 @@ it("keeps same-directory imports and package imports unchanged", () => {
     "packages/backend/src/contexts/auth/User.ts": "export type UserId = string;",
   };
 
-  const result = checkLint(files, true);
+  const result = await checkLint(files, true);
 
   expect(result.status, result.output).toBe(0);
   expect(result.sources).toEqual(files);
 });
 
-it.each([
+it.concurrent.each([
   "expect(send).toHaveBeenCalled();",
   'expect(send).not.toHaveBeenCalledWith("payload");',
   'expect(send)["toHaveBeenCalledTimes"](2);',
@@ -317,8 +323,8 @@ it.each([
   "const { calls } = send.mock; void calls;",
   'const { results: outcomes } = send["mock"]; void outcomes;',
   "const { toHaveBeenCalledWith: matched } = expect(send); void matched;",
-])("rejects assertions on test implementation details: %s", (source) => {
-  const result = checkLint({
+])("rejects assertions on test implementation details: %s", async (source) => {
+  const result = await checkLint({
     "scripts/example.test.ts": `import { expect, vi } from "vitest"; const send = vi.fn(); ${source}`,
   });
 
@@ -327,7 +333,7 @@ it.each([
   expect(result.output.replaceAll(/\s+/g, " ")).toContain("assert observable outcomes instead");
 });
 
-it.each([
+it.concurrent.each([
   'vi.doMock("./dependency.ts");',
   "vi.hoisted(() => ({}));",
   'vi["mock"]("./dependency.ts");',
@@ -336,8 +342,8 @@ it.each([
   'vitest.vi.doMock("./dependency.ts");',
   'const api = testing; api.doMock("./dependency.ts");',
   "const { mock: replace } = vi; void replace;",
-])("rejects module mocking: %s", (source) => {
-  const result = checkLint({
+])("rejects module mocking: %s", async (source) => {
+  const result = await checkLint({
     "scripts/example.test.ts": `import { vi, vi as testing } from "vitest"; import * as vitest from "vitest"; ${source}`,
   });
 
@@ -346,8 +352,8 @@ it.each([
   expect(result.output.replaceAll(/\s+/g, " ")).toContain("inject the dependency or use MSW");
 });
 
-it.each(["e2e/scenarios/example.e2e.ts"])("rejects mock history in %s", (path) => {
-  const result = checkLint({
+it.concurrent.each(["e2e/scenarios/example.e2e.ts"])("rejects mock history in %s", async (path) => {
+  const result = await checkLint({
     [path]:
       'import { expect } from "@playwright/test"; declare const send: unknown; expect(send).toHaveBeenCalled();',
   });
@@ -356,8 +362,8 @@ it.each(["e2e/scenarios/example.e2e.ts"])("rejects mock history in %s", (path) =
   expect(result.output).toContain("repository(no-test-internals)");
 });
 
-it("permits external transport handlers and unrelated shadowed methods", () => {
-  const result = checkLint({
+it.concurrent("permits external transport handlers and unrelated shadowed methods", async () => {
+  const result = await checkLint({
     "scripts/example.test.ts":
       'import { http, HttpResponse } from "msw/http"; export const handler = http.get("https://provider.example/status", () => HttpResponse.json({ ready: true })); const vi = { mock: (): string => "ready" }; export const status = vi.mock();',
   });
@@ -365,8 +371,8 @@ it("permits external transport handlers and unrelated shadowed methods", () => {
   expect(result.status, result.output).toBe(0);
 });
 
-it("permits injected test dependencies and assertions on returned outcomes", () => {
-  const result = checkLint({
+it.concurrent("permits injected test dependencies and assertions on returned outcomes", async () => {
+  const result = await checkLint({
     "scripts/example.test.ts":
       'import { expect, vi } from "vitest"; const read = vi.fn(() => "ready"); expect(read()).toBe("ready"); const clock = { mock: (): string => "time" }; expect(clock.mock()).toBe("time");',
   });
@@ -374,20 +380,20 @@ it("permits injected test dependencies and assertions on returned outcomes", () 
   expect(result.status, result.output).toBe(0);
 });
 
-it.each([
+it.concurrent.each([
   "export function count() { return 1; }",
   "export const count = () => 1;",
   "export class Counter { count() { return 1; } }",
-])("requires a return contract on named functions: %s", (source) => {
-  const result = checkLint({ "scripts/example.ts": source });
+])("requires a return contract on named functions: %s", async (source) => {
+  const result = await checkLint({ "scripts/example.ts": source });
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("typescript(explicit-function-return-type)");
   expect(result.output).toContain("Require explicit return types");
 });
 
-it("permits explicit named contracts and inferred inline callbacks", () => {
-  const result = checkLint({
+it.concurrent("permits explicit named contracts and inferred inline callbacks", async () => {
+  const result = await checkLint({
     "scripts/example.ts":
       "export function count(): number { return [1, 2].map((value) => value + 1).reduce((total, value) => total + value, 0); } export const read: () => number = () => count();",
   });
@@ -395,21 +401,20 @@ it("permits explicit named contracts and inferred inline callbacks", () => {
   expect(result.status, result.output).toBe(0);
 });
 
-it.each(['import { inArray as matches } from "drizzle-orm"; export const predicate = matches;'])(
-  "steers ID-list predicates to one-bind anyOf: %s",
-  (source) => {
-    const result = checkLint({
-      "packages/backend/src/contexts/example/internal/ExampleRepository.ts": source,
-    });
+it.concurrent.each([
+  'import { inArray as matches } from "drizzle-orm"; export const predicate = matches;',
+])("steers ID-list predicates to one-bind anyOf: %s", async (source) => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/example/internal/ExampleRepository.ts": source,
+  });
 
-    expect(result.status).toBeGreaterThan(0);
-    expect(result.output).toContain("anyOf");
-    expect(result.output).toContain("one bind parameter");
-  },
-);
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("anyOf");
+  expect(result.output).toContain("one bind parameter");
+});
 
-it("permits one-bind predicates in owned repositories", () => {
-  const result = checkLint({
+it.concurrent("permits one-bind predicates in owned repositories", async () => {
+  const result = await checkLint({
     "packages/backend/src/contexts/example/internal/ExampleRepository.ts":
       'import { anyOf } from "#database/dbUtilities.ts"; export const predicate = anyOf;',
     "packages/backend/src/database/dbUtilities.ts": "export const anyOf = (): boolean => true;",
@@ -418,28 +423,29 @@ it("permits one-bind predicates in owned repositories", () => {
   expect(result.status, result.output).toBe(0);
 });
 
-it.each(["items.push(...values);", 'items["push"](...values);', "items.push(first, ...values);"])(
-  "rejects unbounded push arguments: %s",
-  (source) => {
-    const result = checkLint({
-      "scripts/example.ts": `export const append = (items: string[], values: string[], first: string): void => { ${source} };`,
-    });
+it.concurrent.each([
+  "items.push(...values);",
+  'items["push"](...values);',
+  "items.push(first, ...values);",
+])("rejects unbounded push arguments: %s", async (source) => {
+  const result = await checkLint({
+    "scripts/example.ts": `export const append = (items: string[], values: string[], first: string): void => { ${source} };`,
+  });
 
-    expect(result.status).toBeGreaterThan(0);
-    expect(result.output).toContain("repository(no-spread-push)");
-    expect(result.output).toContain("for-of loop");
-  },
-);
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("repository(no-spread-push)");
+  expect(result.output).toContain("for-of loop");
+});
 
-it("permits bounded append arguments and for-of appends", () => {
-  const result = checkLint({
+it.concurrent("permits bounded append arguments and for-of appends", async () => {
+  const result = await checkLint({
     "scripts/example.ts":
       "export const append = (items: string[], values: string[]): void => { items.push('first', 'second'); for (const value of values) { items.push(value); } };",
   });
 
   expect(result.status, result.output).toBe(0);
 });
-it.each([
+it.concurrent.each([
   "for (const input of inputs) yield* notes.update(owner, [input]);",
   "for (let i = 0; i < inputs.length; i++) yield* notes.update(owner, [inputs[i]]);",
   "while (inputs.length) yield* notes.update(owner, inputs);",
@@ -451,8 +457,8 @@ it.each([
   "const { update } = notes; inputs.map((input) => update(owner, [input]));",
   "const save = (input: string) => notes.update(owner, [input]); yield* Effect.forEach(inputs, save);",
   "for (const input of inputs) yield* Renamed.use((service) => service.update(owner, [input]));",
-])("rejects per-item calls: %s", (body) => {
-  const result = checkLint(fixture(body));
+])("rejects per-item calls: %s", async (body) => {
+  const result = await checkLint(fixture(body));
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-per-item-service-calls)");
@@ -461,32 +467,32 @@ it.each([
   );
 });
 
-it.each([
+it.concurrent.each([
   "yield* notes.update(owner, inputs);",
   "yield* Effect.flatMap(Effect.succeed(inputs), (commands) => notes.update(owner, commands));",
   "const commands = inputs.map((input) => input.toUpperCase()); yield* notes.update(owner, commands);",
   "yield* Effect.forEach(inputs, (input) => Effect.succeed(input));",
   "inputs.map((notes) => notes.toString());",
   "for (const input of inputs) { const notes = { update: () => input }; notes.update(); }",
-])("permits batching and unrelated pure bindings: %s", (body) => {
-  const result = checkLint(fixture(body));
+])("permits batching and unrelated pure bindings: %s", async (body) => {
+  const result = await checkLint(fixture(body));
 
   expect(result.status, result.output).toBe(0);
 });
 
-it("rejects aliased repository calls without matching variable names", () => {
+it.concurrent("rejects aliased repository calls without matching variable names", async () => {
   const files = {
     "packages/backend/src/contexts/notes/internal/NotesLive.ts":
       'import { NoteRepository as Store } from "./NoteRepository.ts"; import { Effect } from "effect"; export const run = Effect.gen(function* () { const storage = yield* Store; for (const id of []) yield* storage.getNotes("owner", [id]); });',
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-per-item-service-calls)");
 });
 
-it("rejects state kept by a view", () => {
+it.concurrent("rejects state kept by a view", async () => {
   const files = {
     "apps/web/src/browser/notes/NoteEditor.tsx": `
       import { createSignal } from "solid-js";
@@ -496,74 +502,74 @@ it("rejects state kept by a view", () => {
       }`,
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-state)");
   expect(result.output).toContain("controller and expose a model or intent");
 });
 
-it("rejects browser APIs inside a workflow", () => {
+it.concurrent("rejects browser APIs inside a workflow", async () => {
   const files = {
     "apps/web/src/browser/notes/noteEditorWorkflow.ts":
       "export const requestId = () => crypto.randomUUID();",
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-globals");
   expect(result.output).toContain("pass them as event data");
 });
 
-it.each([
+it.concurrent.each([
   ["a feature", "apps/web/src/browser/notes/NoteCard.tsx"],
 
   ["a route", "apps/web/src/routes/notes.tsx"],
-])("rejects intrinsic elements in %s", (_, path) => {
+])("rejects intrinsic elements in %s", async (_, path) => {
   const files = { [path]: "export const View = () => <section>Notes</section>;" };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-intrinsic-elements)");
   expect(result.output).toContain("browser/shared-ui or browser/brand-ui");
 });
 
-it("rejects namespaced intrinsic elements outside the design system", () => {
+it.concurrent("rejects namespaced intrinsic elements outside the design system", async () => {
   const files = {
     "apps/web/src/browser/notes/Mark.tsx": "export const Mark = () => <svg:rect />;",
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("repository(no-intrinsic-elements)");
   expect(result.output).toContain("browser/shared-ui or browser/brand-ui");
 });
 
-it("rejects rendering intrinsic elements through dynamic components outside the design system", () => {
+it.concurrent("rejects rendering intrinsic elements through dynamic components outside the design system", async () => {
   const files = {
     "apps/web/src/browser/notes/NoteCard.tsx":
       'import { dynamic } from "@solidjs/web"; export const Tag = dynamic(() => "div");',
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-imports");
 });
 
-it.each(["class", "className", "classList", "style"])(
+it.concurrent.each(["class", "className", "classList", "style"])(
   "rejects the %s prop on components outside the design system",
-  (prop) => {
+  async (prop) => {
     const files = {
       "apps/web/src/browser/notes/NoteCard.tsx": `import { Button } from "#browser/shared-ui/Button.tsx"; export const View = () => <Button ${prop}={undefined}>Save</Button>;`,
       "apps/web/src/browser/shared-ui/Button.tsx":
         "export const Button = (props: { readonly children: string }) => <button>{props.children}</button>;",
     };
 
-    const result = checkLint(files);
+    const result = await checkLint(files);
 
     expect(result.status).toBeGreaterThan(0);
     expect(result.output).toContain("repository(no-style-props)");
@@ -571,21 +577,21 @@ it.each(["class", "className", "classList", "style"])(
   },
 );
 
-it.each([
+it.concurrent.each([
   ["shared-ui", "apps/web/src/browser/shared-ui/Panel.tsx"],
   ["brand-ui", "apps/web/src/browser/brand-ui/Panel.tsx"],
-])("permits markup and layout classes in %s", (_, path) => {
+])("permits markup and layout classes in %s", async (_, path) => {
   const files = {
     [path]:
       'export const Panel = (): import("@solidjs/web").JSX.Element => <section class="grid min-h-[150px] gap-[clamp(24px,4vw,50px)] [writing-mode:vertical-rl] text-control bg-panel duration-quick md:grid-cols-[minmax(0,1fr)_auto]">Panel</section>;',
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status, result.output).toBe(0);
 });
 
-it("permits document elements in the root route and stub markup in tests", () => {
+it.concurrent("permits document elements in the root route and stub markup in tests", async () => {
   const files = {
     "apps/web/src/routes/__root.tsx":
       'export const Document = (): import("@solidjs/web").JSX.Element => <html lang="en"><head /><body /></html>;',
@@ -593,12 +599,12 @@ it("permits document elements in the root route and stub markup in tests", () =>
       'export const Stub = (): import("@solidjs/web").JSX.Element => <p class="stub">Home page</p>;',
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status, result.output).toBe(0);
 });
 
-it.each([
+it.concurrent.each([
   ["an arbitrary font size behind a variant", "max-sm:text-[3.3rem]"],
   ["an arbitrary colour", "bg-[#215cff]"],
   ["an arbitrary letter spacing", "tracking-[-0.02em]"],
@@ -610,27 +616,27 @@ it.each([
   ["an arbitrary typography property", "[font-size:2rem]"],
   ["a numeric duration", "duration-150"],
   ["an arbitrary delay", "hover:delay-[40ms]"],
-])("rejects %s in design-system classes", (_, utility) => {
+])("rejects %s in design-system classes", async (_, utility) => {
   const files = {
     "apps/web/src/browser/shared-ui/Panel.tsx": `const panelClass = "grid gap-2 ${utility}"; export const Panel = (): import("@solidjs/web").JSX.Element => <section class={panelClass}>Panel</section>;`,
     "apps/web/src/browser/brand-ui/Badge.tsx": `export const Badge = () => <span class={\`grid \${"x"} ${utility}\`}>Badge</span>;`,
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output.match(/repository\(token-values\)/g)).toHaveLength(2);
   expect(result.output).toContain("add a token to brand-theme.css and design-system.css");
 });
 
-it.each([
+it.concurrent.each([
   "window.setTimeout",
   "globalThis.setInterval",
   'window["setTimeout"]',
   'globalThis["setTimeout"]',
   "self.setInterval",
-])("rejects qualified browser timing through %s in an unlisted domain", (timer) => {
-  const result = checkLint({
+])("rejects qualified browser timing through %s in an unlisted domain", async (timer) => {
+  const result = await checkLint({
     "apps/web/src/browser/calendar/useCalendar.ts": `export const later = (): void => { ${timer}(() => {}, 10); };`,
   });
 
@@ -638,12 +644,12 @@ it.each([
   expect(result.output).toContain("Timers obscure request completion");
 });
 
-it("permits timing helpers without dropping implicit-global protection", () => {
-  const accepted = checkLint({
+it.concurrent("permits timing helpers without dropping implicit-global protection", async () => {
+  const accepted = await checkLint({
     "apps/web/src/browser/timing/delay.ts":
       "export const later = (): void => { window.setTimeout(() => {}, 10); };",
   });
-  const rejected = checkLint({
+  const rejected = await checkLint({
     "apps/web/src/browser/timing/delay.ts": "export const value = event;",
   });
 
@@ -652,8 +658,8 @@ it("permits timing helpers without dropping implicit-global protection", () => {
   expect(rejected.output).toContain("Implicit global event");
 });
 
-it.each(["Calendar.test.ts"])("rejects unbound instance methods in %s", (file) => {
-  const result = checkLint({
+it.concurrent.each(["Calendar.test.ts"])("rejects unbound instance methods in %s", async (file) => {
+  const result = await checkLint({
     [`apps/web/src/browser/calendar/${file}`]:
       "class Calendar { value = 1; read(): number { return this.value; } } const calendar = new Calendar(); export const read = calendar.read;",
   });
@@ -662,17 +668,17 @@ it.each(["Calendar.test.ts"])("rejects unbound instance methods in %s", (file) =
   expect(result.output).toContain("unbound-method");
 });
 
-it.each([
+it.concurrent.each([
   "class Calendar { value = 1; read(): number { return this.value; } } const calendar = new Calendar(); export const read = (): number => calendar.read();",
   "class Calendar { read(this: void): number { return 1; } } const calendar = new Calendar(); export const read = calendar.read;",
-])("permits receiver-safe test callbacks: %s", (source) => {
-  const result = checkLint({ "apps/web/src/browser/calendar/Calendar.test.ts": source });
+])("permits receiver-safe test callbacks: %s", async (source) => {
+  const result = await checkLint({ "apps/web/src/browser/calendar/Calendar.test.ts": source });
 
   expect(result.status, result.output).toBe(0);
 });
 
-it("permits schema and type pairing in an unlisted domain", () => {
-  const result = checkLint({
+it.concurrent("permits schema and type pairing in an unlisted domain", async () => {
+  const result = await checkLint({
     "packages/backend/src/contexts/calendar/Appointment.ts":
       'import { Schema } from "effect"; export const Appointment = Schema.String; export type Appointment = typeof Appointment.Type;',
   });
@@ -680,8 +686,8 @@ it("permits schema and type pairing in an unlisted domain", () => {
   expect(result.status, result.output).toBe(0);
 });
 
-it("retains SQL restrictions in shared UI", () => {
-  const result = checkLint({
+it.concurrent("retains SQL restrictions in shared UI", async () => {
+  const result = await checkLint({
     "apps/web/src/browser/shared-ui/helper.ts":
       'import { sql } from "drizzle-orm"; export const value = sql;',
   });
@@ -690,27 +696,28 @@ it("retains SQL restrictions in shared UI", () => {
   expect(result.output).toContain("no-restricted-imports");
 });
 
-it.each(["window.Date.now()", "globalThis.Math.random()", "globalThis.crypto.randomUUID()"])(
-  "rejects qualified ambient workflow access through %s",
-  (expression) => {
-    const result = checkLint({
-      "apps/web/src/browser/calendar/CalendarWorkflow.ts": `export const transition = () => ${expression};`,
-    });
+it.concurrent.each([
+  "window.Date.now()",
+  "globalThis.Math.random()",
+  "globalThis.crypto.randomUUID()",
+])("rejects qualified ambient workflow access through %s", async (expression) => {
+  const result = await checkLint({
+    "apps/web/src/browser/calendar/CalendarWorkflow.ts": `export const transition = () => ${expression};`,
+  });
 
-    expect(result.status).toBeGreaterThan(0);
-    expect(result.output).toContain("nondeterministic");
-  },
-);
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("nondeterministic");
+});
 
-it.each(["fetch", "globalThis.fetch"])(
+it.concurrent.each(["fetch", "globalThis.fetch"])(
   "rejects backend %s outside designated transports",
-  (expression) => {
+  async (expression) => {
     const source = `export const response = ${expression}("https://client.example/metadata.json");`;
 
-    const rejected = checkLint({
+    const rejected = await checkLint({
       "packages/backend/src/contexts/notes/internal/Foreign.ts": source,
     });
-    const accepted = checkLint({
+    const accepted = await checkLint({
       "packages/backend/src/runtime/public-internet/transport/isolate/PublicInternetIsolate.ts":
         source,
     });
@@ -721,8 +728,8 @@ it.each(["fetch", "globalThis.fetch"])(
   },
 );
 
-it("applies Effect lifecycle diagnostics to the actual server entry", () => {
-  const result = checkLint({
+it.concurrent("applies Effect lifecycle diagnostics to the actual server entry", async () => {
+  const result = await checkLint({
     "apps/web/src/server.ts": `
       import { Effect } from "effect";
       export const example = Effect.gen(function* () {
@@ -735,8 +742,8 @@ it("applies Effect lifecycle diagnostics to the actual server entry", () => {
   expect(result.output).toContain("abort-controller-in-effect");
 });
 
-it("applies Effect lifecycle diagnostics inside compiler-erased RPC handlers", () => {
-  const result = checkLint({
+it.concurrent("applies Effect lifecycle diagnostics inside compiler-erased RPC handlers", async () => {
+  const result = await checkLint({
     "apps/web/src/server-functions/example.ts": `
       import { createServerFn } from "@tanstack/solid-start";
       import { Effect } from "effect";
@@ -752,8 +759,8 @@ it("applies Effect lifecycle diagnostics inside compiler-erased RPC handlers", (
   expect(result.output).toContain("abort-controller-in-effect");
 });
 
-it("accepts Effect-owned RPC programs inside erased handlers", () => {
-  const result = checkLint({
+it.concurrent("accepts Effect-owned RPC programs inside erased handlers", async () => {
+  const result = await checkLint({
     "apps/web/src/server-functions/example.ts": `
       import { createServerFn } from "@tanstack/solid-start";
       import { Effect } from "effect";
@@ -764,8 +771,8 @@ it("accepts Effect-owned RPC programs inside erased handlers", () => {
   expect(result.status, result.output).toBe(0);
 });
 
-it("accepts Effect-owned cancellation in the server entry", () => {
-  const result = checkLint({
+it.concurrent("accepts Effect-owned cancellation in the server entry", async () => {
+  const result = await checkLint({
     "apps/web/src/server.ts":
       'import { Effect } from "effect"; export const example = Effect.succeed("ready");',
   });
@@ -773,7 +780,7 @@ it("accepts Effect-owned cancellation in the server entry", () => {
   expect(result.status, result.output).toBe(0);
 });
 
-it.each([
+it.concurrent.each([
   "export const leaked = Schema.String;",
   'export const leaked = Effect.succeed("visible");',
   "const alias = Schema; export const leaked = alias.String;",
@@ -784,8 +791,8 @@ it.each([
   'export const leaked = import("effect");',
   "const fake = { handler: (run: () => unknown) => run() }; export const leaked = fake.handler(() => Schema.String);",
   "export const leaked = createIsomorphicFn().client(() => Schema.String);",
-])("rejects surviving server code: %s", (source) => {
-  const result = checkLint({
+])("rejects surviving server code: %s", async (source) => {
+  const result = await checkLint({
     "apps/web/src/server-functions/inventory.ts": `
       import { createIsomorphicFn } from "@tanstack/solid-start";
       import { Schema, Effect } from "effect";
@@ -798,26 +805,27 @@ it.each([
   expect(result.output).toContain("compiler-erased validator/handler");
 });
 
-it.each(["drizzle-orm", "alchemy", "@lineupkeep/backend/inventory/internal/InventoryRepository"])(
-  "rejects persistence and construction in server functions through %s",
-  (source) => {
-    const result = checkLint({
-      "apps/web/src/server-functions/inventory.ts": `
+it.concurrent.each([
+  "drizzle-orm",
+  "alchemy",
+  "@lineupkeep/backend/inventory/internal/InventoryRepository",
+])("rejects persistence and construction in server functions through %s", async (source) => {
+  const result = await checkLint({
+    "apps/web/src/server-functions/inventory.ts": `
         import { createServerFn } from "@tanstack/solid-start";
         import * as implementation from "${source}";
         export const reserve = createServerFn().handler(() => implementation);
       `,
-    });
+  });
 
-    expect(result.status).toBeGreaterThan(0);
-    expect(result.output).toContain("invoke public backend services");
-  },
-);
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("invoke public backend services");
+});
 
-it.each(["`notes.${request.url}`", '"Notes.Create"', '"notes.create.private"'])(
+it.concurrent.each(["`notes.${request.url}`", '"Notes.Create"', '"notes.create.private"'])(
   "rejects unbounded operation names: %s",
-  (name) => {
-    const result = checkLint({
+  async (name) => {
+    const result = await checkLint({
       "apps/web/src/server/inventory.ts": `
         import { runBackend } from "./backendEntry";
         import { Effect } from "effect";
@@ -830,8 +838,8 @@ it.each(["`notes.${request.url}`", '"Notes.Create"', '"notes.create.private"'])(
   },
 );
 
-it("rejects a dynamic operation through an aliased runner import", () => {
-  const result = checkLint({
+it.concurrent("rejects a dynamic operation through an aliased runner import", async () => {
+  const result = await checkLint({
     "apps/web/src/server/inventory.ts": `
       import { runBackend as execute } from "./backendEntry";
       import { Effect } from "effect";
@@ -843,8 +851,8 @@ it("rejects a dynamic operation through an aliased runner import", () => {
   expect(result.output).toContain("literal domain.action");
 });
 
-it("accepts a qualified literal operation without registering its domain", () => {
-  const result = checkLint({
+it.concurrent("accepts a qualified literal operation without registering its domain", async () => {
+  const result = await checkLint({
     "apps/web/src/server/backendEntry.ts": `
       import type { Effect } from "effect";
       export function runBackend<A>(request: Request, operation: string, program: Effect.Effect<A>): Effect.Effect<A> {
@@ -861,10 +869,10 @@ it("accepts a qualified literal operation without registering its domain", () =>
   expect(result.status, result.output).toBe(0);
 });
 
-it.each(['export const maxItems = process.env["MAX_ITEMS"];'])(
+it.concurrent.each(['export const maxItems = process.env["MAX_ITEMS"];'])(
   "rejects executable shared limits: %s",
-  (source) => {
-    const result = checkLint({
+  async (source) => {
+    const result = await checkLint({
       "packages/backend/src/contexts/inventory/InventoryLimits.ts": source,
     });
 
@@ -873,29 +881,29 @@ it.each(['export const maxItems = process.env["MAX_ITEMS"];'])(
   },
 );
 
-it.each([
+it.concurrent.each([
   "packages/backend/src/contexts/notes/internal/NoteRepository.ts",
   "packages/backend/src/contexts/notes/internal/NotesDatabase.ts",
 
   "packages/backend/src/database/anotherBatch.ts",
-])("rejects SQL expressions outside the single database utility module: %s", (path) => {
-  const result = checkLint({ [path]: 'export { sql } from "drizzle-orm";' });
+])("rejects SQL expressions outside the single database utility module: %s", async (path) => {
+  const result = await checkLint({ [path]: 'export { sql } from "drizzle-orm";' });
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-imports");
   expect(result.output.replaceAll(/\s+/g, " ")).toContain("structured, context-owned persistence");
 });
 
-it("permits parameterized SQL expressions only in the shared helper", () => {
-  const result = checkLint({
+it.concurrent("permits parameterized SQL expressions only in the shared helper", async () => {
+  const result = await checkLint({
     "packages/backend/src/database/dbUtilities.ts": 'export { sql } from "drizzle-orm";',
   });
 
   expect(result.status, result.output).toBe(0);
 });
 
-it("rejects raw execution even inside the SQL-expression exception", () => {
-  const result = checkLint({
+it.concurrent("rejects raw execution even inside the SQL-expression exception", async () => {
+  const result = await checkLint({
     "packages/backend/src/database/dbUtilities.ts":
       'declare const database: { execute(query: string): void }; database.execute("select 1");',
   });
@@ -904,7 +912,7 @@ it("rejects raw execution even inside the SQL-expression exception", () => {
   expect(result.output).toContain("no-restricted-properties");
 });
 
-it.each([
+it.concurrent.each([
   'import { Layer as L } from "effect"; export const value = L.empty;',
   'import * as L from "effect/Layer"; export const value = L.empty;',
   'import { Effect as E } from "effect"; export const value = E.provide;',
@@ -919,8 +927,8 @@ it.each([
   'import { decodeUserId as identity } from "@lineupkeep/backend/auth/User"; export const value = identity;',
   'import { Schema } from "effect"; export const value = Schema.String.pipe(Schema.brand("UserId"));',
   'import { brand as identity } from "effect/Schema"; export const value = identity("UserId");',
-])("rejects scenario service substitution or identity construction: %s", (source) => {
-  const result = checkLint({
+])("rejects scenario service substitution or identity construction: %s", async (source) => {
+  const result = await checkLint({
     "e2e/scenarios/services.ts": source,
     "e2e/scratch/task/helper.ts": source,
   });
@@ -934,8 +942,8 @@ it.each([
   expect(result.output).toContain("e2e/scratch/task/helper.ts");
 });
 
-it("allows scenario programs to decode arguments and call services with their authenticated User", () => {
-  const result = checkLint({
+it.concurrent("allows scenario programs to decode arguments and call services with their authenticated User", async () => {
+  const result = await checkLint({
     "packages/backend/src/contexts/auth/AuthSession.ts":
       "export type AuthSessionUser = { readonly id: string };",
     "packages/backend/src/contexts/notes/Notes.ts": `import { Context } from "effect";
@@ -955,81 +963,81 @@ it("allows scenario programs to decode arguments and call services with their au
   expect(result.status, result.output).toBe(0);
 });
 
-it.each([
+it.concurrent.each([
   ["apps/web/src/shared/read.ts", "../server/notes/read"],
 
   ["apps/web/src/browser/shared-ui/read.tsx", "../../server/notes/read"],
-])("rejects server re-exports through %s", (path, remote) => {
+])("rejects server re-exports through %s", async (path, remote) => {
   const files = {
     [path]: `export { read } from "${remote}";`,
     "apps/web/src/server/notes/read.ts": "export const read = 1;",
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-imports");
 });
 
-it("rejects Effect re-exports through an otherwise unclassified web helper", () => {
+it.concurrent("rejects Effect re-exports through an otherwise unclassified web helper", async () => {
   const files = { "apps/web/src/shared/effect.ts": 'export { Effect } from "effect";' };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-imports");
 });
 
-it("rejects direct query-client access in web modules", () => {
+it.concurrent("rejects direct query-client access in web modules", async () => {
   const files = {
     "apps/web/src/browser/notes/NoteCard.tsx":
       'import { useQueryClient } from "@tanstack/solid-query"; export const NoteCard = useQueryClient;',
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-imports");
 });
 
-it("rejects timers in browser modules", () => {
+it.concurrent("rejects timers in browser modules", async () => {
   const files = {
     "apps/web/src/browser/notes/NoteCard.tsx":
       "export function later(run: () => void): void { setTimeout(run, 0); }",
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-globals");
   expect(result.output).toContain("wait on Query, router state, or onSettled");
 });
 
-it("rejects raw execution through a repository database handle", () => {
+it.concurrent("rejects raw execution through a repository database handle", async () => {
   const files = {
     "packages/backend/src/contexts/notes/internal/NoteRepository.ts":
       'declare const database: { execute(query: string): void }; database.execute("select 1");',
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-properties");
 });
 
-it("rejects table constructors imported by a repository", () => {
+it.concurrent("rejects table constructors imported by a repository", async () => {
   const files = {
     "packages/backend/src/contexts/notes/internal/NoteRepository.ts":
       'export { pgTable } from "drizzle-orm/pg-core";',
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-imports");
 });
 
-it.each([
+it.concurrent.each([
   ["an aliased SQL tag", 'export { sql as query } from "drizzle-orm";'],
   ["a SQL constructor", 'export { SQL } from "drizzle-orm";'],
   [
@@ -1037,16 +1045,16 @@ it.each([
     'import * as orm from "drizzle-orm"; export const query = orm.sql`select 1`;',
   ],
   ["a SQL implementation subpath", 'export { sql } from "drizzle-orm/sql/sql";'],
-])("rejects %s in a repository", (_name, source) => {
+])("rejects %s in a repository", async (_name, source) => {
   const files = { "packages/backend/src/contexts/notes/internal/NoteRepository.ts": source };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-imports");
 });
 
-it.each([
+it.concurrent.each([
   [
     "literal-bracket execution",
     'declare const database: { execute(query: string): void }; database["execute"]("select 1");',
@@ -1064,22 +1072,22 @@ it.each([
     "SQL representation access",
     "declare const query: { getSQL(): object }; export const sql = query.getSQL();",
   ],
-])("rejects %s in a repository", (_name, source) => {
+])("rejects %s in a repository", async (_name, source) => {
   const files = { "packages/backend/src/contexts/notes/internal/NoteRepository.ts": source };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-properties");
 });
 
-it("rejects handwritten SQL construction in a repository", () => {
+it.concurrent("rejects handwritten SQL construction in a repository", async () => {
   const files = {
     "packages/backend/src/contexts/notes/internal/NoteRepository.ts":
       'import { sql } from "drizzle-orm"; export const query = sql`select 1`;',
   };
 
-  const result = checkLint(files);
+  const result = await checkLint(files);
 
   expect(result.status).toBeGreaterThan(0);
   expect(result.output).toContain("no-restricted-imports");
