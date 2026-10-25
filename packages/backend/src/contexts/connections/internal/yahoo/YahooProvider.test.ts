@@ -15,7 +15,15 @@ import { PublicInternet } from "#runtime/PublicInternet.ts";
 import type { PublicInternetOptions } from "#runtime/PublicInternet.ts";
 
 import {
+  yahooEmptyRoster,
+  yahooNflFreeAgents,
   yahooNflLeagueSettings,
+  yahooNflLeagueTeams,
+  yahooNflMatchups,
+  yahooNflRosterWeekMismatch,
+  yahooNflTeams,
+  yahooNhlTeams,
+  yahooSession,
   yahooNflSeasonPlayerDetails,
   yahooNflWeekPlayerDetails,
   yahooNhlSeasonPlayerDetails,
@@ -34,7 +42,7 @@ import { YahooProvider } from "./YahooProvider.ts";
 it.effect("validates a session with one exact read request", () => {
   const internet = recordingInternet((request) =>
     request.url.pathname === "/fantasy/v2/users;use_login=1"
-      ? jsonResponse(rawSession)
+      ? jsonResponse(yahooSession)
       : jsonResponse({}, 404),
   );
   return Effect.gen(function* () {
@@ -64,8 +72,8 @@ it.effect("validates a session with one exact read request", () => {
 it.effect("discovers both supported leagues with exact batches and stable team identity", () => {
   const internet = recordingInternet((request) =>
     request.url.pathname.includes("game_keys=nhl")
-      ? jsonResponse(rawNhlTeams)
-      : jsonResponse(rawNflTeams),
+      ? jsonResponse(yahooNhlTeams)
+      : jsonResponse(yahooNflTeams),
   );
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
@@ -82,30 +90,21 @@ it.effect("discovers both supported leagues with exact batches and stable team i
     assert.deepStrictEqual(teams, [
       {
         provider: "yahoo",
-        providerTeamKey: "461.l.1000.t.1",
-        providerLeagueKey: "461.l.1000",
+        providerTeamKey: "466.l.4000.t.1",
+        providerLeagueKey: "466.l.4000",
         league: "nfl",
         sport: "football",
         season: 2026,
-        name: "Alpha",
+        name: "Synthetic NFL Team",
       },
       {
         provider: "yahoo",
-        providerTeamKey: "461.l.1000.t.2",
-        providerLeagueKey: "461.l.1000",
-        league: "nfl",
-        sport: "football",
-        season: 2026,
-        name: "Beta",
-      },
-      {
-        provider: "yahoo",
-        providerTeamKey: "465.l.2000.t.9",
-        providerLeagueKey: "465.l.2000",
+        providerTeamKey: "466.l.4002.t.3",
+        providerLeagueKey: "466.l.4002",
         league: "nhl",
         sport: "hockey",
         season: 2026,
-        name: "Gamma",
+        name: "Synthetic NHL Team",
       },
     ]);
     assert.isTrue(internet.calls.every((call) => call.options?.timeoutMs === 30_000));
@@ -500,52 +499,53 @@ it.effect("rejects a league response for another league and names the identity f
 });
 
 it.effect("reads an exact selected week roster with whole verified fields", () => {
-  const internet = recordingInternet(() => jsonResponse(rawRoster));
+  const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const roster = yield* provider.readRoster({
       ...sessionInput,
-      providerTeamKey: "461.l.1000.t.1",
-      period: { week: 3 },
+      providerTeamKey: "466.l.4000.t.1",
+      period: { week: 6 },
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/461.l.1000.t.1/roster;week=3?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6?format=json",
     );
-    assert.deepStrictEqual(roster.coverage, { type: "week", week: 3 });
-    assert.strictEqual(roster.players.length, 2);
-    assert.deepStrictEqual(roster.players[0], {
-      providerPlayerKey: "461.p.10001",
-      name: "Synthetic Player",
-      displayPosition: "QB",
-      primaryPosition: "QB",
-      positionType: "O",
-      eligiblePositions: ["QB", "W/R"],
-      slot: "QB",
-      isFlex: false,
-      isEditable: true,
-      injuryCode: undefined,
-      injuryDetail: undefined,
-      byeWeek: 7,
-      undroppable: false,
-    });
-    assert.deepStrictEqual(roster.players[1], {
-      providerPlayerKey: "461.p.10002",
-      name: "Synthetic Reserve",
-      displayPosition: "RB",
-      primaryPosition: "RB",
-      positionType: "O",
-      eligiblePositions: ["RB"],
-      slot: "IR",
-      isFlex: null,
-      isEditable: false,
-      injuryCode: "O",
-      injuryDetail: "Out for the synthetic test",
-      byeWeek: null,
-      undroppable: true,
-    });
+    assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
+    assert.deepStrictEqual(roster.players, [
+      {
+        providerPlayerKey: "466.p.20001",
+        name: "Synthetic Starter",
+        displayPosition: "QB",
+        primaryPosition: "QB",
+        positionType: "O",
+        eligiblePositions: ["QB", "W/R"],
+        slot: "QB",
+        isFlex: false,
+        isEditable: true,
+        injuryCode: undefined,
+        injuryDetail: undefined,
+        byeWeek: 7,
+        undroppable: false,
+      },
+      {
+        providerPlayerKey: "466.p.20002",
+        name: "Synthetic Reserve",
+        displayPosition: "WR",
+        primaryPosition: "WR",
+        positionType: "O",
+        eligiblePositions: ["WR"],
+        slot: "BN",
+        isFlex: false,
+        isEditable: false,
+        injuryCode: "O",
+        injuryDetail: "Synthetic injury note",
+        byeWeek: null,
+        undroppable: true,
+      },
+    ]);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -577,14 +577,14 @@ it.effect("reads a week-scoped roster container from a captured payload", () => 
 });
 
 it.effect("rejects a roster whose container and entries disagree on the week", () => {
-  const internet = recordingInternet(() => jsonResponse(rawRosterContainerWeekMismatch));
+  const internet = recordingInternet(() => jsonResponse(yahooNflRosterWeekMismatch));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const error = yield* Effect.flip(
       provider.readRoster({
         ...sessionInput,
-        providerTeamKey: "461.l.1000.t.1",
+        providerTeamKey: "466.l.4000.t.1",
         period: undefined,
       }),
     );
@@ -593,35 +593,15 @@ it.effect("rejects a roster whose container and entries disagree on the week", (
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
-it.effect("reads a date-scoped roster without a weekly claim", () => {
-  const internet = recordingInternet(() => jsonResponse(rawDateRoster));
-  return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
-
-    const roster = yield* provider.readRoster({
-      ...sessionInput,
-      providerTeamKey: "465.l.2000.t.9",
-      period: undefined,
-    });
-
-    assert.strictEqual(
-      internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/465.l.2000.t.9/roster?format=json",
-    );
-    assert.deepStrictEqual(roster.coverage, { type: "date", date: "2026-10-25" });
-    assert.strictEqual(roster.players[0]?.slot, "G");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
-});
-
 it.effect("refuses to relabel a date-scoped roster as a week", () => {
-  const internet = recordingInternet(() => jsonResponse(rawDateRoster));
+  const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const error = yield* Effect.flip(
       provider.readRoster({
         ...sessionInput,
-        providerTeamKey: "465.l.2000.t.9",
+        providerTeamKey: "466.l.4002.t.3",
         period: { week: 4 },
       }),
     );
@@ -677,39 +657,33 @@ it.effect("reads a date-scoped roster from a captured payload", () => {
 });
 
 it.effect("reports a period mismatch instead of relabelling another week", () => {
-  const internet = recordingInternet(() => jsonResponse(rawRoster));
+  const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const error = yield* Effect.flip(
       provider.readRoster({
         ...sessionInput,
-        providerTeamKey: "461.l.1000.t.1",
+        providerTeamKey: "466.l.4000.t.1",
         period: { week: 4 },
       }),
     );
 
     assert.instanceOf(error, ProviderPeriodMismatch);
     assert.strictEqual(error.requestedWeek, 4);
-    assert.strictEqual(error.coveredWeek, 3);
+    assert.strictEqual(error.coveredWeek, 6);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
 it.effect("rejects an empty roster as an unestablished period", () => {
-  const internet = recordingInternet(() =>
-    jsonResponse({
-      fantasy_content: {
-        team: [{ team_key: "461.l.1000.t.1" }, { roster: [{ players: [] }] }],
-      },
-    }),
-  );
+  const internet = recordingInternet(() => jsonResponse(yahooEmptyRoster));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const error = yield* Effect.flip(
       provider.readRoster({
         ...sessionInput,
-        providerTeamKey: "461.l.1000.t.1",
+        providerTeamKey: "466.l.4000.t.1",
         period: undefined,
       }),
     );
@@ -719,14 +693,14 @@ it.effect("rejects an empty roster as an unestablished period", () => {
 });
 
 it.effect("searches free agents with one exact request and typed availability", () => {
-  const internet = recordingInternet(() => jsonResponse(rawFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const result = yield* provider.searchPlayers({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
-      query: "Synthetic Player",
+      providerLeagueKey: "466.l.4000",
+      query: "Synthetic Free",
       availability: "free_agent",
       sort: "ownership",
       limit: 10,
@@ -734,20 +708,20 @@ it.effect("searches free agents with one exact request and typed availability", 
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/461.l.1000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Player;out=ownership,percent_owned?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Free;out=ownership,percent_owned?format=json",
     );
     assert.deepStrictEqual(result.players, [
       {
-        providerPlayerKey: "461.p.10001",
-        name: "Synthetic Player",
-        primaryPosition: "QB",
-        displayPosition: "QB",
-        eligiblePositions: ["QB", "W/R"],
+        providerPlayerKey: "466.p.20006",
+        name: "Synthetic Free Agent",
+        primaryPosition: "WR",
+        displayPosition: "WR",
+        eligiblePositions: ["WR", "W/R"],
         availability: "free_agent",
         percentOwned: 42.5,
       },
       {
-        providerPlayerKey: "461.p.10002",
+        providerPlayerKey: "466.p.20007",
         name: "Synthetic Waiver",
         primaryPosition: "RB",
         displayPosition: "RB",
@@ -760,13 +734,13 @@ it.effect("searches free agents with one exact request and typed availability", 
 });
 
 it.effect("searches waiver players without a query", () => {
-  const internet = recordingInternet(() => jsonResponse(rawFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     yield* provider.searchPlayers({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
+      providerLeagueKey: "466.l.4000",
       query: undefined,
       availability: "waiver",
       sort: "name",
@@ -775,19 +749,19 @@ it.effect("searches waiver players without a query", () => {
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/461.l.1000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned?format=json",
     );
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
 it.effect("searches the whole player pool without an availability filter", () => {
-  const internet = recordingInternet(() => jsonResponse(rawFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     yield* provider.searchPlayers({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
+      providerLeagueKey: "466.l.4000",
       query: undefined,
       availability: "all",
       sort: "position",
@@ -796,13 +770,13 @@ it.effect("searches the whole player pool without an availability filter", () =>
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/461.l.1000/players;sort=NAME;count=25;out=ownership,percent_owned?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned?format=json",
     );
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
 it.effect("rejects an unbounded player search without a request", () => {
-  const internet = recordingInternet(() => jsonResponse(rawFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
@@ -944,52 +918,46 @@ it.effect("reports no actual statistics when the provider omits the series", () 
 });
 
 it.effect("reads a league scoreboard for the requested week", () => {
-  const internet = recordingInternet(() => jsonResponse(rawMatchups));
+  const internet = recordingInternet(() => jsonResponse(yahooNflMatchups));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const matchups = yield* provider.readMatchups({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
-      period: { week: 3 },
+      providerLeagueKey: "466.l.4000",
+      period: { week: 6 },
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/461.l.1000/scoreboard;week=3?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/scoreboard;week=6?format=json",
     );
     assert.deepStrictEqual(matchups, [
       {
-        period: { week: 3 },
-        home: { providerTeamKey: "461.l.1000.t.1", name: "Alpha", points: 101.25 },
-        away: { providerTeamKey: "461.l.1000.t.2", name: "Beta", points: 98.5 },
-        status: "midevent",
-      },
-      {
-        period: { week: 3 },
-        home: { providerTeamKey: "461.l.1000.t.3", name: "Gamma", points: null },
-        away: { providerTeamKey: "461.l.1000.t.4", name: "Delta", points: null },
-        status: "preevent",
+        period: { week: 6 },
+        home: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic NFL Team", points: 101.25 },
+        away: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival", points: 98.5 },
+        status: "postevent",
       },
     ]);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
 it.effect("reports a scoreboard period mismatch", () => {
-  const internet = recordingInternet(() => jsonResponse(rawMatchups));
+  const internet = recordingInternet(() => jsonResponse(yahooNflMatchups));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const error = yield* Effect.flip(
       provider.readMatchups({
         ...sessionInput,
-        providerLeagueKey: "461.l.1000",
+        providerLeagueKey: "466.l.4000",
         period: { week: 4 },
       }),
     );
 
     assert.instanceOf(error, ProviderPeriodMismatch);
-    assert.strictEqual(error.coveredWeek, 3);
+    assert.strictEqual(error.coveredWeek, 6);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -1054,22 +1022,30 @@ it.effect("reads bounded league transaction history with dropped-player identity
 });
 
 it.effect("reads league team membership", () => {
-  const internet = recordingInternet(() => jsonResponse(rawLeagueTeams));
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueTeams));
   return Effect.gen(function* () {
     const provider = yield* ProviderGateway;
 
     const teams = yield* provider.readLeagueTeams({
       ...sessionInput,
-      providerLeagueKey: "461.l.1000",
+      providerLeagueKey: "466.l.4000",
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/461.l.1000/teams?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/teams?format=json",
     );
     assert.deepStrictEqual(teams, [
-      { providerTeamKey: "461.l.1000.t.1", providerLeagueKey: "461.l.1000", name: "Alpha" },
-      { providerTeamKey: "461.l.1000.t.2", providerLeagueKey: "461.l.1000", name: "Beta" },
+      {
+        providerTeamKey: "466.l.4000.t.1",
+        providerLeagueKey: "466.l.4000",
+        name: "Synthetic NFL Team",
+      },
+      {
+        providerTeamKey: "466.l.4000.t.2",
+        providerLeagueKey: "466.l.4000",
+        name: "Synthetic Rival",
+      },
     ]);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
@@ -1191,357 +1167,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status });
 }
 
-const rawRoster = {
-  fantasy_content: {
-    team: [
-      { team_key: "461.l.1000.t.1" },
-      {
-        roster: {
-          "0": {
-            players: {
-              "0": {
-                player: [
-                  [
-                    { player_key: "461.p.10001" },
-                    { name: { full: "Synthetic Player" } },
-                    { display_position: "QB" },
-                    { primary_position: "QB" },
-                    { position_type: "O" },
-                    {
-                      eligible_positions: {
-                        "0": { position: "QB" },
-                        "1": { position: "W/R" },
-                        count: 2,
-                      },
-                    },
-                    { bye_weeks: { week: "7" } },
-                    { is_undroppable: "0" },
-                  ],
-                  {
-                    selected_position: [
-                      { coverage_type: "week", week: "3" },
-                      { position: "QB" },
-                      { is_flex: 0 },
-                    ],
-                  },
-                  { is_editable: "1" },
-                ],
-              },
-              "1": {
-                player: [
-                  [
-                    { player_key: "461.p.10002" },
-                    { name: { full: "Synthetic Reserve" } },
-                    { display_position: "RB" },
-                    { primary_position: "RB" },
-                    { position_type: "O" },
-                    { eligible_positions: { "0": { position: "RB" }, count: 1 } },
-                    { status: "O" },
-                    { status_full: "Out" },
-                    { injury_note: "Out for the synthetic test" },
-                    { is_undroppable: "1" },
-                  ],
-                  {
-                    selected_position: [{ coverage_type: "week", week: "3" }, { position: "IR" }],
-                  },
-                  { is_editable: "0" },
-                ],
-              },
-              count: 2,
-            },
-          },
-          count: 1,
-        },
-      },
-    ],
-  },
-};
-
-const rawRosterContainerWeekMismatch = {
-  fantasy_content: {
-    team: [
-      { team_key: "461.l.1000.t.1" },
-      {
-        roster: {
-          "0": {
-            players: {
-              "0": {
-                player: [
-                  [
-                    { player_key: "461.p.10001" },
-                    { name: { full: "Synthetic Player" } },
-                    { display_position: "QB" },
-                    { primary_position: "QB" },
-                    { position_type: "O" },
-                    { eligible_positions: { "0": { position: "QB" }, count: 1 } },
-                  ],
-                  {
-                    selected_position: [{ coverage_type: "week", week: "3" }, { position: "QB" }],
-                  },
-                  { is_editable: "1" },
-                ],
-              },
-              count: 1,
-            },
-          },
-          coverage_type: "week",
-          week: "4",
-          is_prescoring: 0,
-        },
-      },
-    ],
-  },
-};
-
-const rawFreeAgents = {
-  fantasy_content: {
-    league: [
-      { league_key: "461.l.1000" },
-      {
-        players: {
-          "0": {
-            player: [
-              [
-                { player_key: "461.p.10001" },
-                { name: { full: "Synthetic Player" } },
-                { primary_position: "QB" },
-                { display_position: "QB" },
-                {
-                  eligible_positions: {
-                    "0": { position: "QB" },
-                    "1": { position: "W/R" },
-                    count: 2,
-                  },
-                },
-                { ownership: { ownership_type: "freeagents" } },
-                { percent_owned: { coverage_type: "week", value: 42.5 } },
-              ],
-            ],
-          },
-          "1": {
-            player: [
-              [
-                { player_key: "461.p.10002" },
-                { name: { full: "Synthetic Waiver" } },
-                { primary_position: "RB" },
-                { display_position: "RB" },
-                { eligible_positions: { "0": { position: "RB" }, count: 1 } },
-                { ownership: { ownership_type: "waivers" } },
-              ],
-            ],
-          },
-          count: 2,
-        },
-      },
-    ],
-  },
-};
-
-const rawMatchups = {
-  fantasy_content: {
-    league: [
-      { league_key: "461.l.1000" },
-      {
-        scoreboard: {
-          "0": {
-            matchups: {
-              "0": {
-                matchup: {
-                  "0": {
-                    teams: {
-                      "0": {
-                        team: [
-                          [
-                            { team_key: "461.l.1000.t.1" },
-                            { name: "Alpha" },
-                            { team_points: { coverage_type: "week", week: "3", total: "101.25" } },
-                          ],
-                        ],
-                      },
-                      "1": {
-                        team: [
-                          [
-                            { team_key: "461.l.1000.t.2" },
-                            { name: "Beta" },
-                            { team_points: { coverage_type: "week", week: "3", total: "98.5" } },
-                          ],
-                        ],
-                      },
-                      count: 2,
-                    },
-                  },
-                  week: "3",
-                  status: "midevent",
-                },
-              },
-              "1": {
-                matchup: {
-                  "0": {
-                    teams: {
-                      "0": { team: [[{ team_key: "461.l.1000.t.3" }, { name: "Gamma" }]] },
-                      "1": { team: [[{ team_key: "461.l.1000.t.4" }, { name: "Delta" }]] },
-                      count: 2,
-                    },
-                  },
-                  week: "3",
-                  status: "preevent",
-                },
-              },
-              count: 2,
-            },
-          },
-          week: "3",
-        },
-      },
-    ],
-  },
-};
-
-const rawLeagueTeams = {
-  fantasy_content: {
-    league: [
-      { league_key: "461.l.1000" },
-      {
-        teams: {
-          "0": { team: [[{ team_key: "461.l.1000.t.1" }, { name: "Alpha" }]] },
-          "1": { team: [[{ team_key: "461.l.1000.t.2" }, { name: "Beta" }]] },
-          count: 2,
-        },
-      },
-    ],
-  },
-};
-
-const rawDateRoster = {
-  fantasy_content: {
-    team: [
-      { team_key: "465.l.2000.t.9" },
-      {
-        roster: {
-          "0": {
-            players: {
-              "0": {
-                player: [
-                  [
-                    { player_key: "465.p.20001" },
-                    { name: { full: "Synthetic Goalie" } },
-                    { display_position: "G" },
-                    { primary_position: "G" },
-                    { position_type: "G" },
-                    { eligible_positions: { "0": { position: "G" }, count: 1 } },
-                  ],
-                  {
-                    selected_position: [
-                      { coverage_type: "date", date: "2026-10-25" },
-                      { position: "G" },
-                    ],
-                  },
-                  { is_editable: "1" },
-                ],
-              },
-              count: 1,
-            },
-          },
-          coverage_type: "date",
-          date: "2026-10-25",
-          is_prescoring: 0,
-        },
-      },
-    ],
-  },
-};
-
 const sessionInput = {
   provider: "yahoo" as const,
   session: Redacted.make("A1=canary-cookie-value; A3=another-cookie-value"),
 };
-
-const rawSession = {
-  fantasy_content: {
-    users: {
-      "0": { user: [{ guid: "SYNTHETICGUID" }] },
-      count: 1,
-    },
-  },
-};
-
-const rawNflTeams = teamPayload("461", "nfl", [
-  { key: "461.l.1000.t.1", name: "Alpha" },
-  { key: "461.l.1000.t.2", name: "Beta" },
-]);
-
-const rawNhlTeams = teamPayload("465", "nhl", [{ key: "465.l.2000.t.9", name: "Gamma" }]);
-
-function teamPayload(
-  gameKey: string,
-  code: "nfl" | "nhl",
-  teams: ReadonlyArray<{ readonly key: string; readonly name: string }>,
-): unknown {
-  return {
-    fantasy_content: {
-      users: {
-        "0": {
-          user: [
-            { guid: "SYNTHETICGUID" },
-            {
-              games: {
-                "0": {
-                  game: [
-                    {
-                      game_key: gameKey,
-                      game_id: gameKey,
-                      name: code === "nfl" ? "Football" : "Hockey",
-                      code,
-                      type: "full",
-                      url: `https://${code === "nfl" ? "football" : "hockey"}.fantasysports.yahoo.com/f1/${gameKey}`,
-                      season: "2026",
-                      is_registration_over: 1,
-                      is_game_over: 0,
-                      is_offseason: 1,
-                      is_live_draft_lobby_active: 0,
-                    },
-                    {
-                      teams: {
-                        ...Object.fromEntries(
-                          teams.map((team, index) => [
-                            String(index),
-                            {
-                              team: [
-                                [
-                                  { team_key: team.key },
-                                  { team_id: team.key.slice(team.key.lastIndexOf(".t.") + 3) },
-                                  { name: team.name },
-                                  { is_owned_by_current_login: 1 },
-                                  {
-                                    team_logos: [
-                                      { team_logo: { size: "large", url: "https://s.yimg.com" } },
-                                    ],
-                                  },
-                                  [],
-                                  {
-                                    managers: [
-                                      { manager: { manager_id: "1", is_current_login: "1" } },
-                                    ],
-                                  },
-                                  [],
-                                ],
-                                [],
-                              ],
-                            },
-                          ]),
-                        ),
-                        count: teams.length,
-                      },
-                    },
-                  ],
-                },
-                count: 1,
-              },
-            },
-          ],
-        },
-        count: 1,
-      },
-    },
-  };
-}

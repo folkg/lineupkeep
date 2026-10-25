@@ -1098,3 +1098,594 @@ export const yahooNflTransactions = {
     ],
   },
 };
+
+export const yahooSession = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    "yahoo:uri": "/fantasy/v2/users;use_login=1",
+    users: {
+      "0": {
+        user: [{ guid: "SYNTHETICGUID" }],
+      },
+      count: 1,
+    },
+  },
+};
+
+const nflTeamEntry = [
+  { team_key: "466.l.4000.t.1" },
+  { team_id: "1" },
+  { name: "Synthetic NFL Team" },
+  { is_owned_by_current_login: 1 },
+  { url: "https://football.fantasysports.yahoo.com/f1/4000/1" },
+  { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic-nfl.png" } }] },
+  [],
+  { managers: [{ manager: { manager_id: "1", is_current_login: "1" } }] },
+  [],
+];
+
+const nhlTeamEntry = [
+  { team_key: "466.l.4002.t.3" },
+  { team_id: "3" },
+  { name: "Synthetic NHL Team" },
+  { is_owned_by_current_login: 1 },
+  { url: "https://hockey.fantasysports.yahoo.com/hockey/4002/3" },
+  { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic-nhl.png" } }] },
+  [],
+  { managers: [{ manager: { manager_id: "1", is_current_login: "1" } }] },
+  [],
+];
+
+export const yahooNflTeams = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    "yahoo:uri": "/fantasy/v2/users;use_login=1/games;game_keys=nfl/teams",
+    users: {
+      "0": {
+        user: [
+          { guid: "SYNTHETICGUID" },
+          {
+            games: {
+              "0": {
+                game: [
+                  [
+                    { game_key: "466" },
+                    { game_id: "466" },
+                    { name: "Football" },
+                    { code: "nfl" },
+                    { type: "full" },
+                    { url: "https://football.fantasysports.yahoo.com/f1" },
+                    { season: "2026" },
+                    { is_registration_over: 1 },
+                    { is_game_over: 0 },
+                    { is_offseason: 0 },
+                    { is_live_draft_lobby_active: 0 },
+                    [],
+                  ],
+                  {
+                    teams: {
+                      "0": {
+                        team: [nflTeamEntry, []],
+                      },
+                      count: 1,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+      count: 1,
+    },
+  },
+};
+
+export const yahooNhlTeams = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    "yahoo:uri": "/fantasy/v2/users;use_login=1/games;game_keys=nhl/teams",
+    users: {
+      "0": {
+        user: [
+          { guid: "SYNTHETICGUID" },
+          {
+            games: {
+              "0": {
+                game: [
+                  [
+                    { game_key: "466" },
+                    { game_id: "466" },
+                    { name: "Hockey" },
+                    { code: "nhl" },
+                    { type: "full" },
+                    { url: "https://hockey.fantasysports.yahoo.com/hockey" },
+                    { season: "2026" },
+                    { is_registration_over: 1 },
+                    { is_game_over: 0 },
+                    { is_offseason: 0 },
+                    { is_live_draft_lobby_active: 0 },
+                    [],
+                  ],
+                  {
+                    teams: {
+                      "0": {
+                        team: [nhlTeamEntry, []],
+                      },
+                      count: 1,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+      count: 1,
+    },
+  },
+};
+
+export const yahooNflFreeAgents = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        players: {
+          "0": {
+            player: [
+              [
+                { player_key: "466.p.20006" },
+                { player_id: "20006" },
+                {
+                  name: {
+                    full: "Synthetic Free Agent",
+                    first: "Synthetic",
+                    last: "Agent",
+                    ascii_first: "Synthetic",
+                    ascii_last: "Agent",
+                  },
+                },
+                { url: "https://sports.yahoo.com/synthetic-free-agent" },
+                { editorial_team_abbr: "SYN" },
+                { is_keeper: "0" },
+                { uniform_number: "8" },
+                { display_position: "WR" },
+                { headshot: { image_url: "https://s.yimg.com/synthetic-free-agent.png" } },
+                { is_undroppable: "0" },
+                { position_type: "O" },
+                { primary_position: "WR" },
+                { eligible_positions: [{ position: "WR" }, { position: "W/R" }] },
+                [],
+              ],
+              { ownership: [{ ownership_type: "freeagents" }] },
+              {
+                percent_owned: [
+                  { coverage_type: "week", week: "6" },
+                  { value: 42.5 },
+                  { delta: "3" },
+                ],
+              },
+            ],
+          },
+          "1": {
+            player: [
+              [
+                { player_key: "466.p.20007" },
+                { player_id: "20007" },
+                {
+                  name: {
+                    full: "Synthetic Waiver",
+                    first: "Synthetic",
+                    last: "Waiver",
+                    ascii_first: "Synthetic",
+                    ascii_last: "Waiver",
+                  },
+                },
+                { display_position: "RB" },
+                { position_type: "O" },
+                { primary_position: "RB" },
+                { eligible_positions: [{ position: "RB" }] },
+                [],
+              ],
+              { ownership: [{ ownership_type: "waivers" }] },
+            ],
+          },
+          count: 2,
+        },
+      },
+    ],
+  },
+};
+
+function nflMatchupTeam(key: string, name: string, total: string, projected: string): unknown[] {
+  return [
+    [
+      { team_key: key },
+      { team_id: key.slice(key.lastIndexOf(".t.") + 3) },
+      { name },
+      { url: `https://football.fantasysports.yahoo.com/f1/4000/${key.slice(-1)}` },
+      { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic.png" } }] },
+      { waiver_priority: 1 },
+      { number_of_moves: 1 },
+      { number_of_trades: 0 },
+      { league_scoring_type: "head" },
+      { draft_position: 1 },
+      [],
+    ],
+    [
+      {
+        team_points: { coverage_type: "week", week: "6", total },
+        team_projected_points: { coverage_type: "week", week: "7", total: projected },
+        team_remaining_games: {
+          coverage_type: "week",
+          week: "6",
+          total: { remaining_games: 1, live_games: 0, completed_games: 1 },
+        },
+      },
+    ],
+  ];
+}
+
+export const yahooNflMatchups = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        scoreboard: {
+          "0": {
+            matchups: {
+              "0": {
+                matchup: {
+                  "0": {
+                    teams: {
+                      "0": {
+                        team: nflMatchupTeam(
+                          "466.l.4000.t.1",
+                          "Synthetic NFL Team",
+                          "101.25",
+                          "109.4",
+                        ),
+                      },
+                      "1": {
+                        team: nflMatchupTeam("466.l.4000.t.2", "Synthetic Rival", "98.5", "104.1"),
+                      },
+                      count: 2,
+                    },
+                  },
+                  week: "6",
+                  week_start: "2026-10-15",
+                  week_end: "2026-10-19",
+                  status: "postevent",
+                  is_playoffs: "0",
+                  is_consolation: "0",
+                  is_matchup_of_the_week: "0",
+                  is_tied: 0,
+                  stat_winners: [
+                    {
+                      stat_winner: {
+                        stat_id: "4",
+                        winner_team_key: "466.l.4000.t.1",
+                      },
+                    },
+                  ],
+                },
+              },
+              count: 1,
+            },
+          },
+          week: "6",
+        },
+      },
+    ],
+  },
+};
+
+export const yahooNflLeagueTeams = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        teams: {
+          "0": {
+            team: [nflTeamEntry, []],
+          },
+          "1": {
+            team: [
+              [
+                { team_key: "466.l.4000.t.2" },
+                { team_id: "2" },
+                { name: "Synthetic Rival" },
+                { is_owned_by_current_login: 0 },
+                [],
+              ],
+              [],
+            ],
+          },
+          count: 2,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooNflRosterWeekMismatch = {
+  fantasy_content: {
+    team: [
+      {
+        team_key: "466.l.4000.t.1",
+        team_id: "1",
+        name: "Synthetic Team",
+      },
+      {
+        roster: {
+          "0": {
+            players: {
+              "0": {
+                player: [
+                  [
+                    { player_key: "466.p.20001" },
+                    { player_id: "20001" },
+                    { name: { full: "Synthetic Starter" } },
+                    { display_position: "QB" },
+                    { position_type: "O" },
+                    { primary_position: "QB" },
+                    { eligible_positions: [{ position: "QB" }] },
+                  ],
+                  {
+                    selected_position: [{ coverage_type: "week", week: "7" }, { position: "QB" }],
+                  },
+                  { is_editable: "1" },
+                ],
+              },
+              count: 1,
+            },
+          },
+          coverage_type: "week",
+          week: 6,
+          is_prescoring: 0,
+          is_editable: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooEmptyRoster = {
+  fantasy_content: {
+    team: [
+      {
+        team_key: "466.l.4000.t.1",
+        team_id: "1",
+        name: "Synthetic Team",
+      },
+      {
+        roster: {
+          "0": {
+            players: {
+              count: 0,
+            },
+          },
+          coverage_type: "week",
+          week: 6,
+          is_prescoring: 0,
+          is_editable: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooRosterFragments = {
+  fantasy_content: {
+    team: [
+      { team_key: "461.l.1000.t.1" },
+      {
+        roster: {
+          "0": {
+            players: {
+              "0": {
+                player: [
+                  [{ player_key: "461.p.10001" }],
+                  {
+                    selected_position: [{ coverage_type: "week", week: "3" }, { position: "QB" }],
+                  },
+                  { is_editable: "1" },
+                ],
+              },
+              count: 1,
+            },
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooRosterWithCoverageMetadata = {
+  fantasy_content: {
+    team: [
+      { team_key: "461.l.1000.t.1" },
+      {
+        roster: {
+          "0": {
+            players: {
+              "0": {
+                player: [
+                  [{ player_key: "461.p.10001" }],
+                  {
+                    selected_position: [{ coverage_type: "week", week: "3" }, { position: "QB" }],
+                  },
+                  { is_editable: "1" },
+                ],
+              },
+              count: 1,
+            },
+          },
+          coverage_type: "week",
+          week: "3",
+          is_prescoring: 0,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooLeagueSettingsFragments = {
+  fantasy_content: {
+    league: [
+      { league_key: "465.l.2000" },
+      {
+        settings: [
+          {
+            roster_type: "head",
+            roster_positions: [
+              { roster_position: { position: "C", count: 2, is_starting_position: 1 } },
+              { roster_position: { position: "BN", count: 6, is_starting_position: 0 } },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const yahooSingleEntryCollections = {
+  fantasy_content: {
+    league: [
+      { league_key: "465.l.2000" },
+      {
+        settings: [
+          {
+            roster_positions: {
+              "0": { roster_position: { position: "G", count: 1, is_starting_position: 1 } },
+              count: 1,
+            },
+            stat_categories: {
+              stats: {
+                "0": {
+                  stat: {
+                    stat_id: 31,
+                    name: "Goals",
+                    stat_position_types: [{ stat_position_type: { position_type: "P" } }],
+                  },
+                },
+                count: 1,
+              },
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const yahooNestedTeams = {
+  fantasy_content: {
+    users: {
+      "0": {
+        user: [
+          { guid: "SYNTHETICGUID" },
+          {
+            games: {
+              "0": {
+                game: [
+                  { game_key: "461" },
+                  { code: "nfl" },
+                  { season: "2026" },
+                  {
+                    teams: {
+                      "0": {
+                        team: [
+                          [
+                            { team_key: "461.l.1000.t.1" },
+                            { name: "Alpha" },
+                            {
+                              team_logos: [
+                                { team_logo: { size: "large", url: "https://s.yimg.com" } },
+                              ],
+                            },
+                            { managers: [{ manager: { manager_id: "1" } }] },
+                            [],
+                          ],
+                          [],
+                        ],
+                      },
+                      count: 1,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+      count: 1,
+    },
+  },
+};
+
+export const yahooTeamFragments = {
+  fantasy_content: {
+    users: {
+      "0": {
+        user: [
+          { guid: "SYNTHETICGUID" },
+          {
+            games: {
+              "0": {
+                game: [
+                  { game_key: "461" },
+                  { code: "nfl" },
+                  { season: "2026" },
+                  {
+                    teams: {
+                      "0": {
+                        team: {
+                          team_key: "461.l.1000.t.1",
+                          name: "Alpha",
+                          is_editable: "0",
+                        },
+                      },
+                      "1": {
+                        team: {
+                          team_key: "461.l.1000.t.2",
+                          name: "Beta",
+                        },
+                      },
+                      count: 2,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+      count: 1,
+    },
+  },
+};
