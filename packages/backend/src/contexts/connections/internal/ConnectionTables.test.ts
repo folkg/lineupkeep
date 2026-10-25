@@ -3,7 +3,10 @@ import { MachineTest } from "@typeonce/effect-machine/testing";
 import { Arbitrary, DateTime, Effect, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
-import { decodeConnectionId } from "#contexts/connections/Connection.ts";
+import {
+  ConnectionCredentialGeneration,
+  decodeConnectionId,
+} from "#contexts/connections/Connection.ts";
 import { snapshotOf } from "#utilities/machine.ts";
 
 import { ConnectionLifecycleWorkflow } from "./ConnectionLifecycleWorkflow.ts";
@@ -13,7 +16,7 @@ it.effect("round-trips every explored lifecycle state through its row codec", ()
   Effect.gen(function* () {
     const explored = yield* MachineTest.explore(ConnectionLifecycleWorkflow, {
       input,
-      events: () => [approve, cancel],
+      events: () => events,
       stateKey: ({ snapshot }) => JSON.stringify(snapshot),
     });
     assert.strictEqual(explored.completeness._tag, "Complete");
@@ -50,11 +53,12 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
         millis: Schema.Int.check(
           Schema.isBetween({ minimum: -8_640_000_000_000_000, maximum: 8_640_000_000_000_000 }),
         ),
+        generation: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
       }),
     );
     const result = yield* Arbitrary.checkEffect(
       generated,
-      ({ millis }) =>
+      ({ millis, generation }) =>
         Effect.gen(function* () {
           const time = DateTime.makeUnsafe(millis);
           const record = {
@@ -76,6 +80,14 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
               _tag: "Ready" as const,
               provider: "yahoo" as const,
               approvedAt: time,
+              credentialGeneration: makeGeneration(generation),
+              updatedAt: time,
+            },
+            {
+              _tag: "ReconnectRequired" as const,
+              provider: "yahoo" as const,
+              reconnectRequiredAt: time,
+              credentialGeneration: makeGeneration(generation),
               updatedAt: time,
             },
             {
@@ -112,31 +124,32 @@ it.effect("rejects incomplete lifecycle rows through the codec", () =>
       provider: "yahoo",
       expiresAt: at,
       approvedAt: at,
+      credentialGeneration: 1,
+      reconnectRequiredAt: at,
       disconnectedAt: at,
       createdAt: at,
       updatedAt: at,
     };
 
-    assert.isTrue(
-      yield* Effect.isFailure(
-        Schema.decodeUnknownEffect(ConnectionRow)({
-          ...base,
-          status: "linking",
-          expiresAt: null,
+    yield* Effect.forEach(
+      [
+        { ...base, status: "linking", expiresAt: null },
+        { ...base, status: "ready", approvedAt: null },
+        { ...base, status: "ready", credentialGeneration: null },
+        { ...base, status: "reconnect-required", reconnectRequiredAt: null },
+        { ...base, status: "reconnect-required", credentialGeneration: null },
+      ],
+      (row) =>
+        Effect.gen(function* () {
+          assert.isTrue(yield* Effect.isFailure(Schema.decodeUnknownEffect(ConnectionRow)(row)));
         }),
-      ),
-    );
-    assert.isTrue(
-      yield* Effect.isFailure(
-        Schema.decodeUnknownEffect(ConnectionRow)({
-          ...base,
-          status: "ready",
-          approvedAt: null,
-        }),
-      ),
     );
   }),
 );
+
+function makeGeneration(value: number): ConnectionCredentialGeneration {
+  return Schema.decodeSync(ConnectionCredentialGeneration)(value);
+}
 
 const at = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
 const input = {
@@ -146,5 +159,17 @@ const input = {
   expiresAt: DateTime.makeUnsafe("2026-01-01T00:10:00Z"),
   updatedAt: at,
 };
-const approve = { _tag: "LinkApproved" as const, at: DateTime.makeUnsafe("2026-01-02T00:00:00Z") };
-const cancel = { _tag: "LinkCancelled" as const, at: DateTime.makeUnsafe("2026-01-02T00:00:00Z") };
+const events = [
+  {
+    _tag: "LinkCompleted" as const,
+    at: DateTime.makeUnsafe("2026-01-02T00:00:00Z"),
+    credentialGeneration: makeGeneration(1),
+  },
+  { _tag: "ReconnectRequired" as const, at: DateTime.makeUnsafe("2026-01-03T00:00:00Z") },
+  {
+    _tag: "Reconnected" as const,
+    at: DateTime.makeUnsafe("2026-01-04T00:00:00Z"),
+    credentialGeneration: makeGeneration(2),
+  },
+  { _tag: "Disconnected" as const, at: DateTime.makeUnsafe("2026-01-05T00:00:00Z") },
+];

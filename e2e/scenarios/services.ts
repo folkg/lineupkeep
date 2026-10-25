@@ -61,6 +61,12 @@ function observeConnection(connection: ProviderConnection): ObservedConnection {
     ...(connection.linkingExpiresAt === undefined
       ? {}
       : { linkingExpiresAt: DateTime.formatIso(connection.linkingExpiresAt) }),
+    ...(connection.credentialGeneration === undefined
+      ? {}
+      : { credentialGeneration: connection.credentialGeneration }),
+    ...(connection.reconnectRequiredAt === undefined
+      ? {}
+      : { reconnectRequiredAt: DateTime.formatIso(connection.reconnectRequiredAt) }),
     ...(connection.disconnectedAt === undefined
       ? {}
       : { disconnectedAt: DateTime.formatIso(connection.disconnectedAt) }),
@@ -71,5 +77,7 @@ type ObservedConnection = {
   readonly id: string;
   readonly status: ProviderConnection["status"];
   readonly linkingExpiresAt?: string;
+  readonly credentialGeneration?: number;
+  readonly reconnectRequiredAt?: string;
   readonly disconnectedAt?: string;
 };

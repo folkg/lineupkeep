@@ -36,9 +36,8 @@ test("pairs a helper through its device code, approves it once, and blocks redem
   });
 
   expect(approved).toEqual(singleFlightWrite);
-  await expect(
-    page.getByText("Connected. The local helper is approved for this account", { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText("Helper approved.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("article")).toHaveCount(1);
   await captureCheckpoint(page, info, "helper-approved");
 
   const redeemed = await redeemHelper(request, requiredOrigin(baseURL), grant.device_code);

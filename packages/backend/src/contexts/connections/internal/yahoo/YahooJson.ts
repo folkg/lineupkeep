@@ -43,11 +43,7 @@ function normalizeCollectionItem(value: unknown): unknown {
   if (isRecord(value)) {
     const keys = Object.keys(value);
     const onlyKey = keys[0];
-    if (
-      keys.length === 1 &&
-      onlyKey !== undefined &&
-      singularResourceKeys.has(onlyKey)
-    ) {
+    if (keys.length === 1 && onlyKey !== undefined && singularResourceKeys.has(onlyKey)) {
       return normalizeValue(value[onlyKey]);
     }
   }

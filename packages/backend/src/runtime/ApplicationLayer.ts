@@ -26,15 +26,19 @@ const AuthLayer = AuthLive.pipe(
   Layer.provide(EmailDelivery.fromConfig),
   Layer.provide(FetchHttpClient.layer),
 );
+const ProviderLayer = YahooProvider;
+const CredentialEncryptionLayer = ConnectionCredentialEncryption.layer;
 const ConnectionsLayer = ConnectionsLive.pipe(
   Layer.provide(ConnectionRepository.layer),
   Layer.provide(ConnectionsDatabase.layer),
+  Layer.provide(ProviderLayer),
+  Layer.provide(CredentialEncryptionLayer),
 );
 export const ApplicationLayer = Layer.mergeAll(
   ConnectionsLayer,
   AuthLayer,
-  YahooProvider,
-  ConnectionCredentialEncryption.layer,
+  ProviderLayer,
+  CredentialEncryptionLayer,
 ).pipe(Layer.provide(PostgresLive), Layer.provide(NodeCrypto.layer));
 
 export type BackendServices = AuthService | Connections;

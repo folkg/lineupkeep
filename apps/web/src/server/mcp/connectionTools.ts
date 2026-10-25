@@ -1,5 +1,6 @@
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import {
+  ConnectionCredentialGeneration,
   ConnectionId,
   ConnectionStatus,
   Provider,
@@ -23,6 +24,8 @@ const ConnectionView = Schema.Struct({
   provider: Provider,
   status: ConnectionStatus,
   linkingExpiresAt: Schema.optional(Schema.DateTimeUtc),
+  credentialGeneration: Schema.optional(ConnectionCredentialGeneration),
+  reconnectRequiredAt: Schema.optional(Schema.DateTimeUtc),
   disconnectedAt: Schema.optional(Schema.DateTimeUtc),
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
@@ -31,7 +34,7 @@ const ConnectionView = Schema.Struct({
 export const connectionTools = Toolkit.make(
   Tool.make("list_connections", {
     description:
-      "List your provider connections in ID order with safe status metadata. Linking connections await the local helper and expire; disconnected connections no longer provide access. This never returns provider credentials, account identity, or connections owned by other people.",
+      "List your provider connections in ID order with safe status metadata. Linking connections await the local helper and expire; reconnect-required connections need a new provider session; disconnected connections no longer provide access. This never returns provider credentials, account identity, or connections owned by other people.",
     parameters: Tool.EmptyParams,
     success: Schema.Struct({ connections: Schema.Array(Schema.toCodecJson(ConnectionView)) }),
     failure: ToolFailure,
@@ -69,6 +72,12 @@ function toConnectionView(connection: ProviderConnection): typeof ConnectionView
     ...(connection.linkingExpiresAt === undefined
       ? {}
       : { linkingExpiresAt: connection.linkingExpiresAt }),
+    ...(connection.credentialGeneration === undefined
+      ? {}
+      : { credentialGeneration: connection.credentialGeneration }),
+    ...(connection.reconnectRequiredAt === undefined
+      ? {}
+      : { reconnectRequiredAt: connection.reconnectRequiredAt }),
     ...(connection.disconnectedAt === undefined
       ? {}
       : { disconnectedAt: connection.disconnectedAt }),
@@ -86,12 +95,15 @@ function mapOutcome<A>(
         case "connection.link_expired":
         case "connection.link_rejected":
         case "connection.not_found":
+        case "connection.credential_generation_stale":
+        case "connection.provider_rejected":
           return reject(
             error._tag,
             "Connection not found or no longer awaiting approval. List your connections again.",
           );
         case "connection.create_failed":
         case "connection.persistence_failed":
+        case "connection.provider_unavailable":
           return Effect.annotateCurrentSpan({
             "app.outcome": "failure",
             "error.type": error._tag,

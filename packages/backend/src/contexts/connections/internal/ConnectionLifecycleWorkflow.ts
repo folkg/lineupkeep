@@ -1,7 +1,7 @@
 import { Machine } from "@typeonce/effect-machine";
 import { Schema } from "effect";
 
-import { Provider } from "#contexts/connections/Connection.ts";
+import { ConnectionCredentialGeneration, Provider } from "#contexts/connections/Connection.ts";
 
 const ConnectionContent = {
   provider: Provider,
@@ -16,6 +16,12 @@ export const ConnectionLifecycleState = Schema.TaggedUnion({
   Ready: {
     ...ConnectionContent,
     approvedAt: Schema.DateTimeUtc,
+    credentialGeneration: ConnectionCredentialGeneration,
+  },
+  ReconnectRequired: {
+    ...ConnectionContent,
+    reconnectRequiredAt: Schema.DateTimeUtc,
+    credentialGeneration: ConnectionCredentialGeneration,
   },
   Disconnected: {
     ...ConnectionContent,
@@ -27,6 +33,7 @@ export const ConnectionLifecycleStates = Machine.state({
   states: {
     Linking: ConnectionLifecycleState.cases.Linking,
     Ready: ConnectionLifecycleState.cases.Ready,
+    ReconnectRequired: ConnectionLifecycleState.cases.ReconnectRequired,
     Disconnected: {
       type: "final",
       schema: ConnectionLifecycleState.cases.Disconnected,
@@ -35,8 +42,10 @@ export const ConnectionLifecycleStates = Machine.state({
 });
 
 export const ConnectionLifecycleEvents = Schema.TaggedUnion({
-  LinkApproved: { at: Schema.DateTimeUtc },
-  LinkCancelled: { at: Schema.DateTimeUtc },
+  LinkCompleted: { at: Schema.DateTimeUtc, credentialGeneration: ConnectionCredentialGeneration },
+  ReconnectRequired: { at: Schema.DateTimeUtc },
+  Reconnected: { at: Schema.DateTimeUtc, credentialGeneration: ConnectionCredentialGeneration },
+  Disconnected: { at: Schema.DateTimeUtc },
 });
 
 export const ConnectionLifecycleWorkflow = Machine.make({
@@ -48,15 +57,16 @@ export const ConnectionLifecycleWorkflow = Machine.make({
   states: {
     Linking: {
       on: {
-        LinkApproved: {
+        LinkCompleted: {
           target: "Ready",
           data: ({ state, event }) => ({
             provider: state.provider,
             approvedAt: event.at,
+            credentialGeneration: event.credentialGeneration,
             updatedAt: event.at,
           }),
         },
-        LinkCancelled: {
+        Disconnected: {
           target: "Disconnected",
           data: ({ state, event }) => ({
             provider: state.provider,
@@ -68,7 +78,46 @@ export const ConnectionLifecycleWorkflow = Machine.make({
     },
     Ready: {
       on: {
-        LinkCancelled: {
+        ReconnectRequired: {
+          target: "ReconnectRequired",
+          data: ({ state, event }) => ({
+            provider: state.provider,
+            reconnectRequiredAt: event.at,
+            credentialGeneration: state.credentialGeneration,
+            updatedAt: event.at,
+          }),
+        },
+        Reconnected: {
+          target: "Ready",
+          data: ({ state, event }) => ({
+            provider: state.provider,
+            approvedAt: event.at,
+            credentialGeneration: event.credentialGeneration,
+            updatedAt: event.at,
+          }),
+        },
+        Disconnected: {
+          target: "Disconnected",
+          data: ({ state, event }) => ({
+            provider: state.provider,
+            disconnectedAt: event.at,
+            updatedAt: event.at,
+          }),
+        },
+      },
+    },
+    ReconnectRequired: {
+      on: {
+        Reconnected: {
+          target: "Ready",
+          data: ({ state, event }) => ({
+            provider: state.provider,
+            approvedAt: event.at,
+            credentialGeneration: event.credentialGeneration,
+            updatedAt: event.at,
+          }),
+        },
+        Disconnected: {
           target: "Disconnected",
           data: ({ state, event }) => ({
             provider: state.provider,

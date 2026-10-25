@@ -21,6 +21,7 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
   const [pairingCode, setPairingCode] = createSignal("");
   const [approvingId, setApprovingId] = createSignal<string>();
   const [cancelingId, setCancelingId] = createSignal<string>();
+  const [disconnectingId, setDisconnectingId] = createSignal<string>();
   let pendingRequestId: string | undefined;
 
   const reportFailure = (error: unknown): void => {
@@ -51,6 +52,15 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     onError: reportFailure,
     onSettled: () => setApprovingId(undefined),
   }));
+  const disconnect = useMutation(() => ({
+    ...connectionMutations.disconnect(props.remote()),
+    onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
+      storeRefreshedConnections(change, variables, onMutateResult, context);
+      setFeedback({ type: "success", message: "Connection disconnected." });
+    },
+    onError: reportFailure,
+    onSettled: () => setDisconnectingId(undefined),
+  }));
   const cancel = useMutation(() => ({
     ...connectionMutations.cancel(props.remote()),
     onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
@@ -70,6 +80,7 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     isStarting: () => start.isPending,
     approvingId,
     cancelingId,
+    disconnectingId,
     refresh: () => props.onRefresh(),
     changePairingCode: (value: string) => setPairingCode(value),
     startLinking: () => {
@@ -95,6 +106,11 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
       setFeedback({ type: "pending", message: "Cancelling pairing…" });
       void cancel.mutate({ id: connection.id });
     },
+    disconnectLinking: (connection: ConnectionView) => {
+      setDisconnectingId(connection.id);
+      setFeedback({ type: "pending", message: "Disconnecting…" });
+      void disconnect.mutate({ id: connection.id });
+    },
   };
 }
 
@@ -107,11 +123,13 @@ export type ConnectionsPageController = {
   readonly isStarting: Accessor<boolean>;
   readonly approvingId: Accessor<string | undefined>;
   readonly cancelingId: Accessor<string | undefined>;
+  readonly disconnectingId: Accessor<string | undefined>;
   readonly refresh: () => Promise<void>;
   readonly changePairingCode: (value: string) => void;
   readonly startLinking: () => void;
   readonly approveLinking: (connection: ConnectionView) => void;
   readonly cancelLinking: (connection: ConnectionView) => void;
+  readonly disconnectLinking: (connection: ConnectionView) => void;
 };
 
 type ConnectionsPageOptions = {

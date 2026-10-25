@@ -118,14 +118,7 @@ function execute(signedIn: boolean): Effect.Effect<
   | {
       type: "error";
       error: {
-        type:
-          | "connection.create_failed"
-          | "connection.device_rejected"
-          | "connection.input_invalid"
-          | "connection.link_expired"
-          | "connection.link_rejected"
-          | "connection.not_found"
-          | "connection.persistence_failed";
+        type: ConnectionMutationError["type"];
       };
     }
   | {

@@ -49,8 +49,19 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
           kind: "rejected",
           message: "This connection is no longer available. Check the latest list before retrying.",
         };
+      case "connection.credential_generation_stale":
+        return {
+          kind: "rejected",
+          message: "This connection changed. Refresh the latest status before reconnecting.",
+        };
+      case "connection.provider_rejected":
+        return {
+          kind: "rejected",
+          message: "The provider rejected this helper session. Reconnect to continue.",
+        };
       case "connection.create_failed":
       case "connection.persistence_failed":
+      case "connection.provider_unavailable":
         break;
     }
   }

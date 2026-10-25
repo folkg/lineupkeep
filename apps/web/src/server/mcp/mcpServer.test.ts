@@ -196,7 +196,11 @@ const unavailableConnections: ConnectionsShape = {
   list: () => Effect.succeed([]),
   startLinking: () => Effect.succeed([]),
   cancelLinking: () => Effect.succeed([]),
-  approveLinking: () => Effect.succeed([]),
+  completeLinking: () => Effect.succeed([]),
+  reconnect: () => Effect.succeed([]),
+  disconnect: () => Effect.succeed([]),
+  discoverTeams: () => Effect.succeed([]),
+  listTeams: () => Effect.succeed([]),
 };
 
 function handle(

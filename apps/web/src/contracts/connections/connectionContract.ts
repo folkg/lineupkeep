@@ -1,8 +1,10 @@
 import type {
+  CompleteLinkingInput,
   ConnectionError,
   ConnectionIdInput,
   ConnectionStatus,
   Provider,
+  ReconnectInput,
   StartLinkingInput,
 } from "@lineupkeep/backend/connections/Connection";
 
@@ -16,6 +18,8 @@ export type ConnectionView = {
   readonly pairingCode?: string;
   readonly linkingExpiresAt?: string;
   readonly approvedAt?: string;
+  readonly credentialGeneration?: number;
+  readonly reconnectRequiredAt?: string;
   readonly disconnectedAt?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -28,6 +32,8 @@ export type ConnectionChangeView = {
 
 export type StartLinkingData = typeof StartLinkingInput.Encoded;
 export type ConnectionIdData = typeof ConnectionIdInput.Encoded;
+export type CompleteLinkingData = typeof CompleteLinkingInput.Encoded;
+export type ReconnectData = typeof ReconnectInput.Encoded;
 export type ConnectionMutationError = {
   readonly type:
     | ConnectionError["_tag"]

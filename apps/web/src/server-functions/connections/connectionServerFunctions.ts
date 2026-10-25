@@ -1,5 +1,10 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
-import { ConnectionIdInput, StartLinkingInput } from "@lineupkeep/backend/connections/Connection";
+import {
+  CompleteLinkingInput,
+  ConnectionIdInput,
+  ReconnectInput,
+  StartLinkingInput,
+} from "@lineupkeep/backend/connections/Connection";
 import { Connections } from "@lineupkeep/backend/connections/Connections";
 import { createServerFn } from "@tanstack/solid-start";
 import { getRequest } from "@tanstack/solid-start/server";
@@ -88,12 +93,86 @@ export const approveLinkingServerFn = createServerFn({ method: "POST" })
               AuthenticationInvalidResponse: (error) => Effect.die(error),
             }),
           );
-          const approved = yield* Connections.use((service) =>
-            service.approveLinking(userId, [input]),
+          const all = yield* Connections.use((service) => service.list(userId));
+          return {
+            connection: toConnectionView(connection),
+            connections: all.map(toConnectionView),
+          } satisfies ConnectionChangeView;
+        }),
+      mapConnectionError,
+    );
+  });
+
+export const completeLinkingServerFn = createServerFn({ method: "POST" })
+  .validator((raw: typeof CompleteLinkingInput.Encoded) =>
+    Schema.decodeResult(CompleteLinkingInput)(raw),
+  )
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "connections.complete_linking",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => ConnectionInputInvalid.make({})),
+          );
+          const completed = yield* Connections.use((service) =>
+            service.completeLinking(userId, [input]),
           );
           const all = yield* Connections.use((service) => service.list(userId));
           return {
-            connection: toConnectionView(Array.getUnsafe(approved, 0)),
+            connection: toConnectionView(Array.getUnsafe(completed, 0)),
+            connections: all.map(toConnectionView),
+          } satisfies ConnectionChangeView;
+        }),
+      mapConnectionError,
+    );
+  });
+
+export const reconnectServerFn = createServerFn({ method: "POST" })
+  .validator((raw: typeof ReconnectInput.Encoded) => Schema.decodeResult(ReconnectInput)(raw))
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "connections.reconnect",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => ConnectionInputInvalid.make({})),
+          );
+          const reconnected = yield* Connections.use((service) =>
+            service.reconnect(userId, [input]),
+          );
+          const all = yield* Connections.use((service) => service.list(userId));
+          return {
+            connection: toConnectionView(Array.getUnsafe(reconnected, 0)),
+            connections: all.map(toConnectionView),
+          } satisfies ConnectionChangeView;
+        }),
+      mapConnectionError,
+    );
+  });
+
+export const disconnectServerFn = createServerFn({ method: "POST" })
+  .validator((raw: typeof ConnectionIdInput.Encoded) => Schema.decodeResult(ConnectionIdInput)(raw))
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "connections.disconnect",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => ConnectionInputInvalid.make({})),
+          );
+          const disconnected = yield* Connections.use((service) =>
+            service.disconnect(userId, [input]),
+          );
+          const all = yield* Connections.use((service) => service.list(userId));
+          return {
+            connection: toConnectionView(Array.getUnsafe(disconnected, 0)),
             connections: all.map(toConnectionView),
           } satisfies ConnectionChangeView;
         }),

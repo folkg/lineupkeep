@@ -150,6 +150,12 @@ export function mutateRows<Table extends PgTable, Row, E, RD, RE, R>(
 }
 
 function arrayParameter(column: PgColumn, values: ReadonlyArray<unknown>): SQL {
+  if (values.every((value) => value === null || value === undefined)) {
+    return sql`ARRAY[${sql.join(
+      values.map(() => sql`NULL`),
+      sql`, `,
+    )}]::${sql.raw(column.getSQLType())}[]`;
+  }
   const array = pgTable("batch_parameter", { value: column.toBuilder().array() }).value;
   return sql`${sql.param(values, array)}::${sql.raw(column.getSQLType())}[]`;
 }

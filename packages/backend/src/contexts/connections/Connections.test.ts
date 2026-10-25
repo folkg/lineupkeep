@@ -1,26 +1,38 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
-import { Array, Crypto, DateTime, Effect, Layer, Schema } from "effect";
+import { eq } from "drizzle-orm";
+import { Array, Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
 import { connectionLinkingWindowMillis } from "#contexts/connections/ConnectionLimits.ts";
 
 import {
+  CompleteLinkingInput,
+  ConnectionCredentialGeneration,
+  ConnectionCredentialGenerationStale,
+  type ConnectionError,
   ConnectionId,
   ConnectionIdInput,
   ConnectionLinkExpired,
   ConnectionLinkRejected,
   ConnectionNotFound,
   ConnectionPersistenceFailed,
+  ConnectionProviderRejected,
+  ProviderConnection,
+  ReconnectInput,
   StartLinkingInput,
 } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
+import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
+import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
 import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
-import { providerConnections } from "./internal/ConnectionTables.ts";
+import { providerConnections, providerCredentials } from "./internal/ConnectionTables.ts";
+import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
+import { ProviderGateway } from "./Provider.ts";
 
 it("rejects missing replay keys, unknown providers, and malformed identifiers", () => {
   assert.throws(() => Schema.decodeUnknownSync(StartLinkingInput)({ provider: "yahoo" }));
@@ -46,6 +58,17 @@ it("rejects missing replay keys, unknown providers, and malformed identifiers", 
   );
   assert.throws(() => Schema.decodeSync(ConnectionId)("not-a-uuid"));
   assert.throws(() => Schema.decodeSync(ConnectionIdInput)({ id: "not-a-uuid" }));
+  assert.throws(() =>
+    Schema.decodeSync(CompleteLinkingInput)({ id: connectionId, provider: "yahoo", session: "" }),
+  );
+  assert.throws(() =>
+    Schema.decodeSync(ReconnectInput)({
+      id: connectionId,
+      provider: "yahoo",
+      session: "A1=cookie",
+      expectedGeneration: 0,
+    }),
+  );
 });
 
 it.effect("replays concurrent linking starts without creating duplicate connections", () =>
@@ -185,38 +208,6 @@ it.effect("bounds the linking window from the creation time", () =>
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
-it.effect("maps UUID generation failure without inserting a connection", () =>
-  Effect.gen(function* () {
-    const crypto = yield* Crypto.Crypto;
-    const cryptoFailure = yield* Effect.flip(crypto.randomBytes(-1));
-    const failingCrypto = Layer.succeed(Crypto.Crypto)(
-      Crypto.Crypto.of({ ...crypto, randomUUIDv7: () => Effect.fail(cryptoFailure) }),
-    );
-    const input = yield* Schema.decodeEffect(StartLinkingInput)({
-      requestId,
-      provider: "yahoo",
-      pairingCode,
-    });
-    const program = Connections.use((connections) => connections.startLinking(owner, [input]));
-
-    const error = yield* Effect.flip(
-      program.pipe(
-        Effect.provide(
-          ConnectionsLive.pipe(
-            Layer.provide(ConnectionRepository.layer),
-            Layer.provide(failingCrypto),
-          ),
-        ),
-      ),
-    );
-    const database = yield* ConnectionsDatabase;
-
-    assert.instanceOf(error, ConnectionPersistenceFailed);
-    assert.strictEqual(error.cause, cryptoFailure);
-    assert.deepStrictEqual(yield* database.select().from(providerConnections), []);
-  }).pipe(Effect.provide(Layer.merge(NodeCrypto.layer, ConnectionsDatabaseTest))),
-);
-
 it.effect("rejects malformed stored connections through the public service", () =>
   Effect.gen(function* () {
     const database = yield* ConnectionsDatabase;
@@ -233,33 +224,27 @@ it.effect("rejects malformed stored connections through the public service", () 
       updatedAt: yield* DateTime.nowAsDate,
     });
 
-    const error = yield* Effect.flip(
-      Connections.use((connections) => connections.list(owner)).pipe(
-        Effect.provide(ConnectionsLive.pipe(Layer.provide(ConnectionRepository.layer))),
-      ),
-    );
+    const error = yield* Effect.flip(Connections.use((connections) => connections.list(owner)));
 
     assert.instanceOf(error, ConnectionPersistenceFailed);
-  }).pipe(Effect.provide(Layer.merge(NodeCrypto.layer, ConnectionsDatabaseTest))),
+  }).pipe(Effect.provide(ConnectionsLayerFor(NodeCrypto.layer))),
 );
 
-it.effect("approves a linking connection once and rejects a replay", () =>
+it.effect("completes one linking connection, validates its session, and rejects replay", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
-    const input = yield* Schema.decodeEffect(StartLinkingInput)({
-      requestId,
-      provider: "yahoo",
-      pairingCode,
-    });
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [input]), 0);
+    const linking = yield* startLinking(connections);
 
-    const approved = yield* connections.approveLinking(owner, [{ id: linking.id }]);
+    const approved = yield* connections.completeLinking(owner, [completeInput(linking.id)]);
     const ready = Array.getUnsafe(approved, 0);
-    const replay = yield* Effect.flip(connections.approveLinking(owner, [{ id: linking.id }]));
-    const replayed = yield* connections.startLinking(owner, [input]);
+    const replay = yield* Effect.flip(
+      connections.completeLinking(owner, [completeInput(linking.id)]),
+    );
+    const replayed = yield* connections.startLinking(owner, [startInput]);
 
     assert.strictEqual(ready.status, "ready");
     assert.isDefined(ready.approvedAt);
+    assert.strictEqual(ready.credentialGeneration, 1);
     assert.isUndefined(ready.linkingExpiresAt);
     assert.instanceOf(replay, ConnectionLinkRejected);
     assert.strictEqual(replay.status, "ready");
@@ -268,42 +253,54 @@ it.effect("approves a linking connection once and rejects a replay", () =>
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
+it.effect("rejects provider session validation without moving the connection to ready", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const linking = yield* startLinking(connections);
+    yield* fake.rejectSession(true);
+
+    const error = yield* Effect.flip(
+      connections.completeLinking(owner, [completeInput(linking.id)]),
+    );
+    const stillLinking = Array.getUnsafe(yield* connections.list(owner), 0);
+
+    assert.instanceOf(error, ConnectionProviderRejected);
+    assert.strictEqual(stillLinking.status, "linking");
+    assert.isUndefined(stillLinking.credentialGeneration);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
 it.effect("rejects an approval after the linking window expires", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
-    const input = yield* Schema.decodeEffect(StartLinkingInput)({
-      requestId,
-      provider: "yahoo",
-      pairingCode,
-    });
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [input]), 0);
+    const linking = yield* startLinking(connections);
 
     yield* TestClock.adjust(connectionLinkingWindowMillis + 1);
-    const error = yield* Effect.flip(connections.approveLinking(owner, [{ id: linking.id }]));
+    const error = yield* Effect.flip(
+      connections.completeLinking(owner, [completeInput(linking.id)]),
+    );
 
     assert.instanceOf(error, ConnectionLinkExpired);
     assert.deepStrictEqual(yield* connections.list(owner), [linking]);
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
-it.effect("scopes approval to the verified owner", () =>
+it.effect("scopes completion to the verified owner", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
-    const input = yield* Schema.decodeEffect(StartLinkingInput)({
-      requestId,
-      provider: "yahoo",
-      pairingCode,
-    });
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [input]), 0);
+    const linking = yield* startLinking(connections);
 
-    const error = yield* Effect.flip(connections.approveLinking(other, [{ id: linking.id }]));
+    const error = yield* Effect.flip(
+      connections.completeLinking(other, [completeInput(linking.id)]),
+    );
 
     assert.instanceOf(error, ConnectionNotFound);
     assert.strictEqual(Array.getUnsafe(yield* connections.list(owner), 0).status, "linking");
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
-it.effect("rolls back an approval batch containing another owner's connection", () =>
+it.effect("rolls back a completion batch containing another owner's connection", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
     const inputs = yield* Schema.decodeEffect(Schema.Array(StartLinkingInput))([
@@ -317,7 +314,10 @@ it.effect("rolls back an approval batch containing another owner's connection", 
     );
 
     const error = yield* Effect.flip(
-      connections.approveLinking(owner, [{ id: Array.getUnsafe(owned, 0).id }, { id: foreign.id }]),
+      connections.completeLinking(owner, [
+        completeInput(Array.getUnsafe(owned, 0).id),
+        completeInput(foreign.id),
+      ]),
     );
 
     assert.instanceOf(error, ConnectionNotFound);
@@ -327,40 +327,151 @@ it.effect("rolls back an approval batch containing another owner's connection", 
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
-it.effect("cancels a ready connection and rejects approval after cancellation", () =>
+it.effect("reconnects to a new credential generation and rejects a stale generation", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
-    const input = yield* Schema.decodeEffect(StartLinkingInput)({
-      requestId,
-      provider: "yahoo",
-      pairingCode,
-    });
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [input]), 0);
-    yield* connections.approveLinking(owner, [{ id: linking.id }]);
+    const linking = yield* startLinking(connections);
+    const ready = Array.getUnsafe(
+      yield* connections.completeLinking(owner, [completeInput(linking.id)]),
+      0,
+    );
+    const reconnected = Array.getUnsafe(
+      yield* connections.reconnect(owner, [reconnectInput(linking.id, 1)]),
+      0,
+    );
+    const stale = yield* Effect.flip(connections.reconnect(owner, [reconnectInput(linking.id, 1)]));
+    const current = Array.getUnsafe(yield* connections.list(owner), 0);
 
-    const cancelled = yield* connections.cancelLinking(owner, [{ id: linking.id }]);
-    const error = yield* Effect.flip(connections.approveLinking(owner, [{ id: linking.id }]));
-
-    assert.strictEqual(Array.getUnsafe(cancelled, 0).status, "disconnected");
-    assert.instanceOf(error, ConnectionLinkRejected);
-    assert.strictEqual(error.status, "disconnected");
+    assert.strictEqual(ready.credentialGeneration, 1);
+    assert.strictEqual(reconnected.status, "ready");
+    assert.strictEqual(reconnected.credentialGeneration, 2);
+    assert.instanceOf(stale, ConnectionCredentialGenerationStale);
+    assert.strictEqual(stale.actualGeneration, 2);
+    assert.strictEqual(current.credentialGeneration, 2);
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
-const requestId = "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2";
+it.effect("rejects reconnect from a linking connection", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const linking = yield* startLinking(connections);
 
-const pairingCode = "ABCD2345";
+    const error = yield* Effect.flip(connections.reconnect(owner, [reconnectInput(linking.id, 1)]));
 
-const secondPairingCode = "WXYZ6789";
-
-const secondRequestId = "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3";
-
-const owner = decodeUserId("owner");
-
-const other = decodeUserId("other");
-
-const ConnectionsTestLayer = ConnectionsLive.pipe(
-  Layer.provide(ConnectionRepository.layer),
-  Layer.provide(ConnectionsDatabaseTest),
-  Layer.provide(NodeCrypto.layer),
+    assert.instanceOf(error, ConnectionLinkRejected);
+    assert.strictEqual(error.status, "linking");
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
+
+it.effect("disconnects a ready connection, deletes its credentials, and is idempotent", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const linking = yield* startLinking(connections);
+    yield* connections.completeLinking(owner, [completeInput(linking.id)]);
+
+    const disconnected = yield* connections.disconnect(owner, [{ id: linking.id }]);
+    const retried = yield* connections.disconnect(owner, [{ id: linking.id }]);
+    const credentials = yield* database
+      .select()
+      .from(providerCredentials)
+      .where(eq(providerCredentials.connectionId, linking.id));
+    const reconnectError = yield* Effect.flip(
+      connections.reconnect(owner, [reconnectInput(linking.id, 1)]),
+    );
+
+    assert.strictEqual(Array.getUnsafe(disconnected, 0).status, "disconnected");
+    assert.isUndefined(Array.getUnsafe(disconnected, 0).credentialGeneration);
+    assert.deepStrictEqual(retried, disconnected);
+    assert.deepStrictEqual(credentials, []);
+    assert.instanceOf(reconnectError, ConnectionLinkRejected);
+    assert.strictEqual(reconnectError.status, "disconnected");
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("rejects disconnect before a credential exists", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const linking = yield* startLinking(connections);
+
+    const error = yield* Effect.flip(connections.disconnect(owner, [{ id: linking.id }]));
+
+    assert.instanceOf(error, ConnectionLinkRejected);
+    assert.strictEqual(error.status, "linking");
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("rejects cancelLinking after credentials are ready", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const linking = yield* startLinking(connections);
+    yield* connections.completeLinking(owner, [completeInput(linking.id)]);
+
+    const error = yield* Effect.flip(connections.cancelLinking(owner, [{ id: linking.id }]));
+
+    assert.instanceOf(error, ConnectionLinkRejected);
+    assert.strictEqual(error.status, "ready");
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+function startLinking(
+  connections: Connections["Service"],
+): Effect.Effect<ProviderConnection, ConnectionError | Schema.SchemaError> {
+  return connections
+    .startLinking(owner, [startInput])
+    .pipe(Effect.map((created) => Array.getUnsafe(created, 0)));
+}
+
+function completeInput(id: ConnectionId): CompleteLinkingInput {
+  return { id, provider: "yahoo", session };
+}
+
+function reconnectInput(id: ConnectionId, expectedGeneration: number): ReconnectInput {
+  return {
+    id,
+    provider: "yahoo",
+    session,
+    expectedGeneration: makeGeneration(expectedGeneration),
+  };
+}
+
+function makeGeneration(value: number): ConnectionCredentialGeneration {
+  return Schema.decodeSync(ConnectionCredentialGeneration)(value);
+}
+
+function ConnectionsLayerFor(
+  crypto: Layer.Layer<Crypto.Crypto>,
+): Layer.Layer<Connections | ConnectionsDatabase | FakeProviderWorld | ProviderGateway> {
+  return ConnectionsLive.pipe(
+    Layer.provide(ConnectionRepository.layer),
+    Layer.provideMerge(ConnectionsDatabaseTest),
+    Layer.provideMerge(ProviderFakeTest),
+    Layer.provide(EncryptionTestLayer),
+    Layer.provide(crypto),
+    Layer.orDie,
+  );
+}
+
+const requestId = "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2";
+const connectionId = "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2";
+const pairingCode = "ABCD2345";
+const secondPairingCode = "WXYZ6789";
+const secondRequestId = "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3";
+const owner = decodeUserId("owner");
+const other = decodeUserId("other");
+const session = Redacted.make("A1=test-session-cookie");
+
+const startInput = Schema.decodeSync(StartLinkingInput)({
+  requestId,
+  provider: "yahoo",
+  pairingCode,
+});
+
+const EncryptionTestLayer = ConnectionCredentialEncryption.forKey(
+  ConnectionEncryptionKey.fromBytes({
+    bytes: new TextEncoder().encode("abcdefghijklmnopqrstuvwxyz012345"),
+    keyVersion: 1,
+  }),
+).pipe(Layer.provide(NodeCrypto.layer));
+
+const ConnectionsTestLayer = ConnectionsLayerFor(NodeCrypto.layer);

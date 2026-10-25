@@ -1,9 +1,9 @@
 import { createSelectSchema } from "drizzle-orm/effect-schema";
-import { index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { Effect, Schema, SchemaParser, SchemaTransformation, Struct } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
-import { ConnectionId } from "#contexts/connections/Connection.ts";
+import { ConnectionCredentialGeneration, ConnectionId } from "#contexts/connections/Connection.ts";
 
 import { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
 
@@ -14,10 +14,14 @@ export const providerConnections = pgTable(
     userId: text("user_id").notNull(),
     requestId: text("request_id").notNull(),
     provider: text("provider", { enum: ["yahoo"] }).notNull(),
-    status: text("status", { enum: ["linking", "ready", "disconnected"] }).notNull(),
+    status: text("status", {
+      enum: ["linking", "ready", "reconnect-required", "disconnected"],
+    }).notNull(),
     pairingCode: text("pairing_code").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
+    credentialGeneration: integer("credential_generation"),
+    reconnectRequiredAt: timestamp("reconnect_required_at", { withTimezone: true }),
     disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -28,12 +32,30 @@ export const providerConnections = pgTable(
   ],
 );
 
+export const providerCredentials = pgTable(
+  "provider_credentials",
+  {
+    connectionId: text("connection_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: ["yahoo"] }).notNull(),
+    generation: integer("generation").notNull(),
+    envelope: text("envelope").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("provider_credentials_user_id_connection_id_idx").on(table.userId, table.connectionId),
+  ],
+);
+
 const Row = createSelectSchema(providerConnections, {
   id: ConnectionId,
   userId: UserId,
   pairingCode: Schema.String,
   expiresAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   approvedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  credentialGeneration: Schema.NullOr(ConnectionCredentialGeneration),
+  reconnectRequiredAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   disconnectedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   createdAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
@@ -58,7 +80,19 @@ export const ConnectionRow = Row.pipe(
             case "linking":
               return { _tag: "Linking", ...content, expiresAt: row.expiresAt };
             case "ready":
-              return { _tag: "Ready", ...content, approvedAt: row.approvedAt };
+              return {
+                _tag: "Ready",
+                ...content,
+                approvedAt: row.approvedAt,
+                credentialGeneration: row.credentialGeneration,
+              };
+            case "reconnect-required":
+              return {
+                _tag: "ReconnectRequired",
+                ...content,
+                reconnectRequiredAt: row.reconnectRequiredAt,
+                credentialGeneration: row.credentialGeneration,
+              };
             case "disconnected":
               return { _tag: "Disconnected", ...content, disconnectedAt: row.disconnectedAt };
           }
@@ -85,6 +119,8 @@ export const ConnectionRow = Row.pipe(
                   status: "linking" as const,
                   expiresAt: state.expiresAt,
                   approvedAt: null,
+                  credentialGeneration: null,
+                  reconnectRequiredAt: null,
                   disconnectedAt: null,
                   updatedAt: state.updatedAt,
                 };
@@ -95,6 +131,20 @@ export const ConnectionRow = Row.pipe(
                   status: "ready" as const,
                   expiresAt: null,
                   approvedAt: state.approvedAt,
+                  credentialGeneration: state.credentialGeneration,
+                  reconnectRequiredAt: null,
+                  disconnectedAt: null,
+                  updatedAt: state.updatedAt,
+                };
+              case "ReconnectRequired":
+                return {
+                  ...identity,
+                  provider: state.provider,
+                  status: "reconnect-required" as const,
+                  expiresAt: null,
+                  approvedAt: null,
+                  credentialGeneration: state.credentialGeneration,
+                  reconnectRequiredAt: state.reconnectRequiredAt,
                   disconnectedAt: null,
                   updatedAt: state.updatedAt,
                 };
@@ -105,6 +155,8 @@ export const ConnectionRow = Row.pipe(
                   status: "disconnected" as const,
                   expiresAt: null,
                   approvedAt: null,
+                  credentialGeneration: null,
+                  reconnectRequiredAt: null,
                   disconnectedAt: state.disconnectedAt,
                   updatedAt: state.updatedAt,
                 };

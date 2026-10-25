@@ -4,16 +4,21 @@ import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect"
 
 import { UserId } from "#contexts/auth/User.ts";
 import {
+  ConnectionCredentialGeneration,
   ConnectionCreateFailed,
+  ConnectionCredentialGenerationStale,
   ConnectionLinkExpired,
   ConnectionLinkRejected,
   ConnectionNotFound,
   ConnectionPersistenceFailed,
+  Provider,
   decodeConnectionId,
 } from "#contexts/connections/Connection.ts";
-import type {
-  ConnectionError,
+import {
+  ConnectionId,
+  type ConnectionError,
   ConnectionIdInput,
+  ConnectionStatus,
   ProviderConnection,
   StartLinkingInput,
 } from "#contexts/connections/Connection.ts";
@@ -32,7 +37,22 @@ import {
 } from "./ConnectionLifecycleWorkflow.ts";
 import type { ConnectionLifecycleRequest } from "./ConnectionLifecycleWorkflow.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
-import { ConnectionRow, providerConnections } from "./ConnectionTables.ts";
+import { ConnectionRow, providerConnections, providerCredentials } from "./ConnectionTables.ts";
+
+export type CompleteLinkingCommand = {
+  readonly id: ConnectionId;
+  readonly provider: Provider;
+  readonly envelope: string;
+};
+
+export type ReconnectCommand = CompleteLinkingCommand & {
+  readonly expectedGeneration: ConnectionCredentialGeneration;
+};
+
+type ReconnectRequiredCommand = {
+  readonly id: ConnectionId;
+  readonly expectedGeneration: ConnectionCredentialGeneration;
+};
 
 export class ConnectionRepository extends Context.Service<ConnectionRepository>()(
   "@lineupkeep/backend/contexts/connections/internal/ConnectionRepository",
@@ -58,6 +78,69 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         return yield* Effect.forEach(rows, toConnection);
       });
 
+      const loadOwned = Effect.fn("ConnectionRepository.loadOwned")(function* (
+        userId: UserId,
+        ids: ReadonlyArray<ConnectionId>,
+      ) {
+        const uniqueIds = [...new Set(ids)];
+        if (!Array.isArrayNonEmpty(uniqueIds)) {
+          return [];
+        }
+        const rows = yield* database
+          .select()
+          .from(providerConnections)
+          .where(
+            and(eq(providerConnections.userId, userId), anyOf(providerConnections.id, uniqueIds)),
+          )
+          .orderBy(asc(providerConnections.id))
+          .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+        const byId = new Map(
+          yield* Effect.forEach(rows, (row) =>
+            Schema.decodeEffect(ConnectionRow)(row).pipe(
+              Effect.map((record) => [record.id, record] as const),
+              Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+            ),
+          ),
+        );
+        return yield* Effect.forEach(ids, (id) => {
+          const record = byId.get(id);
+          return record === undefined ? ConnectionNotFound.make({ id }) : Effect.succeed(record);
+        });
+      });
+
+      const loadCredential = Effect.fn("ConnectionRepository.loadCredential")(function* (
+        userId: UserId,
+        connectionId: ConnectionId,
+      ) {
+        const rows = yield* database
+          .select({
+            provider: providerConnections.provider,
+            generation: providerCredentials.generation,
+            envelope: providerCredentials.envelope,
+          })
+          .from(providerConnections)
+          .innerJoin(
+            providerCredentials,
+            eq(providerCredentials.connectionId, providerConnections.id),
+          )
+          .where(
+            and(
+              eq(providerConnections.userId, userId),
+              eq(providerConnections.id, connectionId),
+              eq(providerConnections.status, "ready"),
+            ),
+          )
+          .limit(1)
+          .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+        const active = rows[0];
+        if (active === undefined) {
+          return yield* ConnectionNotFound.make({ id: connectionId });
+        }
+        return yield* Schema.decodeEffect(ActiveCredential)(active).pipe(
+          Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+        );
+      });
+
       const startLinking = Effect.fn("ConnectionRepository.startLinking")(function* (
         userId: UserId,
         inputs: ReadonlyArray<StartLinkingInput>,
@@ -77,6 +160,8 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
             pairingCode: input.pairingCode,
             expiresAt: DateTime.toDateUtc(expiresAt),
             approvedAt: null,
+            credentialGeneration: null,
+            reconnectRequiredAt: null,
             disconnectedAt: null,
             createdAt: DateTime.toDateUtc(now),
             updatedAt: DateTime.toDateUtc(now),
@@ -147,48 +232,63 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         const at = yield* DateTime.now;
         return yield* database
           .transaction((transaction) =>
-            mutateRows(transaction, providerConnections, {
-              where: eq(providerConnections.userId, userId),
-              ids,
-              codec: ConnectionRow,
-              plan: (locked) =>
-                Effect.gen(function* () {
-                  const targets: Array<{
-                    readonly id: (typeof ids)[number];
-                    readonly record: typeof ConnectionRow.Type;
-                    readonly snapshot: Machine.Snapshot<typeof ConnectionLifecycleStates>;
-                  }> = [];
-                  const unchanged: Array<typeof ConnectionRow.Type> = [];
-                  for (const id of ids) {
-                    const record = locked.get(id);
-                    if (record === undefined) {
-                      return yield* ConnectionNotFound.make({ id });
+            Effect.gen(function* () {
+              const rows = yield* mutateRows(transaction, providerConnections, {
+                where: eq(providerConnections.userId, userId),
+                ids,
+                codec: ConnectionRow,
+                plan: (locked) =>
+                  Effect.gen(function* () {
+                    const targets: Array<LockedTarget> = [];
+                    const unchanged: Array<typeof ConnectionRow.Type> = [];
+                    for (const id of ids) {
+                      const record = locked.get(id);
+                      if (record === undefined) {
+                        return yield* ConnectionNotFound.make({ id });
+                      }
+                      if (record.state._tag === "Disconnected") {
+                        unchanged.push(record);
+                        continue;
+                      }
+                      if (record.state._tag !== "Linking") {
+                        return yield* ConnectionLinkRejected.make({
+                          id,
+                          status: connectionStatus(record.state),
+                        });
+                      }
+                      const snapshot = yield* snapshotOf(
+                        ConnectionLifecycleWorkflow,
+                        record.state,
+                      ).pipe(
+                        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                      );
+                      targets.push({ id, record, snapshot });
                     }
-                    if (record.state._tag === "Disconnected") {
-                      unchanged.push(record);
-                      continue;
-                    }
-                    const snapshot = yield* snapshotOf(
+                    const disconnected: ConnectionLifecycleRequest =
+                      ConnectionLifecycleEvents.cases.Disconnected.make({ at });
+                    const planned = yield* planBatch(
                       ConnectionLifecycleWorkflow,
-                      record.state,
+                      targets,
+                      (_target) => disconnected,
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-                    targets.push({ id, record, snapshot });
-                  }
-                  const cancelled: ConnectionLifecycleRequest =
-                    ConnectionLifecycleEvents.cases.LinkCancelled.make({ at });
-                  const planned = yield* planBatch(
-                    ConnectionLifecycleWorkflow,
-                    targets,
-                    (_target) => cancelled,
-                  ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-                  return [
-                    ...unchanged,
-                    ...planned.map(({ row, snapshot }) => ({
-                      ...row.record,
-                      state: snapshot.state.value,
-                    })),
-                  ];
-                }),
+                    return [
+                      ...unchanged,
+                      ...planned.map(({ row, snapshot }) => ({
+                        ...row.record,
+                        state: snapshot.state.value,
+                      })),
+                    ];
+                  }),
+              });
+              yield* transaction
+                .delete(providerCredentials)
+                .where(
+                  and(
+                    eq(providerCredentials.userId, userId),
+                    anyOf(providerCredentials.connectionId, ids),
+                  ),
+                );
+              return orderConnections(rows, ids);
             }),
           )
           .pipe(
@@ -196,17 +296,202 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
               cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
             ),
             mapTransactionError,
-            Effect.map((rows) => {
-              const byId = new Map(rows.map((row) => [row.id, row]));
-              return ids.flatMap((id) => {
-                const row = byId.get(id);
-                return row === undefined ? [] : [recordToConnection(row, row.state)];
-              });
-            }),
+            Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
           );
       });
 
-      const approveLinking = Effect.fn("ConnectionRepository.approveLinking")(function* (
+      const completeLinking = Effect.fn("ConnectionRepository.completeLinking")(function* (
+        userId: UserId,
+        commands: ReadonlyArray<CompleteLinkingCommand>,
+      ) {
+        if (commands.length === 0) {
+          return [];
+        }
+        const byId = new Map(commands.map((command) => [command.id, command]));
+        const ids = [...byId.keys()];
+        if (!Array.isArrayNonEmpty(ids)) {
+          return [];
+        }
+        const now = yield* DateTime.now;
+        return yield* database
+          .transaction((transaction) =>
+            Effect.gen(function* () {
+              const rows = yield* mutateRows(transaction, providerConnections, {
+                where: eq(providerConnections.userId, userId),
+                ids,
+                codec: ConnectionRow,
+                plan: (locked) =>
+                  Effect.gen(function* () {
+                    const targets: Array<LockedTarget> = [];
+                    for (const id of ids) {
+                      const record = locked.get(id);
+                      const command = byId.get(id);
+                      if (record === undefined || command === undefined) {
+                        return yield* ConnectionNotFound.make({ id });
+                      }
+                      if (record.state._tag !== "Linking") {
+                        return yield* ConnectionLinkRejected.make({
+                          id,
+                          status: connectionStatus(record.state),
+                        });
+                      }
+                      if (
+                        DateTime.toEpochMillis(record.state.expiresAt) <=
+                        DateTime.toEpochMillis(now)
+                      ) {
+                        return yield* ConnectionLinkExpired.make({ id });
+                      }
+                      const snapshot = yield* snapshotOf(
+                        ConnectionLifecycleWorkflow,
+                        record.state,
+                      ).pipe(
+                        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                      );
+                      targets.push({ id, record, snapshot });
+                    }
+                    const completed: ConnectionLifecycleRequest =
+                      ConnectionLifecycleEvents.cases.LinkCompleted.make({
+                        at: now,
+                        credentialGeneration: makeCredentialGeneration(1),
+                      });
+                    const planned = yield* planBatch(
+                      ConnectionLifecycleWorkflow,
+                      targets,
+                      (_target) => completed,
+                    ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+                    return planned.map(({ row, snapshot }) => ({
+                      ...row.record,
+                      state: snapshot.state.value,
+                    }));
+                  }),
+              });
+              const credentials = credentialRows(rows, byId, now);
+              yield* transaction
+                .delete(providerCredentials)
+                .where(
+                  and(
+                    eq(providerCredentials.userId, userId),
+                    anyOf(providerCredentials.connectionId, ids),
+                  ),
+                );
+              yield* chunked(credentials, maxInsertRows(providerCredentials), (chunk) =>
+                transaction.insert(providerCredentials).values(chunk).returning(),
+              );
+              return orderConnections(rows, ids);
+            }),
+          )
+          .pipe(
+            Effect.mapError((cause) =>
+              cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
+            ),
+            mapTransactionError,
+            Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
+          );
+      });
+
+      const reconnect = Effect.fn("ConnectionRepository.reconnect")(function* (
+        userId: UserId,
+        commands: ReadonlyArray<ReconnectCommand>,
+      ) {
+        if (commands.length === 0) {
+          return [];
+        }
+        const byId = new Map(commands.map((command) => [command.id, command]));
+        const ids = [...byId.keys()];
+        if (!Array.isArrayNonEmpty(ids)) {
+          return [];
+        }
+        const now = yield* DateTime.now;
+        return yield* database
+          .transaction((transaction) =>
+            Effect.gen(function* () {
+              const rows = yield* mutateRows(transaction, providerConnections, {
+                where: eq(providerConnections.userId, userId),
+                ids,
+                codec: ConnectionRow,
+                plan: (locked) =>
+                  Effect.gen(function* () {
+                    const targets: Array<LockedTarget> = [];
+                    const generations = new Map<string, ConnectionCredentialGeneration>();
+                    for (const id of ids) {
+                      const record = locked.get(id);
+                      const command = byId.get(id);
+                      if (record === undefined || command === undefined) {
+                        return yield* ConnectionNotFound.make({ id });
+                      }
+                      if (
+                        record.state._tag !== "Ready" &&
+                        record.state._tag !== "ReconnectRequired"
+                      ) {
+                        return yield* ConnectionLinkRejected.make({
+                          id,
+                          status: connectionStatus(record.state),
+                        });
+                      }
+                      if (record.state.credentialGeneration !== command.expectedGeneration) {
+                        return yield* ConnectionCredentialGenerationStale.make({
+                          id,
+                          expectedGeneration: command.expectedGeneration,
+                          actualGeneration: record.state.credentialGeneration,
+                        });
+                      }
+                      generations.set(
+                        id,
+                        makeCredentialGeneration(record.state.credentialGeneration + 1),
+                      );
+                      const snapshot = yield* snapshotOf(
+                        ConnectionLifecycleWorkflow,
+                        record.state,
+                      ).pipe(
+                        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                      );
+                      targets.push({ id, record, snapshot });
+                    }
+                    const planned = yield* planBatch(
+                      ConnectionLifecycleWorkflow,
+                      targets,
+                      (target) => {
+                        const credentialGeneration = generations.get(target.id);
+                        if (credentialGeneration === undefined) {
+                          throw new Error("reconnect target is missing its credential generation");
+                        }
+                        return ConnectionLifecycleEvents.cases.Reconnected.make({
+                          at: now,
+                          credentialGeneration,
+                        });
+                      },
+                    ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+                    return planned.map(({ row, snapshot }) => ({
+                      ...row.record,
+                      state: snapshot.state.value,
+                    }));
+                  }),
+              });
+              const credentials = credentialRows(rows, byId, now);
+              yield* transaction
+                .delete(providerCredentials)
+                .where(
+                  and(
+                    eq(providerCredentials.userId, userId),
+                    anyOf(providerCredentials.connectionId, ids),
+                  ),
+                );
+              yield* chunked(credentials, maxInsertRows(providerCredentials), (chunk) =>
+                transaction.insert(providerCredentials).values(chunk).returning(),
+              );
+              return orderConnections(rows, ids);
+            }),
+          )
+          .pipe(
+            Effect.mapError((cause) =>
+              cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
+            ),
+            mapTransactionError,
+            Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
+          );
+      });
+
+      const disconnect = Effect.fn("ConnectionRepository.disconnect")(function* (
         userId: UserId,
         inputs: ReadonlyArray<ConnectionIdInput>,
       ) {
@@ -214,52 +499,63 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         if (!Array.isArrayNonEmpty(ids)) {
           return [];
         }
-        const now = yield* DateTime.now;
+        const at = yield* DateTime.now;
         return yield* database
           .transaction((transaction) =>
-            mutateRows(transaction, providerConnections, {
-              where: eq(providerConnections.userId, userId),
-              ids,
-              codec: ConnectionRow,
-              plan: (locked) =>
-                Effect.gen(function* () {
-                  const targets: Array<{
-                    readonly id: (typeof ids)[number];
-                    readonly record: typeof ConnectionRow.Type;
-                    readonly snapshot: Machine.Snapshot<typeof ConnectionLifecycleStates>;
-                  }> = [];
-                  for (const id of ids) {
-                    const record = locked.get(id);
-                    if (record === undefined) {
-                      return yield* ConnectionNotFound.make({ id });
+            Effect.gen(function* () {
+              const rows = yield* mutateRows(transaction, providerConnections, {
+                where: eq(providerConnections.userId, userId),
+                ids,
+                codec: ConnectionRow,
+                plan: (locked) =>
+                  Effect.gen(function* () {
+                    const targets: Array<LockedTarget> = [];
+                    const unchanged: Array<typeof ConnectionRow.Type> = [];
+                    for (const id of ids) {
+                      const record = locked.get(id);
+                      if (record === undefined) {
+                        return yield* ConnectionNotFound.make({ id });
+                      }
+                      if (record.state._tag === "Disconnected") {
+                        unchanged.push(record);
+                        continue;
+                      }
+                      if (record.state._tag === "Linking") {
+                        return yield* ConnectionLinkRejected.make({ id, status: "linking" });
+                      }
+                      const snapshot = yield* snapshotOf(
+                        ConnectionLifecycleWorkflow,
+                        record.state,
+                      ).pipe(
+                        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                      );
+                      targets.push({ id, record, snapshot });
                     }
-                    if (record.state._tag !== "Linking") {
-                      return yield* ConnectionLinkRejected.make({
-                        id,
-                        status: record.state._tag === "Ready" ? "ready" : "disconnected",
-                      });
-                    }
-                    if (
-                      DateTime.toEpochMillis(record.state.expiresAt) <= DateTime.toEpochMillis(now)
-                    ) {
-                      return yield* ConnectionLinkExpired.make({ id });
-                    }
-                    const snapshot = yield* snapshotOf(
+                    const disconnected: ConnectionLifecycleRequest =
+                      ConnectionLifecycleEvents.cases.Disconnected.make({ at });
+                    const planned = yield* planBatch(
                       ConnectionLifecycleWorkflow,
-                      record.state,
+                      targets,
+                      (_target) => disconnected,
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-                    targets.push({ id, record, snapshot });
-                  }
-                  const approved = yield* planBatch(
-                    ConnectionLifecycleWorkflow,
-                    targets,
-                    (_target) => ConnectionLifecycleEvents.cases.LinkApproved.make({ at: now }),
-                  ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-                  return approved.map(({ row, snapshot }) => ({
-                    ...row.record,
-                    state: snapshot.state.value,
-                  }));
-                }),
+                    return [
+                      ...unchanged,
+                      ...planned.map(({ row, snapshot }) => ({
+                        ...row.record,
+                        state: snapshot.state.value,
+                      })),
+                    ];
+                  }),
+              });
+              yield* transaction
+                .delete(providerCredentials)
+                .where(
+                  and(
+                    eq(providerCredentials.userId, userId),
+                    anyOf(providerCredentials.connectionId, ids),
+                  ),
+                );
+              return orderConnections(rows, ids);
             }),
           )
           .pipe(
@@ -267,21 +563,170 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
               cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
             ),
             mapTransactionError,
-            Effect.map((rows) => {
-              const byId = new Map(rows.map((row) => [row.id, row]));
-              return ids.flatMap((id) => {
-                const row = byId.get(id);
-                return row === undefined ? [] : [recordToConnection(row, row.state)];
-              });
-            }),
+            Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
           );
       });
 
-      return { listConnections, startLinking, cancelLinking, approveLinking };
+      const markReconnectRequired = Effect.fn("ConnectionRepository.markReconnectRequired")(
+        function* (userId: UserId, commands: ReadonlyArray<ReconnectRequiredCommand>) {
+          if (commands.length === 0) {
+            return [];
+          }
+          const byId = new Map(commands.map((command) => [command.id, command]));
+          const ids = [...byId.keys()];
+          if (!Array.isArrayNonEmpty(ids)) {
+            return [];
+          }
+          const at = yield* DateTime.now;
+          return yield* database
+            .transaction((transaction) =>
+              mutateRows(transaction, providerConnections, {
+                where: eq(providerConnections.userId, userId),
+                ids,
+                codec: ConnectionRow,
+                plan: (locked) =>
+                  Effect.gen(function* () {
+                    const targets: Array<LockedTarget> = [];
+                    const unchanged: Array<typeof ConnectionRow.Type> = [];
+                    for (const id of ids) {
+                      const record = locked.get(id);
+                      const command = byId.get(id);
+                      if (record === undefined || command === undefined) {
+                        return yield* ConnectionNotFound.make({ id });
+                      }
+                      if (record.state._tag === "ReconnectRequired") {
+                        if (record.state.credentialGeneration !== command.expectedGeneration) {
+                          return yield* ConnectionCredentialGenerationStale.make({
+                            id,
+                            expectedGeneration: command.expectedGeneration,
+                            actualGeneration: record.state.credentialGeneration,
+                          });
+                        }
+                        unchanged.push(record);
+                        continue;
+                      }
+                      if (record.state._tag !== "Ready") {
+                        return yield* ConnectionLinkRejected.make({
+                          id,
+                          status: connectionStatus(record.state),
+                        });
+                      }
+                      if (record.state.credentialGeneration !== command.expectedGeneration) {
+                        return yield* ConnectionCredentialGenerationStale.make({
+                          id,
+                          expectedGeneration: command.expectedGeneration,
+                          actualGeneration: record.state.credentialGeneration,
+                        });
+                      }
+                      const snapshot = yield* snapshotOf(
+                        ConnectionLifecycleWorkflow,
+                        record.state,
+                      ).pipe(
+                        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                      );
+                      targets.push({ id, record, snapshot });
+                    }
+                    const required: ConnectionLifecycleRequest =
+                      ConnectionLifecycleEvents.cases.ReconnectRequired.make({ at });
+                    const planned = yield* planBatch(
+                      ConnectionLifecycleWorkflow,
+                      targets,
+                      (_target) => required,
+                    ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+                    return [
+                      ...unchanged,
+                      ...planned.map(({ row, snapshot }) => ({
+                        ...row.record,
+                        state: snapshot.state.value,
+                      })),
+                    ];
+                  }),
+              }),
+            )
+            .pipe(
+              Effect.mapError((cause) =>
+                cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
+              ),
+              mapTransactionError,
+              Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
+            );
+        },
+      );
+
+      return {
+        listConnections,
+        loadOwned,
+        loadCredential,
+        startLinking,
+        cancelLinking,
+        completeLinking,
+        reconnect,
+        disconnect,
+        markReconnectRequired,
+      };
     }),
   },
 ) {
   static readonly layer = Layer.effect(this)(this.make);
+}
+
+function connectionStatus(state: typeof ConnectionRow.Type.state): ConnectionStatus {
+  switch (state._tag) {
+    case "Linking":
+      return "linking" as const;
+    case "Ready":
+      return "ready" as const;
+    case "ReconnectRequired":
+      return "reconnect-required" as const;
+    case "Disconnected":
+      return "disconnected" as const;
+  }
+}
+
+function credentialRows(
+  rows: ReadonlyArray<typeof ConnectionRow.Type>,
+  commands: ReadonlyMap<string, CompleteLinkingCommand>,
+  now: DateTime.Utc,
+): ReadonlyArray<{
+  readonly connectionId: ConnectionId;
+  readonly userId: UserId;
+  readonly provider: Provider;
+  readonly generation: ConnectionCredentialGeneration;
+  readonly envelope: string;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}> {
+  const at = DateTime.toDateUtc(now);
+  return rows.map((row) => {
+    const command = commands.get(row.id);
+    if (command === undefined || row.state._tag !== "Ready") {
+      throw new Error("completed connection is missing its credential");
+    }
+    return {
+      connectionId: row.id,
+      userId: row.userId,
+      provider: row.state.provider,
+      generation: row.state.credentialGeneration,
+      envelope: command.envelope,
+      createdAt: at,
+      updatedAt: at,
+    };
+  });
+}
+
+function orderConnections(
+  rows: ReadonlyArray<typeof ConnectionRow.Type>,
+  ids: ReadonlyArray<ConnectionId>,
+): ReadonlyArray<typeof ConnectionRow.Type> {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row === undefined ? [] : [row];
+  });
+}
+
+function makeCredentialGeneration(value: number): ConnectionCredentialGeneration {
+  return Schema.decodeSync(ConnectionCredentialGeneration)(value);
 }
 
 function mapTransactionError<A, R>(
@@ -298,10 +743,13 @@ function mapTransactionError<A, R>(
         case "EffectDrizzleQueryError":
           return ConnectionPersistenceFailed.make({ cause });
         case "connection.create_failed":
+        case "connection.credential_generation_stale":
         case "connection.link_expired":
         case "connection.link_rejected":
         case "connection.not_found":
         case "connection.persistence_failed":
+        case "connection.provider_rejected":
+        case "connection.provider_unavailable":
           return cause;
       }
     }),
@@ -343,8 +791,32 @@ function recordToConnection(
         linkingExpiresAt: state.expiresAt,
       };
     case "Ready":
-      return { ...content, status: "ready", approvedAt: state.approvedAt };
+      return {
+        ...content,
+        status: "ready",
+        approvedAt: state.approvedAt,
+        credentialGeneration: state.credentialGeneration,
+      };
+    case "ReconnectRequired":
+      return {
+        ...content,
+        status: "reconnect-required",
+        credentialGeneration: state.credentialGeneration,
+        reconnectRequiredAt: state.reconnectRequiredAt,
+      };
     case "Disconnected":
       return { ...content, status: "disconnected", disconnectedAt: state.disconnectedAt };
   }
 }
+
+type LockedTarget = {
+  readonly id: ConnectionId;
+  readonly record: typeof ConnectionRow.Type;
+  readonly snapshot: Machine.Snapshot<typeof ConnectionLifecycleStates>;
+};
+
+const ActiveCredential = Schema.Struct({
+  provider: Provider,
+  generation: ConnectionCredentialGeneration,
+  envelope: Schema.String,
+});

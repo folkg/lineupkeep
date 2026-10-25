@@ -22,6 +22,12 @@ export function toConnectionView(connection: ProviderConnection): ConnectionView
     ...(connection.approvedAt === undefined
       ? {}
       : { approvedAt: DateTime.formatIso(connection.approvedAt) }),
+    ...(connection.credentialGeneration === undefined
+      ? {}
+      : { credentialGeneration: connection.credentialGeneration }),
+    ...(connection.reconnectRequiredAt === undefined
+      ? {}
+      : { reconnectRequiredAt: DateTime.formatIso(connection.reconnectRequiredAt) }),
     ...(connection.disconnectedAt === undefined
       ? {}
       : { disconnectedAt: DateTime.formatIso(connection.disconnectedAt) }),
@@ -41,9 +47,12 @@ export function mapConnectionError(
     case "connection.link_expired":
     case "connection.link_rejected":
     case "connection.not_found":
+    case "connection.credential_generation_stale":
+    case "connection.provider_rejected":
       return { type: error._tag, outcome: "rejected" };
     case "connection.create_failed":
     case "connection.persistence_failed":
+    case "connection.provider_unavailable":
       return { type: error._tag, outcome: "failure" };
   }
 }

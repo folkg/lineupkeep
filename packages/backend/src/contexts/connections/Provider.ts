@@ -31,7 +31,10 @@ type ProviderCrumb = {
   readonly crumb: Redacted.Redacted<string>;
 };
 
-type ProviderFailure = ProviderSessionRejected | ProviderRequestFailed | ProviderResponseInvalid;
+export type ProviderFailure =
+  | ProviderSessionRejected
+  | ProviderRequestFailed
+  | ProviderResponseInvalid;
 
 export class ProviderSessionRejected extends Schema.TaggedError<
   ProviderSessionRejected,

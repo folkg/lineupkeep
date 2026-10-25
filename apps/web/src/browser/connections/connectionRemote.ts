@@ -1,13 +1,18 @@
 import type {
+  CompleteLinkingData,
   ConnectionChangeView,
   ConnectionIdData,
   ConnectionView,
+  ReconnectData,
   StartLinkingData,
 } from "#contracts/connections/connectionContract.ts";
 import {
   approveLinkingServerFn,
   cancelLinkingServerFn,
+  completeLinkingServerFn,
+  disconnectServerFn,
   listConnectionsServerFn,
+  reconnectServerFn,
   startLinkingServerFn,
 } from "#server-functions/connections/connectionServerFunctions.ts";
 
@@ -19,6 +24,9 @@ export const connectionRemote: ConnectionRemote = {
   start: (input) => startLinkingServerFn({ data: input }).then(requireConnectionSuccess),
   approve: (input) => approveLinkingServerFn({ data: input }).then(requireConnectionSuccess),
   cancel: (input) => cancelLinkingServerFn({ data: input }).then(requireConnectionSuccess),
+  disconnect: (input) => disconnectServerFn({ data: input }).then(requireConnectionSuccess),
+  complete: (input) => completeLinkingServerFn({ data: input }).then(requireConnectionSuccess),
+  reconnect: (input) => reconnectServerFn({ data: input }).then(requireConnectionSuccess),
 };
 
 export type ConnectionRemote = {
@@ -26,6 +34,9 @@ export type ConnectionRemote = {
   readonly start: (input: StartLinkingData) => Promise<ConnectionChangeView>;
   readonly approve: (input: ConnectionIdData) => Promise<ConnectionChangeView>;
   readonly cancel: (input: ConnectionIdData) => Promise<ConnectionChangeView>;
+  readonly disconnect: (input: ConnectionIdData) => Promise<ConnectionChangeView>;
+  readonly complete: (input: CompleteLinkingData) => Promise<ConnectionChangeView>;
+  readonly reconnect: (input: ReconnectData) => Promise<ConnectionChangeView>;
 };
 
 type ConnectionListRequestOptions = {

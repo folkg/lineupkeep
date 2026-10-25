@@ -11,8 +11,19 @@ export const decodeConnectionId = Schema.decodeUnknownSync(ConnectionId);
 export const Provider = Schema.Literals(["yahoo"]);
 export type Provider = typeof Provider.Type;
 
-export const ConnectionStatus = Schema.Literals(["linking", "ready", "disconnected"]);
+export const ConnectionStatus = Schema.Literals([
+  "linking",
+  "ready",
+  "reconnect-required",
+  "disconnected",
+]);
 export type ConnectionStatus = typeof ConnectionStatus.Type;
+
+export const ConnectionCredentialGeneration = Schema.Int.pipe(
+  Schema.check(Schema.isGreaterThanOrEqualTo(1)),
+  Schema.brand("ConnectionCredentialGeneration"),
+);
+export type ConnectionCredentialGeneration = typeof ConnectionCredentialGeneration.Type;
 
 const ConnectionTimestamp = Schema.DateTimeUtc;
 
@@ -24,6 +35,8 @@ export const ProviderConnection = Schema.Struct({
   pairingCode: Schema.optional(Schema.String),
   linkingExpiresAt: Schema.optional(ConnectionTimestamp),
   approvedAt: Schema.optional(ConnectionTimestamp),
+  credentialGeneration: Schema.optional(ConnectionCredentialGeneration),
+  reconnectRequiredAt: Schema.optional(ConnectionTimestamp),
   disconnectedAt: Schema.optional(ConnectionTimestamp),
   createdAt: ConnectionTimestamp,
   updatedAt: ConnectionTimestamp,
@@ -40,6 +53,10 @@ const ConnectionPairingCode = Schema.Trim.pipe(
   Schema.brand("ConnectionPairingCode"),
 );
 
+const ProviderSessionValue = Schema.RedactedFromValue(
+  Schema.String.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(8_192))),
+);
+
 export const StartLinkingInput = Schema.Struct({
   requestId: ConnectionRequestId,
   provider: Provider,
@@ -52,11 +69,29 @@ export const ConnectionIdInput = Schema.Struct({
 });
 export type ConnectionIdInput = typeof ConnectionIdInput.Type;
 
+export const CompleteLinkingInput = Schema.Struct({
+  id: ConnectionId,
+  provider: Provider,
+  session: ProviderSessionValue,
+});
+export type CompleteLinkingInput = typeof CompleteLinkingInput.Type;
+
+export const ReconnectInput = Schema.Struct({
+  id: ConnectionId,
+  provider: Provider,
+  session: ProviderSessionValue,
+  expectedGeneration: ConnectionCredentialGeneration,
+});
+export type ReconnectInput = typeof ReconnectInput.Type;
+
 export type ConnectionError =
   | ConnectionNotFound
   | ConnectionCreateFailed
   | ConnectionLinkExpired
   | ConnectionLinkRejected
+  | ConnectionProviderRejected
+  | ConnectionProviderUnavailable
+  | ConnectionCredentialGenerationStale
   | ConnectionPersistenceFailed;
 
 export class ConnectionNotFound extends Schema.TaggedError<
@@ -79,6 +114,30 @@ export class ConnectionLinkRejected extends Schema.TaggedError<
 >()("connection.link_rejected", {
   id: ConnectionId,
   status: ConnectionStatus,
+}) {}
+
+export class ConnectionProviderRejected extends Schema.TaggedError<
+  ConnectionProviderRejected,
+  { readonly brand: unique symbol }
+>()("connection.provider_rejected", {
+  id: ConnectionId,
+}) {}
+
+export class ConnectionProviderUnavailable extends Schema.TaggedError<
+  ConnectionProviderUnavailable,
+  { readonly brand: unique symbol }
+>()("connection.provider_unavailable", {
+  id: ConnectionId,
+  reason: Schema.Literals(["unavailable", "invalid_response"]),
+}) {}
+
+export class ConnectionCredentialGenerationStale extends Schema.TaggedError<
+  ConnectionCredentialGenerationStale,
+  { readonly brand: unique symbol }
+>()("connection.credential_generation_stale", {
+  id: ConnectionId,
+  expectedGeneration: ConnectionCredentialGeneration,
+  actualGeneration: ConnectionCredentialGeneration,
 }) {}
 
 export class ConnectionCreateFailed extends Schema.TaggedError<

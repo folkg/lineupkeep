@@ -3,9 +3,11 @@ import { Context } from "effect";
 import type { Effect } from "effect";
 
 import type {
+  CompleteLinkingInput,
   ConnectionError,
   ConnectionIdInput,
   ProviderConnection,
+  ReconnectInput,
   StartLinkingInput,
 } from "./Connection.ts";
 
@@ -28,7 +30,17 @@ export type ConnectionsShape = {
     inputs: ReadonlyArray<ConnectionIdInput>,
   ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
 
-  readonly approveLinking: (
+  readonly completeLinking: (
+    userId: UserId,
+    inputs: ReadonlyArray<CompleteLinkingInput>,
+  ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
+
+  readonly reconnect: (
+    userId: UserId,
+    inputs: ReadonlyArray<ReconnectInput>,
+  ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
+
+  readonly disconnect: (
     userId: UserId,
     inputs: ReadonlyArray<ConnectionIdInput>,
   ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;

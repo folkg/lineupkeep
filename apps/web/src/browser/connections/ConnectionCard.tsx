@@ -14,8 +14,8 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
   return (
     <Entry
       actions={
-        <Show when={props.connection.status === "linking"}>
-          <Inline gap="sm">
+        <Inline gap="sm">
+          <Show when={props.connection.status === "linking"}>
             <Button pending={props.approving} pendingLabel="Approving…" onClick={props.onApprove}>
               Approve helper
             </Button>
@@ -27,8 +27,23 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
             >
               Cancel
             </Button>
-          </Inline>
-        </Show>
+          </Show>
+          <Show
+            when={
+              props.connection.status === "ready" ||
+              props.connection.status === "reconnect-required"
+            }
+          >
+            <Button
+              pending={props.disconnecting}
+              pendingLabel="Disconnecting…"
+              variant="secondary"
+              onClick={props.onDisconnect}
+            >
+              Disconnect
+            </Button>
+          </Show>
+        </Inline>
       }
       cue={statusLabel(props.connection.status)}
       editing={false}
@@ -47,10 +62,19 @@ function ConnectionMeta(props: { readonly connection: ConnectionView }): JSX.Ele
       fallback={
         <Show
           fallback={
-            <Text size="caption" tone="muted">
-              Connected. The local helper is approved for this account; provider credentials are
-              linked next.
-            </Text>
+            <Show
+              fallback={
+                <Text size="caption" tone="muted">
+                  Connected. The provider session is ready for this account.
+                </Text>
+              }
+              when={props.connection.status === "reconnect-required"}
+            >
+              <Text size="caption" tone="muted">
+                This connection needs a new provider session. Reconnect the local helper to
+                continue.
+              </Text>
+            </Show>
           }
           when={props.connection.status === "linking"}
         >
@@ -84,6 +108,8 @@ function statusLabel(status: ConnectionView["status"]): string {
       return "Linking";
     case "ready":
       return "Connected";
+    case "reconnect-required":
+      return "Reconnect required";
     case "disconnected":
       return "Disconnected";
   }
@@ -97,6 +123,8 @@ type ConnectionCardProps = {
   readonly connection: ConnectionView;
   readonly approving: boolean;
   readonly canceling: boolean;
+  readonly disconnecting: boolean;
   readonly onApprove: () => void;
   readonly onCancel: () => void;
+  readonly onDisconnect: () => void;
 };

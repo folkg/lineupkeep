@@ -25,6 +25,12 @@ export const connectionMutations = {
       mutationFn: remote.cancel,
       onSuccess: storeRefreshedConnections,
     }),
+  disconnect: (remote: ConnectionRemote) =>
+    mutationOptions({
+      mutationKey: ["connections", "disconnect"],
+      mutationFn: remote.disconnect,
+      onSuccess: storeRefreshedConnections,
+    }),
 };
 
 export function storeRefreshedConnections(
