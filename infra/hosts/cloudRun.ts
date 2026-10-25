@@ -33,9 +33,15 @@ export function cloudRunHost(
       const account = yield* GCP.IAM.ServiceAccount("Runtime", {
         displayName: "Lineupkeep web runtime",
       });
+      const workerAccount = yield* GCP.IAM.ServiceAccount("WorkerRuntime", {
+        displayName: "Lineupkeep private lineup worker",
+      });
       const { plain, secrets } = partitionEnvironment(environment);
       const secretEntries = yield* Effect.forEach(secrets, ([name, value]) =>
-        runtimeSecret(name, value, account),
+        runtimeSecret(name, value, [
+          { id: `Access-${name}`, account },
+          { id: `Access-${name}-Worker`, account: workerAccount },
+        ]),
       );
       const image = yield* publishCloudRunImage(
         Output.map(registry.registryUri, (uri) => {
@@ -58,9 +64,6 @@ export function cloudRunHost(
           },
         })),
       ];
-      const workerAccount = yield* GCP.IAM.ServiceAccount("WorkerRuntime", {
-        displayName: "Lineupkeep private lineup worker",
-      });
       const queueEnqueuer = yield* GCP.IAM.ServiceAccount("QueueEnqueuer", {
         displayName: "Lineupkeep queue enqueuer and scheduler invoker",
       });
@@ -266,7 +269,7 @@ function publishCloudRunImage(
 function runtimeSecret(
   name: string,
   value: Input<string | Redacted.Redacted<string>>,
-  account: GCP.IAM.ServiceAccount,
+  readers: ReadonlyArray<SecretReader>,
 ): Effect.Effect<
   {
     name: string;
@@ -278,12 +281,14 @@ function runtimeSecret(
 > {
   return Effect.gen(function* () {
     const secret = yield* GCP.SecretManager.Secret(`Secret-${name}`, {});
-    const access = yield* GCP.IAM.Member(`Access-${name}`, {
-      kind: "secretmanager.secret",
-      name: secret.name,
-      role: "roles/secretmanager.secretAccessor",
-      member: Output.map(account.email, (email) => `serviceAccount:${email}`),
-    });
+    const accesses = yield* Effect.forEach(readers, ({ id, account }) =>
+      GCP.IAM.Member(id, {
+        kind: "secretmanager.secret",
+        name: secret.name,
+        role: "roles/secretmanager.secretAccessor",
+        member: Output.map(account.email, (email) => `serviceAccount:${email}`),
+      }),
+    );
     const directory = new URL(`../.alchemy/versions/${yield* Stage}/${name}/`, import.meta.url);
 
     const published = yield* Command.Build(`Version-${name}`, {
@@ -299,7 +304,7 @@ function runtimeSecret(
       outdir: directory.pathname,
       timeout: "1 minute",
     });
-    const version = Output.all(published.outdir, access.member).pipe(
+    const version = Output.all(published.outdir, ...accesses.map((access) => access.member)).pipe(
       Output.mapEffect(() =>
         Effect.promise(async () => {
           const resourceName = await readFile(new URL("version", directory), "utf8");
@@ -314,3 +319,8 @@ function runtimeSecret(
     return { name, secret, version };
   });
 }
+
+type SecretReader = {
+  readonly id: string;
+  readonly account: GCP.IAM.ServiceAccount;
+};
