@@ -25,6 +25,7 @@ export default Alchemy.Stack(
       region: "aws-us-east-1",
       defaultBranchName: "production",
       databaseName: "lineupkeep",
+      historyRetentionSeconds: 21600,
     }).pipe(RemovalPolicy.retain());
     return {
       runtimeUrl: Output.map(database.pooledConnectionUri, Redacted.make),
