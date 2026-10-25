@@ -188,7 +188,7 @@ test("presents missing and forged consent requests without permission actions", 
   }
 });
 
-test("rejects legacy protocols and dynamic client registration", async ({ page, baseURL }) => {
+test("rejects legacy protocols and registers dynamic clients", async ({ page, baseURL }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
   const { credentials } = await authorize(page, origin, "connections:read");
@@ -201,12 +201,21 @@ test("rejects legacy protocols and dynamic client registration", async ({ page, 
   const registration = await fetch(new URL("/api/auth/oauth2/register", origin), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ redirect_uris: [callback] }),
+    body: JSON.stringify({
+      client_name: "Registration probe",
+      redirect_uris: [callback],
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      application_type: "native",
+    }),
   });
+  const registered: unknown = await registration.json();
 
   expect(legacy.status).toBe(400);
   expect(legacy.headers.has("mcp-session-id")).toBe(false);
-  expect(registration.status).toBe(403);
+  expect(registration.status, "dynamic client registration is open for public clients").toBe(201);
+  expect(isRecord(registered) && typeof registered["client_id"] === "string").toBe(true);
 });
 
 test("rotates refresh credentials and rejects the spent token after the retry window", async ({
@@ -308,3 +317,7 @@ const RefreshCredentials = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.String,
 });
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}

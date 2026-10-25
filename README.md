@@ -85,7 +85,7 @@ Use `--app-url <origin>` (or `LINEUPKEEP_APP_URL`) when the app is not at `http:
 ## Connecting an MCP client
 
 Connect a stateless **MCP 2026-07-28** client to `https://<host>/mcp`; earlier session-based revisions are unsupported. Follow challenge/resource metadata and authorization-server discovery; use authorization code with S256 PKCE, endpoint `resource`, and explicit scope consent. Request `offline_access` for renewable access.
-Dynamic Client Registration is disabled. Publish an HTTPS client metadata document at a public non-root `client_id` URL with matching identity and registered callback. Metadata redirects/private destinations are rejected; native loopback callbacks are allowed.
+Dynamic Client Registration is enabled for public clients at `POST /api/auth/oauth2/register`; PKCE is required and redirect URIs are validated. Clients that cannot self-register may instead use an HTTPS client metadata document as their `client_id`. Metadata redirects/private destinations are rejected; native loopback callbacks are allowed.
 Use `tools/list` for live schemas/scopes/hints. Retry unconfirmed creation only with the same request identity/content; inspect current state before repeating other writes. Store rotated refresh tokens.
 Browser sign-out does not revoke offline grants: disconnect through `/api/auth/oauth2/revoke`. Issued access tokens may remain valid until expiry. OAuth setup proves no tool behavior; local workerd proves no production routing guarantee.
 
