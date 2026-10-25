@@ -25,6 +25,7 @@ import type {
   ProviderTeam,
 } from "./Provider.ts";
 import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
+import { RosterResult } from "./QueryResults.ts";
 import { QueryTeamNotFound } from "./QueryValues.ts";
 import { TransactionReviews } from "./TransactionReview.ts";
 
@@ -664,6 +665,38 @@ it.effect("pages a large multi-byte roster inside the encoded result budget", ()
     }
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
+
+it.effect("fits both representations a client receives inside the hard byte limit", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      roster: rosterFixture({
+        count: 40,
+        name: '"Joueur Élite 名前"',
+      }),
+    });
+
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const page = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
+
+    assert.strictEqual(page.status, "ok");
+    if (page.status !== "ok") {
+      return;
+    }
+    assert.isAtMost(receivedToolResultBytes(page), page.budget.hardLimitBytes);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+function receivedToolResultBytes(page: RosterResult): number {
+  const structuredContent = Schema.encodeSync(Schema.toCodecJson(RosterResult))(page);
+  const received = JSON.stringify({
+    content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+    structuredContent,
+    isError: false,
+  });
+  return new TextEncoder().encode(received).length;
+}
 
 it.effect("builds review-only links for add, add/drop, and drop without provider keys", () =>
   Effect.gen(function* () {

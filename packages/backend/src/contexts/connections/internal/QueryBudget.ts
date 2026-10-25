@@ -13,6 +13,7 @@ const queryResultHardLimitBytes = 16 * 1024;
 
 const envelopeAllowanceBytes = 1_024;
 const cursorPlaceholder = "x".repeat(256);
+const utf8 = new TextEncoder();
 
 export const queryBudget: QueryBudget = {
   targetBytes: queryResultTargetBytes,
@@ -46,7 +47,7 @@ export function fitPage<Row, Result>(
         complete: true,
         remaining: 0,
       });
-      return modelResultBytes(input.schema, base) <= queryResultHardLimitBytes
+      return clientResultBytes(input.schema, base) <= queryResultHardLimitBytes
         ? base
         : narrowing(input, undefined);
     }
@@ -69,7 +70,7 @@ export function fitPage<Row, Result>(
           input.rows.slice(input.offset, input.offset + returned),
           page,
         );
-        if (modelResultBytes(input.schema, candidate) <= budgetBytes) {
+        if (clientResultBytes(input.schema, candidate) <= budgetBytes) {
           return returned;
         }
       }
@@ -88,7 +89,7 @@ export function fitPage<Row, Result>(
         input.rows.slice(input.offset, input.offset + returned),
         pageFor(returned, next),
       );
-      if (modelResultBytes(input.schema, result) <= queryResultHardLimitBytes) {
+      if (clientResultBytes(input.schema, result) <= queryResultHardLimitBytes) {
         return result;
       }
       returned -= 1;
@@ -97,9 +98,17 @@ export function fitPage<Row, Result>(
   });
 }
 
-function modelResultBytes(schema: Schema.Codec<unknown, unknown>, value: unknown): number {
+function clientResultBytes(schema: Schema.Codec<unknown, unknown>, value: unknown): number {
   const encoded = Schema.encodeSync(Schema.toCodecJson(schema))(value);
-  return new TextEncoder().encode(JSON.stringify(encoded)).length * 2 + envelopeAllowanceBytes;
+  const structuredContent = JSON.stringify(encoded);
+  const textContent = escapedTextContent(structuredContent);
+  return (
+    utf8.encode(structuredContent).length + utf8.encode(textContent).length + envelopeAllowanceBytes
+  );
+}
+
+function escapedTextContent(json: string): string {
+  return JSON.stringify(json).slice(1, -1);
 }
 
 function narrowing<Row, Result>(
