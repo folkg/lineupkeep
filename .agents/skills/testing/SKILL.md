@@ -40,6 +40,10 @@ Clients use `browser/workflow/workflowTest.ts` (`exploreWorkflow` and `play`) wi
 Use MSW 3 for HTTP transport tests at an external boundary, such as an email provider: exercise the real client and assert request content and response handling. Never use MSW for domain logic; inject a service or its Test Layer for application tests.
 Create fresh MSW interception per test through a disposable setup, reject unhandled requests strictly, and close interception on disposal. Keep transport tests serial because interception is process-global. MSW cannot prove DNS pinning, TLS identity, or SSRF protection; retain the capability's dedicated security tests.
 
+## Suite parallelism
+
+`bun checks` runs files concurrently in one worker pool sized from available parallelism; tests inside a file run in order. A file must therefore own its database, temporary directories, and loopback ports, and any process-wide state (environment variables, globals, interception) belongs to the single file that sets it. Keep a file serial when its cases share that state, and use `test.concurrent` only where each case allocates its own resources.
+
 ## E2E discipline
 
 Use role/name locators and web-first assertions; poll measured layout instead of taking an instant snapshot.

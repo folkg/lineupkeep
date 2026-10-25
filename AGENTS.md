@@ -16,7 +16,9 @@ The approved identity is Lineupkeep, lowercase lineupkeep in the wordmark, with 
 
 Use the pinned Node runtime by default and Bun package manager.
 Run `bun checks` after every change to committed code; do not finish with failing checks.
-Follow the [README check matrix](README.md#commands-and-required-checks) for additional E2E and artifact checks. Run suites serially.
+`bun checks` runs format, type-aware lint, architecture, unused code, the Node/browser tests, and both builds. It runs **no E2E target**, so a green `checks` never proves routes, hydration, authentication, persistence, or a deployment target.
+After `checks`, run every affected E2E target (`bun run test:e2e`, `test:e2e:cloudflare`, `test:e2e:container`), all three if in doubt; follow the [README check matrix](README.md#commands-and-required-checks) for those and for artifact checks. Run suites serially.
+While iterating, run one file with `bunx vitest run --project node <path>` (or `--project browser <path>`); `--changed`/`--related` are incomplete for this repository's aliases and never replace `checks`.
 
 ## Safety
 

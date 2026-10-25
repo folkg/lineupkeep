@@ -44,18 +44,28 @@ Developer commands own origin and migrated database. Ctrl-C stops the app, not i
 
 Bun installs dependencies and dispatches scripts; Node is the default runtime for application/tooling code. `package.json` owns commands.
 
-| Command                                | When / purpose                                                                                      |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `bun checks`                           | Every committed-code change: format, type-aware lint, architecture, unused code, tests, both builds |
-| `bun run test:node` / `test:browser`   | Focused Node/tooling or browser regressions                                                         |
-| `bun run test:e2e`                     | Routes, UI, authentication, or server functions; production Node integration                        |
-| `bun run test:e2e:cloudflare`          | Server entry, backend runtime, database/auth composition, or deployment target                      |
-| `bun run test:e2e:container`           | Node image, Dockerfile, container build/publication, host runtime, or container networking          |
-| `bun run targets:verify`               | Deployment-adapter upgrades or build/infrastructure changes; credential-free artifact checks        |
-| `bun run db:generate` / `db:migrate`   | Generate/review committed migrations / apply to stopped development                                 |
-| `bun run verify --criteria <file> ...` | Assertion-linked evidence; see [verify-app](.agents/skills/verify-app/SKILL.md)                     |
+| Command                                | When / purpose                                                                                      | Runs E2E          |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------- |
+| `bun checks`                           | Every committed-code change: format, type-aware lint, architecture, unused code, tests, both builds | No                |
+| `bun run test:node` / `test:browser`   | Focused Node or browser regressions                                                                 | No                |
+| `bun run test:e2e`                     | Routes, UI, authentication, or server functions; production Node integration                        | Node target       |
+| `bun run test:e2e:cloudflare`          | Server entry, backend runtime, database/auth composition, or deployment target                      | Cloudflare target |
+| `bun run test:e2e:container`           | Node image, Dockerfile, container build/publication, host runtime, or container networking          | Container target  |
+| `bun run targets:verify`               | Deployment-adapter upgrades or build/infrastructure changes; credential-free artifact checks        | No                |
+| `bun run db:generate` / `db:migrate`   | Generate/review committed migrations / apply to stopped development                                 | No                |
+| `bun run verify --criteria <file> ...` | Assertion-linked evidence; see [verify-app](.agents/skills/verify-app/SKILL.md)                     | No                |
 
-E2Es require Docker and are excluded from `checks`. Run all affected targets, all three if in doubt. Never run builds/E2Es/verification concurrently or edit source during an owned run. [Harness recovery](.agents/skills/verify-app/references/harness.md#ownership-and-recovery) owns interrupted runs.
+### `checks` never runs E2E
+
+`bun checks` runs formatting, type-aware lint, architecture rules, unused-code detection, the Node and browser test suite, and both builds. It runs **no** E2E target, because E2E needs Docker, a production build, and real browser sessions. A green `checks` therefore never proves routes, hydration, authentication, persistence, or deployment-target behavior.
+
+After `checks`, run the E2E targets the change can break: any page, read, write, recovery, navigation, server function, protocol route, authentication path, backend runtime, or deployment configuration change needs its affected target; run all three when in doubt. Never run builds/E2Es/verification concurrently or edit source during an owned run. [Harness recovery](.agents/skills/verify-app/references/harness.md#ownership-and-recovery) owns interrupted runs.
+
+### Fast inner loop
+
+While iterating, run the one file that can fail: `bunx vitest run --project node <path>` (or `--project browser <path>`, or add `-t "<test name>"`). Vitest has no changed-test cache that stays correct: `--changed` and `--related` silently skip suites reached through package aliases, so they are a convenience only and are never what `checks` runs. Finish with `bun checks` plus the affected E2E targets, not with a narrowed run.
+
+Node and browser files share one worker pool sized from available parallelism: every file owns its migrated in-memory database, temporary directories, and ephemeral loopback ports, so a file is only serial against itself and parallel files cannot collide. A file that mutates process-wide state, such as `PATH` for a fake container runtime, owns that state for its own process only.
 
 ## Loading and mutations
 
