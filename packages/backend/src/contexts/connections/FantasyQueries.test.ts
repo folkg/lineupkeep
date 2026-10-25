@@ -181,6 +181,33 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("rejects a blank player search query with the remedy instead of a generic failure", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    for (const query of ["", "   "]) {
+      const rejected = yield* Effect.flip(queries.searchPlayers(owner, { team: teamId, query }));
+
+      assert.strictEqual(rejected._tag, "query.selection_invalid");
+      if (rejected._tag === "query.selection_invalid") {
+        assert.include(rejected.detail, "Omit the query");
+      }
+    }
+
+    const listed = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      availability: "free_agent",
+    });
+    assert.strictEqual(listed.status, "ok");
+    if (listed.status === "ok") {
+      assert.strictEqual(listed.players.length, 1);
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("searches bounded free agents and preserves zero versus missing stats", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;

@@ -83,7 +83,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search a bounded provider player pool for one linked team, with availability, position, and validated sort filters. Names and positions are provider-reported; ownership may be missing and is never treated as zero.",
+      "Search a bounded provider player pool for one linked team, with availability, position, and validated sort filters. Omit the query to list the pool; a blank query is rejected with the remedy. Names and positions are provider-reported; ownership may be missing and is never treated as zero.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,
@@ -182,10 +182,7 @@ function mapOutcome<A>(
             "A private reference in this request is invalid for this account. Start the query again.",
           );
         case "query.selection_invalid":
-          return reject(
-            "selection_invalid",
-            "The requested period, team, or selection is outside what this league establishes.",
-          );
+          return reject("selection_invalid", error.detail);
         case "query.persistence_failed":
           return Effect.annotateCurrentSpan({
             "app.outcome": "failure",

@@ -222,7 +222,13 @@ const PlayerSort = Schema.Literals(["name", "position", "ownership"]);
 export const SearchPlayersInput = Schema.Struct({
   team: TeamId,
   query: Schema.optional(
-    Schema.String.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(80))),
+    Schema.String.pipe(
+      Schema.check(Schema.isMaxLength(80)),
+      Schema.annotate({
+        description:
+          "Case-insensitive name filter of 1 to 80 characters. Omit it to list the available player pool; a blank value is rejected with the remedy rather than treated as no filter.",
+      }),
+    ),
   ),
   positions: Schema.optional(
     Schema.Array(

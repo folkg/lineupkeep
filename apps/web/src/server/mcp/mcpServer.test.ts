@@ -10,7 +10,7 @@ import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupSubmitData } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupRunsShape } from "@lineupkeep/backend/connections/LineupRuns";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
-import { PlayerRef } from "@lineupkeep/backend/connections/QueryValues";
+import { PlayerRef, QuerySelectionInvalid } from "@lineupkeep/backend/connections/QueryValues";
 import type { ReviewLinksData } from "@lineupkeep/backend/connections/TransactionReview";
 import type { TransactionReviewsShape } from "@lineupkeep/backend/connections/TransactionReview";
 import { TransactionReviews } from "@lineupkeep/backend/connections/TransactionReview";
@@ -238,6 +238,41 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
   });
   expect(invalid.status).toBe(400);
   expect(await json(invalid)).toMatchObject({ error: { code: -32602 } });
+});
+
+it("reaches search_players with an empty query and returns the remedy instead of invalid-params", async () => {
+  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const queries: FantasyQueriesShape = {
+    ...unavailableQueries,
+    searchPlayers: () =>
+      Effect.fail(
+        QuerySelectionInvalid.make({
+          detail:
+            "The player search query must contain at least one visible character. Omit the query to search the whole available player pool.",
+        }),
+      ),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(queries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+  );
+  const response = await handleMcpRequest(
+    request(
+      "tools/call",
+      { name: "search_players", arguments: { team: teamId, query: "" } },
+      "fantasy",
+    ),
+    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+  );
+  const body = await json(response);
+
+  expect(response.status).toBe(200);
+  expect(body).toMatchObject({ result: { isError: true } });
+  expect(JSON.stringify(body)).toContain('\\"code\\":\\"selection_invalid\\"');
+  expect(JSON.stringify(body)).toContain("Omit the query");
 });
 
 it("requires transaction review scope and returns human-review-only links", async () => {

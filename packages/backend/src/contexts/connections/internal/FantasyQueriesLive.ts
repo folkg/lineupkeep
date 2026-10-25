@@ -479,6 +479,13 @@ export const FantasyQueriesLive = Layer.effect(
       userId: UserId,
       input: SearchPlayersInput,
     ) {
+      const query = input.query?.trim();
+      if (query === "") {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "The player search query must contain at least one visible character. Omit the query to search the whole available player pool.",
+        });
+      }
       const context = yield* loadContext(userId, input.team);
       const team = queryTeam(context.owned);
       const fetchedAt = yield* DateTime.now;
@@ -490,7 +497,7 @@ export const FantasyQueriesLive = Layer.effect(
         provider.searchPlayers({
           ...providerIdentity(context),
           providerLeagueKey: context.owned.team.providerLeagueKey,
-          query: input.query,
+          query,
           availability,
           sort,
           limit: 50,
@@ -528,7 +535,7 @@ export const FantasyQueriesLive = Layer.effect(
         [
           "search_players",
           `team=${input.team}`,
-          `query=${input.query ?? ""}`,
+          `query=${query ?? ""}`,
           `positions=${[...positions].sort().join(",")}`,
           `availability=${availability}`,
           `sort=${sort}`,
