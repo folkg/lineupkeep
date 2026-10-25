@@ -67,3 +67,49 @@ These records preserve the answers and corrections from all eight rounds. Later 
 2. Accepted: manual requests normally return verified results, but return a durable run reference after a bounded wait. Clients can query status; disconnecting a request does not lose an accepted job. MCP remains stateless.
 3. Accepted: retain configuration for teams that become inaccessible, mark them unavailable, and suppress writes rather than deleting configuration or repeatedly attempting writes. Newly discovered teams remain disabled.
 4. Accepted: retain concise run outcomes/explanations for 30 days, minimal normalized diagnostic inputs for 7 days, and no raw provider-response dumps by default. No credentials in history, logs, or email.
+
+## Round 9 — Local-helper pairing mechanism
+
+Status: chosen and proved locally against the installed Better Auth 1.7.12 auth layer. The app-side pairing lifecycle and the first-party helper client land with the connection vertical; this record fixes the mechanism so that vertical does not invent a competing flow.
+
+### Chosen mechanism
+
+Use the OAuth 2.0 Device Authorization Grant (RFC 8628) from the installed `@better-auth/oauth-provider` (`oauthDeviceAuthorization()`), paired with the existing `mcp()` OAuth provider. The helper is a first-party public client; completion yields a short-lived access token scoped to the helper scope rather than a full account session.
+
+The helper initiates, the signed-in application user approves, and the helper redeems the scoped token. The application's pairing/connection record binds the approval to the authenticated owner and tracks the lifecycle.
+
+### Flow: who holds what
+
+1. **Helper starts.** `POST /api/auth/device/code` with the helper's public `client_id` and the helper scope. The helper keeps `device_code` in its own memory or private state and shows the user only the public `user_code` and verification URL.
+2. **User approves.** The user opens the verification URL in a browser, signs in to Lineupkeep if needed through the existing email code, reviews the helper name and requested scope, then approves or denies. The first authenticated user to claim the `user_code` becomes the attempt owner; the application records the pairing attempt for that owner.
+3. **Helper completes.** The helper polls `POST /api/auth/oauth2/token` with the device grant at the advertised interval. On approval it receives a Bearer access token scoped to the helper scope and expiring within 300 seconds. It stores the token in private local state (mode 0600 file or OS keychain), never logs it or passes it as a shell argument, and uses it only for the provider-credential upload.
+4. **Application.** A different signed-in person cannot approve the claimed request. The device code is consumed atomically at redemption. The helper token is revoked after the upload, or expires on its own.
+
+### Expiry, replay, and ownership properties
+
+- **Expiry:** device codes expire after ten minutes. Redemption after expiry deletes the code and returns `expired_token`.
+- **One-use:** redemption uses an atomic claim; replay returns `invalid_grant`. Both are proved.
+- **Wrong owner:** approval requires an authenticated session, the first authenticated claim binds the code to that user, and another signed-in user receives `access_denied`. Unauthenticated approval is rejected.
+- **No bearer secrets in shell arguments or logs:** the only value the person transfers is the public `user_code`; the device code and access token remain in helper-controlled state.
+- **No browser extension, hosted login, remote CDP, or custom auth protocol:** the helper opens the application's own approval page in an ordinary browser; the standard RFC 8628 endpoints are served by the existing auth layer.
+- **Dedicated provider browser profile:** unchanged. The helper's temporary local browser profile is for the provider's own sign-in while linking credentials, not for application pairing.
+
+### Rejected alternatives
+
+- **Standalone `deviceAuthorization()`:** the same endpoints but returns a full Better Auth session token, which is broader than the scoped OAuth access token and not independently revocable from the browser session.
+- **`one-time-token`:** the token is a copy of the existing browser session's long-lived token, requires transferring a bearer secret from the application UI to the helper, and is not scoped.
+- **`email-otp`:** proves control of the email address rather than approval from the authenticated session, and conflates pairing with sign-in.
+- **`magic-link`:** a bearer link delivered by email is not a helper-held proof and is not one-use for a second device.
+- **Custom pairing code/proof protocol, browser extension, hosted browser login, remote CDP:** unnecessary where a supported flow fits, or explicitly excluded by ARCHITECTURE §9.
+
+### Helper responsibilities
+
+- Keep the device code and access token out of argv, logs, telemetry, and shell history; store the token privately.
+- Show only the public user code and verification URL; never request the provider password.
+- Poll at the server-advertised interval and stop on denial or expiry.
+- Use the token only for the provider-credential upload, then discard it and revoke the session it established.
+- Use a dedicated temporary local browser profile for the provider's own login and never export that profile.
+
+### Proof
+
+`packages/backend/src/contexts/auth/internal/DevicePairing.test.ts` exercises start → claim → wrong-owner rejection → approve → scoped redemption → replay rejection → expiry rejection against the installed auth layer with a fake client-metadata transport and no live provider or network. The production adapter enables `oauthDeviceAuthorization()` with a ten-minute code and five-second polling interval. The first-party helper client and the application pairing lifecycle are delivered by the pairing vertical.

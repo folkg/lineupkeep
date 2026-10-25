@@ -224,7 +224,7 @@ Keep application data, infrastructure state, and test databases on separate life
 
 Use a local helper on the user's machine. Do not assume hosted Muse can run browser JS in the user's existing session. Recommend a small Effect CLI and a dedicated temporary local browser profile where the human signs into the provider directly; the app never collects the password or broad browser profile.
 
-A bounded pairing flow should bind the helper to the authenticated application user with short-lived one-use approval and a helper-held proof. Do not put bearer secrets into shell command arguments or ship a new custom auth protocol when the auth library's supported flow can satisfy the contract. Verify available device/pairing primitives before selecting the exact mechanism; local-helper feasibility is an explicit early spike.
+A bounded pairing flow should bind the helper to the authenticated application user with short-lived one-use approval and a helper-held proof. Do not put bearer secrets into shell command arguments or ship a new custom auth protocol when the auth library's supported flow can satisfy the contract. The selected mechanism is RFC 8628 device authorization with a first-party helper client and a scoped access token, proved in a local feasibility spike; see [DECISIONS.md](DECISIONS.md#round-9--local-helper-pairing-mechanism).
 
 Extract only the provider's required session material, send over authenticated TLS, validate the connection server-side, and store encrypted credentials separately. No cookies/crumbs in MCP, frontend state, telemetry, diagnostic snapshots, task payloads, URLs returned to agents, or email. Disconnect blocks future work and removes active secret material; already-sent requests still require reconciliation.
 

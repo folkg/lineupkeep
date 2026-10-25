@@ -3,6 +3,7 @@ import { getCurrentAuthEndpointContext } from "@better-auth/core/context";
 import type { DB } from "@better-auth/drizzle-adapter/relations-v2";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { mcp } from "@better-auth/mcp";
+import { oauthDeviceAuthorization } from "@better-auth/oauth-provider";
 import { productName } from "@lineupkeep/brand/product";
 import { getSessionCookie } from "better-auth/cookies";
 import { betterAuth } from "better-auth/minimal";
@@ -385,6 +386,10 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
         metadataProfile: "mcp-2026-07-28",
         fetchClientMetadataResource: options.fetchMetadata,
       }),
+      oauthDeviceAuthorization({
+        expiresIn: "10 minutes",
+        interval: "5 seconds",
+      }),
       emailOTP({
         otpLength: 6,
         expiresIn: Duration.toSeconds(signInCodeLifetime),
@@ -625,6 +630,7 @@ type ApplicationAuthOptions = import("better-auth").BetterAuthOptions & {
     ReturnType<typeof jwt>,
     ReturnType<typeof mcp>,
     ReturnType<typeof cimd>,
+    ReturnType<typeof oauthDeviceAuthorization>,
     ReturnType<typeof emailOTP>,
   ];
 };
