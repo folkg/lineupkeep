@@ -15,6 +15,7 @@ import type {
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderMatchup,
+  ProviderNativeActionResult,
   ProviderOperation,
   ProviderPlayerDetail,
   ProviderReviewLinkInput,
@@ -23,7 +24,9 @@ import type {
   ProviderTransaction,
 } from "#contexts/connections/Provider.ts";
 
-type FakeDiscoveryGate = {
+type FakeNativeAction = "accept" | "reject" | "lost_response" | "unavailable";
+
+type FakeGate = {
   readonly started: Deferred.Deferred<void>;
   readonly release: Deferred.Deferred<void>;
 };
@@ -33,7 +36,8 @@ type FakeProviderState = {
   readonly teams: ReadonlyArray<ProviderTeam>;
   readonly requestFailure: FakeRequestFailure | undefined;
   readonly crumbAvailable: boolean;
-  readonly discoveryGate: Option.Option<FakeDiscoveryGate>;
+  readonly discoveryGate: Option.Option<FakeGate>;
+  readonly rosterReadGate: Option.Option<FakeGate>;
   readonly league: ProviderLeagueSettings | undefined;
   readonly roster: ProviderRoster | undefined;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
@@ -43,6 +47,9 @@ type FakeProviderState = {
   readonly unsupported: ReadonlySet<ProviderOperation>;
   readonly reviewLinkFailure: ProviderReviewLinkInvalid | undefined;
   readonly reviewLinkUrl: string | undefined;
+  readonly nativeAction: FakeNativeAction;
+  readonly nativeAfter: ProviderRoster | undefined;
+  readonly nativeCalls: number;
 };
 
 export type FakeProviderWorldShape = {
@@ -51,8 +58,10 @@ export type FakeProviderWorldShape = {
   readonly setTeams: (teams: ReadonlyArray<ProviderTeam>) => Effect.Effect<void>;
   readonly failRequests: (failure: FakeRequestFailure | undefined) => Effect.Effect<void>;
   readonly setCrumbAvailable: (available: boolean) => Effect.Effect<void>;
-  readonly blockDiscovery: Effect.Effect<FakeDiscoveryGate>;
+  readonly blockDiscovery: Effect.Effect<FakeGate>;
   readonly unblockDiscovery: Effect.Effect<void>;
+  readonly blockRosterRead: Effect.Effect<FakeGate>;
+  readonly unblockRosterRead: Effect.Effect<void>;
   readonly setLeague: (league: ProviderLeagueSettings | undefined) => Effect.Effect<void>;
   readonly setRoster: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
@@ -66,6 +75,9 @@ export type FakeProviderWorldShape = {
   ) => Effect.Effect<void>;
   readonly failReviewLinks: (failure: ProviderReviewLinkInvalid | undefined) => Effect.Effect<void>;
   readonly setReviewLinkUrl: (url: string | undefined) => Effect.Effect<void>;
+  readonly setNativeAction: (action: FakeNativeAction) => Effect.Effect<void>;
+  readonly setNativeAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
+  readonly nativeCallCount: Effect.Effect<number>;
 };
 
 export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakeProviderWorldShape>()(
@@ -80,6 +92,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         requestFailure: undefined,
         crumbAvailable: true,
         discoveryGate: Option.none(),
+        rosterReadGate: Option.none(),
         league: undefined,
         roster: undefined,
         playerDetails: [],
@@ -89,6 +102,9 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         unsupported: new Set(),
         reviewLinkFailure: undefined,
         reviewLinkUrl: undefined,
+        nativeAction: "accept",
+        nativeAfter: undefined,
+        nativeCalls: 0,
       });
       const modify = (
         update: (current: FakeProviderState) => FakeProviderState,
@@ -102,7 +118,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setCrumbAvailable: (crumbAvailable) =>
           modify((current) => ({ ...current, crumbAvailable })),
         blockDiscovery: Effect.gen(function* () {
-          const gate: FakeDiscoveryGate = {
+          const gate: FakeGate = {
             started: yield* Deferred.make<void>(),
             release: yield* Deferred.make<void>(),
           };
@@ -110,6 +126,15 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           return gate;
         }),
         unblockDiscovery: modify((current) => ({ ...current, discoveryGate: Option.none() })),
+        blockRosterRead: Effect.gen(function* () {
+          const gate: FakeGate = {
+            started: yield* Deferred.make<void>(),
+            release: yield* Deferred.make<void>(),
+          };
+          yield* modify((current) => ({ ...current, rosterReadGate: Option.some(gate) }));
+          return gate;
+        }),
+        unblockRosterRead: modify((current) => ({ ...current, rosterReadGate: Option.none() })),
         setLeague: (league) => modify((current) => ({ ...current, league })),
         setRoster: (roster) => modify((current) => ({ ...current, roster })),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
@@ -121,6 +146,9 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         failReviewLinks: (reviewLinkFailure) =>
           modify((current) => ({ ...current, reviewLinkFailure })),
         setReviewLinkUrl: (reviewLinkUrl) => modify((current) => ({ ...current, reviewLinkUrl })),
+        setNativeAction: (nativeAction) => modify((current) => ({ ...current, nativeAction })),
+        setNativeAfter: (nativeAfter) => modify((current) => ({ ...current, nativeAfter })),
+        nativeCallCount: Effect.map(Ref.get(state), (current) => current.nativeCalls),
       } satisfies FakeProviderWorldShape;
     }),
   );
@@ -217,6 +245,15 @@ export const ProviderFakeTest = Layer.effect(
         if (current.roster.providerTeamKey !== input.providerTeamKey) {
           return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
         }
+        const gate = Option.getOrUndefined(current.rosterReadGate);
+        if (gate !== undefined) {
+          yield* Deferred.succeed(gate.started, undefined);
+          yield* Deferred.await(gate.release);
+          yield* Ref.update(world.state, (current) => ({
+            ...current,
+            rosterReadGate: Option.none(),
+          }));
+        }
         const coverage = current.roster.coverage;
         if (input.period !== undefined && coverage.type === "date") {
           return yield* ProviderPeriodMismatch.make({
@@ -237,6 +274,44 @@ export const ProviderFakeTest = Layer.effect(
           });
         }
         return current.roster;
+      }),
+      applyNativeStartActive: Effect.fn("FakeProvider.applyNativeStartActive")(function* (input) {
+        const current = yield* prepare(input, "apply_native_start_active").pipe(
+          Effect.mapError((error) =>
+            error._tag === "provider.session_rejected"
+              ? error
+              : ProviderResponseInvalid.make({ operation: "apply_native_start_active" }),
+          ),
+        );
+        if (current.roster === undefined) {
+          return yield* ProviderResponseInvalid.make({
+            operation: "apply_native_start_active",
+          });
+        }
+        if (current.roster.providerTeamKey !== input.providerTeamKey) {
+          return { status: "rejected" as const, reason: "not_found" as const };
+        }
+        yield* Ref.update(world.state, (state) => ({
+          ...state,
+          nativeCalls: state.nativeCalls + 1,
+        }));
+        const result: ProviderNativeActionResult = (() => {
+          switch (current.nativeAction) {
+            case "accept":
+              return { status: "accepted" };
+            case "lost_response":
+              return { status: "unknown" };
+            case "unavailable":
+              return { status: "unknown" };
+            case "reject":
+              return { status: "rejected", reason: "invalid_request" };
+          }
+        })();
+        if (current.nativeAction === "accept" || current.nativeAction === "lost_response") {
+          const after = current.nativeAfter ?? current.roster;
+          yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));
+        }
+        return result;
       }),
       readPlayerDetails: Effect.fn("FakeProvider.readPlayerDetails")(function* (input) {
         const current = yield* prepare(input, "read_player_details");

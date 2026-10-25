@@ -19,6 +19,7 @@ const ProviderOperation = Schema.Literals([
   "read_transactions",
   "read_league_teams",
   "build_review_link",
+  "apply_native_start_active",
 ]);
 export type ProviderOperation = typeof ProviderOperation.Type;
 
@@ -95,6 +96,17 @@ export type ProviderPeriod = {
 type ProviderRosterCoverage =
   | { readonly type: "week"; readonly week: number }
   | { readonly type: "date"; readonly date: string };
+
+export type ProviderNativeTarget = ProviderRosterCoverage;
+
+export type ProviderNativeActionResult =
+  | { readonly status: "accepted" }
+  | {
+      readonly status: "rejected";
+      readonly reason: "invalid_request" | "not_found" | "premium_required";
+    }
+  | { readonly status: "not_sent"; readonly reason: "crumb_unavailable" | "request_failed" }
+  | { readonly status: "unknown" };
 
 export type ProviderRosterPlayer = {
   readonly providerPlayerKey: string;
@@ -316,6 +328,13 @@ export type ProviderGatewayShape = {
       readonly period: ProviderPeriod | undefined;
     },
   ) => Effect.Effect<ProviderRoster, ProviderReadFailure>;
+
+  readonly applyNativeStartActive: (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly target: ProviderNativeTarget;
+    },
+  ) => Effect.Effect<ProviderNativeActionResult, ProviderSessionRejected | ProviderResponseInvalid>;
 
   readonly readPlayerDetails: (
     input: ProviderSessionMaterial & {

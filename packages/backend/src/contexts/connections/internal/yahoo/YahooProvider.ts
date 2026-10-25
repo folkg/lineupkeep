@@ -14,6 +14,8 @@ import {
 import type {
   ProviderLeagueSettings,
   ProviderMatchup,
+  ProviderNativeActionResult,
+  ProviderNativeTarget,
   ProviderOperation,
   ProviderPeriod,
   ProviderPlayerDetail,
@@ -29,7 +31,12 @@ import type {
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { normalizeYahooJson } from "./YahooJson.ts";
-import { yahooReadDeadlineMillis, yahooReadResponseLimitBytes } from "./YahooLimits.ts";
+import {
+  yahooReadDeadlineMillis,
+  yahooReadResponseLimitBytes,
+  yahooWriteDeadlineMillis,
+  yahooWriteResponseLimitBytes,
+} from "./YahooLimits.ts";
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
 const serviceOrigin = new URL("https://pub-api.fantasysports.yahoo.com");
@@ -64,7 +71,8 @@ type ReadOperation =
   | "search_players"
   | "read_matchups"
   | "read_transactions"
-  | "read_league_teams";
+  | "read_league_teams"
+  | "apply_native_start_active";
 
 export const YahooProvider = Layer.effect(
   ProviderGateway,
@@ -187,6 +195,83 @@ export const YahooProvider = Layer.effect(
       const roster = yield* rosterFromPayload(decoded, input.providerTeamKey, input.period);
       yield* Effect.annotateCurrentSpan("provider.player_count", roster.players.length);
       return roster;
+    });
+
+    const applyNativeStartActive: (
+      input: ProviderSessionMaterial & {
+        readonly providerTeamKey: string;
+        readonly target: ProviderNativeTarget;
+      },
+    ) => Effect.Effect<
+      ProviderNativeActionResult,
+      ProviderSessionRejected | ProviderResponseInvalid
+    > = Effect.fn("YahooProvider.applyNativeStartActive")(function* (
+      input: ProviderSessionMaterial & {
+        readonly providerTeamKey: string;
+        readonly target: ProviderNativeTarget;
+      },
+    ) {
+      yield* Effect.annotateCurrentSpan("provider.operation", "apply_native_start_active");
+      const cookie = yield* sessionCookie(input, "apply_native_start_active");
+      const teamKey = yield* ValidTeamKey(input.providerTeamKey, "apply_native_start_active");
+      const target = yield* ValidNativeTarget(input.target);
+      const crumb = yield* Effect.result(readCrumb(input));
+      if (crumb._tag === "Failure") {
+        if (crumb.failure._tag === "provider.session_rejected") {
+          return yield* crumb.failure;
+        }
+        return crumb.failure._tag === "provider.crumb_unavailable"
+          ? { status: "not_sent" as const, reason: "crumb_unavailable" as const }
+          : { status: "not_sent" as const, reason: "request_failed" as const };
+      }
+      const url = yahooWriteUrl(
+        `/fantasy/v2/team/${teamKey}/roster;type=${target.type}${periodSelector(target)}`,
+        Redacted.value(crumb.success.crumb),
+      );
+      const body = nativeStartActiveBody(target);
+      const response = yield* Effect.scoped(
+        internet
+          .request(
+            new Request(url, {
+              method: "PUT",
+              headers: {
+                accept: "application/json",
+                "content-type": "application/xml",
+                cookie,
+              },
+              body,
+            }),
+            {
+              timeoutMs: yahooWriteDeadlineMillis,
+              maxResponseBytes: yahooWriteResponseLimitBytes,
+            },
+          )
+          .pipe(
+            Effect.flatMap((result) => discardBody(result).pipe(Effect.as(result.status))),
+            Effect.catchTag("PublicInternetUnavailable", () => Effect.void),
+          ),
+      );
+      yield* Effect.annotateCurrentSpan("provider.native_action", "start_active_players");
+      if (response === undefined) {
+        return { status: "unknown" as const };
+      }
+      yield* Effect.annotateCurrentSpan("http.response.status_code", response);
+      if (response === 401 || response === 403) {
+        return yield* ProviderSessionRejected.make({ operation: "apply_native_start_active" });
+      }
+      if (response === 404) {
+        return { status: "rejected" as const, reason: "not_found" as const };
+      }
+      if (response === 408 || response === 429) {
+        return { status: "not_sent" as const, reason: "request_failed" as const };
+      }
+      if (response >= 500) {
+        return { status: "unknown" as const };
+      }
+      if (response >= 400) {
+        return { status: "rejected" as const, reason: "invalid_request" as const };
+      }
+      return { status: "accepted" as const };
     });
 
     const unsupported = (
@@ -369,6 +454,7 @@ export const YahooProvider = Layer.effect(
       readCrumb,
       readLeague,
       readRoster,
+      applyNativeStartActive,
       readPlayerDetails,
       searchPlayers,
       readMatchups,
@@ -481,6 +567,51 @@ function yahooUrl(origin: URL, path: string, query: Readonly<Record<string, stri
     throw new Error("Yahoo request contains an unsupported query field");
   }
   return url;
+}
+
+function yahooWriteUrl(path: string, crumb: string): URL {
+  if (!path.startsWith("/") || path.includes("?") || path.includes("#")) {
+    throw new Error("Yahoo write path must be a relative path without query or fragment");
+  }
+  const url = new URL(path, serviceOrigin);
+  if (
+    url.origin !== serviceOrigin.origin ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.pathname !== path
+  ) {
+    throw new Error("Yahoo write request escaped its fixed origin");
+  }
+  url.searchParams.set("format", "json");
+  url.searchParams.set("crumb", crumb);
+  if ([...url.searchParams.keys()].some((key) => key !== "format" && key !== "crumb")) {
+    throw new Error("Yahoo write request contains an unsupported query field");
+  }
+  return url;
+}
+
+function ValidNativeTarget(
+  target: ProviderNativeTarget,
+): Effect.Effect<ProviderNativeTarget, ProviderResponseInvalid> {
+  if (target.type === "week") {
+    return Effect.map(ValidWeek(target.week), (week) => ({ type: "week" as const, week }));
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(target.date)) {
+    return Effect.fail(ProviderResponseInvalid.make({ operation: "apply_native_start_active" }));
+  }
+  return Effect.succeed({ type: "date" as const, date: target.date });
+}
+
+function periodSelector(target: ProviderNativeTarget): string {
+  return target.type === "week" ? `;week=${String(target.week)}` : `;date=${target.date}`;
+}
+
+function nativeStartActiveBody(target: ProviderNativeTarget): string {
+  const coverage =
+    target.type === "week"
+      ? `<coverage_type>week</coverage_type><week>${String(target.week)}</week>`
+      : `<coverage_type>date</coverage_type><date>${target.date}</date>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster>${coverage}<roster_action>start_active_players</roster_action></roster></fantasy_content>`;
 }
 
 function decodePayload<A, E>(
