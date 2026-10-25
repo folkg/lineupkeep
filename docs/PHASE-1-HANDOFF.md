@@ -125,6 +125,12 @@ Completion means either:
 
 Leave focused described jj changes and a fresh empty working copy. Deliver a concise summary, test/evidence locations, public URLs if deployed, resource inventory without secret values, known limitations, and operator instructions. Use Plannotator Inbox for substantive handover and necessary owner questions/actions, not routine progress. Continue independent work after asking; do not poll or wait for replies.
 
+## Orchestration notes
+
+- Delegate implementation to Herdr `pi` agents on `opencode-go/deepseek-v4.1-flash` with `--thinking max`, one serial chunk at a time. Review each chunk (`bun checks`, affected E2E targets, the actual diff) before starting the next, and close the pane once a chunk is accepted.
+- Give each agent its own prompt file with the binding constraints, the exact acceptance bar, and stop conditions; do not rely on conversation history.
+- Record every externally visible fact (deployed URLs, revisions, IAM posture) in the runbook, not in the transcript.
+
 ## Prompt for the next agent
 
 ```text
