@@ -30,6 +30,7 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
       entry: [
         "alchemy.run.ts!",
         "database.run.ts!",
+        "platform.run.ts!",
         "build/run.ts!",
         "local/driver.ts!",
         "local/*.safety.test.ts",
