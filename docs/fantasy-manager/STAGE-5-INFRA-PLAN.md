@@ -1,6 +1,6 @@
 # Stage 5 infrastructure plan
 
-Status: plan-only. No cloud resource was created, updated, or deleted.
+Status: deployed on 2026-10-25. The `cloud-run` stage created the described Scheduler job, queue, worker IAM bindings, and both Cloud Run services after the plan review. See [the deployed environment](../deployment.md#deployed-environment-2026-10-25) for the inventory, smoke results and remaining gates. The original plan-only record is retained below for provenance.
 
 ## Intended change
 

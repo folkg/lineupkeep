@@ -56,6 +56,46 @@ Bootstrap outside Alchemy, because Alchemy has no billing-link provider and stat
 - Email currently uses Resend's test sender `onboarding@resend.dev`, which delivers only to the owner's account address. A verified sending domain is a launch gate for open registration; the owner has not purchased a domain.
 - Owner decisions recorded here: budget ceiling 5 CAD/month with alerts at 50/90/100%; temporary backported security patches until a fixed upstream parent exists; live read queries and native `set_lineup` writes on the owner's teams are authorized, transactions and premium actions are not.
 
+### Deployed state and remaining gates (2026-10-25)
+
+The `cloud-run` stage is deployed to `lineupkeep-prod` / `us-east1`. The public
+origin, Cloud Run web and IAM-private worker, Cloud Tasks queue, hourly Cloud
+Scheduler job, secret names, cost expectation, and redeploy/rollback steps are
+recorded in [the deployed environment](deployment.md#deployed-environment-2026-10-25).
+The deployed smoke passed: landing page, MCP auth challenge and metadata,
+Scheduler-to-worker OIDC tick, worker IAM refusal, and Resend acceptance.
+
+Local live acceptance against the owner's Yahoo account passed through the
+product's linking upload, team discovery, the services behind all eight query
+tools, and one native `set_lineup` with verified readback (`no_op`). The live
+check found the original write request addressed the wrong origin and used an
+undocumented body shape; that defect is fixed with a regression test. Details
+and redacted measurements are in [the Phase 1 acceptance
+record](phase-1-acceptance-2026-10-25.md). The account currently resolves five
+teams across five leagues (1 football, 4 hockey); the expected shared-league
+example was not present on this date.
+
+Remaining gates before full Phase 1 acceptance:
+
+- **Owner-only deployed sign-in and live product acceptance.** Sign in to the
+  deployed origin with the owner's mailbox code, link Yahoo through the helper
+  against that origin, then prove one live read and one native write with
+  verified readback. The agent did not read the inbox or complete the owner's
+  sign-in.
+- **Hosted MCP client acceptance.** Local JSON-RPC calls are blocked by the
+  deliberate public-HTTPS client-metadata requirement; publish a CIMD metadata
+  document and verify consent, scopes and bounded results with the hosted client.
+- **Verified Resend sending domain.** `onboarding@resend.dev` accepts only the
+  owner's account address (a different address returned `422 EMAIL_REJECTED`).
+  Open registration remains gated on a verified domain.
+- **Operational drills.** Exercise application-data and protected-state
+  restoration, and decide when to destroy superseded secret versions (ten active
+  versions after four deploys; the current revisions pin their versions).
+- **Publication security acceptance.** The temporary response-validation
+  backport remains in force. No coherent upstream Solid 2 fix has been adopted;
+  the framework pin and the acceptance/removal conditions in
+  [release readiness](release-readiness.md) are unchanged.
+
 ## Execution sequence
 
 1. Inspect jj status and current authoritative documents. Preserve unrelated work. Confirm the pinned Node/Bun toolchain and baseline checks; do not recopy the starter or reinitialize history.

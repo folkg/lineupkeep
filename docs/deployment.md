@@ -26,6 +26,122 @@ env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy alchemy.run.t
 
 `BETTER_AUTH_URL` must equal the deployed origin, so the first web deploy establishes the Cloud Run URL and a follow-up deploy sets it; never ship a placeholder origin. Docker must be authenticated to `${GCP_REGION}-docker.pkg.dev` before the web stack publishes an image.
 
+## Deployed environment (2026-10-25)
+
+The `cloud-run` stage is deployed in `lineupkeep-prod` (`us-east1`) under the
+owner's CAD 5/month budget. `BETTER_AUTH_URL` and the canonical service origin
+are the same URL; the provisioned environment file now owns that value.
+
+| Item                              | Value                                                                                                                                                                                                                      |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public origin / `BETTER_AUTH_URL` | `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-hcfc7y3kha-ue.a.run.app`                                                                                                                                             |
+| Web service                       | `lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc` — public ingress, min 0 / max 3, concurrency 20, 1 vCPU / 512 MiB, request-based billing (`cpu-throttling=true`), startup CPU boost                                         |
+| Worker service                    | `lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y` — min 0 / max 2, concurrency 2, timeout 900 s, request-based billing, invoker IAM enforced (unauthenticated requests return 403)                                         |
+| Runtime accounts                  | Web: `alchemefdt2v24ebek3kk5bbglblvc@lineupkeep-prod.iam.gserviceaccount.com`; worker: `alchems6msjzkhxxseuglypqfudf7b@…`; queue/scheduler invoker: `alchem2r7pyg3ia7ujwxdkdpon7d5z@…`                                     |
+| Queue                             | `projects/lineupkeep-prod/locations/us-east1/queues/lineupkeepweb-lineupworkerqueue-cloud-run-vhxrepebzd4sojv4` — running, 5 dispatches/s, 4 concurrent, 5 attempts with 10–300 s backoff                                  |
+| Scheduler                         | `lineupkeepweb-lineuptick-cloud-run-ctseuiblv2wtwlwu` — `0 * * * *` UTC, OIDC to `POST /api/internal/lineup-worker` with `{action:"tick",limit:50}`, 300 s attempt deadline, 2 retries                                     |
+| Registry                          | `us-east1-docker.pkg.dev/lineupkeep-prod/lineupkeepweb-registry-cloud-run-u4rplfecdzi27v3w` (88.98 MB, 4 images)                                                                                                           |
+| Application database              | Alchemy-managed `LineupkeepDatabase` / `production` Neon Free project, independent of protected state                                                                                                                      |
+| Secret Manager                    | `lineupkeepweb-secret-better-auth-secret-cloud-run-zz7b4zbcg2rfo5fb`, `…-connection-encryption-key-cloud-run-ec7zelts3e7mtrtt`, `…-resend-api-key-cloud-run-6daiaqee2uvf6llx`, `…-database-url-cloud-run-2zpqgtvdba7gierc` |
+| Secret versions                   | 10 active (2 / 2 / 4 / 2) on 2026-10-25; revisions pin immutable version numbers                                                                                                                                           |
+
+**Plan review before apply:** the `cloud-run` plan proposed 26 resources, all
+creates — four secrets with their access bindings and immutable versions, three
+service accounts (web runtime, worker runtime, queue enqueuer), the Artifact
+Registry repository, image build and publish, the migration run, both Cloud Run
+services, the queue, the worker invoker binding, and the hourly Scheduler job.
+It proposed no updates, replacements or deletions and adopted no existing
+resource. The applied revisions were then read back with `gcloud` to confirm the
+settings in the table.
+
+The deterministic alias
+`https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-602042678335.us-east1.run.app`
+also resolves, but the canonical URL above is the auth origin. Do not configure
+callbacks or clients against the alias unless `BETTER_AUTH_URL` is changed and
+redeployed.
+
+Every deploy publishes a secret version because the version command is not
+memoized. Secret Manager includes six active versions per billing account before
+per-version charges; keep the version pinned by the live revisions, then
+deliberately destroy superseded versions after a rollback window. Do not disable
+a version that the current web or worker revision references.
+
+### Cost expectation
+
+Planning estimate for one owner and five teams, not a measured invoice or a
+zero-cost promise. The budget is a CAD 5/month alerting budget, not a hard cap.
+
+| Dimension         | Expectation                                                                                                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloud Run         | Hourly ticks, a few user requests, and month-end runs should stay inside the request-billed free allowances (2M requests, 180k vCPU-s, 360k GiB-s). Cold starts count. |
+| Cloud Tasks       | One small message per run plus retries; inside the free 1M operations.                                                                                                 |
+| Cloud Scheduler   | One job; inside the free three jobs per billing account unless other projects consume them, then $0.10/job/month.                                                      |
+| Secret Manager    | 10 active versions; up to about $0.24/month beyond the six free versions if the allowance is already used.                                                             |
+| Artifact Registry | 88.98 MB, inside the 0.5 GiB free allowance.                                                                                                                           |
+| Neon              | Free-plan quotas (100 CU-hours, 1 GB per project); hourly bursts must actually suspend to remain inside them.                                                          |
+| Resend            | Test sender only until a domain is verified; free 100/day and 3,000/month.                                                                                             |
+
+Budget alerts fire at 50 %, 90 % and 100 % of CAD 5. Review actual usage before
+adding users, teams or a sending domain.
+
+### Redeploy and rollback
+
+Load the protected provisioning inputs, mint a fresh GCP token, authenticate
+Docker, and deploy the same stacks in dependency order:
+
+```sh
+set -a && . ~/.config/lineupkeep/infra.env && set +a
+export GOOGLE_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+gcloud auth configure-docker us-east1-docker.pkg.dev --quiet
+cd infra
+env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy database.run.ts --stage production --yes
+env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy platform.run.ts --stage production --yes
+env -u npm_execpath node ../node_modules/alchemy/bin/cli.js deploy alchemy.run.ts --stage cloud-run --yes
+```
+
+`BETTER_AUTH_URL` is already set to the deployed origin in the provisioning
+environment. A new origin requires a new value and a redeploy; never leave a
+placeholder in a live revision. The web stack builds and publishes its image,
+runs committed migrations before activation, and creates new secret versions.
+Treat the access token as short-lived and account for expiry during long runs.
+
+Code rollback: deploy the previous source revision through Alchemy, or move
+traffic back to the previous ready Cloud Run revision while investigating:
+
+```sh
+gcloud run services update-traffic lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc \
+  --project=lineupkeep-prod --region=us-east1 --to-revisions=<previous-web-revision>=100
+gcloud run services update-traffic lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y \
+  --project=lineupkeep-prod --region=us-east1 --to-revisions=<previous-worker-revision>=100
+```
+
+Migrations are forward-only, so a code rollback must still tolerate the applied
+schema. Restoring data or protected state is a separate, tested procedure; state
+restore does not roll back code. Record the previous revisions and image digest
+before a risky change.
+
+### Deployed smoke results (2026-10-25)
+
+- `GET /` returned `200 text/html` (12,497 bytes, 0.28 s) with the Lineupkeep title.
+- `POST /mcp` without a token returned `401` and
+  `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/mcp"`.
+- The protected-resource metadata returned the deployed `/mcp` resource, the
+  authorization server, and the four scopes.
+- A manual Scheduler run invoked the worker with a Google-issued OIDC token and
+  returned `200` in 0.45 s.
+- An unauthenticated worker request returned `403`.
+- A sign-in-code request for the owner's Resend account address returned `200
+  {"success":true}`; the transactional path reached Resend. A different address
+  was refused with `422 EMAIL_REJECTED` because `onboarding@resend.dev` is a
+  test sender. No inbox was read and no owner sign-in was completed.
+- Both revisions were Ready with clean startup logs (only the HTTP listener and
+  graceful shutdown messages).
+
+Deployed product acceptance still needs the owner to sign in, link Yahoo through
+the helper against the deployed origin, and perform one live read/write run;
+hosted MCP-client acceptance and a verified sending domain remain open. See
+[the Phase 1 acceptance record](phase-1-acceptance-2026-10-25.md).
+
 ## Select a stage and lifecycle
 
 [infra/stage.ts](../infra/stage.ts) owns host/database selection. [infra/config.ts](../infra/config.ts) owns the runtime allowlist; [.env.example](../.env.example) is its annotated input reference. Do not infer a runtime setting from a variable merely existing in the provisioning shell.
