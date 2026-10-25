@@ -1,0 +1,14 @@
+diff --git a/dist/esm/createServerFn.js b/dist/esm/createServerFn.js
+index 016ed35d734b001b0c0bf844aedf4c8b555f1cf5..2642140bb8d46fc0cd3c0c4bfb3ba1021a27832f 100644
+--- a/dist/esm/createServerFn.js
++++ b/dist/esm/createServerFn.js
+@@ -64,7 +64,8 @@ var createServerFn = (options, __opts) => {
+ 					const serverContextAfterGlobalMiddlewares = startContext.contextAfterGlobalMiddlewares;
+ 					return await executeMiddleware(resolvedMiddleware, "server", {
+ 						...extractedFn,
+-						...opts,
++						data: opts.data,
++						method: opts.method ?? resolvedOptions.method,
+ 						serverFnMeta: extractedFn.serverFnMeta,
+ 						context: safeObjectMerge(opts.context, serverContextAfterGlobalMiddlewares),
+ 						request: startContext.request

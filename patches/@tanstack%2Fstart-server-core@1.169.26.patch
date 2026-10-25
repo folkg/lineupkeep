@@ -1,0 +1,137 @@
+diff --git a/dist/esm/request-response.js b/dist/esm/request-response.js
+index 4ce23fae2de3772646a2380a9e64c3f468b051f6..21994093055e04e4617b621fde700d3d77f81982 100644
+--- a/dist/esm/request-response.js
++++ b/dist/esm/request-response.js
+@@ -6,7 +6,7 @@ var globalObj = globalThis;
+ if (!globalObj[GLOBAL_EVENT_STORAGE_KEY]) globalObj[GLOBAL_EVENT_STORAGE_KEY] = new AsyncLocalStorage();
+ var eventStorage = globalObj[GLOBAL_EVENT_STORAGE_KEY];
+ function isPromiseLike(value) {
+-	return typeof value.then === "function";
++	return (typeof value === "object" || typeof value === "function") && value !== null && typeof value.then === "function";
+ }
+ function getSetCookieValues(headers) {
+ 	const headersWithSetCookie = headers;
+@@ -23,13 +23,23 @@ function mergeEventResponseHeaders(response, event) {
+ 	for (const cookie of responseSetCookies) response.headers.append("set-cookie", cookie);
+ 	for (const cookie of eventSetCookies) response.headers.append("set-cookie", cookie);
+ }
+-function attachResponseHeaders(value, event) {
+-	if (isPromiseLike(value)) return value.then((resolved) => {
+-		if (resolved instanceof Response) mergeEventResponseHeaders(resolved, event);
+-		return resolved;
+-	});
+-	if (value instanceof Response) mergeEventResponseHeaders(value, event);
+-	return value;
++function finalizeResponse(value, event) {
++	const response = ensureResponse(value);
++	mergeEventResponseHeaders(response, event);
++	return response;
++}
++function finalizeMaybeResponse(value, event) {
++	if (isPromiseLike(value)) return Promise.resolve(value).then((resolved) => finalizeResponse(resolved, event), (error) => finalizeResponse(handleResponseError(error), event));
++	return finalizeResponse(value, event);
++}
++function ensureResponse(value) {
++	if (value instanceof Response) return value;
++	return new Response("Internal Server Error", { status: 500 });
++}
++function handleResponseError(error) {
++	if (error instanceof Response) return error;
++	if (error instanceof Error) throw error;
++	return new Response("Internal Server Error", { status: 500 });
+ }
+ function requestHandler(handler) {
+ 	return (request, requestOpts) => {
+@@ -43,7 +53,13 @@ function requestHandler(handler) {
+ 			});
+ 			throw error;
+ 		}
+-		return toResponse(attachResponseHeaders(eventStorage.run({ h3Event }, () => handler(request, requestOpts)), h3Event), h3Event);
++		let response;
++		try {
++			response = eventStorage.run({ h3Event }, () => handler(request, requestOpts));
++		} catch (error) {
++			response = handleResponseError(error);
++		}
++		return toResponse(finalizeMaybeResponse(response, h3Event), h3Event);
+ 	};
+ }
+ function getH3Event() {
+diff --git a/dist/esm/serializer/ServerFunctionSerializationAdapter.js b/dist/esm/serializer/ServerFunctionSerializationAdapter.js
+index c50f86a266be46df94a90d9e38da9e036192c3ce..3e35a9cfbbe016681249c041c3b42a7e4d0ece6f 100644
+--- a/dist/esm/serializer/ServerFunctionSerializationAdapter.js
++++ b/dist/esm/serializer/ServerFunctionSerializationAdapter.js
+@@ -12,7 +12,14 @@ var ServerFunctionSerializationAdapter = createSerializationAdapter({
+ 	toSerializable: ({ serverFnMeta }) => ({ functionId: serverFnMeta.id }),
+ 	fromSerializable: ({ functionId }) => {
+ 		const fn = async (opts, signal) => {
+-			return (await (await getServerFnById(functionId, { origin: "client" }))(opts ?? {}, signal)).result;
++			const serverFn = await getServerFnById(functionId, { origin: "client" });
++			const result = await serverFn({
++				data: opts?.data,
++				context: opts?.context,
++				method: serverFn.method ?? "GET"
++			}, signal);
++			if (result.error !== void 0) throw result.error;
++			return result.result;
+ 		};
+ 		return fn;
+ 	}
+diff --git a/dist/esm/server-functions-handler.js b/dist/esm/server-functions-handler.js
+index c493774211d1ea4b966e9fcd437e3e833d8f932e..c90de27918ea6829cc159251938e6b031932938e 100644
+--- a/dist/esm/server-functions-handler.js
++++ b/dist/esm/server-functions-handler.js
+@@ -49,21 +49,25 @@ var handleServerAction = async ({ request, context, serverFnId }) => {
+ 				if (methodUpper === "GET") {
+ 					const payloadParam = url.searchParams.get("payload");
+ 					if (payloadParam && payloadParam.length > MAX_PAYLOAD_SIZE) throw new Error("Payload too large");
+-					const payload = payloadParam ? parsePayload(JSON.parse(payloadParam)) : {};
+-					payload.context = safeObjectMerge(payload.context, context);
+-					payload.method = methodUpper;
+-					return await action(payload);
++					const payload = payloadParam ? parsePayload(JSON.parse(payloadParam)) : void 0;
++					return await action({
++						data: payload?.data,
++						context: safeObjectMerge(payload?.context, context),
++						method: methodUpper
++					});
+ 				}
+ 				let jsonPayload;
+ 				if (contentType?.includes("application/json")) jsonPayload = await request.json();
+-				const payload = jsonPayload ? parsePayload(jsonPayload) : {};
+-				payload.context = safeObjectMerge(payload.context, context);
+-				payload.method = methodUpper;
+-				return await action(payload);
++				const payload = jsonPayload ? parsePayload(jsonPayload) : void 0;
++				return await action({
++					data: payload?.data,
++					context: safeObjectMerge(payload?.context, context),
++					method: methodUpper
++				});
+ 			})();
+-			const unwrapped = res.result || res.error;
++			const unwrapped = res.error !== void 0 ? res.error : res.result;
+ 			if (isNotFound(res)) res = isNotFoundResponse(res);
+-			if (!isServerFn) return unwrapped;
++			if (!isServerFn && (unwrapped instanceof Response || unwrapped === null || typeof unwrapped !== "object")) return unwrapped;
+ 			if (unwrapped instanceof Response) {
+ 				if (isRedirect(unwrapped)) return unwrapped;
+ 				unwrapped.headers.set(X_TSS_RAW_RESPONSE, "true");
+@@ -202,13 +206,12 @@ var handleServerAction = async ({ request, context, serverFnId }) => {
+ };
+ function isNotFoundResponse(error) {
+ 	const { headers, ...rest } = error;
+-	return new Response(JSON.stringify(rest), {
++	const response = new Response(JSON.stringify(rest), {
+ 		status: 404,
+-		headers: {
+-			"Content-Type": "application/json",
+-			...headers || {}
+-		}
++		headers
+ 	});
++	response.headers.set("Content-Type", "application/json");
++	return response;
+ }
+ //#endregion
+ export { handleServerAction };

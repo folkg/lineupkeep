@@ -116,7 +116,10 @@
     },
   },
   "patchedDependencies": {
+    "@tanstack/start-server-core@1.169.26": "patches/@tanstack%2Fstart-server-core@1.169.26.patch",
+    "@tanstack/start-client-core@1.170.22": "patches/@tanstack%2Fstart-client-core@1.170.22.patch",
     "@better-auth/oauth-provider@1.7.12": "patches/@better-auth%2Foauth-provider@1.7.12.patch",
+    "@tanstack/router-core@1.171.22": "patches/@tanstack%2Frouter-core@1.171.22.patch",
     "@tanstack/solid-start@2.0.0-rc.8": "patches/@tanstack%2Fsolid-start@2.0.0-rc.8.patch",
   },
   "overrides": {
