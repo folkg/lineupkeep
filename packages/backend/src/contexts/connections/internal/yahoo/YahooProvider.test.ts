@@ -117,6 +117,58 @@ it.effect("reads a redacted crumb from the fixed service origin", () => {
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
+it.effect("sends the native start-active action to the read-write roster endpoint", () => {
+  const calls: Array<{
+    url: URL;
+    method: string;
+    body: string;
+    headers: Record<string, string>;
+  }> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.promise(async () => {
+        const body = request.body === null ? "" : await request.clone().text();
+        calls.push({
+          url: new URL(request.url),
+          method: request.method,
+          body,
+          headers: Object.fromEntries(request.headers.entries()),
+        });
+        return request.url.includes("getCrumb")
+          ? jsonResponse({
+              service: { "xml:lang": "en-US", crumb: "canary-crumb-value" },
+            })
+          : jsonResponse({ fantasy_content: { roster: { status: "success" } } });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const result = yield* provider.applyNativeStartActive({
+      ...sessionInput,
+      providerTeamKey: "461.l.1000.t.1",
+      target: { type: "week", week: 7 },
+    });
+
+    assert.deepStrictEqual(result, { status: "accepted" });
+    assert.strictEqual(calls.length, 2);
+    const write = calls[1];
+    assert.isDefined(write);
+    assert.strictEqual(write.method, "PUT");
+    assert.strictEqual(write.url.origin, "https://pub-api-rw.fantasysports.yahoo.com");
+    assert.strictEqual(write.url.pathname, "/fantasy/v2/team/461.l.1000.t.1/roster");
+    assert.strictEqual(write.url.searchParams.get("format"), "json_f");
+    assert.strictEqual(write.url.searchParams.get("crumb"), "canary-crumb-value");
+    assert.strictEqual(write.headers["content-type"], "application/xml");
+    assert.strictEqual(write.headers["cookie"], Redacted.value(sessionInput.session));
+    assert.include(write.body, "<coverage_type>week</coverage_type>");
+    assert.include(write.body, "<week>7</week>");
+    assert.include(write.body, "<action>start_active_players</action>");
+    assert.notInclude(write.body, "roster_action");
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(layer))));
+});
+
 it.effect("rejects rejected sessions without exposing the cookie or response body", () => {
   const internet = recordingInternet(() => new Response("private-provider-body", { status: 401 }));
   return Effect.gen(function* () {

@@ -40,6 +40,7 @@ import {
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
 const serviceOrigin = new URL("https://pub-api.fantasysports.yahoo.com");
+const writeOrigin = new URL("https://pub-api-rw.fantasysports.yahoo.com");
 const supportedLeagues = ["nfl", "nhl"] as const;
 const leagueSport = {
   nfl: "football",
@@ -225,7 +226,7 @@ export const YahooProvider = Layer.effect(
           : { status: "not_sent" as const, reason: "request_failed" as const };
       }
       const url = yahooWriteUrl(
-        `/fantasy/v2/team/${teamKey}/roster;type=${target.type}${periodSelector(target)}`,
+        `/fantasy/v2/team/${teamKey}/roster`,
         Redacted.value(crumb.success.crumb),
       );
       const body = nativeStartActiveBody(target);
@@ -573,16 +574,16 @@ function yahooWriteUrl(path: string, crumb: string): URL {
   if (!path.startsWith("/") || path.includes("?") || path.includes("#")) {
     throw new Error("Yahoo write path must be a relative path without query or fragment");
   }
-  const url = new URL(path, serviceOrigin);
+  const url = new URL(path, writeOrigin);
   if (
-    url.origin !== serviceOrigin.origin ||
+    url.origin !== writeOrigin.origin ||
     url.username !== "" ||
     url.password !== "" ||
     url.pathname !== path
   ) {
     throw new Error("Yahoo write request escaped its fixed origin");
   }
-  url.searchParams.set("format", "json");
+  url.searchParams.set("format", "json_f");
   url.searchParams.set("crumb", crumb);
   if ([...url.searchParams.keys()].some((key) => key !== "format" && key !== "crumb")) {
     throw new Error("Yahoo write request contains an unsupported query field");
@@ -602,16 +603,12 @@ function ValidNativeTarget(
   return Effect.succeed({ type: "date" as const, date: target.date });
 }
 
-function periodSelector(target: ProviderNativeTarget): string {
-  return target.type === "week" ? `;week=${String(target.week)}` : `;date=${target.date}`;
-}
-
 function nativeStartActiveBody(target: ProviderNativeTarget): string {
   const coverage =
     target.type === "week"
       ? `<coverage_type>week</coverage_type><week>${String(target.week)}</week>`
       : `<coverage_type>date</coverage_type><date>${target.date}</date>`;
-  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster>${coverage}<roster_action>start_active_players</roster_action></roster></fantasy_content>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster>${coverage}<action>start_active_players</action></roster></fantasy_content>`;
 }
 
 function decodePayload<A, E>(
