@@ -33,6 +33,50 @@ it("merges positional resource fragments and nested collections", () => {
   });
 });
 
+it("merges nested attribute fragment lists and ignores absent placeholders", () => {
+  const normalized = normalizeYahooJson(rawNestedTeams);
+
+  assert.deepStrictEqual(normalized, {
+    users: [
+      {
+        guid: "SYNTHETICGUID",
+        games: [
+          {
+            game_key: "461",
+            code: "nfl",
+            season: "2026",
+            teams: [
+              {
+                team_key: "461.l.1000.t.1",
+                name: "Alpha",
+                team_logos: { team_logo: { size: "large", url: "https://s.yimg.com" } },
+                managers: { manager: { manager_id: "1" } },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+});
+
+it("keeps repeated single-key attribute entries in order instead of merging them", () => {
+  const normalized = normalizeYahooJson(rawLeagueSettings);
+
+  assert.deepStrictEqual(normalized, {
+    league: {
+      league_key: "465.l.2000",
+      settings: {
+        roster_type: "head",
+        roster_positions: [
+          { roster_position: { position: "C", count: 2, is_starting_position: 1 } },
+          { roster_position: { position: "BN", count: 6, is_starting_position: 0 } },
+        ],
+      },
+    },
+  });
+});
+
 it("preserves empty successful collections and ignores non-JSON content", () => {
   assert.deepStrictEqual(normalizeYahooJson({ fantasy_content: { users: { count: 0 } } }), {
     users: [],
@@ -46,6 +90,71 @@ const rawSession = {
     users: {
       "0": {
         user: [{ guid: "SYNTHETICGUID" }],
+      },
+      count: 1,
+    },
+  },
+};
+
+const rawLeagueSettings = {
+  fantasy_content: {
+    league: [
+      { league_key: "465.l.2000" },
+      {
+        settings: [
+          {
+            roster_type: "head",
+            roster_positions: [
+              { roster_position: { position: "C", count: 2, is_starting_position: 1 } },
+              { roster_position: { position: "BN", count: 6, is_starting_position: 0 } },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+const rawNestedTeams = {
+  fantasy_content: {
+    users: {
+      "0": {
+        user: [
+          { guid: "SYNTHETICGUID" },
+          {
+            games: {
+              "0": {
+                game: [
+                  { game_key: "461" },
+                  { code: "nfl" },
+                  { season: "2026" },
+                  {
+                    teams: {
+                      "0": {
+                        team: [
+                          [
+                            { team_key: "461.l.1000.t.1" },
+                            { name: "Alpha" },
+                            {
+                              team_logos: [
+                                { team_logo: { size: "large", url: "https://s.yimg.com" } },
+                              ],
+                            },
+                            { managers: [{ manager: { manager_id: "1" } }] },
+                            [],
+                          ],
+                          [],
+                        ],
+                      },
+                      count: 1,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
       },
       count: 1,
     },

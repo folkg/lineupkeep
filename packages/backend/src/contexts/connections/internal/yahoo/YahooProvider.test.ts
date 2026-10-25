@@ -315,7 +315,7 @@ const rawSession = {
 };
 
 const rawNflTeams = teamPayload("461", "nfl", [
-  { key: "461.l.1000.t.1", name: "Alpha", editable: "0" },
+  { key: "461.l.1000.t.1", name: "Alpha" },
   { key: "461.l.1000.t.2", name: "Beta" },
 ]);
 
@@ -324,7 +324,7 @@ const rawNhlTeams = teamPayload("465", "nhl", [{ key: "465.l.2000.t.9", name: "G
 function teamPayload(
   gameKey: string,
   code: "nfl" | "nhl",
-  teams: ReadonlyArray<{ readonly key: string; readonly name: string; readonly editable?: string }>,
+  teams: ReadonlyArray<{ readonly key: string; readonly name: string }>,
 ): unknown {
   return {
     fantasy_content: {
@@ -336,22 +336,46 @@ function teamPayload(
               games: {
                 "0": {
                   game: [
-                    { game_key: gameKey },
-                    { code },
-                    { season: "2026" },
+                    {
+                      game_key: gameKey,
+                      game_id: gameKey,
+                      name: code === "nfl" ? "Football" : "Hockey",
+                      code,
+                      type: "full",
+                      url: `https://${code === "nfl" ? "football" : "hockey"}.fantasysports.yahoo.com/f1/${gameKey}`,
+                      season: "2026",
+                      is_registration_over: 1,
+                      is_game_over: 0,
+                      is_offseason: 1,
+                      is_live_draft_lobby_active: 0,
+                    },
                     {
                       teams: {
                         ...Object.fromEntries(
                           teams.map((team, index) => [
                             String(index),
                             {
-                              team: {
-                                team_key: team.key,
-                                name: team.name,
-                                ...(team.editable === undefined
-                                  ? {}
-                                  : { is_editable: team.editable }),
-                              },
+                              team: [
+                                [
+                                  { team_key: team.key },
+                                  { team_id: team.key.slice(team.key.lastIndexOf(".t.") + 3) },
+                                  { name: team.name },
+                                  { is_owned_by_current_login: 1 },
+                                  {
+                                    team_logos: [
+                                      { team_logo: { size: "large", url: "https://s.yimg.com" } },
+                                    ],
+                                  },
+                                  [],
+                                  {
+                                    managers: [
+                                      { manager: { manager_id: "1", is_current_login: "1" } },
+                                    ],
+                                  },
+                                  [],
+                                ],
+                                [],
+                              ],
                             },
                           ]),
                         ),

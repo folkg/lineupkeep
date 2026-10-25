@@ -238,6 +238,8 @@ Every production Yahoo HTTP request uses starter PublicInternet. The Yahoo imple
 
 Current PublicInternet accepts Request and scoped Response consumption; its defaults are 15 seconds and 1 MiB. Earlier verified bulk Yahoo payloads exceed that default. Configure a deliberate larger bound only for bounded rich Yahoo operations, not globally. Consume/cancel response bodies within scope.
 
+The v2 read origin `pub-api-ro.fantasysports.yahoo.com` and the service origin `pub-api.fantasysports.yahoo.com` were exercised against the live provider on 2026-10-25 for session validation, crumb acquisition, and NFL/NHL team discovery, together with bounded roster and league-settings reads. [Verified read behavior](RESEARCH.md#live-yahoo-read-verification-2026-10-25) records payload shapes, the two normalizer defects that verification corrected, and the write-side facts that remain unproven.
+
 Yahoo native start-active uses an XML roster action; optimal-start was explicitly premium-denied on the researched account. No premium optimization endpoint, purchase, entitlement bypass, or substitute recommendation call is included.
 
 Review links support add, add/drop, drop, and trade, with exact provider-host allowlists and identifier validation. Yahoo uses scalar `apid`/`dpid`, and stage-one trade review with repeated outgoing/incoming IDs. Keep numeric web IDs private to the adapter. No submission-stage URLs, arbitrary redirects, CSRF material, transaction execution, or claim that a prefill guarantees final eligibility. Validate same-league/counterparty/player relationships before generating a link.

@@ -73,7 +73,7 @@ Security/IO:
 - Dedicated local browser workspace, no provider passwords collected, no browser extension/hosted login infrastructure, no secrets in commands/MCP/logs.
 - Test wrong owner, pairing replay/expiry, tampered credentials, connection generation, missing ranks/statuses, non-editable rosters, and synthetic-provider structural differences.
 
-**Exit:** safe query-only connection and team discovery work locally through the public seam; linking feasibility and account ownership are proven without code from AutoCoach. Live account acceptance remains separately authorized.
+**Exit:** safe query-only connection and team discovery work locally through the public seam; linking feasibility and account ownership are proven without code from AutoCoach. Adapter read endpoints and payload shapes were verified against the live provider on 2026-10-25; acceptance through the product's own linking seam remains open.
 
 ## Stage 3 — Query-first stateless MCP and transaction review links
 

@@ -51,10 +51,28 @@ function normalizeCollectionItem(value: unknown): unknown {
 }
 
 function normalizeFragments(fragments: ReadonlyArray<unknown>): unknown {
-  if (!fragments.every(isRecord)) {
+  const attributeFragments = fragments
+    .flatMap((fragment): ReadonlyArray<unknown> =>
+      Array.isArray(fragment) ? fragment : [fragment],
+    )
+    .filter((fragment) => !(Array.isArray(fragment) && fragment.length === 0));
+  if (!attributeFragments.every(isRecord) || !hasOnlyDistinctFields(attributeFragments)) {
     return fragments.map(normalizeValue);
   }
-  return Object.assign({}, ...fragments.map((fragment) => normalizeCollectionItem(fragment)));
+  return Object.assign({}, ...attributeFragments.map(normalizeCollectionItem));
+}
+
+function hasOnlyDistinctFields(records: ReadonlyArray<Record<string, unknown>>): boolean {
+  const seen = new Set<string>();
+  for (const record of records) {
+    for (const key of Object.keys(record)) {
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+    }
+  }
+  return true;
 }
 
 function isCollection(record: Record<string, unknown>): boolean {
