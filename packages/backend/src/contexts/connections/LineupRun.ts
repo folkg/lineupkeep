@@ -32,11 +32,46 @@ export const LineupTrigger = Schema.Literals(["manual", "scheduled"]);
 export type LineupTrigger = typeof LineupTrigger.Type;
 
 export const nativeLineupImplementation = "provider_native" as const;
+export const customLineupImplementation = "custom_policy" as const;
 
-export const LineupImplementation = Schema.Literals([nativeLineupImplementation]);
+export const LineupImplementation = Schema.Literals([
+  nativeLineupImplementation,
+  customLineupImplementation,
+]);
 export type LineupImplementation = typeof LineupImplementation.Type;
 
 export const providerNativeImplementationVersion = "provider-native/1" as const;
+export const customPolicyImplementationVersion = "custom-policy/1" as const;
+
+export const LineupPolicyProvenance = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("planned"),
+    version: Schema.NonEmptyString,
+    basis: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("refused"),
+    version: Schema.NonEmptyString,
+    code: Schema.NonEmptyString,
+    detail: Schema.NonEmptyString,
+  }),
+]);
+export type LineupPolicyProvenance = typeof LineupPolicyProvenance.Type;
+
+export const LineupPolicyRefusalProvenance = Schema.Struct({
+  kind: Schema.Literal("refused"),
+  version: Schema.NonEmptyString,
+  code: Schema.NonEmptyString,
+  detail: Schema.NonEmptyString,
+});
+export type LineupPolicyRefusalProvenance = typeof LineupPolicyRefusalProvenance.Type;
+
+export const LineupRunDifference = Schema.Struct({
+  name: Schema.NonEmptyString,
+  expected: Schema.NonEmptyString,
+  actual: Schema.NonEmptyString,
+});
+export type LineupRunDifference = typeof LineupRunDifference.Type;
 
 const IsoDate = Schema.String.pipe(
   Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
@@ -118,6 +153,9 @@ export const LineupRunOutcome = Schema.Struct({
   summary: Schema.String.pipe(Schema.check(Schema.isMaxLength(500))),
   observedAt: Schema.DateTimeUtc,
   changes: Schema.Array(LineupRunChange),
+  differences: Schema.optional(Schema.Array(LineupRunDifference)),
+  implementation: Schema.optional(LineupImplementation),
+  policy: Schema.optional(LineupPolicyProvenance),
   lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });

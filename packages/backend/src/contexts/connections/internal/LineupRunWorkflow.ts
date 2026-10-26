@@ -4,6 +4,8 @@ import { Schema } from "effect";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
   LineupImplementation,
+  LineupPolicyProvenance,
+  LineupPolicyRefusalProvenance,
   LineupRunOutcome,
   LineupTargetPeriod,
   LineupTrigger,
@@ -36,14 +38,31 @@ export const LineupObservation = Schema.Struct({
 });
 export type LineupObservation = typeof LineupObservation.Type;
 
-export const LineupNativePlan = Schema.Struct({
-  action: Schema.Literal("start_active_players"),
-  target: LineupTargetPeriod,
-  connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+const LineupPlannedAssignment = Schema.Struct({
+  playerKey: Schema.NonEmptyString,
+  slot: Schema.NonEmptyString,
 });
-export type LineupNativePlan = typeof LineupNativePlan.Type;
+type LineupPlannedAssignment = typeof LineupPlannedAssignment.Type;
+
+export const LineupPlan = Schema.TaggedUnion({
+  start_active_players: {
+    target: LineupTargetPeriod,
+    connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    policy: Schema.optional(LineupPolicyRefusalProvenance),
+  },
+  explicit_assignments: {
+    target: LineupTargetPeriod,
+    connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    policy: LineupPolicyProvenance,
+    assignments: Schema.Array(LineupPlannedAssignment),
+    sourceChanged: Schema.Boolean,
+  },
+});
+export type LineupPlan = typeof LineupPlan.Type;
 
 export const LineupWriteIntentRef = Schema.Struct({
   id: LineupUuid,
@@ -92,7 +111,7 @@ export const LineupRunState = Schema.TaggedUnion({
     ...RunContent,
     ...LeaseContent,
     observation: LineupObservation,
-    plan: LineupNativePlan,
+    plan: LineupPlan,
   },
   Applying: {
     ...RunContent,
@@ -149,7 +168,7 @@ const LineupRunEvents = Schema.TaggedUnion({
   RetryClaimed: { at: Schema.DateTimeUtc, ...LeaseContent },
   VerificationClaimed: { at: Schema.DateTimeUtc, ...LeaseContent },
   ObservationRecorded: { at: Schema.DateTimeUtc, observation: LineupObservation },
-  PlanPrepared: { at: Schema.DateTimeUtc, plan: LineupNativePlan },
+  PlanPrepared: { at: Schema.DateTimeUtc, plan: LineupPlan },
   ApplyStarted: {
     at: Schema.DateTimeUtc,
     writeIntent: LineupWriteIntentRef,
@@ -315,6 +334,14 @@ export const LineupRunWorkflow = Machine.make({
             attempt: state.attempt,
             writeIntent: state.writeIntent,
             providerResponse: event.providerResponse,
+            updatedAt: event.at,
+          }),
+        },
+        Verified: {
+          target: "Completed",
+          data: ({ state, event }) => ({
+            ...content(state),
+            outcome: event.outcome,
             updatedAt: event.at,
           }),
         },

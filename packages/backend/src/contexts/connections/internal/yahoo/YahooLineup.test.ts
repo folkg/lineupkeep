@@ -1,4 +1,4 @@
-import { makePlayerId } from "@lineupkeep/lineup-solver";
+import { makePlayerId, makeSlotId } from "@lineupkeep/lineup-solver";
 import type { PlayerId, RosterSlot } from "@lineupkeep/lineup-solver";
 import { describe, expect, it } from "vitest";
 
@@ -11,9 +11,12 @@ import type {
 
 import {
   planYahooLineup,
+  yahooAssignmentRequest,
   yahooAvailability,
   yahooLeagueSlots,
+  yahooObservationWindow,
   yahooPolicyInput,
+  yahooScorable,
   yahooScoringProfile,
   yahooTargetPeriod,
 } from "./YahooLineup.ts";
@@ -118,6 +121,130 @@ describe("Yahoo league translation", () => {
       kind: "refused",
       refusal: { kind: "policy", refusal: { kind: "no-scoring-rules" } },
     });
+  });
+
+  it("translates only the changed editable assignments and retains every roster member", () => {
+    const parsed = planYahooLineup(recordedPolicyInput(true));
+    if (parsed.kind !== "planned") {
+      throw new Error("Expected a plan.");
+    }
+
+    const result = yahooAssignmentRequest({
+      league: recordedLeague(),
+      roster: recordedRoster(true),
+      plan: parsed.plan,
+    });
+
+    expect(result.kind).toBe("request");
+    if (result.kind !== "request") {
+      throw new Error("Expected a request.");
+    }
+    const currentSlots = new Map(
+      recordedRoster(true).players.map((player) => [player.providerPlayerKey, player.slot]),
+    );
+    expect(result.assignments).toHaveLength(parsed.plan.comparison.slotChanges.length);
+    expect(new Set(result.assignments.map((assignment) => assignment.playerKey)).size).toBe(
+      result.assignments.length,
+    );
+    for (const assignment of result.assignments) {
+      expect(currentSlots.has(assignment.playerKey)).toBe(true);
+      expect(currentSlots.get(assignment.playerKey)).not.toBe(assignment.slot);
+    }
+  });
+
+  it("sends nothing when the plan already matches the observed lineup", () => {
+    const parsed = planYahooLineup(recordedPolicyInput(false));
+    if (parsed.kind !== "planned") {
+      throw new Error("Expected a plan.");
+    }
+
+    expect(
+      yahooAssignmentRequest({
+        league: recordedLeague(),
+        roster: recordedRoster(false),
+        plan: parsed.plan,
+      }),
+    ).toEqual({ kind: "no_op" });
+  });
+
+  it("refuses to move a player the provider reports as locked", () => {
+    const parsed = planYahooLineup(recordedPolicyInput(true));
+    if (parsed.kind !== "planned") {
+      throw new Error("Expected a plan.");
+    }
+
+    const result = yahooAssignmentRequest({
+      league: recordedLeague(),
+      roster: recordedRoster(false),
+      plan: parsed.plan,
+    });
+
+    expect(result.kind).toBe("refused");
+    if (result.kind !== "refused") {
+      throw new Error("Expected a refusal.");
+    }
+    expect(result.refusal.kind).toBe("locked-player");
+  });
+
+  it("refuses a plan that moves a player through a reserve list", () => {
+    const parsed = planYahooLineup(recordedPolicyInput(true));
+    if (parsed.kind !== "planned") {
+      throw new Error("Expected a plan.");
+    }
+    const plan = {
+      ...parsed.plan,
+      assignments: parsed.plan.assignments.map((assignment) =>
+        assignment.playerId === recordedPlayerId(7)
+          ? { ...assignment, slotId: makeSlotId("IR") }
+          : assignment,
+      ),
+    };
+
+    const result = yahooAssignmentRequest({
+      league: recordedLeague(),
+      roster: recordedRoster(true),
+      plan,
+    });
+
+    expect(result.kind).toBe("refused");
+    if (result.kind !== "refused") {
+      throw new Error("Expected a refusal.");
+    }
+    expect(result.refusal.kind).toBe("reserve-list");
+  });
+
+  it("refuses a plan that does not assign every roster member", () => {
+    const parsed = planYahooLineup(recordedPolicyInput(true));
+    if (parsed.kind !== "planned") {
+      throw new Error("Expected a plan.");
+    }
+    const plan = {
+      ...parsed.plan,
+      assignments: parsed.plan.assignments.slice(1),
+    };
+
+    const result = yahooAssignmentRequest({
+      league: recordedLeague(),
+      roster: recordedRoster(true),
+      plan,
+    });
+
+    expect(result.kind).toBe("refused");
+    if (result.kind !== "refused") {
+      throw new Error("Expected a refusal.");
+    }
+    expect(result.refusal.kind).toBe("plan-membership");
+  });
+
+  it("derives the completed observation window from the target period", () => {
+    expect(yahooObservationWindow(recordedLeague(), recordedRoster(true))).toEqual([
+      { kind: "week", week: 3 },
+      { kind: "week", week: 4 },
+      { kind: "week", week: 5 },
+      { kind: "week", week: 6 },
+    ]);
+    expect(yahooScorable(recordedLeague())).toBe(true);
+    expect(yahooScorable(hockeyLeague())).toBe(false);
   });
 });
 

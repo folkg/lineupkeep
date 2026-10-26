@@ -19,6 +19,8 @@ import type {
 } from "./types.ts";
 import { valuate } from "./valuation.ts";
 
+export const lineupPolicyVersion = "trailing-mean-points/1";
+
 export function buildLineupProblem(input: LineupPolicyInput): LineupPolicyResult {
   requireConsistentInput(input);
   if (input.scoring.rules.length === 0) {

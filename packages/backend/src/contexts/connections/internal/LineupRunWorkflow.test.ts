@@ -232,7 +232,7 @@ const plan = {
   _tag: "PlanPrepared" as const,
   at,
   plan: {
-    action: "start_active_players" as const,
+    _tag: "start_active_players" as const,
     target,
     connectionGeneration: 1,
     lockedPlayers: 1,

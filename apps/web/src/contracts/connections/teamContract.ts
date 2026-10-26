@@ -48,7 +48,7 @@ export type LineupRunView = {
   readonly team: string;
   readonly target: LineupTargetPeriod;
   readonly trigger: LineupTrigger;
-  readonly implementation: "provider_native";
+  readonly implementation: "provider_native" | "custom_policy";
   readonly implementationVersion: string;
   readonly status: LineupRunStatus;
   readonly attempts: number;
@@ -72,6 +72,20 @@ export type LineupRunView = {
       readonly from: string;
       readonly to: string;
     }>;
+    readonly differences?: ReadonlyArray<{
+      readonly name: string;
+      readonly expected: string;
+      readonly actual: string;
+    }>;
+    readonly implementation?: "provider_native" | "custom_policy";
+    readonly policy?:
+      | { readonly kind: "planned"; readonly version: string; readonly basis: string }
+      | {
+          readonly kind: "refused";
+          readonly version: string;
+          readonly code: string;
+          readonly detail: string;
+        };
     readonly lockedPlayers: number;
     readonly editablePlayers: number;
   };

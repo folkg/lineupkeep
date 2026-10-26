@@ -1,4 +1,10 @@
-import { buildLineupProblem, periodKey, trailingWindow } from "@lineupkeep/lineup-policy";
+import {
+  buildLineupProblem,
+  lineupPolicyVersion,
+  periodKey,
+  trailingPeriodCount,
+  trailingWindow,
+} from "@lineupkeep/lineup-policy";
 import type {
   LineupPolicyInput,
   LineupPolicyRefusal,
@@ -25,6 +31,7 @@ import type {
   SelectionBasis,
   SlotEligibility,
 } from "@lineupkeep/lineup-solver";
+import { DateTime } from "effect";
 
 import type {
   ProviderLeagueSettings,
@@ -32,6 +39,8 @@ import type {
   ProviderRoster,
   ProviderRosterPlayer,
 } from "#contexts/connections/Provider.ts";
+
+export { lineupPolicyVersion };
 
 export function planYahooLineup(input: YahooLineupInput): YahooLineupResult {
   const policyInput = yahooPolicyInput(input);
@@ -79,6 +88,151 @@ export function yahooScoringProfile(league: ProviderLeagueSettings): ScoringProf
       points: modifier.points,
     })),
   });
+}
+
+export function yahooScorable(league: ProviderLeagueSettings): boolean {
+  return league.statModifiers.length > 0;
+}
+
+export function yahooObservationWindow(
+  league: ProviderLeagueSettings,
+  roster: ProviderRoster,
+): ReadonlyArray<Period> {
+  const target = yahooTargetPeriod(roster);
+  return target.kind === "week"
+    ? completedWeeks(league, target.week)
+    : completedDates(league, target.date);
+}
+
+export function yahooAssignmentRequest(input: YahooAssignmentInput): YahooAssignmentResult {
+  const rosterPlayers = new Map(
+    input.roster.players.map((player) => [player.providerPlayerKey, player]),
+  );
+  const plannedSlots = new Map(
+    input.plan.assignments.map((assignment) => [assignment.playerId, assignment.slotId]),
+  );
+  const missingPlayerKeys = [...rosterPlayers.keys()].filter(
+    (key) => !plannedSlots.has(makePlayerId(key)),
+  );
+  const unknownPlayerIds = input.plan.assignments
+    .map((assignment) => assignment.playerId)
+    .filter((playerId) => !rosterPlayers.has(playerId));
+  if (missingPlayerKeys.length > 0 || unknownPlayerIds.length > 0) {
+    return {
+      kind: "refused",
+      refusal: { kind: "plan-membership", missingPlayerKeys, unknownPlayerIds },
+    };
+  }
+
+  const startingSlots = new Set(
+    input.league.rosterPositions
+      .filter((position) => position.isStarting)
+      .map((position) => position.position),
+  );
+  const assignments: Array<YahooPlannedAssignment> = [];
+  for (const player of input.roster.players) {
+    const targetSlot = plannedSlots.get(makePlayerId(player.providerPlayerKey));
+    if (targetSlot === undefined || targetSlot === player.slot) {
+      continue;
+    }
+    if (player.isEditable !== true) {
+      return {
+        kind: "refused",
+        refusal: {
+          kind: "locked-player",
+          playerKey: player.providerPlayerKey,
+          from: player.slot,
+          to: targetSlot,
+        },
+      };
+    }
+    if (isReserveList(player.slot, startingSlots) || isReserveList(targetSlot, startingSlots)) {
+      return {
+        kind: "refused",
+        refusal: {
+          kind: "reserve-list",
+          playerKey: player.providerPlayerKey,
+          from: player.slot,
+          to: targetSlot,
+        },
+      };
+    }
+    assignments.push({ playerKey: player.providerPlayerKey, slot: targetSlot });
+  }
+
+  return assignments.length === 0 ? { kind: "no_op" } : { kind: "request", assignments };
+}
+
+export function describeYahooLineupRefusal(refusal: YahooLineupRefusal): string {
+  switch (refusal.kind) {
+    case "policy":
+      return describePolicyRefusal(refusal.refusal);
+    case "solver":
+      return describeSolverRefusal(refusal.refusal);
+  }
+}
+
+export function yahooLineupRefusalCode(refusal: YahooLineupRefusal): string {
+  return refusal.kind === "policy"
+    ? `policy:${refusal.refusal.kind}`
+    : `solver:${refusal.refusal.reason}`;
+}
+
+function describePolicyRefusal(refusal: LineupPolicyRefusal): string {
+  switch (refusal.kind) {
+    case "no-scoring-rules":
+      return "This league publishes no points rules, so its lineup cannot be scored by the custom policy.";
+    case "no-observed-periods":
+      return "No completed scoring period is available to value the roster, so the custom policy cannot plan a lineup.";
+  }
+}
+
+function describeSolverRefusal(refusal: LineupRefusal): string {
+  switch (refusal.reason) {
+    case "unusable-selection-value":
+      return "Some roster players have no usable selection value, so a complete lineup cannot be planned.";
+    case "lock-references-unknown-slot":
+      return "A locked player occupies a slot this league does not declare, so the lineup cannot be planned.";
+    case "locked-player-ineligible-for-slot":
+      return "A locked player is not eligible for the slot they occupy, so the lineup cannot be planned.";
+    case "lock-capacity-exceeded":
+      return "Locked players exceed a slot's declared capacity, so the lineup cannot be planned.";
+    case "roster-exceeds-slot-capacity":
+      return "The roster has more players than the league's declared slots, so the lineup cannot be planned without dropping a player.";
+    case "player-has-no-legal-slot":
+      return "Some roster players have no legal slot, so the lineup cannot be planned.";
+    case "required-starting-position-unfillable":
+      return "A required starting position cannot be filled from the current roster.";
+    case "no-legal-assignment":
+      return "No complete legal assignment of this roster exists.";
+  }
+}
+
+function completedWeeks(league: ProviderLeagueSettings, targetWeek: number): ReadonlyArray<Period> {
+  const firstWeek = league.periodWindow?.startWeek ?? 1;
+  const periods: Array<Period> = [];
+  for (let week = targetWeek - trailingPeriodCount; week < targetWeek; week += 1) {
+    if (week >= firstWeek) {
+      periods.push({ kind: "week", week });
+    }
+  }
+  return periods;
+}
+
+function completedDates(league: ProviderLeagueSettings, targetDate: string): ReadonlyArray<Period> {
+  const target = DateTime.makeUnsafe(`${targetDate}T00:00:00.000Z`);
+  const periods: Array<Period> = [];
+  for (let offset = trailingPeriodCount; offset >= 1; offset -= 1) {
+    const date = DateTime.formatIsoDate(DateTime.add(target, { days: -offset }));
+    if (league.startDate === undefined || date >= league.startDate) {
+      periods.push({ kind: "date", date });
+    }
+  }
+  return periods;
+}
+
+function isReserveList(slot: string, startingSlots: ReadonlySet<string>): boolean {
+  return !startingSlots.has(slot) && slot !== benchPosition;
 }
 
 export function yahooLeagueSlots(league: ProviderLeagueSettings): ReadonlyArray<RosterSlot> {
@@ -219,6 +373,41 @@ export type YahooLineupInput = {
   readonly history: ReadonlyArray<YahooPeriodHistory>;
 };
 
+export type YahooAssignmentInput = {
+  readonly league: ProviderLeagueSettings;
+  readonly roster: ProviderRoster;
+  readonly plan: LineupPlan;
+};
+
+type YahooPlannedAssignment = {
+  readonly playerKey: string;
+  readonly slot: string;
+};
+
+export type YahooAssignmentResult =
+  | { readonly kind: "request"; readonly assignments: ReadonlyArray<YahooPlannedAssignment> }
+  | { readonly kind: "no_op" }
+  | { readonly kind: "refused"; readonly refusal: YahooAssignmentRefusal };
+
+export type YahooAssignmentRefusal =
+  | {
+      readonly kind: "plan-membership";
+      readonly missingPlayerKeys: ReadonlyArray<string>;
+      readonly unknownPlayerIds: ReadonlyArray<string>;
+    }
+  | {
+      readonly kind: "locked-player";
+      readonly playerKey: string;
+      readonly from: string;
+      readonly to: string;
+    }
+  | {
+      readonly kind: "reserve-list";
+      readonly playerKey: string;
+      readonly from: string;
+      readonly to: string;
+    };
+
 type YahooPeriodHistory = {
   readonly period: Period;
   readonly details: ReadonlyArray<ProviderPlayerDetail>;
@@ -235,6 +424,6 @@ export type YahooLineupResult =
     }
   | { readonly kind: "refused"; readonly refusal: YahooLineupRefusal };
 
-type YahooLineupRefusal =
+export type YahooLineupRefusal =
   | { readonly kind: "policy"; readonly refusal: LineupPolicyRefusal }
   | { readonly kind: "solver"; readonly refusal: LineupRefusal };

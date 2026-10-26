@@ -7,6 +7,8 @@ import type { ConnectionId } from "#contexts/connections/Connection.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupRunOutcome } from "#contexts/connections/LineupRun.ts";
 import {
+  customLineupImplementation,
+  customPolicyImplementationVersion,
   LineupPersistenceFailed,
   LineupRequestConflict,
   LineupRequestId,
@@ -15,7 +17,11 @@ import {
   nativeLineupImplementation,
   providerNativeImplementationVersion,
 } from "#contexts/connections/LineupRun.ts";
-import type { LineupTargetPeriod, LineupTrigger } from "#contexts/connections/LineupRun.ts";
+import type {
+  LineupImplementation,
+  LineupTargetPeriod,
+  LineupTrigger,
+} from "#contexts/connections/LineupRun.ts";
 import { anyOf, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
 import { snapshotOf } from "#utilities/machine.ts";
@@ -41,9 +47,14 @@ import type {
 } from "./LineupRunTables.ts";
 
 export type { LineupWriteIntentRecord };
-import { LineupRunState, LineupRunWorkflow, lineupRunStatus } from "./LineupRunWorkflow.ts";
+import {
+  LineupPlan,
+  LineupRunState,
+  LineupRunWorkflow,
+  lineupRunStatus,
+} from "./LineupRunWorkflow.ts";
 import { LineupObservation } from "./LineupRunWorkflow.ts";
-import type { LineupLeaseRef, LineupNativePlan, LineupRunEvent } from "./LineupRunWorkflow.ts";
+import type { LineupLeaseRef, LineupRunEvent } from "./LineupRunWorkflow.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
 const lineupLeaseDurationMillis = 45_000;
@@ -55,6 +66,7 @@ export type NewLineupRun = {
   readonly connectionId: ConnectionId;
   readonly target: LineupTargetPeriod;
   readonly trigger: LineupTrigger;
+  readonly implementation?: LineupImplementation;
 };
 
 type CreatedLineupRequest = {
@@ -76,6 +88,7 @@ const nonTerminalRunStatuses = [
 export type NewScheduledLineupRun = {
   readonly team: TeamId;
   readonly connectionId: ConnectionId;
+  readonly implementation?: LineupImplementation;
 };
 
 export type ClaimedLineupRun = {
@@ -100,7 +113,8 @@ type IntentStatus =
   | "unknown"
   | "not_sent"
   | "verified_changed"
-  | "verified_no_op";
+  | "verified_no_op"
+  | "verified_mismatch";
 
 type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transaction"]>[0]>[0];
 
@@ -165,13 +179,14 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 input.runs,
                 (run) =>
                   Effect.gen(function* () {
+                    const implementation = run.implementation ?? nativeLineupImplementation;
                     const state: LineupRunState = {
                       _tag: "Queued",
                       team: run.team,
                       target: run.target,
                       trigger: run.trigger,
-                      implementation: nativeLineupImplementation,
-                      implementationVersion: providerNativeImplementationVersion,
+                      implementation,
+                      implementationVersion: implementationVersion(implementation),
                       queuedAt: now,
                       updatedAt: now,
                     };
@@ -186,8 +201,8 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                       target: run.target,
                       status: lineupRunStatus(state),
                       state,
-                      implementation: nativeLineupImplementation,
-                      implementationVersion: providerNativeImplementationVersion,
+                      implementation,
+                      implementationVersion: implementationVersion(implementation),
                       attempts: 0,
                       nextActionAt: null,
                       createdAt: now,
@@ -247,13 +262,14 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               input.runs,
               (run) =>
                 Effect.gen(function* () {
+                  const implementation = run.implementation ?? nativeLineupImplementation;
                   const state: LineupRunState = {
                     _tag: "Queued",
                     team: run.team,
                     target: { coverage: "current" },
                     trigger: "scheduled",
-                    implementation: nativeLineupImplementation,
-                    implementationVersion: providerNativeImplementationVersion,
+                    implementation,
+                    implementationVersion: implementationVersion(implementation),
                     queuedAt: input.at,
                     updatedAt: input.at,
                   };
@@ -268,8 +284,8 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                     target: { coverage: "current" as const },
                     status: lineupRunStatus(state),
                     state,
-                    implementation: nativeLineupImplementation,
-                    implementationVersion: providerNativeImplementationVersion,
+                    implementation,
+                    implementationVersion: implementationVersion(implementation),
                     attempts: 0,
                     nextActionAt: null,
                     createdAt: input.at,
@@ -607,7 +623,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         readonly runId: LineupRunId;
         readonly lease: LineupLeaseRef;
         readonly at: DateTime.Utc;
-        readonly plan: LineupNativePlan;
+        readonly plan: LineupPlan;
         readonly before: LineupObservation["players"];
       }) {
         return yield* database
@@ -686,6 +702,9 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               }
 
               const intentId = yield* Schema.decodeEffect(LineupUuid)(yield* newId);
+              const plan = yield* Schema.encodeEffect(Schema.toCodecJson(LineupPlan))(
+                input.plan,
+              ).pipe(Effect.mapError(mapPersistenceFailure));
               const inserted = yield* tx
                 .insert(lineupWriteIntents)
                 .values({
@@ -698,9 +717,10 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   connectionGeneration: input.plan.connectionGeneration,
                   leaseToken: input.lease.token,
                   leaseGeneration: input.lease.generation,
-                  action: "start_active_players",
+                  action: input.plan._tag,
                   target: input.plan.target,
                   before: input.before,
+                  plan,
                   status: "intended",
                   createdAt: DateTime.toDateUtc(input.at),
                   updatedAt: DateTime.toDateUtc(input.at),
@@ -766,7 +786,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
       const recordPlan = Effect.fn("LineupRunRepository.recordPlan")(function* (input: {
         readonly runId: LineupRunId;
         readonly lease: LineupLeaseRef;
-        readonly plan: LineupNativePlan;
+        readonly plan: LineupPlan;
         readonly at: DateTime.Utc;
       }) {
         yield* mutateClaimed(input.runId, input.lease, (record, tx) =>
@@ -1471,4 +1491,10 @@ type TerminalInput = {
 
 function mapPersistenceFailure(cause: unknown): LineupPersistenceFailed {
   return LineupPersistenceFailed.make({ cause });
+}
+
+function implementationVersion(implementation: LineupImplementation): string {
+  return implementation === customLineupImplementation
+    ? customPolicyImplementationVersion
+    : providerNativeImplementationVersion;
 }

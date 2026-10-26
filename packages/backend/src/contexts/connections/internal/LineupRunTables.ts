@@ -26,7 +26,12 @@ import {
 } from "#contexts/connections/LineupRun.ts";
 import { scheduledPendingPredicate } from "#database/dbUtilities.ts";
 
-import { LineupObservedPlayer, LineupRunState, lineupRunStatus } from "./LineupRunWorkflow.ts";
+import {
+  LineupObservedPlayer,
+  LineupPlan,
+  LineupRunState,
+  lineupRunStatus,
+} from "./LineupRunWorkflow.ts";
 
 export const lineupRequests = pgTable(
   "lineup_requests",
@@ -69,7 +74,9 @@ export const lineupRuns = pgTable(
       ],
     }).notNull(),
     state: jsonb("state").notNull(),
-    implementation: text("implementation", { enum: ["provider_native"] }).notNull(),
+    implementation: text("implementation", {
+      enum: ["provider_native", "custom_policy"],
+    }).notNull(),
     implementationVersion: text("implementation_version").notNull(),
     attempts: integer("attempts").notNull().default(0),
     nextActionAt: timestamp("next_action_at", { withTimezone: true }),
@@ -173,9 +180,10 @@ export const lineupWriteIntents = pgTable(
     connectionGeneration: integer("connection_generation").notNull(),
     leaseToken: uuid("lease_token").notNull(),
     leaseGeneration: integer("lease_generation").notNull(),
-    action: text("action", { enum: ["start_active_players"] }).notNull(),
+    action: text("action", { enum: ["start_active_players", "explicit_assignments"] }).notNull(),
     target: jsonb("target").notNull(),
     before: jsonb("before").notNull(),
+    plan: jsonb("plan"),
     status: text("status", {
       enum: [
         "intended",
@@ -186,6 +194,7 @@ export const lineupWriteIntents = pgTable(
         "not_sent",
         "verified_changed",
         "verified_no_op",
+        "verified_mismatch",
       ],
     }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -354,9 +363,10 @@ const LineupWriteIntentRecordSchema = Schema.Struct({
   connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   leaseToken: LineupUuid,
   leaseGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  action: Schema.Literal("start_active_players"),
+  action: Schema.Literals(["start_active_players", "explicit_assignments"]),
   target: LineupTargetPeriod,
   before: Schema.Array(LineupObservedPlayer),
+  plan: Schema.optional(LineupPlan),
   status: Schema.Literals([
     "intended",
     "sent",
@@ -366,6 +376,7 @@ const LineupWriteIntentRecordSchema = Schema.Struct({
     "not_sent",
     "verified_changed",
     "verified_no_op",
+    "verified_mismatch",
   ]),
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
@@ -382,9 +393,10 @@ const LineupWriteIntentSelect = createSelectSchema(lineupWriteIntents, {
   connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   leaseToken: LineupUuid,
   leaseGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  action: Schema.Literal("start_active_players"),
+  action: Schema.Literals(["start_active_players", "explicit_assignments"]),
   target: Schema.Unknown,
   before: Schema.Unknown,
+  plan: Schema.NullOr(Schema.Unknown),
   status: Schema.Literals([
     "intended",
     "sent",
@@ -394,6 +406,7 @@ const LineupWriteIntentSelect = createSelectSchema(lineupWriteIntents, {
     "not_sent",
     "verified_changed",
     "verified_no_op",
+    "verified_mismatch",
   ]),
   createdAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
@@ -414,7 +427,14 @@ export const LineupWriteIntentRow = LineupWriteIntentSelect.pipe(
           const before = yield* SchemaParser.decodeUnknownEffect(
             Schema.toCodecJson(Schema.Array(LineupObservedPlayer)),
           )(row.before);
-          return { ...row, target, before };
+          const { plan: currentPlan, ...rest } = row;
+          const plan =
+            currentPlan === null
+              ? undefined
+              : yield* SchemaParser.decodeUnknownEffect(Schema.toCodecJson(LineupPlan))(
+                  currentPlan,
+                );
+          return { ...rest, target, before, ...(plan === undefined ? {} : { plan }) };
         }),
       encode: (row) =>
         Effect.gen(function* () {
@@ -424,7 +444,11 @@ export const LineupWriteIntentRow = LineupWriteIntentSelect.pipe(
           const before = yield* SchemaParser.encodeEffect(
             Schema.toCodecJson(Schema.Array(LineupObservedPlayer)),
           )(row.before);
-          return { ...row, target, before };
+          const plan =
+            row.plan === undefined
+              ? null
+              : yield* SchemaParser.encodeEffect(Schema.toCodecJson(LineupPlan))(row.plan);
+          return { ...row, target, before, plan };
         }),
     }),
   ),

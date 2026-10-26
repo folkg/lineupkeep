@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "68643c5a-4997-4761-9282-8f98406032a2",
+  "prevIds": ["3d09402e-2966-4e2c-a6bb-13241ceb4b86"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "lineup_write_intents", "plan"],
+      "writes": [
+        "s|col|public.lineup_write_intents.plan",
+        "n|col|public.lineup_write_intents.plan",
+        "e|col|public.lineup_write_intents.plan"
+      ],
+      "reads": ["n|tbl|public.lineup_write_intents", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "lineup_write_intents",
+        "name": "plan",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

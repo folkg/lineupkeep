@@ -104,6 +104,45 @@ it.effect("round-trips delivery and write-intent rows", () =>
     const intentDecoded = yield* Schema.decodeEffect(LineupWriteIntentRow)(intentRow);
     assert.isTrue(Schema.toEquivalence(LineupWriteIntentRow)(intentDecoded, intent));
     assert.strictEqual(intentRow.status, "intended");
+
+    const explicit: LineupWriteIntentRecord = {
+      ...intent,
+      id: yield* Schema.decodeEffect(LineupUuid)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a9"),
+      action: "explicit_assignments",
+      status: "verified_mismatch",
+      plan: {
+        _tag: "explicit_assignments",
+        target: { coverage: "week", week: 3 },
+        connectionGeneration: 2,
+        lockedPlayers: 0,
+        editablePlayers: 1,
+        policy: {
+          kind: "planned",
+          version: "trailing-mean-points/1",
+          basis: "yahoo:mean-points-per-period:week:2",
+        },
+        assignments: [{ playerKey: "461.p.10001", slot: "BN" }],
+        sourceChanged: false,
+      },
+    };
+    const explicitRow = yield* Schema.encodeEffect(LineupWriteIntentRow)(explicit);
+    const explicitDecoded = yield* Schema.decodeEffect(LineupWriteIntentRow)(explicitRow);
+    assert.isTrue(Schema.toEquivalence(LineupWriteIntentRow)(explicitDecoded, explicit));
+    assert.strictEqual(explicitRow.action, "explicit_assignments");
+    assert.deepStrictEqual(explicitRow.plan, {
+      _tag: "explicit_assignments",
+      target: { coverage: "week", week: 3 },
+      connectionGeneration: 2,
+      lockedPlayers: 0,
+      editablePlayers: 1,
+      policy: {
+        kind: "planned",
+        version: "trailing-mean-points/1",
+        basis: "yahoo:mean-points-per-period:week:2",
+      },
+      assignments: [{ playerKey: "461.p.10001", slot: "BN" }],
+      sourceChanged: false,
+    });
   }),
 );
 
