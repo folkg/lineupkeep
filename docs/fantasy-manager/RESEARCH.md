@@ -477,7 +477,149 @@ excluded from the team total. One hand-checkable row: the week-6 quarterback sco
 - Whether Yahoo accepts a starting slot left empty, and whether the declared bench count is a hard
   maximum rather than a pooled standard-roster allowance.
 - Lock transitions inside a scoring day for date-scoped hockey leagues.
-- Any per-player remaining-games, probable-starter, or projection signal.
+- Any per-player remaining-games or probable-starter signal. Projections and started percentages are
+  covered by [the probes below](#live-yahoo-started-percentage-and-projection-probes-2026-10-26).
+
+## Live Yahoo started-percentage and projection probes (2026-10-26)
+
+Same authorization, harness, and privacy rules as the section above: a disposable gitignored harness
+(`.artifacts/phase2-evidence/`) decrypted the stored credential with the application's own credential
+service and issued read-only requests to the committed read origin through `PublicInternet`. Retained
+evidence is request shapes, status codes, byte sizes, presence counts, JSON key paths, value kinds,
+and value ranges. No token, crumb, player name, player key, team key, or league id was printed or
+committed. No write was attempted.
+
+The questions were whether the player-detail read can carry a started percentage and a diamond cut,
+whether `ranks` exposes projected points, how these behave for a category-scored hockey league, what
+`starting_status` returns, and what a partly unavailable response does to the whole body.
+
+### 1. A started percentage can be added to the player-detail read
+
+`GET .../league/{league_key}/players;player_keys={keys};out=stats,ownership,percent_started` with
+`percent_started.cut_types=diamond` answers 200 for all five leagues and adds about 7 KB per 12-player
+sample without a cut, and about 19 KB with one cut (football 264 KB → 271 KB → 283 KB, hockey
+209 KB → 216 KB → 229 KB). After the adapter's normalizer
+the node is one object:
+
+| Path                                   | Type          | Presence in 12-player samples                 |
+| -------------------------------------- | ------------- | --------------------------------------------- |
+| `percent_started.coverage_type`        | string        | 12/12                                         |
+| `percent_started.week` / `.date`       | integer/date  | 12/12                                         |
+| `percent_started.value`                | integer       | 12/12                                         |
+| `percent_started.delta`                | integer       | 12/12 in the samples; 12/15–21/21 on full rosters |
+| `percent_started.percent_started_cut_types[]` | array | 12/12 when a cut is requested, 0/12 otherwise |
+| `percent_started_cut_types[].cut_type` | string        | as requested                                  |
+| `percent_started_cut_types[].value`    | integer       | as requested                                  |
+
+The provider publishes `coverage_type` `week` for the football league (the league's current week)
+and `date` for all four hockey leagues (the provider's current fantasy day), and both matched the
+roster read's own coverage in every league. **The coverage cannot be steered by query parameters**:
+`stats.type=date&stats.date={tomorrow}`, `stats.type=week&stats.week={current+1}`, bare `date=` and
+bare `week=` all returned the provider's current period unchanged. In the same response
+`percent_owned` carried `week` coverage even in the date-scoped hockey leagues, so owned percentage
+is not a per-date signal there.
+
+### 2. A cut is a distinct field, and the request literal is echoed unvalidated
+
+A cut is not a sibling of `percent_started`; it is a fourth positional fragment inside it:
+`percent_started[3] = { percent_started_cut_types: [ { percent_started_cut_type: [ {coverage}, {cut_type}, {value} ] } ] }`.
+The overall percentage is `percent_started.value`; a cut percentage is
+the nested `cut_type`/`value` pair, with its own `coverage_type`.
+
+| Requested `cut_types` | Cut entries returned | Literal returned | Distinct values across the roster   |
+| --------------------- | -------------------: | ---------------- | ----------------------------------- |
+| `diamond`             |                    1 | `diamond`        | **1** — every value was `0` (5/5 leagues) |
+| `diamond,gold`        |                    2 | `diamond`, `gold` | diamond 1, gold 12–20               |
+| `platinum`            |                    1 | `platinum`       | 13–19                               |
+| none                  |                    0 | —                | —                                   |
+
+So the literal is whatever was asked for: Yahoo does not reject or validate a cut name, and it does
+not substitute a known name. **The diamond cut is published but unpopulated for this account**: 13–22
+entries per league, all `0`, while the overall percentage in the same league had 15–20 distinct
+non-zero values (`1`–`98`). `gold` and even the unlisted `platinum` carried discriminating values.
+A cut therefore cannot be assumed to carry information just because the container came back, and a
+cut value of `0` is not distinguishable from an unpopulated cut by inspection of one player alone.
+
+### 3. `ranks` publishes ranks, and nothing publishes projected points
+
+`out=ranks;ranks=last30days,last14days,projected_next7days,projected_season_remaining,last4weeks,projected_week,projected_next4weeks`
+answers 200 for the football **and** the hockey leagues, 7 rank entries per player, each
+`player_rank.rank_type` from `L30, L14, PS7, PSR, L4W, PW, PN4W` and each `rank_value` a **string
+integer**. Values across 12-player samples ranged 1–859 depending on the rank type: they are ordinal
+ranks, not point totals. The four `projected` names (`PS7`, `PSR`, `PW`, `PN4W`) are rank types; no
+response contained a projected quantity.
+
+Confirmed negative evidence for player-level projections:
+
+- A recursive scan for keys matching `project` over `out=stats,ownership,percent_started,percent_owned,ranks,opponent,starting_status`
+  returned no path on any of the five leagues.
+- `out=stats,player_points` and `out=stats,projected_points` answer 400 (these are not `out` members).
+- `stats.type=projected` and `stats.type=projected&stats.week=N` answer 400 (unchanged from the
+  earlier pass).
+- `player_points` does come back with `out=stats` **in the football league** (the provider's own
+  realised league-scored total, alongside the stat series), and is absent in all four hockey leagues,
+  which have no modifiers to score. There is no projected sibling of it.
+
+`ranks` does degrade silently when asked for something it does not know: `ranks=notaranktype` answers
+200 with the default rank types `OR` and `S` instead of an error, while `ranks=last4weeks,projected_week`
+returns exactly those two.
+
+### 4. Hockey roster players do carry a started percentage
+
+| League     | Roster | `percent_started` node | Numeric `value` | Non-numeric `value` | Value range | `delta` present |
+| ---------- | -----: | ---------------------: | --------------: | ------------------: | ----------- | --------------: |
+| football-1 |     15 |                 15/15  |              15 |                   0 | 1–98        |           12/15 |
+| hockey-1   |     21 |                 21/21  |              21 |                   0 | 4–88        |           21/21 |
+| hockey-2   |     19 |                 19/19  |              18 |                   1 | 9–96        |           17/19 |
+| hockey-3   |     22 |                 22/22  |              22 |                   0 | 3–89        |           17/22 |
+| hockey-4   |     21 |                 21/21  |              21 |                   0 | 1–97        |           20/21 |
+
+The one non-numeric case is a player in an `IR+` slot carrying `IR-LT`, whose `percent_started`
+fragment had the coverage fragment but **no `value` fragment**. Its cut container likewise carried no
+value. So a missing started percentage appears as *an absent fragment inside a present node*, not as
+the key being absent, not as `null`, and not as an empty array. A few players also lack `delta` while
+carrying a `value`, so `delta` is context and never required.
+
+### 5. `starting_status` is goalie-only, and `opponent` means "has a game today"
+
+Both answer 200 for football and hockey and are absent or null for most rows, which is a fact about
+who the field applies to rather than a missing read.
+
+`starting_status` appeared on **exactly one player** across the five rosters: a hockey goalie whose
+team played that day, as `starting_status.is_starting: 0` — a **number**, not a string. No skater in
+any league carried the key, no football player did, and a goalie whose team had no game that day did
+not carry it either. It is the real-world starting status of a goalie (or pitcher), published around
+game time, not a fantasy-lineup fact, and it is absent for everyone else. It can therefore never be a
+value basis for a skater.
+
+`opponent` is present as a string exactly for players whose team has a game on the read's date:
+hockey 0/21, 3/19, 4/22, and 4/21 roster players in the four leagues, every sampled football player
+15/15 (a scoring week always has a game), and `null` for everyone else. AutoCoach reads the same field
+as `is_playing` and treats an absent or `Bye` opponent as not playing. That is a **has-a-game**
+availability fact, which this adapter does not yet read.
+
+| League     | Roster | `opponent` string | Goalie `starting_status` |
+| ---------- | -----: | ----------------: | ------------------------ |
+| football-1 |     15 |             15/15 |                        — |
+| hockey-1   |     21 |              0/21 |                      0/4 |
+| hockey-2   |     19 |              3/19 |                      1/4 |
+| hockey-3   |     22 |              4/22 |                      0/4 |
+| hockey-4   |     21 |              4/21 |                      0/3 |
+
+### 6. Sub-resources fail per request member and degrade silently per value
+
+| Request                                                       | Status | Effect on the body                                  |
+| ------------------------------------------------------------- | ------ | --------------------------------------------------- |
+| `out=stats,ownership,notasubresource`                         | 400    | Whole request fails with an error envelope, 0 players |
+| `out=starting_status` (goalie/pitcher field)                  | 200    | Key omitted for every non-goalie; no error          |
+| `ranks=notaranktype`                                          | 200    | Default `OR`/`S` ranks instead of the request       |
+| `percent_started.cut_types=platinum`                          | 200    | Cut echoed, no validation                           |
+| `stats.type=projected`                                        | 400    | Whole request fails                                 |
+
+An unknown **request member** is a hard failure. An unpopulated sub-resource, an unknown rank type,
+and an unknown cut name all degrade silently inside a 200 body. Absence therefore cannot be detected
+from the response alone: the adapter has to ask for what it needs, assert the shape it depends on, and
+treat a value that stops arriving as a finding rather than as a normal empty state.
 
 ## Live Yahoo native write verification (2026-10-25)
 
