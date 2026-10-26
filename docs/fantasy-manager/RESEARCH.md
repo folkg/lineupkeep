@@ -339,3 +339,138 @@ Still unsupported after this verification:
   head-to-head categories, rotisserie), a hockey scoreboard with remaining games and category
   winners, and player ownership/started signals. The football scoreboard fixture was corrected to
   omit the remaining-games block the live provider does not publish.
+
+## Live Yahoo league-scoring evidence (2026-10-26)
+
+The owner authorized read-only access to their own linked account. A disposable gitignored harness
+(`.artifacts/phase2-evidence/`) read the stored provider credential, decrypted it with the
+application's own credential service, and called the committed `YahooProvider` through
+`PublicInternet` with the real transport. Basis probes the adapter cannot express (weekly hockey,
+date coverage, projections) were issued to the same read origin through the same transport with the
+adapter's own request shape. No key, cookie, crumb, name, team key, league id, or manager identity
+was printed, written, or committed; retained evidence holds request shapes, status codes, byte
+sizes, counts, JSON types, and stat ids only. No write, transaction, or premium action was attempted.
+Five leagues answered: one football points league and four hockey leagues (three head-to-head
+category leagues and one rotisserie league).
+
+### 1. Football player statistics, both bases
+
+| Basis                          | Status | Coverage | Players with a stats node | Distinct stat ids    | Values per player | Value forms               |
+| ------------------------------ | ------ | -------- | ------------------------- | -------------------- | ----------------- | ------------------------- |
+| `stats.type=season`            | 200    | `season` | 15/15                     | 36 (the league's 36) | 6–16              | plain integers            |
+| `stats.type=week&stats.week=6` | 200    | `week`   | 15/15                     | 36                   | 6–16              | integers, no nulls        |
+| `stats.type=week&stats.week=7` | 200    | `week`   | 15/15                     | 36                   | 6–16              | integers for played games |
+
+Football therefore exposes both bases, densely. A player's series contains only the stats that
+apply to that player (a kicker returned six ids, a defence sixteen, offensive players fourteen), and
+no value in any sampled week was the dashed missing form. Week coverage for the _current_ week
+carries values for games already played, so a current-week total is a partial week, not a forecast.
+
+The adapter's own basis rule — weekly only when the requested week is earlier than the league's
+`current_week`, otherwise season — was confirmed to send the request it claims to send. The policy
+never needs the current week's basis: it values a period from earlier completed periods.
+
+### 2. Hockey player statistics, both bases
+
+| Basis                                   | Status | Coverage | Players with a stats node  | Distinct stat ids   | Values per player | Value forms                    |
+| --------------------------------------- | ------ | -------- | -------------------------- | ------------------- | ----------------- | ------------------------------ |
+| `stats.type=season`                     | 200    | `season` | 21/21, 19/19, 22/22, 21/21 | 12, 12, 13, 15      | 5–8               | integers, decimals, some nulls |
+| `stats.type=week&stats.week=5`          | 200    | absent   | **0/21, 0/19, 0/21**       | none                | none              | none                           |
+| `stats.type=date&stats.date=2026-10-26` | 200    | `date`   | every player               | the same league ids | 5–8               | the dashed missing form only   |
+
+Weekly hockey is not empty: the `player_stats` node is absent entirely for every player, in every
+probed league. Date coverage works and mirrors season coverage per player. A date whose games have
+not been played returns every value as the dashed missing form, which the adapter decodes as null —
+so a future or in-progress date is _unknown_, never zero. Hockey also publishes real nulls inside a
+completed series (7 of 113 values in one league were the ratio stats GAA and SV% with no games), so
+"scored but unknown" is an observed hockey state, not a hypothetical one.
+
+### 3. Modifier coverage against the stat ids players actually return
+
+| League     | Categories | Modifiers | Returned ids | Returned with a modifier | Returned without | Modifiers with no returned stat |
+| ---------- | ---------: | --------: | -----------: | -----------------------: | ---------------: | ------------------------------: |
+| football-1 |         36 |        33 |           36 |                       33 |        8, 31, 78 |                               0 |
+| hockey-1   |         12 |         0 |           12 |                        0 |        all of 12 |                               0 |
+| hockey-2   |         12 |         0 |           12 |                        0 |        all of 12 |                               0 |
+| hockey-3   |         13 |         0 |           13 |                        0 |        all of 13 |                               0 |
+| hockey-4   |         15 |         0 |           15 |                        0 |        all of 15 |                               0 |
+
+The football ids without a modifier are Rushing Attempts (`8`), Points Allowed (`31`), and Targets
+(`78`); all three are declared categories that the league's own points rules do not score. Every
+football modifier maps to a stat its players return, so no rule is unused.
+
+The four hockey leagues publish **no `stat_modifiers` key at all**. Checked on the raw settings body,
+not only through the adapter: the literal key occurs zero times on each hockey league and once on the
+football league with 33 stat entries. Category and rotisserie leagues therefore have no additive
+points rules to apply — a fact about the league format, not a missing read.
+
+### 4. Modifier magnitudes
+
+Quoted shapes from the football league's 33 modifiers:
+
+- Non-negative decimals: `0.04`, `0.1` (3 rules).
+- Non-negative integers: `0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `10` (26 rules), including one
+  literal `0` for Points Allowed 21-27.
+- Negative integers: `-1`, `-2`, `-4` (4 rules).
+- Largest magnitude is `10`; there is no exponent form, no leading `+`, no thousands separator, and
+  no value with more than two fractional digits.
+
+### 5. Games played
+
+There is no games-played stat id to use. None of the five leagues declares a games-played category
+(the football league's 36 categories are passing, rushing, receiving, return, kicking, and defensive
+stats; the hockey leagues' 12–15 are goals, assists, points, plus/minus, powerplay points, shots,
+hits, blocks, wins, goals against, goals against average, saves, shots against, save percentage, and
+shutouts), and the stat ids players return are exactly those categories. A season total cannot
+therefore be converted into a per-game rate from this read surface, and the policy does not pretend
+to one.
+
+### 6. Projections
+
+Absent. `stats.type=projected` and `stats.type=projected&stats.week=N` both answer HTTP 400 on all
+five leagues, and the adapter keeps `projected: undefined` for every player. The earlier finding is
+unchanged, so selection values stay trailing and actual.
+
+### The scoring rule the provider itself applies
+
+For football weeks 4, 5, and 6, the sum of `stat value × modifier` over the stats each **starting**
+player's series contained reproduced the provider's own `team_points.total` exactly:
+
+| Week | Computed from starter series | Provider `team_points.total` | Difference |
+| ---- | ---------------------------: | ---------------------------: | ---------: |
+| 4    |                       109.14 |                       109.14 |          0 |
+| 5    |                       144.60 |                       144.60 |          0 |
+| 6    |                        98.02 |                        98.02 |          0 |
+
+That identity is the evidence for two rules: a modifier applies per stat, and a scored stat absent
+from a player's series contributes nothing. Bench players summed to 49.20 in week 6 and were correctly
+excluded from the team total. One hand-checkable row: the week-6 quarterback scored
+`253 × 0.04 + 2 × 4 + 1 × -1 + (-1) × 0.1 = 17.02`.
+
+### Roster and slot facts used by the policy
+
+- Declared roster positions carry a name, a count, and `is_starting_position`. The football league
+  declares `QB 1, RB 2, WR 2, TE 1, W/R/T 1, K 1, DEF 1, BN 6, IR 1`; the hockey leagues declare
+  between 6 and 10 entries including `BN`, `IR`, `IR+`, and `NA`, and flex names `F`, `W`, and
+  `Util`. One hockey league declares 21 total slots for a 21-player roster, so capacity is exactly
+  binding there.
+- A roster player's `eligible_positions` contains the **slot names** that player may occupy, not only
+  professional positions: `["QB"]`, `["RB","W/R/T"]`, `["C","LW","Util"]`, `["LW","RW","W","Util","IR","IR+"]`,
+  `["G","IR","IR+"]`, `["DEF"]`. `BN` never appears, so bench space is open to every player. This is
+  the published eligibility rule the policy uses instead of inferring slot semantics.
+- `is_editable` was `false` for 13 of 15 football roster members after that week's games had started,
+  and `true` for every hockey player before that day's games. It is a per-player editability flag, and
+  the policy treats anything other than `true` as locked.
+- Football roster entries publish `bye_weeks.week`; hockey roster entries publish no bye week, which
+  matches its date-scoped schedule.
+- Observed `status` codes across the roster reads: absent (field omitted), `IR`, `O`, `DTD`, and
+  `IR-LT`. No other code appeared, so any other code is mapped to an unknown condition rather than
+  guessed.
+
+### Still unverified after this pass
+
+- Every write path, including native start-active and explicit assignment requests.
+- Whether Yahoo accepts a starting slot left empty, and whether the declared bench count is a hard
+  maximum rather than a pooled standard-roster allowance.
+- Lock transitions inside a scoring day for date-scoped hockey leagues.
+- Any per-player remaining-games, probable-starter, or projection signal.
