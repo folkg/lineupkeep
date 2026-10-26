@@ -63,9 +63,9 @@ After `checks`, run the E2E targets the change can break: any page, read, write,
 
 ### Fast inner loop
 
-While iterating, run the one file that can fail: `bunx vitest run --project node <path>` (or `--project browser <path>`, or add `-t "<test name>"`). Vitest has no changed-test cache that stays correct: `--changed` and `--related` silently skip suites reached through package aliases, so they are a convenience only and are never what `checks` runs. Finish with `bun checks` plus the affected E2E targets, not with a narrowed run.
+While iterating, run the one file that can fail: `bunx vitest run --project node <path>` (or `--project chromium <path>` for a Chromium-launching test, `--project browser <path>`, or add `-t "<test name>"`). Vitest has no changed-test cache that stays correct: `--changed` and `--related` silently skip suites reached through package aliases, so they are a convenience only and are never what `checks` runs. Finish with `bun checks` plus the affected E2E targets, not with a narrowed run.
 
-Node and browser files share one worker pool sized from available parallelism: every file owns its migrated in-memory database, temporary directories, and ephemeral loopback ports, so a file is only serial against itself and parallel files cannot collide. A file that mutates process-wide state, such as `PATH` for a fake container runtime, owns that state for its own process only.
+Node and browser files share one worker pool sized from available parallelism: every file owns its migrated in-memory database, temporary directories, and ephemeral loopback ports, so a file is only serial against itself and parallel files cannot collide. Files that launch Chromium use a separate serialized project after that pool, because browser startup starves against sibling workers. A file that mutates process-wide state, such as `PATH` for a fake container runtime, owns that state for its own process only.
 
 ## Loading and mutations
 

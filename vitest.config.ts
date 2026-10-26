@@ -8,6 +8,35 @@ const solidWebRuntime = new URL("./node_modules/@solidjs/web/dist/server.js", im
 
 const maxWorkers = "70%";
 
+const chromiumTests = [
+  "apps/hosted-browser/src/server.test.ts",
+  "apps/web/src/server/hostedLinking/playwrightHostedBrowser.test.ts",
+  "apps/linking-helper/src/ProviderBrowser.test.ts",
+];
+
+const nodeProject = {
+  mode: "production",
+  ssr: {
+    noExternal: ["@tanstack/solid-query"],
+  },
+  resolve: {
+    conditions: ["import", "module", "node"],
+    alias: {
+      "solid-js/web": solidWebRuntime,
+      "solid-js/store": "solid-js",
+      "solid-js/html": "@solidjs/web",
+      "solid-js/h": "@solidjs/web",
+    },
+  },
+  test: {
+    deps: {
+      optimizer: {
+        ssr: { enabled: false },
+      },
+    },
+  },
+};
+
 export default defineConfig({
   test: {
     projects: [
@@ -36,28 +65,12 @@ export default defineConfig({
             },
           ]),
       {
-        mode: "production",
-        ssr: {
-          noExternal: ["@tanstack/solid-query"],
-        },
-        resolve: {
-          conditions: ["import", "module", "node"],
-          alias: {
-            "solid-js/web": solidWebRuntime,
-            "solid-js/store": "solid-js",
-            "solid-js/html": "@solidjs/web",
-            "solid-js/h": "@solidjs/web",
-          },
-        },
+        ...nodeProject,
         test: {
+          ...nodeProject.test,
           name: "node",
           maxWorkers,
           sequence: { groupOrder: 0 },
-          deps: {
-            optimizer: {
-              ssr: { enabled: false },
-            },
-          },
           include: [
             "apps/**/*.test.ts",
             "apps/**/*.test.tsx",
@@ -74,7 +87,19 @@ export default defineConfig({
             "**/dist/**",
             "**/*.browser.test.ts",
             "**/*.browser.test.tsx",
+            ...chromiumTests,
           ],
+        },
+      },
+      {
+        ...nodeProject,
+        test: {
+          ...nodeProject.test,
+          name: "chromium",
+          maxWorkers: 1,
+          sequence: { groupOrder: 1 },
+          include: chromiumTests,
+          exclude: ["node_modules/**", "**/node_modules/**", "**/dist/**"],
         },
       },
       {

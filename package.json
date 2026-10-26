@@ -27,7 +27,7 @@
     "format:check": "bun run format -- --check",
     "fix": "bun run format && bun run lint",
     "test": "vitest run",
-    "test:node": "vitest run --project node",
+    "test:node": "vitest run --project node --project chromium",
     "test:browser": "vitest run --project browser",
     "test:e2e": "node e2e/test.ts",
     "test:e2e:container": "node e2e/test.ts --target container",
