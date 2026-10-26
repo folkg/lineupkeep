@@ -64,15 +64,19 @@ The portion of a roster whose players are retained but are not assigned to contr
 A restricted roster area whose players must meet the league's reserve eligibility rules, such as an injured reserve list.
 
 **Selection value**:
-The signed relative benefit assigned to starting a player for a particular period. Values are comparable only within a consistent scoring basis; a negative value is worse than leaving a starting position empty when legally possible.
+The signed relative benefit assigned to starting a player for a particular period. It is a contribution estimate, not a health score, and availability never changes it. Values are comparable only within a consistent scoring basis; a negative value is worse than leaving a starting position empty when legally possible.
 
 **Scoring basis**:
 One declared set of rules, statistic coverage, and period arithmetic that makes two selection values comparable, such as one league's points rules applied to one period basis. Values from different scoring bases are never combined.
 _Avoid_: Scoring model, formula, weighting
 
-**Availability condition**:
-A named, provider-reported fact about whether a player can contribute in a period, such as healthy, out, day to day, injured reserve, suspended, not active, or no game. It has exactly one stated effect on that player's selection value.
-_Avoid_: Injury when it also covers byes, suspensions, and inactive players
+**Availability status**:
+A named, provider-reported fact about whether a player can appear in a period, such as healthy, out, day to day, injured reserve, suspended, not active, or no game. It never adjusts that player's selection value; it selects an availability tier.
+_Avoid_: Injury when it also covers byes, suspensions, and inactive players; availability condition when an ordering is meant
+
+**Availability tier**:
+One rung of an ordered ladder from most to least likely to appear — will play, might play, will not play — that the lineup objective ranks above selection value. The league policy names the ladder and decides which availability status selects which rung; the solver knows only the order.
+_Avoid_: Health score, injury penalty, availability factor
 
 **Observation window**:
 The completed periods whose realised statistics are averaged into a player's selection value for a target period. The target period is never inside its own observation window.

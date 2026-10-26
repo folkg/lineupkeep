@@ -16,7 +16,7 @@ Planning workspace for Lineupkeep, the independent provider-neutral rewrite. The
 - [Hosted browser infrastructure](HOSTED-BROWSER-INFRA-PLAN.md): deployed IAM-only browser service, egress, limits, and remaining gates.
 - [Research notes](RESEARCH.md): inspected code and primary-source evidence.
 - [Naming research](NAMING-RESEARCH.md): preliminary domain/commercial/US-Canadian screening; Lineupkeep is selected, not legally cleared or purchased.
-- Architecture decisions: [provider-neutral product](adr/0001-provider-neutral-product.md), [workflow machines and pure selection](adr/0002-workflow-machines-and-pure-selection.md), [independent product](adr/0003-independent-product.md), [Cloud Run first](adr/0004-cloud-run-first.md), and [free-tier Postgres](adr/0005-free-tier-postgres.md).
+- Architecture decisions: [provider-neutral product](adr/0001-provider-neutral-product.md), [workflow machines and pure selection](adr/0002-workflow-machines-and-pure-selection.md), [independent product](adr/0003-independent-product.md), [Cloud Run first](adr/0004-cloud-run-first.md), [free-tier Postgres](adr/0005-free-tier-postgres.md), and [availability tiers in the lineup objective](adr/0006-availability-tiers.md).
 
 ## Source of truth
 

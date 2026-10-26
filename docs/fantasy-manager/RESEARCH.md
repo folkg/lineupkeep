@@ -464,8 +464,10 @@ excluded from the team total. One hand-checkable row: the week-6 quarterback sco
 - Football roster entries publish `bye_weeks.week`; hockey roster entries publish no bye week, which
   matches its date-scoped schedule.
 - Observed `status` codes across the roster reads: absent (field omitted), `IR`, `O`, `DTD`, and
-  `IR-LT`. No other code appeared, so any other code is mapped to an unknown condition rather than
-  guessed.
+  `IR-LT`. No other code appeared, so the adapter's one mapping table carries only those rows; any
+  other code is recorded as unrecognised and treated as doubtful rather than guessed at, and it never
+  refuses a lineup run. [The policy](POLICY.md#an-unrecognised-status-is-doubtful-and-it-is-recorded)
+  owns that decision and its cost.
 
 ### Still unverified after this pass
 

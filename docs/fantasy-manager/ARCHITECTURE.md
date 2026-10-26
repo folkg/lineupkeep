@@ -111,10 +111,15 @@ Use a weighted bipartite assignment formulation, not a procedural sequence of pl
 Optimize lexicographically:
 
 1. Legality and fixed assignments are mandatory, not penalties.
-2. Maximize total comparable signed starting value; non-starting contribution and empty slots are zero.
-3. Among equal-value plans, prefer eligible zero-valued starter occupancy.
-4. Minimize semantic assignment changes.
-5. Choose a canonical deterministic result.
+2. Maximize starting occupancy by availability tier, most available tier first, as a count. A player from a lower tier never displaces one from a higher tier, whatever either is worth; the tier ladder is declared by the policy and the solver knows only its order. A starter counts towards its tier only when its value is not negative.
+3. Maximize total comparable signed starting value across every tier; non-starting contribution and empty slots are zero.
+4. Among equal-value plans, prefer eligible zero-valued starter occupancy.
+5. Minimize semantic assignment changes.
+6. Choose a canonical deterministic result.
+
+Availability is never a multiplier on value. Provider status codes map to policy availability facts in
+one adapter table, and those facts map to ladder tiers in one policy function, so the pure solver stays
+provider-neutral and a missing or unrecognised code cannot refuse a run.
 
 Equivalent repeated slots must not create fake changes: exchanging two identical center-slot indices is not a Yahoo position change. The provider mapping determines whether slot identity matters.
 
