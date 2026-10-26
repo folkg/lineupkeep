@@ -26,6 +26,7 @@ export async function checkArchitecture(
       [
         "packages/backend/src",
         "packages/brand/src",
+        "packages/lineup-solver/src",
         "apps/web/src",
         "e2e",
         "infra",
@@ -130,7 +131,12 @@ async function withFixture<Result>(
 function createFixture(files: Readonly<Record<string, string>>): string {
   const fixture = realpathSync(mkdtempSync(join(tmpdir(), "lineupkeep-architecture-")));
   try {
-    for (const workspace of ["packages/backend", "packages/brand", "apps/web"]) {
+    for (const workspace of [
+      "packages/backend",
+      "packages/brand",
+      "packages/lineup-solver",
+      "apps/web",
+    ]) {
       mkdirSync(join(fixture, workspace, "src"), { recursive: true });
       symlinkSync(
         join(repositoryRoot, workspace, "node_modules"),
@@ -155,6 +161,7 @@ function createFixture(files: Readonly<Record<string, string>>): string {
     for (const [name, workspace] of [
       ["backend", "packages/backend"],
       ["brand", "packages/brand"],
+      ["lineup-solver", "packages/lineup-solver"],
       ["web", "apps/web"],
       ["infra", "infra"],
       ["tools", "tools"],

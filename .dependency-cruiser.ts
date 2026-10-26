@@ -49,6 +49,22 @@ export default {
       { dependencyTypesNot: ["type-only"] },
     ),
     forbid(
+      "lineup-solver-is-pure",
+      "Lineup selection is a pure calculation; keep provider, persistence, transport, application, and clock code out of packages/lineup-solver.",
+      { path: "^packages/lineup-solver/src/" },
+      {
+        path: [
+          "^packages/backend/",
+          "^packages/hosted-browser/",
+          "^apps/",
+          "^infra/",
+          "^e2e/",
+          "^tools/",
+          "(?:^|/node_modules/)(?:effect|@effect|drizzle-orm|drizzle-kit|pg|postgres|better-auth|alchemy|@alchemy\\.run)(?:/|$)",
+        ],
+      },
+    ),
+    forbid(
       "database-utilities-only-used-by-repositories",
       "SQL utilities outside persistence bypass owned queries; gather domain commands in services and call the repository's atomic batch operation.",
       {

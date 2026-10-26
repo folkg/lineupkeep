@@ -1302,3 +1302,43 @@ const featureFixture = {
   [featureModule]:
     'export { Uploads } from "@lineupkeep/backend/uploads/Uploads"; export { Layer } from "effect"; export { Bucket } from "alchemy/Cloudflare/R2"; export * as storage from "@distilled.cloud/gcp/storage_v1"; export const uploads = {};',
 };
+
+it("accepts a pure lineup-solver module that imports only its assignment dependency", async () => {
+  const result = await checkArchitecture({
+    "packages/lineup-solver/src/solver.ts":
+      'import { munkres } from "munkres"; export const solve = (matrix: bigint[][]) => munkres(matrix);',
+  });
+
+  expect(result.status, result.output).toBe(0);
+});
+
+it.each([
+  [
+    "an application contract",
+    'export { value } from "@lineupkeep/backend/auth/User";',
+    "packages/backend/src/contexts/auth/User.ts",
+  ],
+  [
+    "an Effect service import",
+    'import { Schema } from "effect"; export const value = Schema.String;',
+    undefined,
+  ],
+])("rejects %s in the pure lineup solver", async (_name, source, dependency) => {
+  const result = await checkArchitecture({
+    ...(dependency === undefined ? {} : { [dependency]: "export const value = 1;" }),
+    "packages/lineup-solver/src/solver.ts": source,
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("lineup-solver-is-pure");
+});
+
+it.each([
+  ["the clock", "export const now = Date.now();"],
+  ["randomness", "export const pick = Math.random();"],
+  ["network access", 'export const load = () => fetch("https://example.com");'],
+])("rejects %s in the pure lineup solver", async (_name, source) => {
+  const result = await checkLint({ "packages/lineup-solver/src/solver.ts": source });
+
+  expect(result.status).toBeGreaterThan(0);
+});

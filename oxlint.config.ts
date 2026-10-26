@@ -587,6 +587,7 @@ const adapters = ["apps/web/src/server-functions/**/*.ts", ...protocols];
 const primitives = ["apps/web/src/browser/shared-ui/**/*.{ts,tsx}"];
 const compositions = ["apps/web/src/browser/brand-ui/**/*.{ts,tsx}"];
 const tests = ["**/*.test.{ts,tsx}"];
+const lineupSolver = ["packages/lineup-solver/src/**/*.ts"];
 const nodeTransport = ["packages/backend/src/runtime/public-internet/transport/node/**/*.ts"];
 const hostedBrowserShell = [
   "apps/web/src/server/hostedLinking/playwrightHostedBrowser.ts",
@@ -648,6 +649,64 @@ export default defineConfig({
       files: ["packages/backend/src/contexts/**/*.ts"],
       excludeFiles: ["**/internal/**/*Table.ts", "**/internal/**/*Tables.ts"],
       rules: imports(storageImports),
+    },
+    {
+      files: lineupSolver,
+      excludeFiles: tests,
+      rules: {
+        ...globals([
+          {
+            name: "Date",
+            message:
+              "The lineup solver must not read the clock; pass the current period from the caller.",
+          },
+          {
+            name: "fetch",
+            message:
+              "The lineup solver must remain pure; call the provider adapter for network access.",
+          },
+          {
+            name: "setTimeout",
+            message: "The lineup solver must remain pure; wait in the workflow shell instead.",
+          },
+          {
+            name: "setInterval",
+            message: "The lineup solver must remain pure; wait in the workflow shell instead.",
+          },
+          {
+            name: "queueMicrotask",
+            message:
+              "The lineup solver must remain pure; call the workflow shell to schedule work.",
+          },
+          {
+            name: "process",
+            message: "The lineup solver must not read process state; pass plain problem data.",
+          },
+          {
+            name: "crypto",
+            message:
+              "The lineup solver must remain deterministic; pass randomness from outside the solver.",
+          },
+          {
+            name: "console",
+            message: "The lineup solver must not log; yield a plan or a named refusal.",
+          },
+        ]),
+        ...properties([
+          {
+            object: "Math",
+            property: "random",
+            message:
+              "The lineup solver must remain deterministic; pass randomness from outside the solver.",
+          },
+          {
+            object: "performance",
+            property: "now",
+            message:
+              "The lineup solver must not read the clock; pass the current period from the caller.",
+          },
+        ]),
+      },
     },
     {
       files: ["packages/backend/src/contexts/**/internal/**/*Database.ts"],
