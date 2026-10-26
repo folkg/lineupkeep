@@ -85,6 +85,7 @@ test("answers the documented token-free discovery request with the same document
     supportedVersions: ["2026-07-28"],
     capabilities: { tools: {} },
   });
+  expect(document.result["capabilities"]).toEqual({ tools: {} });
 
   await signUp(page);
   const { credentials } = await authorize(page, origin);

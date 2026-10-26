@@ -32,17 +32,23 @@ import { mcpRequest } from "./mcpEndpoint";
 import { handleMcpRequest } from "./mcpServer";
 import { RequiredScope } from "./toolAuthorization";
 
+const DiscoveryDocument = Schema.Struct({
+  result: Schema.Struct({
+    _meta: Schema.Record(Schema.String, Schema.Unknown),
+    capabilities: Schema.Record(Schema.String, Schema.Unknown),
+  }),
+});
+
 it("identifies the product during protocol discovery", async () => {
   const response = await handle(request("server/discover", {}, "read"));
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({
-    result: {
-      _meta: {
-        "io.modelcontextprotocol/serverInfo": { name: "Lineupkeep", version: "1.0.0" },
-      },
-    },
+  const body = Schema.decodeUnknownSync(DiscoveryDocument)(await response.json());
+  expect(body.result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({
+    name: "Lineupkeep",
+    version: "1.0.0",
   });
+  expect(body.result.capabilities).toEqual({ tools: {} });
 });
 
 it("answers server discovery without a token and publishes the same document", async () => {

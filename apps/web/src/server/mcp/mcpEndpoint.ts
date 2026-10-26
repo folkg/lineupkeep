@@ -116,9 +116,7 @@ function discoveryResponse(
         cacheScope: "private",
         supportedVersions: [supportedProtocolVersion],
         capabilities: {
-          logging: {},
-          completions: {},
-          tools: { listChanged: true },
+          tools: {},
         },
       },
     });
