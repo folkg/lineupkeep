@@ -15,12 +15,14 @@ const ProviderOperation = Schema.Literals([
   "read_standings",
   "read_roster",
   "read_player_details",
+  "read_player_history",
   "search_players",
   "read_matchups",
   "read_transactions",
   "read_league_teams",
   "build_review_link",
   "apply_native_start_active",
+  "apply_explicit_assignments",
 ]);
 export type ProviderOperation = typeof ProviderOperation.Type;
 
@@ -118,7 +120,12 @@ export type ProviderPeriod = {
 
 export type ProviderNativeTarget = ProviderRosterCoverage;
 
-export type ProviderNativeActionResult =
+export type ProviderLineupAssignment = {
+  readonly providerPlayerKey: string;
+  readonly slot: string;
+};
+
+export type ProviderWriteResult =
   | { readonly status: "accepted" }
   | {
       readonly status: "rejected";
@@ -174,6 +181,11 @@ export type ProviderPlayerDetail = {
   readonly rosterStatus: "rostered" | "free_agent" | "waiver" | "unknown";
   readonly actual: ProviderPlayerStatGroup | undefined;
   readonly projected: ProviderPlayerStatGroup | undefined;
+};
+
+export type ProviderPlayerPeriod = {
+  readonly period: ProviderPeriod;
+  readonly details: ReadonlyArray<ProviderPlayerDetail>;
 };
 
 export type ProviderPlayerSearchSort =
@@ -428,7 +440,15 @@ export type ProviderGatewayShape = {
       readonly providerTeamKey: string;
       readonly target: ProviderNativeTarget;
     },
-  ) => Effect.Effect<ProviderNativeActionResult, ProviderSessionRejected | ProviderResponseInvalid>;
+  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
+
+  readonly applyExplicitAssignments: (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly target: ProviderNativeTarget;
+      readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
+    },
+  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
 
   readonly readPlayerDetails: (
     input: ProviderSessionMaterial & {
@@ -439,6 +459,16 @@ export type ProviderGatewayShape = {
       readonly currentWeek: number | undefined;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure>;
+
+  readonly readPlayerHistory: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerPlayerKeys: ReadonlyArray<string>;
+      readonly sport: ProviderSport;
+      readonly periods: ReadonlyArray<ProviderPeriod>;
+      readonly currentWeek: number | undefined;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderPlayerPeriod>, ProviderReadFailure>;
 
   readonly searchPlayers: (
     input: ProviderPlayerSearchInput,

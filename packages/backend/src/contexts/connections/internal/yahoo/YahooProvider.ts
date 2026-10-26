@@ -22,15 +22,16 @@ import {
 import type {
   ProviderCategoryWinner,
   ProviderLeagueSettings,
+  ProviderLineupAssignment,
   ProviderStatBasis,
   ProviderMatchup,
-  ProviderNativeActionResult,
   ProviderNativeTarget,
   ProviderOperation,
   ProviderPeriod,
   ProviderPeriodKind,
   ProviderPeriodWindow,
   ProviderPlayerDetail,
+  ProviderPlayerPeriod,
   ProviderPlayerSearchInput,
   ProviderPlayerSearchResult,
   ProviderPlayerSearchSort,
@@ -45,6 +46,7 @@ import type {
   ProviderTeam,
   ProviderTeamScore,
   ProviderTransaction,
+  ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
@@ -93,6 +95,7 @@ const rankedSearchSorts = new Set<ProviderPlayerSearchInput["sort"]>([
   "stat",
 ]);
 const maximumSelectedPlayers = 25;
+const maximumHistoryPlayers = 200;
 const maximumUpstreamLimit = 50;
 
 type ReadOperation =
@@ -103,6 +106,7 @@ type ReadOperation =
   | "read_standings"
   | "read_roster"
   | "read_player_details"
+  | "read_player_history"
   | "search_players"
   | "read_matchups"
   | "read_transactions"
@@ -269,76 +273,137 @@ export const YahooProvider = Layer.effect(
         readonly providerTeamKey: string;
         readonly target: ProviderNativeTarget;
       },
-    ) => Effect.Effect<
-      ProviderNativeActionResult,
-      ProviderSessionRejected | ProviderResponseInvalid
-    > = Effect.fn("YahooProvider.applyNativeStartActive")(function* (
+    ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =
+      Effect.fn("YahooProvider.applyNativeStartActive")(function* (
+        input: ProviderSessionMaterial & {
+          readonly providerTeamKey: string;
+          readonly target: ProviderNativeTarget;
+        },
+      ) {
+        yield* Effect.annotateCurrentSpan("provider.operation", "apply_native_start_active");
+        const target = yield* ValidNativeTarget(input.target, "apply_native_start_active");
+        yield* Effect.annotateCurrentSpan("provider.native_action", "start_active_players");
+        return yield* writeRoster(
+          input,
+          "apply_native_start_active",
+          nativeStartActiveBody(target),
+        );
+      });
+
+    const applyExplicitAssignments: (
       input: ProviderSessionMaterial & {
         readonly providerTeamKey: string;
         readonly target: ProviderNativeTarget;
+        readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
       },
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "apply_native_start_active");
-      const cookie = yield* sessionCookie(input, "apply_native_start_active");
-      const teamKey = yield* ValidTeamKey(input.providerTeamKey, "apply_native_start_active");
-      const target = yield* ValidNativeTarget(input.target);
-      const crumb = yield* Effect.result(readCrumb(input));
-      if (crumb._tag === "Failure") {
-        if (crumb.failure._tag === "provider.session_rejected") {
-          return yield* crumb.failure;
+    ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =
+      Effect.fn("YahooProvider.applyExplicitAssignments")(function* (
+        input: ProviderSessionMaterial & {
+          readonly providerTeamKey: string;
+          readonly target: ProviderNativeTarget;
+          readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
+        },
+      ) {
+        yield* Effect.annotateCurrentSpan("provider.operation", "apply_explicit_assignments");
+        const target = yield* ValidNativeTarget(input.target, "apply_explicit_assignments");
+        const assignments = yield* ValidAssignments(input.assignments);
+        yield* Effect.annotateCurrentSpan("provider.assignment_count", assignments.length);
+        return yield* writeRoster(
+          input,
+          "apply_explicit_assignments",
+          explicitAssignmentsBody(target, assignments),
+        );
+      });
+
+    const writeRoster = (
+      input: ProviderSessionMaterial & { readonly providerTeamKey: string },
+      operation: "apply_native_start_active" | "apply_explicit_assignments",
+      body: string,
+    ): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
+      Effect.gen(function* () {
+        const cookie = yield* sessionCookie(input, operation);
+        const teamKey = yield* ValidTeamKey(input.providerTeamKey, operation);
+        const crumb = yield* Effect.result(readCrumb(input));
+        if (crumb._tag === "Failure") {
+          if (crumb.failure._tag === "provider.session_rejected") {
+            return yield* crumb.failure;
+          }
+          return crumb.failure._tag === "provider.crumb_unavailable"
+            ? { status: "not_sent" as const, reason: "crumb_unavailable" as const }
+            : { status: "not_sent" as const, reason: "request_failed" as const };
         }
-        return crumb.failure._tag === "provider.crumb_unavailable"
-          ? { status: "not_sent" as const, reason: "crumb_unavailable" as const }
-          : { status: "not_sent" as const, reason: "request_failed" as const };
-      }
-      const url = yahooWriteUrl(
-        `/fantasy/v2/team/${teamKey}/roster`,
-        Redacted.value(crumb.success.crumb),
-      );
-      const body = nativeStartActiveBody(target);
-      const response = yield* Effect.scoped(
-        internet
-          .request(
-            new Request(url, {
-              method: "PUT",
-              headers: {
-                accept: "application/json",
-                "content-type": "application/xml",
-                cookie,
+        const url = yahooWriteUrl(
+          `/fantasy/v2/team/${teamKey}/roster`,
+          Redacted.value(crumb.success.crumb),
+        );
+        const response = yield* Effect.scoped(
+          internet
+            .request(
+              new Request(url, {
+                method: "PUT",
+                headers: {
+                  accept: "application/json",
+                  "content-type": "application/xml",
+                  cookie,
+                },
+                body,
+              }),
+              {
+                timeoutMs: yahooWriteDeadlineMillis,
+                maxResponseBytes: yahooWriteResponseLimitBytes,
               },
-              body,
-            }),
-            {
-              timeoutMs: yahooWriteDeadlineMillis,
-              maxResponseBytes: yahooWriteResponseLimitBytes,
-            },
-          )
-          .pipe(
-            Effect.flatMap((result) => discardBody(result).pipe(Effect.as(result.status))),
-            Effect.catchTag("PublicInternetUnavailable", () => Effect.void),
-          ),
-      );
-      yield* Effect.annotateCurrentSpan("provider.native_action", "start_active_players");
-      if (response === undefined) {
-        return { status: "unknown" as const };
-      }
-      yield* Effect.annotateCurrentSpan("http.response.status_code", response);
-      if (response === 401 || response === 403) {
-        return yield* ProviderSessionRejected.make({ operation: "apply_native_start_active" });
-      }
-      if (response === 404) {
-        return { status: "rejected" as const, reason: "not_found" as const };
-      }
-      if (response === 408 || response === 429) {
-        return { status: "not_sent" as const, reason: "request_failed" as const };
-      }
-      if (response >= 500) {
-        return { status: "unknown" as const };
-      }
-      if (response >= 400) {
-        return { status: "rejected" as const, reason: "invalid_request" as const };
-      }
-      return { status: "accepted" as const };
+            )
+            .pipe(
+              Effect.flatMap((result) => discardBody(result).pipe(Effect.as(result.status))),
+              Effect.catchTag("PublicInternetUnavailable", () => Effect.void),
+            ),
+        );
+        if (response === undefined) {
+          return { status: "unknown" as const };
+        }
+        yield* Effect.annotateCurrentSpan("http.response.status_code", response);
+        if (response === 401 || response === 403) {
+          return yield* ProviderSessionRejected.make({ operation });
+        }
+        if (response === 404) {
+          return { status: "rejected" as const, reason: "not_found" as const };
+        }
+        if (response === 408 || response === 429) {
+          return { status: "not_sent" as const, reason: "request_failed" as const };
+        }
+        if (response >= 500) {
+          return { status: "unknown" as const };
+        }
+        if (response >= 400) {
+          return { status: "rejected" as const, reason: "invalid_request" as const };
+        }
+        return { status: "accepted" as const };
+      });
+
+    const readPlayerPeriod = Effect.fnUntraced(function* (input: {
+      readonly cookie: string;
+      readonly leagueKey: string;
+      readonly playerKeys: ReadonlyArray<string>;
+      readonly basis: ProviderStatBasis;
+      readonly operation: "read_player_details" | "read_player_history";
+    }) {
+      const payload = yield* readJson(internet, {
+        operation: input.operation,
+        origin: readOrigin,
+        path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")};out=stats,ownership`,
+        query:
+          input.basis.type === "week"
+            ? {
+                format: "json",
+                "stats.type": "week",
+                "stats.week": String(input.basis.week),
+              }
+            : { format: "json", "stats.type": "season" },
+        cookie: input.cookie,
+        normalize: true,
+      });
+      const decoded = yield* decodePayload(PlayerDetailsPayload, payload, input.operation);
+      return yield* playerDetailsFromPayload(decoded, input.leagueKey, input.basis);
     });
 
     const readPlayerDetails = Effect.fn("YahooProvider.readPlayerDetails")(function* (
@@ -357,24 +422,56 @@ export const YahooProvider = Layer.effect(
         input.period === undefined ? undefined : { week: yield* ValidWeek(input.period.week) };
       const playerKeys = yield* ValidPlayerKeys(input.providerPlayerKeys, "read_player_details");
       const basis = statBasis(input.sport, period, input.currentWeek);
-      const payload = yield* readJson(internet, {
-        operation: "read_player_details",
-        origin: readOrigin,
-        path: `/fantasy/v2/league/${leagueKey}/players;player_keys=${playerKeys.join(",")};out=stats,ownership`,
-        query:
-          basis.type === "week"
-            ? { format: "json", "stats.type": "week", "stats.week": String(basis.week) }
-            : { format: "json", "stats.type": "season" },
+      const details = yield* readPlayerPeriod({
         cookie,
-        normalize: true,
+        leagueKey,
+        playerKeys,
+        basis,
+        operation: "read_player_details",
       });
-      const decoded = yield* decodePayload(PlayerDetailsPayload, payload, "read_player_details");
-      const details = yield* playerDetailsFromPayload(decoded, leagueKey, basis);
       yield* Effect.annotateCurrentSpan({
         "provider.player_count": details.length,
         "provider.stat_basis": basis.type,
       });
       return details;
+    });
+
+    const readPlayerHistory = Effect.fn("YahooProvider.readPlayerHistory")(function* (
+      input: ProviderSessionMaterial & {
+        readonly providerLeagueKey: string;
+        readonly providerPlayerKeys: ReadonlyArray<string>;
+        readonly sport: "football" | "hockey";
+        readonly periods: ReadonlyArray<ProviderPeriod>;
+        readonly currentWeek: number | undefined;
+      },
+    ) {
+      yield* Effect.annotateCurrentSpan("provider.operation", "read_player_history");
+      const cookie = yield* sessionCookie(input, "read_player_history");
+      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_history");
+      const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys);
+      const periods = yield* ValidPlayerPeriods(input.periods);
+      const history: Array<ProviderPlayerPeriod> = [];
+      for (const period of periods) {
+        const basis = statBasis(input.sport, period, input.currentWeek);
+        const details: Array<ProviderPlayerDetail> = [];
+        for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
+          const chunkDetails = yield* readPlayerPeriod({
+            cookie,
+            leagueKey,
+            playerKeys: playerKeys.slice(index, index + maximumSelectedPlayers),
+            basis,
+            operation: "read_player_history",
+          });
+          for (const detail of chunkDetails) {
+            details.push(detail);
+          }
+        }
+        history.push({ period, details });
+      }
+      yield* Effect.annotateCurrentSpan({
+        "provider.period_count": history.length,
+      });
+      return history;
     });
 
     const searchPlayers = Effect.fn("YahooProvider.searchPlayers")(function* (
@@ -532,7 +629,9 @@ export const YahooProvider = Layer.effect(
       readStandings,
       readRoster,
       applyNativeStartActive,
+      applyExplicitAssignments,
       readPlayerDetails,
+      readPlayerHistory,
       searchPlayers,
       readMatchups,
       readTransactions,
@@ -544,7 +643,7 @@ export const YahooProvider = Layer.effect(
 
 function sessionCookie(
   input: ProviderSessionMaterial,
-  operation: ReadOperation,
+  operation: ProviderOperation,
 ): Effect.Effect<string, ProviderSessionRejected> {
   return Schema.decodeEffect(ProviderSessionMaterial)(input).pipe(
     Effect.flatMap((material) =>
@@ -672,22 +771,58 @@ function yahooWriteUrl(path: string, crumb: string): URL {
 
 function ValidNativeTarget(
   target: ProviderNativeTarget,
+  operation: ProviderOperation,
 ): Effect.Effect<ProviderNativeTarget, ProviderResponseInvalid> {
   if (target.type === "week") {
-    return Effect.map(ValidWeek(target.week), (week) => ({ type: "week" as const, week }));
+    return Number.isSafeInteger(target.week) && target.week >= 1
+      ? Effect.succeed({ type: "week" as const, week: target.week })
+      : Effect.fail(ProviderResponseInvalid.make({ operation }));
   }
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(target.date)) {
-    return Effect.fail(ProviderResponseInvalid.make({ operation: "apply_native_start_active" }));
+    return Effect.fail(ProviderResponseInvalid.make({ operation }));
   }
   return Effect.succeed({ type: "date" as const, date: target.date });
 }
 
+function ValidAssignments(
+  assignments: ReadonlyArray<ProviderLineupAssignment>,
+): Effect.Effect<ReadonlyArray<ProviderLineupAssignment>, ProviderResponseInvalid> {
+  const keys = new Set(assignments.map((assignment) => assignment.providerPlayerKey));
+  if (
+    assignments.length === 0 ||
+    keys.size !== assignments.length ||
+    !assignments.every(
+      (assignment) =>
+        /^[0-9]+\.p\.[0-9]+$/u.test(assignment.providerPlayerKey) &&
+        /^[A-Za-z0-9/+_-]{1,16}$/u.test(assignment.slot),
+    )
+  ) {
+    return ProviderResponseInvalid.make({ operation: "apply_explicit_assignments" });
+  }
+  return Effect.succeed(assignments);
+}
+
 function nativeStartActiveBody(target: ProviderNativeTarget): string {
-  const coverage =
-    target.type === "week"
-      ? `<coverage_type>week</coverage_type><week>${String(target.week)}</week>`
-      : `<coverage_type>date</coverage_type><date>${target.date}</date>`;
-  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster>${coverage}<action>start_active_players</action></roster></fantasy_content>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster>${coverageBody(target)}<action>start_active_players</action></roster></fantasy_content>`;
+}
+
+function explicitAssignmentsBody(
+  target: ProviderNativeTarget,
+  assignments: ReadonlyArray<ProviderLineupAssignment>,
+): string {
+  const players = assignments
+    .map(
+      (assignment) =>
+        `<player><player_key>${assignment.providerPlayerKey}</player_key><position>${assignment.slot}</position></player>`,
+    )
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster>${coverageBody(target)}<players>${players}</players></roster></fantasy_content>`;
+}
+
+function coverageBody(target: ProviderNativeTarget): string {
+  return target.type === "week"
+    ? `<coverage_type>week</coverage_type><week>${String(target.week)}</week>`
+    : `<coverage_type>date</coverage_type><date>${target.date}</date>`;
 }
 
 function decodePayload<A, E>(
@@ -1499,6 +1634,33 @@ function ValidPlayerKeys(
     !value.every((key) => /^[0-9]+\.p\.[0-9]+$/u.test(key))
   ) {
     return ProviderResponseInvalid.make({ operation });
+  }
+  return Effect.succeed(value);
+}
+
+function ValidPlayerPeriods(
+  periods: ReadonlyArray<ProviderPeriod>,
+): Effect.Effect<ReadonlyArray<ProviderPeriod>, ProviderResponseInvalid> {
+  const weeks = new Set(periods.map((period) => period.week));
+  if (
+    periods.length === 0 ||
+    weeks.size !== periods.length ||
+    !periods.every((period) => Number.isSafeInteger(period.week) && period.week >= 1)
+  ) {
+    return ProviderResponseInvalid.make({ operation: "read_player_history" });
+  }
+  return Effect.succeed(periods);
+}
+
+function ValidBatchPlayerKeys(
+  value: ReadonlyArray<string>,
+): Effect.Effect<ReadonlyArray<string>, ProviderResponseInvalid> {
+  if (
+    value.length === 0 ||
+    value.length > maximumHistoryPlayers ||
+    !value.every((key) => /^[0-9]+\.p\.[0-9]+$/u.test(key))
+  ) {
+    return ProviderResponseInvalid.make({ operation: "read_player_history" });
   }
   return Effect.succeed(value);
 }

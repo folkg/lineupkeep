@@ -199,6 +199,88 @@ it.effect("sends the native start-active action to the read-write roster endpoin
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(layer))));
 });
 
+it.effect("sends explicit player assignments to the read-write roster endpoint", () => {
+  const calls: Array<{
+    url: URL;
+    method: string;
+    body: string;
+    headers: Record<string, string>;
+  }> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.promise(async () => {
+        const body = request.body === null ? "" : await request.clone().text();
+        calls.push({
+          url: new URL(request.url),
+          method: request.method,
+          body,
+          headers: Object.fromEntries(request.headers.entries()),
+        });
+        return request.url.includes("getCrumb")
+          ? jsonResponse({
+              service: { "xml:lang": "en-US", crumb: "canary-crumb-value" },
+            })
+          : jsonResponse({ fantasy_content: { roster: { status: "success" } } });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const result = yield* provider.applyExplicitAssignments({
+      ...sessionInput,
+      providerTeamKey: "461.l.1000.t.1",
+      target: { type: "week", week: 7 },
+      assignments: [
+        { providerPlayerKey: "461.p.10001", slot: "RB" },
+        { providerPlayerKey: "461.p.10002", slot: "BN" },
+      ],
+    });
+
+    assert.deepStrictEqual(result, { status: "accepted" });
+    assert.strictEqual(calls.length, 2);
+    const write = calls[1];
+    assert.isDefined(write);
+    assert.strictEqual(write.method, "PUT");
+    assert.strictEqual(write.url.origin, "https://pub-api-rw.fantasysports.yahoo.com");
+    assert.strictEqual(write.url.pathname, "/fantasy/v2/team/461.l.1000.t.1/roster");
+    assert.strictEqual(write.url.searchParams.get("format"), "json_f");
+    assert.strictEqual(write.url.searchParams.get("crumb"), "canary-crumb-value");
+    assert.strictEqual(write.headers["content-type"], "application/xml");
+    assert.strictEqual(write.headers["cookie"], Redacted.value(sessionInput.session));
+    assert.strictEqual(
+      write.body,
+      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster><coverage_type>week</coverage_type><week>7</week><players><player><player_key>461.p.10001</player_key><position>RB</position></player><player><player_key>461.p.10002</player_key><position>BN</position></player></players></roster></fantasy_content>',
+    );
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(layer))));
+});
+
+it.effect("reports an explicit assignment rejection without retrying a different body", () => {
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.succeed(
+        request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : new Response('{"error":{"description":"That position has already been filled."}}', {
+              status: 400,
+            }),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const result = yield* provider.applyExplicitAssignments({
+      ...sessionInput,
+      providerTeamKey: "461.l.1000.t.1",
+      target: { type: "week", week: 7 },
+      assignments: [{ providerPlayerKey: "461.p.10001", slot: "RB" }],
+    });
+
+    assert.deepStrictEqual(result, { status: "rejected", reason: "invalid_request" });
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(layer))));
+});
+
 it.effect("rejects rejected sessions without exposing the cookie or response body", () => {
   const internet = recordingInternet(() => new Response("private-provider-body", { status: 401 }));
   return Effect.gen(function* () {
@@ -1048,6 +1130,32 @@ it.effect("reads season statistics on a season basis when no completed week is a
     });
     assert.strictEqual(details[0]?.rosterStatus, "free_agent");
     assert.strictEqual(details[0]?.projected, undefined);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reads a bounded player history in one request per period", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const history = yield* provider.readPlayerHistory({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerPlayerKeys: ["466.p.20001"],
+      sport: "football",
+      periods: [{ week: 6 }, { week: 7 }],
+      currentWeek: 6,
+    });
+
+    assert.deepStrictEqual(
+      history.map((entry) => entry.period),
+      [{ week: 6 }, { week: 7 }],
+    );
+    assert.strictEqual(internet.calls.length, 2);
+    assert.include(internet.calls[0]?.url.href, "stats.type=season");
+    assert.include(internet.calls[1]?.url.href, "stats.type=season");
+    assert.strictEqual(history[0]?.details[0]?.providerPlayerKey, "466.p.20001");
+    assert.strictEqual(history[1]?.details[0]?.providerPlayerKey, "466.p.20001");
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 

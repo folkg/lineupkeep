@@ -14,8 +14,8 @@ import {
 import type {
   ProviderLeagueSettings,
   ProviderLeagueTeam,
+  ProviderLineupAssignment,
   ProviderMatchup,
-  ProviderNativeActionResult,
   ProviderNativeTarget,
   ProviderOperation,
   ProviderPlayerDetail,
@@ -25,9 +25,10 @@ import type {
   ProviderStandings,
   ProviderTeam,
   ProviderTransaction,
+  ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
 
-type FakeNativeAction = "accept" | "reject" | "lost_response" | "unavailable";
+type FakeWriteAction = "accept" | "reject" | "lost_response" | "unavailable" | "invalid";
 
 type FakeGate = {
   readonly started: Deferred.Deferred<void>;
@@ -46,6 +47,7 @@ type FakeProviderState = {
   readonly standings: ProviderStandings | undefined;
   readonly standingsFailure: ProviderResponseInvalid | undefined;
   readonly roster: ProviderRoster | undefined;
+  readonly rosterAfterNextRead: ProviderRoster | undefined;
   readonly rosterPeriods: ReadonlyArray<ProviderRosterCoverage | undefined>;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
   readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
@@ -55,10 +57,14 @@ type FakeProviderState = {
   readonly unsupported: ReadonlySet<ProviderOperation>;
   readonly reviewLinkFailure: ProviderReviewLinkInvalid | undefined;
   readonly reviewLinkUrl: string | undefined;
-  readonly nativeAction: FakeNativeAction;
+  readonly nativeAction: FakeWriteAction;
   readonly nativeAfter: ProviderRoster | undefined;
   readonly nativeTargets: ReadonlyArray<ProviderNativeTarget>;
   readonly nativeCalls: number;
+  readonly explicitAction: FakeWriteAction;
+  readonly explicitAfter: ProviderRoster | undefined;
+  readonly explicitRequests: ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>;
+  readonly explicitCalls: number;
 };
 
 export type FakeProviderWorldShape = {
@@ -76,6 +82,7 @@ export type FakeProviderWorldShape = {
   readonly setStandings: (standings: ProviderStandings | undefined) => Effect.Effect<void>;
   readonly failStandings: (failure: ProviderResponseInvalid | undefined) => Effect.Effect<void>;
   readonly setRoster: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
+  readonly setRosterAfterNextRead: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly rosterPeriods: Effect.Effect<ReadonlyArray<ProviderRosterCoverage | undefined>>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
   readonly failPlayerDetails: (failure: ProviderPeriodMismatch | undefined) => Effect.Effect<void>;
@@ -89,10 +96,14 @@ export type FakeProviderWorldShape = {
   ) => Effect.Effect<void>;
   readonly failReviewLinks: (failure: ProviderReviewLinkInvalid | undefined) => Effect.Effect<void>;
   readonly setReviewLinkUrl: (url: string | undefined) => Effect.Effect<void>;
-  readonly setNativeAction: (action: FakeNativeAction) => Effect.Effect<void>;
+  readonly setNativeAction: (action: FakeWriteAction) => Effect.Effect<void>;
   readonly setNativeAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly nativeTargets: Effect.Effect<ReadonlyArray<ProviderNativeTarget>>;
   readonly nativeCallCount: Effect.Effect<number>;
+  readonly setExplicitAction: (action: FakeWriteAction) => Effect.Effect<void>;
+  readonly setExplicitAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
+  readonly explicitRequests: Effect.Effect<ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>>;
+  readonly explicitCallCount: Effect.Effect<number>;
 };
 
 export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakeProviderWorldShape>()(
@@ -113,6 +124,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         standings: undefined,
         standingsFailure: undefined,
         roster: undefined,
+        rosterAfterNextRead: undefined,
         rosterPeriods: [],
         playerDetails: [],
         playerDetailsFailure: undefined,
@@ -126,6 +138,10 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         nativeAfter: undefined,
         nativeTargets: [],
         nativeCalls: 0,
+        explicitAction: "accept",
+        explicitAfter: undefined,
+        explicitRequests: [],
+        explicitCalls: 0,
       });
       const modify = (
         update: (current: FakeProviderState) => FakeProviderState,
@@ -162,6 +178,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         failStandings: (standingsFailure) =>
           modify((current) => ({ ...current, standingsFailure })),
         setRoster: (roster) => modify((current) => ({ ...current, roster })),
+        setRosterAfterNextRead: (rosterAfterNextRead) =>
+          modify((current) => ({ ...current, rosterAfterNextRead })),
         rosterPeriods: Effect.map(Ref.get(state), (current) => current.rosterPeriods),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
         failPlayerDetails: (playerDetailsFailure) =>
@@ -178,6 +196,11 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setNativeAfter: (nativeAfter) => modify((current) => ({ ...current, nativeAfter })),
         nativeTargets: Effect.map(Ref.get(state), (current) => current.nativeTargets),
         nativeCallCount: Effect.map(Ref.get(state), (current) => current.nativeCalls),
+        setExplicitAction: (explicitAction) =>
+          modify((current) => ({ ...current, explicitAction })),
+        setExplicitAfter: (explicitAfter) => modify((current) => ({ ...current, explicitAfter })),
+        explicitRequests: Effect.map(Ref.get(state), (current) => current.explicitRequests),
+        explicitCallCount: Effect.map(Ref.get(state), (current) => current.explicitCalls),
       } satisfies FakeProviderWorldShape;
     }),
   );
@@ -333,6 +356,13 @@ export const ProviderFakeTest = Layer.effect(
             covered: coverage,
           });
         }
+        if (current.rosterAfterNextRead !== undefined) {
+          yield* Ref.update(world.state, (state) => ({
+            ...state,
+            roster: current.rosterAfterNextRead,
+            rosterAfterNextRead: undefined,
+          }));
+        }
         return current.roster;
       }),
       applyNativeStartActive: Effect.fn("FakeProvider.applyNativeStartActive")(function* (input) {
@@ -356,24 +386,49 @@ export const ProviderFakeTest = Layer.effect(
           nativeCalls: state.nativeCalls + 1,
           nativeTargets: [...state.nativeTargets, input.target],
         }));
-        const result: ProviderNativeActionResult = (() => {
-          switch (current.nativeAction) {
-            case "accept":
-              return { status: "accepted" };
-            case "lost_response":
-              return { status: "unknown" };
-            case "unavailable":
-              return { status: "unknown" };
-            case "reject":
-              return { status: "rejected", reason: "invalid_request" };
-          }
-        })();
+        const result: ProviderWriteResult = writeResult(current.nativeAction);
         if (current.nativeAction === "accept" || current.nativeAction === "lost_response") {
           const after = current.nativeAfter ?? current.roster;
           yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));
         }
         return result;
       }),
+      applyExplicitAssignments: Effect.fn("FakeProvider.applyExplicitAssignments")(
+        function* (input) {
+          const current = yield* prepare(input, "apply_explicit_assignments").pipe(
+            Effect.mapError((error) =>
+              error._tag === "provider.session_rejected"
+                ? error
+                : ProviderResponseInvalid.make({ operation: "apply_explicit_assignments" }),
+            ),
+          );
+          if (current.roster === undefined) {
+            return yield* ProviderResponseInvalid.make({
+              operation: "apply_explicit_assignments",
+            });
+          }
+          if (current.roster.providerTeamKey !== input.providerTeamKey) {
+            return { status: "rejected" as const, reason: "not_found" as const };
+          }
+          yield* Ref.update(world.state, (state) => ({
+            ...state,
+            explicitCalls: state.explicitCalls + 1,
+            explicitRequests: [...state.explicitRequests, input.assignments],
+          }));
+          if (current.explicitAction === "invalid") {
+            return yield* ProviderResponseInvalid.make({
+              operation: "apply_explicit_assignments",
+            });
+          }
+          const result: ProviderWriteResult = writeResult(current.explicitAction);
+          if (current.explicitAction === "accept" || current.explicitAction === "lost_response") {
+            const after =
+              current.explicitAfter ?? applyAssignments(current.roster, input.assignments);
+            yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));
+          }
+          return result;
+        },
+      ),
       readPlayerDetails: Effect.fn("FakeProvider.readPlayerDetails")(function* (input) {
         const current = yield* prepare(input, "read_player_details");
         if (current.playerDetailsFailure !== undefined) {
@@ -385,6 +440,21 @@ export const ProviderFakeTest = Layer.effect(
         }
         const requested = new Set(input.providerPlayerKeys);
         return current.playerDetails.filter((player) => requested.has(player.providerPlayerKey));
+      }),
+      readPlayerHistory: Effect.fn("FakeProvider.readPlayerHistory")(function* (input) {
+        const current = yield* prepare(input, "read_player_history");
+        if (current.playerDetailsFailure !== undefined) {
+          return yield* ProviderPeriodMismatch.make({
+            operation: "read_player_history",
+            requested: current.playerDetailsFailure.requested,
+            covered: current.playerDetailsFailure.covered,
+          });
+        }
+        const requested = new Set(input.providerPlayerKeys);
+        const details = current.playerDetails.filter((player) =>
+          requested.has(player.providerPlayerKey),
+        );
+        return input.periods.map((period) => ({ period, details }));
       }),
       searchPlayers: Effect.fn("FakeProvider.searchPlayers")(function* (input) {
         const current = yield* prepare(input, "search_players");
@@ -516,6 +586,37 @@ function validate(
     ),
     Effect.mapError(() => ProviderSessionRejected.make({ operation })),
   );
+}
+
+function writeResult(action: FakeWriteAction): ProviderWriteResult {
+  switch (action) {
+    case "accept":
+      return { status: "accepted" };
+    case "lost_response":
+      return { status: "unknown" };
+    case "unavailable":
+      return { status: "unknown" };
+    case "reject":
+      return { status: "rejected", reason: "invalid_request" };
+    case "invalid":
+      return { status: "rejected", reason: "invalid_request" };
+  }
+}
+
+function applyAssignments(
+  roster: ProviderRoster,
+  assignments: ReadonlyArray<ProviderLineupAssignment>,
+): ProviderRoster {
+  const slots = new Map(
+    assignments.map((assignment) => [assignment.providerPlayerKey, assignment.slot]),
+  );
+  return {
+    ...roster,
+    players: roster.players.map((player) => ({
+      ...player,
+      slot: slots.get(player.providerPlayerKey) ?? player.slot,
+    })),
+  };
 }
 
 function requestFailure(
