@@ -72,7 +72,7 @@ function teamsPayload(league: "nfl" | "nhl"): unknown {
             games: {
               "0": {
                 game: [
-                  { season: 2026 },
+                  { game_key: league === "nfl" ? "461" : "465", code: league, season: 2026 },
                   {
                     teams: {
                       "0": { team: { team_key: teamKey, name } },

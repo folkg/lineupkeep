@@ -39,8 +39,8 @@ function hostedBrowserFactory(): HostedBrowserFactory | undefined {
 }
 
 function stopProcess(): void {
-  void deploymentTarget.hostedBrowser
-    ?.closeAll()
+  const closed = deploymentTarget.hostedBrowser?.closeAll() ?? Promise.resolve();
+  void closed
     .catch(() => undefined)
     .then(() => backend.dispose())
     .then(

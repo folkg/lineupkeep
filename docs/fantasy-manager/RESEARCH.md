@@ -136,7 +136,10 @@ Confirmed live:
 - A one-entry nested collection such as `stat_position_types`, `team_logos`, or `managers` is a
   positional array of wrapper records, but the normalizer merged single-element arrays of records
   into one object. Real league settings then failed to decode. Collection fields now keep their
-  ordered entries; only known resource-fragment fields merge.
+  ordered entries: an array of records merges into one resource only when its entries carry
+  disjoint fields, the key does not name a plural collection, and known single-key wrappers are
+  unwrapped first. Repeated fields stay ordered entries; a singular list of distinct fields
+  describes one resource.
 - A roster container mixes numeric player entries with coverage metadata (`coverage_type`, `week`
   or `date`, `is_prescoring`, `bye_week_sponsor`). It is not a pure count-keyed collection, so the
   normalizer exposed metadata next to numeric keys. Numeric entries are now separated into an
