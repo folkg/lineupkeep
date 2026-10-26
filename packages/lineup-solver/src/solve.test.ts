@@ -194,6 +194,24 @@ describe("lineup optimization", () => {
     expect(plan.comparison.slotChanges).toEqual([]);
   });
 
+  it("keeps a better primary value ahead of change and occupancy tie-breaks at the safe-integer boundary", () => {
+    const high = Number.MAX_SAFE_INTEGER - 1;
+    const low = Number.MAX_SAFE_INTEGER - 2;
+    const problem = lineupProblem(
+      [startingSlot("S1", 1, "optional", ["A"]), benchSlot("BN", 1)],
+      [
+        player("high", high, { positions: ["A"], currentSlotId: slotId("BN") }),
+        player("low", low, { positions: ["A"], currentSlotId: slotId("S1") }),
+      ],
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("high", "S1"), assignment("low", "BN")]);
+    expect(plan.totalSelectionValue).toBe(high);
+    expect(plan.comparison.slotChanges).toHaveLength(2);
+  });
+
   it("prefers zero-value occupancy before minimizing changes", () => {
     const problem = lineupProblem(
       [startingSlot("FLEX", 1, "optional", ["RB"]), benchSlot("BN", 1)],

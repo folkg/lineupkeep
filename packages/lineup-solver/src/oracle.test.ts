@@ -34,6 +34,40 @@ describe("exhaustive oracle agreement", () => {
     expect(generatedProblems).toBe(10000);
   });
 
+  it("never lowers the optimum when a player's value increases", () => {
+    fc.assert(
+      fc.property(generatedProblemArbitrary(), fc.nat(), (problem, offset) => {
+        if (problem.players.length === 0) {
+          return;
+        }
+        const index = offset % problem.players.length;
+        const target = problem.players[index];
+        if (target === undefined || target.selection.kind !== "known") {
+          return;
+        }
+
+        const increased: LineupProblem = {
+          ...problem,
+          players: problem.players.map((player, playerIndex) =>
+            playerIndex === index && player.selection.kind === "known"
+              ? { ...player, selection: knownSelection(basis, player.selection.units + 1) }
+              : player,
+          ),
+        };
+        const before = solveLineup(problem);
+        const after = solveLineup(increased);
+
+        expect(after.kind).toBe(before.kind);
+        if (before.kind === "plan" && after.kind === "plan") {
+          expect(after.plan.totalSelectionValue).toBeGreaterThanOrEqual(
+            before.plan.totalSelectionValue,
+          );
+        }
+      }),
+      { numRuns: 2000, seed: 20261027 },
+    );
+  });
+
   it("finds a known optimum and a known infeasibility", () => {
     const optimal = lineupProblem(
       [startingSlot("S1", 1, "optional", ["A"]), startingSlot("S2", 1, "optional", ["A"])],
