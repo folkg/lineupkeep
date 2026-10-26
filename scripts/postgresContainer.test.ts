@@ -30,7 +30,7 @@ it("removes a container that an orphaned Docker client finishes creating after i
     env: docker.environment,
   });
   orphan.unref();
-  await expect.poll(() => docker.calls()).toContain(`create --name ${name}`);
+  await expect.poll(() => docker.calls(), { timeout: 10_000 }).toContain(`create --name ${name}`);
 
   await postgresContainer(name, "/lock").remove(AbortSignal.timeout(20_000), false);
 

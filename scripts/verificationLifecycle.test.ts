@@ -23,6 +23,8 @@ import {
 
 vi.setConfig({ testTimeout: 30_000 });
 
+const processStartupTimeoutMillis = 10_000;
+
 it("drops the database and releases the lock after a command fails", async () => {
   await using fixture = await lifecycleFixture();
 
@@ -46,7 +48,7 @@ it("stops a command that ignores interruption, then cleans up", async () => {
   `);
 
   const running = runVerification(await fixture.plan([stubborn], interruption.signal));
-  await expect.poll(() => existsSync(pidFile)).toBe(true);
+  await expect.poll(() => existsSync(pidFile), { timeout: processStartupTimeoutMillis }).toBe(true);
   interruption.abort(new Error("Operator interrupted"));
   const outcome = await running;
 
@@ -249,7 +251,7 @@ it("kills owned processes at once after a second interruption", async () => {
 
   const started = Date.now();
   const running = runVerification(plan);
-  await expect.poll(() => existsSync(pidFile)).toBe(true);
+  await expect.poll(() => existsSync(pidFile), { timeout: processStartupTimeoutMillis }).toBe(true);
   interruption.abort(new Error("Operator interrupted"));
   urgency.abort();
   const outcome = await running;
@@ -343,7 +345,9 @@ it("lets only one recovery act on an abandoned lock at a time", async () => {
     (name) => fileDatabase(name, databaseFile, gate.promise),
     300,
   );
-  await expect.poll(() => existsSync(join(lock, "recovery-1"))).toBe(true);
+  await expect
+    .poll(() => existsSync(join(lock, "recovery-1")), { timeout: processStartupTimeoutMillis })
+    .toBe(true);
 
   const second = await recoverVerification(lock, (name) => fileDatabase(name, databaseFile), 300);
   gate.resolve();
@@ -398,7 +402,7 @@ it("leaves a lock alone when it was recovered and retaken while a late recovery 
       ),
     ]),
   );
-  await expect.poll(() => existsSync(livePid)).toBe(true);
+  await expect.poll(() => existsSync(livePid), { timeout: processStartupTimeoutMillis }).toBe(true);
 
   const status = await late.resume();
 
@@ -538,7 +542,9 @@ it("treats a container as orphaned only when its checkout's lock is gone or anot
   const running = runVerification(
     await fixture.plan([fixture.script("setTimeout(() => {}, 1500)")]),
   );
-  await expect.poll(() => existsSync(join(lock, "owner.json"))).toBe(true);
+  await expect
+    .poll(() => existsSync(join(lock, "owner.json")), { timeout: processStartupTimeoutMillis })
+    .toBe(true);
 
   const ownRun = await isOrphaned(lock, "verify_fixture");
   const otherRun = await isOrphaned(lock, "lineupkeep-test-0123456789abcdef0123456789abcdef");

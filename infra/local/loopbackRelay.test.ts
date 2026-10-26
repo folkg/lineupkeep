@@ -8,6 +8,8 @@ import { join } from "node:path";
 
 import { expect, it } from "vitest";
 
+const relayStartupTimeoutMillis = 10_000;
+
 it.each(["127.0.0.1", "localhost"])(
   "keeps the public port reserved while its dynamic %s upstream starts",
   async (host) => {
@@ -50,10 +52,22 @@ async function relayFixture(): Promise<{
   await using resources = new AsyncDisposableStack();
   const directory = resources.use(await mkdtempDisposable(join(tmpdir(), "lineupkeep-relay-")));
   const target = join(directory.path, "upstream");
-  const upstream = resources.use(
-    httpServer((request, response) => response.end(request.headers.host)),
-  );
-  resources.defer(() => upstream.closeAllConnections());
+  const upstream = httpServer((request, response) => response.end(request.headers.host));
+  resources.defer(async () => {
+    upstream.closeAllConnections();
+    if (!upstream.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      upstream.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  });
   const relay = spawn(process.execPath, ["infra/local/loopbackRelay.ts"], {
     env: { ...process.env, RELAY_BIND: "127.0.0.1", RELAY_TARGET_FILE: target },
     stdio: ["ignore", "pipe", "pipe"],
@@ -67,7 +81,11 @@ async function relayFixture(): Promise<{
   relay.stdout.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
-  await expect.poll(() => /http:\/\/127\.0\.0\.1:\d+/u.exec(output)?.[0]).toBeDefined();
+  await expect
+    .poll(() => /http:\/\/127\.0\.0\.1:\d+/u.exec(output)?.[0], {
+      timeout: relayStartupTimeoutMillis,
+    })
+    .toBeDefined();
   const address = new URL(/http:\/\/127\.0\.0\.1:\d+/u.exec(output)?.[0] ?? "");
   const cleanup = resources.move();
   return { address, target, upstream, [Symbol.asyncDispose]: () => cleanup.disposeAsync() };

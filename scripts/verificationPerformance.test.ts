@@ -696,7 +696,9 @@ async function foreignInspector(): Promise<{
   child.stderr.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
-  await expect.poll(() => /ws:\/\/127\.0\.0\.1:(\d+)\//u.test(output)).toBe(true);
+  await expect
+    .poll(() => /ws:\/\/127\.0\.0\.1:(\d+)\//u.test(output), { timeout: 10_000 })
+    .toBe(true);
   const port = /ws:\/\/127\.0\.0\.1:(\d+)\//u.exec(output)?.[1];
   const exited = new Promise((resolve) => child.once("exit", resolve));
   return {

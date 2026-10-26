@@ -42,7 +42,7 @@ Create fresh MSW interception per test through a disposable setup, reject unhand
 
 ## Suite parallelism
 
-`bun checks` runs files concurrently in one worker pool sized from available parallelism; tests inside a file run in order. A file must therefore own its database, temporary directories, and loopback ports, and any process-wide state (environment variables, globals, interception) belongs to the single file that sets it. Keep a file serial when its cases share that state, and use `test.concurrent` only where each case allocates its own resources. Files that launch Chromium belong to the separate serialized `chromium` project; keep them there so browser startup never starves against the shared pool.
+`bun checks` runs the Node, browser-mode, and Chromium projects as separate Vitest invocations; within the Node project, files run concurrently in one worker pool sized from available parallelism, and tests inside a file run in order. A file must therefore own its database, temporary directories, and loopback ports, and any process-wide state (environment variables, globals, interception) belongs to the single file that sets it. Keep a file serial when its cases share that state, and use `test.concurrent` only where each case allocates its own resources. Files that launch Chromium belong to the separate serialized `chromium` project; keep them there so browser startup never starves against Node workers.
 
 ## E2E discipline
 

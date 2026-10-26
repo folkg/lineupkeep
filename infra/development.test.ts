@@ -40,7 +40,7 @@ it("terminates stalled shutdown and removes its directory before native teardown
     },
     true,
   );
-  await expect.poll(fixture.output).toContain("STOPPING");
+  await expect.poll(fixture.output, { timeout: 10_000 }).toContain("STOPPING");
   await using deadline = new AsyncDisposableStack();
   const bounded = new AbortController();
   deadline.defer(() => bounded.abort());
