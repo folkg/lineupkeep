@@ -113,12 +113,17 @@ it.effect("excludes disabled, paused, unavailable, and reconnecting teams", () =
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
-it.effect("blocks a current-week run when the league publishes no scoring weeks", () =>
+it.effect("completes a current hockey run in a rotisserie league with no scoring weeks", () =>
   Effect.gen(function* () {
     const runs = yield* LineupRuns;
     const fake = yield* FakeProviderWorld;
-    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
-    yield* fake.setLeague({ ...league, scoringType: "roto", periodWindow: undefined });
+    const team = yield* seedTeam(fake, "465.l.2000.t.9", "Gamma", {
+      team: hockeyTeamFixture,
+      league: { ...hockeyLeague, scoringType: "roto", periodWindow: undefined },
+      roster: hockeyRoster,
+      nativeAfter: hockeyNativeAfter,
+    });
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-25T19:00:00Z")));
     const requested = yield* Schema.decodeEffect(LineupRequestInput)({
       requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164f9",
       teams: [{ team, period: { coverage: "current" } }],
@@ -126,8 +131,66 @@ it.effect("blocks a current-week run when the league publishes no scoring weeks"
 
     const submitted = yield* runs.submit(owner, requested);
 
+    assert.strictEqual(submitted.runs[0]?.status, "completed");
+    assert.strictEqual(submitted.runs[0]?.outcome?.kind, "changed");
+    assert.deepStrictEqual(yield* fake.rosterPeriods, [
+      { type: "date", date: "2026-10-25" },
+      { type: "date", date: "2026-10-25" },
+    ]);
+    assert.deepStrictEqual(yield* fake.nativeTargets, [{ type: "date", date: "2026-10-25" }]);
+    assert.strictEqual(yield* fake.nativeCallCount, 1);
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("resolves the current fantasy day for a head-to-head hockey league with weeks", () =>
+  Effect.gen(function* () {
+    const runs = yield* LineupRuns;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "465.l.2000.t.9", "Gamma", {
+      team: hockeyTeamFixture,
+      league: hockeyLeague,
+      roster: hockeyRoster,
+      nativeAfter: hockeyNativeAfter,
+    });
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-25T19:00:00Z")));
+    const requested = yield* Schema.decodeEffect(LineupRequestInput)({
+      requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164fa",
+      teams: [{ team, period: { coverage: "current" } }],
+    });
+
+    const submitted = yield* runs.submit(owner, requested);
+
+    assert.strictEqual(submitted.runs[0]?.status, "completed");
+    assert.deepStrictEqual(yield* fake.rosterPeriods, [
+      { type: "date", date: "2026-10-25" },
+      { type: "date", date: "2026-10-25" },
+    ]);
+    assert.deepStrictEqual(yield* fake.nativeTargets, [{ type: "date", date: "2026-10-25" }]);
+    assert.strictEqual(yield* fake.nativeCallCount, 1);
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("blocks a current hockey run outside the declared season with the actual cause", () =>
+  Effect.gen(function* () {
+    const runs = yield* LineupRuns;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "465.l.2000.t.9", "Gamma", {
+      team: hockeyTeamFixture,
+      league: { ...hockeyLeague, periodWindow: undefined },
+      roster: hockeyRoster,
+      nativeAfter: hockeyNativeAfter,
+    });
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2027-05-01T19:00:00Z")));
+    const requested = yield* Schema.decodeEffect(LineupRequestInput)({
+      requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164fb",
+      teams: [{ team, period: { coverage: "current" } }],
+    });
+
+    const submitted = yield* runs.submit(owner, requested);
+
     assert.strictEqual(submitted.runs[0]?.status, "blocked");
-    assert.include(submitted.runs[0]?.outcome?.summary, "no scoring-week window");
+    assert.include(submitted.runs[0]?.outcome?.summary, "outside the league's declared season");
+    assert.deepStrictEqual(yield* fake.rosterPeriods, []);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
@@ -177,17 +240,25 @@ it.effect("blocks a stale explicit week instead of replaying or editing a future
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
+type SeedShape = {
+  readonly team: ProviderTeam;
+  readonly league: ProviderLeagueSettings;
+  readonly roster: ProviderRoster;
+  readonly nativeAfter: ProviderRoster;
+};
+
 function seedTeam(
   fake: FakeProviderWorld["Service"],
   providerTeamKey: string,
   name: string,
+  shape: SeedShape = { team: teamFixture, league, roster, nativeAfter },
 ): Effect.Effect<TeamId, never, Connections> {
   return Effect.gen(function* () {
     const connections = yield* Connections;
-    yield* fake.setTeams([{ ...teamFixture, providerTeamKey, name }]);
-    yield* fake.setLeague(league);
-    yield* fake.setRoster(roster);
-    yield* fake.setNativeAfter(nativeAfter);
+    yield* fake.setTeams([{ ...shape.team, providerTeamKey, name }]);
+    yield* fake.setLeague(shape.league);
+    yield* fake.setRoster(shape.roster);
+    yield* fake.setNativeAfter(shape.nativeAfter);
     const linkingInput = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId: nextRequestId(),
       provider: "yahoo",
@@ -232,6 +303,7 @@ const league: ProviderLeagueSettings = {
   webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
   season: 2026,
   periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 17 },
+  rosterCoverage: "week",
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,
@@ -295,6 +367,88 @@ const nativeAfter: ProviderRoster = {
   players: roster.players.map((player, index) => ({
     ...player,
     slot: index === 0 ? "BN" : "QB",
+  })),
+};
+
+const hockeyTeamFixture: ProviderTeam = {
+  ...teamFixture,
+  providerTeamKey: "465.l.2000.t.9",
+  providerLeagueKey: "465.l.2000",
+  league: "nhl",
+  sport: "hockey",
+  name: "Gamma",
+};
+
+const hockeyLeague: ProviderLeagueSettings = {
+  providerLeagueKey: "465.l.2000",
+  name: "Hockey League",
+  webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
+  season: 2026,
+  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 24 },
+  rosterCoverage: "date",
+  startDate: "2026-10-01",
+  endDate: "2027-04-10",
+  teamCount: 10,
+  scoringType: "head",
+  scoringLabel: "H2H",
+  weeklyDeadline: "daily",
+  waiverType: "FR",
+  waiverRule: "continuous",
+  usesFaab: false,
+  draftStatus: "postdraft",
+  rosterPositions: [
+    { position: "C", positionType: "P", count: 2, isStarting: true },
+    { position: "BN", positionType: "B", count: 2, isStarting: false },
+  ],
+  statCategories: [],
+  statModifiers: [],
+};
+
+const hockeyRoster: ProviderRoster = {
+  providerTeamKey: "465.l.2000.t.9",
+  providerLeagueKey: "465.l.2000",
+  coverage: { type: "date", date: "2026-10-25" },
+  players: [
+    {
+      providerPlayerKey: "465.p.90001",
+      name: "Locked Center",
+      displayPosition: "C",
+      primaryPosition: "C",
+      positionType: "P",
+      proTeamAbbreviation: undefined,
+      eligiblePositions: ["C"],
+      slot: "C",
+      isFlex: false,
+      isEditable: false,
+      injuryCode: undefined,
+      injuryDetail: undefined,
+      byeWeek: null,
+      undroppable: false,
+    },
+    {
+      providerPlayerKey: "465.p.90002",
+      name: "Movable Bench",
+      displayPosition: "C",
+      primaryPosition: "C",
+      positionType: "P",
+      proTeamAbbreviation: undefined,
+      eligiblePositions: ["C"],
+      slot: "BN",
+      isFlex: false,
+      isEditable: true,
+      injuryCode: undefined,
+      injuryDetail: undefined,
+      byeWeek: null,
+      undroppable: false,
+    },
+  ],
+};
+
+const hockeyNativeAfter: ProviderRoster = {
+  ...hockeyRoster,
+  players: hockeyRoster.players.map((player, index) => ({
+    ...player,
+    slot: index === 0 ? "BN" : "C",
   })),
 };
 

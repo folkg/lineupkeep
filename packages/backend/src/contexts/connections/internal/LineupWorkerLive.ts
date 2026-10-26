@@ -1,6 +1,7 @@
 import { DateTime, Effect, Layer, Option } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import { fantasyDayPolicy } from "#contexts/connections/FantasyDay.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupRunOutcome, LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import { LineupPersistenceFailed } from "#contexts/connections/LineupRun.ts";
@@ -10,6 +11,7 @@ import type {
   ProviderNativeTarget,
   ProviderReadFailure,
   ProviderRoster,
+  ProviderRosterCoverage,
 } from "#contexts/connections/Provider.ts";
 import { ProviderGateway } from "#contexts/connections/Provider.ts";
 
@@ -21,6 +23,7 @@ import type {
   LineupRunState,
   LineupWriteIntentRef,
 } from "./LineupRunWorkflow.ts";
+import { resolveTarget } from "./LineupTarget.ts";
 import type { OwnedTeam } from "./QueryRepository.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 
@@ -99,15 +102,14 @@ export const LineupWorkerLive = Layer.effect(
       if (league === undefined) {
         return;
       }
-      const resolution = resolveTarget(run.record.target, league);
-      if (resolution.status !== "resolved") {
-        return yield* block(
-          run,
-          resolution.status,
-          resolution.status === "no_week_window"
-            ? "The provider reports no scoring-week window for this league, so a week target cannot be resolved. Request an explicit date."
-            : "The requested period is not the provider's current period for this league.",
-        );
+      const resolution = resolveTarget(
+        run.record.target,
+        league,
+        fantasyDayPolicy(context.connection.provider, context.team.league),
+        now,
+      );
+      if (resolution.status === "blocked") {
+        return yield* block(run, resolution.reason, resolution.detail);
       }
       const target = resolution.target;
       const roster = yield* readRoster(run, context, session, target);
@@ -265,7 +267,7 @@ export const LineupWorkerLive = Layer.effect(
           provider: context.connection.provider,
           session,
           providerTeamKey: context.team.providerTeamKey,
-          period: target.coverage === "week" ? { week: target.week } : undefined,
+          period: rosterPeriod(target),
         }),
       );
       if (readback._tag === "Failure") {
@@ -401,7 +403,7 @@ export const LineupWorkerLive = Layer.effect(
           provider: owned.connection.provider,
           session,
           providerTeamKey: owned.team.providerTeamKey,
-          period: target.coverage === "week" ? { week: target.week } : undefined,
+          period: rosterPeriod(target),
         }),
       );
       if (result._tag === "Success") {
@@ -433,7 +435,7 @@ export const LineupWorkerLive = Layer.effect(
           yield* block(
             run,
             "period_unavailable",
-            `The provider returned an unexpected period for ${resource}.`,
+            `The provider returned ${describeCoverage(error.covered)} for the ${resource} instead of the requested ${describeCoverage(error.requested)}.`,
           );
           return;
         case "provider.session_rejected":
@@ -583,41 +585,22 @@ export const LineupWorkerLive = Layer.effect(
   }),
 );
 
-type TargetResolution =
-  | { readonly status: "resolved"; readonly target: LineupTargetPeriod }
-  | { readonly status: "no_week_window" }
-  | { readonly status: "stale_period" };
+function rosterPeriod(target: LineupTargetPeriod): ProviderRosterCoverage | undefined {
+  switch (target.coverage) {
+    case "current":
+      return undefined;
+    case "week":
+      return { type: "week", week: target.week };
+    case "date":
+      return { type: "date", date: target.date };
+  }
+}
 
-function resolveTarget(
-  requested: LineupTargetPeriod,
-  league: ProviderLeagueSettings,
-): TargetResolution {
-  const window = league.periodWindow;
-  const resolved = (target: LineupTargetPeriod): TargetResolution => ({
-    status: "resolved",
-    target,
-  });
-  if (requested.coverage === "date") {
-    return league.startDate !== undefined &&
-      league.endDate !== undefined &&
-      requested.date >= league.startDate &&
-      requested.date <= league.endDate
-      ? resolved(requested)
-      : { status: "stale_period" };
+function describeCoverage(coverage: ProviderRosterCoverage | null): string {
+  if (coverage === null) {
+    return "no period";
   }
-  if (window === undefined) {
-    return { status: "no_week_window" };
-  }
-  if (requested.coverage === "current") {
-    return window.currentWeek >= window.startWeek && window.currentWeek <= window.endWeek
-      ? resolved({ coverage: "week", week: window.currentWeek })
-      : { status: "stale_period" };
-  }
-  return requested.week >= window.startWeek &&
-    requested.week <= window.endWeek &&
-    requested.week === window.currentWeek
-    ? resolved(requested)
-    : { status: "stale_period" };
+  return coverage.type === "week" ? `week ${String(coverage.week)}` : `date ${coverage.date}`;
 }
 
 function observe(

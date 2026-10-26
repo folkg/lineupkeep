@@ -10,6 +10,7 @@ import type {
   ProviderPlayerStatGroup,
   ProviderReadFailure,
   ProviderRoster,
+  ProviderRosterCoverage,
   ProviderMatchup,
   ProviderRemainingGames,
   ProviderRosterPlayer,
@@ -156,10 +157,7 @@ export const FantasyQueriesLive = Layer.effect(
                 failure: {
                   code: "period_unavailable",
                   resource,
-                  message:
-                    error.coveredWeek === null
-                      ? "The provider did not report a weekly period for this read."
-                      : `The provider returned week ${String(error.coveredWeek)} instead of the requested week ${String(error.requestedWeek)}.`,
+                  message: periodMismatchDetail(error.requested, error.covered),
                 },
               });
           }
@@ -558,7 +556,7 @@ export const FantasyQueriesLive = Layer.effect(
           provider.readRoster({
             ...providerIdentity(context),
             providerTeamKey: context.owned.team.providerTeamKey,
-            period: requested,
+            period: providerRosterPeriod(requested),
           }),
         );
       let rosterOutcome = yield* readRoster(period);
@@ -834,7 +832,7 @@ export const FantasyQueriesLive = Layer.effect(
         provider.readRoster({
           ...providerIdentity(context),
           providerTeamKey: context.owned.team.providerTeamKey,
-          period: input.period,
+          period: providerRosterPeriod(input.period),
         }),
       );
       let roster: ProviderRoster | undefined;
@@ -1524,7 +1522,7 @@ export const FantasyQueriesLive = Layer.effect(
           provider.readRoster({
             ...providerIdentity(context),
             providerTeamKey: context.owned.team.providerTeamKey,
-            period: requested,
+            period: providerRosterPeriod(requested),
           }),
         );
       let rosterOutcome = yield* readRoster(period);
@@ -2245,6 +2243,10 @@ function currentPeriod(window: ProviderPeriodWindow | undefined): QueryPeriod | 
     : undefined;
 }
 
+function providerRosterPeriod(period: QueryPeriod | undefined): ProviderRosterCoverage | undefined {
+  return period === undefined ? undefined : { type: "week", week: period.week };
+}
+
 function leagueOverview(league: ProviderLeagueSettings): NonNullable<LeagueData["overview"]> {
   return {
     name: league.name,
@@ -2451,6 +2453,20 @@ function comparePlayers(
     case "stat":
       return 0;
   }
+}
+
+function periodMismatchDetail(
+  requested: ProviderRosterCoverage,
+  covered: ProviderRosterCoverage | null,
+): string {
+  const wanted =
+    requested.type === "week" ? `week ${String(requested.week)}` : `date ${requested.date}`;
+  if (covered === null) {
+    return `The provider did not report the requested ${wanted} for this read.`;
+  }
+  const actual =
+    covered.type === "week" ? `week ${String(covered.week)}` : `the roster for ${covered.date}`;
+  return `The provider returned ${actual} instead of the requested ${wanted}.`;
 }
 
 function dictionaryEntry(

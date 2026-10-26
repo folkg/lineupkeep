@@ -73,6 +73,23 @@ export type ProviderPeriodWindow = {
   readonly endWeek: number;
 };
 
+const ProviderPeriodKind = Schema.Literals(["week", "date"]);
+export type ProviderPeriodKind = typeof ProviderPeriodKind.Type;
+
+const ProviderDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
+
+const ProviderRosterCoverage = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("week"),
+    week: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(99)),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("date"),
+    date: ProviderDate,
+  }),
+]);
+export type ProviderRosterCoverage = typeof ProviderRosterCoverage.Type;
+
 export type ProviderLeagueSettings = {
   readonly providerLeagueKey: string;
   readonly name: string;
@@ -89,6 +106,7 @@ export type ProviderLeagueSettings = {
   readonly usesFaab: boolean | undefined;
   readonly draftStatus: string | undefined;
   readonly periodWindow: ProviderPeriodWindow | undefined;
+  readonly rosterCoverage: ProviderPeriodKind;
   readonly rosterPositions: ReadonlyArray<ProviderRosterPosition>;
   readonly statCategories: ReadonlyArray<ProviderStatCategory>;
   readonly statModifiers: ReadonlyArray<ProviderStatModifier>;
@@ -97,10 +115,6 @@ export type ProviderLeagueSettings = {
 export type ProviderPeriod = {
   readonly week: number;
 };
-
-type ProviderRosterCoverage =
-  | { readonly type: "week"; readonly week: number }
-  | { readonly type: "date"; readonly date: string };
 
 export type ProviderNativeTarget = ProviderRosterCoverage;
 
@@ -367,8 +381,8 @@ export class ProviderPeriodMismatch extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("provider.period_mismatch", {
   operation: ProviderOperation,
-  requestedWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  coveredWeek: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  requested: ProviderRosterCoverage,
+  covered: Schema.NullOr(ProviderRosterCoverage),
 }) {}
 
 export class ProviderReviewLinkInvalid extends Schema.TaggedError<
@@ -405,7 +419,7 @@ export type ProviderGatewayShape = {
   readonly readRoster: (
     input: ProviderSessionMaterial & {
       readonly providerTeamKey: string;
-      readonly period: ProviderPeriod | undefined;
+      readonly period: ProviderRosterCoverage | undefined;
     },
   ) => Effect.Effect<ProviderRoster, ProviderReadFailure>;
 

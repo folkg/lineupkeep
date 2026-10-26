@@ -367,6 +367,7 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
     assert.strictEqual(internet.calls[0]?.headers["cookie"], Redacted.value(sessionInput.session));
     assert.strictEqual(league.name, "Synthetic NFL League");
     assert.deepStrictEqual(league.periodWindow, { currentWeek: 6, startWeek: 1, endWeek: 17 });
+    assert.strictEqual(league.rosterCoverage, "week");
     assert.strictEqual(league.weeklyDeadline, undefined);
     assert.deepStrictEqual(
       league.rosterPositions.map((position) => [
@@ -415,6 +416,7 @@ it.effect("reads an NHL head-to-head league with qualifying-days settings and no
     });
 
     assert.deepStrictEqual(league.periodWindow, { currentWeek: 3, startWeek: 1, endWeek: 24 });
+    assert.strictEqual(league.rosterCoverage, "date");
     assert.strictEqual(league.webUrl, "https://hockey.fantasysports.yahoo.com/hockey/4001");
     assert.strictEqual(league.weeklyDeadline, "game");
     assert.deepStrictEqual(
@@ -438,6 +440,7 @@ it.effect("reads a rotisserie league that publishes no scoring-week window", () 
     });
 
     assert.strictEqual(league.periodWindow, undefined);
+    assert.strictEqual(league.rosterCoverage, "date");
     assert.strictEqual(league.scoringType, "roto");
     assert.strictEqual(league.teamCount, 12);
     assert.strictEqual(league.startDate, "2026-10-01");
@@ -523,7 +526,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
     const roster = yield* provider.readRoster({
       ...sessionInput,
       providerTeamKey: "466.l.4000.t.1",
-      period: { week: 6 },
+      period: { type: "week", week: 6 },
     });
 
     assert.strictEqual(
@@ -576,7 +579,7 @@ it.effect("reads a week-scoped roster container from a captured payload", () => 
     const roster = yield* provider.readRoster({
       ...sessionInput,
       providerTeamKey: "466.l.4000.t.1",
-      period: { week: 6 },
+      period: { type: "week", week: 6 },
     });
 
     assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
@@ -604,7 +607,7 @@ it.effect("rejects a roster returned for a different team", () => {
       provider.readRoster({
         ...sessionInput,
         providerTeamKey: "466.l.4000.t.2",
-        period: { week: 6 },
+        period: { type: "week", week: 6 },
       }),
     );
 
@@ -639,12 +642,13 @@ it.effect("refuses to relabel a date-scoped roster as a week", () => {
       provider.readRoster({
         ...sessionInput,
         providerTeamKey: "466.l.4002.t.3",
-        period: { week: 4 },
+        period: { type: "week", week: 4 },
       }),
     );
 
     assert.instanceOf(error, ProviderPeriodMismatch);
-    assert.strictEqual(error.coveredWeek, null);
+    assert.deepStrictEqual(error.requested, { type: "week", week: 4 });
+    assert.deepStrictEqual(error.covered, { type: "date", date: "2026-10-25" });
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -661,12 +665,13 @@ it.effect("treats a rejected week selector as uncovered period coverage", () => 
       provider.readRoster({
         ...sessionInput,
         providerTeamKey: "466.l.4002.t.3",
-        period: { week: 6 },
+        period: { type: "week", week: 6 },
       }),
     );
 
     assert.instanceOf(error, ProviderPeriodMismatch);
-    assert.strictEqual(error.coveredWeek, null);
+    assert.deepStrictEqual(error.requested, { type: "week", week: 6 });
+    assert.strictEqual(error.covered, null);
     assert.strictEqual(internet.calls.length, 1);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
@@ -693,6 +698,63 @@ it.effect("reads a date-scoped roster from a captured payload", () => {
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
+it.effect("reads a date target without sending a period selector", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const roster = yield* provider.readRoster({
+      ...sessionInput,
+      providerTeamKey: "466.l.4002.t.3",
+      period: { type: "date", date: "2026-10-25" },
+    });
+
+    assert.deepStrictEqual(roster.coverage, { type: "date", date: "2026-10-25" });
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4002.t.3/roster?format=json",
+    );
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reports a date period mismatch without relabelling another day", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "466.l.4002.t.3",
+        period: { type: "date", date: "2026-10-24" },
+      }),
+    );
+
+    assert.instanceOf(error, ProviderPeriodMismatch);
+    assert.deepStrictEqual(error.requested, { type: "date", date: "2026-10-24" });
+    assert.deepStrictEqual(error.covered, { type: "date", date: "2026-10-25" });
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("sends a week selector only for a week target", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const roster = yield* provider.readRoster({
+      ...sessionInput,
+      providerTeamKey: "466.l.4000.t.1",
+      period: { type: "week", week: 6 },
+    });
+
+    assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6?format=json",
+    );
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
 it.effect("reports a period mismatch instead of relabelling another week", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
@@ -702,13 +764,13 @@ it.effect("reports a period mismatch instead of relabelling another week", () =>
       provider.readRoster({
         ...sessionInput,
         providerTeamKey: "466.l.4000.t.1",
-        period: { week: 4 },
+        period: { type: "week", week: 4 },
       }),
     );
 
     assert.instanceOf(error, ProviderPeriodMismatch);
-    assert.strictEqual(error.requestedWeek, 4);
-    assert.strictEqual(error.coveredWeek, 6);
+    assert.deepStrictEqual(error.requested, { type: "week", week: 4 });
+    assert.deepStrictEqual(error.covered, { type: "week", week: 6 });
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -1289,7 +1351,8 @@ it.effect("reports a scoreboard period mismatch", () => {
     );
 
     assert.instanceOf(error, ProviderPeriodMismatch);
-    assert.strictEqual(error.coveredWeek, 6);
+    assert.deepStrictEqual(error.requested, { type: "week", week: 4 });
+    assert.deepStrictEqual(error.covered, { type: "week", week: 6 });
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 

@@ -233,6 +233,7 @@ it.effect("reports a league without a scoring-week window instead of inventing p
         providerLeagueKey: "465.l.2000",
         webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
         periodWindow: undefined,
+        rosterCoverage: "date",
       },
       roster: rosterFixture({
         count: 2,
@@ -533,8 +534,8 @@ it.effect("never pairs an unsupported stat group with a period failure", () =>
     yield* fake.failPlayerDetails(
       ProviderPeriodMismatch.make({
         operation: "read_player_details",
-        requestedWeek: 3,
-        coveredWeek: null,
+        requested: { type: "week", week: 3 },
+        covered: null,
       }),
     );
 
@@ -552,14 +553,14 @@ it.effect("never pairs an unsupported stat group with a period failure", () =>
     const player = Array.getUnsafe(hydrated.players, 0);
     assert.strictEqual(player.actualStats?.status, "unsupported");
     if (player.actualStats?.status === "unsupported") {
-      assert.include(player.actualStats.detail, "did not report a weekly period");
+      assert.include(player.actualStats.detail, "did not report the requested week 3");
     }
     assert.strictEqual(player.projections?.status, "unsupported");
     assert.deepStrictEqual(hydrated.failures, []);
     const detailsCoverage = hydrated.coverage.find(
       (entry) => entry.resource === "players" && entry.status === "degraded",
     );
-    assert.include(detailsCoverage?.detail, "did not report a weekly period");
+    assert.include(detailsCoverage?.detail, "did not report the requested week 3");
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -1592,6 +1593,7 @@ const hockeyLeagueFixture: ProviderLeagueSettings = {
   webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
   season: 2026,
   periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 24 },
+  rosterCoverage: "date",
   startDate: "2026-10-01",
   endDate: "2027-04-10",
   teamCount: 10,
@@ -1626,6 +1628,7 @@ const rotoLeagueFixture: ProviderLeagueSettings = {
   webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
   season: 2026,
   periodWindow: undefined,
+  rosterCoverage: "date",
   startDate: "2026-10-01",
   endDate: "2027-04-10",
   teamCount: 10,
@@ -1670,6 +1673,7 @@ const leagueFixture: ProviderLeagueSettings = {
   webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
   season: 2026,
   periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 17 },
+  rosterCoverage: "week",
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,

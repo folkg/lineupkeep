@@ -147,6 +147,7 @@ const league: ProviderLeagueSettings = {
   webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
   season: 2026,
   periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 17 },
+  rosterCoverage: "week",
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,

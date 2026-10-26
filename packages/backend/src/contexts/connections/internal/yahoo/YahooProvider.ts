@@ -28,6 +28,7 @@ import type {
   ProviderNativeTarget,
   ProviderOperation,
   ProviderPeriod,
+  ProviderPeriodKind,
   ProviderPeriodWindow,
   ProviderPlayerDetail,
   ProviderPlayerSearchInput,
@@ -35,6 +36,7 @@ import type {
   ProviderPlayerSearchSort,
   ProviderRemainingGames,
   ProviderRoster,
+  ProviderRosterCoverage,
   ProviderRosterPlayer,
   ProviderReviewLinkInput,
   ProviderStanding,
@@ -62,6 +64,10 @@ const leagueSport = {
   nfl: "football",
   nhl: "hockey",
 } as const;
+const rosterCoverageBySport = {
+  football: "week",
+  hockey: "date",
+} as const satisfies Record<"football" | "hockey", ProviderPeriodKind>;
 const reviewHosts = {
   football: "football.fantasysports.yahoo.com",
   hockey: "hockey.fantasysports.yahoo.com",
@@ -224,13 +230,13 @@ export const YahooProvider = Layer.effect(
     const readRoster = Effect.fn("YahooProvider.readRoster")(function* (
       input: ProviderSessionMaterial & {
         readonly providerTeamKey: string;
-        readonly period: ProviderPeriod | undefined;
+        readonly period: ProviderRosterCoverage | undefined;
       },
     ) {
       yield* Effect.annotateCurrentSpan("provider.operation", "read_roster");
       const cookie = yield* sessionCookie(input, "read_roster");
       const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_roster");
-      const week = input.period === undefined ? undefined : yield* ValidWeek(input.period.week);
+      const week = input.period?.type === "week" ? yield* ValidWeek(input.period.week) : undefined;
       const periodSuffix = week === undefined ? "" : `;week=${String(week)}`;
       const payload = yield* readJson(internet, {
         operation: "read_roster",
@@ -240,15 +246,16 @@ export const YahooProvider = Layer.effect(
         cookie,
         normalize: true,
       }).pipe(
-        Effect.catchIf(
-          (error): error is ProviderRequestFailed =>
-            error._tag === "provider.request_failed" && error.status === 400 && week !== undefined,
-          () =>
-            ProviderPeriodMismatch.make({
-              operation: "read_roster",
-              requestedWeek: week ?? 1,
-              coveredWeek: null,
-            }),
+        Effect.catchTag("provider.request_failed", (error) =>
+          Effect.fail(
+            error.status === 400 && week !== undefined
+              ? ProviderPeriodMismatch.make({
+                  operation: "read_roster",
+                  requested: { type: "week", week },
+                  covered: null,
+                })
+              : error,
+          ),
         ),
       );
       const decoded = yield* decodePayload(TeamRosterPayload, payload, "read_roster");
@@ -805,6 +812,7 @@ function leagueSettings(
       usesFaab: settings.uses_faab,
       draftStatus: optionalNonEmpty(attributes.draft_status),
       periodWindow,
+      rosterCoverage: rosterCoverageBySport[sport],
       rosterPositions: settings.roster_positions.map(({ roster_position }) => ({
         position: roster_position.position,
         positionType: optionalNonEmpty(roster_position.position_type),
@@ -856,7 +864,7 @@ function weekWindow(
 function rosterFromPayload(
   payload: typeof TeamRosterPayload.Type,
   requestedTeamKey: string,
-  requestedPeriod: ProviderPeriod | undefined,
+  requestedPeriod: ProviderRosterCoverage | undefined,
 ): Effect.Effect<ProviderRoster, ProviderResponseInvalid | ProviderPeriodMismatch> {
   return Effect.gen(function* () {
     if (payload.team.team_key !== requestedTeamKey) {
@@ -907,28 +915,25 @@ function rosterFromPayload(
       if (week === undefined) {
         return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
       }
-      if (requestedPeriod !== undefined && requestedPeriod.week !== week) {
+      const coverage = { type: "week" as const, week };
+      if (
+        requestedPeriod !== undefined &&
+        (requestedPeriod.type !== "week" || requestedPeriod.week !== week)
+      ) {
         return yield* ProviderPeriodMismatch.make({
           operation: "read_roster",
-          requestedWeek: requestedPeriod.week,
-          coveredWeek: week,
+          requested: requestedPeriod,
+          covered: coverage,
         });
       }
       return {
         providerTeamKey: requestedTeamKey,
         providerLeagueKey: leagueKey,
-        coverage: { type: "week" as const, week },
+        coverage,
         players: players.map(toRosterPlayer),
       };
     }
     if (coverageType === "date") {
-      if (requestedPeriod !== undefined) {
-        return yield* ProviderPeriodMismatch.make({
-          operation: "read_roster",
-          requestedWeek: requestedPeriod.week,
-          coveredWeek: null,
-        });
-      }
       const dates = new Set(
         players.flatMap((player) =>
           player.selected_position.date === undefined ? [] : [player.selected_position.date],
@@ -945,10 +950,21 @@ function rosterFromPayload(
       if (date === undefined) {
         return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
       }
+      const coverage = { type: "date" as const, date };
+      if (
+        requestedPeriod !== undefined &&
+        (requestedPeriod.type !== "date" || requestedPeriod.date !== date)
+      ) {
+        return yield* ProviderPeriodMismatch.make({
+          operation: "read_roster",
+          requested: requestedPeriod,
+          covered: coverage,
+        });
+      }
       return {
         providerTeamKey: requestedTeamKey,
         providerLeagueKey: leagueKey,
-        coverage: { type: "date" as const, date },
+        coverage,
         players: players.map(toRosterPlayer),
       };
     }
@@ -1052,8 +1068,9 @@ function statSeries(
     if (basis.type === "week" && coverage.week !== basis.week) {
       return yield* ProviderPeriodMismatch.make({
         operation: "read_player_details",
-        requestedWeek: basis.week,
-        coveredWeek: coverage.week ?? null,
+        requested: { type: "week", week: basis.week },
+        covered:
+          coverage.week === undefined ? null : { type: "week" as const, week: coverage.week },
       });
     }
     return stats.stats.map(({ stat }) => ({
@@ -1154,8 +1171,8 @@ function matchupsFromPayload(
     if (scoreboard.week !== period.week) {
       return yield* ProviderPeriodMismatch.make({
         operation: "read_matchups",
-        requestedWeek: period.week,
-        coveredWeek: scoreboard.week,
+        requested: { type: "week", week: period.week },
+        covered: { type: "week", week: scoreboard.week },
       });
     }
     const matchups: ProviderMatchup[] = [];
@@ -1164,8 +1181,8 @@ function matchupsFromPayload(
         if (matchup.week !== period.week) {
           return yield* ProviderPeriodMismatch.make({
             operation: "read_matchups",
-            requestedWeek: period.week,
-            coveredWeek: matchup.week,
+            requested: { type: "week", week: period.week },
+            covered: { type: "week", week: matchup.week },
           });
         }
         const teams = matchup.entries.flatMap((entry) => entry.teams);
@@ -1211,24 +1228,24 @@ function teamScore(
     if (points?.week !== undefined && points.week !== period.week) {
       return yield* ProviderPeriodMismatch.make({
         operation: "read_matchups",
-        requestedWeek: period.week,
-        coveredWeek: points.week,
+        requested: { type: "week", week: period.week },
+        covered: { type: "week", week: points.week },
       });
     }
     const projected = team.team_projected_points;
     if (projected?.week !== undefined && projected.week !== period.week) {
       return yield* ProviderPeriodMismatch.make({
         operation: "read_matchups",
-        requestedWeek: period.week,
-        coveredWeek: projected.week,
+        requested: { type: "week", week: period.week },
+        covered: { type: "week", week: projected.week },
       });
     }
     const remaining = remainingGames(team.team_remaining_games, period);
     if (remaining !== undefined && remaining.week !== null && remaining.week !== period.week) {
       return yield* ProviderPeriodMismatch.make({
         operation: "read_matchups",
-        requestedWeek: period.week,
-        coveredWeek: remaining.week,
+        requested: { type: "week", week: period.week },
+        covered: { type: "week", week: remaining.week },
       });
     }
     return {

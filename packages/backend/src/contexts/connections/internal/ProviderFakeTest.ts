@@ -16,10 +16,12 @@ import type {
   ProviderLeagueTeam,
   ProviderMatchup,
   ProviderNativeActionResult,
+  ProviderNativeTarget,
   ProviderOperation,
   ProviderPlayerDetail,
   ProviderReviewLinkInput,
   ProviderRoster,
+  ProviderRosterCoverage,
   ProviderStandings,
   ProviderTeam,
   ProviderTransaction,
@@ -44,6 +46,7 @@ type FakeProviderState = {
   readonly standings: ProviderStandings | undefined;
   readonly standingsFailure: ProviderResponseInvalid | undefined;
   readonly roster: ProviderRoster | undefined;
+  readonly rosterPeriods: ReadonlyArray<ProviderRosterCoverage | undefined>;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
   readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
   readonly matchups: ReadonlyArray<ProviderMatchup>;
@@ -54,6 +57,7 @@ type FakeProviderState = {
   readonly reviewLinkUrl: string | undefined;
   readonly nativeAction: FakeNativeAction;
   readonly nativeAfter: ProviderRoster | undefined;
+  readonly nativeTargets: ReadonlyArray<ProviderNativeTarget>;
   readonly nativeCalls: number;
 };
 
@@ -72,6 +76,7 @@ export type FakeProviderWorldShape = {
   readonly setStandings: (standings: ProviderStandings | undefined) => Effect.Effect<void>;
   readonly failStandings: (failure: ProviderResponseInvalid | undefined) => Effect.Effect<void>;
   readonly setRoster: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
+  readonly rosterPeriods: Effect.Effect<ReadonlyArray<ProviderRosterCoverage | undefined>>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
   readonly failPlayerDetails: (failure: ProviderPeriodMismatch | undefined) => Effect.Effect<void>;
   readonly setMatchups: (matchups: ReadonlyArray<ProviderMatchup>) => Effect.Effect<void>;
@@ -86,6 +91,7 @@ export type FakeProviderWorldShape = {
   readonly setReviewLinkUrl: (url: string | undefined) => Effect.Effect<void>;
   readonly setNativeAction: (action: FakeNativeAction) => Effect.Effect<void>;
   readonly setNativeAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
+  readonly nativeTargets: Effect.Effect<ReadonlyArray<ProviderNativeTarget>>;
   readonly nativeCallCount: Effect.Effect<number>;
 };
 
@@ -107,6 +113,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         standings: undefined,
         standingsFailure: undefined,
         roster: undefined,
+        rosterPeriods: [],
         playerDetails: [],
         playerDetailsFailure: undefined,
         matchups: [],
@@ -117,6 +124,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         reviewLinkUrl: undefined,
         nativeAction: "accept",
         nativeAfter: undefined,
+        nativeTargets: [],
         nativeCalls: 0,
       });
       const modify = (
@@ -154,6 +162,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         failStandings: (standingsFailure) =>
           modify((current) => ({ ...current, standingsFailure })),
         setRoster: (roster) => modify((current) => ({ ...current, roster })),
+        rosterPeriods: Effect.map(Ref.get(state), (current) => current.rosterPeriods),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
         failPlayerDetails: (playerDetailsFailure) =>
           modify((current) => ({ ...current, playerDetailsFailure })),
@@ -167,6 +176,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setReviewLinkUrl: (reviewLinkUrl) => modify((current) => ({ ...current, reviewLinkUrl })),
         setNativeAction: (nativeAction) => modify((current) => ({ ...current, nativeAction })),
         setNativeAfter: (nativeAfter) => modify((current) => ({ ...current, nativeAfter })),
+        nativeTargets: Effect.map(Ref.get(state), (current) => current.nativeTargets),
         nativeCallCount: Effect.map(Ref.get(state), (current) => current.nativeCalls),
       } satisfies FakeProviderWorldShape;
     }),
@@ -284,6 +294,10 @@ export const ProviderFakeTest = Layer.effect(
       }),
       readRoster: Effect.fn("FakeProvider.readRoster")(function* (input) {
         const current = yield* prepare(input, "read_roster");
+        yield* Ref.update(world.state, (state) => ({
+          ...state,
+          rosterPeriods: [...state.rosterPeriods, input.period],
+        }));
         if (current.roster === undefined) {
           return yield* ProviderOperationUnsupported.make({
             operation: "read_roster",
@@ -303,22 +317,20 @@ export const ProviderFakeTest = Layer.effect(
           }));
         }
         const coverage = current.roster.coverage;
-        if (input.period !== undefined && coverage.type === "date") {
-          return yield* ProviderPeriodMismatch.make({
-            operation: "read_roster",
-            requestedWeek: input.period.week,
-            coveredWeek: null,
-          });
-        }
         if (
           input.period !== undefined &&
-          coverage.type === "week" &&
-          input.period.week !== coverage.week
+          (input.period.type !== coverage.type ||
+            (input.period.type === "week" &&
+              coverage.type === "week" &&
+              input.period.week !== coverage.week) ||
+            (input.period.type === "date" &&
+              coverage.type === "date" &&
+              input.period.date !== coverage.date))
         ) {
           return yield* ProviderPeriodMismatch.make({
             operation: "read_roster",
-            requestedWeek: input.period.week,
-            coveredWeek: coverage.week,
+            requested: input.period,
+            covered: coverage,
           });
         }
         return current.roster;
@@ -342,6 +354,7 @@ export const ProviderFakeTest = Layer.effect(
         yield* Ref.update(world.state, (state) => ({
           ...state,
           nativeCalls: state.nativeCalls + 1,
+          nativeTargets: [...state.nativeTargets, input.target],
         }));
         const result: ProviderNativeActionResult = (() => {
           switch (current.nativeAction) {
@@ -366,8 +379,8 @@ export const ProviderFakeTest = Layer.effect(
         if (current.playerDetailsFailure !== undefined) {
           return yield* ProviderPeriodMismatch.make({
             operation: "read_player_details",
-            requestedWeek: current.playerDetailsFailure.requestedWeek,
-            coveredWeek: current.playerDetailsFailure.coveredWeek,
+            requested: current.playerDetailsFailure.requested,
+            covered: current.playerDetailsFailure.covered,
           });
         }
         const requested = new Set(input.providerPlayerKeys);
