@@ -1,19 +1,16 @@
-import {
-  averageExact,
-  exactFromInteger,
-  exactToUnits,
-  multiplyExact,
-  parseExact,
-  scorePeriod,
-} from "@lineupkeep/lineup-scoring";
+import { averageExact, exactToUnits, scorePeriod } from "@lineupkeep/lineup-scoring";
 import type { Exact, ScoringProfile, StatObservation } from "@lineupkeep/lineup-scoring";
-import { knownSelection, unusableSelection } from "@lineupkeep/lineup-solver";
+import { knownSelection } from "@lineupkeep/lineup-solver";
 import type { PlayerId, SelectionBasis } from "@lineupkeep/lineup-solver";
 
 import { containsPeriod, periodsEqual } from "./period.ts";
-import type { Period, PlayerValuation, PolicyPlayer, ValuationEffect } from "./types.ts";
-
-export const dayToDayFactor = parseExact("0.5");
+import type {
+  AvailabilityAssessment,
+  Period,
+  PlayerAvailability,
+  PlayerValuation,
+  PolicyPlayer,
+} from "./types.ts";
 
 export function valuate(input: {
   readonly player: PolicyPlayer;
@@ -51,54 +48,41 @@ export function valuate(input: {
 
   const average =
     periodPoints.length === 0 ? undefined : averageExact(periodPoints, input.scoring.scale);
-  const effect = valuationEffect(input.player, input.period);
-  const evidence = {
+  const units = average === undefined ? 0 : selectionUnits(average, input.scoring.scale);
+
+  return {
     playerId: input.player.id,
-    effect,
+    availability: assessAvailability(input.player, input.period),
     countedPeriods,
     skippedPeriods,
     periodPoints,
     average,
+    selection: knownSelection(input.selectionBasis, units),
   };
-
-  const unusable = (reason: "missing" | "not-comparable"): PlayerValuation => ({
-    ...evidence,
-    selection: unusableSelection(input.selectionBasis, reason),
-  });
-  const known = (points: Exact): PlayerValuation => ({
-    ...evidence,
-    selection: knownSelection(input.selectionBasis, selectionUnits(points, input.scoring.scale)),
-  });
-
-  if (effect.kind === "excluded" || effect.kind === "no-game") {
-    return known(exactFromInteger(0n));
-  }
-  if (effect.kind === "unknown-availability") {
-    return unusable("not-comparable");
-  }
-  if (average === undefined) {
-    return unusable("missing");
-  }
-  if (effect.kind === "day-to-day") {
-    return known(multiplyExact(average, effect.factor));
-  }
-  return known(average);
 }
 
-function valuationEffect(player: PolicyPlayer, period: Period): ValuationEffect {
-  if (player.availability.kind === "excluded") {
-    return { kind: "excluded", reason: player.availability.reason };
+export function assessAvailability(player: PolicyPlayer, period: Period): AvailabilityAssessment {
+  if (!hasGame(player, period)) {
+    return { tier: "will-not-play", fact: "no-game", period };
   }
-  if (player.nonGamePeriods.some((candidate) => periodsEqual(candidate, period))) {
-    return { kind: "no-game", period };
+  return statusAssessment(player.availability);
+}
+
+function hasGame(player: PolicyPlayer, period: Period): boolean {
+  return !player.nonGamePeriods.some((candidate) => periodsEqual(candidate, period));
+}
+
+function statusAssessment(availability: PlayerAvailability): AvailabilityAssessment {
+  switch (availability.kind) {
+    case "available":
+      return { tier: "will-play", fact: "available" };
+    case "uncertain":
+      return { tier: "might-play", fact: "day-to-day" };
+    case "unrecognised":
+      return { tier: "might-play", fact: "unrecognised-status", code: availability.code };
+    case "excluded":
+      return { tier: "will-not-play", fact: "excluded", reason: availability.reason };
   }
-  if (player.availability.kind === "unknown") {
-    return { kind: "unknown-availability", code: player.availability.code };
-  }
-  if (player.availability.kind === "uncertain") {
-    return { kind: "day-to-day", factor: dayToDayFactor };
-  }
-  return { kind: "period-average" };
 }
 
 function selectionUnits(points: Exact, scale: number): number {

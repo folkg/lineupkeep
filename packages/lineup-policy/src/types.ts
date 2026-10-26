@@ -17,9 +17,16 @@ export type PlayerAvailability =
   | { readonly kind: "available" }
   | { readonly kind: "excluded"; readonly reason: ExclusionReason }
   | { readonly kind: "uncertain"; readonly reason: "day-to-day" }
-  | { readonly kind: "unknown"; readonly code: string };
+  | { readonly kind: "unrecognised"; readonly code: string };
 
 export type ExclusionReason = "out" | "injured-reserve" | "suspended" | "not-active";
+
+export type AvailabilityAssessment =
+  | { readonly tier: "will-play"; readonly fact: "available" }
+  | { readonly tier: "might-play"; readonly fact: "day-to-day" }
+  | { readonly tier: "might-play"; readonly fact: "unrecognised-status"; readonly code: string }
+  | { readonly tier: "will-not-play"; readonly fact: "excluded"; readonly reason: ExclusionReason }
+  | { readonly tier: "will-not-play"; readonly fact: "no-game"; readonly period: Period };
 
 export type PolicyPlayer = {
   readonly id: PlayerId;
@@ -62,17 +69,10 @@ export type LineupPolicyRefusal =
 
 export type PlayerValuation = {
   readonly playerId: PlayerId;
-  readonly effect: ValuationEffect;
+  readonly availability: AvailabilityAssessment;
   readonly countedPeriods: ReadonlyArray<Period>;
   readonly skippedPeriods: ReadonlyArray<Period>;
   readonly periodPoints: ReadonlyArray<Exact>;
   readonly average: Exact | undefined;
   readonly selection: PlayerSelection;
 };
-
-export type ValuationEffect =
-  | { readonly kind: "period-average" }
-  | { readonly kind: "no-game"; readonly period: Period }
-  | { readonly kind: "excluded"; readonly reason: ExclusionReason }
-  | { readonly kind: "day-to-day"; readonly factor: Exact }
-  | { readonly kind: "unknown-availability"; readonly code: string };

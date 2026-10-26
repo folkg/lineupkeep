@@ -6,7 +6,6 @@ import {
   makeSelectionBasis,
   makeSlotId,
   solveLineup,
-  unusableSelection,
 } from "@lineupkeep/lineup-solver";
 import type {
   BenchSlot,
@@ -52,10 +51,10 @@ describe("availability", () => {
     ]);
     expect(valuation.average).toEqual(parseExact("20"));
     expect(knownUnits(valuation)).toBe(2000);
-    expect(valuation.effect).toEqual({ kind: "period-average" });
+    expect(valuation.availability).toEqual({ tier: "will-play", fact: "available" });
   });
 
-  it("gives a player with no game in the target period a known zero without dropping the evidence", () => {
+  it("keeps a player's value when they have no game in the target period", () => {
     const input = availabilityInput({
       weeks: [1600, 1600, 1600, 1600],
       availability: { kind: "available" },
@@ -64,12 +63,16 @@ describe("availability", () => {
 
     const valuation = valuationFrom(buildLineupProblem(input), "p1");
 
-    expect(valuation.effect).toEqual({ kind: "no-game", period: target });
+    expect(valuation.availability).toEqual({
+      tier: "will-not-play",
+      fact: "no-game",
+      period: target,
+    });
     expect(valuation.average).toEqual(parseExact("16"));
-    expect(knownUnits(valuation)).toBe(0);
+    expect(knownUnits(valuation)).toBe(1600);
   });
 
-  it("gives an excluded player a known zero rather than discounting a statistical value", () => {
+  it("keeps an excluded player's value while marking them as not playing", () => {
     const input = availabilityInput({
       weeks: [2000, 2000, 2000, 2000],
       availability: { kind: "excluded", reason: "injured-reserve" },
@@ -77,39 +80,87 @@ describe("availability", () => {
 
     const valuation = valuationFrom(buildLineupProblem(input), "p1");
 
-    expect(valuation.effect).toEqual({ kind: "excluded", reason: "injured-reserve" });
+    expect(valuation.availability).toEqual({
+      tier: "will-not-play",
+      fact: "excluded",
+      reason: "injured-reserve",
+    });
     expect(valuation.average).toEqual(parseExact("20"));
-    expect(knownUnits(valuation)).toBe(0);
+    expect(knownUnits(valuation)).toBe(2000);
   });
 
-  it("halves a day-to-day player's value once", () => {
-    const input = availabilityInput({
-      weeks: [1000, 1000, 1000, 1000],
-      availability: { kind: "uncertain", reason: "day-to-day" },
+  it("values a player identically whether they are healthy, doubtful, excluded, or unrecognised", () => {
+    const availabilities: ReadonlyArray<PlayerAvailability> = [
+      { kind: "available" },
+      { kind: "uncertain", reason: "day-to-day" },
+      { kind: "excluded", reason: "out" },
+      { kind: "unrecognised", code: "PROBABLE" },
+    ];
+    const observed = availabilities.map((availability) => {
+      const valuation = valuationFrom(
+        buildLineupProblem(availabilityInput({ weeks: [1000, 1000, 1000, 1000], availability })),
+        "p1",
+      );
+      return { units: knownUnits(valuation), tier: valuation.availability.tier };
     });
 
-    const valuation = valuationFrom(buildLineupProblem(input), "p1");
-
-    expect(valuation.effect).toEqual({ kind: "day-to-day", factor: parseExact("0.5") });
-    expect(knownUnits(valuation)).toBe(500);
+    expect(observed).toEqual([
+      { units: 1000, tier: "will-play" },
+      { units: 1000, tier: "might-play" },
+      { units: 1000, tier: "will-not-play" },
+      { units: 1000, tier: "might-play" },
+    ]);
   });
 
-  it("refuses to invent a value for an unrecognised status and holds the player where they are", () => {
-    const input = availabilityInput({
-      weeks: [3000, 3000, 3000, 3000],
-      availability: { kind: "unknown", code: "PROBABLE" },
-      slot: "QB",
-    });
+  it("plans a lineup for an unrecognised status instead of refusing the run", () => {
+    const result = buildLineupProblem(
+      rosterInput({
+        players: [
+          {
+            id: "p1",
+            weeks: [3000, 3000, 3000, 3000],
+            availability: { kind: "unrecognised", code: "PROBABLE" },
+            slot: "QB",
+            positions: ["QB"],
+          },
+          { id: "p2", weeks: [1000, 1000, 1000, 1000], positions: ["QB"] },
+        ],
+      }),
+    );
 
-    const result = buildLineupProblem(input);
+    const valuation = valuationFrom(result, "p1");
+    const plan = planFrom(solveLineup(problemFrom(result)));
+
+    expect(valuation.availability).toEqual({
+      tier: "might-play",
+      fact: "unrecognised-status",
+      code: "PROBABLE",
+    });
+    expect(knownUnits(valuation)).toBe(3000);
+    expect(plan.assignments).toContainEqual({
+      playerId: makePlayerId("p1"),
+      slotId: makeSlotId("BN"),
+    });
+  });
+
+  it("values a player with no counted period at zero and records the unmeasured periods", () => {
+    const result = buildLineupProblem(
+      rosterInput({
+        players: [{ id: "p1", weeks: [null, null, null, null], slot: "QB", positions: ["QB"] }],
+      }),
+    );
+
     const valuation = valuationFrom(result, "p1");
 
-    expect(valuation.effect).toEqual({ kind: "unknown-availability", code: "PROBABLE" });
-    expect(valuation.selection).toEqual(unusableSelection(basis, "not-comparable"));
-    expect(solveLineup(problemFrom(result))).toEqual({
-      kind: "refusal",
-      refusal: { reason: "unusable-selection-value", playerIds: [makePlayerId("p1")] },
-    });
+    expect(valuation.average).toBeUndefined();
+    expect(knownUnits(valuation)).toBe(0);
+    expect(valuation.skippedPeriods.map(periodKey)).toEqual([
+      "week:3",
+      "week:4",
+      "week:5",
+      "week:6",
+    ]);
+    expect(solveLineup(problemFrom(result)).kind).toBe("plan");
   });
 
   it("skips a published non-game period from the mean instead of scoring it zero", () => {
@@ -138,20 +189,76 @@ describe("availability", () => {
     expect(knownUnits(valuation)).toBe(1000);
   });
 
-  it("returns an unusable selection when no period could be counted", () => {
-    const input = availabilityInput({
-      weeks: [null, null, null, null],
-      availability: { kind: "available" },
-      slot: "QB",
-    });
+  it("starts a healthy player ahead of a higher-valued injured player", () => {
+    const result = buildLineupProblem(
+      rosterInput({
+        players: [
+          {
+            id: "injured",
+            weeks: [5000, 5000, 5000, 5000],
+            availability: { kind: "excluded", reason: "out" },
+            positions: ["QB"],
+          },
+          { id: "healthy", weeks: [1000, 1000, 1000, 1000], positions: ["QB"] },
+        ],
+      }),
+    );
 
-    const valuation = valuationFrom(buildLineupProblem(input), "p1");
+    const plan = planFrom(solveLineup(problemFrom(result)));
 
-    expect(valuation.selection).toEqual(unusableSelection(basis, "missing"));
-    expect(solveLineup(problemFrom(buildLineupProblem(input)))).toEqual({
-      kind: "refusal",
-      refusal: { reason: "unusable-selection-value", playerIds: [makePlayerId("p1")] },
-    });
+    expect(plan.assignments).toEqual([
+      { playerId: makePlayerId("healthy"), slotId: makeSlotId("QB") },
+      { playerId: makePlayerId("injured"), slotId: makeSlotId("BN") },
+    ]);
+    expect(plan.totalSelectionValue).toBe(1000);
+  });
+
+  it("starts an injured player in a starting position that would otherwise stay empty", () => {
+    const result = buildLineupProblem(
+      rosterInput({
+        slots: quarterbackSlots("optional"),
+        players: [
+          {
+            id: "injured",
+            weeks: [1200, 1200, 1200, 1200],
+            availability: { kind: "excluded", reason: "out" },
+            positions: ["QB"],
+          },
+        ],
+      }),
+    );
+
+    const plan = planFrom(solveLineup(problemFrom(result)));
+
+    expect(plan.assignments).toEqual([
+      { playerId: makePlayerId("injured"), slotId: makeSlotId("QB") },
+    ]);
+    expect(plan.filledStartingPositions).toBe(1);
+    expect(plan.totalSelectionValue).toBe(1200);
+  });
+
+  it("starts an available player worth nothing ahead of an injured player who scored well", () => {
+    const result = buildLineupProblem(
+      rosterInput({
+        players: [
+          {
+            id: "injured",
+            weeks: [4000, 4000, 4000, 4000],
+            availability: { kind: "excluded", reason: "suspended" },
+            positions: ["QB"],
+          },
+          { id: "healthy", weeks: [0, 0, 0, 0], positions: ["QB"] },
+        ],
+      }),
+    );
+
+    const plan = planFrom(solveLineup(problemFrom(result)));
+
+    expect(plan.assignments).toEqual([
+      { playerId: makePlayerId("healthy"), slotId: makeSlotId("QB") },
+      { playerId: makePlayerId("injured"), slotId: makeSlotId("BN") },
+    ]);
+    expect(plan.totalSelectionValue).toBe(0);
   });
 });
 
@@ -269,13 +376,18 @@ describe("worked example: recorded football league", () => {
     ]);
   });
 
-  it("gives the two editable players on bye a known zero in the target week", () => {
+  it("marks the two editable players on bye as not playing while keeping their means", () => {
     const result = buildLineupProblem(recordedFootballInput(true));
 
-    expect(valuationFrom(result, "BN-8").effect).toEqual({ kind: "no-game", period: target });
+    expect(valuationFrom(result, "BN-8").availability).toEqual({
+      tier: "will-not-play",
+      fact: "no-game",
+      period: target,
+    });
     expect(valuationFrom(result, "BN-8").average).toEqual(parseExact("16.1"));
-    expect(valuationFrom(result, "BN-13").effect).toEqual({ kind: "no-game", period: target });
-    expect(unitsByPlayer(result)["BN-13"]).toBe(0);
+    expect(unitsByPlayer(result)["BN-8"]).toBe(1610);
+    expect(valuationFrom(result, "BN-13").availability.tier).toBe("will-not-play");
+    expect(unitsByPlayer(result)["BN-13"]).toBe(980);
   });
 });
 
@@ -287,12 +399,12 @@ const recordedUnits: Readonly<Record<string, number>> = {
   "WR-5": 1985,
   "TE-6": 978,
   "W/R/T-7": 1555,
-  "BN-8": 0,
+  "BN-8": 1610,
   "BN-9": 977,
   "BN-10": 568,
   "BN-11": 0,
   "BN-12": 1133,
-  "BN-13": 0,
+  "BN-13": 980,
   "K-14": 800,
   "DEF-15": 400,
 };
@@ -478,6 +590,42 @@ function footballSlots(): ReadonlyArray<RosterSlot> {
     startingSlot("DEF", 1, ["DEF"]),
     benchSlot("BN", 6),
     reserveSlot("IR", 1, ["IR"]),
+  ];
+}
+
+function rosterInput(input: {
+  readonly players: ReadonlyArray<{
+    readonly id: string;
+    readonly weeks: ReadonlyArray<number | null>;
+    readonly availability?: PlayerAvailability;
+    readonly slot?: string;
+    readonly positions?: ReadonlyArray<string>;
+  }>;
+  readonly slots?: ReadonlyArray<RosterSlot>;
+}): LineupPolicyInput {
+  return {
+    selectionBasis: basis,
+    period: target,
+    window: [3, 4, 5, 6].map(week),
+    scoring: unitRule,
+    slots: input.slots ?? quarterbackSlots(),
+    players: input.players.map((player) => policyPlayer(player)),
+    observations: observationsFor(input.players),
+  };
+}
+
+function quarterbackSlots(
+  requirement: "required" | "optional" = "required",
+): ReadonlyArray<RosterSlot> {
+  return [
+    {
+      kind: "starting",
+      id: makeSlotId("QB"),
+      capacity: 1,
+      requirement,
+      eligibility: { kind: "positions", positions: ["QB"] },
+    },
+    benchSlot("BN", 2),
   ];
 }
 

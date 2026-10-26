@@ -1,11 +1,12 @@
 import type { StatObservation } from "@lineupkeep/lineup-scoring";
+import { makeAvailabilityTier } from "@lineupkeep/lineup-solver";
 import type {
+  AvailabilityTier,
   PlayerId,
   PositionType,
   RosterPlayer,
   RosterSlot,
   SlotEligibility,
-  SlotId,
 } from "@lineupkeep/lineup-solver";
 
 import { containsPeriod, periodKey, periodsEqual } from "./period.ts";
@@ -19,7 +20,13 @@ import type {
 } from "./types.ts";
 import { valuate } from "./valuation.ts";
 
-export const lineupPolicyVersion = "trailing-mean-points/1";
+export const lineupPolicyVersion = "trailing-mean-points-with-tiers/1";
+
+export const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
+  makeAvailabilityTier("will-play"),
+  makeAvailabilityTier("might-play"),
+  makeAvailabilityTier("will-not-play"),
+];
 
 export function buildLineupProblem(input: LineupPolicyInput): LineupPolicyResult {
   requireConsistentInput(input);
@@ -52,6 +59,7 @@ export function buildLineupProblem(input: LineupPolicyInput): LineupPolicyResult
     kind: "problem",
     problem: {
       selectionBasis: input.selectionBasis,
+      availabilityTiers: availabilityLadder,
       slots: input.slots,
       players: evaluated.map((entry) => entry.player),
     },
@@ -67,18 +75,12 @@ function rosterPlayer(
   return {
     id: player.id,
     eligiblePositions: player.eligiblePositions,
+    availabilityTier: makeAvailabilityTier(valuation.availability.tier),
     selection: valuation.selection,
     reserveEligible: reserveEligible(player, slots),
-    lockedSlotId: lockedSlotId(player, valuation),
+    lockedSlotId: player.locked ? player.currentSlotId : undefined,
     currentSlotId: player.currentSlotId,
   };
-}
-
-function lockedSlotId(player: PolicyPlayer, valuation: PlayerValuation): SlotId | undefined {
-  if (valuation.effect.kind === "unknown-availability") {
-    return player.currentSlotId;
-  }
-  return player.locked ? player.currentSlotId : undefined;
 }
 
 function reserveEligible(player: PolicyPlayer, slots: ReadonlyArray<RosterSlot>): boolean {

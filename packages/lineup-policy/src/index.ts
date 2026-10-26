@@ -1,8 +1,9 @@
 export { formatPeriod, periodKey, periodsEqual } from "./period.ts";
-export { buildLineupProblem, lineupPolicyVersion } from "./policy.ts";
-export { dayToDayFactor, valuate } from "./valuation.ts";
+export { availabilityLadder, buildLineupProblem, lineupPolicyVersion } from "./policy.ts";
+export { assessAvailability, valuate } from "./valuation.ts";
 export { trailingPeriodCount, trailingWindow } from "./window.ts";
 export type {
+  AvailabilityAssessment,
   ExclusionReason,
   LineupPolicyInput,
   LineupPolicyRefusal,
@@ -12,5 +13,4 @@ export type {
   PlayerAvailability,
   PlayerValuation,
   PolicyPlayer,
-  ValuationEffect,
 } from "./types.ts";

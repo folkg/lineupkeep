@@ -2,8 +2,8 @@
 
 The opinionated layer between observed statistics and lineup selection. Given a league's roster
 slots, a retained roster with each player's availability, and one observation per completed period,
-this package produces the solver's `LineupProblem` together with the reasoning for every value it
-assigned.
+this package produces the solver's `LineupProblem` — values, availability tiers, and locks — together
+with the reasoning for every decision it made.
 
 This package contains no IO, provider code, database, clock, randomness, or Effect services. It does
 not read a provider and does not assign players to slots. It also does not perform the arithmetic of
@@ -21,7 +21,8 @@ period observations ─┘
 
 The provider adapter decides what exists: which slots a league declares, which positions a player may
 occupy, what an injury code means, which periods a player has no game, whether a player is locked.
-This package decides what those facts are worth.
+This package decides what those facts are worth, how likely each player is to appear, and which
+availability rung that puts them on.
 
 ## The input states its basis
 
@@ -57,25 +58,32 @@ For each player, each window period is either **counted** or **skipped**:
 - a period whose scored total is unknown is skipped;
 - every other period contributes its exact points.
 
-The player's value is the mean of the counted periods, at the scoring profile's own scale. A player
-with no counted period has no value and receives an unusable selection rather than a zero.
+The player's value is the mean of the counted periods, at the scoring profile's own scale, and it is
+the same number whatever the player's availability is. Nothing is halved, zeroed, or refused for a
+status. A player with no counted period has no measured value; they are valued at zero and the
+valuation records that the mean is absent and which periods were skipped, so one unmeasured player
+never disables a run.
 
-The mean is then adjusted by exactly one availability condition. The conditions are ordered, and only
-the first that applies has any effect, so no fact is counted twice:
+## The availability tier
 
-| Order | Condition                                                                      | Effect on the value                      |
-| ----- | ------------------------------------------------------------------------------ | ---------------------------------------- |
-| 1     | Availability excludes the player (out, injured reserve, suspended, not active) | known zero                               |
-| 2     | The player's team has no game in the target period                             | known zero                               |
-| 3     | Availability is not recognised                                                 | unusable, and pinned to the current slot |
-| 4     | No period could be counted                                                     | unusable with `missing`                  |
-| 5     | Availability is uncertain (day to day)                                         | the mean, halved                         |
-| 6     | Otherwise                                                                      | the mean                                 |
+Availability is a separate fact, not a discount on the value. Each player is placed on one rung of an
+ordered ladder that the problem declares:
 
-An excluded player's zero replaces the statistical mean; it is never multiplied by it. A player on a
-bye is not charged a second time for the mean they would otherwise have had. An unrecognised status
-is neither healthy nor injured: the player keeps the slot the provider has them in and contributes an
-unusable value, so the solver refuses instead of asserting a lineup it cannot justify.
+| Tier            | Selected by                                                      |
+| --------------- | ---------------------------------------------------------------- |
+| `will-play`     | no status code                                                   |
+| `might-play`    | day to day; an unrecognised status code                          |
+| `will-not-play` | out, injured reserve, suspended, not active; a bye in the period |
+
+The ladder is exported as `availabilityLadder` and handed to the solver unchanged; the solver knows
+only that it is ordered from most to least available. `assessAvailability` is the single total
+function from provider-reported fact to tier, and the valuation records both, including the code of an
+unrecognised status so the plan's evidence can explain itself.
+
+A bye wins over a status: a player with no game in the target period cannot appear no matter what the
+provider says about their health, so they are `will-not-play` and the fact is recorded as `no-game`.
+An unrecognised status is placed on `might-play`: it never blocks a run, and it never displaces a
+player the provider calls healthy. The cost is stated in [the policy document](../../docs/fantasy-manager/POLICY.md#an-unrecognised-status-is-doubtful-and-it-is-recorded).
 
 Values are integers in the scoring profile's own scale, so a league whose modifiers carry two decimal
 places produces centi-points. The solver's comparisons are then exact.
@@ -90,7 +98,7 @@ derived facts:
   list. A league that distinguishes two reserve lists keeps them apart, because each list's own name
   is part of its eligibility rule.
 - **Locks** come from the caller's per-player lock flag, which pins the player to their current slot.
-  A player with an unrecognised availability is pinned the same way.
+  Availability never adds a lock: an unrecognised status moves like any other tier.
 
 Slot capacity is treated as a hard maximum, and a roster that does not fit is the solver's refusal,
 not a policy guess.
@@ -107,9 +115,9 @@ type LineupPolicyResult =
   | { readonly kind: "refusal"; readonly refusal: LineupPolicyRefusal };
 ```
 
-A `PlayerValuation` records the applied effect, which periods were counted and skipped, each counted
-period's exact points, the mean, the selection units, and the unusable reason when there is one. That
-is the evidence a person needs to disagree with a lineup.
+A `PlayerValuation` records the availability tier and the fact that selected it, which periods were
+counted and skipped, each counted period's exact points, the mean (absent when nothing could be
+counted), and the selection units. That is the evidence a person needs to disagree with a lineup.
 
 The policy refuses outright when:
 
@@ -120,11 +128,12 @@ Any further refusal comes from the solver and names its own reason.
 
 ## Verification
 
-The suite covers each availability condition, the single-application ordering, bye and unknown-period
-skipping, the unusable paths and the solver refusals they cause, basis-mixing rejection, reserve
-eligibility derivation, and two worked examples on a recorded football roster: the provider-locked
-lineup the policy must leave alone, and the same roster when editable, where the solver replaces the
-second running back with a bench player worth 7.35 more points.
+The suite covers each status-to-tier mapping, identical values across tiers, bye and unknown-period
+skipping, an unmeasured player, a run that keeps planning despite an unrecognised status, the owner's
+two availability scenarios, basis-mixing rejection, reserve eligibility derivation, and two worked
+examples on a recorded football roster: the provider-locked lineup the policy must leave alone, and the
+same roster when editable, where the solver replaces the second running back with a bench player worth
+7.35 more points.
 
 ## Deliberately outside this package
 
