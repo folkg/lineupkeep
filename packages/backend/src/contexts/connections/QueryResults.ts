@@ -139,6 +139,62 @@ const ScoringCategory = Schema.Struct({
   points: Schema.NullOr(Schema.String),
 });
 
+export const LeagueFormat = Schema.Literals([
+  "head_to_head_categories",
+  "head_to_head_points",
+  "rotisserie",
+  "unknown",
+]);
+export type LeagueFormat = typeof LeagueFormat.Type;
+
+const StandingCategory = Schema.Struct({
+  stat: StatRef,
+  value: Schema.NullOr(Schema.Finite),
+});
+
+const StandingsCoverage = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("available") }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]);
+
+export const StandingRow = Schema.Struct({
+  team: CounterpartyRef,
+  name: Schema.NonEmptyString,
+  current: Schema.Boolean,
+  rank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  playoffSeed: Schema.optional(Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)))),
+  record: Schema.optional(
+    Schema.Struct({
+      wins: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      losses: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      ties: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      percentage: Schema.NullOr(Schema.Finite),
+    }),
+  ),
+  gamesBack: Schema.NullOr(Schema.Finite),
+  pointsBack: Schema.NullOr(Schema.Finite),
+  points: Schema.NullOr(Schema.Finite),
+  pointsFor: Schema.NullOr(Schema.Finite),
+  pointsAgainst: Schema.NullOr(Schema.Finite),
+  streak: Schema.optional(
+    Schema.Struct({
+      type: Schema.NonEmptyString,
+      value: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    }),
+  ),
+  categories: Schema.Array(StandingCategory),
+  categoryPoints: Schema.Array(StandingCategory),
+});
+export type StandingRow = typeof StandingRow.Type;
+
+const StandingsData = Schema.Struct({
+  status: Schema.Literal("available"),
+  format: LeagueFormat,
+  categoryTotals: StandingsCoverage,
+  categoryPoints: StandingsCoverage,
+  teams: Schema.Array(StandingRow),
+});
+
 export const LeagueData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
@@ -146,10 +202,13 @@ export const LeagueData = Schema.Struct({
   rosterRules: Schema.optional(RosterRules),
   scoring: Schema.Array(ScoringCategory),
   standings: Schema.optional(
-    Schema.Struct({
-      status: Schema.Literal("unsupported"),
-      detail: Schema.String,
-    }),
+    Schema.Union([
+      StandingsData,
+      Schema.Struct({
+        status: Schema.Literal("unsupported"),
+        detail: Schema.String,
+      }),
+    ]),
   ),
   coverage: Schema.Array(QueryCoverage),
   failures: Schema.Array(QueryFailure),
@@ -178,6 +237,7 @@ export const RosterPlayer = Schema.Struct({
   slot: Schema.NonEmptyString,
   primaryPosition: Schema.NonEmptyString,
   displayPosition: Schema.NonEmptyString,
+  proTeam: Schema.NullOr(Schema.NonEmptyString),
   eligiblePositions: Schema.Array(Schema.NonEmptyString),
   editable: Schema.NullOr(Schema.Boolean),
   injury: Schema.Struct({
@@ -217,7 +277,14 @@ export type PlayerGroup = typeof PlayerGroup.Type;
 
 const SearchAvailability = Schema.Literals(["all", "free_agent", "waiver"]);
 
-const PlayerSort = Schema.Literals(["name", "position", "ownership"]);
+const PlayerSort = Schema.Literals([
+  "name",
+  "position",
+  "ownership",
+  "actual_rank",
+  "overall_rank",
+  "stat",
+]);
 
 export const SearchPlayersInput = Schema.Struct({
   team: TeamId,
@@ -236,7 +303,30 @@ export const SearchPlayersInput = Schema.Struct({
     ).pipe(Schema.check(Schema.isMaxLength(8))),
   ),
   availability: Schema.optional(SearchAvailability),
-  sort: Schema.optional(PlayerSort),
+  sort: Schema.optional(
+    PlayerSort.pipe(
+      Schema.annotate({
+        description:
+          "Provider-backed order. `actual_rank` and `overall_rank` are Yahoo's actual and overall ranks; `stat` orders by the league scoring category in `stat`. `ownership` orders by percent owned descending. Yahoo rejects point-total sorts for hockey, so no points sort is offered.",
+      }),
+    ),
+  ),
+  stat: Schema.optional(
+    StatRef.pipe(
+      Schema.annotate({
+        description:
+          "League scoring category from `get_league` scoring. Required only when sort is `stat`.",
+      }),
+    ),
+  ),
+  statPeriod: Schema.optional(
+    Schema.Literals(["season", "week"]).pipe(
+      Schema.annotate({
+        description:
+          "Period for a `stat` sort. `season` is the default; `week` uses the league's current scoring week.",
+      }),
+    ),
+  ),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
 });
@@ -250,6 +340,9 @@ const SearchPlayer = Schema.Struct({
   eligiblePositions: Schema.Array(Schema.NonEmptyString),
   availability: Schema.Literals(["free_agent", "waiver", "rostered", "unknown"]),
   percentOwned: Schema.NullOr(Schema.Finite),
+  percentOwnedDelta: Schema.NullOr(Schema.Finite),
+  percentStarted: Schema.NullOr(Schema.Finite),
+  percentStartedDelta: Schema.NullOr(Schema.Finite),
 });
 
 export const SearchPlayersData = Schema.Struct({
@@ -373,10 +466,32 @@ export const GetMatchupsInput = Schema.Struct({
 });
 export type GetMatchupsInput = typeof GetMatchupsInput.Type;
 
+const RemainingGames = Schema.Struct({
+  week: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  completed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  live: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  remaining: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+
+const MatchupCategoryValue = Schema.Struct({
+  stat: StatRef,
+  value: Schema.NullOr(Schema.Finite),
+});
+
 const MatchupTeam = Schema.Struct({
   team: CounterpartyRef,
   name: Schema.NonEmptyString,
   points: Schema.NullOr(Schema.Finite),
+  projectedPoints: Schema.NullOr(Schema.Finite),
+  winProbability: Schema.NullOr(Schema.Finite),
+  remainingGames: Schema.optional(RemainingGames),
+  categories: Schema.optional(Schema.Array(MatchupCategoryValue)),
+});
+
+const MatchupCategoryWinner = Schema.Struct({
+  stat: StatRef,
+  winner: Schema.optional(CounterpartyRef),
+  tied: Schema.Boolean,
 });
 
 const Matchup = Schema.Struct({
@@ -384,6 +499,12 @@ const Matchup = Schema.Struct({
   home: MatchupTeam,
   away: MatchupTeam,
   status: Schema.optional(Schema.String),
+  isPlayoffs: Schema.optional(Schema.Boolean),
+  isConsolation: Schema.optional(Schema.Boolean),
+  isTied: Schema.optional(Schema.Boolean),
+  weekStart: Schema.optional(Schema.NonEmptyString),
+  weekEnd: Schema.optional(Schema.NonEmptyString),
+  categoryWinners: Schema.optional(Schema.Array(MatchupCategoryWinner)),
 });
 
 export const MatchupsData = Schema.Struct({
@@ -402,10 +523,41 @@ export type MatchupsResult = typeof MatchupsResult.Type;
 
 export const GetTransactionsInput = Schema.Struct({
   team: TeamId,
+  scope: Schema.optional(
+    Schema.Literals(["league", "team"]).pipe(
+      Schema.annotate({
+        description:
+          "`league` returns the league's recent transactions; `team` restricts the provider read to the linked team's own moves. Both use the provider's bounded transaction window.",
+      }),
+    ),
+  ),
+  since: Schema.optional(
+    Schema.DateTimeUtc.pipe(
+      Schema.annotate({
+        description:
+          "Only transactions at or after this instant. The provider has no date filter, so the range is applied to the bounded window the provider returns; `window` states whether the window was exhausted.",
+      }),
+    ),
+  ),
+  until: Schema.optional(
+    Schema.DateTimeUtc.pipe(
+      Schema.annotate({
+        description: "Only transactions at or before this instant.",
+      }),
+    ),
+  ),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
 });
 export type GetTransactionsInput = typeof GetTransactionsInput.Type;
+
+export const TransactionWindow = Schema.Struct({
+  fetched: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  truncated: Schema.Boolean,
+  earliest: Schema.optional(Schema.String),
+  latest: Schema.optional(Schema.String),
+});
+export type TransactionWindow = typeof TransactionWindow.Type;
 
 const Transaction = Schema.Struct({
   occurredAt: Schema.String,
@@ -424,6 +576,7 @@ export const TransactionsData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
   transactions: Schema.Array(Transaction),
+  window: TransactionWindow,
   coverage: Schema.Array(QueryCoverage),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,
@@ -432,3 +585,153 @@ export const TransactionsData = Schema.Struct({
 export type TransactionsData = typeof TransactionsData.Type;
 export const TransactionsResult = Schema.Union([TransactionsData, NarrowingResult]);
 export type TransactionsResult = typeof TransactionsResult.Type;
+
+export const GetTeamSummaryInput = Schema.Struct({
+  team: TeamId,
+  cursor: Schema.optional(Cursor),
+  limit: Schema.optional(PageLimit),
+});
+export type GetTeamSummaryInput = typeof GetTeamSummaryInput.Type;
+
+const SummaryLeague = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("available"), ...LeagueOverview.fields }),
+  Schema.Struct({ status: Schema.Literal("degraded"), detail: Schema.String }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]);
+
+const SummaryStanding = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    rank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+    playoffSeed: Schema.optional(Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)))),
+    points: Schema.NullOr(Schema.Finite),
+    gamesBack: Schema.NullOr(Schema.Finite),
+    pointsBack: Schema.NullOr(Schema.Finite),
+    pointsFor: Schema.NullOr(Schema.Finite),
+    pointsAgainst: Schema.NullOr(Schema.Finite),
+    streak: Schema.optional(
+      Schema.Struct({
+        type: Schema.NonEmptyString,
+        value: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      }),
+    ),
+  }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]);
+
+const SummaryRecord = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    wins: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    losses: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    ties: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    percentage: Schema.NullOr(Schema.Finite),
+  }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]);
+
+const SummaryCategories = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("available"), values: Schema.Array(StandingCategory) }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]);
+
+const SummaryStandingRow = Schema.Struct({
+  team: CounterpartyRef,
+  name: Schema.NonEmptyString,
+  current: Schema.Boolean,
+  rank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  wins: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  losses: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  ties: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  percentage: Schema.optional(Schema.NullOr(Schema.Finite)),
+  points: Schema.NullOr(Schema.Finite),
+  gamesBack: Schema.NullOr(Schema.Finite),
+  pointsBack: Schema.NullOr(Schema.Finite),
+});
+
+const SummaryStandings = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    format: LeagueFormat,
+    teams: Schema.Array(SummaryStandingRow),
+  }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]);
+
+const SummaryMatchup = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    period: QueryPeriod,
+    opponent: Schema.Struct({
+      team: CounterpartyRef,
+      name: Schema.NonEmptyString,
+    }),
+    points: Schema.NullOr(Schema.Finite),
+    opponentPoints: Schema.NullOr(Schema.Finite),
+    projectedPoints: Schema.NullOr(Schema.Finite),
+    opponentProjectedPoints: Schema.NullOr(Schema.Finite),
+    remainingGames: Schema.optional(RemainingGames),
+    opponentRemainingGames: Schema.optional(RemainingGames),
+    categories: Schema.optional(Schema.Array(StandingCategory)),
+    opponentCategories: Schema.optional(Schema.Array(StandingCategory)),
+    statusLabel: Schema.optional(Schema.String),
+    isPlayoffs: Schema.optional(Schema.Boolean),
+  }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]);
+
+export const SummaryScheduleWeek = Schema.Struct({
+  period: QueryPeriod,
+  current: Schema.Boolean,
+  completed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  live: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  remaining: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+
+const SummarySchedule = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    unit: Schema.Literal("fantasy_team_player_games"),
+    weeks: Schema.Array(SummaryScheduleWeek),
+    detail: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]);
+
+const SummaryRosterPlayer = Schema.Struct({
+  player: PlayerRef,
+  name: Schema.NonEmptyString,
+  slot: Schema.NonEmptyString,
+  primaryPosition: Schema.NonEmptyString,
+  proTeam: Schema.NullOr(Schema.NonEmptyString),
+  injury: Schema.Struct({
+    reported: Schema.Boolean,
+    code: Schema.optional(Schema.String),
+  }),
+});
+
+export const TeamSummaryData = Schema.Struct({
+  status: QueryStatus,
+  team: QueryTeam,
+  period: Schema.optional(QueryPeriod),
+  league: SummaryLeague,
+  standing: SummaryStanding,
+  record: SummaryRecord,
+  categoryTotals: SummaryCategories,
+  categoryPoints: SummaryCategories,
+  standings: SummaryStandings,
+  matchup: SummaryMatchup,
+  schedule: SummarySchedule,
+  probableStarters: Schema.Struct({
+    status: Schema.Literal("unsupported"),
+    detail: Schema.String,
+  }),
+  roster: Schema.Array(SummaryRosterPlayer),
+  coverage: Schema.Array(QueryCoverage),
+  failures: Schema.Array(QueryFailure),
+  page: QueryPage,
+  budget: QueryBudget,
+});
+export type TeamSummaryData = typeof TeamSummaryData.Type;
+export const TeamSummaryResult = Schema.Union([TeamSummaryData, NarrowingResult]);
+export type TeamSummaryResult = typeof TeamSummaryResult.Type;

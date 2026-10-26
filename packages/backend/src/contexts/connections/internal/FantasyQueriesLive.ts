@@ -10,7 +10,12 @@ import type {
   ProviderPlayerStatGroup,
   ProviderReadFailure,
   ProviderRoster,
+  ProviderMatchup,
+  ProviderRemainingGames,
   ProviderRosterPlayer,
+  ProviderStandings,
+  ProviderStatValue,
+  ProviderTeamScore,
 } from "#contexts/connections/Provider.ts";
 import { ProviderGateway } from "#contexts/connections/Provider.ts";
 import type {
@@ -33,6 +38,12 @@ import type {
   SearchPlayersData,
   SearchPlayersInput,
   TransactionsData,
+  TransactionWindow,
+  GetTeamSummaryInput,
+  LeagueFormat,
+  StandingRow,
+  SummaryScheduleWeek,
+  TeamSummaryData,
 } from "#contexts/connections/QueryResults.ts";
 import {
   CalendarData as CalendarSchema,
@@ -43,6 +54,7 @@ import {
   RosterData as RosterSchema,
   SearchPlayersData as SearchPlayersSchema,
   TransactionsData as TransactionsSchema,
+  TeamSummaryData as TeamSummarySchema,
 } from "#contexts/connections/QueryResults.ts";
 import {
   type QueryCoverage,
@@ -173,6 +185,31 @@ export const FantasyQueriesLive = Layer.effect(
         };
       });
 
+    const resolveStatRef = (
+      context: TeamContext,
+      stat: StatRef,
+    ): Effect.Effect<StatRefResolution, QueryError> =>
+      Effect.gen(function* () {
+        const outcome = yield* readLeague(context);
+        if (outcome._tag !== "ok") {
+          return {
+            _tag: "unavailable" as const,
+            detail:
+              outcome._tag === "failed"
+                ? outcome.failure.message
+                : "The provider reported no league scoring categories.",
+          };
+        }
+        const cache = new Map<number, StatRef>();
+        for (const category of outcome.value.statCategories) {
+          const ref = yield* statRefFor(context, tokens, cache, category.statId);
+          if (ref === stat) {
+            return { _tag: "resolved" as const, statId: category.statId };
+          }
+        }
+        return { _tag: "unknown" as const };
+      });
+
     const transactionIdentityIndex = (
       context: TeamContext,
       fetchedAt: DateTime.Utc,
@@ -191,6 +228,7 @@ export const FantasyQueriesLive = Layer.effect(
           provider.readTransactions({
             ...providerIdentity(context),
             providerLeagueKey: context.owned.team.providerLeagueKey,
+            providerTeamKey: undefined,
             limit: 50,
           }),
         );
@@ -394,36 +432,77 @@ export const FantasyQueriesLive = Layer.effect(
       }
       const league = outcome.value;
       const scoring = yield* scoringCategories(context, tokens, league);
+      const standingsOutcome = groups.includes("standings")
+        ? yield* readOutcome(
+            context,
+            "standings",
+            provider.readStandings({
+              ...providerIdentity(context),
+              providerLeagueKey: context.owned.team.providerLeagueKey,
+            }),
+          )
+        : undefined;
+      const standingsRows =
+        standingsOutcome?._tag === "ok"
+          ? yield* standingRows(context, tokens, standingsOutcome.value)
+          : [];
+      const standingsFormat = leagueFormat(league);
+      const pagedStandings = groups.includes("standings");
       const fingerprintValue = yield* queryFingerprint(
-        `league|team=${input.team}|groups=${[...groups].sort().join(",")}|order=stat_id`,
+        `league|team=${input.team}|groups=${[...groups].sort().join(",")}|order=${pagedStandings ? "rank" : "stat_id"}`,
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
-      const base: Omit<LeagueData, "scoring" | "page"> = {
-        status: "ok",
+      const failures: QueryFailure[] = [];
+      const coverageEntries: QueryCoverage[] = [coverage("league", "league_settings", fetchedAt)];
+      if (groups.includes("scoring")) {
+        coverageEntries.push(coverage("scoring", "league_settings", fetchedAt));
+      }
+      if (standingsOutcome !== undefined) {
+        coverageEntries.push(
+          standingsOutcome._tag === "ok"
+            ? coverage("standings", "standings", fetchedAt)
+            : standingsOutcome._tag === "unsupported"
+              ? unsupportedCoverage("standings", "standings", fetchedAt, standingsOutcome.detail)
+              : degradedCoverage(
+                  "standings",
+                  "standings",
+                  fetchedAt,
+                  standingsOutcome.failure.message,
+                ),
+        );
+        if (standingsOutcome._tag === "failed") {
+          failures.push(standingsOutcome.failure);
+        }
+      }
+      const base = {
+        status: "ok" as const,
         team,
         ...(groups.includes("overview") ? { overview: leagueOverview(league) } : {}),
         ...(groups.includes("roster_rules") ? { rosterRules: rosterRules(league) } : {}),
-        ...(groups.includes("standings")
-          ? {
-              standings: {
-                status: "unsupported" as const,
-                detail: "League standings reads are not verified for this provider.",
-              },
-            }
-          : {}),
-        coverage: [
-          coverage("league", "league_settings", fetchedAt),
-          ...(groups.includes("scoring")
-            ? [coverage("scoring", "league_settings", fetchedAt)]
-            : []),
-          ...(groups.includes("standings")
-            ? [unsupportedCoverage("standings", "standings", fetchedAt)]
-            : []),
-        ],
-        failures: [],
+        coverage: coverageEntries,
+        failures,
         budget: queryBudget,
       };
+      if (pagedStandings && standingsOutcome !== undefined) {
+        return yield* fitPage({
+          schema: LeagueSchema,
+          rows: standingsRows,
+          offset,
+          limit: input.limit ?? 20,
+          resource: "standings.teams",
+          groups,
+          build: (pageRows, page) => ({
+            ...base,
+            scoring,
+            standings: standingsData(standingsOutcome, [...pageRows], standingsFormat),
+            page,
+          }),
+          makeNext: (nextOffset) =>
+            tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
+          recordLabel: (row) => row.team,
+        });
+      }
       return yield* fitPage({
         schema: LeagueSchema,
         rows: groups.includes("scoring") ? scoring : [],
@@ -431,7 +510,14 @@ export const FantasyQueriesLive = Layer.effect(
         limit: input.limit ?? 20,
         resource: "scoring",
         groups,
-        build: (pageRows, page) => ({ ...base, scoring: [...pageRows], page }),
+        build: (pageRows, page) => ({
+          ...base,
+          ...(standingsOutcome === undefined
+            ? {}
+            : { standings: standingsData(standingsOutcome, standingsRows, standingsFormat) }),
+          scoring: [...pageRows],
+          page,
+        }),
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
         recordLabel: (row) => row.stat,
@@ -547,6 +633,45 @@ export const FantasyQueriesLive = Layer.effect(
       const fetchedAt = yield* DateTime.now;
       const availability = input.availability ?? "all";
       const sort = input.sort ?? "name";
+      const statPeriod = input.statPeriod ?? "season";
+      if (statPeriod === "week" && providerOrdered(sort) && context.owned.team.sport === "hockey") {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "Yahoo rejects weekly player sorts for hockey. Use statPeriod `season`, or sort by name, position, or ownership.",
+        });
+      }
+      if (sort === "stat" && input.stat === undefined) {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "A stat sort needs the scoring category reference from `get_league` in `stat`, or choose `actual_rank`, `overall_rank`, `ownership`, `position`, or `name`.",
+        });
+      }
+      if (sort !== "stat" && input.stat !== undefined) {
+        return yield* QuerySelectionInvalid.make({
+          detail: "The `stat` reference is used only with sort `stat`.",
+        });
+      }
+      let statId: number | undefined;
+      if (input.stat !== undefined) {
+        const resolved = yield* resolveStatRef(context, input.stat);
+        if (resolved._tag === "unavailable") {
+          return searchWithoutData(team, fetchedAt, {
+            _tag: "failed",
+            failure: {
+              code: "league_unavailable",
+              resource: "players",
+              message: resolved.detail,
+            },
+          });
+        }
+        if (resolved._tag === "unknown") {
+          return yield* QuerySelectionInvalid.make({
+            detail:
+              "The stat reference is not one of this league's scoring categories. Read `get_league` scoring and use one of those references.",
+          });
+        }
+        statId = resolved.statId;
+      }
       const outcome = yield* readOutcome(
         context,
         "players",
@@ -556,6 +681,8 @@ export const FantasyQueriesLive = Layer.effect(
           query,
           availability,
           sort,
+          statId,
+          statType: statPeriod,
           limit: 50,
         }),
       );
@@ -563,22 +690,23 @@ export const FantasyQueriesLive = Layer.effect(
         return searchWithoutData(team, fetchedAt, outcome);
       }
       const positions = new Set(input.positions ?? []);
-      const filtered = outcome.value.players
-        .filter((player) => availability === "all" || player.availability === availability)
-        .filter(
-          (player) =>
-            positions.size === 0 ||
+      const filtered = outcome.value.players.filter(
+        (player) =>
+          (availability === "all" || player.availability === availability) &&
+          (positions.size === 0 ||
             positions.has(player.primaryPosition) ||
             positions.has(player.displayPosition) ||
-            player.eligiblePositions.some((position) => positions.has(position)),
-        )
-        .toSorted((left, right) => comparePlayers(left, right, sort));
+            player.eligiblePositions.some((position) => positions.has(position))),
+      );
+      const ordered = providerOrdered(sort)
+        ? filtered
+        : filtered.toSorted((left, right) => comparePlayers(left, right, sort));
       const refs = yield* tokens.sealPlayerRefs({
         userId,
         leagueKey: context.owned.team.providerLeagueKey,
-        playerKeys: filtered.map((player) => player.providerPlayerKey),
+        playerKeys: ordered.map((player) => player.providerPlayerKey),
       });
-      const players = EffectArray.map(EffectArray.zip(filtered, refs), ([player, playerRef]) => ({
+      const players = EffectArray.map(EffectArray.zip(ordered, refs), ([player, playerRef]) => ({
         player: playerRef,
         name: player.name,
         primaryPosition: player.primaryPosition,
@@ -586,6 +714,9 @@ export const FantasyQueriesLive = Layer.effect(
         eligiblePositions: player.eligiblePositions,
         availability: player.availability,
         percentOwned: player.percentOwned,
+        percentOwnedDelta: player.percentOwnedDelta,
+        percentStarted: player.percentStarted,
+        percentStartedDelta: player.percentStartedDelta,
       }));
       const fingerprintValue = yield* queryFingerprint(
         [
@@ -595,6 +726,8 @@ export const FantasyQueriesLive = Layer.effect(
           `positions=${[...positions].sort().join(",")}`,
           `availability=${availability}`,
           `sort=${sort}`,
+          `stat=${input.stat ?? ""}`,
+          `statPeriod=${statPeriod}`,
           "order=provider",
         ].join("|"),
       );
@@ -979,6 +1112,15 @@ export const FantasyQueriesLive = Layer.effect(
           detail: "The requested period is outside the linked league's season.",
         });
       }
+      if (leagueOutcome._tag === "ok" && leagueOutcome.value.periodWindow === undefined) {
+        return matchupsUnavailable(
+          team,
+          input.period,
+          fetchedAt,
+          leagueOutcome,
+          "This league format publishes no scoring-week matchups.",
+        );
+      }
       const outcome = yield* readOutcome(
         context,
         "matchups",
@@ -991,17 +1133,80 @@ export const FantasyQueriesLive = Layer.effect(
       if (outcome._tag !== "ok") {
         return matchupsWithoutData(team, input.period, fetchedAt, outcome);
       }
+      const statRefs = new Map<number, StatRef>();
       const matchups = yield* Effect.forEach(
         outcome.value,
         (matchup) =>
           Effect.gen(function* () {
             const home = yield* counterpartyRef(context, tokens, matchup.home.providerTeamKey);
             const away = yield* counterpartyRef(context, tokens, matchup.away.providerTeamKey);
+            const categoryWinners = yield* Effect.forEach(
+              matchup.categoryWinners,
+              (winner) =>
+                Effect.gen(function* () {
+                  const winnerRef =
+                    winner.winnerProviderTeamKey === undefined
+                      ? undefined
+                      : yield* counterpartyRef(context, tokens, winner.winnerProviderTeamKey);
+                  return {
+                    stat: yield* statRefFor(context, tokens, statRefs, winner.statId),
+                    ...(winnerRef === undefined ? {} : { winner: winnerRef }),
+                    tied: winner.isTied,
+                  };
+                }),
+              { concurrency: 1 },
+            );
             return {
               period: matchup.period,
-              home: { team: home, name: matchup.home.name, points: matchup.home.points },
-              away: { team: away, name: matchup.away.name, points: matchup.away.points },
+              home: {
+                team: home,
+                name: matchup.home.name,
+                points: matchup.home.points,
+                projectedPoints: matchup.home.projectedPoints,
+                winProbability: matchup.home.winProbability,
+                ...(matchup.home.remainingGames === undefined
+                  ? {}
+                  : { remainingGames: matchup.home.remainingGames }),
+                ...(matchup.home.categoryTotals.length === 0
+                  ? {}
+                  : {
+                      categories: yield* statValueRows(
+                        context,
+                        tokens,
+                        statRefs,
+                        matchup.home.categoryTotals,
+                      ),
+                    }),
+              },
+              away: {
+                team: away,
+                name: matchup.away.name,
+                points: matchup.away.points,
+                projectedPoints: matchup.away.projectedPoints,
+                winProbability: matchup.away.winProbability,
+                ...(matchup.away.remainingGames === undefined
+                  ? {}
+                  : { remainingGames: matchup.away.remainingGames }),
+                ...(matchup.away.categoryTotals.length === 0
+                  ? {}
+                  : {
+                      categories: yield* statValueRows(
+                        context,
+                        tokens,
+                        statRefs,
+                        matchup.away.categoryTotals,
+                      ),
+                    }),
+              },
               ...(matchup.status === undefined ? {} : { status: matchup.status }),
+              ...(matchup.isPlayoffs === undefined ? {} : { isPlayoffs: matchup.isPlayoffs }),
+              ...(matchup.isConsolation === undefined
+                ? {}
+                : { isConsolation: matchup.isConsolation }),
+              ...(matchup.isTied === undefined ? {} : { isTied: matchup.isTied }),
+              ...(matchup.weekStart === undefined ? {} : { weekStart: matchup.weekStart }),
+              ...(matchup.weekEnd === undefined ? {} : { weekEnd: matchup.weekEnd }),
+              ...(categoryWinners.length === 0 ? {} : { categoryWinners }),
             };
           }),
         { concurrency: 1 },
@@ -1040,33 +1245,69 @@ export const FantasyQueriesLive = Layer.effect(
       userId: UserId,
       input: GetTransactionsInput,
     ) {
+      const since = input.since === undefined ? undefined : DateTime.formatIso(input.since);
+      const until = input.until === undefined ? undefined : DateTime.formatIso(input.until);
+      if (since !== undefined && until !== undefined && since > until) {
+        return yield* QuerySelectionInvalid.make({
+          detail: "`since` must not be later than `until`.",
+        });
+      }
       const context = yield* loadContext(userId, input.team);
       const team = queryTeam(context.owned);
       const fetchedAt = yield* DateTime.now;
+      const scope = input.scope ?? "league";
       const outcome = yield* readOutcome(
         context,
         "transactions",
         provider.readTransactions({
           ...providerIdentity(context),
           providerLeagueKey: context.owned.team.providerLeagueKey,
+          providerTeamKey: scope === "team" ? context.owned.team.providerTeamKey : undefined,
           limit: 50,
         }),
       );
       if (outcome._tag !== "ok") {
         return transactionsWithoutData(team, fetchedAt, outcome);
       }
+      const fetched = outcome.value;
+      const filtered = fetched.filter(
+        (transaction) =>
+          (since === undefined || transaction.occurredAt >= since) &&
+          (until === undefined || transaction.occurredAt <= until),
+      );
+      const window: TransactionWindow = {
+        fetched: fetched.length,
+        truncated: fetched.length >= 50,
+        ...(fetched[0] === undefined ? {} : { latest: fetched[0].occurredAt }),
+        ...(fetched.at(-1) === undefined ? {} : { earliest: fetched.at(-1)?.occurredAt }),
+      };
+      const exhausted =
+        since !== undefined &&
+        window.truncated &&
+        window.earliest !== undefined &&
+        since < window.earliest;
+      const coverageEntries = [
+        exhausted
+          ? degradedCoverage(
+              "transactions",
+              "transactions",
+              fetchedAt,
+              "The requested range starts before the most recent transaction window the provider returns; older moves are not included.",
+            )
+          : coverage("transactions", "transactions", fetchedAt),
+      ];
       const leagueKey = context.owned.team.providerLeagueKey;
-      const teamKeys = outcome.value.flatMap((transaction) =>
+      const teamKeys = filtered.flatMap((transaction) =>
         transaction.teams.map((transactionTeam) => transactionTeam.providerTeamKey),
       );
-      const playerKeys = outcome.value.flatMap((transaction) =>
+      const playerKeys = filtered.flatMap((transaction) =>
         transaction.players.map((player) => player.providerPlayerKey),
       );
       const teamRefs = yield* tokens.sealCounterpartyRefs({ userId, leagueKey, teamKeys });
       const playerRefs = yield* tokens.sealPlayerRefs({ userId, leagueKey, playerKeys });
       let teamOffset = 0;
       let playerOffset = 0;
-      const transactions = outcome.value.map((transaction) => {
+      const transactions = filtered.map((transaction) => {
         const teams = EffectArray.map(
           EffectArray.zip(
             transaction.teams,
@@ -1092,15 +1333,25 @@ export const FantasyQueriesLive = Layer.effect(
         };
       });
       const fingerprintValue = yield* queryFingerprint(
-        `transactions|team=${input.team}|order=provider`,
+        `transactions|team=${input.team}|scope=${scope}|since=${since ?? ""}|until=${until ?? ""}|order=provider`,
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
       const base: Omit<TransactionsData, "transactions" | "page"> = {
         status: "ok",
         team,
-        coverage: [coverage("transactions", "transactions", fetchedAt)],
-        failures: [],
+        window,
+        coverage: coverageEntries,
+        failures: exhausted
+          ? [
+              {
+                code: "transaction_window_truncated",
+                resource: "transactions",
+                message:
+                  "The provider returns only its most recent transaction window, so this date range may omit older moves.",
+              },
+            ]
+          : [],
         budget: queryBudget,
       };
       return yield* fitPage({
@@ -1117,6 +1368,424 @@ export const FantasyQueriesLive = Layer.effect(
       });
     });
 
+    const getTeamSummary = Effect.fn("FantasyQueries.getTeamSummary")(function* (
+      userId: UserId,
+      input: GetTeamSummaryInput,
+    ) {
+      const context = yield* loadContext(userId, input.team);
+      const team = queryTeam(context.owned);
+      const fetchedAt = yield* DateTime.now;
+      const coverageEntries: QueryCoverage[] = [];
+      const failures: QueryFailure[] = [];
+      const statRefs = new Map<number, StatRef>();
+
+      const leagueOutcome = yield* readLeague(context);
+      const league = leagueOutcome._tag === "ok" ? leagueOutcome.value : undefined;
+      const leagueSection: TeamSummaryData["league"] =
+        leagueOutcome._tag === "ok"
+          ? { status: "available", ...leagueOverview(leagueOutcome.value) }
+          : leagueOutcome._tag === "unsupported"
+            ? { status: "unsupported", detail: leagueOutcome.detail }
+            : { status: "degraded", detail: leagueOutcome.failure.message };
+      coverageEntries.push(
+        leagueOutcome._tag === "ok"
+          ? coverage("league", "league_settings", fetchedAt)
+          : leagueOutcome._tag === "unsupported"
+            ? unsupportedCoverage("league", "league_settings", fetchedAt, leagueOutcome.detail)
+            : degradedCoverage(
+                "league",
+                "league_settings",
+                fetchedAt,
+                leagueOutcome.failure.message,
+              ),
+      );
+      if (leagueOutcome._tag === "failed") {
+        failures.push(leagueOutcome.failure);
+      }
+
+      const standingsOutcome = yield* readOutcome(
+        context,
+        "standings",
+        provider.readStandings({
+          ...providerIdentity(context),
+          providerLeagueKey: context.owned.team.providerLeagueKey,
+        }),
+      );
+      const rows =
+        standingsOutcome._tag === "ok"
+          ? yield* standingRows(context, tokens, standingsOutcome.value)
+          : [];
+      const current = rows.find((row) => row.current);
+      coverageEntries.push(
+        standingsOutcome._tag === "ok"
+          ? coverage("standings", "standings", fetchedAt)
+          : standingsOutcome._tag === "unsupported"
+            ? unsupportedCoverage("standings", "standings", fetchedAt, standingsOutcome.detail)
+            : degradedCoverage(
+                "standings",
+                "standings",
+                fetchedAt,
+                standingsOutcome.failure.message,
+              ),
+      );
+      if (standingsOutcome._tag === "failed") {
+        failures.push(standingsOutcome.failure);
+      }
+      const standingsDetail =
+        standingsOutcome._tag === "ok"
+          ? "The provider standings did not include this team."
+          : standingsOutcome._tag === "failed"
+            ? standingsOutcome.failure.message
+            : standingsOutcome.detail;
+      const standingSection: TeamSummaryData["standing"] =
+        current === undefined
+          ? { status: "unsupported", detail: standingsDetail }
+          : {
+              status: "available",
+              rank: current.rank,
+              ...(current.playoffSeed === undefined ? {} : { playoffSeed: current.playoffSeed }),
+              points: current.points,
+              gamesBack: current.gamesBack,
+              pointsBack: current.pointsBack,
+              pointsFor: current.pointsFor,
+              pointsAgainst: current.pointsAgainst,
+              ...(current.streak === undefined ? {} : { streak: current.streak }),
+            };
+      const recordSection: TeamSummaryData["record"] =
+        current?.record === undefined
+          ? {
+              status: "unsupported",
+              detail:
+                current === undefined
+                  ? standingsDetail
+                  : "This league format publishes a rank and season points but no win–loss record.",
+            }
+          : { status: "available", ...current.record };
+      const categoryTotals: TeamSummaryData["categoryTotals"] =
+        current === undefined || current.categories.length === 0
+          ? {
+              status: "unsupported",
+              detail:
+                current === undefined
+                  ? standingsDetail
+                  : "The provider published no season category totals for this league format.",
+            }
+          : { status: "available", values: [...current.categories] };
+      const categoryPoints: TeamSummaryData["categoryPoints"] =
+        current === undefined || current.categoryPoints.length === 0
+          ? {
+              status: "unsupported",
+              detail:
+                current === undefined
+                  ? standingsDetail
+                  : "The provider publishes rotisserie category points only for rotisserie leagues.",
+            }
+          : { status: "available", values: [...current.categoryPoints] };
+      const standingsSection: TeamSummaryData["standings"] =
+        standingsOutcome._tag === "ok"
+          ? {
+              status: "available",
+              format: league === undefined ? "unknown" : leagueFormat(league),
+              teams: rows.map((row) => ({
+                team: row.team,
+                name: row.name,
+                current: row.current,
+                rank: row.rank,
+                ...(row.record === undefined
+                  ? {}
+                  : {
+                      wins: row.record.wins,
+                      losses: row.record.losses,
+                      ties: row.record.ties,
+                      percentage: row.record.percentage,
+                    }),
+                points: row.points,
+                gamesBack: row.gamesBack,
+                pointsBack: row.pointsBack,
+              })),
+            }
+          : { status: "unsupported", detail: standingsDetail };
+
+      const window = league?.periodWindow;
+      const period = currentPeriod(window);
+      const readRoster = (
+        requested: QueryPeriod | undefined,
+      ): Effect.Effect<ReadOutcome<ProviderRoster>> =>
+        readOutcome(
+          context,
+          "roster",
+          provider.readRoster({
+            ...providerIdentity(context),
+            providerTeamKey: context.owned.team.providerTeamKey,
+            period: requested,
+          }),
+        );
+      let rosterOutcome = yield* readRoster(period);
+      if (rosterOutcome._tag === "failed" && rosterOutcome.failure.code === "period_unavailable") {
+        rosterOutcome = yield* readRoster(undefined);
+      }
+      if (rosterOutcome._tag === "ok") {
+        coverageEntries.push(
+          rosterOutcome.value.coverage.type === "week"
+            ? coverage("roster", "roster", fetchedAt, {
+                week: rosterOutcome.value.coverage.week,
+              })
+            : coverage(
+                "roster",
+                "roster",
+                fetchedAt,
+                undefined,
+                `Date-scoped roster for ${rosterOutcome.value.coverage.date}`,
+              ),
+        );
+      } else {
+        coverageEntries.push(
+          rosterOutcome._tag === "unsupported"
+            ? unsupportedCoverage("roster", "roster", fetchedAt, rosterOutcome.detail)
+            : degradedCoverage("roster", "roster", fetchedAt, rosterOutcome.failure.message),
+        );
+        if (rosterOutcome._tag === "failed") {
+          failures.push(rosterOutcome.failure);
+        }
+      }
+      const rosterPlayers = rosterOutcome._tag === "ok" ? rosterOutcome.value.players : [];
+      const rosterRefs = yield* tokens.sealPlayerRefs({
+        userId,
+        leagueKey: context.owned.team.providerLeagueKey,
+        playerKeys: rosterPlayers.map((player) => player.providerPlayerKey),
+      });
+      const rosterRows: ReadonlyArray<TeamSummaryData["roster"][number]> =
+        rosterOutcome._tag !== "ok"
+          ? []
+          : EffectArray.map(EffectArray.zip(rosterPlayers, rosterRefs), ([player, ref]) => ({
+              player: ref,
+              name: player.name,
+              slot: player.slot,
+              primaryPosition: player.primaryPosition,
+              proTeam: player.proTeamAbbreviation ?? null,
+              injury: {
+                reported: player.injuryCode !== undefined || player.injuryDetail !== undefined,
+                ...(player.injuryCode === undefined ? {} : { code: player.injuryCode }),
+              },
+            }));
+      const rosterPeriod =
+        rosterOutcome._tag === "ok" && rosterOutcome.value.coverage.type === "week"
+          ? { week: rosterOutcome.value.coverage.week }
+          : undefined;
+
+      const matchupOutcome =
+        period === undefined
+          ? undefined
+          : yield* readOutcome(
+              context,
+              "matchups",
+              provider.readMatchups({
+                ...providerIdentity(context),
+                providerLeagueKey: context.owned.team.providerLeagueKey,
+                period,
+              }),
+            );
+      const findOwnMatchup = (
+        entries: ReadonlyArray<ProviderMatchup> | undefined,
+      ): ProviderMatchup | undefined =>
+        entries?.find(
+          (entry) =>
+            entry.home.providerTeamKey === context.owned.team.providerTeamKey ||
+            entry.away.providerTeamKey === context.owned.team.providerTeamKey,
+        );
+      const ownSide = (matchup: ProviderMatchup): ProviderTeamScore =>
+        matchup.home.providerTeamKey === context.owned.team.providerTeamKey
+          ? matchup.home
+          : matchup.away;
+      const opponentSide = (matchup: ProviderMatchup): ProviderTeamScore =>
+        matchup.home.providerTeamKey === context.owned.team.providerTeamKey
+          ? matchup.away
+          : matchup.home;
+      const currentMatchup =
+        matchupOutcome?._tag === "ok" ? findOwnMatchup(matchupOutcome.value) : undefined;
+      let matchupSection: TeamSummaryData["matchup"];
+      if (period === undefined) {
+        matchupSection = {
+          status: "unsupported",
+          detail:
+            league === undefined
+              ? "The league's current scoring week could not be read."
+              : "This league format publishes no scoring-week matchups.",
+        };
+      } else if (matchupOutcome === undefined || matchupOutcome._tag !== "ok") {
+        matchupSection = {
+          status: "unsupported",
+          detail:
+            matchupOutcome === undefined
+              ? "The current matchup was not read."
+              : matchupOutcome._tag === "failed"
+                ? matchupOutcome.failure.message
+                : matchupOutcome.detail,
+        };
+        if (matchupOutcome?._tag === "failed") {
+          failures.push(matchupOutcome.failure);
+        }
+      } else if (currentMatchup === undefined) {
+        matchupSection = {
+          status: "unsupported",
+          detail: "The provider returned no matchup for this team in the current week.",
+        };
+      } else {
+        const own = ownSide(currentMatchup);
+        const opponent = opponentSide(currentMatchup);
+        const opponentRef = yield* counterpartyRef(context, tokens, opponent.providerTeamKey);
+        matchupSection = {
+          status: "available",
+          period: currentMatchup.period,
+          opponent: { team: opponentRef, name: opponent.name },
+          points: own.points,
+          opponentPoints: opponent.points,
+          projectedPoints: own.projectedPoints,
+          opponentProjectedPoints: opponent.projectedPoints,
+          ...(own.remainingGames === undefined ? {} : { remainingGames: own.remainingGames }),
+          ...(opponent.remainingGames === undefined
+            ? {}
+            : { opponentRemainingGames: opponent.remainingGames }),
+          ...(own.categoryTotals.length === 0
+            ? {}
+            : { categories: yield* statValueRows(context, tokens, statRefs, own.categoryTotals) }),
+          ...(opponent.categoryTotals.length === 0
+            ? {}
+            : {
+                opponentCategories: yield* statValueRows(
+                  context,
+                  tokens,
+                  statRefs,
+                  opponent.categoryTotals,
+                ),
+              }),
+          ...(currentMatchup.status === undefined ? {} : { statusLabel: currentMatchup.status }),
+          ...(currentMatchup.isPlayoffs === undefined
+            ? {}
+            : { isPlayoffs: currentMatchup.isPlayoffs }),
+        };
+      }
+      coverageEntries.push(
+        matchupSection.status === "available"
+          ? coverage("matchups", "matchups", fetchedAt, period)
+          : unsupportedCoverage("matchups", "matchups", fetchedAt, matchupSection.detail),
+      );
+
+      const scheduleWeek = (
+        period: QueryPeriod,
+        current: boolean,
+        remaining: ProviderRemainingGames,
+      ): typeof SummaryScheduleWeek.Type => ({
+        period,
+        current,
+        completed: remaining.completed,
+        live: remaining.live,
+        remaining: remaining.remaining,
+      });
+      const currentRemaining =
+        currentMatchup === undefined ? undefined : ownSide(currentMatchup).remainingGames;
+      let scheduleSection: TeamSummaryData["schedule"];
+      if (period === undefined) {
+        scheduleSection = {
+          status: "unsupported",
+          detail: "This league format publishes no scoring-week schedule.",
+        };
+      } else if (currentRemaining === undefined) {
+        scheduleSection = {
+          status: "unsupported",
+          detail:
+            context.owned.team.sport === "football"
+              ? "Yahoo publishes no remaining-game count for football: a player plays at most one game per scoring week, and each roster entry carries the bye week instead."
+              : "The provider reported no remaining-game count for this team's scoring week.",
+        };
+      } else {
+        const nextPeriod =
+          league?.periodWindow === undefined || period.week >= league.periodWindow.endWeek
+            ? undefined
+            : { week: period.week + 1 };
+        const nextOutcome =
+          nextPeriod === undefined
+            ? undefined
+            : yield* readOutcome(
+                context,
+                "matchups",
+                provider.readMatchups({
+                  ...providerIdentity(context),
+                  providerLeagueKey: context.owned.team.providerLeagueKey,
+                  period: nextPeriod,
+                }),
+              );
+        const nextMatchup =
+          nextOutcome?._tag === "ok" ? findOwnMatchup(nextOutcome.value) : undefined;
+        const nextRemaining =
+          nextMatchup === undefined ? undefined : ownSide(nextMatchup).remainingGames;
+        const nextWeek =
+          nextPeriod !== undefined && nextRemaining !== undefined
+            ? [scheduleWeek(nextPeriod, false, nextRemaining)]
+            : [];
+        scheduleSection = {
+          status: "available",
+          unit: "fantasy_team_player_games",
+          weeks: [scheduleWeek(period, true, currentRemaining), ...nextWeek],
+          ...(nextPeriod === undefined
+            ? { detail: "This is the final scoring week of the season." }
+            : nextWeek.length === 0
+              ? { detail: "The provider did not publish remaining games for the next week." }
+              : {}),
+        };
+      }
+      coverageEntries.push(
+        scheduleSection.status === "available"
+          ? coverage("schedule", "matchups", fetchedAt, period)
+          : unsupportedCoverage("schedule", "matchups", fetchedAt, scheduleSection.detail),
+      );
+
+      const available =
+        leagueOutcome._tag === "ok" ||
+        standingsOutcome._tag === "ok" ||
+        rosterOutcome._tag === "ok" ||
+        matchupSection.status === "available";
+      const status: QueryStatus = available ? "ok" : failures.length > 0 ? "failed" : "unsupported";
+      const fingerprintValue = yield* queryFingerprint(
+        `team_summary|team=${input.team}|period=${rosterPeriod === undefined ? "date" : String(rosterPeriod.week)}|order=slot,player,rank`,
+      );
+      const now = yield* DateTime.now;
+      const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
+      const base: Omit<TeamSummaryData, "roster" | "page"> = {
+        status,
+        team,
+        ...(rosterPeriod === undefined ? {} : { period: rosterPeriod }),
+        league: leagueSection,
+        standing: standingSection,
+        record: recordSection,
+        categoryTotals,
+        categoryPoints,
+        standings: standingsSection,
+        matchup: matchupSection,
+        schedule: scheduleSection,
+        probableStarters: {
+          status: "unsupported",
+          detail:
+            "Yahoo publishes no probable-starter field on its fantasy read surface, so participation is reported only through the provider's injury status.",
+        },
+        coverage: coverageEntries,
+        failures,
+        budget: queryBudget,
+      };
+      return yield* fitPage({
+        schema: TeamSummarySchema,
+        rows: rosterRows,
+        offset,
+        limit: input.limit ?? 50,
+        resource: "team_summary.roster",
+        groups: undefined,
+        build: (pageRows, page) => ({ ...base, roster: [...pageRows], page }),
+        makeNext: (nextOffset) =>
+          tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
+        recordLabel: (row) => row.player,
+      });
+    });
+
     return FantasyQueries.of({
       listTeams,
       getCalendar,
@@ -1126,9 +1795,137 @@ export const FantasyQueriesLive = Layer.effect(
       getPlayers,
       getMatchups,
       getTransactions,
+      getTeamSummary,
     });
   }),
 );
+
+function statRefFor(
+  context: TeamContext,
+  tokens: QueryTokens["Service"],
+  cache: Map<number, StatRef>,
+  statId: number,
+): Effect.Effect<StatRef> {
+  return Effect.gen(function* () {
+    const existing = cache.get(statId);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const ref = yield* tokens.statRef({
+      leagueKey: context.owned.team.providerLeagueKey,
+      statId,
+    });
+    cache.set(statId, ref);
+    return ref;
+  });
+}
+
+function statValueRows(
+  context: TeamContext,
+  tokens: QueryTokens["Service"],
+  cache: Map<number, StatRef>,
+  stats: ReadonlyArray<ProviderStatValue>,
+): Effect.Effect<ReadonlyArray<{ readonly stat: StatRef; readonly value: number | null }>> {
+  return Effect.forEach(
+    stats,
+    (entry) =>
+      statRefFor(context, tokens, cache, entry.statId).pipe(
+        Effect.map((stat) => ({ stat, value: entry.value })),
+      ),
+    { concurrency: 1 },
+  );
+}
+
+function leagueFormat(league: ProviderLeagueSettings): LeagueFormat {
+  if (league.scoringType === "roto") {
+    return "rotisserie";
+  }
+  if (league.scoringType !== "head") {
+    return "unknown";
+  }
+  return league.statModifiers.length === 0 ? "head_to_head_categories" : "head_to_head_points";
+}
+
+function categoryAvailability(
+  rows: ReadonlyArray<StandingRow>,
+  select: (row: StandingRow) => ReadonlyArray<unknown>,
+  detail: string,
+): { readonly status: "available" } | { readonly status: "unsupported"; readonly detail: string } {
+  return rows.some((row) => select(row).length > 0)
+    ? { status: "available" }
+    : { status: "unsupported", detail };
+}
+
+function standingsData(
+  outcome: ReadOutcome<ProviderStandings>,
+  rows: ReadonlyArray<StandingRow>,
+  format: LeagueFormat,
+): NonNullable<LeagueData["standings"]> {
+  if (outcome._tag !== "ok") {
+    return {
+      status: "unsupported",
+      detail: outcome._tag === "failed" ? outcome.failure.message : outcome.detail,
+    };
+  }
+  return {
+    status: "available",
+    format,
+    categoryTotals: categoryAvailability(
+      rows,
+      (row) => row.categories,
+      "The provider published no season category totals for this league format.",
+    ),
+    categoryPoints: categoryAvailability(
+      rows,
+      (row) => row.categoryPoints,
+      "The provider publishes rotisserie category points only for rotisserie leagues.",
+    ),
+    teams: [...rows],
+  };
+}
+
+function standingRows(
+  context: TeamContext,
+  tokens: QueryTokens["Service"],
+  standings: ProviderStandings,
+): Effect.Effect<ReadonlyArray<StandingRow>> {
+  return Effect.gen(function* () {
+    const refs = yield* tokens.sealCounterpartyRefs({
+      userId: context.userId,
+      leagueKey: context.owned.team.providerLeagueKey,
+      teamKeys: standings.teams.map((standing) => standing.providerTeamKey),
+    });
+    const statRefs = new Map<number, StatRef>();
+    return yield* Effect.forEach(
+      EffectArray.zip(standings.teams, refs),
+      ([standing, team]) =>
+        Effect.gen(function* () {
+          return {
+            team,
+            name: standing.name,
+            current: standing.providerTeamKey === context.owned.team.providerTeamKey,
+            rank: standing.rank,
+            ...(standing.playoffSeed === null ? {} : { playoffSeed: standing.playoffSeed }),
+            ...(standing.record === undefined ? {} : { record: standing.record }),
+            gamesBack: standing.gamesBack,
+            pointsBack: standing.pointsBack,
+            points: standing.points,
+            pointsFor: standing.pointsFor,
+            pointsAgainst: standing.pointsAgainst,
+            ...(standing.streak === undefined ? {} : { streak: standing.streak }),
+            categories: yield* statValueRows(context, tokens, statRefs, standing.categoryTotals),
+            categoryPoints: yield* statValueRows(
+              context,
+              tokens,
+              statRefs,
+              standing.categoryPoints,
+            ),
+          };
+        }),
+      { concurrency: 1 },
+    );
+  });
+}
 
 function queryTeam(owned: OwnedTeam): QueryTeam {
   const team = owned.team;
@@ -1163,8 +1960,15 @@ function unsupportedCoverage(
   resource: string,
   source: string,
   fetchedAt: DateTime.Utc,
+  detail?: string,
 ): QueryCoverage {
-  return { resource, status: "unsupported", source, fetchedAt };
+  return {
+    resource,
+    status: "unsupported",
+    source,
+    fetchedAt,
+    ...(detail === undefined ? {} : { detail }),
+  };
 }
 
 function degradedCoverage(
@@ -1255,7 +2059,10 @@ function leagueWithoutData(
       ? {
           standings: {
             status: "unsupported" as const,
-            detail: "League standings reads are not verified for this provider.",
+            detail:
+              outcome._tag === "failed"
+                ? outcome.failure.message
+                : "The provider did not publish league settings, so standings could not be read.",
           },
         }
       : {}),
@@ -1315,6 +2122,28 @@ function searchWithoutData(
   };
 }
 
+function matchupsUnavailable(
+  team: QueryTeam,
+  period: QueryPeriod,
+  fetchedAt: DateTime.Utc,
+  league: ReadOutcome<ProviderLeagueSettings>,
+  detail: string,
+): MatchupsData {
+  return {
+    status: "unsupported",
+    team,
+    period,
+    matchups: [],
+    coverage: [
+      leagueCoverage(league, fetchedAt),
+      unsupportedCoverage("matchups", "matchups", fetchedAt, detail),
+    ],
+    failures: leagueFailure(league),
+    page: emptyPage(),
+    budget: queryBudget,
+  };
+}
+
 function matchupsWithoutData(
   team: QueryTeam,
   period: QueryPeriod,
@@ -1346,6 +2175,7 @@ function transactionsWithoutData(
     status: outcome._tag === "unsupported" ? "unsupported" : "failed",
     team,
     transactions: [],
+    window: { fetched: 0, truncated: false },
     coverage: [
       outcome._tag === "ok"
         ? coverage("transactions", "transactions", fetchedAt)
@@ -1513,6 +2343,7 @@ function rosterPlayer(
         slot: player.slot,
         primaryPosition: player.primaryPosition,
         displayPosition: player.displayPosition,
+        proTeam: player.proTeamAbbreviation ?? null,
         eligiblePositions: player.eligiblePositions,
         editable: player.isEditable,
         injury: injuryOf(player),
@@ -1539,6 +2370,15 @@ function counterpartyRef(
   });
 }
 
+type StatRefResolution =
+  | { readonly _tag: "resolved"; readonly statId: number }
+  | { readonly _tag: "unknown" }
+  | { readonly _tag: "unavailable"; readonly detail: string };
+
+function providerOrdered(sort: NonNullable<SearchPlayersInput["sort"]>): boolean {
+  return sort === "actual_rank" || sort === "overall_rank" || sort === "stat";
+}
+
 function comparePlayers(
   left: {
     readonly name: string;
@@ -1550,7 +2390,7 @@ function comparePlayers(
     readonly primaryPosition: string;
     readonly percentOwned: number | null;
   },
-  sort: "name" | "position" | "ownership",
+  sort: NonNullable<SearchPlayersInput["sort"]>,
 ): number {
   switch (sort) {
     case "name":
@@ -1565,6 +2405,10 @@ function comparePlayers(
         (right.percentOwned ?? -1) - (left.percentOwned ?? -1) ||
         left.name.localeCompare(right.name)
       );
+    case "actual_rank":
+    case "overall_rank":
+    case "stat":
+      return 0;
   }
 }
 

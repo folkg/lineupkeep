@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import type { Tracer } from "effect";
-import { Cause, Effect, Exit, Layer, Redacted, Tracer as EffectTracer } from "effect";
+import { Array, Cause, Effect, Exit, Layer, Redacted, Tracer as EffectTracer } from "effect";
 
 import {
   ProviderCrumbUnavailable,
@@ -37,6 +37,10 @@ import {
   yahooNhlWeekPlayerDetails,
   yahooNflTransactions,
   yahooNflRoster,
+  yahooNflStandings,
+  yahooNhlCategoryStandings,
+  yahooNhlMatchupsWithGames,
+  yahooNhlRotoStandings,
 } from "./YahooPayloadFixturesTest.ts";
 import { YahooProvider } from "./YahooProvider.ts";
 
@@ -534,6 +538,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         displayPosition: "QB",
         primaryPosition: "QB",
         positionType: "O",
+        proTeamAbbreviation: "SYN",
         eligiblePositions: ["QB", "W/R"],
         slot: "QB",
         isFlex: false,
@@ -549,6 +554,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         displayPosition: "WR",
         primaryPosition: "WR",
         positionType: "O",
+        proTeamAbbreviation: "SYN",
         eligiblePositions: ["WR"],
         slot: "BN",
         isFlex: false,
@@ -734,12 +740,14 @@ it.effect("searches free agents with one exact request and typed availability", 
       query: "Synthetic Free",
       availability: "free_agent",
       sort: "ownership",
+      statId: undefined,
+      statType: "season",
       limit: 10,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Free;out=ownership,percent_owned?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Free;out=ownership,percent_owned,percent_started?format=json",
     );
     assert.deepStrictEqual(result.players, [
       {
@@ -750,6 +758,9 @@ it.effect("searches free agents with one exact request and typed availability", 
         eligiblePositions: ["WR", "W/R"],
         availability: "free_agent",
         percentOwned: 42.5,
+        percentOwnedDelta: 3,
+        percentStarted: 31.5,
+        percentStartedDelta: -2,
       },
       {
         providerPlayerKey: "466.p.20007",
@@ -759,6 +770,21 @@ it.effect("searches free agents with one exact request and typed availability", 
         eligiblePositions: ["RB"],
         availability: "waiver",
         percentOwned: null,
+        percentOwnedDelta: null,
+        percentStarted: null,
+        percentStartedDelta: null,
+      },
+      {
+        providerPlayerKey: "466.p.20008",
+        name: "Synthetic Unstarted",
+        primaryPosition: "TE",
+        displayPosition: "TE",
+        eligiblePositions: ["TE"],
+        availability: "free_agent",
+        percentOwned: 0,
+        percentOwnedDelta: 0,
+        percentStarted: null,
+        percentStartedDelta: null,
       },
     ]);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
@@ -775,12 +801,14 @@ it.effect("searches waiver players without a query", () => {
       query: undefined,
       availability: "waiver",
       sort: "name",
+      statId: undefined,
+      statType: "season",
       limit: 25,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned,percent_started?format=json",
     );
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
@@ -796,13 +824,74 @@ it.effect("searches the whole player pool without an availability filter", () =>
       query: undefined,
       availability: "all",
       sort: "position",
+      statId: undefined,
+      statType: "season",
       limit: 25,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned,percent_started?format=json",
     );
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("sorts by a league stat and by provider ranks with explicit sort types", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    yield* provider.searchPlayers({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      query: undefined,
+      availability: "all",
+      sort: "stat",
+      statId: 4,
+      statType: "season",
+      limit: 10,
+    });
+    yield* provider.searchPlayers({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      query: undefined,
+      availability: "all",
+      sort: "actual_rank",
+      statId: undefined,
+      statType: "week",
+      limit: 10,
+    });
+
+    assert.deepStrictEqual(
+      internet.calls.map((call) => call.url.href),
+      [
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=4;sort_type=season;count=10;out=ownership,percent_owned,percent_started?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=AR;sort_type=week;count=10;out=ownership,percent_owned,percent_started?format=json",
+      ],
+    );
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("refuses a stat sort without a stat id", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.searchPlayers({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        query: undefined,
+        availability: "all",
+        sort: "stat",
+        statId: undefined,
+        statType: "season",
+        limit: 10,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.deepStrictEqual(internet.calls, []);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -818,6 +907,8 @@ it.effect("rejects an unbounded player search without a request", () => {
         query: undefined,
         availability: "all",
         sort: "name",
+        statId: undefined,
+        statType: "season",
         limit: 51,
       }),
     );
@@ -995,11 +1086,192 @@ it.effect("reads a league scoreboard for the requested week", () => {
     assert.deepStrictEqual(matchups, [
       {
         period: { week: 6 },
-        home: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic NFL Team", points: 101.25 },
-        away: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival", points: 98.5 },
+        home: {
+          providerTeamKey: "466.l.4000.t.1",
+          name: "Synthetic NFL Team",
+          points: 101.25,
+          projectedPoints: 109.4,
+          winProbability: 0.62,
+          remainingGames: undefined,
+          categoryTotals: [],
+        },
+        away: {
+          providerTeamKey: "466.l.4000.t.2",
+          name: "Synthetic Rival",
+          points: 98.5,
+          projectedPoints: 104.1,
+          winProbability: 0.38,
+          remainingGames: undefined,
+          categoryTotals: [],
+        },
         status: "postevent",
+        isPlayoffs: false,
+        isConsolation: false,
+        isTied: false,
+        weekStart: "2026-10-15",
+        weekEnd: "2026-10-19",
+        categoryWinners: [],
       },
     ]);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reads head-to-head point standings with record and season points", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflStandings));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const standings = yield* provider.readStandings({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/standings?format=json",
+    );
+    assert.deepStrictEqual(standings.teams, [
+      {
+        providerTeamKey: "466.l.4000.t.1",
+        name: "Synthetic NFL Team",
+        rank: 1,
+        playoffSeed: 4,
+        record: { wins: 8, losses: 6, ties: 0, percentage: 0.571 },
+        gamesBack: null,
+        pointsBack: null,
+        points: 1583.16,
+        pointsFor: 1583.16,
+        pointsAgainst: 1447.26,
+        streak: { type: "loss", value: 2 },
+        categoryTotals: [],
+        categoryPoints: [],
+      },
+      {
+        providerTeamKey: "466.l.4000.t.2",
+        name: "Synthetic Rival",
+        rank: 2,
+        playoffSeed: 3,
+        record: { wins: 6, losses: 8, ties: 0, percentage: 0.429 },
+        gamesBack: null,
+        pointsBack: null,
+        points: 1494.02,
+        pointsFor: 1494.02,
+        pointsAgainst: 1501.44,
+        streak: { type: "win", value: 1 },
+        categoryTotals: [],
+        categoryPoints: [],
+      },
+    ]);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reads category standings with season category totals and no roto points", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlCategoryStandings));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const standings = yield* provider.readStandings({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+    });
+
+    const first = standings.teams[0];
+    assert.deepStrictEqual(first?.record, {
+      wins: 9,
+      losses: 3,
+      ties: 1,
+      percentage: 0.731,
+    });
+    assert.deepStrictEqual(first?.categoryTotals, [
+      { statId: 1, value: 37 },
+      { statId: 2, value: 54 },
+    ]);
+    assert.deepStrictEqual(first?.categoryPoints, []);
+    assert.isNull(first?.gamesBack);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reads rotisserie standings without inventing a win-loss record", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlRotoStandings));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const standings = yield* provider.readStandings({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4003",
+    });
+
+    const first = standings.teams[0];
+    assert.isUndefined(first?.record);
+    assert.strictEqual(first?.rank, 1);
+    assert.strictEqual(first?.points, 86.5);
+    assert.strictEqual(first?.pointsBack, 0);
+    assert.deepStrictEqual(first?.categoryPoints, [
+      { statId: 1, value: 12 },
+      { statId: 2, value: null },
+    ]);
+    assert.deepStrictEqual(first?.categoryTotals, [
+      { statId: 1, value: 37 },
+      { statId: 2, value: 54 },
+    ]);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("rejects standings for another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflStandings));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readStandings({ ...sessionInput, providerLeagueKey: "466.l.4999" }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.league_key");
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reads category matchup values, winners, and remaining player-games", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlMatchupsWithGames));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const matchups = yield* provider.readMatchups({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+      period: { week: 4 },
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/scoreboard;week=4?format=json",
+    );
+    const matchup = Array.getUnsafe(matchups, 0);
+    assert.deepStrictEqual(matchup.home.remainingGames, {
+      week: 4,
+      completed: 51,
+      live: 3,
+      remaining: 0,
+    });
+    assert.deepStrictEqual(matchup.away.remainingGames, {
+      week: 4,
+      completed: 48,
+      live: 2,
+      remaining: 4,
+    });
+    assert.deepStrictEqual(matchup.home.categoryTotals, [
+      { statId: 1, value: 6 },
+      { statId: 2, value: 9 },
+    ]);
+    assert.deepStrictEqual(matchup.categoryWinners, [
+      { statId: 1, winnerProviderTeamKey: "466.l.4002.t.3", isTied: false },
+      { statId: 2, winnerProviderTeamKey: undefined, isTied: true },
+    ]);
+    assert.isTrue(matchup.isPlayoffs);
+    assert.isFalse(matchup.isConsolation);
+    assert.isFalse(matchup.isTied);
+    assert.strictEqual(matchup.weekStart, "2026-10-19");
+    assert.strictEqual(matchup.weekEnd, "2026-10-25");
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -1021,6 +1293,44 @@ it.effect("reports a scoreboard period mismatch", () => {
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
+it.effect("scopes a transaction read to one team in the same league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    yield* provider.readTransactions({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: "466.l.4000.t.1",
+      limit: 25,
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;count=25;team_key=466.l.4000.t.1?format=json",
+    );
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("refuses a transaction team filter from another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readTransactions({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerTeamKey: "466.l.4001.t.1",
+        limit: 25,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.deepStrictEqual(internet.calls, []);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
 it.effect("reads bounded league transaction history with dropped-player identity", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
   return Effect.gen(function* () {
@@ -1029,6 +1339,7 @@ it.effect("reads bounded league transaction history with dropped-player identity
     const transactions = yield* provider.readTransactions({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      providerTeamKey: undefined,
       limit: 25,
     });
 

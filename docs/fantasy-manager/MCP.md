@@ -14,21 +14,22 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 
 ## Proposed tool families
 
-| Tool                                | Purpose and important limits                                                                                     |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `list_connections`                  | Safe owned provider connection metadata/status only                                                              |
-| `list_teams`                        | Compact owned team discovery with season/sport/connection filters; stable paging                                 |
-| `get_calendar`                      | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence              |
-| `get_league`                        | Selected league settings, scoring definitions, roster rules, standings/team summaries; bounded groups/pages      |
-| `get_rosters`                       | Exact selected team/period rosters, compact by default; rich detail single-team by default                       |
-| `search_players`                    | Bounded league/sport-context player search, available/free-agent/waiver filters and validated sorts              |
-| `get_players`                       | Bounded selected-player hydration including generic stats/projections/availability groups                        |
-| `get_matchups`                      | Selected matchup/scoreboard data with explicit period                                                            |
-| `get_transactions`                  | Read transaction history; no execution                                                                           |
-| `generate_transaction_review_links` | Typed add/add-drop/drop/trade review intents; return provider human-review URLs only                             |
-| `set_lineup`                        | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes           |
-| `set_team_automation`               | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state |
-| `get_lineup_runs`                   | Owned run status, safe concise explanations, observed changes, and unresolved conditions                         |
+| Tool                                | Purpose and important limits                                                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_connections`                  | Safe owned provider connection metadata/status only                                                                                               |
+| `list_teams`                        | Compact owned team discovery with season/sport/connection filters; stable paging                                                                  |
+| `get_calendar`                      | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                               |
+| `get_league`                        | Selected league settings, scoring definitions, roster rules, and standings with records, season points, and category totals; bounded groups/pages |
+| `get_rosters`                       | Exact selected team/period rosters, compact by default; professional-team abbreviation on every entry                                             |
+| `search_players`                    | Bounded league/sport-context player search with ownership/started signals and validated sorts                                                     |
+| `get_players`                       | Bounded selected-player hydration including generic stats/projections/availability groups                                                         |
+| `get_matchups`                      | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                        |
+| `get_transactions`                  | Bounded transaction history with team scope and date filtering; no execution                                                                      |
+| `get_team_summary`                  | One bounded per-team snapshot: league, standing and record, standings, current matchup, and compact roster                                        |
+| `generate_transaction_review_links` | Typed add/add-drop/drop/trade review intents; return provider human-review URLs only                                                              |
+| `set_lineup`                        | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                            |
+| `set_team_automation`               | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                  |
+| `get_lineup_runs`                   | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                          |
 
 Do not expose a general policy-mode selector, native/premium action selector, custom formula, or fallback override. Return the implementation actually used. The MCP surface covers automation enrollment, pause, and resume because an agent must be able to manage a team it owns; it still does not expose registration, helper secret upload, or every frontend control as tools.
 
@@ -79,6 +80,40 @@ Initial service policy: aim for about 12 KiB and enforce a 16 KiB model-facing a
 Starting adapter bounds can reuse verified selected-player batches of at most 25 keys and bounded upstream search pages. These are configuration proposals informed by research, not universal provider limits. Agent pages can be much smaller than upstream pages.
 
 Upstream response caps are separate from agent-output caps. The adapter may fetch a bounded megabyte-scale response, decode and select fields, then return a small page. Filtering statistics upstream was not demonstrated by earlier Yahoo probes; local projection must not pretend it saved upstream bytes.
+
+## Analysis surface behaviour
+
+`get_league` with the `standings` group reports each team's rank, the format inferred from the
+provider's scoring type and modifiers, and the record the provider actually publishes. A
+rotisserie league publishes rank, season points, points back, and per-category rotisserie points
+but no win-loss record; the row simply omits `record`, and `record` in `get_team_summary` says so
+with a reason. Season category totals appear in `categories` only where the provider publishes
+them, and the section-level `categoryTotals`/`categoryPoints` coverage states availability so an
+empty array is never read as zero. When standings are requested, that response pages teams;
+otherwise it pages scoring categories.
+
+`get_matchups` carries per-category values and the category winner (or a tie) for category
+leagues, plus `remainingGames` for the scoring week where the provider publishes it. Yahoo
+publishes that remaining-game count only as a fantasy-team total of player-games (National Hockey
+League); a football player plays at most one game per scoring week, so football omits it rather
+than reporting zero. The provider publishes no per-player or per-professional-team remaining-game
+count and no probable-starter field; `search_players` and `get_rosters` therefore report
+`proTeam` and provider ownership/started percentages without inventing either.
+
+`get_transactions` maps `scope: team` onto the provider's team filter. The provider has no date
+filter: `since`/`until` filter the bounded window the provider returns, `window` reports how many
+events were fetched, the oldest and newest timestamps, and whether the window was exhausted, and a
+range older than the window is reported as `transaction_window_truncated` with degraded coverage
+instead of a silently incomplete success.
+
+`get_team_summary` composes the league overview, the linked team's standing, record, category
+totals, league standings, current matchup, this week's and next week's remaining player-games, and
+a compact roster. Each section states its own availability, so a failed standings read leaves the
+roster and matchup intact. The schedule section names its unit (`fantasy_team_player_games`),
+because that is the only granularity Yahoo publishes; football declares the section unsupported
+with the bye-week alternative, and probable starters are always declared unsupported because no
+read shape exposes them. The roster section pages inside the same 12 KiB target and 16 KiB ceiling
+as every other read.
 
 ## Coverage correctness
 

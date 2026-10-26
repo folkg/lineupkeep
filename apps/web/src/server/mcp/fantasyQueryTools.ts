@@ -16,6 +16,8 @@ import {
   RosterResult,
   SearchPlayersInput,
   SearchPlayersResult,
+  TeamSummaryResult,
+  GetTeamSummaryInput,
   TransactionsResult,
 } from "@lineupkeep/backend/connections/QueryResults";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
@@ -57,7 +59,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_league", {
     description:
-      "Read selected league settings, scoring definitions, roster rules, and explicitly unsupported standings for one linked team. Request groups to narrow the response; scoring categories use private stat references.",
+      "Read selected league settings, scoring definitions, roster rules, and standings for one linked team. The `standings` group carries each team's rank, win-loss record where the format publishes one, season points, and per-category season totals where the provider publishes them; a format without a win-loss record says so instead of returning zeros. The response pages teams when standings are requested, otherwise scoring categories. Scoring categories use private stat references.",
     parameters: GetLeagueInput,
     success: Schema.toCodecJson(LeagueResult),
     failure: ToolFailure,
@@ -70,7 +72,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_rosters", {
     description:
-      "Read one linked team's roster for an exact league week. The compact shape is the default; full detail adds provider-reported injury, bye, flexibility, and drop metadata. A week the provider does not cover fails explicitly instead of being guessed.",
+      "Read one linked team's roster for an exact league week. Every entry carries the provider's professional-team abbreviation so schedule context needs no second lookup. The compact shape is the default; full detail adds provider-reported injury, bye, flexibility, and drop metadata. A week the provider does not cover fails explicitly instead of being guessed.",
     parameters: GetRostersInput,
     success: Schema.toCodecJson(RosterResult),
     failure: ToolFailure,
@@ -83,7 +85,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search a bounded provider player pool for one linked team, with availability, position, and validated sort filters. Omit the query to list the pool; a blank query is rejected with the remedy. Names and positions are provider-reported; ownership may be missing and is never treated as zero.",
+      "Search a bounded provider player pool for one linked team, with availability, position, and validated sort filters. Omit the query to list the pool; a blank query is rejected with the remedy. Each row reports provider percent owned with its weekly change, and percent started with its change where the league publishes it; a missing signal is null, never zero. Sort by `name`, `position`, `ownership`, Yahoo's `actual_rank` or `overall_rank`, or a league scoring category through `stat` (the reference comes from `get_league` scoring). Ranked and stat sorts accept a `statPeriod` of `season` (the default) or `week`; Yahoo rejects weekly sorts for hockey, so hockey answers with the remedy instead of forwarding a request it would refuse.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,
@@ -109,7 +111,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_matchups", {
     description:
-      "Read matchups for one linked team and one explicit league week. Matchups use private counterparty references; an uncovered week is reported explicitly.",
+      "Read matchups for one linked team and one explicit league week. Each side reports points, the provider projection where published, win probability, per-category values and category winners for category leagues, and remaining player-games for the week where the provider publishes them (hockey; football plays one game per week). Matchups use private counterparty references; an uncovered week is reported explicitly, and a league format without weekly matchups returns an unsupported result with the reason.",
     parameters: GetMatchupsInput,
     success: Schema.toCodecJson(MatchupsResult),
     failure: ToolFailure,
@@ -120,9 +122,22 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.Destructive, false)
     .annotate(Tool.Idempotent, true)
     .annotate(Tool.OpenWorld, false),
+  Tool.make("get_team_summary", {
+    description:
+      "One bounded snapshot for one linked team: league overview, the team's standing and record, league standings, the current matchup with per-category values, this week's and next week's remaining player-games, and the current roster with professional-team abbreviations. Each section states its own coverage and degrades independently, so a failed standings read still returns the roster and matchup. A section the provider cannot supply says so with a reason: football publishes no remaining-game count, and no league publishes probable starters. Use this instead of a per-team pass over the individual tools; the roster section pages inside the same result budget, and the underlying tools remain available for detail.",
+    parameters: GetTeamSummaryInput,
+    success: Schema.toCodecJson(TeamSummaryResult),
+    failure: ToolFailure,
+  })
+    .annotate(RequiredScope, fantasyQueryScopes.read)
+    .annotate(Tool.Title, "Get team summary")
+    .annotate(Tool.Readonly, true)
+    .annotate(Tool.Destructive, false)
+    .annotate(Tool.Idempotent, true)
+    .annotate(Tool.OpenWorld, false),
   Tool.make("get_transactions", {
     description:
-      "Read bounded transaction history for one linked team. This is a read-only view and never submits, retries, or reverses a transaction.",
+      "Read bounded transaction history for one linked team. `scope: team` restricts the provider read to the linked team's own moves; `league` returns the league's recent events. `since` and `until` filter by instant. The provider publishes no date filter, so those bounds apply to the bounded window it returns: `window` reports how many events were fetched, the oldest and newest timestamps, and whether the window was exhausted, and a range older than the window is reported as truncated rather than silently incomplete. This is a read-only view and never submits, retries, or reverses a transaction.",
     parameters: GetTransactionsInput,
     success: Schema.toCodecJson(TransactionsResult),
     failure: ToolFailure,
@@ -149,6 +164,7 @@ export function fantasyQueryToolHandlers(
         search_players: (input) => queries.searchPlayers(userId, input).pipe(mapOutcome),
         get_players: (input) => queries.getPlayers(userId, input).pipe(mapOutcome),
         get_matchups: (input) => queries.getMatchups(userId, input).pipe(mapOutcome),
+        get_team_summary: (input) => queries.getTeamSummary(userId, input).pipe(mapOutcome),
         get_transactions: (input) => queries.getTransactions(userId, input).pipe(mapOutcome),
       });
     }),

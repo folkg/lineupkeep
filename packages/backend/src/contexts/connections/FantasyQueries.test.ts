@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
-import { Array, Effect, Layer, Redacted, Schema } from "effect";
+import { Array, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 
 import { StartLinkingInput } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
@@ -25,7 +25,8 @@ import type {
   ProviderTeam,
 } from "./Provider.ts";
 import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
-import { RosterResult } from "./QueryResults.ts";
+import { RosterResult, TeamSummaryResult } from "./QueryResults.ts";
+import { StatRef } from "./QueryValues.ts";
 import { QueryTeamNotFound } from "./QueryValues.ts";
 import { TransactionReviews } from "./TransactionReview.ts";
 
@@ -722,6 +723,16 @@ it.effect("fits both representations a client receives inside the hard byte limi
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+function summarySectionBytes(summary: TeamSummaryResult): number {
+  const structuredContent = Schema.encodeSync(Schema.toCodecJson(TeamSummaryResult))(summary);
+  const received = JSON.stringify({
+    content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+    structuredContent,
+    isError: false,
+  });
+  return new TextEncoder().encode(received).length;
+}
+
 function receivedToolResultBytes(page: RosterResult): number {
   const structuredContent = Schema.encodeSync(Schema.toCodecJson(RosterResult))(page);
   const received = JSON.stringify({
@@ -923,6 +934,492 @@ it.effect("marks a drop link unsupported when the player is not on the roster", 
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("reads standings with category totals and marks the linked team", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setStandings({
+      providerLeagueKey: "461.l.1000",
+      teams: [
+        {
+          providerTeamKey: "461.l.1000.t.1",
+          name: "Alpha",
+          rank: 1,
+          playoffSeed: 2,
+          record: { wins: 8, losses: 3, ties: 0, percentage: 0.727 },
+          gamesBack: null,
+          pointsBack: null,
+          points: 1234.5,
+          pointsFor: 1234.5,
+          pointsAgainst: 1100,
+          streak: { type: "win", value: 3 },
+          categoryTotals: [
+            { statId: 4, value: 3120 },
+            { statId: 20, value: 980 },
+          ],
+          categoryPoints: [],
+        },
+        {
+          providerTeamKey: "461.l.1000.t.2",
+          name: "Beta",
+          rank: 2,
+          playoffSeed: null,
+          record: { wins: 5, losses: 6, ties: 0, percentage: 0.455 },
+          gamesBack: null,
+          pointsBack: null,
+          points: 1090.25,
+          pointsFor: 1090.25,
+          pointsAgainst: 1142,
+          streak: undefined,
+          categoryTotals: [{ statId: 4, value: 2800 }],
+          categoryPoints: [],
+        },
+      ],
+    });
+
+    const league = yield* queries.getLeague(owner, {
+      team: teamId,
+      groups: ["standings"],
+    });
+
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok" || league.standings?.status !== "available") {
+      assert.fail("expected available standings");
+      return;
+    }
+    assert.strictEqual(league.standings.format, "head_to_head_points");
+    assert.strictEqual(league.standings.teams.length, 2);
+    assert.isTrue(Array.getUnsafe(league.standings.teams, 0).current);
+    assert.isFalse(Array.getUnsafe(league.standings.teams, 1).current);
+    assert.strictEqual(Array.getUnsafe(league.standings.teams, 0).rank, 1);
+    assert.deepStrictEqual(Array.getUnsafe(league.standings.teams, 0).record, {
+      wins: 8,
+      losses: 3,
+      ties: 0,
+      percentage: 0.727,
+    });
+    assert.strictEqual(Array.getUnsafe(league.standings.teams, 0).categories.length, 2);
+    assert.strictEqual(league.standings.categoryTotals.status, "available");
+    assert.strictEqual(league.standings.categoryPoints.status, "unsupported");
+    assert.strictEqual(league.page.complete, true);
+    assert.isTrue(
+      league.coverage.some(
+        (entry) => entry.resource === "standings" && entry.status === "available",
+      ),
+    );
+    assert.isFalse(includesText(league, "461.l.1000"));
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports rotisserie standings without inventing a record or weekly matchup", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Roto", "nhl")], {
+      league: rotoLeagueFixture,
+      roster: rosterFixture({
+        count: 2,
+        providerTeamKey: "465.l.2000.t.1",
+        providerLeagueKey: "465.l.2000",
+        coverage: { type: "date", date: "2026-10-20" },
+      }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setStandings({
+      providerLeagueKey: "465.l.2000",
+      teams: [
+        {
+          providerTeamKey: "465.l.2000.t.1",
+          name: "Roto",
+          rank: 1,
+          playoffSeed: null,
+          record: undefined,
+          gamesBack: null,
+          pointsBack: 0,
+          points: 86.5,
+          pointsFor: 86.5,
+          pointsAgainst: null,
+          streak: undefined,
+          categoryTotals: [{ statId: 1, value: 37 }],
+          categoryPoints: [{ statId: 1, value: 12 }],
+        },
+      ],
+    });
+
+    const league = yield* queries.getLeague(owner, { team: teamId, groups: ["standings"] });
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok" || league.standings?.status !== "available") {
+      assert.fail("expected available rotisserie standings");
+      return;
+    }
+    assert.strictEqual(league.standings.format, "rotisserie");
+    assert.isUndefined(Array.getUnsafe(league.standings.teams, 0).record);
+    assert.strictEqual(Array.getUnsafe(league.standings.teams, 0).pointsBack, 0);
+    assert.strictEqual(Array.getUnsafe(league.standings.teams, 0).categoryPoints.length, 1);
+
+    const matchups = yield* queries.getMatchups(owner, { team: teamId, period: { week: 4 } });
+    assert.strictEqual(matchups.status, "unsupported");
+    if (matchups.status === "unsupported") {
+      assert.isTrue(
+        matchups.coverage.some(
+          (entry) => entry.resource === "matchups" && entry.status === "unsupported",
+        ),
+      );
+    }
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId });
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(summary.league.status, "available");
+    assert.strictEqual(summary.standing.status, "available");
+    assert.strictEqual(summary.record.status, "unsupported");
+    assert.strictEqual(summary.categoryPoints.status, "available");
+    assert.strictEqual(summary.matchup.status, "unsupported");
+    assert.isTrue(summary.roster.length > 0);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("degrades one team summary section without failing the snapshot", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.failStandings(
+      ProviderResponseInvalid.make({ operation: "read_standings", field: "league.standings" }),
+    );
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(summary.league.status, "available");
+    assert.strictEqual(summary.standings.status, "unsupported");
+    assert.strictEqual(summary.standing.status, "unsupported");
+    assert.strictEqual(summary.matchup.status, "available");
+    assert.strictEqual(summary.roster.length, 2);
+    assert.isTrue(
+      summary.coverage.some(
+        (entry) => entry.resource === "standings" && entry.status === "degraded",
+      ),
+    );
+    assert.isTrue(summary.failures.some((failure) => failure.code === "provider_invalid_response"));
+    assert.strictEqual(summary.schedule.status, "unsupported");
+    if (summary.schedule.status === "unsupported") {
+      assert.include(summary.schedule.detail, "bye week");
+    }
+    assert.strictEqual(summary.probableStarters.status, "unsupported");
+    assert.include(summary.probableStarters.detail, "probable-starter");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("filters transactions by scope and date inside the bounded provider window", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setTransactions([
+      {
+        occurredAt: "2026-09-24T12:00:00.000Z",
+        type: "add",
+        status: "successful",
+        teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
+        players: [transactionPlayer("461.p.10003", "add", "Synthetic Addition")],
+      },
+      {
+        occurredAt: "2026-09-20T12:00:00.000Z",
+        type: "drop",
+        status: "successful",
+        teams: [{ providerTeamKey: "461.l.1000.t.2", name: "Beta" }],
+        players: [transactionPlayer("461.p.10004", "drop", "Synthetic Rival Drop")],
+      },
+      {
+        occurredAt: "2026-09-10T12:00:00.000Z",
+        type: "add",
+        status: "successful",
+        teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
+        players: [transactionPlayer("461.p.10005", "add", "Synthetic Older Add")],
+      },
+    ]);
+
+    const own = yield* queries.getTransactions(owner, { team: teamId, scope: "team" });
+    assert.strictEqual(own.status, "ok");
+    if (own.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(own.transactions.length, 2);
+    assert.strictEqual(own.window.fetched, 2);
+    assert.isFalse(own.window.truncated);
+
+    const ranged = yield* queries.getTransactions(owner, {
+      team: teamId,
+      since: DateTime.makeUnsafe("2026-09-15T00:00:00.000Z"),
+    });
+    assert.strictEqual(ranged.status, "ok");
+    if (ranged.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(ranged.transactions.length, 2);
+    assert.strictEqual(ranged.window.fetched, 3);
+
+    const invalid = yield* Effect.flip(
+      queries.getTransactions(owner, {
+        team: teamId,
+        since: DateTime.makeUnsafe("2026-09-25T00:00:00.000Z"),
+        until: DateTime.makeUnsafe("2026-09-01T00:00:00.000Z"),
+      }),
+    );
+    assert.strictEqual(invalid._tag, "query.selection_invalid");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports a truncated transaction window instead of silently narrowing a date range", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setTransactions(
+      globalThis.Array.from({ length: 50 }, (_, index) => ({
+        occurredAt: DateTime.formatIso(
+          DateTime.makeUnsafe("2026-09-25T12:00:00.000Z").pipe(DateTime.subtract({ hours: index })),
+        ),
+        type: "add" as const,
+        status: "successful",
+        teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
+        players: [transactionPlayer("461.p.10003", "add" as const, "Synthetic Addition")],
+      })),
+    );
+
+    const ranged = yield* queries.getTransactions(owner, {
+      team: teamId,
+      since: DateTime.makeUnsafe("2026-08-01T00:00:00.000Z"),
+    });
+    assert.strictEqual(ranged.status, "ok");
+    if (ranged.status !== "ok") {
+      return;
+    }
+    assert.isTrue(ranged.window.truncated);
+    assert.isTrue(
+      ranged.coverage.some(
+        (entry) => entry.resource === "transactions" && entry.status === "degraded",
+      ),
+    );
+    assert.isTrue(
+      ranged.failures.some((failure) => failure.code === "transaction_window_truncated"),
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("resolves a league stat reference for a stat-ordered player search", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const league = yield* queries.getLeague(owner, { team: teamId, groups: ["scoring"] });
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok") {
+      return;
+    }
+    const stat = Array.getUnsafe(league.scoring, 0).stat;
+
+    const ordered = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      availability: "free_agent",
+      sort: "stat",
+      stat,
+    });
+    assert.strictEqual(ordered.status, "ok");
+
+    const unknown = yield* Effect.flip(
+      queries.searchPlayers(owner, {
+        team: teamId,
+        sort: "stat",
+        stat: unknownStatRef,
+      }),
+    );
+    assert.strictEqual(unknown._tag, "query.selection_invalid");
+
+    const missing = yield* Effect.flip(
+      queries.searchPlayers(owner, { team: teamId, sort: "stat" }),
+    );
+    assert.strictEqual(missing._tag, "query.selection_invalid");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("refuses a weekly player sort for hockey instead of forwarding a rejected request", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: hockeyLeagueFixture,
+      roster: rosterFixture({
+        count: 2,
+        providerTeamKey: "465.l.2000.t.1",
+        providerLeagueKey: "465.l.2000",
+        coverage: { type: "date", date: "2026-10-20" },
+      }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const rejected = yield* Effect.flip(
+      queries.searchPlayers(owner, {
+        team: teamId,
+        availability: "free_agent",
+        sort: "actual_rank",
+        statPeriod: "week",
+      }),
+    );
+    assert.strictEqual(rejected._tag, "query.selection_invalid");
+    if (rejected._tag === "query.selection_invalid") {
+      assert.include(rejected.detail, "weekly player sorts for hockey");
+    }
+
+    const season = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      availability: "free_agent",
+      sort: "actual_rank",
+      statPeriod: "season",
+    });
+    assert.strictEqual(season.status, "ok");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("carries the professional team on every compact roster entry", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(roster.players[0]?.proTeam, "SYN");
+    assert.isNull(roster.players[1]?.proTeam);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports this week's and next week's remaining player-games for hockey", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: hockeyLeagueFixture,
+      roster: rosterFixture({
+        count: 2,
+        providerTeamKey: "465.l.2000.t.1",
+        providerLeagueKey: "465.l.2000",
+        coverage: { type: "date", date: "2026-10-20" },
+      }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setMatchups([
+      matchupFixture({
+        period: 3,
+        remaining: {
+          home: { week: 3, completed: 51, live: 3, remaining: 0 },
+          away: { week: 3, completed: 48, live: 2, remaining: 4 },
+        },
+      }),
+      matchupFixture({
+        period: 4,
+        remaining: {
+          home: { week: 4, completed: 0, live: 0, remaining: 46 },
+          away: { week: 4, completed: 0, live: 0, remaining: 49 },
+        },
+      }),
+    ]);
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId });
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(summary.schedule.status, "available");
+    if (summary.schedule.status !== "available") {
+      return;
+    }
+    assert.strictEqual(summary.schedule.unit, "fantasy_team_player_games");
+    assert.strictEqual(summary.schedule.weeks.length, 2);
+    assert.deepStrictEqual(Array.getUnsafe(summary.schedule.weeks, 0), {
+      period: { week: 3 },
+      current: true,
+      completed: 51,
+      live: 3,
+      remaining: 0,
+    });
+    assert.deepStrictEqual(Array.getUnsafe(summary.schedule.weeks, 1), {
+      period: { week: 4 },
+      current: false,
+      completed: 0,
+      live: 0,
+      remaining: 46,
+    });
+    assert.isTrue(
+      summary.coverage.some(
+        (entry) => entry.resource === "schedule" && entry.status === "available",
+      ),
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("fits a multi-section team summary inside the result budget", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      roster: rosterFixture({ count: 40 }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setStandings({
+      providerLeagueKey: "461.l.1000",
+      teams: globalThis.Array.from({ length: 14 }, (_, index) => ({
+        providerTeamKey: `461.l.1000.t.${String(index + 1)}`,
+        name: `Synthetic Team ${String(index)}`,
+        rank: index + 1,
+        playoffSeed: null,
+        record: { wins: 8, losses: 3, ties: 0, percentage: 0.727 },
+        gamesBack: null,
+        pointsBack: null,
+        points: 1234.5,
+        pointsFor: 1234.5,
+        pointsAgainst: 1100,
+        streak: undefined,
+        categoryTotals: [
+          { statId: 4, value: 3120 },
+          { statId: 20, value: 980 },
+        ],
+        categoryPoints: [],
+      })),
+    });
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId });
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.isFalse(summary.page.complete);
+    assert.isString(summary.page.next);
+    assert.isTrue(summary.page.returned < 40);
+    assert.isTrue(summarySectionBytes(summary) <= 16_384);
+    assert.strictEqual(summary.standings.status, "available");
+    if (summary.standings.status === "available") {
+      assert.strictEqual(summary.standings.teams.length, 14);
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 function transactionPlayer(
   providerPlayerKey: string,
   direction: "add" | "drop" | "incoming" | "outgoing",
@@ -937,6 +1434,8 @@ function transactionPlayer(
     eligiblePositions: undefined,
   };
 }
+
+const unknownStatRef = Schema.decodeSync(StatRef)("s1.unknown");
 
 const owner = decodeUserId("owner");
 const session = Redacted.make("A1=test-session-cookie");
@@ -963,9 +1462,31 @@ function seed(
     yield* fake.setMatchups([
       {
         period: { week: 3 },
-        home: { providerTeamKey: "461.l.1000.t.1", name: "Alpha", points: 101.5 },
-        away: { providerTeamKey: "461.l.1000.t.2", name: "Beta", points: 98 },
+        home: {
+          providerTeamKey: "461.l.1000.t.1",
+          name: "Alpha",
+          points: 101.5,
+          projectedPoints: null,
+          winProbability: null,
+          remainingGames: undefined,
+          categoryTotals: [],
+        },
+        away: {
+          providerTeamKey: "461.l.1000.t.2",
+          name: "Beta",
+          points: 98,
+          projectedPoints: null,
+          winProbability: null,
+          remainingGames: undefined,
+          categoryTotals: [],
+        },
         status: "final",
+        isPlayoffs: undefined,
+        isConsolation: undefined,
+        isTied: undefined,
+        weekStart: undefined,
+        weekEnd: undefined,
+        categoryWinners: [],
       },
     ]);
     yield* fake.setTransactions([
@@ -989,6 +1510,58 @@ function seed(
   }).pipe(Effect.orDie);
 }
 
+function matchupFixture(input: {
+  readonly period: number;
+  readonly remaining?: {
+    readonly home?: {
+      readonly week: number;
+      readonly completed: number;
+      readonly live: number;
+      readonly remaining: number;
+    };
+    readonly away?: {
+      readonly week: number;
+      readonly completed: number;
+      readonly live: number;
+      readonly remaining: number;
+    };
+  };
+  readonly categories?: boolean;
+}): import("./Provider.ts").ProviderMatchup {
+  const side = (
+    key: string,
+    name: string,
+    remaining:
+      | {
+          readonly week: number;
+          readonly completed: number;
+          readonly live: number;
+          readonly remaining: number;
+        }
+      | undefined,
+  ): import("./Provider.ts").ProviderTeamScore => ({
+    providerTeamKey: key,
+    name,
+    points: 10,
+    projectedPoints: null,
+    winProbability: null,
+    remainingGames: remaining,
+    categoryTotals: input.categories === true ? [{ statId: 1, value: 3 }] : [],
+  });
+  return {
+    period: { week: input.period },
+    home: side("465.l.2000.t.1", "Hockey", input.remaining?.home),
+    away: side("465.l.2000.t.2", "Rival", input.remaining?.away),
+    status: "midevent",
+    isPlayoffs: false,
+    isConsolation: false,
+    isTied: false,
+    weekStart: "2026-10-19",
+    weekEnd: "2026-10-25",
+    categoryWinners: [],
+  };
+}
+
 function team(providerTeamKey: string, name: string, league: "nfl" | "nhl" = "nfl"): ProviderTeam {
   const providerLeagueKey = providerTeamKey.slice(0, providerTeamKey.lastIndexOf(".t."));
   return {
@@ -1001,6 +1574,84 @@ function team(providerTeamKey: string, name: string, league: "nfl" | "nhl" = "nf
     name,
   };
 }
+
+const hockeyLeagueFixture: ProviderLeagueSettings = {
+  providerLeagueKey: "465.l.2000",
+  name: "Hockey League",
+  webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
+  season: 2026,
+  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 24 },
+  startDate: "2026-10-01",
+  endDate: "2027-04-10",
+  teamCount: 10,
+  scoringType: "head",
+  scoringLabel: "H2H",
+  weeklyDeadline: "daily",
+  waiverType: "FR",
+  waiverRule: "continuous",
+  usesFaab: false,
+  draftStatus: "postdraft",
+  rosterPositions: [
+    { position: "C", positionType: "P", count: 2, isStarting: true },
+    { position: "BN", positionType: "B", count: 4, isStarting: false },
+  ],
+  statCategories: [
+    {
+      statId: 1,
+      name: "Goals",
+      displayName: "G",
+      abbreviation: "G",
+      group: "offense",
+      enabled: true,
+      positionTypes: ["P"],
+    },
+  ],
+  statModifiers: [],
+};
+
+const rotoLeagueFixture: ProviderLeagueSettings = {
+  providerLeagueKey: "465.l.2000",
+  name: "Roto League",
+  webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
+  season: 2026,
+  periodWindow: undefined,
+  startDate: "2026-10-01",
+  endDate: "2027-04-10",
+  teamCount: 10,
+  scoringType: "roto",
+  scoringLabel: "Roto",
+  weeklyDeadline: undefined,
+  waiverType: "FR",
+  waiverRule: "continuous",
+  usesFaab: false,
+  draftStatus: "postdraft",
+  rosterPositions: [
+    {
+      position: "C",
+      positionType: "P",
+      count: 2,
+      isStarting: true,
+    },
+    {
+      position: "BN",
+      positionType: "B",
+      count: 4,
+      isStarting: false,
+    },
+  ],
+  statCategories: [
+    {
+      statId: 1,
+      name: "Goals",
+      displayName: "G",
+      abbreviation: "G",
+      group: "offense",
+      enabled: true,
+      positionTypes: ["P"],
+    },
+  ],
+  statModifiers: [],
+};
 
 const leagueFixture: ProviderLeagueSettings = {
   providerLeagueKey: "461.l.1000",
@@ -1063,6 +1714,7 @@ function rosterFixture(input: {
       displayPosition: "QB",
       primaryPosition: "QB",
       positionType: "O",
+      proTeamAbbreviation: index === 0 ? "SYN" : undefined,
       eligiblePositions: ["QB"],
       slot: index === 0 ? "QB" : "BN",
       isFlex: false,

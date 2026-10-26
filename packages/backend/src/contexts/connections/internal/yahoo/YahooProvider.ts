@@ -20,6 +20,7 @@ import {
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
 import type {
+  ProviderCategoryWinner,
   ProviderLeagueSettings,
   ProviderStatBasis,
   ProviderMatchup,
@@ -31,9 +32,14 @@ import type {
   ProviderPlayerDetail,
   ProviderPlayerSearchInput,
   ProviderPlayerSearchResult,
+  ProviderPlayerSearchSort,
+  ProviderRemainingGames,
   ProviderRoster,
   ProviderRosterPlayer,
   ProviderReviewLinkInput,
+  ProviderStanding,
+  ProviderStandings,
+  ProviderStatValue,
   ProviderTeam,
   ProviderTeamScore,
   ProviderTransaction,
@@ -68,7 +74,18 @@ const searchSort = {
   name: "NAME",
   position: "NAME",
   ownership: "R_PO",
-} as const;
+  actual_rank: "AR",
+  overall_rank: "OR",
+} as const satisfies Record<Exclude<ProviderPlayerSearchSort, "stat">, string>;
+
+function searchSortValue(sort: ProviderPlayerSearchSort, statId: number | undefined): string {
+  return sort === "stat" ? String(statId) : searchSort[sort];
+}
+const rankedSearchSorts = new Set<ProviderPlayerSearchInput["sort"]>([
+  "actual_rank",
+  "overall_rank",
+  "stat",
+]);
 const maximumSelectedPlayers = 25;
 const maximumUpstreamLimit = 50;
 
@@ -77,6 +94,7 @@ type ReadOperation =
   | "discover_teams"
   | "read_crumb"
   | "read_league"
+  | "read_standings"
   | "read_roster"
   | "read_player_details"
   | "search_players"
@@ -181,6 +199,26 @@ export const YahooProvider = Layer.effect(
         "provider.roster_position_count": settings.rosterPositions.length,
       });
       return settings;
+    });
+
+    const readStandings = Effect.fn("YahooProvider.readStandings")(function* (
+      input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
+    ) {
+      yield* Effect.annotateCurrentSpan("provider.operation", "read_standings");
+      const cookie = yield* sessionCookie(input, "read_standings");
+      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_standings");
+      const payload = yield* readJson(internet, {
+        operation: "read_standings",
+        origin: readOrigin,
+        path: `/fantasy/v2/league/${leagueKey}/standings`,
+        query: { format: "json" },
+        cookie,
+        normalize: true,
+      });
+      const decoded = yield* decodePayload(StandingsPayload, payload, "read_standings");
+      const standings = yield* standingsFromPayload(decoded, leagueKey);
+      yield* Effect.annotateCurrentSpan("provider.standing_count", standings.teams.length);
+      return standings;
     });
 
     const readRoster = Effect.fn("YahooProvider.readRoster")(function* (
@@ -340,18 +378,21 @@ export const YahooProvider = Layer.effect(
       const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "search_players");
       const limit = yield* ValidSearchLimit(input.limit);
       const query = yield* ValidSearchQuery(input.query);
+      const statId = yield* ValidSearchStat(input.sort, input.statId);
       const search = query === undefined ? "" : `;search=${encodeURIComponent(query)}`;
       const status =
         input.availability === "all" ? "" : `;status=${searchStatus[input.availability]}`;
+      const sortValue = searchSortValue(input.sort, statId);
+      const sortType = rankedSearchSorts.has(input.sort) ? `;sort_type=${input.statType}` : "";
       const payload = yield* readJson(internet, {
         operation: "search_players",
         origin: readOrigin,
         path:
           `/fantasy/v2/league/${leagueKey}/players` +
           status +
-          `;sort=${searchSort[input.sort]}` +
+          `;sort=${sortValue}${sortType}` +
           `;count=${String(limit)}${search}` +
-          ";out=ownership,percent_owned",
+          ";out=ownership,percent_owned,percent_started",
         query: { format: "json" },
         cookie,
         normalize: true,
@@ -392,6 +433,7 @@ export const YahooProvider = Layer.effect(
     const readTransactions = Effect.fn("YahooProvider.readTransactions")(function* (
       input: ProviderSessionMaterial & {
         readonly providerLeagueKey: string;
+        readonly providerTeamKey: string | undefined;
         readonly limit: number;
       },
     ) {
@@ -399,10 +441,15 @@ export const YahooProvider = Layer.effect(
       const cookie = yield* sessionCookie(input, "read_transactions");
       const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_transactions");
       const limit = yield* ValidTransactionLimit(input.limit);
+      const teamFilter = yield* ValidLeagueTeamKey(
+        input.providerTeamKey,
+        leagueKey,
+        "read_transactions",
+      );
       const payload = yield* readJson(internet, {
         operation: "read_transactions",
         origin: readOrigin,
-        path: `/fantasy/v2/league/${leagueKey}/transactions;count=${String(limit)}`,
+        path: `/fantasy/v2/league/${leagueKey}/transactions;count=${String(limit)}` + teamFilter,
         query: { format: "json" },
         cookie,
         normalize: true,
@@ -475,6 +522,7 @@ export const YahooProvider = Layer.effect(
       discoverTeams,
       readCrumb,
       readLeague,
+      readStandings,
       readRoster,
       applyNativeStartActive,
       readPlayerDetails,
@@ -915,6 +963,7 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
     displayPosition: player.display_position,
     primaryPosition: player.primary_position,
     positionType: optionalNonEmpty(player.position_type),
+    proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr ?? ""),
     eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
     slot: player.selected_position.position,
     isFlex: player.selected_position.is_flex ?? null,
@@ -1026,7 +1075,70 @@ function toSearchPlayer(
     availability: availabilityOf(player.ownership?.ownership_type),
     percentOwned:
       player.percent_owned === undefined ? null : providerNumber(player.percent_owned.value),
+    percentOwnedDelta:
+      player.percent_owned === undefined ? null : providerNumber(player.percent_owned.delta),
+    percentStarted:
+      player.percent_started === undefined ? null : providerNumber(player.percent_started.value),
+    percentStartedDelta:
+      player.percent_started === undefined ? null : providerNumber(player.percent_started.delta),
   };
+}
+
+function standingsFromPayload(
+  payload: typeof StandingsPayload.Type,
+  requestedLeagueKey: string,
+): Effect.Effect<ProviderStandings, ProviderResponseInvalid> {
+  return Effect.gen(function* () {
+    if (payload.league.league_key !== requestedLeagueKey) {
+      return yield* ProviderResponseInvalid.make({
+        operation: "read_standings",
+        field: "league.league_key",
+      });
+    }
+    const teams = payload.league.standings.flatMap((group) => group.teams);
+    if (teams.length === 0) {
+      return yield* ProviderResponseInvalid.make({ operation: "read_standings" });
+    }
+    return {
+      providerLeagueKey: requestedLeagueKey,
+      teams: teams.map(toStanding),
+    };
+  });
+}
+
+function toStanding(team: typeof StandingsTeamPayload.Type): ProviderStanding {
+  const standings = team.team_standings;
+  const totals = standings?.outcome_totals;
+  return {
+    providerTeamKey: team.team_key,
+    name: team.name,
+    rank: standings?.rank ?? null,
+    playoffSeed: standings?.playoff_seed ?? null,
+    record:
+      totals === undefined
+        ? undefined
+        : {
+            wins: totals.wins,
+            losses: totals.losses,
+            ties: totals.ties,
+            percentage: providerNumber(totals.percentage),
+          },
+    gamesBack: providerNumber(standings?.games_back),
+    pointsBack: providerNumber(standings?.points_back),
+    points: providerNumber(team.team_points?.total),
+    pointsFor: providerNumber(standings?.points_for),
+    pointsAgainst: providerNumber(standings?.points_against),
+    streak:
+      standings?.streak === undefined
+        ? undefined
+        : { type: standings.streak.type, value: standings.streak.value },
+    categoryTotals: (team.team_stats?.stats ?? []).map(statValue),
+    categoryPoints: (team.team_points?.stats ?? []).map(statValue),
+  };
+}
+
+function statValue(entry: typeof StatEntry.Type): ProviderStatValue {
+  return { statId: entry.stat.stat_id, value: providerNumber(entry.stat.value) };
 }
 
 function matchupsFromPayload(
@@ -1071,6 +1183,18 @@ function matchupsFromPayload(
           home: homeScore,
           away: awayScore,
           status: optionalNonEmpty(matchup.status ?? ""),
+          isPlayoffs: optionalFlag(matchup.is_playoffs),
+          isConsolation: optionalFlag(matchup.is_consolation),
+          isTied: optionalFlag(matchup.is_tied),
+          weekStart: optionalNonEmpty(matchup.week_start ?? ""),
+          weekEnd: optionalNonEmpty(matchup.week_end ?? ""),
+          categoryWinners: (matchup.stat_winners ?? []).map(
+            ({ stat_winner }): ProviderCategoryWinner => ({
+              statId: stat_winner.stat_id,
+              winnerProviderTeamKey: stat_winner.winner_team_key,
+              isTied: optionalFlag(stat_winner.is_tied) ?? false,
+            }),
+          ),
         });
       }
     }
@@ -1091,12 +1215,47 @@ function teamScore(
         coveredWeek: points.week,
       });
     }
+    const projected = team.team_projected_points;
+    if (projected?.week !== undefined && projected.week !== period.week) {
+      return yield* ProviderPeriodMismatch.make({
+        operation: "read_matchups",
+        requestedWeek: period.week,
+        coveredWeek: projected.week,
+      });
+    }
+    const remaining = remainingGames(team.team_remaining_games, period);
+    if (remaining !== undefined && remaining.week !== null && remaining.week !== period.week) {
+      return yield* ProviderPeriodMismatch.make({
+        operation: "read_matchups",
+        requestedWeek: period.week,
+        coveredWeek: remaining.week,
+      });
+    }
     return {
       providerTeamKey: team.team_key,
       name: team.name,
       points: points === undefined ? null : providerNumber(points.total),
+      projectedPoints: projected === undefined ? null : providerNumber(projected.total),
+      winProbability: providerNumber(team.win_probability),
+      remainingGames: remaining,
+      categoryTotals: (team.team_stats?.stats ?? []).map(statValue),
     };
   });
+}
+
+function remainingGames(
+  value: (typeof ScoreboardTeamPayload.Type)["team_remaining_games"],
+  period: ProviderPeriod,
+): ProviderRemainingGames | undefined {
+  if (value?.total === undefined) {
+    return undefined;
+  }
+  return {
+    week: value.week ?? period.week,
+    completed: value.total.completed_games,
+    live: value.total.live_games,
+    remaining: value.total.remaining_games,
+  };
 }
 
 function decodeTransactions(
@@ -1356,6 +1515,42 @@ function ValidSearchQuery(
     : Effect.succeed(trimmed);
 }
 
+function ValidSearchStat(
+  sort: ProviderPlayerSearchInput["sort"],
+  statId: number | undefined,
+): Effect.Effect<number | undefined, ProviderResponseInvalid> {
+  if (sort !== "stat") {
+    return Effect.as(Effect.void, undefined);
+  }
+  return statId !== undefined && Number.isSafeInteger(statId) && statId >= 1 && statId <= 1_000
+    ? Effect.succeed(statId)
+    : ProviderResponseInvalid.make({ operation: "search_players" });
+}
+
+function ValidLeagueTeamKey(
+  value: string | undefined,
+  leagueKey: string,
+  operation: ProviderOperation,
+): Effect.Effect<string, ProviderResponseInvalid> {
+  if (value === undefined) {
+    return Effect.succeed("");
+  }
+  return /^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u.test(value) && providerLeagueKey(value) === leagueKey
+    ? Effect.succeed(`;team_key=${value}`)
+    : ProviderResponseInvalid.make({ operation });
+}
+
+function optionalFlag(value: boolean | number | string | undefined): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return typeof value === "boolean"
+    ? value
+    : typeof value === "number"
+      ? value !== 0
+      : value === "1";
+}
+
 function ValidWeek(value: number): Effect.Effect<number, ProviderResponseInvalid> {
   return Number.isSafeInteger(value) && value >= 1
     ? Effect.succeed(value)
@@ -1526,6 +1721,7 @@ const RosterPlayerPayload = Schema.Struct({
   primary_position: Schema.NonEmptyString,
   position_type: Schema.optional(Schema.String),
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
+  editorial_team_abbr: Schema.optional(Schema.String),
   selected_position: Schema.Struct({
     coverage_type: Schema.NonEmptyString,
     week: Schema.optional(IntFromStringOrNumber),
@@ -1574,7 +1770,11 @@ const PlayerOwnership = Schema.Struct({
 });
 
 const PercentOwned = Schema.Struct({
+  coverage_type: Schema.optional(Schema.String),
+  week: Schema.optional(IntFromStringOrNumber),
+  date: Schema.optional(Schema.String),
   value: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+  delta: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
 });
 
 const StatEntry = Schema.Struct({
@@ -1621,6 +1821,7 @@ const SearchPlayerPayload = Schema.Struct({
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   ownership: Schema.optional(PlayerOwnership),
   percent_owned: Schema.optional(PercentOwned),
+  percent_started: Schema.optional(PercentOwned),
 });
 
 const PlayerSearchPayload = Schema.Struct({
@@ -1630,22 +1831,61 @@ const PlayerSearchPayload = Schema.Struct({
   }),
 });
 
-const ScoreboardTeamPayload = Schema.Struct({
-  team_key: TeamKey,
-  name: Schema.NonEmptyString,
-  team_points: Schema.optional(
+const ScoreboardPointsPayload = Schema.Struct({
+  coverage_type: Schema.optional(Schema.String),
+  week: Schema.optional(IntFromStringOrNumber),
+  season: Schema.optional(IntFromStringOrNumber),
+  total: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+  stats: Schema.optional(Schema.Array(StatEntry)),
+});
+
+const RemainingGamesPayload = Schema.Struct({
+  coverage_type: Schema.optional(Schema.String),
+  week: Schema.optional(IntFromStringOrNumber),
+  total: Schema.optional(
     Schema.Struct({
-      coverage_type: Schema.optional(Schema.String),
-      week: Schema.optional(IntFromStringOrNumber),
-      total: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+      completed_games: IntFromStringOrNumber,
+      live_games: IntFromStringOrNumber,
+      remaining_games: IntFromStringOrNumber,
     }),
   ),
 });
 
+const TeamStatsPayload = Schema.Struct({
+  coverage_type: Schema.optional(Schema.String),
+  week: Schema.optional(IntFromStringOrNumber),
+  season: Schema.optional(IntFromStringOrNumber),
+  stats: Schema.Array(StatEntry),
+});
+
+const ScoreboardTeamPayload = Schema.Struct({
+  team_key: TeamKey,
+  name: Schema.NonEmptyString,
+  team_points: Schema.optional(ScoreboardPointsPayload),
+  team_projected_points: Schema.optional(ScoreboardPointsPayload),
+  team_remaining_games: Schema.optional(RemainingGamesPayload),
+  team_stats: Schema.optional(TeamStatsPayload),
+  win_probability: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+});
+
+const StatWinnerPayload = Schema.Struct({
+  stat_winner: Schema.Struct({
+    stat_id: IntFromStringOrNumber,
+    winner_team_key: Schema.optional(TeamKey),
+    is_tied: Schema.optional(Flag),
+  }),
+});
+
 const MatchupPayload = Schema.Struct({
   week: IntFromStringOrNumber,
+  week_start: Schema.optional(Schema.String),
+  week_end: Schema.optional(Schema.String),
   status: Schema.optional(Schema.String),
+  is_playoffs: Schema.optional(Flag),
+  is_consolation: Schema.optional(Flag),
+  is_tied: Schema.optional(Flag),
   entries: Schema.Array(Schema.Struct({ teams: Schema.Array(ScoreboardTeamPayload) })),
+  stat_winners: Schema.optional(Schema.Array(StatWinnerPayload)),
 });
 
 const MatchupsPayload = Schema.Struct({
@@ -1686,6 +1926,49 @@ const TransactionsPayload = Schema.Struct({
   league: Schema.Struct({
     league_key: LeagueKey,
     transactions: Schema.Array(TransactionPayload),
+  }),
+});
+
+const OutcomeTotalsPayload = Schema.Struct({
+  wins: IntFromStringOrNumber,
+  losses: IntFromStringOrNumber,
+  ties: IntFromStringOrNumber,
+  percentage: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+});
+
+const TeamStandingsPayload = Schema.Struct({
+  rank: Schema.optional(IntFromStringOrNumber),
+  playoff_seed: Schema.optional(IntFromStringOrNumber),
+  outcome_totals: Schema.optional(OutcomeTotalsPayload),
+  streak: Schema.optional(
+    Schema.Struct({
+      type: Schema.String,
+      value: IntFromStringOrNumber,
+    }),
+  ),
+  games_back: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+  points_for: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+  points_against: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+  points_back: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+  points_change: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+});
+
+const StandingsTeamPayload = Schema.Struct({
+  team_key: TeamKey,
+  name: Schema.NonEmptyString,
+  team_points: Schema.optional(ScoreboardPointsPayload),
+  team_standings: Schema.optional(TeamStandingsPayload),
+  team_stats: Schema.optional(TeamStatsPayload),
+});
+
+const StandingsPayload = Schema.Struct({
+  league: Schema.Struct({
+    league_key: LeagueKey,
+    standings: Schema.Array(
+      Schema.Struct({
+        teams: Schema.Array(StandingsTeamPayload),
+      }),
+    ),
   }),
 });
 

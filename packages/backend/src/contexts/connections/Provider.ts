@@ -12,6 +12,7 @@ const ProviderOperation = Schema.Literals([
   "discover_teams",
   "read_crumb",
   "read_league",
+  "read_standings",
   "read_roster",
   "read_player_details",
   "search_players",
@@ -118,6 +119,7 @@ export type ProviderRosterPlayer = {
   readonly displayPosition: string;
   readonly primaryPosition: string;
   readonly positionType: string | undefined;
+  readonly proTeamAbbreviation: string | undefined;
   readonly eligiblePositions: ReadonlyArray<string>;
   readonly slot: string;
   readonly isFlex: boolean | null;
@@ -135,7 +137,7 @@ export type ProviderRoster = {
   readonly players: ReadonlyArray<ProviderRosterPlayer>;
 };
 
-type ProviderStatValue = {
+export type ProviderStatValue = {
   readonly statId: number;
   readonly value: number | null;
 };
@@ -160,11 +162,21 @@ export type ProviderPlayerDetail = {
   readonly projected: ProviderPlayerStatGroup | undefined;
 };
 
+export type ProviderPlayerSearchSort =
+  | "name"
+  | "position"
+  | "ownership"
+  | "actual_rank"
+  | "overall_rank"
+  | "stat";
+
 export type ProviderPlayerSearchInput = ProviderSessionMaterial & {
   readonly providerLeagueKey: string;
   readonly query: string | undefined;
   readonly availability: "all" | "free_agent" | "waiver";
-  readonly sort: "name" | "position" | "ownership";
+  readonly sort: ProviderPlayerSearchSort;
+  readonly statId: number | undefined;
+  readonly statType: "season" | "week";
   readonly limit: number;
 };
 
@@ -177,13 +189,61 @@ export type ProviderPlayerSearchResult = {
     readonly eligiblePositions: ReadonlyArray<string>;
     readonly availability: "free_agent" | "waiver" | "rostered" | "unknown";
     readonly percentOwned: number | null;
+    readonly percentOwnedDelta: number | null;
+    readonly percentStarted: number | null;
+    readonly percentStartedDelta: number | null;
   }>;
+};
+
+type ProviderStandingRecord = {
+  readonly wins: number;
+  readonly losses: number;
+  readonly ties: number;
+  readonly percentage: number | null;
+};
+
+export type ProviderStanding = {
+  readonly providerTeamKey: string;
+  readonly name: string;
+  readonly rank: number | null;
+  readonly playoffSeed: number | null;
+  readonly record: ProviderStandingRecord | undefined;
+  readonly gamesBack: number | null;
+  readonly pointsBack: number | null;
+  readonly points: number | null;
+  readonly pointsFor: number | null;
+  readonly pointsAgainst: number | null;
+  readonly streak: { readonly type: string; readonly value: number } | undefined;
+  readonly categoryTotals: ReadonlyArray<ProviderStatValue>;
+  readonly categoryPoints: ReadonlyArray<ProviderStatValue>;
+};
+
+export type ProviderStandings = {
+  readonly providerLeagueKey: string;
+  readonly teams: ReadonlyArray<ProviderStanding>;
+};
+
+export type ProviderRemainingGames = {
+  readonly week: number | null;
+  readonly completed: number;
+  readonly live: number;
+  readonly remaining: number;
 };
 
 export type ProviderTeamScore = {
   readonly providerTeamKey: string;
   readonly name: string;
   readonly points: number | null;
+  readonly projectedPoints: number | null;
+  readonly winProbability: number | null;
+  readonly remainingGames: ProviderRemainingGames | undefined;
+  readonly categoryTotals: ReadonlyArray<ProviderStatValue>;
+};
+
+export type ProviderCategoryWinner = {
+  readonly statId: number;
+  readonly winnerProviderTeamKey: string | undefined;
+  readonly isTied: boolean;
 };
 
 export type ProviderMatchup = {
@@ -191,6 +251,12 @@ export type ProviderMatchup = {
   readonly home: ProviderTeamScore;
   readonly away: ProviderTeamScore;
   readonly status: string | undefined;
+  readonly isPlayoffs: boolean | undefined;
+  readonly isConsolation: boolean | undefined;
+  readonly isTied: boolean | undefined;
+  readonly weekStart: string | undefined;
+  readonly weekEnd: string | undefined;
+  readonly categoryWinners: ReadonlyArray<ProviderCategoryWinner>;
 };
 
 type ProviderTransactionPlayer = {
@@ -374,9 +440,14 @@ export type ProviderGatewayShape = {
   readonly readTransactions: (
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
+      readonly providerTeamKey: string | undefined;
       readonly limit: number;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderTransaction>, ProviderReadFailure>;
+
+  readonly readStandings: (
+    input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
+  ) => Effect.Effect<ProviderStandings, ProviderReadFailure>;
 
   readonly readLeagueTeams: (
     input: ProviderSessionMaterial & { readonly providerLeagueKey: string },

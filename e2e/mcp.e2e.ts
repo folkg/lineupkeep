@@ -52,6 +52,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "search_players",
     "get_players",
     "get_matchups",
+    "get_team_summary",
     "get_transactions",
     "generate_transaction_review_links",
     "set_lineup",

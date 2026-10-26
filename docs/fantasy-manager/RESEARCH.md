@@ -250,3 +250,92 @@ The GCP guide documents Effect-oriented Cloud Run runtimes, Cloud Scheduler, Pub
 This makes an Alchemy-managed GCP deployment plausible, not verified. Before recommending exact resources or installing anything, inspect the current starter dependency versions and published package/source contracts, especially Effect compatibility, the selected frontend's production build, private job invocation, Cloud Tasks support if selected, database cost, and remote infrastructure-state storage. Documentation examples show differing import conventions, so do not copy them as a compatibility guarantee.
 
 No infrastructure was created or modified during this research.
+
+## Live Yahoo analysis-surface verification (2026-10-25)
+
+The owner authorized live reads on their own teams, and a disposable gitignored harness
+(`.artifacts/live-capabilities/`) probed candidate endpoints for analysis capabilities, then ran
+the committed `YahooProvider` through `PublicInternet` with the real transport to verify the
+implemented reads. The `T`/`Y` cookies moved from browser memory to the harness over loopback and
+were never printed, written, or committed. Retained evidence holds field names, JSON types,
+cardinalities, byte sizes, timings, presence counts, and masked identifier patterns only. No write,
+transaction, or premium action was attempted.
+
+| Adapter operation                    | Request                                                                                                   | Status | Typical size | Typical time |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------ | ------------ | ------------ |
+| `readStandings`                      | `GET .../league/{league_key}/standings?format=json`                                                       | 200    | 75–215 KB    | 230–370 ms   |
+| `readMatchups` (football)            | `GET .../league/{league_key}/scoreboard;week={week}?format=json`                                          | 200    | 91–98 KB     | 220–310 ms   |
+| `readMatchups` (hockey)              | same                                                                                                      | 200    | 134–181 KB   | 230–650 ms   |
+| `searchPlayers` (`sort=AR`/`OR`)     | `GET .../players;status=FA;sort=AR;sort_type=season;count=10;out=ownership,percent_owned,percent_started` | 200    | 29–33 KB     | 190–340 ms   |
+| `searchPlayers` (`sort={stat_id}`)   | same with a league stat id                                                                                | 200    | 28–31 KB     | 190–340 ms   |
+| `searchPlayers` (`sort=PTS`, hockey) | same with `sort=PTS`                                                                                      | 400    | ~0.3 KB      | 160–220 ms   |
+| `readTransactions` (team filter)     | `GET .../league/{league_key}/transactions;count=50;team_key={team_key}`                                   | 200    | 16–41 KB     | 160–240 ms   |
+
+Confirmed live, through the adapter:
+
+- **Standings are published for all five leagues**, including the rotisserie league, so an empty
+  standings result is not a valid league state. Each team record carries `team_points` (season
+  coverage), `team_standings`, and — for category and rotisserie leagues — `team_stats` season
+  totals. Head-to-head leagues publish `team_standings.outcome_totals` (wins, losses, ties,
+  percentage) and, in the points league, `streak`, `points_for`, and `points_against`. The
+  rotisserie league publishes **no** `outcome_totals`: it reports `rank`, `points_back`,
+  `points_change`, `points_for`, and per-category `team_points.stats` instead. `games_back` did not
+  appear in any of the five leagues.
+- **Completed and current matchups publish per-category values** (`team_stats` with week
+  coverage) and `stat_winners` (`stat_id`, `winner_team_key`, occasionally `is_tied`) in category
+  leagues. Football's points league publishes `team_projected_points` and `win_probability` but no
+  category values.
+- **`team_remaining_games` is a fantasy-team total of player-games for the scoring week**
+  (`coverage_type`, `week`, `total.completed_games`, `total.live_games`, `total.remaining_games`).
+  It is present for the requested week and the next week in every inspected hockey league
+  (including a future week with zero completed games) and absent for football. The provider
+  publishes no per-player or per-professional-team remaining-game count, so a player-level
+  "games this week" cannot be derived from this read surface.
+- **Projections and remaining-game blocks cover the requested week**: `team_projected_points.week`
+  equalled the requested scoreboard week for weeks 6–9, and `team_remaining_games.week` did too.
+  A fixture that assumed a different projection week was wrong and is corrected.
+- **`percent_started` is a real `out=` value** alongside `percent_owned`; both carry
+  `coverage_type` (`week` in football, `date` in hockey), a numeric value, and a `delta`. They are
+  absent for some rows (8 of 10 football free agents carried a started value), so a missing signal
+  is null, not zero. A Friday search returned `value: 0` for one player, proving zero is published.
+- **Player search accepts provider sorts** `NAME`, `R_PO` (percent owned), `AR` (actual rank), `OR`
+  (overall rank), and a numeric stat id from the league's categories, with `sort_type` season or
+  week. `sort=PTS` is rejected with HTTP 400 for hockey; the adapter does not offer it. Every
+  `sort_type=week` combination — rank or stat id — was also rejected with HTTP 400 for hockey while
+  the same requests succeeded for football, so a weekly ranked sort is refused for hockey with the
+  remedy rather than sent. Rankings are provider-derived, not local.
+- **Transactions accept `team_key`** and the filtered response contains only that team's events
+  (7 of 50 in football, 3 of 44 in hockey). `start` is a **pagination offset**, not a date: a large
+  `start` returned an empty window, and offsets 1, 2, 50, and 100 returned successive slices. No
+  documented or observed date filter exists, so date ranges are applied to the bounded window the
+  provider returns.
+- **Roster entries publish `editorial_team_abbr`** (with `editorial_team_key`, full name, and URL)
+  for both sports; every inspected roster entry carried it. Football also publishes `bye_weeks`;
+  current hockey rosters do not.
+
+Still unsupported after this verification:
+
+- Per-player or per-professional-team games remaining this week or next, and probable-starter
+  flags: no read shape exposes either. `get_matchups` reports the fantasy-team remaining-game
+  total where the provider publishes it, and football omits it rather than pretending every player
+  has one game left.
+- A provider-side transaction date filter. A range older than the fetched window is reported as
+  truncated rather than presented as complete.
+- A points-total search sort for hockey (`sort=PTS` is rejected); `actual_rank`, `overall_rank`, and
+  a league stat id are available instead.
+
+### Payload processing notes
+
+- Standings arrive as `league: [attributes, { standings: { 0: { teams: { <n>: { team: [...] } } } } }]`.
+  Each `team` is a positional fragment list holding attributes, `team_points`, and
+  `team_standings`/`team_stats`; the existing normalizer flattens it into one record with those
+  fields, which the new schema decodes directly.
+- `team_points.total` is a formatted string in every league (`"1583.16"`, `"48"`), and
+  rotisserie `team_points.stats[].stat.value` can be an empty string; values are parsed by the same
+  permissive numeric helper that preserves missing as null.
+- `stat_winners` entries omit `winner_team_key` when `is_tied` is set; the adapter reports the
+  marker instead of inventing a winner.
+- Fixtures for the new resources were added for three standings variants (head-to-head points,
+  head-to-head categories, rotisserie), a hockey scoreboard with remaining games and category
+  winners, and player ownership/started signals. The football scoreboard fixture was corrected to
+  omit the remaining-games block the live provider does not publish.

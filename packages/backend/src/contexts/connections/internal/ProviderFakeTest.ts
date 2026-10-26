@@ -20,6 +20,7 @@ import type {
   ProviderPlayerDetail,
   ProviderReviewLinkInput,
   ProviderRoster,
+  ProviderStandings,
   ProviderTeam,
   ProviderTransaction,
 } from "#contexts/connections/Provider.ts";
@@ -40,6 +41,8 @@ type FakeProviderState = {
   readonly rosterReadGate: Option.Option<FakeGate>;
   readonly league: ProviderLeagueSettings | undefined;
   readonly leagueFailure: ProviderResponseInvalid | undefined;
+  readonly standings: ProviderStandings | undefined;
+  readonly standingsFailure: ProviderResponseInvalid | undefined;
   readonly roster: ProviderRoster | undefined;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
   readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
@@ -66,6 +69,8 @@ export type FakeProviderWorldShape = {
   readonly unblockRosterRead: Effect.Effect<void>;
   readonly setLeague: (league: ProviderLeagueSettings | undefined) => Effect.Effect<void>;
   readonly failLeague: (failure: ProviderResponseInvalid | undefined) => Effect.Effect<void>;
+  readonly setStandings: (standings: ProviderStandings | undefined) => Effect.Effect<void>;
+  readonly failStandings: (failure: ProviderResponseInvalid | undefined) => Effect.Effect<void>;
   readonly setRoster: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
   readonly failPlayerDetails: (failure: ProviderPeriodMismatch | undefined) => Effect.Effect<void>;
@@ -99,6 +104,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         rosterReadGate: Option.none(),
         league: undefined,
         leagueFailure: undefined,
+        standings: undefined,
+        standingsFailure: undefined,
         roster: undefined,
         playerDetails: [],
         playerDetailsFailure: undefined,
@@ -143,6 +150,9 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         unblockRosterRead: modify((current) => ({ ...current, rosterReadGate: Option.none() })),
         setLeague: (league) => modify((current) => ({ ...current, league })),
         failLeague: (leagueFailure) => modify((current) => ({ ...current, leagueFailure })),
+        setStandings: (standings) => modify((current) => ({ ...current, standings })),
+        failStandings: (standingsFailure) =>
+          modify((current) => ({ ...current, standingsFailure })),
         setRoster: (roster) => modify((current) => ({ ...current, roster })),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
         failPlayerDetails: (playerDetailsFailure) =>
@@ -250,6 +260,27 @@ export const ProviderFakeTest = Layer.effect(
           return yield* ProviderResponseInvalid.make({ operation: "read_league" });
         }
         return current.league;
+      }),
+      readStandings: Effect.fn("FakeProvider.readStandings")(function* (input) {
+        const current = yield* prepare(input, "read_standings");
+        if (current.standingsFailure !== undefined) {
+          return yield* ProviderResponseInvalid.make({
+            operation: "read_standings",
+            ...(current.standingsFailure.field === undefined
+              ? {}
+              : { field: current.standingsFailure.field }),
+          });
+        }
+        if (current.standings === undefined) {
+          return yield* ProviderOperationUnsupported.make({
+            operation: "read_standings",
+            reason: "No standings are configured for the fake provider.",
+          });
+        }
+        if (current.standings.providerLeagueKey !== input.providerLeagueKey) {
+          return yield* ProviderResponseInvalid.make({ operation: "read_standings" });
+        }
+        return current.standings;
       }),
       readRoster: Effect.fn("FakeProvider.readRoster")(function* (input) {
         const current = yield* prepare(input, "read_roster");
@@ -374,6 +405,9 @@ export const ProviderFakeTest = Layer.effect(
               eligiblePositions: player.eligiblePositions,
               availability: player.rosterStatus,
               percentOwned: null,
+              percentOwnedDelta: null,
+              percentStarted: null,
+              percentStartedDelta: null,
             },
           ];
         });
@@ -384,6 +418,9 @@ export const ProviderFakeTest = Layer.effect(
             case "position":
               return left.primaryPosition.localeCompare(right.primaryPosition);
             case "ownership":
+            case "actual_rank":
+            case "overall_rank":
+            case "stat":
               return 0;
           }
         });
@@ -395,7 +432,13 @@ export const ProviderFakeTest = Layer.effect(
       }),
       readTransactions: Effect.fn("FakeProvider.readTransactions")(function* (input) {
         const current = yield* prepare(input, "read_transactions");
-        return current.transactions.slice(0, input.limit);
+        return current.transactions
+          .filter(
+            (transaction) =>
+              input.providerTeamKey === undefined ||
+              transaction.teams.some((team) => team.providerTeamKey === input.providerTeamKey),
+          )
+          .slice(0, input.limit);
       }),
       readLeagueTeams: Effect.fn("FakeProvider.readLeagueTeams")(function* (input) {
         const current = yield* prepare(input, "read_league_teams");

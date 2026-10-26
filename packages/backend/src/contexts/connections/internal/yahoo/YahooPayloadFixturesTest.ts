@@ -556,6 +556,8 @@ export const yahooNflRoster = {
                     { player_key: "466.p.20001" },
                     { player_id: "20001" },
                     { name: { full: "Synthetic Starter", first: "Synthetic", last: "Starter" } },
+                    { editorial_team_abbr: "SYN" },
+                    { editorial_team_full_name: "Synthetic Franchise" },
                     { display_position: "QB" },
                     { position_type: "O" },
                     { primary_position: "QB" },
@@ -585,6 +587,7 @@ export const yahooNflRoster = {
                     { player_key: "466.p.20002" },
                     { player_id: "20002" },
                     { name: { full: "Synthetic Reserve", first: "Synthetic", last: "Reserve" } },
+                    { editorial_team_abbr: "SYN" },
                     { display_position: "WR" },
                     { position_type: "O" },
                     { primary_position: "WR" },
@@ -1274,6 +1277,39 @@ export const yahooNflFreeAgents = {
                   { delta: "3" },
                 ],
               },
+              {
+                percent_started: [
+                  { coverage_type: "week", week: "6" },
+                  { value: 31.5 },
+                  { delta: -2 },
+                ],
+              },
+            ],
+          },
+          "2": {
+            player: [
+              [
+                { player_key: "466.p.20008" },
+                { player_id: "20008" },
+                {
+                  name: {
+                    full: "Synthetic Unstarted",
+                    first: "Synthetic",
+                    last: "Unstarted",
+                    ascii_first: "Synthetic",
+                    ascii_last: "Unstarted",
+                  },
+                },
+                { display_position: "TE" },
+                { position_type: "O" },
+                { primary_position: "TE" },
+                { eligible_positions: [{ position: "TE" }] },
+                [],
+              ],
+              { ownership: [{ ownership_type: "freeagents" }] },
+              {
+                percent_owned: [{ coverage_type: "week", week: "6" }, { value: 0 }, { delta: "0" }],
+              },
             ],
           },
           "1": {
@@ -1299,14 +1335,20 @@ export const yahooNflFreeAgents = {
               { ownership: [{ ownership_type: "waivers" }] },
             ],
           },
-          count: 2,
+          count: 3,
         },
       },
     ],
   },
 };
 
-function nflMatchupTeam(key: string, name: string, total: string, projected: string): unknown[] {
+function nflMatchupTeam(
+  key: string,
+  name: string,
+  total: string,
+  projected: string,
+  winProbability: number,
+): unknown[] {
   return [
     [
       { team_key: key },
@@ -1324,12 +1366,8 @@ function nflMatchupTeam(key: string, name: string, total: string, projected: str
     [
       {
         team_points: { coverage_type: "week", week: "6", total },
-        team_projected_points: { coverage_type: "week", week: "7", total: projected },
-        team_remaining_games: {
-          coverage_type: "week",
-          week: "6",
-          total: { remaining_games: 1, live_games: 0, completed_games: 1 },
-        },
+        team_projected_points: { coverage_type: "week", week: "6", total: projected },
+        win_probability: winProbability,
       },
     ],
   ];
@@ -1359,10 +1397,17 @@ export const yahooNflMatchups = {
                           "Synthetic NFL Team",
                           "101.25",
                           "109.4",
+                          0.62,
                         ),
                       },
                       "1": {
-                        team: nflMatchupTeam("466.l.4000.t.2", "Synthetic Rival", "98.5", "104.1"),
+                        team: nflMatchupTeam(
+                          "466.l.4000.t.2",
+                          "Synthetic Rival",
+                          "98.5",
+                          "104.1",
+                          0.38,
+                        ),
                       },
                       count: 2,
                     },
@@ -1375,14 +1420,6 @@ export const yahooNflMatchups = {
                   is_consolation: "0",
                   is_matchup_of_the_week: "0",
                   is_tied: 0,
-                  stat_winners: [
-                    {
-                      stat_winner: {
-                        stat_id: "4",
-                        winner_team_key: "466.l.4000.t.1",
-                      },
-                    },
-                  ],
                 },
               },
               count: 1,
@@ -1712,5 +1749,317 @@ export const yahooTeamFragments = {
       },
       count: 1,
     },
+  },
+};
+
+function standingsTeam(key: string, name: string, fragments: ReadonlyArray<unknown>): unknown[] {
+  return [
+    [
+      { team_key: key },
+      { team_id: key.slice(key.lastIndexOf(".t.") + 3) },
+      { name },
+      { url: `https://football.fantasysports.yahoo.com/f1/4000/${key.slice(-1)}` },
+      { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic.png" } }] },
+      { waiver_priority: 1 },
+      { number_of_moves: 1 },
+      { number_of_trades: 0 },
+      { league_scoring_type: "head" },
+      { draft_position: 1 },
+      [],
+    ],
+    ...fragments,
+  ];
+}
+
+function standingsPayload(
+  leagueKey: string,
+  leagueName: string,
+  teams: ReadonlyArray<unknown>,
+): { fantasy_content: Record<string, unknown> } {
+  const entries: Record<string, unknown> = {};
+  teams.forEach((team, index) => {
+    entries[String(index)] = { team };
+  });
+  entries["count"] = teams.length;
+  return {
+    fantasy_content: {
+      "xml:lang": "en-US",
+      league: [
+        {
+          league_key: leagueKey,
+          league_id: leagueKey.slice(leagueKey.indexOf(".l.") + 3),
+          name: leagueName,
+          url: "https://football.fantasysports.yahoo.com/f1/4000",
+          num_teams: 2,
+          scoring_type: "head",
+          current_week: 6,
+          start_week: "1",
+          end_week: "17",
+          season: "2026",
+        },
+        {
+          standings: {
+            "0": { teams: entries },
+            count: 1,
+          },
+        },
+      ],
+    },
+  };
+}
+
+export const yahooNflStandings = standingsPayload("466.l.4000", "Synthetic NFL League", [
+  standingsTeam("466.l.4000.t.1", "Synthetic NFL Team", [
+    {
+      team_points: { coverage_type: "season", season: "2026", total: "1583.16" },
+    },
+    {
+      team_standings: {
+        rank: "1",
+        playoff_seed: "4",
+        outcome_totals: { wins: "8", losses: 6, ties: 0, percentage: ".571" },
+        streak: { type: "loss", value: "2" },
+        points_for: "1583.16",
+        points_against: 1447.26,
+      },
+    },
+  ]),
+  standingsTeam("466.l.4000.t.2", "Synthetic Rival", [
+    {
+      team_points: { coverage_type: "season", season: "2026", total: "1494.02" },
+    },
+    {
+      team_standings: {
+        rank: "2",
+        playoff_seed: "3",
+        outcome_totals: { wins: "6", losses: "8", ties: "0", percentage: ".429" },
+        streak: { type: "win", value: "1" },
+        points_for: "1494.02",
+        points_against: 1501.44,
+      },
+    },
+  ]),
+]);
+
+export const yahooNhlCategoryStandings = standingsPayload(
+  "466.l.4002",
+  "Synthetic NHL Categories",
+  [
+    standingsTeam("466.l.4002.t.3", "Synthetic NHL Team", [
+      {
+        team_points: { coverage_type: "season", season: "2026", total: "48" },
+      },
+      {
+        team_standings: {
+          rank: "1",
+          playoff_seed: "1",
+          outcome_totals: { wins: "9", losses: "3", ties: "1", percentage: ".731" },
+        },
+      },
+      {
+        team_stats: {
+          coverage_type: "season",
+          season: "2026",
+          stats: {
+            "0": { stat: { stat_id: "1", value: "37" } },
+            "1": { stat: { stat_id: "2", value: "54" } },
+            count: 2,
+          },
+        },
+      },
+    ]),
+    standingsTeam("466.l.4002.t.4", "Synthetic Rival", [
+      {
+        team_points: { coverage_type: "season", season: "2026", total: "41" },
+      },
+      {
+        team_standings: {
+          rank: "2",
+          outcome_totals: { wins: "7", losses: "5", ties: "1", percentage: ".577" },
+        },
+      },
+      {
+        team_stats: {
+          coverage_type: "season",
+          season: "2026",
+          stats: {
+            "0": { stat: { stat_id: "1", value: "31" } },
+            "1": { stat: { stat_id: "2", value: "49" } },
+            count: 2,
+          },
+        },
+      },
+    ]),
+  ],
+);
+
+export const yahooNhlRotoStandings = standingsPayload("466.l.4003", "Synthetic NHL Roto", [
+  standingsTeam("466.l.4003.t.1", "Synthetic Roto Team", [
+    {
+      team_points: {
+        coverage_type: "season",
+        season: "2026",
+        total: "86.5",
+        stats: {
+          "0": { stat: { stat_id: "1", value: "12" } },
+          "1": { stat: { stat_id: "2", value: "" } },
+          count: 2,
+        },
+      },
+    },
+    {
+      team_standings: {
+        rank: "1",
+        points_back: "0",
+        points_change: "1.5",
+        points_for: "86.5",
+      },
+    },
+    {
+      team_stats: {
+        coverage_type: "season",
+        season: "2026",
+        stats: {
+          "0": { stat: { stat_id: "1", value: "37" } },
+          "1": { stat: { stat_id: "2", value: "54" } },
+          count: 2,
+        },
+      },
+    },
+  ]),
+  standingsTeam("466.l.4003.t.2", "Synthetic Roto Rival", [
+    {
+      team_points: {
+        coverage_type: "season",
+        season: "2026",
+        total: "83",
+        stats: {
+          "0": { stat: { stat_id: "1", value: "9" } },
+          "1": { stat: { stat_id: "2", value: "11" } },
+          count: 2,
+        },
+      },
+    },
+    {
+      team_standings: { rank: "2", points_back: "3.5", points_change: "-1", points_for: "83" },
+    },
+    {
+      team_stats: {
+        coverage_type: "season",
+        season: "2026",
+        stats: {
+          "0": { stat: { stat_id: "1", value: "29" } },
+          "1": { stat: { stat_id: "2", value: "47" } },
+          count: 2,
+        },
+      },
+    },
+  ]),
+]);
+
+function nhlMatchupTeam(
+  key: string,
+  name: string,
+  total: string,
+  remaining: { readonly completed: number; readonly live: number; readonly remaining: number },
+): unknown[] {
+  return [
+    [
+      { team_key: key },
+      { team_id: key.slice(key.lastIndexOf(".t.") + 3) },
+      { name },
+      { url: `https://hockey.fantasysports.yahoo.com/hockey/4002/${key.slice(-1)}` },
+      { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic.png" } }] },
+      { waiver_priority: 1 },
+      { number_of_moves: 1 },
+      { number_of_trades: 0 },
+      { league_scoring_type: "head" },
+      [],
+    ],
+    [
+      {
+        team_points: { coverage_type: "week", week: "4", total },
+        team_remaining_games: {
+          coverage_type: "week",
+          week: "4",
+          total: {
+            completed_games: remaining.completed,
+            live_games: remaining.live,
+            remaining_games: remaining.remaining,
+          },
+        },
+        team_stats: {
+          coverage_type: "week",
+          week: "4",
+          stats: {
+            "0": { stat: { stat_id: "1", value: "6" } },
+            "1": { stat: { stat_id: "2", value: "9" } },
+            count: 2,
+          },
+        },
+      },
+    ],
+  ];
+}
+
+export const yahooNhlMatchupsWithGames = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4002",
+        league_id: "4002",
+        name: "Synthetic NHL Categories",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
+        current_week: 4,
+        start_week: "1",
+        end_week: "24",
+        season: "2026",
+      },
+      {
+        scoreboard: {
+          week: "4",
+          "0": {
+            matchups: {
+              "0": {
+                matchup: {
+                  "0": {
+                    teams: {
+                      "0": {
+                        team: nhlMatchupTeam("466.l.4002.t.3", "Synthetic NHL Team", "12", {
+                          completed: 51,
+                          live: 3,
+                          remaining: 0,
+                        }),
+                      },
+                      "1": {
+                        team: nhlMatchupTeam("466.l.4002.t.4", "Synthetic Rival", "9", {
+                          completed: 48,
+                          live: 2,
+                          remaining: 4,
+                        }),
+                      },
+                      count: 2,
+                    },
+                  },
+                  week: "4",
+                  week_start: "2026-10-19",
+                  week_end: "2026-10-25",
+                  status: "midevent",
+                  is_playoffs: "1",
+                  is_consolation: "0",
+                  is_tied: 0,
+                  stat_winners: [
+                    { stat_winner: { stat_id: "1", winner_team_key: "466.l.4002.t.3" } },
+                    { stat_winner: { stat_id: "2", is_tied: "1" } },
+                  ],
+                },
+              },
+              count: 1,
+            },
+          },
+        },
+      },
+    ],
   },
 };

@@ -202,6 +202,7 @@ it("lists only the read-only connection tool without exposing account identity",
     "search_players",
     "get_players",
     "get_matchups",
+    "get_team_summary",
     "get_transactions",
     "generate_transaction_review_links",
     "set_lineup",
@@ -875,6 +876,7 @@ const unavailableQueries: FantasyQueriesShape = {
   getPlayers: () => Effect.die(new Error("queries unavailable")),
   getMatchups: () => Effect.die(new Error("queries unavailable")),
   getTransactions: () => Effect.die(new Error("queries unavailable")),
+  getTeamSummary: () => Effect.die(new Error("queries unavailable")),
 };
 const unavailableReviews: TransactionReviewsShape = {
   generate: () => Effect.die(new Error("reviews unavailable")),

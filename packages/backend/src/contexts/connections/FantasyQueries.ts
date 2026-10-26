@@ -19,6 +19,8 @@ import type {
   RosterResult,
   SearchPlayersInput,
   SearchPlayersResult,
+  TeamSummaryResult,
+  GetTeamSummaryInput,
   TransactionsResult,
 } from "./QueryResults.ts";
 import type { QueryError } from "./QueryValues.ts";
@@ -67,4 +69,9 @@ export type FantasyQueriesShape = {
     userId: UserId,
     input: GetTransactionsInput,
   ) => Effect.Effect<TransactionsResult, QueryError>;
+
+  readonly getTeamSummary: (
+    userId: UserId,
+    input: GetTeamSummaryInput,
+  ) => Effect.Effect<TeamSummaryResult, QueryError>;
 };
