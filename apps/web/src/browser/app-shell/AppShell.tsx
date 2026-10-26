@@ -20,35 +20,33 @@ export function AppShell(props: AppShellProps): JSX.Element {
           {productName}
         </BrandLink>
       }
-      actions={<AppActions />}
+      navigation={<PrimaryNavigation />}
+      controls={<ThemeToggle />}
     >
       {props.children}
     </PageShell>
   );
 }
 
-function AppActions(): JSX.Element {
+function PrimaryNavigation(): JSX.Element {
   const session = useSessionActions();
 
   return (
-    <>
+    <Show when={session.isSignedIn()}>
       <Nav label="Primary navigation">
         <NavLink to="/teams">Teams</NavLink>
         <NavLink to="/connections">Connections</NavLink>
         <NavLink to="/feedback">Feedback</NavLink>
-        <Show fallback={<NavLink to="/auth">Sign in</NavLink>} when={session.isSignedIn()}>
-          <Button
-            pending={session.isSigningOut()}
-            pendingLabel="Signing out…"
-            variant="quiet"
-            onClick={() => void session.signOut()}
-          >
-            Sign out
-          </Button>
-        </Show>
+        <Button
+          pending={session.isSigningOut()}
+          pendingLabel="Signing out…"
+          variant="quiet"
+          onClick={() => void session.signOut()}
+        >
+          Sign out
+        </Button>
       </Nav>
-      <ThemeToggle />
-    </>
+    </Show>
   );
 }
 

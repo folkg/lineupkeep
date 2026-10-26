@@ -14,14 +14,13 @@ import type { HostedLinkingController } from "./useHostedLinking";
 
 export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element {
   return (
-    <Stack as="section" gap="sm" labelledBy="connect-yahoo-title">
-      <Heading id="connect-yahoo-title" level={2} size="section">
-        Connect Yahoo
+    <Stack as="section" gap="sm" labelledBy="yahoo-signin-title">
+      <Heading id="yahoo-signin-title" level={2} size="section">
+        Yahoo sign-in
       </Heading>
       <Text size="body" tone="muted">
-        Sign in once below. Your password is entered directly into Yahoo's page in a temporary
-        browser; it is never stored or logged by Lineupkeep. We keep only the session tokens Yahoo
-        returns, encrypted.
+        Sign in through a temporary browser. Your password is entered on Yahoo's page; Lineupkeep
+        keeps only the encrypted session.
       </Text>
       <Show
         fallback={
@@ -34,7 +33,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
               Connect Yahoo
             </Button>
             <Text size="caption" tone="muted">
-              No install, no code to copy.
+              No helper to install.
             </Text>
           </Inline>
         }

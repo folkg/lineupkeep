@@ -25,14 +25,14 @@ import {
 export function TeamList(props: TeamListProps): JSX.Element {
   return (
     <Stack as="section" gap="md" labelledBy="teams-list-title">
-      <Inline gap="sm" justify="between">
+      <Inline gap="md">
         <Heading id="teams-list-title" level={2} size="section">
           Your teams
         </Heading>
         <Button
           pending={props.refreshing()}
           pendingLabel="Refreshing teams…"
-          variant="secondary"
+          variant="link"
           onClick={props.onRefreshTeams}
         >
           Refresh teams
@@ -61,8 +61,8 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No teams yet.">
-                <TextLink to="/connections">Link Yahoo</TextLink>, then refresh to import the teams
-                this account can manage.
+                <TextLink to="/connections">Connect Yahoo</TextLink> to import the teams this
+                account can manage. If you join another league on Yahoo, refresh to import it.
               </EmptyState>
             }
             when={props.teams().length > 0}

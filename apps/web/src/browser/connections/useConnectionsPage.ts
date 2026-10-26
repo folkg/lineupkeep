@@ -24,6 +24,7 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
   const [disconnectingId, setDisconnectingId] = createSignal<string>();
   const [reconnectingId, setReconnectingId] = createSignal<string>();
   const [reconnectCodes, setReconnectCodes] = createSignal<ReadonlyMap<string, string>>(new Map());
+  const [helperOpen, setHelperOpen] = createSignal(false);
   let pendingRequestId: string | undefined;
   const reconnectRequestIds = new Map<string, string>();
 
@@ -97,6 +98,8 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     isLoading: () => connections.isPending,
     loadFailure: () => connections.error,
     feedback,
+    helperOpen,
+    toggleHelper: () => setHelperOpen((open) => !open),
     pairingCode,
     isStarting: () => start.isPending,
     approvingId,
@@ -165,6 +168,8 @@ export type ConnectionsPageController = {
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
+  readonly helperOpen: Accessor<boolean>;
+  readonly toggleHelper: () => void;
   readonly pairingCode: Accessor<string>;
   readonly isStarting: Accessor<boolean>;
   readonly approvingId: Accessor<string | undefined>;

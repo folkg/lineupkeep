@@ -1,4 +1,3 @@
-import { productName } from "@lineupkeep/brand/product";
 import type { JSX } from "@solidjs/web";
 import type { Accessor } from "solid-js";
 
@@ -19,15 +18,15 @@ export function AuthPage(props: AuthPageProps): JSX.Element {
         variant="form"
         start={
           <IntroPanel
-            cue="Development preview"
+            cue="Your lineup. Looked after."
             title={
               <Heading level={1} size="statement">
-                A clear place to begin.
+                Sign in. Then connect Yahoo.
               </Heading>
             }
           >
             <Text size="lede" tone="muted">
-              This is the {productName} development shell. Fantasy features are not built yet.
+              Sign in by email code. Then one Yahoo sign-in finds your teams.
             </Text>
           </IntroPanel>
         }

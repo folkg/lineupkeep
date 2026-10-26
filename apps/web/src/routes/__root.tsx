@@ -18,7 +18,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       {
         name: "description",
         content:
-          "Lineupkeep development preview. An independent fantasy-management product in preparation.",
+          "Connect Yahoo once. Lineupkeep checks each enabled team's current scoring period every hour and makes the same teams available to an authorized MCP client.",
       },
     ],
     links: [{ rel: "icon", type: "image/svg+xml", href: "/brand/lineupkeep-mark.svg" }],

@@ -23,11 +23,11 @@ import {
 export function FeedbackReportList(props: FeedbackReportListProps): JSX.Element {
   return (
     <Stack as="section" gap="md" labelledBy="feedback-reports-title">
-      <Inline gap="sm" justify="between">
+      <Inline gap="md">
         <Heading id="feedback-reports-title" level={2} size="section">
           Your reports
         </Heading>
-        <Button variant="quiet" onClick={() => void props.onRefresh()}>
+        <Button variant="link" onClick={() => void props.onRefresh()}>
           Refresh
         </Button>
       </Inline>

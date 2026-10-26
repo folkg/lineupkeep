@@ -4,6 +4,7 @@ import type { Accessor } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
+import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -34,6 +35,9 @@ export function FeedbackPage(props: FeedbackPageProps): JSX.Element {
       >
         <Stack gap="xl">
           <Stack as="section" gap="md" labelledBy="feedback-form-title">
+            <Heading id="feedback-form-title" level={2} size="section">
+              Send a report
+            </Heading>
             <Show when={about()}>
               {(summary) => (
                 <Text size="caption" tone="muted">

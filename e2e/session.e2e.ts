@@ -16,14 +16,20 @@ test("renders Sign out in the server HTML when signed in", async ({ newUser, pag
   await expect(navigation.getByRole("link", { name: "Sign in" })).toHaveCount(0);
 });
 
-test("renders Sign in in the server HTML when signed out", async ({ newUser }) => {
+test("renders the sign-in call to action in the server HTML when signed out", async ({
+  newUser,
+}) => {
   const serverRendered = await newUser("server-rendered visitor", { javaScriptEnabled: false });
 
   await serverRendered.goto("/");
 
-  const navigation = serverRendered.getByRole("navigation", { name: "Primary navigation" });
-  await expect(navigation.getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(navigation.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(serverRendered.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(
+    0,
+  );
+  await expect(
+    serverRendered.getByRole("link", { name: "Sign in to connect Yahoo" }),
+  ).toBeVisible();
+  await expect(serverRendered.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });
 
 test("returns home on sign-out and back to the account's connections on sign-in", async ({
@@ -39,7 +45,7 @@ test("returns home on sign-out and back to the account's connections on sign-in"
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL("/");
-  await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in to connect Yahoo" })).toBeVisible();
   await page.goto("/connections");
   await expect(page).toHaveURL("/auth?redirect=%2Fconnections");
   await signIn(page, account);

@@ -5,6 +5,7 @@ import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -43,37 +44,39 @@ export function ConsentPage(props: {
               <Text tone="muted">Client identifier</Text>
               <Text wrap="preserve">{request().client.id}</Text>
               <For each={request().scopes}>{(scope) => <Text>{scope.description}</Text>}</For>
-              <Form
-                gap="md"
-                onSubmit={() => {
-                  void consent.approve();
-                }}
-              >
-                <Button
-                  type="submit"
-                  pending={consent.isApproving()}
-                  pendingLabel="Allowing access…"
-                  disabled={consent.isPending()}
+              <Inline gap="sm">
+                <Form
+                  gap="md"
+                  onSubmit={() => {
+                    void consent.approve();
+                  }}
                 >
-                  Allow access
-                </Button>
-              </Form>
-              <Form
-                gap="md"
-                onSubmit={() => {
-                  void consent.deny();
-                }}
-              >
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  pending={consent.isDenying()}
-                  pendingLabel="Denying access…"
-                  disabled={consent.isPending()}
+                  <Button
+                    type="submit"
+                    pending={consent.isApproving()}
+                    pendingLabel="Allowing access…"
+                    disabled={consent.isPending()}
+                  >
+                    Allow access
+                  </Button>
+                </Form>
+                <Form
+                  gap="md"
+                  onSubmit={() => {
+                    void consent.deny();
+                  }}
                 >
-                  Deny access
-                </Button>
-              </Form>
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    pending={consent.isDenying()}
+                    pendingLabel="Denying access…"
+                    disabled={consent.isPending()}
+                  >
+                    Deny access
+                  </Button>
+                </Form>
+              </Inline>
               <ActionFeedback feedback={consent.feedback()} />
             </Stack>
           )}

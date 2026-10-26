@@ -73,6 +73,9 @@ test("returns to the email step to use a different address", async ({ page }) =>
 test("signs in again after an ended session and returns to the page", async ({ page }) => {
   const account = await signUp(page);
   await page.context().clearCookies();
+  await page
+    .getByRole("button", { name: "Having trouble? Use the local helper", exact: true })
+    .click();
   await page.getByRole("textbox", { name: "Pairing code" }).fill("ABCD2345");
   await page.getByRole("button", { name: "Pair helper" }).click();
   await expect(page.getByText(/^Your session has ended\./)).toBeVisible();

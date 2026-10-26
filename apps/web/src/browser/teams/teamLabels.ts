@@ -88,7 +88,7 @@ export function runExplanation(run: LineupRunView): string {
   }
   switch (run.status) {
     case "queued":
-      return "Accepted into the durable queue. The lineup has not been checked yet.";
+      return "Accepted into the queue. The lineup has not been checked yet.";
     case "reading":
     case "planning":
     case "validating":
@@ -110,7 +110,7 @@ export function runExplanation(run: LineupRunView): string {
 export function targetLabel(target: LineupRunView["target"]): string {
   switch (target.coverage) {
     case "current":
-      return "Current fantasy week";
+      return "Current scoring period";
     case "week":
       return `Week ${String(target.week)}`;
     case "date":

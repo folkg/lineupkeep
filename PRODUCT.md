@@ -26,11 +26,11 @@ Brief desktop and mobile checks around games, sometimes in bright daylight and s
 
 ## Capabilities and Constraints
 
-Planned Phase 1: rich bounded query MCP, provider-native set_lineup, transaction-review links, passwordless open registration, connection/team controls, hourly durable automation, and deduplicated reconnect notifications.
+Implemented Phase 1: passwordless email-code sign-in, hosted browser linking with a local-helper fallback, owner-scoped encrypted Yahoo connections, team discovery, connection and team controls, bounded provider queries, native `set_lineup`, hourly current-period automation, reconnect email, and owner-scoped feedback from the app and MCP clients.
 
-Planned Phase 2: a ground-up pure lineup optimizer, legal same-roster reserve movement, and direct cutover after acceptance. No transactions, server-side LLM, premium entitlement bypass, or user scoring controls.
+Deferred to Phase 2: a ground-up pure lineup optimizer, legal same-roster reserve movement, and direct cutover after acceptance. No transactions, server-side LLM, premium entitlement bypass, or user scoring controls.
 
-These are planned capabilities, not implemented claims. The current checkout contains the starter's auth, Notes demo, MCP and development/test infrastructure plus the Lineupkeep brand foundation. No fantasy domain has been implemented.
+These describe implemented behavior and deferred scope. Do not claim an accuracy guarantee, projection, transaction execution, custom scoring, or a provider that is not connected.
 
 ## Evidence on Hand
 
@@ -48,6 +48,6 @@ Semantic controls, keyboard access, visible focus, AA contrast, touch-sized targ
 
 Lineupkeep in prose; lowercase lineupkeep in the wordmark. One continuous word, one baseline, one colour; the shared “up” is a quiet discovery. Never LineUPkeep or LineUpKeep.
 
-Professional, solid, and energetically sporting—not cheap, mascot-led, gamified, or AI-themed. The owner selected royal violet and gold: vivid violet actions, golden yellow accents, and deep violet ink, with complete light/dark palettes. Do not substitute green or return to extreme restraint. Precise typography and useful information keep the colour confident rather than noisy. No trophies, shields, robot heads, gradient lettering, neon, or sports-betting hype. “Your lineup. Looked after.” is the positioning line, not a promise that the current scaffold already automates teams.
+Professional, solid, and energetically sporting—not cheap, mascot-led, gamified, or AI-themed. The owner selected royal violet and gold: vivid violet actions, golden yellow accents, and deep violet ink, with complete light/dark palettes. Do not substitute green or return to extreme restraint. Precise typography and useful information keep the colour confident rather than noisy. No trophies, shields, robot heads, gradient lettering, neon, or sports-betting hype. “Your lineup. Looked after.” is the positioning line, not an accuracy guarantee.
 
 Replace the starter's theatrical prompt-book identity completely. The owner approved this direction; do not reopen a style tournament during routine implementation. [DESIGN.md](DESIGN.md) owns tokens and application rules; [brand notes](docs/brand/BRAND.md) owns name, voice, and wordmark usage.

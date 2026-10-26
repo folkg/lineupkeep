@@ -35,7 +35,7 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
 
   return (
     <AppShell>
-      <Page lede="What the durable lineup run checked and what it observed." title="Lineup run">
+      <Page lede="What this lineup run checked and what it observed." title="Lineup run">
         <Stack gap="lg">
           <Show
             fallback={<LoadingState label="Loading run">Loading this run…</LoadingState>}
@@ -94,7 +94,6 @@ function RunDetail(props: {
         <Definition term="Last updated" value={formatDateTime(props.run.updatedAt)} />
         <Definition term="Attempts" value={String(props.run.attempts)} />
         <Definition term="Team" value={props.teamName} />
-        <Definition term="Implementation" value={props.run.implementationVersion} />
         <Show when={props.run.pending?.retryAt}>
           {(retryAt) => <Definition term="Retry at" value={formatDateTime(retryAt())} />}
         </Show>

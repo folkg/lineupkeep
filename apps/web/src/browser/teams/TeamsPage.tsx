@@ -21,7 +21,7 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Choose which teams Lineupkeep manages. Automation checks the current fantasy week every hour while a team is enabled."
+        lede="Choose which teams Lineupkeep manages. While a team is enabled, connected, and available, Lineupkeep checks its league's current scoring period every hour — the scoring week in football, the fantasy day in hockey — and starts the active players Yahoo allows."
         title="Teams"
       >
         <Stack gap="lg">

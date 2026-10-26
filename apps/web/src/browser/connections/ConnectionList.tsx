@@ -52,7 +52,7 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No connections yet.">
-                Connect Yahoo above, or pair the local helper below.
+                Connect Yahoo above to find the teams this account can manage.
               </EmptyState>
             }
             when={visibleConnections().length > 0}

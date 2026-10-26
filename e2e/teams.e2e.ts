@@ -10,8 +10,12 @@ test("renders the empty teams surface and links back to provider linking", async
   await page.goto("/teams");
 
   await expect(page.getByRole("heading", { name: "Teams", exact: true })).toBeVisible();
+  await expect(page.getByText("current scoring period", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("the scoring week in football, the fantasy day in hockey"),
+  ).toBeVisible();
   await expect(page.getByText("No teams yet.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Link Yahoo" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Connect Yahoo" })).toHaveAttribute(
     "href",
     "/connections",
   );
@@ -70,7 +74,7 @@ test("renders the teams surface before client scripts and hydrates its navigatio
   }
 
   await expect(page.getByRole("link", { name: "Teams", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Link Yahoo" }).click();
+  await page.getByRole("link", { name: "Connect Yahoo" }).click();
   await expect(page).toHaveURL("/connections");
   expect(hydrationWarnings).toEqual([]);
 });
@@ -90,7 +94,7 @@ for (const viewport of [
     await expect(main.getByRole("heading", { name: "Teams", exact: true })).toBeInViewport({
       ratio: 1,
     });
-    await expect(main.getByRole("link", { name: "Link Yahoo" })).toBeInViewport({
+    await expect(main.getByRole("link", { name: "Connect Yahoo" })).toBeInViewport({
       ratio: 1,
     });
   });

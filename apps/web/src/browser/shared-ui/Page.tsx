@@ -6,7 +6,7 @@ import { Text } from "./Text";
 
 export function Page(props: PageProps): JSX.Element {
   return (
-    <section class="w-full pt-[clamp(34px,4vw,52px)] pb-[max(40px,env(safe-area-inset-bottom))] max-sm:pt-9">
+    <section class="w-full max-w-[48rem] pt-[clamp(34px,4vw,52px)] pb-[max(40px,env(safe-area-inset-bottom))] max-sm:pt-9">
       <header class="mb-[clamp(28px,4vw,44px)] grid max-w-[760px] gap-3">
         <Heading level={1} size="headline">
           {props.title}

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 import { Schema } from "effect";
 
 import { expect, recordServerRequests, signUp, test } from "./support";
@@ -17,6 +17,8 @@ test("pairs a helper through its device code, approves it once, and blocks redem
   await signUp(page);
   const grant = await startHelper(request, requiredOrigin(baseURL));
   await expect(page.getByText("No connections yet.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pair helper" })).toHaveCount(0);
+  await openLocalHelper(page);
   const requests = recordServerRequests(page);
 
   const paired = await requests.during(async () => {
@@ -61,6 +63,7 @@ test("cancels a pairing request before approval and refuses the helper", async (
 }) => {
   await signUp(page);
   const grant = await startHelper(request, requiredOrigin(baseURL));
+  await openLocalHelper(page);
   await page.getByRole("textbox", { name: "Pairing code" }).fill(grant.user_code);
   await page.getByRole("button", { name: "Pair helper" }).click();
   await expect(page.getByText("Helper pairing started.", { exact: true })).toBeVisible();
@@ -113,6 +116,7 @@ test("renders a persisted pairing before client scripts and hydrates cancellatio
     await page.unrouteAll({ behavior: "wait" });
   }
 
+  await openLocalHelper(page);
   await expect(page.getByRole("button", { name: "Pair helper" })).toBeEnabled();
   const requests = recordServerRequests(page);
   const cancelled = await requests.during(async () => {
@@ -164,6 +168,19 @@ test("refuses an unauthenticated helper upload with a safe error", async ({ requ
   expect(response.headers()["cache-control"]).toContain("no-store");
   expect(await response.json()).toEqual({ error: "unauthorized" });
 });
+
+async function openLocalHelper(page: Page): Promise<void> {
+  const trigger = page.getByRole("button", {
+    name: "Having trouble? Use the local helper",
+    exact: true,
+  });
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(trigger).toHaveAttribute("aria-controls", "local-helper");
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Pair helper" })).toBeVisible();
+}
 
 function requiredOrigin(value: string | undefined): string {
   if (value === undefined) {

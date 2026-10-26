@@ -81,7 +81,7 @@ function ReconnectForm(props: {
     <Form gap="sm" onSubmit={props.onStart}>
       <Text size="caption" tone="muted">
         Run the Lineupkeep helper again, enter the new pairing code here, and finish the Yahoo
-        sign-in. The helper uploads the new session; enrollment stays unchanged.
+        sign-in. The helper uploads the new session; your team automation settings stay unchanged.
       </Text>
       <TextField
         autocomplete="off"
@@ -113,16 +113,16 @@ function ConnectionMeta(props: { readonly connection: ConnectionView }): JSX.Ele
               when={props.connection.status === "reconnect-required"}
             >
               <Text size="caption" tone="muted">
-                This connection needs a new provider session. Reconnect the local helper to
-                continue.
+                This connection needs a new provider session. Use the local helper below to
+                reconnect.
               </Text>
             </Show>
           }
           when={props.connection.status === "linking"}
         >
           <Text size="caption" tone="muted">
-            Pairing code <Badge size="cue">{props.connection.pairingCode}</Badge>. Approve the
-            helper after it shows this code.
+            Pairing code <Badge size="cue">{props.connection.pairingCode}</Badge>. Check that the
+            helper shows this code, then approve it.
             <Show when={props.connection.linkingExpiresAt}>
               {(expiresAt) => (
                 <>

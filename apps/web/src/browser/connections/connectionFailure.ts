@@ -66,7 +66,7 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
       case "hosted_browser.unsupported":
         return {
           kind: "rejected",
-          message: "Hosted sign-in is unavailable here. Use the local helper below.",
+          message: "Hosted sign-in is unavailable here. Use the local helper option below.",
         };
       case "hosted_linking.session_active":
         return {

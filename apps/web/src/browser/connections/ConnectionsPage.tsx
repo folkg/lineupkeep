@@ -6,6 +6,7 @@ import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -32,10 +33,10 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Connect Yahoo once in a temporary browser session, or use the local helper on your computer. Your provider password is never stored or logged."
+        lede="Connect Yahoo once. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage."
         title="Connections"
       >
-        <Stack gap="lg">
+        <Stack gap="xl">
           <HostedBrowserPanel controller={hosted} />
           <ConnectionList
             approvingId={page.approvingId}
@@ -53,29 +54,42 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
             onChangeReconnectCode={page.changeReconnectCode}
             onRefresh={page.refresh}
           />
-          <Stack as="section" gap="sm" labelledBy="link-provider-title">
-            <Heading id="link-provider-title" level={2} size="section">
-              Fallback: pair the local helper
-            </Heading>
-            <Text size="body" tone="muted">
-              If the hosted sign-in is unavailable, run the Lineupkeep helper on your computer and
-              enter the pairing code it shows. The request expires after ten minutes, and the helper
-              signs in to the provider itself.
-            </Text>
-            <Form gap="sm" onSubmit={page.startLinking}>
-              <TextField
-                autocomplete="off"
-                autocapitalize="characters"
-                label="Pairing code"
-                spellcheck={false}
-                value={page.pairingCode()}
-                onInput={(event) => page.changePairingCode(event.currentTarget.value)}
-              />
-              <Button pending={page.isStarting()} pendingLabel="Pairing…" type="submit">
-                Pair helper
-              </Button>
-            </Form>
-            <ActionFeedback feedback={page.feedback()} />
+          <Stack as="section" align="start" gap="sm" label="Local helper">
+            <Button
+              aria-controls="local-helper"
+              aria-expanded={page.helperOpen() ? "true" : "false"}
+              variant="link"
+              onClick={page.toggleHelper}
+            >
+              Having trouble? Use the local helper
+            </Button>
+            <Stack id="local-helper" hidden={!page.helperOpen()} gap="sm">
+              <Heading id="local-helper-title" level={2} size="section">
+                Pair the local helper
+              </Heading>
+              <Text size="body" tone="muted">
+                Run the Lineupkeep helper on your computer and enter the code it shows. The code
+                expires after ten minutes; the helper signs in to Yahoo itself.
+              </Text>
+              <Form gap="sm" onSubmit={page.startLinking}>
+                <Stack gap="sm" measure="control">
+                  <TextField
+                    autocomplete="off"
+                    autocapitalize="characters"
+                    label="Pairing code"
+                    spellcheck={false}
+                    value={page.pairingCode()}
+                    onInput={(event) => page.changePairingCode(event.currentTarget.value)}
+                  />
+                </Stack>
+                <Inline gap="sm">
+                  <Button pending={page.isStarting()} pendingLabel="Pairing…" type="submit">
+                    Pair helper
+                  </Button>
+                </Inline>
+              </Form>
+              <ActionFeedback feedback={page.feedback()} />
+            </Stack>
           </Stack>
         </Stack>
       </Page>

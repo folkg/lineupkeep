@@ -2,6 +2,7 @@ import type { JSX } from "@solidjs/web";
 
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { SelectField } from "#browser/shared-ui/SelectField.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextArea } from "#browser/shared-ui/TextArea.tsx";
@@ -42,9 +43,11 @@ export function FeedbackForm(props: FeedbackFormProps): JSX.Element {
         Never include passwords, provider cookies, or account identifiers. Reports are stored as
         plain text and read back only by this account.
       </Text>
-      <Button pending={props.submitting} pendingLabel="Sending…" type="submit">
-        Send feedback
-      </Button>
+      <Inline gap="sm">
+        <Button pending={props.submitting} pendingLabel="Sending…" type="submit">
+          Send feedback
+        </Button>
+      </Inline>
     </Form>
   );
 }

@@ -185,7 +185,7 @@ Body/supporting/placeholder text must meet 4.5:1. Large text, focus, and essenti
 
 ## Layout
 
-Generous separation between tasks, tight grouping inside them. A four-pixel base rhythm with the recorded spacing steps supports familiar product layouts. Desktop can put controls beside a list; mobile stacks them in task order. Maximum application content width is 76rem.
+Generous separation between tasks, tight grouping inside them. A four-pixel base rhythm with the recorded spacing steps supports familiar product layouts. Desktop can put controls beside a list; mobile stacks them in task order. Maximum application content width is 76rem; operational page content caps at 48rem so controls size to their content rather than to the viewport. On small screens the primary navigation occupies its own header row; signed-out visitors see no application navigation before sign-in.
 
 Lists/tables—not repeated marketing cards—own teams and run history when those features are implemented. Shared alignment is the visual signature: wordmark, headings, labels, state text, and row rules sit on a disciplined baseline. No field grids, ornamental numbers, podiums, or trading-terminal clutter.
 
