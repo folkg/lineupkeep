@@ -65,6 +65,40 @@ export default {
       },
     ),
     forbid(
+      "lineup-scoring-is-pure",
+      "League scoring is arithmetic on declared rules; keep provider, persistence, transport, application, clock, and lineup-assignment code out of packages/lineup-scoring.",
+      { path: "^packages/lineup-scoring/src/" },
+      {
+        path: [
+          "^packages/backend/",
+          "^packages/hosted-browser/",
+          "^packages/lineup-solver/",
+          "^packages/lineup-policy/",
+          "^apps/",
+          "^infra/",
+          "^e2e/",
+          "^tools/",
+          "(?:^|/node_modules/)(?:effect|@effect|drizzle-orm|drizzle-kit|pg|postgres|better-auth|alchemy|@alchemy\\.run|munkres)(?:/|$)",
+        ],
+      },
+    ),
+    forbid(
+      "lineup-policy-is-pure",
+      "The lineup policy decides values from observations; keep provider, persistence, transport, application, and clock code out of packages/lineup-policy.",
+      { path: "^packages/lineup-policy/src/" },
+      {
+        path: [
+          "^packages/backend/",
+          "^packages/hosted-browser/",
+          "^apps/",
+          "^infra/",
+          "^e2e/",
+          "^tools/",
+          "(?:^|/node_modules/)(?:effect|@effect|drizzle-orm|drizzle-kit|pg|postgres|better-auth|alchemy|@alchemy\\.run)(?:/|$)",
+        ],
+      },
+    ),
+    forbid(
       "database-utilities-only-used-by-repositories",
       "SQL utilities outside persistence bypass owned queries; gather domain commands in services and call the repository's atomic batch operation.",
       {

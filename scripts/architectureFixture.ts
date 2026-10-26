@@ -27,6 +27,8 @@ export async function checkArchitecture(
         "packages/backend/src",
         "packages/brand/src",
         "packages/lineup-solver/src",
+        "packages/lineup-scoring/src",
+        "packages/lineup-policy/src",
         "apps/web/src",
         "e2e",
         "infra",
@@ -135,6 +137,8 @@ function createFixture(files: Readonly<Record<string, string>>): string {
       "packages/backend",
       "packages/brand",
       "packages/lineup-solver",
+      "packages/lineup-scoring",
+      "packages/lineup-policy",
       "apps/web",
     ]) {
       mkdirSync(join(fixture, workspace, "src"), { recursive: true });
@@ -162,6 +166,8 @@ function createFixture(files: Readonly<Record<string, string>>): string {
       ["backend", "packages/backend"],
       ["brand", "packages/brand"],
       ["lineup-solver", "packages/lineup-solver"],
+      ["lineup-scoring", "packages/lineup-scoring"],
+      ["lineup-policy", "packages/lineup-policy"],
       ["web", "apps/web"],
       ["infra", "infra"],
       ["tools", "tools"],

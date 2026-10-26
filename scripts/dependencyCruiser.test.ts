@@ -1342,3 +1342,80 @@ it.each([
 
   expect(result.status).toBeGreaterThan(0);
 });
+
+it("accepts a pure scoring engine and a policy that composes the solver", async () => {
+  const result = await checkArchitecture({
+    "packages/lineup-scoring/src/index.ts":
+      "export const score = (value: number): number => value * 2;",
+    "packages/lineup-solver/src/index.ts": "export const solve = (): number => 0;",
+    "packages/lineup-policy/src/policy.ts":
+      'import { score } from "../../lineup-scoring/src/index.ts"; import { solve } from "../../lineup-solver/src/index.ts"; export const plan = (): number => solve() + score(1);',
+  });
+
+  expect(result.status, result.output).toBe(0);
+});
+
+it.each([
+  [
+    "an application contract",
+    'export { value } from "@lineupkeep/backend/connections/Provider";',
+    "packages/backend/src/contexts/connections/Provider.ts",
+  ],
+  [
+    "an Effect service import",
+    'import { Schema } from "effect"; export const value = Schema.String;',
+    undefined,
+  ],
+  [
+    "lineup assignment",
+    'import { solveLineup } from "@lineupkeep/lineup-solver"; export const value = solveLineup;',
+    "packages/lineup-solver/src/index.ts",
+  ],
+])("rejects %s in the pure scoring engine", async (_name, source, dependency) => {
+  const result = await checkArchitecture({
+    ...(dependency === undefined ? {} : { [dependency]: "export const value = 1;" }),
+    "packages/lineup-scoring/src/score.ts": source,
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("lineup-scoring-is-pure");
+});
+
+it.each([
+  [
+    "an application contract",
+    'export { value } from "@lineupkeep/backend/connections/Provider";',
+    "packages/backend/src/contexts/connections/Provider.ts",
+  ],
+  [
+    "an Effect service import",
+    'import { Schema } from "effect"; export const value = Schema.String;',
+    undefined,
+  ],
+])("rejects %s in the lineup policy", async (_name, source, dependency) => {
+  const result = await checkArchitecture({
+    ...(dependency === undefined ? {} : { [dependency]: "export const value = 1;" }),
+    "packages/lineup-policy/src/policy.ts": source,
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("lineup-policy-is-pure");
+});
+
+it.each([
+  ["the clock", "export const now = Date.now();"],
+  ["network access", 'export const load = () => fetch("https://example.com");'],
+])("rejects %s in the pure scoring engine", async (_name, source) => {
+  const result = await checkLint({ "packages/lineup-scoring/src/score.ts": source });
+
+  expect(result.status).toBeGreaterThan(0);
+});
+
+it.each([
+  ["the clock", "export const now = Date.now();"],
+  ["randomness", "export const pick = Math.random();"],
+])("rejects %s in the lineup policy", async (_name, source) => {
+  const result = await checkLint({ "packages/lineup-policy/src/policy.ts": source });
+
+  expect(result.status).toBeGreaterThan(0);
+});
