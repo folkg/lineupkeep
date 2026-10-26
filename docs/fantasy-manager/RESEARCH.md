@@ -469,8 +469,148 @@ excluded from the team total. One hand-checkable row: the week-6 quarterback sco
 
 ### Still unverified after this pass
 
-- Every write path, including native start-active and explicit assignment requests.
+- Every write path, including native start-active and explicit assignment requests. The native
+  writes were verified later on 2026-10-25 and explicit assignments on 2026-10-26; see the two write
+  sections below.
 - Whether Yahoo accepts a starting slot left empty, and whether the declared bench count is a hard
   maximum rather than a pooled standard-roster allowance.
 - Lock transitions inside a scoring day for date-scoped hockey leagues.
 - Any per-player remaining-games, probable-starter, or projection signal.
+
+## Live Yahoo native write verification (2026-10-25)
+
+The owner authorized one native `set_lineup` run on their own football team and a date-scoped native
+write on one of their own hockey teams. Both used the stored provider session and the committed
+adapter through `PublicInternet` with the real transport; no cookie, crumb, team key, player name, or
+provider body was printed, written, or committed.
+
+- **Football.** The first committed shape addressed the read-only origin, placed the coverage
+  selector in the path, and sent an undocumented `roster_action` element; the provider rejected it
+  with no change. The corrected request is a `PUT` to the read-write origin's
+  `/fantasy/v2/team/{team_key}/roster?format=json_f&crumb={crumb}` with
+  `content-type: application/xml` and a body of
+  `<fantasy_content><roster><coverage_type>week</coverage_type><week>{week}</week><action>start_active_players</action></roster></fantasy_content>`.
+  The corrected run completed as a verified `no_op` in 1,583 ms with 0 changes, 2 locked and 13
+  editable players; a direct corrected request returned HTTP 200 with a `status: success` envelope.
+  Full counts and timings are in [the Phase 1 acceptance record](../phase-1-acceptance-2026-10-25.md#native-set_lineup).
+- **Hockey, date coverage.** A `PUT` to the same endpoint with
+  `<coverage_type>date</coverage_type><date>{date}</date><action>start_active_players</action>`
+  was accepted. The readback kept the same date coverage and membership, reported 0 changed slots,
+  and showed 5 locked and 15 editable players. The disposable harness recorded only outcome tags
+  and counts in gitignored `.artifacts/live-yahoo/evidence-date-write.json`.
+
+This establishes the read-write origin, crumb use, coverage selectors, and native action body, but
+not a changed native action, an explicit assignment, or an uncertain-response reconciliation live.
+
+## Live Yahoo explicit assignment write verification (2026-10-26)
+
+The owner authorized read-only access plus one minimal real write on their own football team. A
+disposable gitignored harness (`.artifacts/phase2-evidence/explicit-write.ts`) decrypted the stored
+provider credential with the application's own credential service and called the committed
+`YahooProvider` through `PublicInternet` with the real transport. It read the league settings, the
+current roster, and weeks 3–6 of player statistics, planned week 7 with the committed policy and
+solver, translated the plan, sent the one write, and read the roster back. Retained evidence holds
+counts, slot names, status tags, and request shapes only; no key, cookie, crumb, name, team key,
+league id, or provider body is recorded here.
+
+### Request shape
+
+```text
+PUT https://pub-api-rw.fantasysports.yahoo.com/fantasy/v2/team/{team_key}/roster?format=json_f&crumb={crumb}
+accept: application/json
+content-type: application/xml
+cookie: {session}
+
+<?xml version="1.0" encoding="UTF-8"?>
+<fantasy_content>
+  <roster>
+    <coverage_type>week</coverage_type>
+    <week>7</week>
+    <players>
+      <player>
+        <player_key>{player_key}</player_key>
+        <position>BN</position>
+      </player>
+    </players>
+  </roster>
+</fantasy_content>
+```
+
+This is Yahoo's documented roster edit shape for the API origin, reached through the read-write
+frontend origin the native action already uses. The `players` collection carries one entry per
+changed assignment; no `add`, `drop`, `trade`, or `action` element is present. The live probe sent a
+single assignment for an editable bench player to the bench position they already occupied, so the
+lineup could not change even if the request were misinterpreted.
+
+Official documentation states the partial-update rule: players whose position is not changed keep
+their previous position, and an invalid move returns an error with no changes made. That is the
+basis for sending only changed assignments rather than every roster member; the live readback
+tested it with 14 unmentioned players.
+
+### Observed outcome
+
+| Observation            | Result                                                                |
+| ---------------------- | --------------------------------------------------------------------- |
+| Target period          | Week 7, weekly roster coverage                                        |
+| Window and basis       | Weeks 3–6, `yahoo:mean-points-per-period:week:3,week:4,week:5,week:6` |
+| Roster                 | 15 players, 13 locked, 2 editable                                     |
+| Plan                   | Zero changes; filled 9/9 required starting positions                  |
+| Translation            | `no_op`; no changed editable assignment exists                        |
+| Write                  | One no-op explicit assignment, accepted (HTTP 2xx)                    |
+| Readback coverage      | Week 7, matching the write target                                     |
+| Readback membership    | Same 15 players                                                       |
+| Readback changed slots | 0                                                                     |
+| Readback locks         | 13 locked, 2 editable                                                 |
+
+What this establishes:
+
+- The read-write origin accepts the explicit `<players><player><player_key>/<position>` body with
+  the crumb and `format=json_f`, and the adapter classifies the response as accepted.
+- A partial request that mentions one player leaves the other 14 roster members and their slots
+  unchanged, matching the documented rule.
+- The committed policy and solver plan the live football roster exactly as the
+  [worked example](POLICY.md#worked-example-a-real-football-lineup) records: 114.41 points and zero
+  changes because 13 players are locked.
+
+What it does not establish:
+
+- **A changed explicit assignment.** Every change the plan would make requires moving a locked
+  player. The only two editable players are bench players whose remaining legal destination is the
+  same bench position, so no expressible change existed at the time of the write. The changed path
+  is proven against the behavioural provider fake and the documented rule, not live. A second live
+  pass is needed after the week rolls, with an editable roster, to show a changed assignment and
+  its readback.
+- **The explicit response envelope.** The adapter discards the write response body and classifies
+  2xx as accepted; the harness did not retain the body for this request. The earlier native probe
+  observed `fantasy_content.roster.status: success` at HTTP 200. The explicit response may carry
+  the same envelope, but that was not observed and is not depended on. The roster readback is the
+  authority.
+- **Error codes.** No explicit-assignment rejection was observed live. The adapter maps 400 and other
+  4xx responses to `invalid_request` with no retry, 404 to `not_found`, 408/429 to `not_sent`,
+  5xx or an unavailable transport to `unknown`, and 401/403 to a rejected session. These mappings
+  follow the native action's observed behaviour and the documented all-or-nothing rejection rule,
+  not a live explicit rejection.
+
+### Read-only batch-history re-verification (2026-10-26)
+
+A second read-only harness (`.artifacts/phase2-evidence/history-read.ts`) exercised the worker's
+batched `readPlayerHistory` operation against the same team after the implementation settled. It
+requested the four-week observation window in one operation (one bounded request per period),
+received 15 player details for each week with actual statistics, and reproduced the 114.41-point
+plan, 9/9 starting positions, zero changes, and a `no_op` translation. No write was sent. This
+verifies the worker's history read path live; the changed-assignment write path remains
+fake-tested only.
+
+Still unverified after this pass:
+
+- A changed explicit assignment accepted and verified live.
+- Whether an assignment for a locked player is rejected with a specific provider error (the adapter
+  never sends one).
+- Whether a reserve-list position (`IR`, `IR+`, `NA`) is accepted by this roster endpoint; the
+  adapter refuses reserve-list moves rather than relying on it.
+- Whether a starting slot left empty is accepted, and whether the bench count is a hard maximum or a
+  pooled allowance.
+- Concurrent human edits between the pre-write read and the provider applying the request. No
+  provider compare-and-set or idempotency token exists; the adapter detects edits visible in the
+  pre-write re-read and relies on all-or-nothing rejection otherwise, but cannot eliminate the
+  final window.

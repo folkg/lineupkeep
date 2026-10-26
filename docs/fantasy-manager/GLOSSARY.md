@@ -101,6 +101,10 @@ An unresolved provider-access problem requiring the user to act, such as reconne
 **Uncertain lineup result**:
 A lineup attempt whose provider acceptance or resulting assignments cannot be established reliably. It is neither verified success nor proof that no change occurred.
 
+**Policy provenance**:
+The recorded implementation and selection policy, or the policy refusal that caused a fallback, for one lineup attempt. It lets a later reader tell what the attempt actually ran rather than what was requested.
+_Avoid_: Version when referring to the whole provenance
+
 ## Feedback
 
 **Feedback report**:
@@ -118,6 +122,10 @@ The bounded number of feedback reports one account, and one acting client label,
 
 **Native start-active action**:
 A provider's own action to select active starters without using this application's lineup optimizer. It is not a guarantee of an optimal projected score.
+
+**Explicit assignment request**:
+A provider write that sets named roster players to named slots for one lineup period. It is incapable of adding, dropping, or trading a player, and sends only assignments that differ from the provider's observed lineup and that the provider reports as editable.
+_Avoid_: Roster submission when referring only to slot assignments
 
 **Lineup optimization**:
 Choosing roster-slot assignments according to an objective while respecting the applicable roster and eligibility constraints.

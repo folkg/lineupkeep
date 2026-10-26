@@ -112,6 +112,21 @@ Inject a failure at each meaningful side-effect boundary and assert returned/per
 
 Transport-level sensitivity controls matter: the fake provider must actually accept/mutate before simulating lost response in the accepted-write case. A test that never performs the side effect cannot prove recovery from it.
 
+### Explicit assignment reconciliation
+
+The behavioural provider fake applies the explicit assignments it accepts, so each lost-response case exercises the real side effect. The durable worker proves:
+
+- Accepted with a matching readback: completed, verified, not reconciled.
+- Accepted with a differing readback: failed, verified, every mismatched assignment recorded, and no automatic retry.
+- Response lost with a matching readback: reconciled change, no second write.
+- Response lost with an unchanged readback: `retry-wait`, the intent marked not sent, no second write inside the attempt, and one write after a forced retry.
+- A slot or lock edit between the planning read and the pre-write re-read: bounded replan from the fresh roster, recorded as source-changed.
+- A membership or coverage change between those reads: blocked with no write.
+- A scoring-week change between the planning league read and the pre-write league read: blocked with no write.
+- A policy that cannot score the league: the provider-native action runs and the outcome records `provider_native` with the policy refusal.
+
+Detected races are limited to observations the provider publishes in its roster and league reads: slot assignments, membership, per-player editability, coverage, and the current scoring week. A scoring-week roll after the pre-write league read, an edit after the pre-write roster read, and a lock transition the provider does not publish are not locally detectable; the provider's all-or-nothing rejection and the post-write readback are the backstops.
+
 ## 7. Provider contracts and privacy
 
 Use a small set of sanitized, hand-minimized fixtures covering structurally distinct Yahoo responses: current/historical discovery, multiple teams in one league, nested league/player projections, date/week/season coverage, missing stats, zeros, locks, and error bodies. Add a synthetic provider with different keys, week identifiers, rollover, and batch behavior.

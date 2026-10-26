@@ -219,7 +219,8 @@ the league actually plays under.
 ## What this policy does not do
 
 - It does not read a provider, validate a session, or refresh period coverage.
-- It does not write a lineup, and it does not translate a plan into provider requests.
+- It does not write a lineup. It produces a plan; the provider adapter translates the changed
+  assignments into the provider's request and verifies the readback.
 - It does not consider opponents, matchups, remaining games, weather, or probable starters.
 - It does not use ranks, ownership, or percent-started values, and it will not mix a weekly total with
   a season total in one value.
