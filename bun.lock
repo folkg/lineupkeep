@@ -127,6 +127,9 @@
         "@effect/sql-pglite": "catalog:",
         "@electric-sql/pglite": "catalog:",
         "@lineupkeep/brand": "workspace:*",
+        "@lineupkeep/lineup-policy": "workspace:*",
+        "@lineupkeep/lineup-scoring": "workspace:*",
+        "@lineupkeep/lineup-solver": "workspace:*",
         "@typeonce/effect-machine": "catalog:",
         "better-auth": "catalog:",
         "drizzle-orm": "catalog:",
@@ -143,6 +146,16 @@
       "dependencies": {
         "playwright": "catalog:",
       },
+    },
+    "packages/lineup-policy": {
+      "name": "@lineupkeep/lineup-policy",
+      "dependencies": {
+        "@lineupkeep/lineup-scoring": "workspace:*",
+        "@lineupkeep/lineup-solver": "workspace:*",
+      },
+    },
+    "packages/lineup-scoring": {
+      "name": "@lineupkeep/lineup-scoring",
     },
     "packages/lineup-solver": {
       "name": "@lineupkeep/lineup-solver",
@@ -611,6 +624,10 @@
     "@lineupkeep/hosted-browser-service": ["@lineupkeep/hosted-browser-service@workspace:apps/hosted-browser"],
 
     "@lineupkeep/infra": ["@lineupkeep/infra@workspace:infra"],
+
+    "@lineupkeep/lineup-policy": ["@lineupkeep/lineup-policy@workspace:packages/lineup-policy"],
+
+    "@lineupkeep/lineup-scoring": ["@lineupkeep/lineup-scoring@workspace:packages/lineup-scoring"],
 
     "@lineupkeep/lineup-solver": ["@lineupkeep/lineup-solver@workspace:packages/lineup-solver"],
 
