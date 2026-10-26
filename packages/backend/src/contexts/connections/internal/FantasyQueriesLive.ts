@@ -482,7 +482,7 @@ export const FantasyQueriesLive = Layer.effect(
         }
       }
       if (rosterOutcome._tag !== "ok") {
-        return rosterWithoutData(team, period, fetchedAt, rosterOutcome);
+        return rosterWithoutData(team, period, fetchedAt, rosterOutcome, leagueOutcome);
       }
       const roster = rosterOutcome.value;
       const rosterCoverage =
@@ -1276,6 +1276,7 @@ function rosterWithoutData(
   period: QueryPeriod | undefined,
   fetchedAt: DateTime.Utc,
   outcome: ReadOutcome<ProviderRoster>,
+  league: ReadOutcome<ProviderLeagueSettings>,
 ): RosterData {
   return {
     status: outcome._tag === "unsupported" ? "unsupported" : "failed",
@@ -1283,11 +1284,12 @@ function rosterWithoutData(
     ...(period === undefined ? {} : { period }),
     players: [],
     coverage: [
+      leagueCoverage(league, fetchedAt),
       outcome._tag === "ok"
         ? coverage("roster", "roster", fetchedAt)
         : unsupportedCoverage("roster", "roster", fetchedAt),
     ],
-    failures: outcome._tag === "failed" ? [outcome.failure] : [],
+    failures: [...leagueFailure(league), ...(outcome._tag === "failed" ? [outcome.failure] : [])],
     page: emptyPage(),
     budget: queryBudget,
   };

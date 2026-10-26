@@ -195,6 +195,33 @@ it.effect("keeps roster, calendar, and matchup reads with degraded league covera
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("keeps the league failure when the roster read also fails", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.failLeague(
+      ProviderResponseInvalid.make({ operation: "read_league", field: "league.num_teams" }),
+    );
+
+    const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 9 } });
+
+    assert.strictEqual(roster.status, "failed");
+    if (roster.status !== "failed") {
+      return;
+    }
+    assert.deepStrictEqual(
+      roster.failures.map((failure) => failure.code),
+      ["provider_invalid_response", "period_unavailable"],
+    );
+    assert.strictEqual(
+      roster.coverage.find((entry) => entry.resource === "league")?.status,
+      "degraded",
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("reports a league without a scoring-week window instead of inventing periods", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
