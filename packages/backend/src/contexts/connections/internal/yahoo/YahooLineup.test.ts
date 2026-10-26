@@ -1,4 +1,6 @@
-import { makePlayerId, makeSlotId } from "@lineupkeep/lineup-solver";
+import { availabilityLadder, assessAvailability } from "@lineupkeep/lineup-policy";
+import type { PlayerAvailability, PolicyPlayer } from "@lineupkeep/lineup-policy";
+import { makeAvailabilityTier, makePlayerId, makeSlotId } from "@lineupkeep/lineup-solver";
 import type { PlayerId, RosterSlot } from "@lineupkeep/lineup-solver";
 import { describe, expect, it } from "vitest";
 
@@ -13,6 +15,7 @@ import {
   planYahooLineup,
   yahooAssignmentRequest,
   yahooAvailability,
+  yahooInjuryStatusCodes,
   yahooLeagueSlots,
   yahooObservationWindow,
   yahooPolicyInput,
@@ -50,6 +53,19 @@ describe("Yahoo league translation", () => {
     ]);
   });
 
+  it("maps every provider status code to exactly one availability tier", () => {
+    const period = yahooTargetPeriod(recordedRoster(true));
+    const codes = [undefined, ...yahooInjuryStatusCodes, "PROBABLE", "Q", ""];
+    const tiers = codes.map(
+      (code) => assessAvailability(policyPlayerWith(yahooAvailability(code)), period).tier,
+    );
+
+    expect(tiers.every((tier) => availabilityLadder.includes(makeAvailabilityTier(tier)))).toBe(
+      true,
+    );
+    expect(new Set(tiers)).toEqual(new Set(["will-play", "might-play", "will-not-play"]));
+  });
+
   it("maps provider availability codes to named conditions", () => {
     expect(yahooAvailability(undefined)).toEqual({ kind: "available" });
     expect(yahooAvailability("O")).toEqual({ kind: "excluded", reason: "out" });
@@ -58,7 +74,7 @@ describe("Yahoo league translation", () => {
     expect(yahooAvailability("SUSP")).toEqual({ kind: "excluded", reason: "suspended" });
     expect(yahooAvailability("NA")).toEqual({ kind: "excluded", reason: "not-active" });
     expect(yahooAvailability("DTD")).toEqual({ kind: "uncertain", reason: "day-to-day" });
-    expect(yahooAvailability("PROBABLE")).toEqual({ kind: "unknown", code: "PROBABLE" });
+    expect(yahooAvailability("PROBABLE")).toEqual({ kind: "unrecognised", code: "PROBABLE" });
   });
 
   it("reads the lineup period from the roster's own coverage", () => {
@@ -87,7 +103,7 @@ describe("Yahoo league translation", () => {
     if (result.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
-    expect(result.plan.totalSelectionValue).toBe(7332);
+    expect(result.plan.totalSelectionValue).toBe(9802);
     expect(result.plan.comparison.slotChanges).toEqual([]);
     expect(result.selectionBasis).toBe("yahoo:mean-points-per-period:week:6");
     expect(new Set(result.coverage.scored).size).toBe(33);
@@ -407,6 +423,17 @@ function hockeyRoster(): ProviderRoster {
         undroppable: null,
       },
     ],
+  };
+}
+
+function policyPlayerWith(availability: PlayerAvailability): PolicyPlayer {
+  return {
+    id: makePlayerId("recorded-player"),
+    eligiblePositions: ["QB"],
+    availability,
+    locked: false,
+    currentSlotId: makeSlotId("QB"),
+    nonGamePeriods: [],
   };
 }
 

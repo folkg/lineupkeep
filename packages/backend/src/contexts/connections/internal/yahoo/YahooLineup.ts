@@ -261,22 +261,19 @@ export function yahooAvailability(injuryCode: string | undefined): PlayerAvailab
   if (injuryCode === undefined) {
     return { kind: "available" };
   }
-  switch (injuryCode) {
-    case "O":
-      return { kind: "excluded", reason: "out" };
-    case "IR":
-    case "IR-LT":
-      return { kind: "excluded", reason: "injured-reserve" };
-    case "SUSP":
-      return { kind: "excluded", reason: "suspended" };
-    case "NA":
-      return { kind: "excluded", reason: "not-active" };
-    case "DTD":
-      return { kind: "uncertain", reason: "day-to-day" };
-    default:
-      return { kind: "unknown", code: injuryCode };
-  }
+  return availabilityByInjuryCode[injuryCode] ?? { kind: "unrecognised", code: injuryCode };
 }
+
+const availabilityByInjuryCode: Readonly<Record<string, PlayerAvailability>> = {
+  O: { kind: "excluded", reason: "out" },
+  IR: { kind: "excluded", reason: "injured-reserve" },
+  "IR-LT": { kind: "excluded", reason: "injured-reserve" },
+  SUSP: { kind: "excluded", reason: "suspended" },
+  NA: { kind: "excluded", reason: "not-active" },
+  DTD: { kind: "uncertain", reason: "day-to-day" },
+};
+
+export const yahooInjuryStatusCodes: ReadonlyArray<string> = Object.keys(availabilityByInjuryCode);
 
 function rosterSlot(position: ProviderRosterPosition): RosterSlot {
   const id = makeSlotId(position.position);
