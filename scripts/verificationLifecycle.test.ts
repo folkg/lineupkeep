@@ -615,6 +615,9 @@ async function lifecycleFixture(): Promise<{
     create: (signal) => {
       database.creations += 1;
       if (database.create === "hang") {
+        if (signal.aborted) {
+          return Promise.reject(new Error("Creation was cancelled."));
+        }
         return new Promise((_, reject) => {
           signal.addEventListener("abort", () => reject(new Error("Creation was cancelled.")), {
             once: true,

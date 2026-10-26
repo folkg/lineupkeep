@@ -113,6 +113,7 @@ async function acquireInfrastructure(
   steps: Array<CleanupStep>,
   adopt: (pid: number) => void,
 ): Promise<Stack> {
+  plan.signal.throwIfAborted();
   await owner.setInfrastructure("creating");
   let confirmed = false;
 
