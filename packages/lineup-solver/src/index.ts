@@ -8,6 +8,7 @@ export {
   playerMayOccupySlot,
   startingSelectionValue,
 } from "./lineup.ts";
+export { solveLineup } from "./solve.ts";
 export {
   knownSelection,
   makePlayerId,

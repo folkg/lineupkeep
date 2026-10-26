@@ -5,5 +5,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "munkres": "2.1.1"
   }
 }
