@@ -1554,9 +1554,7 @@ const RosterEntry = Schema.Struct({
 
 const TeamRosterPayload = Schema.Struct({
   team: Schema.Struct({
-    team_key: Schema.String.pipe(
-      Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u)),
-    ),
+    team_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u))),
     roster: Schema.Union([
       Schema.Array(RosterEntry),
       Schema.Struct({ ...RosterCoverage.fields, entries: Schema.Array(RosterEntry) }),

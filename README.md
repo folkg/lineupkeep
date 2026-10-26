@@ -83,7 +83,7 @@ The owner has chosen to proceed with local implementation on the current pinned 
 
 Open **Connections** and choose **Connect Yahoo**. A private browser opens inside the page; sign in there once. Lineupkeep never stores your password, and keystrokes are relayed only to that temporary browser. When Yahoo accepts the sign-in, the connection becomes ready, teams are discovered automatically, and the app opens **Teams**. No install, code copy, or second approval is required. The temporary browser profile is destroyed when the session ends.
 
-Hosted sign-in runs on the Node target. The Cloudflare target returns `hosted_browser.unsupported`; the dedicated production browser service is [planned but not provisioned](docs/fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md). The local helper remains the fallback when hosted sign-in is unavailable:
+Hosted sign-in runs on the Node target when a Playwright Chromium is installed. The Cloudflare target and a Node image without that browser report `hosted_browser.unsupported`; the dedicated production browser service is [planned but not provisioned](docs/fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md). The local helper remains the fallback when hosted sign-in is unavailable:
 
 ```sh
 ./node_modules/.bin/lineupkeep link

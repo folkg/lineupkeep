@@ -1443,11 +1443,7 @@ export const yahooNflLeagueTeamsForAnotherLeague = {
         teams: {
           "0": {
             team: [
-              [
-                { team_key: "466.l.4001.t.1" },
-                { team_id: "1" },
-                { name: "Foreign Team" },
-              ],
+              [{ team_key: "466.l.4001.t.1" }, { team_id: "1" }, { name: "Foreign Team" }],
               [],
             ],
           },

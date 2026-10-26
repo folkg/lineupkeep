@@ -237,8 +237,10 @@ Choose client-address headers from actual trusted ingress: Cloudflare's `cf-conn
 The local Node target still runs Playwright Chromium in-process for development
 and tests. The `cloud-run` stage runs the dedicated IAM-only browser service
 `lineupkeep-hb` and the web service proxies each owner-bound session to it. The
-Cloudflare target returns `hosted_browser.unsupported`; the local-helper path
-remains available on every target.
+Cloudflare target returns `hosted_browser.unsupported`; so does a Node image
+without the Playwright Chromium executable, which the node target checks before
+claiming hosted linking is available. The local-helper path remains available on
+every target.
 
 The web mints a Cloud Run ID token for the exact service URL from the metadata
 server and opens WSS with an HMAC-signed descriptor (session id, expiry of at

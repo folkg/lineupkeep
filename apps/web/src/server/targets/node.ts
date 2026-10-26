@@ -3,7 +3,10 @@ import { longRunningProcess } from "@lineupkeep/backend/runtime/BackendPlatform"
 import { BackendRuntime } from "#backend-runtime";
 import { cloudRunIdentityToken } from "#server/hostedLinking/cloudRunIdentity.ts";
 import type { HostedBrowserFactory } from "#server/hostedLinking/HostedBrowser.ts";
-import { playwrightHostedBrowser } from "#server/hostedLinking/playwrightHostedBrowser.ts";
+import {
+  chromiumInstalled,
+  playwrightHostedBrowser,
+} from "#server/hostedLinking/playwrightHostedBrowser.ts";
 import { createRemoteHostedBrowser } from "#server/hostedLinking/remoteHostedBrowser.ts";
 
 import type { DeploymentTarget } from "./DeploymentTarget";
@@ -19,10 +22,10 @@ export const deploymentTarget: DeploymentTarget = {
   },
 };
 
-function hostedBrowserFactory(): HostedBrowserFactory {
+function hostedBrowserFactory(): HostedBrowserFactory | undefined {
   const url = process.env["HOSTED_BROWSER_URL"];
   if (url === undefined || url === "") {
-    return playwrightHostedBrowser;
+    return chromiumInstalled() ? playwrightHostedBrowser : undefined;
   }
   const descriptorKey = process.env["HOSTED_BROWSER_DESCRIPTOR_KEY"];
   if (descriptorKey === undefined || descriptorKey === "") {

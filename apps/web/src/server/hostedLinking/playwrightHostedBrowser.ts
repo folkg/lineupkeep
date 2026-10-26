@@ -1,5 +1,8 @@
+import { existsSync } from "node:fs";
+
 import { createHostedBrowser } from "@lineupkeep/hosted-browser/browser";
 import { DateTime, Redacted } from "effect";
+import { chromium } from "playwright";
 
 import type { HostedBrowserMessage } from "#contracts/connections/hostedBrowserProtocol.ts";
 
@@ -8,6 +11,14 @@ import type {
   HostedBrowserFactory,
   HostedBrowserSession,
 } from "./HostedBrowser.ts";
+
+export function chromiumInstalled(): boolean {
+  try {
+    return existsSync(chromium.executablePath());
+  } catch {
+    return false;
+  }
+}
 
 export function createPlaywrightHostedBrowser(
   options: { readonly profileRoot?: string } = {},

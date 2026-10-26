@@ -1,12 +1,9 @@
 import { expect, signUp, test } from "./support";
 import { captureCheckpoint } from "./verify/capture";
 
-test.skip(
-  process.env["E2E_TARGET"] === "cloudflare" || process.env["E2E_TARGET"] === "container",
-  "Only the Node target runs an in-process hosted browser; the other images have no browser runtime.",
-);
+const hostedBrowserAvailable = (process.env["E2E_TARGET"] ?? "node") === "node";
 
-test("signs in through the hosted browser, opens teams, and refuses another owner", async ({
+test("signs in through the hosted browser or reports why it is unavailable", async ({
   page,
   newUser,
 }, info) => {
@@ -16,6 +13,16 @@ test("signs in through the hosted browser, opens teams, and refuses another owne
   await signUp(page);
   await expect(page.getByRole("button", { name: "Connect Yahoo" })).toBeVisible();
   await page.getByRole("button", { name: "Connect Yahoo" }).click();
+
+  if (!hostedBrowserAvailable) {
+    await expect(
+      page.getByText("Hosted sign-in is unavailable here. Use the local helper below.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(sockets).toEqual([]);
+    return;
+  }
 
   const signInView = page.getByRole("button", { name: "Yahoo sign-in browser" });
   await expect(signInView).toBeVisible();
