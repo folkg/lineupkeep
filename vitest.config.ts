@@ -8,6 +8,8 @@ const solidWebRuntime = new URL("./node_modules/@solidjs/web/dist/server.js", im
 
 const maxWorkers = "70%";
 
+const hangGuardTimeoutMs = 30_000;
+
 const chromiumTests = [
   "apps/hosted-browser/src/server.test.ts",
   "apps/web/src/server/hostedLinking/playwrightHostedBrowser.test.ts",
@@ -70,6 +72,8 @@ export default defineConfig({
           ...nodeProject.test,
           name: "node",
           maxWorkers,
+          testTimeout: hangGuardTimeoutMs,
+          hookTimeout: hangGuardTimeoutMs,
           sequence: { groupOrder: 0 },
           include: [
             "apps/**/*.test.ts",
@@ -129,6 +133,8 @@ export default defineConfig({
         test: {
           name: "browser",
           maxWorkers,
+          testTimeout: hangGuardTimeoutMs,
+          hookTimeout: hangGuardTimeoutMs,
           sequence: { groupOrder: 0 },
           browser: {
             enabled: true,
