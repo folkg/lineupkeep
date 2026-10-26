@@ -36,7 +36,7 @@ The owner wants one autonomous assignment covering all Phase 1 and permits use o
 2. [Scope and technical proposal](docs/fantasy-manager/IMPLEMENTATION-PLAN.md).
 3. [Detailed delivery stages](docs/fantasy-manager/DELIVERY-PLAN.md), [architecture](docs/fantasy-manager/ARCHITECTURE.md), [testing](docs/fantasy-manager/TESTING.md).
 4. [Glossary](docs/fantasy-manager/GLOSSARY.md), [decisions](docs/fantasy-manager/DECISIONS.md), [ADRs](docs/fantasy-manager/README.md).
-5. [MCP](docs/fantasy-manager/MCP.md), [hosting](docs/fantasy-manager/HOSTING.md), [provider research](docs/fantasy-manager/RESEARCH.md).
+5. [MCP](docs/fantasy-manager/MCP.md), [hosting](docs/fantasy-manager/HOSTING.md), [provider research](docs/fantasy-manager/RESEARCH.md), [lineup selection policy](docs/fantasy-manager/POLICY.md).
 6. [Release readiness](docs/release-readiness.md), [deployment runbook](docs/deployment.md), [working agreement](AGENTS.md).
 
 ## Implementation readiness

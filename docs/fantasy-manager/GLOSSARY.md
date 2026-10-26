@@ -66,6 +66,18 @@ A restricted roster area whose players must meet the league's reserve eligibilit
 **Selection value**:
 The signed relative benefit assigned to starting a player for a particular period. Values are comparable only within a consistent scoring basis; a negative value is worse than leaving a starting position empty when legally possible.
 
+**Scoring basis**:
+One declared set of rules, statistic coverage, and period arithmetic that makes two selection values comparable, such as one league's points rules applied to one period basis. Values from different scoring bases are never combined.
+_Avoid_: Scoring model, formula, weighting
+
+**Availability condition**:
+A named, provider-reported fact about whether a player can contribute in a period, such as healthy, out, day to day, injured reserve, suspended, not active, or no game. It has exactly one stated effect on that player's selection value.
+_Avoid_: Injury when it also covers byes, suspensions, and inactive players
+
+**Observation window**:
+The completed periods whose realised statistics are averaged into a player's selection value for a target period. The target period is never inside its own observation window.
+_Avoid_: History, lookback, sample
+
 ## Automation
 
 **Disabled team**:
