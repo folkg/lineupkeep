@@ -574,12 +574,11 @@ What this establishes:
 
 What it does not establish:
 
-- **A changed explicit assignment.** Every change the plan would make requires moving a locked
-  player. The only two editable players are bench players whose remaining legal destination is the
-  same bench position, so no expressible change existed at the time of the write. The changed path
-  is proven against the behavioural provider fake and the documented rule, not live. A second live
-  pass is needed after the week rolls, with an editable roster, to show a changed assignment and
-  its readback.
+- **A changed explicit assignment through the durable worker.** Week 7 had 13 locked players and a
+  zero-change plan. A changed write was later verified on the fully editable week 8 roster through
+  the committed provider seam; the worker's own changed-write path is covered by the behavioural
+  fake and awaits week 8 becoming the current period. See [changed explicit assignment
+  verification](#changed-explicit-assignment-verification-2026-10-26).
 - **The explicit response envelope.** The adapter discards the write response body and classifies
   2xx as accepted; the harness did not retain the body for this request. The earlier native probe
   observed `fantasy_content.roster.status: success` at HTTP 200. The explicit response may carry
@@ -598,12 +597,59 @@ batched `readPlayerHistory` operation against the same team after the implementa
 requested the four-week observation window in one operation (one bounded request per period),
 received 15 player details for each week with actual statistics, and reproduced the 114.41-point
 plan, 9/9 starting positions, zero changes, and a `no_op` translation. No write was sent. This
-verifies the worker's history read path live; the changed-assignment write path remains
-fake-tested only.
+verifies the worker's history read path live.
+
+### Durable worker live no-op (2026-10-26)
+
+Two custom-policy runs through the committed durable worker against the live football team
+completed as verified `no_op` with `custom_policy` provenance and no provider write. Week 7 had 13
+locked players and the plan had zero changes. This verifies the worker's live read, history, plan,
+translation, and no-op settlement path; it does not exercise a changed worker write.
+
+### Changed explicit assignment verification (2026-10-26)
+
+With week 7 still locked, the owner authorized a changed explicit write on the next week's fully
+editable roster. A disposable harness (`.artifacts/phase2-evidence/future-week.ts`) read the week 8
+roster, planned from completed weeks 3–6, translated the plan, sent one request, and read week 8
+back. It deliberately did not include the in-progress week 7 statistics. No cookie, crumb, team key,
+player name, or provider body is recorded here.
+
+| Observation         | Result                                                                |
+| ------------------- | --------------------------------------------------------------------- |
+| Target period       | Week 8, weekly roster coverage                                        |
+| Roster              | 15 players, 15 editable, 0 locked                                     |
+| Window and basis    | Weeks 3–6, `yahoo:mean-points-per-period:week:3,week:4,week:5,week:6` |
+| Plan                | Four changes; filled 9/9 required starting positions; 122.31 points   |
+| Request             | Four assignments: RB→BN, W/R/T→BN, BN→W/R/T, BN→RB                    |
+| Write               | Accepted (HTTP 2xx)                                                   |
+| Readback coverage   | Week 8, matching the write target                                     |
+| Readback membership | Same 15 players                                                       |
+| Readback mismatches | 0                                                                     |
+| Follow-up read      | 0 changes, 122.31 points, `no_op` translation                         |
+
+What this establishes:
+
+- A changed explicit assignment request is accepted and persisted, not just a no-op body.
+- One request can move several players between starting and bench slots; unmentioned roster members
+  keep their slots, and membership is retained.
+- The readback matched the intended final slots exactly, and a second read found no further change.
+
+What it does not establish:
+
+- **The durable worker's changed-write path for the current week.** This write used the committed
+  provider operation and policy translation before week 8 became current; the worker's live runs
+  proved only the no-op path. The worker's changed path is exercised against the behavioural fake.
+- **The worker's week 8 plan.** The harness used completed weeks 3–6. Once week 8 is current, the
+  worker will include week 7 statistics, so the production plan may differ from this record.
+- **A live rejection or readback mismatch.** No explicit-assignment rejection or mismatch was
+  observed live.
 
 Still unverified after this pass:
 
-- A changed explicit assignment accepted and verified live.
+- A changed explicit assignment through the durable worker for the current week, and whether its
+  week 8 plan matches the weeks 3–6 plan recorded above.
+- A live explicit-assignment rejection or readback mismatch; the adapter's failure mappings remain
+  derived from documented behaviour, the native probe, and the behavioural fake.
 - Whether an assignment for a locked player is rejected with a specific provider error (the adapter
   never sends one).
 - Whether a reserve-list position (`IR`, `IR+`, `NA`) is accepted by this roster endpoint; the

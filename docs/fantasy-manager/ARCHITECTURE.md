@@ -80,7 +80,7 @@ Resolve the owner and connection from stored team identity, then its provider im
 
 Yahoo is the only initial live adapter, for NFL/NHL. Different providers may batch differently and define different periods/day boundaries. The generic operation remains the same; no public methods for Yahoo entitlement checks or diamond cohorts.
 
-Phase 1 `set_lineup` invokes native start-active. Phase 2 switches scheduled/manual generic requests to the custom optimizer once ready. Report `provider_native` versus `optimizer` behavior and relevant policy version in safe results. A native invocation is not a projection-optimal guarantee and does not enforce the custom optimizer's signed-value objective.
+Phase 1 `set_lineup` invoked native start-active. Phase 2 now requests `custom_policy` for scheduled and manual generic runs and falls back to native start-active when the policy refuses the league or the plan cannot be expressed as explicit assignments. Report `provider_native` versus `custom_policy` behavior and relevant policy version in safe results. A native invocation is not a projection-optimal guarantee and does not enforce the custom optimizer's signed-value objective.
 
 Queued requests express intent, not a permanently selected algorithm. Resolve the active implementation when claiming fresh work; persist the selected version for that attempt. Do not reinterpret an already-sent native write after a deployment. Never overlap a replacement optimizer write with an unresolved prior write. The run records the requested implementation and its version; each attempt's write intent stores the plan that actually ran, including whether it used the provider-native action or explicit assignments and the policy provenance or refusal.
 
