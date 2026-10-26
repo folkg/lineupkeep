@@ -440,7 +440,8 @@ export const LineupWorkerLive = Layer.effect(
           providerLeagueKey: owned.team.providerLeagueKey,
           providerPlayerKeys: roster.players.map((player) => player.providerPlayerKey),
           sport: owned.team.sport,
-          period: roster.coverage,
+          period: undefined,
+          startedPeriod: roster.coverage,
           currentWeek: league.periodWindow?.currentWeek,
         }),
       );
@@ -991,13 +992,17 @@ export const LineupWorkerLive = Layer.effect(
           );
           return;
         case "provider.response_invalid":
-          yield* retry(
+          yield* fail(
             run,
             undefined,
-            "provider_invalid_response",
-            `The provider returned data that could not be verified for the ${resource}.`,
-            false,
+            "provider_shape_changed",
+            `The provider returned ${resource} that did not match the shape the adapter decodes (${error.operation}${error.field === undefined ? "" : ` at ${error.field}`}). Retrying cannot fix this; the adapter needs updating. No lineup change was made.`,
           );
+          yield* Effect.annotateCurrentSpan({
+            "lineup.shape_change": true,
+            "lineup.shape_change.operation": error.operation,
+            "lineup.shape_change.field": error.field ?? "unreported",
+          });
           return;
       }
     });

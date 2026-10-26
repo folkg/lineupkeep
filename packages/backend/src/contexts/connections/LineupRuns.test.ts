@@ -32,6 +32,7 @@ import { TeamAutomationState } from "./internal/TeamAutomationWorkflow.ts";
 import { LineupRequestConflict, LineupRequestInput, LineupRunNotFound } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import { LineupWorker } from "./LineupWork.ts";
+import { ProviderResponseInvalid } from "./Provider.ts";
 import type {
   ProviderLeagueSettings,
   ProviderPlayerDetail,
@@ -200,6 +201,37 @@ it.effect("plans a league without points rules from the published started percen
     assert.strictEqual(policy.basis, "percent-started:overall:week:3");
     assert.strictEqual(run.state.outcome.changes.length, 2);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
+    assert.strictEqual(yield* fake.nativeCallCount, 0);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect("fails loudly when a provider response stops matching the decoder", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedCustom(fake);
+    yield* fake.failLeague(
+      ProviderResponseInvalid.make({ operation: "read_league", field: "league.stat_modifiers" }),
+    );
+    const runId = yield* createCustomRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.status, "failed");
+    assert.strictEqual(run.state._tag, "Failed");
+    if (run.state._tag !== "Failed") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.kind, "failed");
+    assert.match(
+      run.state.outcome.summary,
+      /did not match the shape the adapter decodes \(read_league at league.stat_modifiers\)/u,
+    );
+    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    assert.strictEqual(yield* fake.explicitCallCount, 0);
+    yield* worker.deliver([runId]);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
   }).pipe(Effect.provide(LineupTestLayer)),
 );

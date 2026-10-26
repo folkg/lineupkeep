@@ -664,6 +664,25 @@ Neither `opponent` (has a game today) nor `starting_status` (goalie confirmed st
 adapter yet. Both are availability facts, not value bases: they would refine the availability tier,
 not the value.
 
+### Reporting a response that changed shape
+
+An optional sub-resource can degrade silently — `out=percent_started` still answers 200 for a player
+whose node is empty — so the adapter cannot treat every gap as a failure. It asserts the shapes it
+actually consumes and names the JSON path that failed (`league.stat_modifiers`, `percent_started.value`,
+`percent_started.percent_started_cut_types.0.value`), and the failure travels as one typed error rather
+than as an empty value. Three signals come out of one mismatch:
+
+1. The span carries `provider.schema_mismatch` and `provider.schema_field` with the failing path.
+2. A warning is logged through the tracer logger, which attaches it to the current span as an event,
+   so it travels on the OTLP trace pipeline the provider spans already use. This works from the
+   hourly worker, which has no request to log against.
+3. The lineup run fails with `provider_shape_changed` and a summary naming the operation and path. It
+   is not retried: a decoder that no longer matches the published shape cannot be fixed by asking
+   again, and the team keeps its native action. No write is attempted.
+
+Unparsable started percentages go through the same path. An absent started percentage stays a normal
+absence and parks the player; only a present value the decoder cannot read is a shape change.
+
 ## Live Yahoo native write verification (2026-10-25)
 
 The owner authorized one native `set_lineup` run on their own football team and a date-scoped native
