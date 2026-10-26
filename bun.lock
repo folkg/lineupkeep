@@ -144,6 +144,9 @@
         "playwright": "catalog:",
       },
     },
+    "packages/lineup-solver": {
+      "name": "@lineupkeep/lineup-solver",
+    },
     "tools": {
       "name": "@lineupkeep/tools",
       "dependencies": {
@@ -602,6 +605,8 @@
     "@lineupkeep/hosted-browser-service": ["@lineupkeep/hosted-browser-service@workspace:apps/hosted-browser"],
 
     "@lineupkeep/infra": ["@lineupkeep/infra@workspace:infra"],
+
+    "@lineupkeep/lineup-solver": ["@lineupkeep/lineup-solver@workspace:packages/lineup-solver"],
 
     "@lineupkeep/linking-helper": ["@lineupkeep/linking-helper@workspace:apps/linking-helper"],
 

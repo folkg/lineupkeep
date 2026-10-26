@@ -1,0 +1,9 @@
+{
+  "name": "@lineupkeep/lineup-solver",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
