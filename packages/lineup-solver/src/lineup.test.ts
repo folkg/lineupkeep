@@ -11,12 +11,14 @@ import {
 } from "./lineup.ts";
 import {
   knownSelection,
+  makeAvailabilityTier,
   makePlayerId,
   makeSelectionBasis,
   makeSlotId,
   unusableSelection,
 } from "./types.ts";
 import type {
+  AvailabilityTier,
   BenchSlot,
   LineupAssignment,
   LineupPlan,
@@ -29,6 +31,8 @@ import type {
 } from "./types.ts";
 
 const basis = makeSelectionBasis("test-basis");
+const willPlay = makeAvailabilityTier("will-play");
+const tiers = [willPlay, makeAvailabilityTier("might-play"), makeAvailabilityTier("will-not-play")];
 
 describe("lineup legality", () => {
   it("accepts a complete legal assignment", () => {
@@ -125,6 +129,7 @@ describe("lineup legality", () => {
   it("reports reserve ineligibility separately from positional ineligibility", () => {
     const problem: LineupProblem = {
       selectionBasis: basis,
+      availabilityTiers: tiers,
       slots: [reserveSlot("IR", 1), benchSlot("BN", 1)],
       players: [
         player("a", { selection: knownSelection(basis, 1), reserveEligible: false }),
@@ -161,6 +166,7 @@ describe("lineup legality", () => {
   it("reports an unfilled required starting position", () => {
     const problem: LineupProblem = {
       selectionBasis: basis,
+      availabilityTiers: tiers,
       slots: [startingSlot("QB", 1, "required", ["QB"]), benchSlot("BN", 1)],
       players: [player("a", { selection: knownSelection(basis, 1) })],
     };
@@ -178,6 +184,7 @@ describe("lineup legality", () => {
   it("reports a started player whose selection value is unusable", () => {
     const problem: LineupProblem = {
       selectionBasis: basis,
+      availabilityTiers: tiers,
       slots: [startingSlot("QB", 1, "optional", ["QB"]), benchSlot("BN", 1)],
       players: [player("a", { selection: unusableSelection(basis, "missing") })],
     };
@@ -194,6 +201,7 @@ describe("lineup legality", () => {
     const otherBasis = makeSelectionBasis("other-basis");
     const problem: LineupProblem = {
       selectionBasis: basis,
+      availabilityTiers: tiers,
       slots: [benchSlot("BN", 2)],
       players: [
         player("a", { selection: knownSelection(otherBasis, 1) }),
@@ -283,6 +291,7 @@ describe("lineup comparison", () => {
   it("reports a player removed from the starting lineup", () => {
     const problem: LineupProblem = {
       selectionBasis: basis,
+      availabilityTiers: tiers,
       slots: [
         startingSlot("QB", 1, "required", ["QB"]),
         startingSlot("RB", 1, "required", ["RB"]),
@@ -334,6 +343,7 @@ describe("selection value", () => {
   it("has no value when a starter has an unusable selection", () => {
     const problem: LineupProblem = {
       selectionBasis: basis,
+      availabilityTiers: tiers,
       slots: [startingSlot("QB", 1, "optional", ["QB"]), benchSlot("BN", 1)],
       players: [player("a", { selection: unusableSelection(basis, "missing") })],
     };
@@ -367,6 +377,7 @@ describe("slot occupancy", () => {
 function problemWithTwoStartersAndBench(): LineupProblem {
   return {
     selectionBasis: basis,
+    availabilityTiers: tiers,
     slots: [
       startingSlot("QB", 1, "required", ["QB"]),
       startingSlot("RB", 1, "required", ["RB"]),
@@ -445,6 +456,7 @@ function player(
   id: string,
   options: {
     readonly selection: RosterPlayer["selection"];
+    readonly availabilityTier?: AvailabilityTier;
     readonly positions?: ReadonlyArray<string>;
     readonly reserveEligible?: boolean;
     readonly lockedSlotId?: SlotId;
@@ -454,6 +466,7 @@ function player(
   return {
     id: playerId(id),
     eligiblePositions: options.positions ?? ["QB", "RB"],
+    availabilityTier: options.availabilityTier ?? willPlay,
     selection: options.selection,
     reserveEligible: options.reserveEligible ?? true,
     lockedSlotId: options.lockedSlotId,

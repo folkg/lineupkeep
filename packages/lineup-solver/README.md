@@ -1,12 +1,12 @@
 # @lineupkeep/lineup-solver
 
-Provider-neutral, pure lineup optimization for Lineupkeep. Given the league's roster slots, the retained roster, signed selection values for one period, and the provider's locks, the solver returns either a legal lineup plan or a named refusal.
+Provider-neutral, pure lineup optimization for Lineupkeep. Given the league's roster slots, the retained roster, signed selection values for one period, an ordered ladder of availability tiers, and the provider's locks, the solver returns either a legal lineup plan or a named refusal.
 
 This package contains no IO, provider code, database, worker, HTTP, clock, randomness, or Effect services. The caller owns the provider period, the scoring policy that produces selection values, and the eventual provider write contract.
 
 ## Boundary
 
-The package starts after the policy layer has decided what to compare. It does not read Yahoo, does not fetch projections, does not decide whether a player is injured, and does not decide how to represent missing evidence. Those decisions belong to the opinionated policy layer and the provider adapter.
+The package starts after the policy layer has decided what to compare. It does not read Yahoo, does not fetch projections, does not decide whether a player is injured, does not know which availability tier an injury code deserves, and does not decide how to represent missing evidence. The ladder's rungs and their order arrive with the problem; the meaning of each rung stays in the policy and the provider adapter.
 
 The pure contract is:
 
@@ -16,15 +16,21 @@ The pure contract is:
 
 ## The problem
 
-A problem is the league's slots, the retained roster, and one scoring basis.
+A problem is the league's slots, the retained roster, one scoring basis, and one ordered availability
+ladder.
 
 ```ts
 type LineupProblem = {
   readonly selectionBasis: SelectionBasis;
+  readonly availabilityTiers: ReadonlyArray<AvailabilityTier>;
   readonly slots: ReadonlyArray<RosterSlot>;
   readonly players: ReadonlyArray<RosterPlayer>;
 };
 ```
+
+`availabilityTiers` is ordered from most available to least available and must contain at least one
+distinct non-empty tier. `makeAvailabilityTier` brands a rung; the ladder carries its own order, so
+a caller cannot express "above" or "below" out of band.
 
 A slot is a starting position, a bench area, or a reserve-list area. Each has a positive capacity and an eligibility rule. A starting slot is either required or optional.
 
@@ -38,18 +44,26 @@ type StartingSlot = {
 };
 ```
 
-A player has the positions they may occupy, one signed selection value for this period, whether the reserve list accepts them, an optional provider lock, and the slot they currently occupy.
+A player has the positions they may occupy, one availability tier for this period, one signed
+selection value, whether the reserve list accepts them, an optional provider lock, and the slot they
+currently occupy.
 
 ```ts
 type RosterPlayer = {
   readonly id: PlayerId;
   readonly eligiblePositions: ReadonlyArray<PositionType>;
+  readonly availabilityTier: AvailabilityTier;
   readonly selection: PlayerSelection;
   readonly reserveEligible: boolean;
   readonly lockedSlotId: SlotId | undefined;
   readonly currentSlotId: SlotId | undefined;
 };
 ```
+
+`availabilityTier` must be one of the declared `availabilityTiers`. A tier is not a modifier on a
+value: the value means the same thing in every tier, and the tier only says how likely the player is
+to appear. A problem that declares no tiers, declares one twice, or has a player on an undeclared tier
+throws; those are caller contract failures.
 
 `selection` is either a known signed integer or an explicit unusable value:
 
@@ -109,13 +123,26 @@ type LineupPlan = {
 The optimization is lexicographic, in this order:
 
 1. **Required starting positions are filled.** Every unit of a required starting slot must be occupied. This is a hard legality condition, not a soft score. If required positions cannot all be filled, the solver refuses. A required position is never traded away for value.
-2. **Total selection value is maximized.** The sum covers players assigned to starting positions. Bench and reserve assignments contribute zero. Only required slots must be filled; optional starting slots may be left empty.
+2. **Availability is maximized, most available tier first.** For each tier in the declared ladder order, maximize the number of starting positions occupied by players of that tier. The higher tier's count is compared first, so no amount of value below it can overturn it.
+3. **Total selection value is maximized.** The sum covers players assigned to starting positions, across every tier. Bench and reserve assignments contribute zero. Only required slots must be filled; optional starting slots may be left empty.
+
+A starter counts towards their tier's term only when their selection value is not negative. A player
+below zero is worse than an empty optional position, so they are not credited for occupying it; zero is
+not negative, so a genuine zero still counts.
 
 The first item is a documented decision about unfilled starting positions: a required position is never left empty, because a plan that violates a league requirement is not a legal plan. An optional position may be left empty, and is left empty when filling it would lower total value. A slot whose capacity is only partly required should be modeled as two slots, one required and one optional.
 
 A negative selection value is worse than leaving an optional starting position empty when the player can be retained on the bench or reserve list. If the player cannot be retained elsewhere, filling the optional position is forced by the retention invariant; refusing would drop a roster member.
 
-Zero is a known value. It is not an unknown value and it is not a sentinel. Among plans with equal total value, the solver prefers starting an eligible zero-valued player in an otherwise empty optional starting position.
+Zero is a known value. It is not an unknown value and it is not a sentinel. It counts towards the
+player's tier, and among plans with equal total value the solver prefers starting an eligible
+zero-valued player in an otherwise empty optional starting position.
+
+Availability outranks value between tiers and never modifies it inside one. Two available players
+compete on value; an available player competes with a doubtful or unavailable one on tier alone, so a
+healthy player worth nothing starts ahead of an injured player worth everything. An unavailable player
+can still fill a position that would otherwise stay empty, which is the case for a player who might
+come back as a game-time decision.
 
 ### Unusable selection values
 
@@ -125,7 +152,7 @@ If the player cannot legally start — for example, the player is locked to the 
 
 ### Tie-breaks
 
-Only the two objective items above can change the value of a plan. Everything below is a tie-break among plans that already have the best objective values.
+Only the objective items above can change the value of a plan. Everything below is a tie-break among plans that already have the best objective values.
 
 1. More zero-valued starting occupancy.
 2. Fewer players moved from their `currentSlotId`.
@@ -152,26 +179,37 @@ A perfect matching in this matrix is exactly a legal plan: every player appears 
 All costs are `bigint`. For a plan, the cost is:
 
 ```text
-(-totalSelectionValue) * valueWeight
+sum over tiers of (-tierStartingCount) * tierWeight[tier]
++ (-totalSelectionValue) * valueWeight
 + (-zeroStartingOccupancy) * occupancyWeight
 + (changedPlayerCount) * changeWeight
 + canonicalCost
 ```
 
-The weights are computed from the problem and satisfy:
+A `tierStartingCount` is the number of starting players in that tier whose value is not negative.
+The weights are computed from the problem and satisfy, from the least significant term upwards:
 
 ```text
 changeWeight     > maximum possible canonical difference
 occupancyWeight  > maximum change difference + canonical difference
 valueWeight      > maximum occupancy difference + change difference + canonical difference
+tierWeight[last] > maximum value difference + occupancy + change + canonical difference
+tierWeight[t]    > unitCount * tierWeight[t + 1] + (everything below tierWeight[t + 1])
 ```
+
+The tier weights are built from the bottom of the ladder upwards, each one larger than every term it
+must outrank, so one more available starter always costs less than the whole rest of the plan can
+recover. Availability dominance is therefore exact rather than a large penalty: a single rung moved
+outweighs the largest possible value, occupancy, change, and canonical difference combined.
 
 `canonicalCost` is the base-`(unitCount + 1)` number whose digits are the unit indices assigned to players in player-ID order. The base is larger than every unit index, so minimizing the sum is exactly lexicographic minimization of that digit sequence.
 
 Forbidden edges use a finite cost larger than any legal assignment:
 
 ```text
-legalCellBound = maxAbsValue * valueWeight + occupancyWeight + changeWeight + canonicalMax
+legalCellBound = maxAbsValue * valueWeight
+               + sum of every tierWeight
+               + occupancyWeight + changeWeight + canonicalMax
 forbiddenCost  = legalCellBound * 2 * unitCount + 1
 ```
 
@@ -208,7 +246,7 @@ A refusal is a value with a specific subject, not a thrown string.
 | `required-starting-position-unfillable` | A required starting slot cannot be fully occupied in a complete legal assignment.                                          |
 | `no-legal-assignment`                   | A complete legal assignment does not exist for a less specific conflict; the refusal names the players and slots involved. |
 
-Malformed problems — duplicate IDs, non-positive capacity, unsafe selection units, a different selection basis, or a current slot not present in the problem — throw an error. They are caller contract failures, not league-feasibility refusals.
+Malformed problems — duplicate IDs, non-positive capacity, unsafe selection units, a different selection basis, no availability tier, a duplicate tier, a player on an undeclared tier, or a current slot not present in the problem — throw an error. They are caller contract failures, not league-feasibility refusals.
 
 ## Invariants
 
@@ -227,21 +265,26 @@ Malformed problems — duplicate IDs, non-positive capacity, unsafe selection un
 
 Slots: one required QB, two required RB, one optional RB/WR flex, three bench.
 
-| Player | Selection units | Current | Note |
-| ------ | --------------: | ------- | ---- |
-| qb1    |             120 | QB      |      |
-| rb1    |             100 | RB      |      |
-| rb2    |              90 | FLEX    |      |
-| wr1    |              80 | BN      |      |
-| wr2    |             -10 | BN      |      |
+| Player | Selection units | Tier      | Current | Note |
+| ------ | --------------: | --------- | ------- | ---- |
+| qb1    |             120 | will-play | QB      |      |
+| rb1    |             100 | will-play | RB      |      |
+| rb2    |              90 | will-play | FLEX    |      |
+| wr1    |              80 | will-play | BN      |      |
+| wr2    |             -10 | will-play | BN      |      |
 
 The required slots are QB, RB, RB; the flex is optional. The best value is 390: qb1 at QB, rb1 and rb2 at RB, wr1 at FLEX, wr2 on the bench. Starting wr2 in the flex would lower the value, so the flex stays occupied by wr1 and the negative player stays benched. The plan reports the rb2 move from FLEX to RB and the wr1 move from bench to FLEX.
 
 If the flex slot were required instead, the best legal plan would still start wr1 there because wr1's value is positive. If wr2 were the only player left for a required flex, the solver would start wr2 and report a negative total value rather than dropping the player.
 
+Give wr2 a `will-not-play` tier and nothing changes here, because wr1 is available and worth more. Give
+wr2 the higher value of 200 instead and wr1 still starts in the flex: wr1 counts towards `will-play`
+and wr2 counts towards `will-not-play`, and the higher rung is decided first. Bench wr1 entirely and
+wr2 takes the flex, because a filled position still beats an empty one.
+
 ## Deliberately outside this package
 
-- The policy layer that produces selection values, including availability, projections, fallbacks, and the choice of scoring basis.
+- The policy layer that produces selection values and availability tiers, including which provider fact becomes which rung, projections, fallbacks, and the choice of scoring basis.
 - Provider-specific explicit assignment requests, readback, and recovery.
 - Provider period freshness, lock revalidation, and live provider evidence.
 - Database, worker, HTTP, MCP, clock, and persistence.
@@ -251,7 +294,7 @@ If the flex slot were required instead, the best legal plan would still start wr
 
 The test suite contains worked examples, refusal cases, invariant checks, generated properties, and an independent exhaustive oracle. The oracle enumerates every legal complete assignment for tiny problems, computes the objective tuple directly, and does not use the solver's feasibility helpers. It checks the solver's plan with its own legality rules as well as the public invariant predicates.
 
-Current generated-oracle evidence: 10,000 tiny problems per test run across duplicate values, all-equal values, all-eligible and no-eligible shapes, capacities above the roster, locks, negative values, zeros, required and optional positions, and bench/reserve constraints.
+Current generated-oracle evidence: 10,000 tiny problems per test run across duplicate values, all-equal values, all-eligible and no-eligible shapes, capacities above the roster, locks, negative values, zeros, required and optional positions, bench/reserve constraints, mixed tiers, all-unavailable rosters, and tiers set against values so the best player is unavailable. The oracle compares the full objective tuple — every tier count, then total value, then zero occupancy, then changes, then the canonical assignment — so agreement is proved for the changed objective rather than assumed.
 
 Measured solver time on this development machine (Node 24, `node --experimental-strip-types`, 30 runs after warm-up):
 

@@ -4,12 +4,14 @@ import { isLegalPlan } from "./lineup.ts";
 import { solveLineup } from "./solve.ts";
 import {
   knownSelection,
+  makeAvailabilityTier,
   makePlayerId,
   makeSelectionBasis,
   makeSlotId,
   unusableSelection,
 } from "./types.ts";
 import type {
+  AvailabilityTier,
   BenchSlot,
   LineupAssignment,
   LineupPlan,
@@ -26,6 +28,10 @@ import type {
 } from "./types.ts";
 
 const basis = makeSelectionBasis("test-basis");
+const willPlay = makeAvailabilityTier("will-play");
+const mightPlay = makeAvailabilityTier("might-play");
+const willNotPlay = makeAvailabilityTier("will-not-play");
+const tiers = [willPlay, mightPlay, willNotPlay];
 
 describe("lineup optimization", () => {
   it("starts the highest-value legal players across flexible positions", () => {
@@ -339,6 +345,141 @@ describe("lineup optimization", () => {
   });
 });
 
+describe("availability tiers", () => {
+  it("starts an available player ahead of a higher-valued unavailable player", () => {
+    const problem = lineupProblem(
+      [startingSlot("RB", 1, "required", ["RB"]), benchSlot("BN", 1)],
+      [
+        player("healthy", 10, { positions: ["RB"] }),
+        player("injured", 100, { positions: ["RB"], availabilityTier: willNotPlay }),
+      ],
+      tiers,
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("healthy", "RB"), assignment("injured", "BN")]);
+    expect(plan.totalSelectionValue).toBe(10);
+  });
+
+  it("starts an available zero ahead of a higher-valued doubtful player", () => {
+    const problem = lineupProblem(
+      [startingSlot("RB", 1, "required", ["RB"]), benchSlot("BN", 1)],
+      [
+        player("healthy", 0, { positions: ["RB"] }),
+        player("doubtful", 100, { positions: ["RB"], availabilityTier: mightPlay }),
+      ],
+      tiers,
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("doubtful", "BN"), assignment("healthy", "RB")]);
+    expect(plan.totalSelectionValue).toBe(0);
+  });
+
+  it("starts an available zero ahead of a higher-valued unavailable player", () => {
+    const problem = lineupProblem(
+      [startingSlot("RB", 1, "required", ["RB"]), benchSlot("BN", 1)],
+      [
+        player("healthy", 0, { positions: ["RB"] }),
+        player("injured", 100, { positions: ["RB"], availabilityTier: willNotPlay }),
+      ],
+      tiers,
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("healthy", "RB"), assignment("injured", "BN")]);
+    expect(plan.totalSelectionValue).toBe(0);
+  });
+
+  it("starts a doubtful player ahead of a higher-valued unavailable player", () => {
+    const problem = lineupProblem(
+      [startingSlot("RB", 1, "required", ["RB"]), benchSlot("BN", 1)],
+      [
+        player("doubtful", 0, { positions: ["RB"], availabilityTier: mightPlay }),
+        player("out", 100, { positions: ["RB"], availabilityTier: willNotPlay }),
+      ],
+      tiers,
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("doubtful", "RB"), assignment("out", "BN")]);
+    expect(plan.totalSelectionValue).toBe(0);
+  });
+
+  it("fills a vacant starting position with an unavailable player", () => {
+    const problem = lineupProblem(
+      [startingSlot("RB", 1, "optional", ["RB"]), benchSlot("BN", 1)],
+      [player("injured", 12, { positions: ["RB"], availabilityTier: willNotPlay })],
+      tiers,
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("injured", "RB")]);
+    expect(plan.filledStartingPositions).toBe(1);
+    expect(plan.totalSelectionValue).toBe(12);
+  });
+
+  it("competes unavailable players against each other by value", () => {
+    const problem = lineupProblem(
+      [startingSlot("RB", 1, "required", ["RB"]), benchSlot("BN", 1)],
+      [
+        player("worse", 4, { positions: ["RB"], availabilityTier: willNotPlay }),
+        player("better", 99, { positions: ["RB"], availabilityTier: willNotPlay }),
+      ],
+      tiers,
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("better", "RB"), assignment("worse", "BN")]);
+    expect(plan.totalSelectionValue).toBe(99);
+  });
+
+  it("seats an unavailable player in a vacant position rather than an available player costing points", () => {
+    const problem = lineupProblem(
+      [startingSlot("RB", 1, "optional", ["RB"]), benchSlot("BN", 2)],
+      [
+        player("costly", -5, { positions: ["RB"] }),
+        player("injured", 10, { positions: ["RB"], availabilityTier: willNotPlay }),
+      ],
+      tiers,
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("costly", "BN"), assignment("injured", "RB")]);
+    expect(plan.totalSelectionValue).toBe(10);
+  });
+});
+
+describe("problem contract", () => {
+  it("rejects a player whose availability tier is not declared", () => {
+    const problem = lineupProblem(
+      [benchSlot("BN", 1)],
+      [player("a", 1, { availabilityTier: makeAvailabilityTier("undeclared") })],
+    );
+
+    expect(() => solveLineup(problem)).toThrow(/undeclared availability tier/u);
+  });
+
+  it("rejects a duplicate availability tier", () => {
+    const problem = lineupProblem([benchSlot("BN", 1)], [player("a", 1)], [willPlay, willPlay]);
+
+    expect(() => solveLineup(problem)).toThrow(/Duplicate availability tier/u);
+  });
+
+  it("rejects a problem without an availability tier", () => {
+    const problem = lineupProblem([benchSlot("BN", 1)], [player("a", 1)], []);
+
+    expect(() => solveLineup(problem)).toThrow(/at least one availability tier/u);
+  });
+});
+
 describe("lineup refusals", () => {
   it("refuses a roster larger than the available slot capacity", () => {
     const refusal = refusalFrom(
@@ -553,8 +694,9 @@ describe("lineup refusals", () => {
 function lineupProblem(
   slots: ReadonlyArray<RosterSlot>,
   players: ReadonlyArray<RosterPlayer>,
+  availabilityTiers: ReadonlyArray<AvailabilityTier> = [willPlay],
 ): LineupProblem {
-  return { selectionBasis: basis, slots, players };
+  return { selectionBasis: basis, availabilityTiers, slots, players };
 }
 
 function startingSlot(
@@ -589,6 +731,7 @@ function player(
   units: number,
   options: {
     readonly positions?: ReadonlyArray<string>;
+    readonly availabilityTier?: AvailabilityTier;
     readonly selection?: PlayerSelection;
     readonly reserveEligible?: boolean;
     readonly lockedSlotId?: SlotId;
@@ -598,6 +741,7 @@ function player(
   return {
     id: playerId(id),
     eligiblePositions: options.positions ?? ["A", "B", "C"],
+    availabilityTier: options.availabilityTier ?? willPlay,
     selection: options.selection ?? knownSelection(basis, units),
     reserveEligible: options.reserveEligible ?? false,
     lockedSlotId: options.lockedSlotId,

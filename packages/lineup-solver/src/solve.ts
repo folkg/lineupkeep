@@ -8,6 +8,7 @@ import {
   startingSelectionValue,
 } from "./lineup.ts";
 import type {
+  AvailabilityTier,
   LineupAssignment,
   LineupPlan,
   LineupProblem,
@@ -93,6 +94,17 @@ function validateProblem(problem: LineupProblem): void {
     throw new Error("A lineup problem requires a non-empty selection basis.");
   }
 
+  if (problem.availabilityTiers.length === 0) {
+    throw new Error("A lineup problem requires at least one availability tier.");
+  }
+  const tiers = new Set<AvailabilityTier>();
+  for (const tier of problem.availabilityTiers) {
+    if (tiers.has(tier)) {
+      throw new Error(`Duplicate availability tier: ${tier}.`);
+    }
+    tiers.add(tier);
+  }
+
   const slotsById = new Map<SlotId, RosterSlot>();
   for (const slot of problem.slots) {
     if (slot.id.length === 0) {
@@ -117,6 +129,9 @@ function validateProblem(problem: LineupProblem): void {
     }
     if (player.selection.basis !== problem.selectionBasis) {
       throw new Error(`Player ${player.id} uses a different selection basis.`);
+    }
+    if (!tiers.has(player.availabilityTier)) {
+      throw new Error(`Player ${player.id} uses an undeclared availability tier.`);
     }
     if (player.selection.kind === "known" && !Number.isSafeInteger(player.selection.units)) {
       throw new Error(`Player ${player.id} requires safe-integer selection units.`);
@@ -153,7 +168,6 @@ function prepareProblem(problem: LineupProblem): ProblemBase {
 
   return { problem, players, slots, slotsById, lockedPlayersBySlot };
 }
-
 function findLockRefusal(base: ProblemBase): LineupRefusal | undefined {
   for (const player of base.players) {
     if (player.lockedSlotId === undefined) {
@@ -258,7 +272,13 @@ function buildAssignmentMatrix(prepared: PreparedProblem): AssignmentMatrix {
   const units = prepared.units;
   const playerCount = players.length;
   const unitCount = units.length;
-  const scale = costScale(playerCount, unitCount, maximumAbsoluteValue(players));
+  const scale = costScale(
+    playerCount,
+    unitCount,
+    prepared.problem.availabilityTiers.length,
+    maximumAbsoluteValue(players),
+    players.map((player) => prepared.problem.availabilityTiers.indexOf(player.availabilityTier)),
+  );
   const costs: Array<Array<bigint>> = [];
 
   for (let row = 0; row < unitCount; row += 1) {
@@ -273,7 +293,13 @@ function buildAssignmentMatrix(prepared: PreparedProblem): AssignmentMatrix {
   return { costs, units, players, forbiddenCost: scale.forbiddenCost };
 }
 
-function costScale(playerCount: number, unitCount: number, maxAbsValue: number): CostScale {
+function costScale(
+  playerCount: number,
+  unitCount: number,
+  tierCount: number,
+  maxAbsValue: number,
+  tierRankByPlayerRow: ReadonlyArray<number>,
+): CostScale {
   const canonicalBase = BigInt(unitCount + 1);
   const largestCanonicalWeight = playerCount === 0 ? 0n : canonicalBase ** BigInt(playerCount - 1);
   const canonicalMax = BigInt(playerCount * (unitCount - 1)) * largestCanonicalWeight;
@@ -281,8 +307,27 @@ function costScale(playerCount: number, unitCount: number, maxAbsValue: number):
   const occupancyWeight = BigInt(playerCount) * changeWeight + canonicalMax + 1n;
   const valueWeight =
     BigInt(unitCount) * occupancyWeight + BigInt(playerCount) * changeWeight + canonicalMax + 1n;
+  const valueBound = BigInt(unitCount) * BigInt(maxAbsValue) * valueWeight;
+  const belowTierBound =
+    valueBound +
+    BigInt(unitCount) * occupancyWeight +
+    BigInt(playerCount) * changeWeight +
+    canonicalMax;
+
+  const tierWeights: Array<bigint> = [];
+  let lowerBound = belowTierBound;
+  for (let rank = tierCount - 1; rank >= 0; rank -= 1) {
+    const weight = lowerBound + 1n;
+    tierWeights[rank] = weight;
+    lowerBound += BigInt(unitCount) * weight;
+  }
+
   const legalCellBound =
-    BigInt(maxAbsValue) * valueWeight + occupancyWeight + changeWeight + canonicalMax;
+    BigInt(maxAbsValue) * valueWeight +
+    tierWeights.reduce((total, weight) => total + weight, 0n) +
+    occupancyWeight +
+    changeWeight +
+    canonicalMax;
   const forbiddenCost = legalCellBound * BigInt(2 * unitCount) + 1n;
 
   return {
@@ -294,6 +339,7 @@ function costScale(playerCount: number, unitCount: number, maxAbsValue: number):
       { length: playerCount },
       (_, row) => canonicalBase ** BigInt(playerCount - 1 - row),
     ),
+    tierWeightByPlayerRow: tierRankByPlayerRow.map((rank) => tierWeights[rank] ?? 0n),
   };
 }
 
@@ -327,12 +373,13 @@ function cellCost(
 
   const value = starting && player.selection.kind === "known" ? player.selection.units : 0;
   const valueCost = starting ? -BigInt(value) * scale.valueWeight : 0n;
+  const availabilityCost = starting && value >= 0 ? -(scale.tierWeightByPlayerRow[row] ?? 0n) : 0n;
   const occupancyCost = starting && value === 0 ? -scale.occupancyWeight : 0n;
   const changeCost = player.currentSlotId === unit.slot.id ? 0n : scale.changeWeight;
   const canonicalWeight = scale.canonicalWeights[row] ?? 0n;
   const canonicalCost = BigInt(unit.index) * canonicalWeight;
 
-  return valueCost + occupancyCost + changeCost + canonicalCost;
+  return valueCost + availabilityCost + occupancyCost + changeCost + canonicalCost;
 }
 
 function playerAllowedOnUnit(player: RosterPlayer, unit: SlotUnit): boolean {
@@ -492,6 +539,7 @@ type CostScale = {
   readonly changeWeight: bigint;
   readonly forbiddenCost: bigint;
   readonly canonicalWeights: ReadonlyArray<bigint>;
+  readonly tierWeightByPlayerRow: ReadonlyArray<bigint>;
 };
 
 type AssignmentMatrix = {

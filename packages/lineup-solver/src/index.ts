@@ -11,12 +11,14 @@ export {
 export { solveLineup } from "./solve.ts";
 export {
   knownSelection,
+  makeAvailabilityTier,
   makePlayerId,
   makeSelectionBasis,
   makeSlotId,
   unusableSelection,
 } from "./types.ts";
 export type {
+  AvailabilityTier,
   BenchSlot,
   LineupAssignment,
   LineupComparison,

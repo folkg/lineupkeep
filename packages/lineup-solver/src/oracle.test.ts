@@ -3,9 +3,17 @@ import { describe, expect, it } from "vitest";
 
 import { isLegalPlan } from "./lineup.ts";
 import { solveLineup } from "./solve.ts";
-import { knownSelection, makePlayerId, makeSelectionBasis, makeSlotId } from "./types.ts";
+import {
+  knownSelection,
+  makeAvailabilityTier,
+  makePlayerId,
+  makeSelectionBasis,
+  makeSlotId,
+} from "./types.ts";
 import type {
+  AvailabilityTier,
   LineupAssignment,
+  LineupPlan,
   LineupProblem,
   PlayerId,
   RosterPlayer,
@@ -14,6 +22,10 @@ import type {
 } from "./types.ts";
 
 const basis = makeSelectionBasis("oracle-basis");
+const willPlay = makeAvailabilityTier("will-play");
+const mightPlay = makeAvailabilityTier("might-play");
+const willNotPlay = makeAvailabilityTier("will-not-play");
+const tiers = [willPlay, mightPlay, willNotPlay];
 
 describe("exhaustive oracle agreement", () => {
   it.each(adversarialCases())("agrees on $name", ({ problem }) => {
@@ -34,7 +46,7 @@ describe("exhaustive oracle agreement", () => {
     expect(generatedProblems).toBe(10000);
   });
 
-  it("never lowers the optimum when a player's value increases", () => {
+  it("never worsens the achieved objective when a player's value increases", () => {
     fc.assert(
       fc.property(generatedProblemArbitrary(), fc.nat(), (problem, offset) => {
         if (problem.players.length === 0) {
@@ -59,9 +71,12 @@ describe("exhaustive oracle agreement", () => {
 
         expect(after.kind).toBe(before.kind);
         if (before.kind === "plan" && after.kind === "plan") {
-          expect(after.plan.totalSelectionValue).toBeGreaterThanOrEqual(
-            before.plan.totalSelectionValue,
-          );
+          expect(
+            compareObjectives(
+              objectiveOf(increased, after.plan),
+              objectiveOf(problem, before.plan),
+            ),
+          ).toBeLessThanOrEqual(0);
         }
       }),
       { numRuns: 2000, seed: 20261027 },
@@ -155,6 +170,7 @@ function expectAgreement(problem: LineupProblem): void {
   expect(isLegalPlan(problem, result.plan)).toBe(true);
   expect(oracleLineupViolations(problem, result.plan.assignments)).toEqual([]);
   expect(result.plan.totalSelectionValue).toBe(oracle.value);
+  expect(startingTierCounts(problem, result.plan.assignments)).toEqual(oracle.tierCounts);
   expect(zeroStartingPlayers(problem, result.plan.assignments)).toBe(oracle.zeroStarters);
   expect(result.plan.comparison.slotChanges).toHaveLength(oracle.changes);
 }
@@ -286,6 +302,69 @@ function adversarialCases(): ReadonlyArray<{
         [player("a", 1, { positions: ["A"] }), player("b", 2, { positions: ["A"] })],
       ),
     },
+    {
+      name: "a high-value unavailable player against a low-value available player",
+      problem: lineupProblem(
+        [
+          startingSlot("S1", 1, "required", ["A"]),
+          startingSlot("S2", 2, "required", ["A"]),
+          benchSlot("BN", 2),
+        ],
+        [
+          player("available", 1, { positions: ["A"] }),
+          player("unavailable", 100, { positions: ["A"], availabilityTier: willNotPlay }),
+          player("doubtful", 50, { positions: ["A"], availabilityTier: mightPlay }),
+          player("other", 0, { positions: ["A"] }),
+        ],
+      ),
+    },
+    {
+      name: "an all-unavailable roster",
+      problem: lineupProblem(
+        [
+          startingSlot("S1", 1, "required", ["A"]),
+          startingSlot("S2", 1, "optional", ["A"]),
+          benchSlot("BN", 2),
+        ],
+        [
+          player("a", 0, { positions: ["A"], availabilityTier: willNotPlay }),
+          player("b", -1, { positions: ["A"], availabilityTier: willNotPlay }),
+          player("c", 4, { positions: ["A"], availabilityTier: willNotPlay }),
+        ],
+      ),
+    },
+    {
+      name: "tiers tied against values",
+      problem: lineupProblem(
+        [
+          startingSlot("S1", 1, "required", ["A"]),
+          startingSlot("S2", 1, "optional", ["A"]),
+          benchSlot("BN", 2),
+        ],
+        [
+          player("a", 3, { positions: ["A"] }),
+          player("b", 3, { positions: ["A"], availabilityTier: mightPlay }),
+          player("c", 3, { positions: ["A"], availabilityTier: willNotPlay }),
+        ],
+      ),
+    },
+    {
+      name: "a zero-valued available player against an unavailable star",
+      problem: lineupProblem(
+        [startingSlot("S1", 1, "required", ["A"]), benchSlot("BN", 1)],
+        [
+          player("zero", 0, { positions: ["A"] }),
+          player("star", 100, { positions: ["A"], availabilityTier: willNotPlay }),
+        ],
+      ),
+    },
+    {
+      name: "only an unavailable player for a vacant position",
+      problem: lineupProblem(
+        [startingSlot("S1", 1, "optional", ["A"]), benchSlot("BN", 1)],
+        [player("hurt", 12, { positions: ["A"], availabilityTier: willNotPlay })],
+      ),
+    },
   ];
 }
 
@@ -313,7 +392,7 @@ function buildGeneratedProblem(
   );
   const lockedPlayers = shape === "locked" ? applyLockedShape(slots, players) : players;
 
-  return { selectionBasis: basis, slots, players: lockedPlayers };
+  return { selectionBasis: basis, availabilityTiers: tiers, slots, players: lockedPlayers };
 }
 
 function slotFromSpec(spec: SlotSpec, index: number, shape: Shape): RosterSlot {
@@ -368,7 +447,15 @@ function playerFromSpec(
           ? -(index % 3) - 1
           : shape === "zeros"
             ? 0
-            : spec.units;
+            : shape === "tier-against-value"
+              ? 3 - index
+              : spec.units;
+  const availabilityTier =
+    shape === "all-unavailable"
+      ? willNotPlay
+      : shape === "tier-against-value"
+        ? (tiers[2 - (index % 3)] ?? willNotPlay)
+        : (tiers[spec.tierOffset % 3] ?? willPlay);
   const lockedSlotId =
     spec.lockOffset === undefined || slotIds.length === 0
       ? undefined
@@ -381,6 +468,7 @@ function playerFromSpec(
   return {
     id: playerId(`P${index}`),
     eligiblePositions: positions,
+    availabilityTier,
     selection: knownSelection(basis, units),
     reserveEligible: spec.reserveEligible,
     lockedSlotId,
@@ -446,6 +534,7 @@ function positionsFromSpec(spec: PositionSpec | EligibilitySpec): ReadonlyArray<
 type OracleResult =
   | {
       readonly kind: "optimal";
+      readonly tierCounts: ReadonlyArray<number>;
       readonly value: number;
       readonly zeroStarters: number;
       readonly changes: number;
@@ -460,6 +549,7 @@ type OracleUnit = {
 };
 
 type OracleCandidate = {
+  readonly tierCounts: ReadonlyArray<number>;
   readonly value: number;
   readonly zeroStarters: number;
   readonly changes: number;
@@ -545,6 +635,7 @@ function solveTinyProblem(problem: LineupProblem): OracleResult {
 
   return {
     kind: "optimal",
+    tierCounts: best.tierCounts,
     value: best.value,
     zeroStarters: best.zeroStarters,
     changes: best.changes,
@@ -613,6 +704,7 @@ function evaluateOracleAssignment(
   assignment: ReadonlyMap<PlayerId, SlotId>,
 ): OracleCandidate {
   const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
+  const tierCounts = problem.availabilityTiers.map(() => 0);
   let value = 0;
   let zeroStarters = 0;
   let changes = 0;
@@ -635,6 +727,10 @@ function evaluateOracleAssignment(
       if (player.selection.units === 0) {
         zeroStarters += 1;
       }
+      if (player.selection.units >= 0) {
+        const rank = problem.availabilityTiers.indexOf(player.availabilityTier);
+        tierCounts[rank] = (tierCounts[rank] ?? 0) + 1;
+      }
     }
     if (player.currentSlotId !== assignedSlotId) {
       changes += 1;
@@ -643,10 +739,17 @@ function evaluateOracleAssignment(
   }
 
   assignments.sort(compareAssignments);
-  return { value, zeroStarters, changes, assignments };
+  return { tierCounts, value, zeroStarters, changes, assignments };
 }
 
 function compareCandidates(left: OracleCandidate, right: OracleCandidate): number {
+  for (let rank = 0; rank < left.tierCounts.length; rank += 1) {
+    const leftCount = left.tierCounts[rank] ?? 0;
+    const rightCount = right.tierCounts[rank] ?? 0;
+    if (leftCount !== rightCount) {
+      return rightCount - leftCount;
+    }
+  }
   if (left.value !== right.value) {
     return right.value - left.value;
   }
@@ -704,11 +807,53 @@ function zeroStartingPlayers(
   }).length;
 }
 
+function compareObjectives(left: ReadonlyArray<number>, right: ReadonlyArray<number>): number {
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return 0;
+}
+
+function objectiveOf(problem: LineupProblem, plan: LineupPlan): ReadonlyArray<number> {
+  return [
+    ...startingTierCounts(problem, plan.assignments).map((count) => -count),
+    -plan.totalSelectionValue,
+  ];
+}
+
+function startingTierCounts(
+  problem: LineupProblem,
+  assignments: ReadonlyArray<LineupAssignment>,
+): ReadonlyArray<number> {
+  const playersById = new Map(problem.players.map((player) => [player.id, player]));
+  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
+  const counts = problem.availabilityTiers.map(() => 0);
+
+  for (const assignment of assignments) {
+    const player = playersById.get(assignment.playerId);
+    const slot = slotsById.get(assignment.slotId);
+    if (player === undefined || slot?.kind !== "starting") {
+      continue;
+    }
+    if (player.selection.kind !== "known" || player.selection.units < 0) {
+      continue;
+    }
+    const rank = problem.availabilityTiers.indexOf(player.availabilityTier);
+    counts[rank] = (counts[rank] ?? 0) + 1;
+  }
+
+  return counts;
+}
+
 function lineupProblem(
   slots: ReadonlyArray<RosterSlot>,
   players: ReadonlyArray<RosterPlayer>,
 ): LineupProblem {
-  return { selectionBasis: basis, slots, players };
+  return { selectionBasis: basis, availabilityTiers: tiers, slots, players };
 }
 
 function startingSlot(
@@ -739,6 +884,7 @@ function player(
   units: number,
   options: {
     readonly positions: ReadonlyArray<string>;
+    readonly availabilityTier?: AvailabilityTier;
     readonly reserveEligible?: boolean;
     readonly lockedSlotId?: SlotId;
     readonly currentSlotId?: SlotId;
@@ -747,6 +893,7 @@ function player(
   return {
     id: playerId(id),
     eligiblePositions: options.positions,
+    availabilityTier: options.availabilityTier ?? willPlay,
     selection: knownSelection(basis, units),
     reserveEligible: options.reserveEligible ?? false,
     lockedSlotId: options.lockedSlotId,
@@ -771,7 +918,9 @@ type Shape =
   | "all-eligible"
   | "none-eligible"
   | "capacity-over-roster"
-  | "locked";
+  | "locked"
+  | "all-unavailable"
+  | "tier-against-value";
 
 const shapes: ReadonlyArray<Shape> = [
   "mixed",
@@ -783,6 +932,8 @@ const shapes: ReadonlyArray<Shape> = [
   "none-eligible",
   "capacity-over-roster",
   "locked",
+  "all-unavailable",
+  "tier-against-value",
 ];
 
 type SlotSpec = {
@@ -798,6 +949,7 @@ type PositionSpec = "none" | "A" | "B" | "AB" | "ABC";
 type PlayerSpec = {
   readonly positions: PositionSpec;
   readonly units: number;
+  readonly tierOffset: number;
   readonly reserveEligible: boolean;
   readonly lockOffset: number | undefined;
   readonly currentOffset: number | undefined;
@@ -812,6 +964,7 @@ const slotArbitrary: fc.Arbitrary<SlotSpec> = fc.record({
 const playerArbitrary: fc.Arbitrary<PlayerSpec> = fc.record({
   positions: fc.constantFrom("none", "A", "B", "AB", "ABC"),
   units: fc.integer({ min: -3, max: 3 }),
+  tierOffset: fc.integer({ min: 0, max: 5 }),
   reserveEligible: fc.boolean(),
   lockOffset: fc.option(fc.integer({ min: 0, max: 3 }), { nil: undefined }),
   currentOffset: fc.option(fc.integer({ min: 0, max: 3 }), { nil: undefined }),

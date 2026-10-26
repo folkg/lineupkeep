@@ -1,5 +1,6 @@
 export type LineupProblem = {
   readonly selectionBasis: SelectionBasis;
+  readonly availabilityTiers: ReadonlyArray<AvailabilityTier>;
   readonly slots: ReadonlyArray<RosterSlot>;
   readonly players: ReadonlyArray<RosterPlayer>;
 };
@@ -161,6 +162,7 @@ export type SlotEligibility =
 export type RosterPlayer = {
   readonly id: PlayerId;
   readonly eligiblePositions: ReadonlyArray<PositionType>;
+  readonly availabilityTier: AvailabilityTier;
   readonly selection: PlayerSelection;
   readonly reserveEligible: boolean;
   readonly lockedSlotId: SlotId | undefined;
@@ -192,6 +194,11 @@ export type PlayerId = string & { readonly [playerIdBrand]: "PlayerId" };
 declare const selectionBasisBrand: unique symbol;
 export type SelectionBasis = string & { readonly [selectionBasisBrand]: "SelectionBasis" };
 
+declare const availabilityTierBrand: unique symbol;
+export type AvailabilityTier = string & {
+  readonly [availabilityTierBrand]: "AvailabilityTier";
+};
+
 export function makeSlotId(value: string): SlotId {
   if (!isNonEmptySlotId(value)) {
     throw new Error("A slot id must not be empty.");
@@ -209,6 +216,13 @@ export function makePlayerId(value: string): PlayerId {
 export function makeSelectionBasis(value: string): SelectionBasis {
   if (!isNonEmptySelectionBasis(value)) {
     throw new Error("A selection basis must not be empty.");
+  }
+  return value;
+}
+
+export function makeAvailabilityTier(value: string): AvailabilityTier {
+  if (!isNonEmptyAvailabilityTier(value)) {
+    throw new Error("An availability tier must not be empty.");
   }
   return value;
 }
@@ -236,5 +250,9 @@ function isNonEmptyPlayerId(value: string): value is PlayerId {
 }
 
 function isNonEmptySelectionBasis(value: string): value is SelectionBasis {
+  return value.length > 0;
+}
+
+function isNonEmptyAvailabilityTier(value: string): value is AvailabilityTier {
   return value.length > 0;
 }
