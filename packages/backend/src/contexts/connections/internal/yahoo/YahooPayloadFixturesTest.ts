@@ -768,6 +768,14 @@ export const yahooNflWeekPlayerDetails = {
                 },
               },
               {
+                percent_started: percentStartedFragments({
+                  coverage: { coverage_type: "week", week: "6" },
+                  value: 38,
+                  delta: 10,
+                  cuts: [{ cutType: "diamond", value: 0 }],
+                }),
+              },
+              {
                 ownership: {
                   "0": {
                     teams: {
@@ -831,6 +839,14 @@ export const yahooNflSeasonPlayerDetails = {
                   "0": { coverage_type: "season", season: "2026" },
                   total: "142.1",
                 },
+              },
+              {
+                percent_started: percentStartedFragments({
+                  coverage: { coverage_type: "week", week: "6" },
+                  value: 38,
+                  delta: 10,
+                  cuts: [{ cutType: "diamond", value: 0 }],
+                }),
               },
               {
                 ownership: {
@@ -907,6 +923,14 @@ export const yahooNhlSeasonPlayerDetails = {
                 },
               },
               {
+                percent_started: percentStartedFragments({
+                  coverage: { coverage_type: "date", date: "2026-10-26" },
+                  value: 43,
+                  delta: -3,
+                  cuts: [{ cutType: "diamond", value: 0 }],
+                }),
+              },
+              {
                 ownership: {
                   ownership_type: "waivers",
                   owner_team_key: "466.l.4002.t.3",
@@ -946,6 +970,14 @@ export const yahooNhlWeekPlayerDetails = {
                 { eligible_positions: [{ position: "C" }, { position: "LW" }] },
                 { is_undroppable: "0" },
               ],
+              {
+                percent_started: percentStartedFragments({
+                  coverage: { coverage_type: "date", date: "2026-10-26" },
+                  value: 43,
+                  delta: -3,
+                  cuts: [{ cutType: "diamond", value: 0 }],
+                }),
+              },
               {
                 ownership: {
                   ownership_type: "team",
@@ -2063,3 +2095,224 @@ export const yahooNhlMatchupsWithGames = {
     ],
   },
 };
+
+export const yahooNflPlayerDetailsWithPopulatedCut = playerDetailsPayload({
+  leagueKey: "466.l.4000",
+  leagueName: "Synthetic NFL League",
+  playerKeys: ["466.p.20001", "466.p.20002"],
+  players: [
+    {
+      displayPosition: "QB",
+      primaryPosition: "QB",
+      eligiblePositions: ["QB"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "week", week: "6" },
+        value: 38,
+        delta: 10,
+        cuts: [{ cutType: "diamond", value: 41 }],
+      }),
+    },
+    {
+      displayPosition: "WR",
+      primaryPosition: "WR",
+      eligiblePositions: ["WR"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "week", week: "6" },
+        value: 72,
+        delta: -4,
+        cuts: [{ cutType: "diamond", value: 65 }],
+      }),
+    },
+  ],
+});
+
+export const yahooNflPlayerDetailsWithUnpopulatedCut = playerDetailsPayload({
+  leagueKey: "466.l.4000",
+  leagueName: "Synthetic NFL League",
+  playerKeys: ["466.p.20001", "466.p.20002"],
+  players: [
+    {
+      displayPosition: "QB",
+      primaryPosition: "QB",
+      eligiblePositions: ["QB"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "week", week: "6" },
+        value: 38,
+        cuts: [{ cutType: "diamond", value: 0 }],
+      }),
+    },
+    {
+      displayPosition: "WR",
+      primaryPosition: "WR",
+      eligiblePositions: ["WR"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "week", week: "6" },
+        value: 72,
+        cuts: [{ cutType: "diamond", value: 0 }],
+      }),
+    },
+  ],
+});
+
+export const yahooNhlPlayerDetailsWithoutStartedPercentage = playerDetailsPayload({
+  leagueKey: "466.l.4002",
+  leagueName: "Synthetic Roto League",
+  playerKeys: ["466.p.30001"],
+  players: [
+    {
+      displayPosition: "C,LW",
+      primaryPosition: "C",
+      eligiblePositions: ["C", "LW"],
+      percentStarted: undefined,
+    },
+  ],
+});
+
+export const yahooNhlPlayerDetailsWithMissingStartedValue = playerDetailsPayload({
+  leagueKey: "466.l.4002",
+  leagueName: "Synthetic Roto League",
+  playerKeys: ["466.p.30001", "466.p.30002"],
+  players: [
+    {
+      displayPosition: "G",
+      primaryPosition: "G",
+      eligiblePositions: ["G", "IR+"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "date", date: "2026-10-26" },
+        cuts: [{ cutType: "diamond", value: undefined }],
+      }),
+    },
+    {
+      displayPosition: "C",
+      primaryPosition: "C",
+      eligiblePositions: ["C"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "date", date: "2026-10-26" },
+        value: 43,
+        delta: -3,
+        cuts: [{ cutType: "diamond", value: 0 }],
+      }),
+    },
+  ],
+});
+
+export const yahooNhlPlayerDetailsWithUnparseableStartedValue = playerDetailsPayload({
+  leagueKey: "466.l.4002",
+  leagueName: "Synthetic Roto League",
+  playerKeys: ["466.p.30001"],
+  players: [
+    {
+      displayPosition: "C,LW",
+      primaryPosition: "C",
+      eligiblePositions: ["C", "LW"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "date", date: "2026-10-26" },
+        value: "n/a",
+        cuts: [{ cutType: "diamond", value: 0 }],
+      }),
+    },
+  ],
+});
+
+export const yahooNflPlayerDetailsWithMismatchedStartedCoverage = playerDetailsPayload({
+  leagueKey: "466.l.4000",
+  leagueName: "Synthetic NFL League",
+  playerKeys: ["466.p.20001"],
+  players: [
+    {
+      displayPosition: "QB",
+      primaryPosition: "QB",
+      eligiblePositions: ["QB"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "week", week: "5" },
+        value: 38,
+        cuts: [{ cutType: "diamond", value: 0 }],
+      }),
+    },
+  ],
+});
+
+function percentStartedFragments(input: {
+  readonly coverage: Readonly<Record<string, string>>;
+  readonly value?: number | string;
+  readonly delta?: number | string;
+  readonly cuts?: ReadonlyArray<{ readonly cutType: string; readonly value?: number | string }>;
+}): ReadonlyArray<unknown> {
+  const fragments: Array<unknown> = [input.coverage];
+  if (input.value !== undefined) {
+    fragments.push({ value: input.value });
+  }
+  if (input.delta !== undefined) {
+    fragments.push({ delta: input.delta });
+  }
+  if (input.cuts !== undefined && input.cuts.length > 0) {
+    fragments.push({
+      percent_started_cut_types: input.cuts.map((cut) => ({
+        percent_started_cut_type: [
+          input.coverage,
+          { cut_type: cut.cutType },
+          ...(cut.value === undefined ? [] : [{ value: cut.value }]),
+        ],
+      })),
+    });
+  }
+  return fragments;
+}
+
+function playerDetailsPayload(input: {
+  readonly leagueKey: string;
+  readonly leagueName: string;
+  readonly playerKeys: ReadonlyArray<string>;
+  readonly players: ReadonlyArray<{
+    readonly displayPosition: string;
+    readonly primaryPosition: string;
+    readonly eligiblePositions: ReadonlyArray<string>;
+    readonly percentStarted: ReadonlyArray<unknown> | undefined;
+  }>;
+}): { fantasy_content: Record<string, unknown> } {
+  const entries: Record<string, unknown> = {};
+  input.players.forEach((player, index) => {
+    const playerKey = input.playerKeys[index] ?? `466.p.9${String(index)}`;
+    entries[String(index)] = {
+      player: [
+        [
+          { player_key: playerKey },
+          { player_id: playerKey.slice(playerKey.lastIndexOf(".p.") + 3) },
+          {
+            name: {
+              full: `Synthetic Player ${String(index + 1)}`,
+              first: "Synthetic",
+              last: `Player ${String(index + 1)}`,
+            },
+          },
+          { display_position: player.displayPosition },
+          { position_type: "O" },
+          { primary_position: player.primaryPosition },
+          {
+            eligible_positions: player.eligiblePositions.map((position) => ({ position })),
+          },
+        ],
+        ...(player.percentStarted === undefined
+          ? []
+          : [{ percent_started: player.percentStarted }]),
+        {
+          ownership: { ownership_type: "team" },
+        },
+      ],
+    };
+  });
+  entries["count"] = input.players.length;
+  return {
+    fantasy_content: {
+      "xml:lang": "en-US",
+      league: [
+        {
+          league_key: input.leagueKey,
+          league_id: input.leagueKey.slice(input.leagueKey.indexOf(".l.") + 3),
+          name: input.leagueName,
+        },
+        { players: entries },
+      ],
+    },
+  };
+}

@@ -172,6 +172,18 @@ export type ProviderPlayerStatGroup = {
   readonly stats: ReadonlyArray<ProviderStatValue>;
 };
 
+export type ProviderStartPercentageCut = {
+  readonly cutType: string;
+  readonly percent: number | null;
+};
+
+export type ProviderPercentStarted = {
+  readonly percent: number | null;
+  readonly delta: number | null;
+  readonly coverage: ProviderRosterCoverage | null;
+  readonly cuts: ReadonlyArray<ProviderStartPercentageCut>;
+};
+
 export type ProviderPlayerDetail = {
   readonly providerPlayerKey: string;
   readonly name: string | undefined;
@@ -181,6 +193,7 @@ export type ProviderPlayerDetail = {
   readonly rosterStatus: "rostered" | "free_agent" | "waiver" | "unknown";
   readonly actual: ProviderPlayerStatGroup | undefined;
   readonly projected: ProviderPlayerStatGroup | undefined;
+  readonly percentStarted: ProviderPercentStarted | undefined;
 };
 
 export type ProviderPlayerPeriod = {
@@ -456,6 +469,7 @@ export type ProviderGatewayShape = {
       readonly providerPlayerKeys: ReadonlyArray<string>;
       readonly sport: ProviderSport;
       readonly period: ProviderPeriod | undefined;
+      readonly startedPeriod: ProviderRosterCoverage | undefined;
       readonly currentWeek: number | undefined;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure>;

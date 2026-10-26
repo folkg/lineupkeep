@@ -19,6 +19,9 @@ import {
   yahooNflFreeAgents,
   yahooNflLeagueSettings,
   yahooNflLeagueTeams,
+  yahooNflPlayerDetailsWithMismatchedStartedCoverage,
+  yahooNflPlayerDetailsWithPopulatedCut,
+  yahooNflPlayerDetailsWithUnpopulatedCut,
   yahooNflLeagueTeamsForAnotherLeague,
   yahooNflMatchups,
   yahooNflRosterWeekMismatch,
@@ -35,6 +38,9 @@ import {
   yahooNhlRoster,
   yahooNhlRotoLeagueSettings,
   yahooNhlWeekPlayerDetails,
+  yahooNhlPlayerDetailsWithMissingStartedValue,
+  yahooNhlPlayerDetailsWithUnparseableStartedValue,
+  yahooNhlPlayerDetailsWithoutStartedPercentage,
   yahooNflTransactions,
   yahooNflRoster,
   yahooNflStandings,
@@ -1073,12 +1079,13 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       period: { week: 6 },
+      startedPeriod: { type: "week", week: 6 },
       currentWeek: 7,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=week&stats.week=6",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership,percent_started?format=json&stats.type=week&stats.week=6&percent_started.cut_types=diamond",
     );
     assert.deepStrictEqual(details, [
       {
@@ -1097,6 +1104,12 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
           ],
         },
         projected: undefined,
+        percentStarted: {
+          percent: 38,
+          delta: 10,
+          coverage: { type: "week", week: 6 },
+          cuts: [{ cutType: "diamond", percent: 0 }],
+        },
       },
     ]);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
@@ -1113,12 +1126,13 @@ it.effect("reads season statistics on a season basis when no completed week is a
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       period: { week: 6 },
+      startedPeriod: { type: "week", week: 6 },
       currentWeek: 6,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=season",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership,percent_started?format=json&stats.type=season&percent_started.cut_types=diamond",
     );
     assert.deepStrictEqual(details[0]?.actual, {
       basis: { type: "season" },
@@ -1154,6 +1168,7 @@ it.effect("reads a bounded player history in one request per period", () => {
     assert.strictEqual(internet.calls.length, 2);
     assert.include(internet.calls[0]?.url.href, "stats.type=season");
     assert.include(internet.calls[1]?.url.href, "stats.type=season");
+    assert.notInclude(internet.calls[0]?.url.href, "percent_started");
     assert.strictEqual(history[0]?.details[0]?.providerPlayerKey, "466.p.20001");
     assert.strictEqual(history[1]?.details[0]?.providerPlayerKey, "466.p.20001");
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
@@ -1170,12 +1185,13 @@ it.effect("uses the season basis when the current week is unknown", () => {
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       period: { week: 6 },
+      startedPeriod: { type: "week", week: 6 },
       currentWeek: undefined,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=season",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership,percent_started?format=json&stats.type=season&percent_started.cut_types=diamond",
     );
     assert.deepStrictEqual(details[0]?.actual, {
       basis: { type: "season" },
@@ -1198,14 +1214,21 @@ it.effect("reads season statistics for hockey instead of requesting a weekly ser
       providerLeagueKey: "466.l.4002",
       providerPlayerKeys: ["466.p.30001"],
       sport: "hockey",
-      period: { week: 6 },
+      period: undefined,
+      startedPeriod: { type: "date", date: "2026-10-26" },
       currentWeek: 7,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/players;player_keys=466.p.30001;out=stats,ownership?format=json&stats.type=season",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/players;player_keys=466.p.30001;out=stats,ownership,percent_started?format=json&stats.type=season&percent_started.cut_types=diamond",
     );
+    assert.deepStrictEqual(details[0]?.percentStarted, {
+      percent: 43,
+      delta: -3,
+      coverage: { type: "date", date: "2026-10-26" },
+      cuts: [{ cutType: "diamond", percent: 0 }],
+    });
     assert.deepStrictEqual(details[0]?.actual, {
       basis: { type: "season" },
       stats: [
@@ -1229,12 +1252,209 @@ it.effect("reports no actual statistics when the provider omits the series", () 
       providerPlayerKeys: ["466.p.30001"],
       sport: "hockey",
       period: undefined,
+      startedPeriod: undefined,
       currentWeek: undefined,
     });
 
     assert.strictEqual(details[0]?.actual, undefined);
     assert.strictEqual(details[0]?.name, "Synthetic Skater");
     assert.strictEqual(details[0]?.projected, undefined);
+    assert.deepStrictEqual(details[0]?.percentStarted, {
+      percent: 43,
+      delta: -3,
+      coverage: { type: "date", date: "2026-10-26" },
+      cuts: [{ cutType: "diamond", percent: 0 }],
+    });
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("decodes a started percentage and its diamond cut in one node", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPlayerDetailsWithPopulatedCut));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const details = yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerPlayerKeys: ["466.p.20001", "466.p.20002"],
+      sport: "football",
+      period: { week: 6 },
+      startedPeriod: { type: "week", week: 6 },
+      currentWeek: 7,
+    });
+
+    assert.deepStrictEqual(
+      details.map((detail) => detail.percentStarted),
+      [
+        {
+          percent: 38,
+          delta: 10,
+          coverage: { type: "week", week: 6 },
+          cuts: [{ cutType: "diamond", percent: 41 }],
+        },
+        {
+          percent: 72,
+          delta: -4,
+          coverage: { type: "week", week: 6 },
+          cuts: [{ cutType: "diamond", percent: 65 }],
+        },
+      ],
+    );
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("keeps a zero cut percentage instead of treating it as absent", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPlayerDetailsWithUnpopulatedCut));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const details = yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerPlayerKeys: ["466.p.20001", "466.p.20002"],
+      sport: "football",
+      period: { week: 6 },
+      startedPeriod: { type: "week", week: 6 },
+      currentWeek: 7,
+    });
+
+    assert.deepStrictEqual(
+      details.map((detail) => detail.percentStarted?.cuts),
+      [[{ cutType: "diamond", percent: 0 }], [{ cutType: "diamond", percent: 0 }]],
+    );
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reports an absent started percentage as absent", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(yahooNhlPlayerDetailsWithoutStartedPercentage),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const details = yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+      providerPlayerKeys: ["466.p.30001"],
+      sport: "hockey",
+      period: undefined,
+      startedPeriod: undefined,
+      currentWeek: undefined,
+    });
+
+    assert.deepStrictEqual(details, [
+      {
+        providerPlayerKey: "466.p.30001",
+        name: "Synthetic Player 1",
+        primaryPosition: "C",
+        displayPosition: "C,LW",
+        eligiblePositions: ["C", "LW"],
+        rosterStatus: "rostered",
+        actual: undefined,
+        projected: undefined,
+        percentStarted: undefined,
+      },
+    ]);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reports a missing started value for one player without failing the read", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(yahooNhlPlayerDetailsWithMissingStartedValue),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const details = yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+      providerPlayerKeys: ["466.p.30001", "466.p.30002"],
+      sport: "hockey",
+      period: undefined,
+      startedPeriod: { type: "date", date: "2026-10-26" },
+      currentWeek: undefined,
+    });
+
+    assert.deepStrictEqual(details[0]?.percentStarted, {
+      percent: null,
+      delta: null,
+      coverage: { type: "date", date: "2026-10-26" },
+      cuts: [{ cutType: "diamond", percent: null }],
+    });
+    assert.strictEqual(details[1]?.percentStarted?.percent, 43);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("fails loudly when a started percentage cannot be parsed", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(yahooNhlPlayerDetailsWithUnparseableStartedValue),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readPlayerDetails({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4002",
+        providerPlayerKeys: ["466.p.30001"],
+        sport: "hockey",
+        period: undefined,
+        startedPeriod: { type: "date", date: "2026-10-26" },
+        currentWeek: undefined,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.players.0.percent_started.value");
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("fails loudly when no player carries a started percentage", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(yahooNhlPlayerDetailsWithoutStartedPercentage),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readPlayerDetails({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4002",
+        providerPlayerKeys: ["466.p.30001"],
+        sport: "hockey",
+        period: undefined,
+        startedPeriod: { type: "date", date: "2026-10-26" },
+        currentWeek: undefined,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.players.percent_started");
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("reports the covered started period when it differs from the request", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(yahooNflPlayerDetailsWithMismatchedStartedCoverage),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readPlayerDetails({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerPlayerKeys: ["466.p.20001"],
+        sport: "football",
+        period: { week: 6 },
+        startedPeriod: { type: "week", week: 6 },
+        currentWeek: 7,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderPeriodMismatch);
+    assert.deepStrictEqual(error.requested, { type: "week", week: 6 });
+    assert.deepStrictEqual(error.covered, { type: "week", week: 5 });
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 

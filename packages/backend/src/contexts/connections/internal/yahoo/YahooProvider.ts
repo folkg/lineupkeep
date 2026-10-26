@@ -27,6 +27,7 @@ import type {
   ProviderMatchup,
   ProviderNativeTarget,
   ProviderOperation,
+  ProviderPercentStarted,
   ProviderPeriod,
   ProviderPeriodKind,
   ProviderPeriodWindow,
@@ -42,6 +43,7 @@ import type {
   ProviderReviewLinkInput,
   ProviderStanding,
   ProviderStandings,
+  ProviderStartPercentageCut,
   ProviderStatValue,
   ProviderTeam,
   ProviderTeamScore,
@@ -385,25 +387,24 @@ export const YahooProvider = Layer.effect(
       readonly leagueKey: string;
       readonly playerKeys: ReadonlyArray<string>;
       readonly basis: ProviderStatBasis;
+      readonly startedPeriod: ProviderRosterCoverage | undefined;
       readonly operation: "read_player_details" | "read_player_history";
     }) {
       const payload = yield* readJson(internet, {
         operation: input.operation,
         origin: readOrigin,
-        path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")};out=stats,ownership`,
-        query:
-          input.basis.type === "week"
-            ? {
-                format: "json",
-                "stats.type": "week",
-                "stats.week": String(input.basis.week),
-              }
-            : { format: "json", "stats.type": "season" },
+        path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")}${playerDetailOutput(input.operation)}`,
+        query: playerDetailQuery(input.basis, input.operation),
         cookie: input.cookie,
         normalize: true,
       });
       const decoded = yield* decodePayload(PlayerDetailsPayload, payload, input.operation);
-      return yield* playerDetailsFromPayload(decoded, input.leagueKey, input.basis);
+      return yield* playerDetailsFromPayload(
+        decoded,
+        input.leagueKey,
+        input.basis,
+        input.startedPeriod,
+      );
     });
 
     const readPlayerDetails = Effect.fn("YahooProvider.readPlayerDetails")(function* (
@@ -412,6 +413,7 @@ export const YahooProvider = Layer.effect(
         readonly providerPlayerKeys: ReadonlyArray<string>;
         readonly sport: "football" | "hockey";
         readonly period: ProviderPeriod | undefined;
+        readonly startedPeriod: ProviderRosterCoverage | undefined;
         readonly currentWeek: number | undefined;
       },
     ) {
@@ -427,11 +429,15 @@ export const YahooProvider = Layer.effect(
         leagueKey,
         playerKeys,
         basis,
+        startedPeriod: input.startedPeriod,
         operation: "read_player_details",
       });
       yield* Effect.annotateCurrentSpan({
         "provider.player_count": details.length,
         "provider.stat_basis": basis.type,
+        "provider.percent_started_count": details.filter((detail) =>
+          hasStartPercentage(detail.percentStarted),
+        ).length,
       });
       return details;
     });
@@ -460,6 +466,7 @@ export const YahooProvider = Layer.effect(
             leagueKey,
             playerKeys: playerKeys.slice(index, index + maximumSelectedPlayers),
             basis,
+            startedPeriod: undefined,
             operation: "read_player_history",
           });
           for (const detail of chunkDetails) {
@@ -503,7 +510,7 @@ export const YahooProvider = Layer.effect(
       });
       const decoded = yield* decodePayload(PlayerSearchPayload, payload, "search_players");
       if (decoded.league.league_key !== leagueKey) {
-        return yield* ProviderResponseInvalid.make({ operation: "search_players" });
+        return yield* responseMismatch({ operation: "search_players", field: "league.league_key" });
       }
       const players = decoded.league.players.map(toSearchPlayer);
       yield* Effect.annotateCurrentSpan("provider.player_count", players.length);
@@ -560,7 +567,10 @@ export const YahooProvider = Layer.effect(
       });
       const decoded = yield* decodePayload(TransactionsPayload, payload, "read_transactions");
       if (decoded.league.league_key !== leagueKey) {
-        return yield* ProviderResponseInvalid.make({ operation: "read_transactions" });
+        return yield* responseMismatch({
+          operation: "read_transactions",
+          field: "league.league_key",
+        });
       }
       const transactions = yield* decodeTransactions(decoded.league.transactions);
       yield* Effect.annotateCurrentSpan("provider.transaction_count", transactions.length);
@@ -586,7 +596,7 @@ export const YahooProvider = Layer.effect(
         decoded.league.league_key !== leagueKey ||
         decoded.league.teams.some((team) => providerLeagueKey(team.team_key) !== leagueKey)
       ) {
-        return yield* ProviderResponseInvalid.make({ operation: "read_league_teams" });
+        return yield* responseMismatch({ operation: "read_league_teams" });
       }
       return decoded.league.teams.map((team) => ({
         providerTeamKey: team.team_key,
@@ -708,7 +718,7 @@ function readJson(
         catch: () => ProviderRequestFailed.make({ operation: request.operation }),
       });
       const payload = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
-        Effect.mapError(() => ProviderResponseInvalid.make({ operation: request.operation })),
+        Effect.catchTag("SchemaError", () => responseMismatch({ operation: request.operation })),
       );
       return request.normalize ? normalizeYahooJson(payload) : payload;
     }),
@@ -740,7 +750,11 @@ function yahooUrl(origin: URL, path: string, query: Readonly<Record<string, stri
   }
   if (
     [...url.searchParams.keys()].some(
-      (key) => key !== "format" && key !== "stats.type" && key !== "stats.week",
+      (key) =>
+        key !== "format" &&
+        key !== "stats.type" &&
+        key !== "stats.week" &&
+        key !== "percent_started.cut_types",
     )
   ) {
     throw new Error("Yahoo request contains an unsupported query field");
@@ -831,10 +845,30 @@ function decodePayload<A, E>(
   operation: ProviderOperation,
 ): Effect.Effect<A, ProviderResponseInvalid> {
   return Schema.decodeUnknownEffect(schema)(payload).pipe(
-    Effect.mapError((error) =>
-      ProviderResponseInvalid.make({ operation, field: invalidField(error.issue) }),
+    Effect.catchTag("SchemaError", (error) =>
+      responseMismatch({ operation, field: invalidField(error.issue) }),
     ),
   );
+}
+
+function responseMismatch(input: {
+  readonly operation: ProviderOperation;
+  readonly field?: string;
+}): Effect.Effect<never, ProviderResponseInvalid> {
+  return Effect.gen(function* () {
+    yield* reportSchemaMismatch(input.field);
+    return yield* ProviderResponseInvalid.make(input);
+  });
+}
+
+function reportSchemaMismatch(field: string | undefined): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    yield* Effect.annotateCurrentSpan({
+      "provider.schema_mismatch": true,
+      "provider.schema_field": field ?? "unreported",
+    });
+    yield* Effect.logWarning("A provider response did not match its decoder");
+  });
 }
 
 function invalidField(issue: SchemaIssue.Issue): string | undefined {
@@ -886,7 +920,7 @@ function teamsFromPayload(
     for (const user of payload.users) {
       for (const game of user.games) {
         if (game.code !== league) {
-          return yield* ProviderResponseInvalid.make({
+          return yield* responseMismatch({
             operation: "discover_teams",
             field: "game.code",
           });
@@ -921,7 +955,7 @@ function leagueSettings(
     const attributes = payload.league;
     const settings = singleEntry(attributes.settings);
     if (settings === undefined || attributes.league_key !== requestedLeagueKey) {
-      return yield* ProviderResponseInvalid.make({
+      return yield* responseMismatch({
         operation: "read_league",
         field: "league.league_key",
       });
@@ -930,7 +964,7 @@ function leagueSettings(
     const webUrl = yield* Effect.try({
       try: () => reviewBase(attributes.url, sport, leagueIdFromKey(attributes.league_key)).href,
       catch: () => ProviderResponseInvalid.make({ operation: "read_league", field: "league.url" }),
-    });
+    }).pipe(Effect.tapError((error) => reportSchemaMismatch(error.field)));
     return {
       providerLeagueKey: attributes.league_key,
       name: attributes.name,
@@ -985,7 +1019,7 @@ function weekWindow(
   if (currentWeek === undefined && startWeek === undefined && endWeek === undefined) {
     return Effect.as(Effect.void, undefined);
   }
-  return ProviderResponseInvalid.make({
+  return responseMismatch({
     operation: "read_league",
     field:
       currentWeek === undefined
@@ -1003,7 +1037,7 @@ function rosterFromPayload(
 ): Effect.Effect<ProviderRoster, ProviderResponseInvalid | ProviderPeriodMismatch> {
   return Effect.gen(function* () {
     if (payload.team.team_key !== requestedTeamKey) {
-      return yield* ProviderResponseInvalid.make({
+      return yield* responseMismatch({
         operation: "read_roster",
         field: "team.team_key",
       });
@@ -1016,21 +1050,21 @@ function rosterFromPayload(
         : [roster];
     const players = entries.flatMap((entry) => entry.players);
     if (players.length === 0) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+      return yield* responseMismatch({ operation: "read_roster" });
     }
     const declaredType = isReadonlyArray(roster) ? undefined : roster.coverage_type;
     const declaredWeek = isReadonlyArray(roster) ? undefined : roster.week;
     const declaredDate = isReadonlyArray(roster) ? undefined : roster.date;
     const coverageTypes = new Set(players.map((player) => player.selected_position.coverage_type));
     if (coverageTypes.size !== 1) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+      return yield* responseMismatch({ operation: "read_roster" });
     }
     const coverageType = [...coverageTypes][0];
     if (coverageType === undefined) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+      return yield* responseMismatch({ operation: "read_roster" });
     }
     if (declaredType !== undefined && declaredType !== coverageType) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+      return yield* responseMismatch({ operation: "read_roster" });
     }
     const leagueKey = providerLeagueKey(requestedTeamKey);
     if (coverageType === "week") {
@@ -1040,15 +1074,15 @@ function rosterFromPayload(
         ),
       );
       if (weeks.size > 1) {
-        return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+        return yield* responseMismatch({ operation: "read_roster" });
       }
       const playerWeek = [...weeks][0];
       if (declaredWeek !== undefined && playerWeek !== undefined && declaredWeek !== playerWeek) {
-        return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+        return yield* responseMismatch({ operation: "read_roster" });
       }
       const week = declaredWeek ?? playerWeek;
       if (week === undefined) {
-        return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+        return yield* responseMismatch({ operation: "read_roster" });
       }
       const coverage = { type: "week" as const, week };
       if (
@@ -1075,15 +1109,15 @@ function rosterFromPayload(
         ),
       );
       if (dates.size > 1) {
-        return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+        return yield* responseMismatch({ operation: "read_roster" });
       }
       const playerDate = [...dates][0];
       if (declaredDate !== undefined && playerDate !== undefined && declaredDate !== playerDate) {
-        return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+        return yield* responseMismatch({ operation: "read_roster" });
       }
       const date = declaredDate ?? playerDate;
       if (date === undefined) {
-        return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+        return yield* responseMismatch({ operation: "read_roster" });
       }
       const coverage = { type: "date" as const, date };
       if (
@@ -1103,7 +1137,7 @@ function rosterFromPayload(
         players: players.map(toRosterPlayer),
       };
     }
-    return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+    return yield* responseMismatch({ operation: "read_roster" });
   });
 }
 
@@ -1126,23 +1160,43 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
   };
 }
 
+function playerDetailOutput(operation: ProviderOperation): string {
+  return operation === "read_player_details"
+    ? ";out=stats,ownership,percent_started"
+    : ";out=stats,ownership";
+}
+
+function playerDetailQuery(
+  basis: ProviderStatBasis,
+  operation: ProviderOperation,
+): Record<string, string> {
+  const query: Record<string, string> =
+    basis.type === "week"
+      ? { format: "json", "stats.type": "week", "stats.week": String(basis.week) }
+      : { format: "json", "stats.type": "season" };
+  return operation === "read_player_details"
+    ? { ...query, "percent_started.cut_types": "diamond" }
+    : query;
+}
+
 function playerDetailsFromPayload(
   payload: typeof PlayerDetailsPayload.Type,
   requestedLeagueKey: string,
   basis: ProviderStatBasis,
+  startedCoverage: ProviderRosterCoverage | undefined,
 ): Effect.Effect<
   ReadonlyArray<ProviderPlayerDetail>,
   ProviderResponseInvalid | ProviderPeriodMismatch
 > {
   return Effect.gen(function* () {
     if (payload.league.league_key !== requestedLeagueKey) {
-      return yield* ProviderResponseInvalid.make({
+      return yield* responseMismatch({
         operation: "read_player_details",
         field: "league.league_key",
       });
     }
     const details: ProviderPlayerDetail[] = [];
-    for (const player of payload.league.players) {
+    for (const [index, player] of payload.league.players.entries()) {
       const series =
         player.player_stats === undefined
           ? undefined
@@ -1159,10 +1213,131 @@ function playerDetailsFromPayload(
         rosterStatus: rosterStatusOf(player.ownership?.ownership_type),
         actual: series === undefined ? undefined : { basis, stats: series },
         projected: undefined,
+        percentStarted: yield* percentStartedOf(
+          player.percent_started,
+          `league.players.${String(index)}.percent_started`,
+          startedCoverage,
+        ),
+      });
+    }
+    if (
+      startedCoverage !== undefined &&
+      details.length > 0 &&
+      details.every((detail) => !hasStartPercentage(detail.percentStarted))
+    ) {
+      return yield* responseMismatch({
+        operation: "read_player_details",
+        field: "league.players.percent_started",
       });
     }
     return details;
   });
+}
+
+function hasStartPercentage(started: ProviderPercentStarted | undefined): boolean {
+  return started !== undefined && started.percent !== null;
+}
+
+function percentStartedOf(
+  payload: typeof PercentStartedPayload.Type | undefined,
+  field: string,
+  expected: ProviderRosterCoverage | undefined,
+): Effect.Effect<
+  ProviderPercentStarted | undefined,
+  ProviderResponseInvalid | ProviderPeriodMismatch
+> {
+  return Effect.gen(function* () {
+    if (payload === undefined) {
+      return undefined;
+    }
+    const coverage = yield* coverageOf(payload, field);
+    if (coverage !== null && expected !== undefined && !sameCoverage(coverage, expected)) {
+      return yield* ProviderPeriodMismatch.make({
+        operation: "read_player_details",
+        requested: expected,
+        covered: coverage,
+      });
+    }
+    const cuts: Array<ProviderStartPercentageCut> = [];
+    for (const [index, entry] of (payload.percent_started_cut_types ?? []).entries()) {
+      const cut = entry.percent_started_cut_type;
+      cuts.push({
+        cutType: cut.cut_type,
+        percent: yield* percentageOf(
+          cut.value,
+          `${field}.percent_started_cut_types.${String(index)}.value`,
+        ),
+      });
+    }
+    return {
+      percent: yield* percentageOf(payload.value, `${field}.value`),
+      delta: yield* percentDeltaOf(payload.delta, `${field}.delta`),
+      coverage,
+      cuts,
+    };
+  });
+}
+
+function coverageOf(
+  payload: typeof PercentStartedPayload.Type,
+  field: string,
+): Effect.Effect<ProviderRosterCoverage | null, ProviderResponseInvalid> {
+  const coverageType = payload.coverage_type;
+  if (coverageType === undefined) {
+    return Effect.succeed(null);
+  }
+  if (coverageType === "week" && payload.week !== undefined) {
+    return Effect.succeed({ type: "week", week: payload.week });
+  }
+  if (coverageType === "date" && payload.date !== undefined) {
+    return Effect.succeed({ type: "date", date: payload.date });
+  }
+  return responseMismatch({ operation: "read_player_details", field: `${field}.coverage_type` });
+}
+
+function percentageOf(
+  value: number | string | null | undefined,
+  field: string,
+): Effect.Effect<number | null, ProviderResponseInvalid> {
+  if (value === undefined || value === null) {
+    return Effect.succeed(null);
+  }
+  const percent = parsePercent(value);
+  if (percent === undefined || percent < 0 || percent > 100) {
+    return responseMismatch({ operation: "read_player_details", field });
+  }
+  return Effect.succeed(percent);
+}
+
+function percentDeltaOf(
+  value: number | string | null | undefined,
+  field: string,
+): Effect.Effect<number | null, ProviderResponseInvalid> {
+  if (value === undefined || value === null) {
+    return Effect.succeed(null);
+  }
+  const delta = parsePercent(value);
+  if (delta === undefined) {
+    return responseMismatch({ operation: "read_player_details", field });
+  }
+  return Effect.succeed(delta);
+}
+
+function parsePercent(value: number | string): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  return /^-?\d+(?:\.\d+)?$/u.test(value) ? Number(value) : undefined;
+}
+
+function sameCoverage(left: ProviderRosterCoverage, right: ProviderRosterCoverage): boolean {
+  if (left.type === "week" && right.type === "week") {
+    return left.week === right.week;
+  }
+  if (left.type === "date" && right.type === "date") {
+    return left.date === right.date;
+  }
+  return false;
 }
 
 function statBasis(
@@ -1195,7 +1370,7 @@ function statSeries(
       coverage === undefined ||
       coverage.coverage_type !== basis.type
     ) {
-      return yield* ProviderResponseInvalid.make({
+      return yield* responseMismatch({
         operation: "read_player_details",
         field: "player_stats",
       });
@@ -1242,14 +1417,14 @@ function standingsFromPayload(
 ): Effect.Effect<ProviderStandings, ProviderResponseInvalid> {
   return Effect.gen(function* () {
     if (payload.league.league_key !== requestedLeagueKey) {
-      return yield* ProviderResponseInvalid.make({
+      return yield* responseMismatch({
         operation: "read_standings",
         field: "league.league_key",
       });
     }
     const teams = payload.league.standings.flatMap((group) => group.teams);
     if (teams.length === 0) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_standings" });
+      return yield* responseMismatch({ operation: "read_standings" });
     }
     return {
       providerLeagueKey: requestedLeagueKey,
@@ -1301,7 +1476,7 @@ function matchupsFromPayload(
   return Effect.gen(function* () {
     const scoreboard = payload.league.scoreboard;
     if (payload.league.league_key !== requestedLeagueKey) {
-      return yield* ProviderResponseInvalid.make({ operation: "read_matchups" });
+      return yield* responseMismatch({ operation: "read_matchups" });
     }
     if (scoreboard.week !== period.week) {
       return yield* ProviderPeriodMismatch.make({
@@ -1322,11 +1497,11 @@ function matchupsFromPayload(
         }
         const teams = matchup.entries.flatMap((entry) => entry.teams);
         if (teams.length !== 2) {
-          return yield* ProviderResponseInvalid.make({ operation: "read_matchups" });
+          return yield* responseMismatch({ operation: "read_matchups" });
         }
         const [home, away] = teams;
         if (home === undefined || away === undefined) {
-          return yield* ProviderResponseInvalid.make({ operation: "read_matchups" });
+          return yield* responseMismatch({ operation: "read_matchups" });
         }
         const homeScore = yield* teamScore(home, period);
         const awayScore = yield* teamScore(away, period);
@@ -1518,7 +1693,7 @@ function providerNumber(value: number | string | undefined): number | null {
 
 function providerInstant(timestamp: number): Effect.Effect<string, ProviderResponseInvalid> {
   return Option.match(DateTime.make(timestamp * 1_000), {
-    onNone: () => ProviderResponseInvalid.make({ operation: "read_transactions" }),
+    onNone: () => responseMismatch({ operation: "read_transactions" }),
     onSome: (instant) => Effect.succeed(DateTime.formatIso(instant)),
   });
 }
@@ -1974,6 +2149,27 @@ const PlayerStats = Schema.Struct({
   entries: Schema.Array(StatCoverageEntry),
 });
 
+const PercentValue = Schema.optional(Schema.NullOr(Schema.Union([Schema.Finite, Schema.String])));
+
+const PercentStartedCut = Schema.Struct({
+  percent_started_cut_type: Schema.Struct({
+    coverage_type: Schema.optional(Schema.String),
+    week: Schema.optional(IntFromStringOrNumber),
+    date: Schema.optional(Schema.String),
+    cut_type: Schema.NonEmptyString,
+    value: PercentValue,
+  }),
+});
+
+const PercentStartedPayload = Schema.Struct({
+  coverage_type: Schema.optional(Schema.String),
+  week: Schema.optional(IntFromStringOrNumber),
+  date: Schema.optional(Schema.String),
+  value: PercentValue,
+  delta: PercentValue,
+  percent_started_cut_types: Schema.optional(Schema.Array(PercentStartedCut)),
+});
+
 const PlayerDetailPayload = Schema.Struct({
   player_key: PlayerKey,
   name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
@@ -1982,6 +2178,7 @@ const PlayerDetailPayload = Schema.Struct({
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   ownership: Schema.optional(PlayerOwnership),
   percent_owned: Schema.optional(PercentOwned),
+  percent_started: Schema.optional(PercentStartedPayload),
   player_stats: Schema.optional(PlayerStats),
 });
 

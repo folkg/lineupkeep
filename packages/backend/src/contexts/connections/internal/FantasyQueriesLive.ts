@@ -870,6 +870,7 @@ export const FantasyQueriesLive = Layer.effect(
             providerPlayerKeys: valid.map((row) => row.providerPlayerKey),
             sport: context.owned.team.sport,
             period: requestedPeriod,
+            startedPeriod: undefined,
             currentWeek: league?.periodWindow?.currentWeek,
           }),
         );

@@ -479,6 +479,7 @@ it.effect(
             rosterStatus: "rostered",
             actual: { basis: { type: "season" }, stats: [{ statId: 11, value: 4 }] },
             projected: undefined,
+            percentStarted: undefined,
           },
         ],
       });
@@ -1752,6 +1753,7 @@ const playerDetails = [
     rosterStatus: "rostered" as const,
     actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 275 }] },
     projected: undefined,
+    percentStarted: undefined,
   },
   {
     providerPlayerKey: "461.p.10002",
@@ -1762,6 +1764,7 @@ const playerDetails = [
     rosterStatus: "rostered" as const,
     actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 0 }] },
     projected: undefined,
+    percentStarted: undefined,
   },
   {
     providerPlayerKey: "461.p.10003",
@@ -1772,6 +1775,7 @@ const playerDetails = [
     rosterStatus: "free_agent" as const,
     actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 0 }] },
     projected: undefined,
+    percentStarted: undefined,
   },
 ];
 
