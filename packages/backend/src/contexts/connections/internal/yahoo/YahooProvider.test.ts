@@ -19,6 +19,7 @@ import {
   yahooNflFreeAgents,
   yahooNflLeagueSettings,
   yahooNflLeagueTeams,
+  yahooNflLeagueTeamsForAnotherLeague,
   yahooNflMatchups,
   yahooNflRosterWeekMismatch,
   yahooNflTeams,
@@ -109,6 +110,18 @@ it.effect("discovers both supported leagues with exact batches and stable team i
     ]);
     assert.isTrue(internet.calls.every((call) => call.options?.timeoutMs === 30_000));
     assert.isTrue(internet.calls.every((call) => call.options?.maxResponseBytes === 4_194_304));
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("rejects a discovered game that does not match the requested sport", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlTeams));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(provider.discoverTeams(sessionInput));
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "game.code");
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -573,6 +586,24 @@ it.effect("reads a week-scoped roster container from a captured payload", () => 
         ["Synthetic Reserve", "BN", false, "O"],
       ],
     );
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("rejects a roster returned for a different team", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "466.l.4000.t.2",
+        period: { week: 6 },
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "team.team_key");
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
@@ -1047,6 +1078,22 @@ it.effect("reads league team membership", () => {
         name: "Synthetic Rival",
       },
     ]);
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
+it.effect("rejects league membership that names another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueTeamsForAnotherLeague));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const error = yield* Effect.flip(
+      provider.readLeagueTeams({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 

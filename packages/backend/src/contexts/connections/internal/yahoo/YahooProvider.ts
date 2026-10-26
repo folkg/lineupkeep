@@ -128,7 +128,7 @@ export const YahooProvider = Layer.effect(
         if (decoded.users.length === 0) {
           return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
         }
-        for (const team of teamsFromPayload(decoded, league)) {
+        for (const team of yield* teamsFromPayload(decoded, league)) {
           teams.push(team);
         }
       }
@@ -431,7 +431,10 @@ export const YahooProvider = Layer.effect(
         normalize: true,
       });
       const decoded = yield* decodePayload(LeagueTeamsPayload, payload, "read_league_teams");
-      if (decoded.league.league_key !== leagueKey) {
+      if (
+        decoded.league.league_key !== leagueKey ||
+        decoded.league.teams.some((team) => providerLeagueKey(team.team_key) !== leagueKey)
+      ) {
         return yield* ProviderResponseInvalid.make({ operation: "read_league_teams" });
       }
       return decoded.league.teams.map((team) => ({
@@ -687,25 +690,32 @@ function issuePath(root: SchemaIssue.Issue): ReadonlyArray<PropertyKey> {
 function teamsFromPayload(
   payload: typeof TeamsPayload.Type,
   league: (typeof supportedLeagues)[number],
-): ReadonlyArray<ProviderTeam> {
-  return payload.users.flatMap((user) =>
-    user.games.flatMap((game) => {
-      const season = game.season;
-      const teams = game.teams ?? [];
-      return teams.map((team) => {
-        const leagueKey = providerLeagueKey(team.team_key);
-        return {
-          provider: "yahoo" as const,
-          providerTeamKey: team.team_key,
-          providerLeagueKey: leagueKey,
-          league,
-          sport: leagueSport[league],
-          season,
-          name: team.name,
-        };
-      });
-    }),
-  );
+): Effect.Effect<ReadonlyArray<ProviderTeam>, ProviderResponseInvalid> {
+  return Effect.gen(function* () {
+    const teams: ProviderTeam[] = [];
+    for (const user of payload.users) {
+      for (const game of user.games) {
+        if (game.code !== league) {
+          return yield* ProviderResponseInvalid.make({
+            operation: "discover_teams",
+            field: "game.code",
+          });
+        }
+        for (const team of game.teams ?? []) {
+          teams.push({
+            provider: "yahoo" as const,
+            providerTeamKey: team.team_key,
+            providerLeagueKey: providerLeagueKey(team.team_key),
+            league,
+            sport: leagueSport[league],
+            season: game.season,
+            name: team.name,
+          });
+        }
+      }
+    }
+    return teams;
+  });
 }
 
 function providerLeagueKey(teamKey: string): string {
@@ -801,6 +811,12 @@ function rosterFromPayload(
   requestedPeriod: ProviderPeriod | undefined,
 ): Effect.Effect<ProviderRoster, ProviderResponseInvalid | ProviderPeriodMismatch> {
   return Effect.gen(function* () {
+    if (payload.team.team_key !== requestedTeamKey) {
+      return yield* ProviderResponseInvalid.make({
+        operation: "read_roster",
+        field: "team.team_key",
+      });
+    }
     const roster = payload.team.roster;
     const entries = isReadonlyArray(roster)
       ? roster
@@ -1412,6 +1428,7 @@ const TeamPayload = Schema.Struct({
 });
 
 const GamePayload = Schema.Struct({
+  code: Schema.NonEmptyString,
   season: Season,
   teams: Schema.optional(Schema.Array(TeamPayload)),
 });
@@ -1536,6 +1553,9 @@ const RosterEntry = Schema.Struct({
 
 const TeamRosterPayload = Schema.Struct({
   team: Schema.Struct({
+    team_key: Schema.String.pipe(
+      Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+\.t\.[0-9]+$/u)),
+    ),
     roster: Schema.Union([
       Schema.Array(RosterEntry),
       Schema.Struct({ ...RosterCoverage.fields, entries: Schema.Array(RosterEntry) }),

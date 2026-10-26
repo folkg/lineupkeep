@@ -1429,6 +1429,35 @@ export const yahooNflLeagueTeams = {
   },
 };
 
+export const yahooNflLeagueTeamsForAnotherLeague = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        teams: {
+          "0": {
+            team: [
+              [
+                { team_key: "466.l.4001.t.1" },
+                { team_id: "1" },
+                { name: "Foreign Team" },
+              ],
+              [],
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
 export const yahooNflRosterWeekMismatch = {
   fantasy_content: {
     team: [
