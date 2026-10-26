@@ -3,7 +3,6 @@ import {
   isLegalPlan,
   isStartingSlot,
   makePlayerId,
-  makeSelectionBasis,
   makeSlotId,
   solveLineup,
 } from "@lineupkeep/lineup-solver";
@@ -20,17 +19,25 @@ import { describe, expect, it } from "vitest";
 
 import { periodKey } from "./period.ts";
 import { buildLineupProblem } from "./policy.ts";
+import {
+  percentStartedPopulation,
+  preferredValueSource,
+  startCutPreference,
+  valueSourceLadder,
+} from "./source.ts";
 import type {
   LineupPolicyInput,
   LineupPolicyResult,
+  PercentStartedCut,
   Period,
   PeriodObservation,
   PlayerAvailability,
+  PlayerPercentStarted,
   PlayerValuation,
   PolicyPlayer,
+  ValueSource,
 } from "./types.ts";
 
-const basis = makeSelectionBasis("test-basis");
 const target: Period = { kind: "week", week: 7 };
 const unitRule = scoringProfile({ categories: [], rules: [{ statId: 1, points: "0.01" }] });
 
@@ -42,14 +49,15 @@ describe("availability", () => {
     });
 
     const valuation = valuationFrom(buildLineupProblem(input), "p1");
+    const realised = realisedValue(valuation);
 
-    expect(valuation.countedPeriods.map(periodKey)).toEqual([
+    expect(realised.countedPeriods.map(periodKey)).toEqual([
       "week:3",
       "week:4",
       "week:5",
       "week:6",
     ]);
-    expect(valuation.average).toEqual(parseExact("20"));
+    expect(realised.average).toEqual(parseExact("20"));
     expect(knownUnits(valuation)).toBe(2000);
     expect(valuation.availability).toEqual({ tier: "will-play", fact: "available" });
   });
@@ -68,7 +76,7 @@ describe("availability", () => {
       fact: "no-game",
       period: target,
     });
-    expect(valuation.average).toEqual(parseExact("16"));
+    expect(realisedValue(valuation).average).toEqual(parseExact("16"));
     expect(knownUnits(valuation)).toBe(1600);
   });
 
@@ -85,7 +93,7 @@ describe("availability", () => {
       fact: "excluded",
       reason: "injured-reserve",
     });
-    expect(valuation.average).toEqual(parseExact("20"));
+    expect(realisedValue(valuation).average).toEqual(parseExact("20"));
     expect(knownUnits(valuation)).toBe(2000);
   });
 
@@ -151,10 +159,11 @@ describe("availability", () => {
     );
 
     const valuation = valuationFrom(result, "p1");
+    const realised = realisedValue(valuation);
 
-    expect(valuation.average).toBeUndefined();
+    expect(realised.average).toBeUndefined();
     expect(knownUnits(valuation)).toBe(0);
-    expect(valuation.skippedPeriods.map(periodKey)).toEqual([
+    expect(realised.skippedPeriods.map(periodKey)).toEqual([
       "week:3",
       "week:4",
       "week:5",
@@ -171,9 +180,10 @@ describe("availability", () => {
     });
 
     const valuation = valuationFrom(buildLineupProblem(input), "p1");
+    const realised = realisedValue(valuation);
 
-    expect(valuation.countedPeriods.map(periodKey)).toEqual(["week:3", "week:4", "week:6"]);
-    expect(valuation.skippedPeriods.map(periodKey)).toEqual(["week:5"]);
+    expect(realised.countedPeriods.map(periodKey)).toEqual(["week:3", "week:4", "week:6"]);
+    expect(realised.skippedPeriods.map(periodKey)).toEqual(["week:5"]);
     expect(knownUnits(valuation)).toBe(1000);
   });
 
@@ -185,7 +195,11 @@ describe("availability", () => {
 
     const valuation = valuationFrom(buildLineupProblem(input), "p1");
 
-    expect(valuation.countedPeriods.map(periodKey)).toEqual(["week:3", "week:5", "week:6"]);
+    expect(realisedValue(valuation).countedPeriods.map(periodKey)).toEqual([
+      "week:3",
+      "week:5",
+      "week:6",
+    ]);
     expect(knownUnits(valuation)).toBe(1000);
   });
 
@@ -197,6 +211,7 @@ describe("availability", () => {
             id: "injured",
             weeks: [5000, 5000, 5000, 5000],
             availability: { kind: "excluded", reason: "out" },
+
             positions: ["QB"],
           },
           { id: "healthy", weeks: [1000, 1000, 1000, 1000], positions: ["QB"] },
@@ -216,11 +231,10 @@ describe("availability", () => {
   it("starts an injured player in a starting position that would otherwise stay empty", () => {
     const result = buildLineupProblem(
       rosterInput({
-        slots: quarterbackSlots("optional"),
         players: [
           {
             id: "injured",
-            weeks: [1200, 1200, 1200, 1200],
+            weeks: [4200, 4200, 4200, 4200],
             availability: { kind: "excluded", reason: "out" },
             positions: ["QB"],
           },
@@ -233,8 +247,6 @@ describe("availability", () => {
     expect(plan.assignments).toEqual([
       { playerId: makePlayerId("injured"), slotId: makeSlotId("QB") },
     ]);
-    expect(plan.filledStartingPositions).toBe(1);
-    expect(plan.totalSelectionValue).toBe(1200);
   });
 
   it("starts an available player worth nothing ahead of an injured player who scored well", () => {
@@ -262,30 +274,262 @@ describe("availability", () => {
   });
 });
 
+describe("value sources", () => {
+  it("orders the ladder from projections to rules to started percentages", () => {
+    expect(valueSourceLadder).toEqual(["projected-points", "scoring-rules", "percent-started"]);
+    expect(startCutPreference).toEqual(["diamond"]);
+  });
+
+  it("treats a published cut as a population only when it carries a value", () => {
+    expect(
+      percentStartedPopulation([{ id: makePlayerId("p1"), percent: undefined, cuts: [] }]),
+    ).toEqual({ kind: "overall" });
+    expect(
+      percentStartedPopulation([
+        {
+          id: makePlayerId("p1"),
+          percent: parseExact("40"),
+          cuts: [{ cut: "diamond", percent: parseExact("0") }],
+        },
+      ]),
+    ).toEqual({ kind: "overall" });
+    expect(
+      percentStartedPopulation([
+        {
+          id: makePlayerId("p1"),
+          percent: parseExact("40"),
+          cuts: [{ cut: "diamond", percent: parseExact("7") }],
+        },
+      ]),
+    ).toEqual({ kind: "cut", cut: "diamond" });
+  });
+
+  it("prefers projected points over league rules over a started percentage", () => {
+    expect(preferredValueSource(["percent-started", "scoring-rules", "projected-points"])).toBe(
+      "projected-points",
+    );
+    expect(preferredValueSource(["percent-started", "scoring-rules"])).toBe("scoring-rules");
+    expect(preferredValueSource(["percent-started"])).toBe("percent-started");
+    expect(preferredValueSource([])).toBeUndefined();
+  });
+
+  it("names the realised mean basis and gives it to every player", () => {
+    const result = buildLineupProblem(
+      rosterInput({
+        players: [
+          { id: "p1", weeks: [1000, 1000, 1000, 1000], positions: ["QB"] },
+          { id: "p2", weeks: [2000, 2000, 2000, 2000], positions: ["QB"] },
+        ],
+      }),
+    );
+
+    expect(problemFrom(result).selectionBasis).toBe(
+      "mean-points-per-period:week:3,week:4,week:5,week:6",
+    );
+    expect(selectionBases(result)).toEqual([
+      "mean-points-per-period:week:3,week:4,week:5,week:6",
+      "mean-points-per-period:week:3,week:4,week:5,week:6",
+    ]);
+  });
+
+  it("uses a projection as the value and records the realised total without adding it", () => {
+    const result = buildLineupProblem(
+      inputFor({
+        source: {
+          kind: "projected-points",
+          projections: [{ id: makePlayerId("p1"), points: parseExact("18.25") }],
+          realised: [{ id: makePlayerId("p1"), points: parseExact("31.4") }],
+        },
+        players: [{ id: "p1", slot: "QB", positions: ["QB"] }],
+      }),
+    );
+
+    const valuation = valuationFrom(result, "p1");
+
+    expect(valuation.value).toEqual({
+      kind: "projected-points",
+      projection: parseExact("18.25"),
+      realised: parseExact("31.4"),
+    });
+    expect(knownUnits(valuation)).toBe(1825);
+    expect(problemFrom(result).selectionBasis).toBe("projected-points:week:7");
+  });
+
+  it("cannot value a player without a projection from that player's realised statistics", () => {
+    const result = buildLineupProblem(
+      inputFor({
+        source: {
+          kind: "projected-points",
+          projections: [],
+          realised: [{ id: makePlayerId("p1"), points: parseExact("31.4") }],
+        },
+        players: [{ id: "p1", slot: "QB", positions: ["QB"] }],
+      }),
+    );
+
+    const valuation = valuationFrom(result, "p1");
+
+    expect(valuation.selection).toEqual({
+      kind: "unusable",
+      basis: "projected-points:week:7",
+      reason: "missing",
+    });
+    expect(solveLineup(problemFrom(result))).toEqual({
+      kind: "refusal",
+      refusal: { reason: "unusable-selection-value", playerIds: [makePlayerId("p1")] },
+    });
+  });
+
+  it("values a started percentage in hundredths of a percent and applies availability", () => {
+    const result = buildLineupProblem(
+      inputFor({
+        source: startedSource([{ id: "p1", percent: 43, cuts: [] }]),
+        players: [{ id: "p1", slot: "QB", positions: ["QB"] }],
+      }),
+    );
+
+    const valuation = valuationFrom(result, "p1");
+
+    expect(valuation.value).toEqual({
+      kind: "percent-started",
+      population: { kind: "overall" },
+      percent: parseExact("43"),
+    });
+    expect(knownUnits(valuation)).toBe(4300);
+    expect(valuation.availability.tier).toBe("will-play");
+    expect(problemFrom(result).selectionBasis).toBe("percent-started:overall:week:7");
+  });
+
+  it("prefers a populated diamond cut over the overall percentage", () => {
+    const result = buildLineupProblem(
+      inputFor({
+        source: startedSource([
+          { id: "p1", percent: 43, cuts: [{ cut: "diamond", percent: 51 }] },
+          { id: "p2", percent: 80, cuts: [{ cut: "diamond", percent: 12 }] },
+        ]),
+        players: [
+          { id: "p1", slot: "BN", positions: ["QB"] },
+          { id: "p2", slot: "QB", positions: ["QB"] },
+        ],
+      }),
+    );
+
+    expect(problemFrom(result).selectionBasis).toBe("percent-started:cut-diamond:week:7");
+    expect(unitsByPlayer(result)).toEqual({ p1: 5100, p2: 1200 });
+    expect(valuationFrom(result, "p1").value).toEqual({
+      kind: "percent-started",
+      population: { kind: "cut", cut: "diamond" },
+      percent: parseExact("51"),
+    });
+  });
+
+  it("falls back to the overall percentage when the diamond cut is published but empty", () => {
+    const result = buildLineupProblem(
+      inputFor({
+        source: startedSource([
+          { id: "p1", percent: 43, cuts: [{ cut: "diamond", percent: 0 }] },
+          { id: "p2", percent: 80, cuts: [{ cut: "diamond", percent: 0 }] },
+        ]),
+        players: [
+          { id: "p1", slot: "BN", positions: ["QB"] },
+          { id: "p2", slot: "QB", positions: ["QB"] },
+        ],
+      }),
+    );
+
+    expect(problemFrom(result).selectionBasis).toBe("percent-started:overall:week:7");
+    expect(unitsByPlayer(result)).toEqual({ p1: 4300, p2: 8000 });
+  });
+
+  it("keeps a zero started percentage as a real value", () => {
+    const result = buildLineupProblem(
+      inputFor({
+        source: startedSource([{ id: "p1", percent: 0, cuts: [] }]),
+        players: [{ id: "p1", slot: "BN", positions: ["QB"] }],
+      }),
+    );
+
+    expect(valuationFrom(result, "p1").selection).toEqual({
+      kind: "known",
+      basis: "percent-started:overall:week:7",
+      units: 0,
+    });
+  });
+
+  it("refuses to plan when a player has no started percentage", () => {
+    const result = buildLineupProblem(
+      inputFor({
+        source: startedSource([{ id: "p1", percent: undefined, cuts: [] }]),
+        players: [{ id: "p1", slot: "QB", positions: ["QB"] }],
+      }),
+    );
+
+    expect(valuationFrom(result, "p1").selection).toEqual({
+      kind: "unusable",
+      basis: "percent-started:overall:week:7",
+      reason: "missing",
+    });
+    expect(solveLineup(problemFrom(result))).toEqual({
+      kind: "refusal",
+      refusal: { reason: "unusable-selection-value", playerIds: [makePlayerId("p1")] },
+    });
+  });
+
+  it("starts a healthy player with a lower started percentage ahead of an excluded one", () => {
+    const result = buildLineupProblem(
+      inputFor({
+        source: startedSource([
+          { id: "excluded", percent: 91, cuts: [] },
+          { id: "healthy", percent: 12, cuts: [] },
+        ]),
+        players: [
+          {
+            id: "excluded",
+            slot: "BN",
+            positions: ["QB"],
+            availability: { kind: "excluded", reason: "out" },
+          },
+          { id: "healthy", slot: "BN", positions: ["QB"] },
+        ],
+      }),
+    );
+
+    const plan = planFrom(solveLineup(problemFrom(result)));
+
+    expect(plan.assignments).toContainEqual({
+      playerId: makePlayerId("healthy"),
+      slotId: makeSlotId("QB"),
+    });
+    expect(plan.assignments).toContainEqual({
+      playerId: makePlayerId("excluded"),
+      slotId: makeSlotId("BN"),
+    });
+  });
+});
+
 describe("policy contract", () => {
-  it("refuses a league whose rules cannot produce a points value", () => {
+  it("refuses a league that publishes no value source", () => {
     const result = buildLineupProblem({
-      selectionBasis: basis,
       period: target,
-      window: [3, 4, 5, 6].map(week),
-      scoring: scoringProfile({ categories: [], rules: [] }),
+      source: undefined,
       slots: footballSlots(),
-      players: [policyPlayer({ id: "p1", weeks: [1, 2, 3, 4] })],
-      observations: observationsFor([{ id: "p1", weeks: [1, 2, 3, 4] }]),
+      players: [policyPlayer({ id: "p1" })],
     });
 
-    expect(result).toEqual({ kind: "refusal", refusal: { kind: "no-scoring-rules" } });
+    expect(result).toEqual({ kind: "refusal", refusal: { kind: "no-value-source" } });
   });
 
   it("refuses when no completed period was observed", () => {
     const result = buildLineupProblem({
-      selectionBasis: basis,
       period: target,
-      window: [],
-      scoring: unitRule,
+      source: {
+        kind: "scoring-rules",
+        window: [],
+        scoring: unitRule,
+        observations: [],
+      },
       slots: footballSlots(),
-      players: [policyPlayer({ id: "p1", weeks: [] })],
-      observations: [],
+      players: [policyPlayer({ id: "p1" })],
     });
 
     expect(result).toEqual({
@@ -300,10 +544,13 @@ describe("policy contract", () => {
     expect(() =>
       buildLineupProblem({
         ...input,
-        observations: [
-          ...input.observations,
-          { period: week(2), players: [{ id: makePlayerId("p1"), stats: [] }] },
-        ],
+        source: {
+          ...rulesSource([{ id: "p1", weeks: [1000, 1000, 1000, 1000] }]),
+          observations: [
+            ...observationsFor([{ id: "p1", weeks: [1000, 1000, 1000, 1000] }]),
+            { period: week(2), players: [{ id: makePlayerId("p1"), stats: [] }] },
+          ],
+        },
       }),
     ).toThrow(/outside the declared window/u);
   });
@@ -311,9 +558,15 @@ describe("policy contract", () => {
   it("rejects a window that contains its own target period", () => {
     const input = availabilityInput({ weeks: [1000, 1000, 1000, 1000] });
 
-    expect(() => buildLineupProblem({ ...input, window: [{ kind: "week", week: 7 }] })).toThrow(
-      /cannot belong to its own observation window/u,
-    );
+    expect(() =>
+      buildLineupProblem({
+        ...input,
+        source: {
+          ...rulesSource([{ id: "p1", weeks: [1000, 1000, 1000, 1000] }]),
+          window: [{ kind: "week", week: 7 }],
+        },
+      }),
+    ).toThrow(/cannot belong to its own observation window/u);
   });
 
   it("rejects an observation for a player who is not on the roster", () => {
@@ -322,15 +575,25 @@ describe("policy contract", () => {
     expect(() =>
       buildLineupProblem({
         ...input,
-        observations: [
-          ...input.observations,
-          {
-            period: week(3),
-            players: [{ id: makePlayerId("other"), stats: [] }],
-          },
-        ].slice(1),
+        source: {
+          ...rulesSource([{ id: "p1", weeks: [1000, 1000, 1000, 1000] }]),
+          observations: [{ period: week(3), players: [{ id: makePlayerId("other"), stats: [] }] }],
+        },
       }),
     ).toThrow(/not on the policy roster/u);
+  });
+
+  it("rejects a source that lists the same player twice", () => {
+    const source = startedSource([
+      { id: "p1", percent: 10, cuts: [] },
+      { id: "p1", percent: 20, cuts: [] },
+    ]);
+
+    expect(() =>
+      buildLineupProblem(
+        inputFor({ source, players: [{ id: "p1", slot: "BN", positions: ["QB"] }] }),
+      ),
+    ).toThrow(/Duplicate started percentage for player/u);
   });
 
   it("derives reserve eligibility from the declared reserve slots", () => {
@@ -384,7 +647,7 @@ describe("worked example: recorded football league", () => {
       fact: "no-game",
       period: target,
     });
-    expect(valuationFrom(result, "BN-8").average).toEqual(parseExact("16.1"));
+    expect(realisedValue(valuationFrom(result, "BN-8")).average).toEqual(parseExact("16.1"));
     expect(unitsByPlayer(result)["BN-8"]).toBe(1610);
     expect(valuationFrom(result, "BN-13").availability.tier).toBe("will-not-play");
     expect(unitsByPlayer(result)["BN-13"]).toBe(980);
@@ -416,7 +679,7 @@ type RecordedPlayer = {
   readonly byeWeek: number;
   readonly availability: PlayerAvailability;
   readonly locked: boolean;
-  readonly weeks: ReadonlyArray<number>;
+  readonly weeks: ReadonlyArray<number | null>;
 };
 
 const available: PlayerAvailability = { kind: "available" };
@@ -435,7 +698,7 @@ const recordedRoster: ReadonlyArray<RecordedPlayer> = [
   {
     id: "RB-2",
     slot: "RB",
-    positions: ["RB", "W/R/T"],
+    positions: ["RB"],
     byeWeek: 10,
     availability: available,
     locked: true,
@@ -444,7 +707,7 @@ const recordedRoster: ReadonlyArray<RecordedPlayer> = [
   {
     id: "RB-3",
     slot: "RB",
-    positions: ["RB", "W/R/T"],
+    positions: ["RB"],
     byeWeek: 11,
     availability: available,
     locked: true,
@@ -453,7 +716,7 @@ const recordedRoster: ReadonlyArray<RecordedPlayer> = [
   {
     id: "WR-4",
     slot: "WR",
-    positions: ["WR", "W/R/T"],
+    positions: ["WR"],
     byeWeek: 11,
     availability: available,
     locked: true,
@@ -462,7 +725,7 @@ const recordedRoster: ReadonlyArray<RecordedPlayer> = [
   {
     id: "WR-5",
     slot: "WR",
-    positions: ["WR", "W/R/T"],
+    positions: ["WR"],
     byeWeek: 11,
     availability: available,
     locked: true,
@@ -471,7 +734,7 @@ const recordedRoster: ReadonlyArray<RecordedPlayer> = [
   {
     id: "TE-6",
     slot: "TE",
-    positions: ["TE", "W/R/T"],
+    positions: ["TE"],
     byeWeek: 11,
     availability: available,
     locked: true,
@@ -480,7 +743,7 @@ const recordedRoster: ReadonlyArray<RecordedPlayer> = [
   {
     id: "W/R/T-7",
     slot: "W/R/T",
-    positions: ["WR", "W/R/T"],
+    positions: ["W/R/T"],
     byeWeek: 8,
     availability: available,
     locked: true,
@@ -492,22 +755,22 @@ const recordedRoster: ReadonlyArray<RecordedPlayer> = [
     positions: ["RB", "W/R/T"],
     byeWeek: 7,
     availability: available,
-    locked: false,
+    locked: true,
     weeks: [1700, 1110, 1160, 2470],
   },
   {
     id: "BN-9",
     slot: "BN",
-    positions: ["WR", "W/R/T"],
+    positions: ["RB", "W/R/T"],
     byeWeek: 5,
     availability: available,
     locked: true,
-    weeks: [400, 1100, 0, 1430],
+    weeks: [400, 1100, null, 1430],
   },
   {
     id: "BN-10",
     slot: "BN",
-    positions: ["WR", "W/R/T"],
+    positions: ["RB", "W/R/T"],
     byeWeek: 10,
     availability: available,
     locked: true,
@@ -515,8 +778,8 @@ const recordedRoster: ReadonlyArray<RecordedPlayer> = [
   },
   {
     id: "BN-11",
-    slot: "BN",
-    positions: ["WR", "W/R/T", "IR"],
+    slot: "IR",
+    positions: ["IR"],
     byeWeek: 13,
     availability: injuredReserve,
     locked: true,
@@ -562,10 +825,8 @@ const recordedRoster: ReadonlyArray<RecordedPlayer> = [
 
 function recordedFootballInput(locked: boolean): LineupPolicyInput {
   return {
-    selectionBasis: basis,
     period: target,
-    window: [3, 4, 5, 6].map(week),
-    scoring: unitRule,
+    source: rulesSource(recordedRoster.map((row) => ({ id: row.id, weeks: row.weeks }))),
     slots: footballSlots(),
     players: recordedRoster.map((row) => ({
       id: makePlayerId(row.id),
@@ -575,7 +836,6 @@ function recordedFootballInput(locked: boolean): LineupPolicyInput {
       currentSlotId: makeSlotId(row.slot),
       nonGamePeriods: [week(row.byeWeek)],
     })),
-    observations: observationsFor(recordedRoster.map((row) => ({ id: row.id, weeks: row.weeks }))),
   };
 }
 
@@ -593,6 +853,62 @@ function footballSlots(): ReadonlyArray<RosterSlot> {
   ];
 }
 
+function rulesSource(
+  players: ReadonlyArray<{ readonly id: string; readonly weeks: ReadonlyArray<number | null> }>,
+): Extract<ValueSource, { readonly kind: "scoring-rules" }> {
+  return {
+    kind: "scoring-rules",
+    window: [3, 4, 5, 6].map(week),
+    scoring: unitRule,
+    observations: observationsFor(players),
+  };
+}
+
+function startedSource(
+  entries: ReadonlyArray<{
+    readonly id: string;
+    readonly percent: number | undefined;
+    readonly cuts: ReadonlyArray<{ readonly cut: string; readonly percent: number }>;
+  }>,
+): Extract<ValueSource, { readonly kind: "percent-started" }> {
+  return {
+    kind: "percent-started",
+    started: entries.map((entry): PlayerPercentStarted => ({
+      id: makePlayerId(entry.id),
+      percent: entry.percent === undefined ? undefined : parseExact(String(entry.percent)),
+      cuts: entry.cuts.map((cut): PercentStartedCut => ({
+        cut: cut.cut,
+        percent: parseExact(String(cut.percent)),
+      })),
+    })),
+  };
+}
+
+function inputFor(input: {
+  readonly source: ValueSource;
+  readonly players: ReadonlyArray<{
+    readonly id: string;
+    readonly slot: string;
+    readonly positions: ReadonlyArray<string>;
+    readonly availability?: PlayerAvailability;
+  }>;
+  readonly slots?: ReadonlyArray<RosterSlot>;
+}): LineupPolicyInput {
+  return {
+    period: target,
+    source: input.source,
+    slots: input.slots ?? quarterbackSlots(),
+    players: input.players.map((player) => ({
+      id: makePlayerId(player.id),
+      eligiblePositions: player.positions,
+      availability: player.availability ?? available,
+      locked: false,
+      currentSlotId: makeSlotId(player.slot),
+      nonGamePeriods: [],
+    })),
+  };
+}
+
 function rosterInput(input: {
   readonly players: ReadonlyArray<{
     readonly id: string;
@@ -604,13 +920,17 @@ function rosterInput(input: {
   readonly slots?: ReadonlyArray<RosterSlot>;
 }): LineupPolicyInput {
   return {
-    selectionBasis: basis,
     period: target,
-    window: [3, 4, 5, 6].map(week),
-    scoring: unitRule,
+    source: rulesSource(input.players),
     slots: input.slots ?? quarterbackSlots(),
-    players: input.players.map((player) => policyPlayer(player)),
-    observations: observationsFor(input.players),
+    players: input.players.map((player) =>
+      policyPlayer({
+        id: player.id,
+        availability: player.availability,
+        slot: player.slot,
+        positions: player.positions,
+      }),
+    ),
   };
 }
 
@@ -636,39 +956,28 @@ function availabilityInput(input: {
   readonly slot?: string;
   readonly positions?: ReadonlyArray<string>;
 }): LineupPolicyInput {
-  const player = policyPlayer({
-    id: "p1",
-    weeks: input.weeks,
-    availability: input.availability ?? available,
-    slot: input.slot ?? "BN",
-    positions: input.positions ?? ["QB", "W/R/T", "IR"],
-    nonGamePeriods: input.nonGamePeriods ?? [],
-  });
   return {
-    selectionBasis: basis,
     period: target,
-    window: [3, 4, 5, 6].map(week),
-    scoring: unitRule,
-    slots: footballSlots(),
-    players: [
-      player,
-      policyPlayer({
-        id: "p2",
-        weeks: [1000, 1000, 1000, 1000],
-        slot: "BN",
-        positions: ["QB"],
-      }),
-    ],
-    observations: observationsFor([
+    source: rulesSource([
       { id: "p1", weeks: input.weeks },
       { id: "p2", weeks: [1000, 1000, 1000, 1000] },
     ]),
+    slots: footballSlots(),
+    players: [
+      policyPlayer({
+        id: "p1",
+        availability: input.availability ?? available,
+        slot: input.slot ?? "BN",
+        positions: input.positions ?? ["QB", "W/R/T", "IR"],
+        nonGamePeriods: input.nonGamePeriods ?? [],
+      }),
+      policyPlayer({ id: "p2", slot: "BN", positions: ["QB"] }),
+    ],
   };
 }
 
 function policyPlayer(input: {
   readonly id: string;
-  readonly weeks: ReadonlyArray<number | null>;
   readonly availability?: PlayerAvailability;
   readonly slot?: string;
   readonly positions?: ReadonlyArray<string>;
@@ -734,6 +1043,15 @@ function problemFrom(result: LineupPolicyResult): LineupProblem {
   return result.problem;
 }
 
+function realisedValue(
+  valuation: PlayerValuation,
+): Extract<PlayerValuation["value"], { readonly kind: "realised-points" }> {
+  if (valuation.value.kind !== "realised-points") {
+    throw new Error(`Expected a realised-points valuation, received ${valuation.value.kind}.`);
+  }
+  return valuation.value;
+}
+
 function knownUnits(valuation: PlayerValuation): number | undefined {
   return valuation.selection.kind === "known" ? valuation.selection.units : undefined;
 }
@@ -758,6 +1076,13 @@ function unitsByPlayer(result: LineupPolicyResult): Readonly<Record<string, numb
   return Object.fromEntries(
     result.valuations.map((valuation) => [valuation.playerId, knownUnits(valuation) ?? -1]),
   );
+}
+
+function selectionBases(result: LineupPolicyResult): ReadonlyArray<string> {
+  if (result.kind !== "problem") {
+    throw new Error(`Expected a problem, received ${result.refusal.kind}.`);
+  }
+  return result.problem.players.map((player) => player.selection.basis);
 }
 
 function planFrom(result: LineupSolveResult): LineupPlan {

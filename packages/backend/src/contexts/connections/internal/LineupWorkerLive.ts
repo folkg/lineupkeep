@@ -1,3 +1,5 @@
+import { preferredValueSource } from "@lineupkeep/lineup-policy";
+import type { LineupPolicyInput } from "@lineupkeep/lineup-policy";
 import { DateTime, Effect, Layer, Option } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
@@ -45,13 +47,16 @@ import {
   yahooAssignmentRequest,
   yahooLineupRefusalCode,
   yahooObservationWindow,
-  yahooScorable,
+  yahooPointsPolicyInput,
+  yahooStartedPolicyInput,
   yahooTargetPeriod,
+  yahooValueSourceKinds,
 } from "./yahoo/YahooLineup.ts";
 import type {
   YahooAssignmentRefusal,
   YahooAssignmentResult,
   YahooLineupResult,
+  YahooPeriodHistory,
 } from "./yahoo/YahooLineup.ts";
 
 const retryDelayMillis = 30_000;
@@ -225,28 +230,65 @@ export const LineupWorkerLive = Layer.effect(
           code,
           detail,
         });
+      const kind = preferredValueSource(yahooValueSourceKinds(league));
+      switch (kind) {
+        case "projected-points":
+          return yield* Effect.die("The Yahoo value-source ladder cannot select projections.");
+        case undefined:
+          return refusedPlan(
+            "policy:no-value-source",
+            "This league publishes no value source the custom policy can use.",
+          );
+        case "scoring-rules":
+          if (yahooTargetPeriod(roster).kind !== "week") {
+            return refusedPlan(
+              "history:dated-roster",
+              "The provider's dated player statistics are not read by this adapter, so the custom policy cannot value this league.",
+            );
+          }
+          return yield* prepareFromPolicy(
+            run,
+            context,
+            session,
+            league,
+            roster,
+            observation,
+            pointsPolicyReader(run, context, session),
+          );
+        case "percent-started":
+          return yield* prepareFromPolicy(
+            run,
+            context,
+            session,
+            league,
+            roster,
+            observation,
+            startedPolicyReader(run, context, session),
+          );
+      }
+    });
 
-      if (!yahooScorable(league)) {
-        const refused = planYahooLineup({ league, roster, history: [] });
-        return refused.kind === "refused"
-          ? refusedPlan(
-              yahooLineupRefusalCode(refused.refusal),
-              describeYahooLineupRefusal(refused.refusal),
-            )
-          : preparedNative(context, observation);
-      }
-      const target = yahooTargetPeriod(roster);
-      if (target.kind !== "week") {
-        return refusedPlan(
-          "history:dated-roster",
-          "The provider's dated player statistics are not read by this adapter, so the custom policy cannot value this league.",
-        );
-      }
-      const history = yield* readHistory(run, context, session, league, roster);
-      if (history === undefined) {
+    const prepareFromPolicy = Effect.fnUntraced(function* (
+      run: ClaimedLineupRun,
+      context: OwnedTeam,
+      session: import("effect").Redacted.Redacted<string>,
+      league: ProviderLeagueSettings,
+      roster: ProviderRoster,
+      observation: LineupObservation,
+      readPolicyInput: PolicyInputReader,
+    ) {
+      const refusedPlan = (code: string, detail: string): PreparedPlan =>
+        preparedNative(context, observation, {
+          kind: "refused" as const,
+          version: lineupPolicyVersion,
+          code,
+          detail,
+        });
+      const policyInput = yield* readPolicyInput(league, roster);
+      if (policyInput === undefined) {
         return { kind: "blocked" as const };
       }
-      const planned = planYahooLineup({ league, roster, history });
+      const planned = planYahooLineup(policyInput);
       if (planned.kind === "refused") {
         return refusedPlan(
           yahooLineupRefusalCode(planned.refusal),
@@ -305,7 +347,11 @@ export const LineupWorkerLive = Layer.effect(
         return { kind: "blocked" as const };
       }
       const freshObservation = observe(revalidated, freshLeague, observation.target);
-      const replanned = planYahooLineup({ league: freshLeague, roster: revalidated, history });
+      const freshPolicyInput = yield* readPolicyInput(freshLeague, revalidated);
+      if (freshPolicyInput === undefined) {
+        return { kind: "blocked" as const };
+      }
+      const replanned = planYahooLineup(freshPolicyInput);
       if (replanned.kind === "refused") {
         yield* block(
           run,
@@ -348,6 +394,61 @@ export const LineupWorkerLive = Layer.effect(
         ),
         before: freshObservation.players,
       };
+    });
+
+    const pointsPolicyReader = (
+      run: ClaimedLineupRun,
+      context: OwnedTeam,
+      session: import("effect").Redacted.Redacted<string>,
+    ): PolicyInputReader => {
+      let history: ReadonlyArray<YahooPeriodHistory> | undefined;
+      return (league, roster) =>
+        Effect.gen(function* () {
+          history ??= yield* readHistory(run, context, session, league, roster);
+          if (history === undefined) {
+            return undefined;
+          }
+          return yahooPointsPolicyInput({ league, roster, history });
+        });
+    };
+
+    const startedPolicyReader =
+      (
+        run: ClaimedLineupRun,
+        context: OwnedTeam,
+        session: import("effect").Redacted.Redacted<string>,
+      ): PolicyInputReader =>
+      (league, roster) =>
+        Effect.gen(function* () {
+          const details = yield* readStartedPercentages(run, context, session, league, roster);
+          return details === undefined
+            ? undefined
+            : yahooStartedPolicyInput({ league, roster, details });
+        });
+
+    const readStartedPercentages = Effect.fnUntraced(function* (
+      run: ClaimedLineupRun,
+      owned: OwnedTeam,
+      session: import("effect").Redacted.Redacted<string>,
+      league: ProviderLeagueSettings,
+      roster: ProviderRoster,
+    ) {
+      const result = yield* Effect.result(
+        provider.readPlayerDetails({
+          provider: owned.connection.provider,
+          session,
+          providerLeagueKey: owned.team.providerLeagueKey,
+          providerPlayerKeys: roster.players.map((player) => player.providerPlayerKey),
+          sport: owned.team.sport,
+          period: roster.coverage,
+          currentWeek: league.periodWindow?.currentWeek,
+        }),
+      );
+      if (result._tag === "Failure") {
+        yield* handleReadFailure(run, owned, result.failure, "started percentages");
+        return undefined;
+      }
+      return result.success;
     });
 
     const applyNative = Effect.fnUntraced(function* (
@@ -1049,6 +1150,11 @@ type PreparedPlan =
       readonly before: LineupObservation["players"];
     }
   | { readonly kind: "blocked" };
+
+type PolicyInputReader = (
+  league: ProviderLeagueSettings,
+  roster: ProviderRoster,
+) => Effect.Effect<LineupPolicyInput | undefined, LineupPersistenceFailed>;
 
 type AttemptRecord = {
   readonly implementation?: LineupImplementation;

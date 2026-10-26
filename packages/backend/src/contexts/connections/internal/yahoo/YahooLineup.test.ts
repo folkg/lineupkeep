@@ -1,4 +1,9 @@
-import { availabilityLadder, assessAvailability } from "@lineupkeep/lineup-policy";
+import {
+  availabilityLadder,
+  assessAvailability,
+  buildLineupProblem,
+  preferredValueSource,
+} from "@lineupkeep/lineup-policy";
 import type { PlayerAvailability, PolicyPlayer } from "@lineupkeep/lineup-policy";
 import { makeAvailabilityTier, makePlayerId, makeSlotId } from "@lineupkeep/lineup-solver";
 import type { PlayerId, RosterSlot } from "@lineupkeep/lineup-solver";
@@ -18,12 +23,14 @@ import {
   yahooInjuryStatusCodes,
   yahooLeagueSlots,
   yahooObservationWindow,
-  yahooPolicyInput,
+  yahooPointsPolicyInput,
   yahooScorable,
   yahooScoringProfile,
+  yahooStartedPolicyInput,
   yahooTargetPeriod,
+  yahooValueSourceKinds,
 } from "./YahooLineup.ts";
-import type { YahooLineupInput } from "./YahooLineup.ts";
+import type { YahooPeriodLineupInput } from "./YahooLineup.ts";
 
 const recordedWeek = 6;
 const targetWeek = 7;
@@ -87,17 +94,15 @@ describe("Yahoo league translation", () => {
   });
 
   it("declares one selection basis for the observed window", () => {
-    const input = yahooPolicyInput(recordedPolicyInput(true));
+    const input = yahooPointsPolicyInput(recordedPolicyInput(true));
 
-    expect(input.selectionBasis).toBe(
-      `yahoo:mean-points-per-period:week:${String(targetWeek - 1)}`,
-    );
-    expect(input.window).toEqual([{ kind: "week", week: targetWeek - 1 }]);
+    expect(input.period).toEqual({ kind: "week", week: targetWeek });
+    expect(input.source?.kind).toBe("scoring-rules");
     expect(input.players).toHaveLength(15);
   });
 
   it("keeps the recorded lineup when the provider reports every player locked", () => {
-    const result = planYahooLineup(recordedPolicyInput(false));
+    const result = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(false)));
 
     expect(result.kind).toBe("planned");
     if (result.kind !== "planned") {
@@ -105,14 +110,11 @@ describe("Yahoo league translation", () => {
     }
     expect(result.plan.totalSelectionValue).toBe(9802);
     expect(result.plan.comparison.slotChanges).toEqual([]);
-    expect(result.selectionBasis).toBe("yahoo:mean-points-per-period:week:6");
-    expect(new Set(result.coverage.scored).size).toBe(33);
-    expect(result.coverage.unscored).toEqual(["8", "31", "78"]);
-    expect(result.coverage.unusedRules).toEqual([]);
+    expect(result.selectionBasis).toBe("mean-points-per-period:week:6");
   });
 
   it("starts the better players when the same roster is editable", () => {
-    const result = planYahooLineup(recordedPolicyInput(true));
+    const result = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
 
     if (result.kind !== "planned") {
       throw new Error(`Expected a plan, received ${result.refusal.kind}.`);
@@ -126,21 +128,65 @@ describe("Yahoo league translation", () => {
     );
   });
 
-  it("refuses a league that publishes categories without points modifiers", () => {
-    const result = planYahooLineup({
+  it("offers the started percentage to a league that publishes no points rules", () => {
+    expect(yahooValueSourceKinds(hockeyLeague())).toEqual(["percent-started"]);
+    expect(yahooValueSourceKinds(recordedLeague())).toEqual(["scoring-rules", "percent-started"]);
+    expect(preferredValueSource(yahooValueSourceKinds(recordedLeague()))).toBe("scoring-rules");
+    expect(preferredValueSource(yahooValueSourceKinds(hockeyLeague()))).toBe("percent-started");
+  });
+
+  it("values a hockey roster by the started percentage the provider publishes", () => {
+    const input = yahooStartedPolicyInput({
       league: hockeyLeague(),
       roster: hockeyRoster(),
-      history: [{ period: { kind: "date", date: "2026-10-25" }, details: [] }],
+      details: [
+        hockeyDetail("hockey-player-0", 43, [{ cutType: "diamond", percent: 51 }]),
+        hockeyDetail("hockey-player-1", 12, [{ cutType: "diamond", percent: 8 }]),
+      ],
     });
+    const verdict = buildLineupProblem(input);
+
+    if (verdict.kind !== "problem") {
+      throw new Error(`Expected a problem, received ${verdict.refusal.kind}.`);
+    }
+    expect(verdict.problem.selectionBasis).toBe("percent-started:cut-diamond:date:2026-10-26");
+    expect(verdict.valuations.map((valuation) => valuation.selection)).toEqual([
+      {
+        kind: "known",
+        basis: "percent-started:cut-diamond:date:2026-10-26",
+        units: 5100,
+      },
+      {
+        kind: "known",
+        basis: "percent-started:cut-diamond:date:2026-10-26",
+        units: 800,
+      },
+    ]);
+  });
+
+  it("refuses to plan a started percentage lineup when a roster player has none", () => {
+    const result = planYahooLineup(
+      yahooStartedPolicyInput({
+        league: hockeyLeague(),
+        roster: hockeyRoster(),
+        details: [hockeyDetail("hockey-player-0", 43, [])],
+      }),
+    );
 
     expect(result).toEqual({
       kind: "refused",
-      refusal: { kind: "policy", refusal: { kind: "no-scoring-rules" } },
+      refusal: {
+        kind: "solver",
+        refusal: {
+          reason: "unusable-selection-value",
+          playerIds: [makePlayerId("hockey-player-1")],
+        },
+      },
     });
   });
 
   it("translates only the changed editable assignments and retains every roster member", () => {
-    const parsed = planYahooLineup(recordedPolicyInput(true));
+    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
     if (parsed.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
@@ -169,7 +215,7 @@ describe("Yahoo league translation", () => {
   });
 
   it("sends nothing when the plan already matches the observed lineup", () => {
-    const parsed = planYahooLineup(recordedPolicyInput(false));
+    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(false)));
     if (parsed.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
@@ -184,7 +230,7 @@ describe("Yahoo league translation", () => {
   });
 
   it("refuses to move a player the provider reports as locked", () => {
-    const parsed = planYahooLineup(recordedPolicyInput(true));
+    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
     if (parsed.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
@@ -203,7 +249,7 @@ describe("Yahoo league translation", () => {
   });
 
   it("refuses a plan that moves a player through a reserve list", () => {
-    const parsed = planYahooLineup(recordedPolicyInput(true));
+    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
     if (parsed.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
@@ -230,7 +276,7 @@ describe("Yahoo league translation", () => {
   });
 
   it("refuses a plan that does not assign every roster member", () => {
-    const parsed = planYahooLineup(recordedPolicyInput(true));
+    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
     if (parsed.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
@@ -260,7 +306,7 @@ describe("Yahoo league translation", () => {
       { kind: "week", week: 6 },
     ]);
     expect(yahooScorable(recordedLeague())).toBe(true);
-    expect(yahooScorable(hockeyLeague())).toBe(false);
+    expect(yahooScorable(hockeyLeague())).toBe(true);
   });
 });
 
@@ -275,7 +321,7 @@ function recordedPlayerId(index: number): PlayerId {
   return makePlayerId(`player-${String(index)}`);
 }
 
-function recordedPolicyInput(editable: boolean): YahooLineupInput {
+function recordedPolicyInput(editable: boolean): YahooPeriodLineupInput {
   return {
     league: recordedLeague(),
     roster: recordedRoster(editable),
@@ -360,6 +406,7 @@ function playerDetail(
       stats: stats.map(([statId, value]) => ({ statId, value })),
     },
     projected: undefined,
+    percentStarted: undefined,
   };
 }
 
@@ -406,23 +453,51 @@ function hockeyRoster(): ProviderRoster {
     providerLeagueKey: "recorded-hockey-league",
     coverage: { type: "date", date: "2026-10-26" },
     players: [
-      {
-        providerPlayerKey: "hockey-player-0",
-        name: "Hockey player 0",
-        displayPosition: "C,LW",
-        primaryPosition: "C",
-        positionType: "P",
-        proTeamAbbreviation: undefined,
-        eligiblePositions: ["C", "LW"],
-        slot: "C",
-        isFlex: false,
-        isEditable: true,
-        injuryCode: undefined,
-        injuryDetail: undefined,
-        byeWeek: null,
-        undroppable: null,
-      },
+      hockeyRosterPlayer("hockey-player-0", "C"),
+      hockeyRosterPlayer("hockey-player-1", "BN"),
     ],
+  };
+}
+
+function hockeyRosterPlayer(providerPlayerKey: string, slot: string): ProviderRosterPlayer {
+  return {
+    providerPlayerKey,
+    name: `Synthetic hockey player ${providerPlayerKey.slice("hockey-player-".length)}`,
+    displayPosition: "C",
+    primaryPosition: "C",
+    positionType: "P",
+    proTeamAbbreviation: undefined,
+    eligiblePositions: ["C"],
+    slot,
+    isFlex: false,
+    isEditable: true,
+    injuryCode: undefined,
+    injuryDetail: undefined,
+    byeWeek: null,
+    undroppable: null,
+  };
+}
+
+function hockeyDetail(
+  providerPlayerKey: string,
+  percent: number,
+  cuts: ReadonlyArray<{ readonly cutType: string; readonly percent: number }>,
+): ProviderPlayerDetail {
+  return {
+    providerPlayerKey,
+    name: undefined,
+    primaryPosition: "C",
+    displayPosition: "C",
+    eligiblePositions: ["C"],
+    rosterStatus: "rostered",
+    actual: undefined,
+    projected: undefined,
+    percentStarted: {
+      percent,
+      delta: null,
+      coverage: { type: "date", date: "2026-10-26" },
+      cuts: cuts.map((cut) => ({ cutType: cut.cutType, percent: cut.percent })),
+    },
   };
 }
 

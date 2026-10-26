@@ -1,5 +1,4 @@
-import type { StatObservation } from "@lineupkeep/lineup-scoring";
-import { makeAvailabilityTier } from "@lineupkeep/lineup-solver";
+import { makeAvailabilityTier, knownSelection, unusableSelection } from "@lineupkeep/lineup-solver";
 import type {
   AvailabilityTier,
   PlayerId,
@@ -10,17 +9,18 @@ import type {
 } from "@lineupkeep/lineup-solver";
 
 import { containsPeriod, periodKey, periodsEqual } from "./period.ts";
+import { resolveValueSource } from "./source.ts";
 import type {
   LineupPolicyInput,
   LineupPolicyResult,
   Period,
-  PeriodObservation,
   PlayerValuation,
   PolicyPlayer,
+  ValueSource,
 } from "./types.ts";
-import { valuate } from "./valuation.ts";
+import { assessAvailability } from "./valuation.ts";
 
-export const lineupPolicyVersion = "trailing-mean-points-with-tiers/1";
+export const lineupPolicyVersion = "value-source-ladder/1";
 
 export const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
   makeAvailabilityTier("will-play"),
@@ -30,35 +30,36 @@ export const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
 
 export function buildLineupProblem(input: LineupPolicyInput): LineupPolicyResult {
   requireConsistentInput(input);
-  if (input.scoring.rules.length === 0) {
-    return { kind: "refusal", refusal: { kind: "no-scoring-rules" } };
+  const source = input.source;
+  if (source === undefined) {
+    return { kind: "refusal", refusal: { kind: "no-value-source" } };
   }
-  if (input.window.length === 0) {
-    return { kind: "refusal", refusal: { kind: "no-observed-periods", window: input.window } };
+  if (source.kind === "scoring-rules" && source.window.length === 0) {
+    return {
+      kind: "refusal",
+      refusal: { kind: "no-observed-periods", window: source.window },
+    };
   }
 
-  const stats = observationIndex(input.observations);
-  const statsFor = (
-    playerId: PlayerId,
-    period: Period,
-  ): ReadonlyArray<StatObservation> | undefined => stats.get(observationKey(period, playerId));
-
+  const resolved = resolveValueSource({ source, period: input.period });
   const evaluated = input.players.map((player) => {
-    const valuation = valuate({
-      player,
-      selectionBasis: input.selectionBasis,
-      scoring: input.scoring,
-      window: input.window,
-      period: input.period,
-      statsFor,
-    });
+    const { assessment, units } = resolved.valueOf(player);
+    const valuation: PlayerValuation = {
+      playerId: player.id,
+      availability: assessAvailability(player, input.period),
+      selection:
+        units === undefined
+          ? unusableSelection(resolved.basis, "missing")
+          : knownSelection(resolved.basis, units),
+      value: assessment,
+    };
     return { player: rosterPlayer(player, valuation, input.slots), valuation };
   });
 
   return {
     kind: "problem",
     problem: {
-      selectionBasis: input.selectionBasis,
+      selectionBasis: resolved.basis,
       availabilityTiers: availabilityLadder,
       slots: input.slots,
       players: evaluated.map((entry) => entry.player),
@@ -100,14 +101,6 @@ function slotAccepts(
 }
 
 function requireConsistentInput(input: LineupPolicyInput): void {
-  if (input.window.some((period) => periodsEqual(period, input.period))) {
-    throw new Error("The target period cannot belong to its own observation window.");
-  }
-  requireUniquePeriods(input.window, "observation window");
-  requireUniquePeriods(
-    input.observations.map((observation) => observation.period),
-    "observation period",
-  );
   const playerIds = new Set(input.players.map((player) => player.id));
   if (playerIds.size !== input.players.length) {
     throw new Error("A policy roster must not contain the same player twice.");
@@ -123,21 +116,74 @@ function requireConsistentInput(input: LineupPolicyInput): void {
       );
     }
   }
-  for (const observation of input.observations) {
-    if (!containsPeriod(input.window, observation.period)) {
-      throw new Error(
-        `Observation period ${periodKey(observation.period)} is outside the declared window.`,
-      );
-    }
-    for (const entry of observation.players) {
-      if (!playerIds.has(entry.id)) {
-        throw new Error(`Observation for player ${entry.id} is not on the policy roster.`);
+  if (input.source !== undefined) {
+    requireConsistentSource(input.source, input.period, playerIds);
+  }
+}
+
+function requireConsistentSource(
+  source: ValueSource,
+  period: Period,
+  playerIds: ReadonlySet<PlayerId>,
+): void {
+  switch (source.kind) {
+    case "scoring-rules": {
+      requireUniquePeriods(source.window, "observation window");
+      if (source.window.some((candidate) => periodsEqual(candidate, period))) {
+        throw new Error("The target period cannot belong to its own observation window.");
       }
+      requireUniquePeriods(
+        source.observations.map((observation) => observation.period),
+        "observation period",
+      );
+      for (const observation of source.observations) {
+        if (!containsPeriod(source.window, observation.period)) {
+          throw new Error(
+            `Observation period ${periodKey(observation.period)} is outside the declared window.`,
+          );
+        }
+        for (const entry of observation.players) {
+          if (!playerIds.has(entry.id)) {
+            throw new Error(`Observation for player ${entry.id} is not on the policy roster.`);
+          }
+        }
+        const observed = new Set(observation.players.map((entry) => entry.id));
+        if (observed.size !== observation.players.length) {
+          throw new Error(
+            `Observation period ${periodKey(observation.period)} lists a player twice.`,
+          );
+        }
+      }
+      return;
     }
-    const observed = new Set(observation.players.map((entry) => entry.id));
-    if (observed.size !== observation.players.length) {
-      throw new Error(`Observation period ${periodKey(observation.period)} lists a player twice.`);
+    case "projected-points": {
+      requireUniqueIds(
+        source.projections.map((entry) => entry.id),
+        "projection",
+      );
+      requireUniqueIds(
+        source.realised.map((entry) => entry.id),
+        "realised total",
+      );
+      return;
     }
+    case "percent-started": {
+      requireUniqueIds(
+        source.started.map((entry) => entry.id),
+        "started percentage",
+      );
+      return;
+    }
+  }
+}
+
+function requireUniqueIds(ids: ReadonlyArray<PlayerId>, subject: string): void {
+  const seen = new Set<PlayerId>();
+  for (const id of ids) {
+    if (seen.has(id)) {
+      throw new Error(`Duplicate ${subject} for player ${id}.`);
+    }
+    seen.add(id);
   }
 }
 
@@ -150,20 +196,4 @@ function requireUniquePeriods(periods: ReadonlyArray<Period>, subject: string): 
     }
     seen.add(key);
   }
-}
-
-function observationIndex(
-  observations: ReadonlyArray<PeriodObservation>,
-): Map<string, ReadonlyArray<StatObservation>> {
-  const index = new Map<string, ReadonlyArray<StatObservation>>();
-  for (const observation of observations) {
-    for (const entry of observation.players) {
-      index.set(observationKey(observation.period, entry.id), entry.stats);
-    }
-  }
-  return index;
-}
-
-function observationKey(period: Period, playerId: PlayerId): string {
-  return `${periodKey(period)}|${playerId}`;
 }

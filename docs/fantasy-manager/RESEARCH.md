@@ -501,15 +501,15 @@ sample without a cut, and about 19 KB with one cut (football 264 KB → 271 KB �
 209 KB → 216 KB → 229 KB). After the adapter's normalizer
 the node is one object:
 
-| Path                                   | Type          | Presence in 12-player samples                 |
-| -------------------------------------- | ------------- | --------------------------------------------- |
-| `percent_started.coverage_type`        | string        | 12/12                                         |
-| `percent_started.week` / `.date`       | integer/date  | 12/12                                         |
-| `percent_started.value`                | integer       | 12/12                                         |
-| `percent_started.delta`                | integer       | 12/12 in the samples; 12/15–21/21 on full rosters |
-| `percent_started.percent_started_cut_types[]` | array | 12/12 when a cut is requested, 0/12 otherwise |
-| `percent_started_cut_types[].cut_type` | string        | as requested                                  |
-| `percent_started_cut_types[].value`    | integer       | as requested                                  |
+| Path                                          | Type         | Presence in 12-player samples                     |
+| --------------------------------------------- | ------------ | ------------------------------------------------- |
+| `percent_started.coverage_type`               | string       | 12/12                                             |
+| `percent_started.week` / `.date`              | integer/date | 12/12                                             |
+| `percent_started.value`                       | integer      | 12/12                                             |
+| `percent_started.delta`                       | integer      | 12/12 in the samples; 12/15–21/21 on full rosters |
+| `percent_started.percent_started_cut_types[]` | array        | 12/12 when a cut is requested, 0/12 otherwise     |
+| `percent_started_cut_types[].cut_type`        | string       | as requested                                      |
+| `percent_started_cut_types[].value`           | integer      | as requested                                      |
 
 The provider publishes `coverage_type` `week` for the football league (the league's current week)
 and `date` for all four hockey leagues (the provider's current fantasy day), and both matched the
@@ -526,12 +526,12 @@ A cut is not a sibling of `percent_started`; it is a fourth positional fragment 
 The overall percentage is `percent_started.value`; a cut percentage is
 the nested `cut_type`/`value` pair, with its own `coverage_type`.
 
-| Requested `cut_types` | Cut entries returned | Literal returned | Distinct values across the roster   |
-| --------------------- | -------------------: | ---------------- | ----------------------------------- |
-| `diamond`             |                    1 | `diamond`        | **1** — every value was `0` (5/5 leagues) |
-| `diamond,gold`        |                    2 | `diamond`, `gold` | diamond 1, gold 12–20               |
-| `platinum`            |                    1 | `platinum`       | 13–19                               |
-| none                  |                    0 | —                | —                                   |
+| Requested `cut_types` | Cut entries returned | Literal returned  | Distinct values across the roster         |
+| --------------------- | -------------------: | ----------------- | ----------------------------------------- |
+| `diamond`             |                    1 | `diamond`         | **1** — every value was `0` (5/5 leagues) |
+| `diamond,gold`        |                    2 | `diamond`, `gold` | diamond 1, gold 12–20                     |
+| `platinum`            |                    1 | `platinum`        | 13–19                                     |
+| none                  |                    0 | —                 | —                                         |
 
 So the literal is whatever was asked for: Yahoo does not reject or validate a cut name, and it does
 not substitute a known name. **The diamond cut is published but unpopulated for this account**: 13–22
@@ -568,15 +568,15 @@ returns exactly those two.
 
 | League     | Roster | `percent_started` node | Numeric `value` | Non-numeric `value` | Value range | `delta` present |
 | ---------- | -----: | ---------------------: | --------------: | ------------------: | ----------- | --------------: |
-| football-1 |     15 |                 15/15  |              15 |                   0 | 1–98        |           12/15 |
-| hockey-1   |     21 |                 21/21  |              21 |                   0 | 4–88        |           21/21 |
-| hockey-2   |     19 |                 19/19  |              18 |                   1 | 9–96        |           17/19 |
-| hockey-3   |     22 |                 22/22  |              22 |                   0 | 3–89        |           17/22 |
-| hockey-4   |     21 |                 21/21  |              21 |                   0 | 1–97        |           20/21 |
+| football-1 |     15 |                  15/15 |              15 |                   0 | 1–98        |           12/15 |
+| hockey-1   |     21 |                  21/21 |              21 |                   0 | 4–88        |           21/21 |
+| hockey-2   |     19 |                  19/19 |              18 |                   1 | 9–96        |           17/19 |
+| hockey-3   |     22 |                  22/22 |              22 |                   0 | 3–89        |           17/22 |
+| hockey-4   |     21 |                  21/21 |              21 |                   0 | 1–97        |           20/21 |
 
 The one non-numeric case is a player in an `IR+` slot carrying `IR-LT`, whose `percent_started`
 fragment had the coverage fragment but **no `value` fragment**. Its cut container likewise carried no
-value. So a missing started percentage appears as *an absent fragment inside a present node*, not as
+value. So a missing started percentage appears as _an absent fragment inside a present node_, not as
 the key being absent, not as `null`, and not as an empty array. A few players also lack `delta` while
 carrying a `value`, so `delta` is context and never required.
 
@@ -600,26 +600,69 @@ availability fact, which this adapter does not yet read.
 
 | League     | Roster | `opponent` string | Goalie `starting_status` |
 | ---------- | -----: | ----------------: | ------------------------ |
-| football-1 |     15 |             15/15 |                        — |
-| hockey-1   |     21 |              0/21 |                      0/4 |
-| hockey-2   |     19 |              3/19 |                      1/4 |
-| hockey-3   |     22 |              4/22 |                      0/4 |
-| hockey-4   |     21 |              4/21 |                      0/3 |
+| football-1 |     15 |             15/15 | —                        |
+| hockey-1   |     21 |              0/21 | 0/4                      |
+| hockey-2   |     19 |              3/19 | 1/4                      |
+| hockey-3   |     22 |              4/22 | 0/4                      |
+| hockey-4   |     21 |              4/21 | 0/3                      |
 
 ### 6. Sub-resources fail per request member and degrade silently per value
 
-| Request                                                       | Status | Effect on the body                                  |
-| ------------------------------------------------------------- | ------ | --------------------------------------------------- |
-| `out=stats,ownership,notasubresource`                         | 400    | Whole request fails with an error envelope, 0 players |
-| `out=starting_status` (goalie/pitcher field)                  | 200    | Key omitted for every non-goalie; no error          |
-| `ranks=notaranktype`                                          | 200    | Default `OR`/`S` ranks instead of the request       |
-| `percent_started.cut_types=platinum`                          | 200    | Cut echoed, no validation                           |
-| `stats.type=projected`                                        | 400    | Whole request fails                                 |
+| Request                                      | Status | Effect on the body                                    |
+| -------------------------------------------- | ------ | ----------------------------------------------------- |
+| `out=stats,ownership,notasubresource`        | 400    | Whole request fails with an error envelope, 0 players |
+| `out=starting_status` (goalie/pitcher field) | 200    | Key omitted for every non-goalie; no error            |
+| `ranks=notaranktype`                         | 200    | Default `OR`/`S` ranks instead of the request         |
+| `percent_started.cut_types=platinum`         | 200    | Cut echoed, no validation                             |
+| `stats.type=projected`                       | 400    | Whole request fails                                   |
 
 An unknown **request member** is a hard failure. An unpopulated sub-resource, an unknown rank type,
 and an unknown cut name all degrade silently inside a 200 body. Absence therefore cannot be detected
 from the response alone: the adapter has to ask for what it needs, assert the shape it depends on, and
 treat a value that stops arriving as a finding rather than as a normal empty state.
+
+### Value-source resolution across the linked account (2026-10-26)
+
+Read-only, same harness and privacy rules, no write attempted. For each league the committed adapter
+read only what the resolved source needs — four completed weeks of statistics for a league that
+publishes points rules, the target-period player detail read for a league that does not — and the
+committed policy planned the lineup from that one source.
+
+| League          | Format     | Modifiers | Source resolved | Basis                                                | Plan                                |
+| --------------- | ---------- | --------: | --------------- | ---------------------------------------------------- | ----------------------------------- |
+| football-1 (15) | head       |        33 | scoring rules   | `mean-points-per-period:week:3,week:4,week:5,week:6` | planned, 9/9 slots, 0 changes       |
+| hockey-1 (21)   | head       |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 12/12 slots, 6 changes     |
+| hockey-2 (19)   | head       |         0 | started percent | —                                                    | refused, `unusable-selection-value` |
+| hockey-3 (22)   | rotisserie |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 15/15 slots, 5 changes     |
+| hockey-4 (21)   | head       |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 15/15 slots, 2 changes     |
+
+The football plan is the roster the provider had already locked; it reports the same total the
+recorded worked example does. Every hockey league resolved to the overall started percentage because
+the diamond cut was `0` for every roster player again. The refused league is the one whose roster
+holds the injured-reserve goaltender with no published started percentage: the refusal names that
+player and the team keeps the native action.
+
+For the 21-player category league the plan's six changes were: two centre slots swapping a bench
+centre ahead of a starter, one left winger moving into a right wing slot ahead of a less-started
+winger, one defenceman replacing a less-started defenceman, and the bench movements those create.
+All twelve starting players were `will-play`, and every change moved a higher started percentage into
+a starting slot at a position the player is eligible for. The reported value term was 758.00 — the
+sum of twelve started percentages, in hundredths of a percent — over a roster whose percentages
+ranged 4–88 with 18 distinct values.
+
+Two limits are visible in that plan rather than inferred:
+
+- **Goaltenders.** The two starting goalies in that plan were started by the crowd at different rates
+  (one below 20 %). Percent started cannot distinguish a confirmed starter from a backup, and the
+  provider does publish `starting_status` for a goalie whose team plays that day (section 5 above).
+  Reading it is the next real improvement to goaltender selection.
+- **Format.** A rotisserie league is decided by season-relative category standing, so a daily lineup
+  ordered by today's crowd starts is a popularity ordering rather than a Roto strategy. The basis
+  string says so; nothing pretends the number is a category projection.
+
+Neither `opponent` (has a game today) nor `starting_status` (goalie confirmed starter) is read by the
+adapter yet. Both are availability facts, not value bases: they would refine the availability tier,
+not the value.
 
 ## Live Yahoo native write verification (2026-10-25)
 

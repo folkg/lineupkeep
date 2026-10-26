@@ -2,27 +2,26 @@ import {
   buildLineupProblem,
   lineupPolicyVersion,
   periodKey,
+  preferredValueSource,
   trailingPeriodCount,
   trailingWindow,
 } from "@lineupkeep/lineup-policy";
 import type {
   LineupPolicyInput,
   LineupPolicyRefusal,
+  PercentStartedCut,
   Period,
   PeriodObservation,
   PlayerAvailability,
+  PlayerPercentStarted,
   PlayerValuation,
   PolicyPlayer,
+  ValueSourceKind,
 } from "@lineupkeep/lineup-policy";
 import type { StatObservation } from "@lineupkeep/lineup-scoring";
-import { describeScoring, scoringProfile } from "@lineupkeep/lineup-scoring";
-import type { ScoringCoverage, ScoringProfile } from "@lineupkeep/lineup-scoring";
-import {
-  makePlayerId,
-  makeSelectionBasis,
-  makeSlotId,
-  solveLineup,
-} from "@lineupkeep/lineup-solver";
+import { parseExact, scoringProfile } from "@lineupkeep/lineup-scoring";
+import type { Exact, ScoringProfile } from "@lineupkeep/lineup-scoring";
+import { makePlayerId, makeSlotId, solveLineup } from "@lineupkeep/lineup-solver";
 import type {
   LineupPlan,
   LineupProblem,
@@ -35,6 +34,7 @@ import { DateTime } from "effect";
 
 import type {
   ProviderLeagueSettings,
+  ProviderPercentStarted,
   ProviderPlayerDetail,
   ProviderRoster,
   ProviderRosterPlayer,
@@ -42,9 +42,8 @@ import type {
 
 export { lineupPolicyVersion };
 
-export function planYahooLineup(input: YahooLineupInput): YahooLineupResult {
-  const policyInput = yahooPolicyInput(input);
-  const verdict = buildLineupProblem(policyInput);
+export function planYahooLineup(input: LineupPolicyInput): YahooLineupResult {
+  const verdict = buildLineupProblem(input);
   if (verdict.kind === "refusal") {
     return { kind: "refused", refusal: { kind: "policy", refusal: verdict.refusal } };
   }
@@ -56,24 +55,49 @@ export function planYahooLineup(input: YahooLineupInput): YahooLineupResult {
     kind: "planned",
     plan: solved.plan,
     problem: verdict.problem,
-    selectionBasis: policyInput.selectionBasis,
-    coverage: describeScoring(policyInput.scoring, observedStatIds(input.history)),
+    selectionBasis: solved.plan.selectionBasis,
     valuations: verdict.valuations,
   };
 }
 
-export function yahooPolicyInput(input: YahooLineupInput): LineupPolicyInput {
-  const period = yahooTargetPeriod(input.roster);
+export function yahooValueSourceKinds(
+  league: ProviderLeagueSettings,
+): ReadonlyArray<ValueSourceKind> {
+  return league.statModifiers.length > 0
+    ? ["scoring-rules", "percent-started"]
+    : ["percent-started"];
+}
+
+export function yahooPointsPolicyInput(input: YahooPeriodLineupInput): LineupPolicyInput {
+  const players = yahooPolicyPlayers(input.roster);
   const window = trailingWindow(input.history.map((entry) => entry.period));
-  const players = input.roster.players.map((player) => yahooPolicyPlayer(player, period));
   return {
-    selectionBasis: selectionBasisFor(window),
-    period,
-    window,
-    scoring: yahooScoringProfile(input.league),
+    period: yahooTargetPeriod(input.roster),
+    source: {
+      kind: "scoring-rules",
+      window,
+      scoring: yahooScoringProfile(input.league),
+      observations: observationsFor(input.history, window, players),
+    },
     slots: yahooLeagueSlots(input.league),
     players,
-    observations: observationsFor(input.history, window, players),
+  };
+}
+
+export function yahooStartedPolicyInput(input: YahooStartedLineupInput): LineupPolicyInput {
+  const details = new Map(
+    input.details.map((detail) => [detail.providerPlayerKey, detail.percentStarted]),
+  );
+  return {
+    period: yahooTargetPeriod(input.roster),
+    source: {
+      kind: "percent-started",
+      started: input.roster.players.map((player) =>
+        startedFor(player.providerPlayerKey, details.get(player.providerPlayerKey)),
+      ),
+    },
+    slots: yahooLeagueSlots(input.league),
+    players: yahooPolicyPlayers(input.roster),
   };
 }
 
@@ -91,7 +115,7 @@ export function yahooScoringProfile(league: ProviderLeagueSettings): ScoringProf
 }
 
 export function yahooScorable(league: ProviderLeagueSettings): boolean {
-  return league.statModifiers.length > 0;
+  return preferredValueSource(yahooValueSourceKinds(league)) !== undefined;
 }
 
 export function yahooObservationWindow(
@@ -180,8 +204,8 @@ export function yahooLineupRefusalCode(refusal: YahooLineupRefusal): string {
 
 function describePolicyRefusal(refusal: LineupPolicyRefusal): string {
   switch (refusal.kind) {
-    case "no-scoring-rules":
-      return "This league publishes no points rules, so its lineup cannot be scored by the custom policy.";
+    case "no-value-source":
+      return "This league publishes neither points rules nor a started percentage, so its lineup cannot be valued by the custom policy.";
     case "no-observed-periods":
       return "No completed scoring period is available to value the roster, so the custom policy cannot plan a lineup.";
   }
@@ -275,6 +299,31 @@ const availabilityByInjuryCode: Readonly<Record<string, PlayerAvailability>> = {
 
 export const yahooInjuryStatusCodes: ReadonlyArray<string> = Object.keys(availabilityByInjuryCode);
 
+function yahooPolicyPlayers(roster: ProviderRoster): ReadonlyArray<PolicyPlayer> {
+  const period = yahooTargetPeriod(roster);
+  return roster.players.map((player) => yahooPolicyPlayer(player, period));
+}
+
+function startedFor(
+  providerPlayerKey: string,
+  started: ProviderPercentStarted | undefined,
+): PlayerPercentStarted {
+  return {
+    id: makePlayerId(providerPlayerKey),
+    percent: exactPercent(started?.percent ?? null),
+    cuts: (started?.cuts ?? []).flatMap((cut) => {
+      const percent = exactPercent(cut.percent);
+      return percent === undefined
+        ? []
+        : [{ cut: cut.cutType, percent } satisfies PercentStartedCut];
+    }),
+  };
+}
+
+function exactPercent(percent: number | null): Exact | undefined {
+  return percent === null ? undefined : parseExact(String(percent));
+}
+
 function rosterSlot(position: ProviderRosterPosition): RosterSlot {
   const id = makeSlotId(position.position);
   if (position.isStarting) {
@@ -344,30 +393,20 @@ function observationsOf(detail: ProviderPlayerDetail): ReadonlyArray<StatObserva
   return detail.actual?.stats.map((stat) => ({ statId: String(stat.statId), value: stat.value }));
 }
 
-function observedStatIds(history: ReadonlyArray<YahooPeriodHistory>): ReadonlyArray<string> {
-  const statIds = new Set<string>();
-  for (const entry of history) {
-    for (const detail of entry.details) {
-      for (const stat of detail.actual?.stats ?? []) {
-        statIds.add(String(stat.statId));
-      }
-    }
-  }
-  return [...statIds];
-}
-
-function selectionBasisFor(window: ReadonlyArray<Period>): SelectionBasis {
-  return makeSelectionBasis(`yahoo:mean-points-per-period:${window.map(periodKey).join(",")}`);
-}
-
 const benchPosition = "BN";
 
 type ProviderRosterPosition = ProviderLeagueSettings["rosterPositions"][number];
 
-export type YahooLineupInput = {
+export type YahooPeriodLineupInput = {
   readonly league: ProviderLeagueSettings;
   readonly roster: ProviderRoster;
   readonly history: ReadonlyArray<YahooPeriodHistory>;
+};
+
+export type YahooStartedLineupInput = {
+  readonly league: ProviderLeagueSettings;
+  readonly roster: ProviderRoster;
+  readonly details: ReadonlyArray<ProviderPlayerDetail>;
 };
 
 export type YahooAssignmentInput = {
@@ -405,7 +444,7 @@ export type YahooAssignmentRefusal =
       readonly to: string;
     };
 
-type YahooPeriodHistory = {
+export type YahooPeriodHistory = {
   readonly period: Period;
   readonly details: ReadonlyArray<ProviderPlayerDetail>;
 };
@@ -416,7 +455,6 @@ export type YahooLineupResult =
       readonly plan: LineupPlan;
       readonly problem: LineupProblem;
       readonly selectionBasis: SelectionBasis;
-      readonly coverage: ScoringCoverage;
       readonly valuations: ReadonlyArray<PlayerValuation>;
     }
   | { readonly kind: "refused"; readonly refusal: YahooLineupRefusal };

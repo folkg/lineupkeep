@@ -70,6 +70,14 @@ The signed relative benefit assigned to starting a player for a particular perio
 One declared set of rules, statistic coverage, and period arithmetic that makes two selection values comparable, such as one league's points rules applied to one period basis. Values from different scoring bases are never combined.
 _Avoid_: Scoring model, formula, weighting
 
+**Value source**:
+The one published measurement a league's selection values are taken from: provider-published projected points, announced league scoring rules applied to realised statistics, or the provider's started percentage. A league uses exactly one, and the basis names it.
+_Avoid_: Fallback chain, blended score, weighted input
+
+**Started percentage**:
+The share of the provider's leagues that started a player for a period, optionally published for a narrower population called a cut. It is an ordinal crowd signal — a popularity ordering — not an expected score, and it is never added to, multiplied by, or converted into points. A published zero means nobody started the player; a missing value is unknown.
+_Avoid_: Ownership, start rate as a projection, crowd points
+
 **Availability status**:
 A named, provider-reported fact about whether a player can appear in a period, such as healthy, out, day to day, injured reserve, suspended, not active, or no game. It never adjusts that player's selection value; it selects an availability tier.
 _Avoid_: Injury when it also covers byes, suspensions, and inactive players; availability condition when an ordering is meant

@@ -1,9 +1,9 @@
 # @lineupkeep/lineup-policy
 
-The opinionated layer between observed statistics and lineup selection. Given a league's roster
-slots, a retained roster with each player's availability, and one observation per completed period,
-this package produces the solver's `LineupProblem` — values, availability tiers, and locks — together
-with the reasoning for every decision it made.
+The opinionated layer between provider facts and lineup selection. Given a league's roster slots, a
+retained roster with each player's availability, and one published value source, this package
+produces the solver's `LineupProblem` — values, availability tiers, and locks — together with the
+reasoning for every decision it made.
 
 This package contains no IO, provider code, database, clock, randomness, or Effect services. It does
 not read a provider and does not assign players to slots. It also does not perform the arithmetic of
@@ -13,10 +13,9 @@ scoring: that belongs to `@lineupkeep/lineup-scoring`.
 
 ```text
 provider adapter            this package                    @lineupkeep/lineup-solver
-league rules        ─┐
+value source        ─┐
 slot declarations   ─┤
 player availability ─┼──▶  LineupProblem + valuations  ──▶  plan or refusal
-period observations ─┘
 ```
 
 The provider adapter decides what exists: which slots a league declares, which positions a player may
@@ -24,45 +23,61 @@ occupy, what an injury code means, which periods a player has no game, whether a
 This package decides what those facts are worth, how likely each player is to appear, and which
 availability rung that puts them on.
 
-## The input states its basis
+## One value source per problem
 
 ```ts
 type LineupPolicyInput = {
-  readonly selectionBasis: SelectionBasis;
   readonly period: Period;
-  readonly window: ReadonlyArray<Period>;
-  readonly scoring: ScoringProfile;
+  readonly source: ValueSource | undefined;
   readonly slots: ReadonlyArray<RosterSlot>;
   readonly players: ReadonlyArray<PolicyPlayer>;
-  readonly observations: ReadonlyArray<PeriodObservation>;
 };
+
+type ValueSource =
+  | { readonly kind: "projected-points"; readonly projections; readonly realised }
+  | { readonly kind: "scoring-rules"; readonly window; readonly scoring; readonly observations }
+  | { readonly kind: "percent-started"; readonly started };
 ```
 
-One league, one target period, one window, one basis string. The policy rejects a problem that could
-mix bases:
+The input carries **exactly one** measurement, so two basis kinds cannot be mixed by construction. The
+policy derives the basis string from the source, and every player in the returned problem carries it,
+so the solver cannot receive a mixed-basis problem from this layer.
 
-- the target period may not belong to its own observation window, so a partial current-period total
-  can never be averaged with completed periods;
-- an observation outside the declared window is rejected rather than silently ignored;
-- the same period may not appear twice in the window or in the observations.
+`preferredValueSource` states the ladder the adapter applies: projected points, then league rules,
+then the started percentage. `buildLineupProblem` refuses `no-value-source` when the caller passes
+`undefined`, and `no-observed-periods` when the scoring-rules window is empty.
 
-Every player in the returned problem carries the caller's one `selectionBasis`, so the solver cannot
-receive a mixed-basis problem from this layer.
+The scoring-rules source is also checked for internal consistency: the target period may not belong to
+its own observation window, an observation outside the window is rejected rather than ignored, and a
+period or player may not appear twice.
 
-## The value
+## The values
 
-For each player, each window period is either **counted** or **skipped**:
+**Projected points.** A player's value is the provider's projection for the target period, in
+hundredths. A realised total in the same source is recorded as context and never added to it. A player
+without a projection is `unusable` with reason `missing`.
+
+**Scoring rules.** For each player, each window period is either **counted** or **skipped**:
 
 - a period the player has no game in is skipped (a published bye, not a zero performance);
 - a period with no observation for that player is skipped;
 - a period whose scored total is unknown is skipped;
 - every other period contributes its exact points.
 
-The player's value is the mean of the counted periods, at the scoring profile's own scale, and it is
-the same number whatever the player's availability is. Nothing is halved, zeroed, or refused for a
-status. A player with no counted period has no measured value; they are valued at zero and the
-valuation records that the mean is absent and which periods were skipped, so one unmeasured player
-never disables a run.
+The player's value is the mean of the counted periods, at the scoring profile's own scale. A player
+with no counted period has no measured value; they are valued at zero and the valuation records that
+the mean is absent and which periods were skipped, so one unmeasured player never disables a run.
+
+**Started percentage.** A player's value is the published percentage for the chosen population, in
+hundredths of a percent. It is an ordinal crowd signal, not an expected score: it is never added to,
+multiplied by, or converted into points. The population is the first preferred cut (diamond) that
+carries a value above zero for at least one roster player, otherwise the overall percentage; a
+published-but-all-zero cut is treated as unpopulated. A published zero is a real value. A player
+without a value in the chosen population is `unusable` with reason `missing`, and the solver refuses
+rather than inventing one.
+
+Whichever source is active, availability is the same number for the same player: nothing is halved,
+zeroed, or refused for a status.
 
 ## The availability tier
 
@@ -115,14 +130,16 @@ type LineupPolicyResult =
   | { readonly kind: "refusal"; readonly refusal: LineupPolicyRefusal };
 ```
 
-A `PlayerValuation` records the availability tier and the fact that selected it, which periods were
-counted and skipped, each counted period's exact points, the mean (absent when nothing could be
-counted), and the selection units. That is the evidence a person needs to disagree with a lineup.
+A `PlayerValuation` records the availability tier and the fact that selected it, the selection units,
+and a kind-specific `value`: the counted and skipped periods with each period's exact points and the
+mean for the scoring-rules basis, the projection with its realised context for the projections basis,
+or the population and percentage for the started basis. That is the evidence a person needs to
+disagree with a lineup, and it makes the basis of every number explicit.
 
 The policy refuses outright when:
 
-- `no-scoring-rules` — the league publishes no additive points rules, so no comparable value exists;
-- `no-observed-periods` — the window is empty.
+- `no-value-source` — the caller has no published measurement to value the roster with;
+- `no-observed-periods` — the scoring-rules window is empty.
 
 Any further refusal comes from the solver and names its own reason.
 
@@ -130,10 +147,15 @@ Any further refusal comes from the solver and names its own reason.
 
 The suite covers each status-to-tier mapping, identical values across tiers, bye and unknown-period
 skipping, an unmeasured player, a run that keeps planning despite an unrecognised status, the owner's
-two availability scenarios, basis-mixing rejection, reserve eligibility derivation, and two worked
-examples on a recorded football roster: the provider-locked lineup the policy must leave alone, and the
-same roster when editable, where the solver replaces the second running back with a bench player worth
-7.35 more points.
+two availability scenarios, reserve eligibility derivation, and two worked examples on a recorded
+football roster.
+
+It also covers the value-source ladder and its cases: the ladder order, the derived basis per source,
+a projection used as the value with its realised total recorded but not added, a player without a
+projection refused instead of valued from statistics, a started percentage valued in hundredths, a
+populated diamond cut preferred over the overall percentage, an all-zero cut falling back to the
+overall percentage, a zero percentage kept as a real value, a missing percentage refused, and a
+healthy low-percentage player ranked above an excluded high-percentage one.
 
 ## Deliberately outside this package
 

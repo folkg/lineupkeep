@@ -27,41 +27,50 @@ the chosen lineup is genuinely the best one under that ordering.
 
 The plan it returns reports a total selection value that sums the starting players' values and is
 **availability-blind**. That number is the objective's value term, not an expected score: an injured
-player's mean is counted there even though they will probably score nothing.
+player's value is counted there even though they will probably score nothing.
 
 That is a simplification whenever a league is not actually scored by points. A head-to-head category
 league is won by taking more categories than an opponent, not by accumulating a scalar; a rotisserie
 league is won by relative standing across categories. Both reward a _portfolio_ of stats rather than a
-total, and no per-player scalar reproduces either. So this policy does not attempt it:
+total, and no per-player scalar reproduces either. So this policy never invents a scalar for a league
+whose format it does not model. It picks a value source the provider actually publishes, states which
+one it used in the basis string, and refuses when there is none.
 
-- A league that publishes additive points rules is scored, and the value term is honest.
-- A league that publishes no points rules is **refused** with `no-scoring-rules`, and the worker keeps
-  the provider's own start-active action for that team.
+## The value source ladder
 
-Refusing is the deliberate answer, not a gap. A category league scored by an invented scalar would
-look like optimisation while optimising something nobody is playing for.
+Every league gets exactly one value source, chosen in this order:
 
-## Which leagues are scoreable today
+1. **Projected points** the provider publishes for that player and period. This is the primary the
+   owner asked for. It is also the one Yahoo does not publish: an exhaustive probe of the player
+   detail surface returns no projected points for any of the five leagues, only ordinal ranks
+   (`PW`, `PS7`, `PSR`, `PN4W`) and fantasy-_team_ projected points on the scoreboard. Rung one is
+   implemented, tested, and never selected by this adapter.
+2. **League scoring rules applied to realised statistics** — the arithmetic that reproduces a points
+   league's own totals exactly. This is what the football league uses.
+3. **Percent started**, the provider's published started percentage for the period. This is the
+   owner's "crowdsourcing the decision": the share of leagues that started this player.
 
-| Sport    | Leagues available        | Points rules | Scoreable |
-| -------- | ------------------------ | ------------ | --------- |
-| Football | 1 points league          | 33 modifiers | yes       |
-| Hockey   | 3 category, 1 rotisserie | none         | no        |
+A league uses one rung. The policy input carries exactly one source, and the basis string it derives
+names the source, so a problem cannot contain two measurement kinds and a value from one basis cannot
+be compared with a value from another. There is no fallback per player: a league on rung 2 does not
+value one player by rung 3, and a league on rung 3 does not mix in points.
 
-Every hockey league in the linked account publishes categories with no `stat_modifiers` at all, which
-is what a category or rotisserie league looks like in the provider's own settings. Their statistics
-are real, dense, and complete — including decimal ratio stats and genuine nulls — but there is no
-league rule that turns them into points. Hockey custom optimisation is therefore not ready, on
-evidence rather than on missing data, and those teams continue to use the native action.
+When no rung is available the policy refuses with `no-value-source`, and the worker keeps the
+provider's own start-active action for that team. Refusing is the deliberate answer, not a gap.
 
-The pipeline itself is basis-agnostic: hockey date coverage is available and behaves like a season
-series per date, so a dated _points_ league would be scored the same way. No such league exists here,
-so that path is exercised only by fixtures.
+### Rung 1: projected points
 
-## What a value means
+A projection is used only as the provider publishes it, for the target period. Its unit is points at
+the provider's own scale. A realised total published alongside it is recorded as context and is
+**never summed** with it: a forward-looking decision takes the projection, and the realised total
+stays evidence. A player the provider publishes no projection for is `unusable` with reason
+`missing`, so the solver refuses rather than treating a missing projection as zero.
+
+### Rung 2: league scoring rules
 
 One league, one target period, one window, one basis string. For a target week, the window is the
-last four completed weeks. For a target date, it is the last four completed dates.
+last four completed weeks. For a target date, it is the last four completed dates, once the adapter
+reads dated history.
 
 A player's value is the **mean realised points per counted period**, at the league's own scoring
 scale. A period is _counted_ when the player had a game scheduled in it and the provider published a
@@ -73,12 +82,67 @@ complete total for it. A period is _skipped_ when:
 
 A player with no counted period has no measured value. They are valued at zero, and the valuation
 records the missing mean and every skipped period. Valuing them at zero keeps the roster placeable;
-refusing would let one unmeasured player disable custom optimisation for the whole team.
+refusing would let one unmeasured player disable custom optimisation for the whole team. That is a
+points-basis decision only: under rung 3 an absent value stays absent.
 
-Why a trailing mean and not a season total: there is no projections surface, and a season total mixes
-weeks already played with different opponents, roles, and byes. A four-week mean is responsive to a
-role change and stable enough not to chase one big game. It is still backward-looking, and it is the
-main thing to argue with.
+Why a trailing mean and not a season total: a season total mixes weeks already played with different
+opponents, roles, and byes. A four-week mean is responsive to a role change and stable enough not to
+chase one big game. It is still backward-looking, and it is the main thing to argue with.
+
+### Rung 3: percent started, and what it does not mean
+
+Percent started is the share of Yahoo leagues that started a player for the target period. It is
+**an ordinal crowd signal, not an expected score**. Concretely:
+
+- It cannot be added to points, multiplied by points, or normalised into points. 43 % started is not
+  43 points and not 0.43 of anything.
+- It is not a forecast of the player's own production. It is what other managers did, and they may be
+  wrong, inattentive, or starting the player for a category this league does not score.
+- It says nothing about the opponent, the scoreline, or whether a goaltender will actually get the
+  start.
+- Its unit is a percentage of leagues. The plan's total selection value for this basis is therefore
+  the sum of starting percentages in hundredths of a percent — the objective's value term, not a
+  score.
+
+Two facts about the published value shape matter:
+
+- **A zero is a real value**, meaning no crowd league started the player. It is not missing.
+- **A missing started percentage is unknown, not zero.** It appears as an absent fragment inside a
+  present node. A player without one is `unusable` with reason `missing`, so the solver refuses and
+  the refusal names them. The observed absence in this account is an injured-reserve goaltender.
+
+#### The cut, and why the overall percentage wins here
+
+The provider can report a started percentage per "cut" — a subset of leagues — as well as the
+overall percentage. The owner's preference is the diamond cut. In this account the diamond cut is
+**published and always zero**: every sampled roster player in all five leagues carried the cut with
+`value: 0` while the overall percentage in the same response had 15–20 distinct non-zero values.
+Yahoo echoes whatever cut literal is requested and validates nothing, so a returned cut is not
+evidence that the cut is populated.
+
+The policy therefore prefers the diamond cut only when at least one roster player's cut percentage is
+above zero, and otherwise uses the overall percentage. Both are the same source (percent started) and
+the same basis kind; the basis string names the population it used (`overall` or `cut-diamond`). The
+cost of the rule: if a diamond cohort genuinely exists but every rostered player has zero of it, the
+policy uses the overall percentage and loses the narrower signal. The alternative — trusting an
+all-zero cut — would rank the whole roster at zero and plan a lineup on noise.
+
+## Which leagues are scoreable today
+
+| Sport    | Leagues available        | Points rules | Started percentage | Value source    |
+| -------- | ------------------------ | ------------ | ------------------ | --------------- |
+| Football | 1 points league          | 33 modifiers | published          | league rules    |
+| Hockey   | 3 category, 1 rotisserie | none         | published          | percent started |
+
+Every hockey league in the linked account publishes categories with no `stat_modifiers` at all, which
+is what a category or rotisserie league looks like in the provider's own settings. Their realised
+statistics are dense but there is no league rule that turns them into points, so they take rung 3.
+One of the four currently refuses because a single roster player — an injured-reserve goaltender who
+is eligible for a starting position — has no published started percentage.
+
+The basis string no longer carries a provider prefix: it names the measurement, which is what
+comparability depends on. Rows recorded in earlier write verifications show the previous
+`yahoo:mean-points-per-period:...` form.
 
 **Availability never enters this arithmetic.** The same player is worth the same number whether they
 are healthy, doubtful, or out. Nothing is halved for day to day, nothing is zeroed for out, and no
@@ -231,69 +295,107 @@ because the defence slot is required and they are the only defence.
 ## Worked example: a real hockey lineup
 
 The same policy, pointed at one of the four hockey leagues — 21 rostered players, twelve categories,
-`C 2, LW 2, RW 2, D 4, G 2, BN 7, IR 2, IR+ 1, NA 2`, all players editable before that day's games.
-The provider publishes no `stat_modifiers` for the league, and the raw settings body does not contain
-the key at all.
+`C 2, LW 2, RW 2, D 4, G 2, BN 7, IR 2, IR+ 1, NA 2`, every player editable and no player on a
+reserve list with a game to play. The league publishes no `stat_modifiers`, and the raw settings body
+does not contain the key at all, so the ladder skips rungs one and two and lands on the started
+percentage.
 
-The policy returns `no-scoring-rules`. Nothing is valued, nothing is written, and the team keeps the
-provider's native start-active action. The availability tier of each player is computed but unused,
-because a lineup with no comparable value has nothing to rank. The evidence that this is a
-league-format fact rather than a missing read is in [the research
-record](RESEARCH.md#live-yahoo-league-scoring-evidence-2026-10-26): the four hockey leagues each
-publish categories and no modifiers, while the football league publishes one modifier list and no
-category without a rule.
+The provider published a started percentage for all 21 roster players (4 %–88 %, 18 distinct values,
+`coverage_type: date`). The diamond cut was published too and was `0` for every player, so the policy
+used the overall percentage:
 
-What remains available for those teams is what already shipped: exact rosters, statistics, schedules,
-and the provider's own start-active action. What is missing for custom optimisation is a scoring rule
-the league actually plays under.
+- basis `percent-started:overall:date:2026-10-26`
+- value term 758.00 — the sum of the twelve starting started percentages, in hundredths of a percent
+- six slot changes, twelve of twelve required starting slots filled
+
+Read the plan as a person who knows the sport would: every change moves a **higher started
+percentage** into a starting slot and benches a lower one at the same position — two centre slots
+swap a bench centre ahead of a starter, a left winger moves into a right wing slot ahead of a winger
+the crowd starts less, and a defenceman replaces a less-started defenceman. The bench movements those
+create follow. No player who will not play is started, because every displaced player was available
+and the roster is healthy enough to fill every required slot from available players.
+
+Where it is not obviously right:
+
+- **Goaltenders.** The two starting goalies were started by 17 % and 54 % of leagues. Percent started
+  cannot tell a confirmed starter from a backup, and a backup goalie the crowd leaves unstarted will
+  lose the slot to a slightly more-started one. The provider does publish `starting_status` for a
+  goalie whose team has a game that day — the one fact that would settle this — and this adapter does
+  not read it.
+- **Category and rotisserie formats.** The value term prices the player the crowd likes, not the
+  category this team needs. For the rotisserie league in particular, a daily crowd-favourite lineup
+  is not a rotisserie strategy: Roto is won on season-relative standing, so churn driven by today's
+  starts can move against the standing.
+
+The other three hockey leagues resolve the same way. One of them refuses, and the refusal is the
+honest outcome: one roster player is an injured-reserve goaltender with no published started
+percentage, and the solver will not invent a value for them.
 
 ## Tradeoffs you can disagree with
 
-1. **Points over categories.** Maximising the value term is right for a points league and wrong in
-   kind for a category or rotisserie league, so the policy refuses the latter instead of
-   approximating it.
-2. **Four completed periods.** Shorter is more responsive to role changes and noisier; longer is
+1. **One source, in its own unit.** A league is valued by points or by a started percentage, never by
+   both and never by a converted mixture. A category league valued by the crowd is not priced in
+   categories, and it is not pretending to be: the basis string says what the number is.
+2. **Rung two before rung three.** A league that publishes points rules uses them even though the
+   crowd signal is also available. Points are what the league scores; the crowd is a proxy. The cost
+   is that football never benefits from the crowd signal, even when the crowd disagrees with the
+   trailing mean.
+3. **Four completed periods.** Shorter is more responsive to role changes and noisier; longer is
    steadier and staler. Four weeks is a judgement.
-3. **A trailing mean, not a forecast.** There are no projections. A player's first big game is
-   invisible until it is behind them, and a returning starter keeps a depressed value while missed
-   weeks are still inside the window.
-4. **Byes excluded, injuries counted.** A published bye is a known absence of opportunity, so it is
+4. **A trailing mean, not a forecast.** For rung two there are no projections. A player's first big
+   game is invisible until it is behind them, and a returning starter keeps a depressed value while
+   missed weeks are still inside the window.
+5. **Byes excluded, injuries counted.** A published bye is a known absence of opportunity, so it is
    excluded from the mean and the player is `will-not-play` for that period. A week a player was
    injured looks like a zero performance, because the provider's dense series cannot distinguish the
    two.
-5. **Availability outranks value, as a head count.** The tier terms count starters rather than adding
-   their values, so availability dominance cannot be bought with points: a healthy player worth 0.00
-   starts ahead of an injured player worth 21.67. The cost is that a doubtful star never starts ahead
-   of a healthy journeyman, and that the count ignores magnitude altogether.
-6. **Negative starters are not credited.** A starter counts towards a tier only when their value is
-   not negative, so a healthy player costing points cannot take a position that would otherwise stay
-   empty, and an unavailable player worth something can. Without this, an available but negative
-   player would be started for showing up — worse than leaving the position empty.
-7. **Unrecognised statuses are treated as doubtful.** One new code does not disable custom
-   optimisation and does not displace a known-healthy player, but it can under-rank a healthy player
-   carrying that code and over-rank an absent one. The code is recorded so the mapping can be
-   extended in one place.
-8. **An unmeasured player is valued at zero.** A player with no counted period does not block the
-   run; they are priced as worthless and the gap is recorded as skipped periods. The cost is that a
-   productive player whose statistics the provider omitted can be benched without a refusal.
-9. **The reported total is availability-blind.** It sums the starting values and is the objective's
-   value term, so it is not an expected score and it does not shrink when an injured player is only
-   filling a vacant position.
-10. **Starting positions are required.** Conservative against an unverified rule, at the cost of
+6. **A crowd signal is hindsight about other people.** Percent started follows what other managers
+   did for the period, not what will happen. It is stale by the time a late lineup change is
+   announced, it says nothing about matchups, and it cannot tell a starting goalie from a backup.
+7. **A published but empty cut is ignored.** The diamond cut is preferred only when at least one
+   roster player's cut percentage is above zero. Trusting an all-zero cut would rank the roster at
+   zero; using the overall percentage keeps a signal, at the cost of the narrower population.
+8. **A missing started percentage refuses the team.** It is unknown, not zero, and the solver will not
+   plan around an invented value. One injured-reserve goaltender who is eligible for a starting
+   position currently blocks one of the four hockey leagues.
+9. **Availability outranks value, as a head count.** The tier terms count starters rather than adding
+   their values, so availability dominance cannot be bought with value: a healthy player worth 0.00
+   starts ahead of an injured player worth 21.67, or ahead of an injured player the crowd starts 91 %
+   of the time. The cost is that a doubtful star never starts ahead of a healthy journeyman, and that
+   the count ignores magnitude altogether.
+10. **Negative starters are not credited.** A starter counts towards a tier only when their value is
+    not negative, so a healthy player costing points cannot take a position that would otherwise stay
+    empty, and an unavailable player worth something can. Without this, an available but negative
+    player would be started for showing up — worse than leaving the position empty.
+11. **Unrecognised statuses are treated as doubtful.** One new code does not disable custom
+    optimisation and does not displace a known-healthy player, but it can under-rank a healthy player
+    carrying that code and over-rank an absent one. The code is recorded so the mapping can be
+    extended in one place.
+12. **An unmeasured points player is valued at zero.** Under the scoring-rules basis a player with no
+    counted period does not block the run; they are priced as worthless and the gap is recorded as
+    skipped periods. The cost is that a productive player whose statistics the provider omitted can
+    be benched without a refusal. The started-percentage basis does not do this: there, absent stays
+    absent and the team refuses.
+13. **The reported total is availability-blind, and in the basis's own unit.** It sums the starting
+    values and is the objective's value term, so it is not an expected score. Under the points basis
+    it is centi-points; under the started basis it is hundredths of a percent. It does not shrink when
+    an injured player is only filling a vacant position.
+14. **Starting positions are required.** Conservative against an unverified rule, at the cost of
     starting a negative player when every candidate is negative.
-11. **No per-game rate.** The provider publishes no games-played count, so a season total cannot
+15. **No per-game rate.** The provider publishes no games-played count, so a season total cannot
     become a rate and the policy does not invent a denominator.
-12. **Bench capacity is a hard maximum.** Unverified against the provider, but it cannot invent space.
+16. **Bench capacity is a hard maximum.** Unverified against the provider, but it cannot invent space.
 
 ## What this policy does not do
 
 - It does not read a provider, validate a session, or refresh period coverage.
 - It does not write a lineup. It produces a plan; the provider adapter translates the changed
   assignments into the provider's request and verifies the readback.
-- It does not consider opponents, matchups, remaining games, weather, or probable starters. The
-  provider publishes no real-world starter or snap-share signal; if one arrives it belongs in the
-  value basis, which already prices the role a player actually had, not in the availability ladder,
-  which is only about whether a player appears at all.
-- It does not use ranks, ownership, or percent-started values, and it will not mix a weekly total with
-  a season total in one value.
-- It does not optimise category outcomes, rotisserie standing, or playoff leverage.
+- It does not consider opponents, matchups, remaining games, weather, probable starters, or whether a
+  goaltender is confirmed to start. The provider does publish a real-world `starting_status` for a
+  goaltender whose team plays that day, and a has-a-game `opponent` for every player; neither is read
+  by this adapter yet, and neither is a value basis — they are availability facts.
+- It does not use ranks or ownership, and it will not mix a weekly total with a season total in one
+  value.
+- It does not optimise category outcomes, rotisserie standing, or playoff leverage. A started
+  percentage is a popularity ordering, not a category projection.

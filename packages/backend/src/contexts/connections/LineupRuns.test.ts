@@ -32,7 +32,12 @@ import { TeamAutomationState } from "./internal/TeamAutomationWorkflow.ts";
 import { LineupRequestConflict, LineupRequestInput, LineupRunNotFound } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import { LineupWorker } from "./LineupWork.ts";
-import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
+import type {
+  ProviderLeagueSettings,
+  ProviderPlayerDetail,
+  ProviderRoster,
+  ProviderTeam,
+} from "./Provider.ts";
 
 it.effect("creates one durable run per team and verifies the native change", () =>
   Effect.gen(function* () {
@@ -164,6 +169,38 @@ it.effect("applies and verifies changed explicit assignments", () =>
     assert.strictEqual(yield* fake.nativeCallCount, 0);
     const requests = yield* fake.explicitRequests;
     assert.strictEqual(requests[0]?.length, 2);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect("plans a league without points rules from the published started percentage", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* fake.setLeague(startedLeague);
+    yield* fake.setRoster(customRoster);
+    yield* fake.setPlayerDetails(startedDetails);
+    const runId = yield* createCustomRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.status, "completed");
+    assert.strictEqual(run.state._tag, "Completed");
+    if (run.state._tag !== "Completed") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.implementation, "custom_policy");
+    const policy = run.state.outcome.policy;
+    assert.strictEqual(policy?.kind, "planned");
+    if (policy?.kind !== "planned") {
+      return;
+    }
+    assert.strictEqual(policy.basis, "percent-started:overall:week:3");
+    assert.strictEqual(run.state.outcome.changes.length, 2);
+    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    assert.strictEqual(yield* fake.nativeCallCount, 0);
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
@@ -810,6 +847,31 @@ function customDetail(
     rosterStatus: "rostered",
     actual: { basis: { type: "week", week: 2 }, stats: [{ statId: 4, value }] },
     projected: undefined,
+    percentStarted: undefined,
+  };
+}
+
+function startedDetail(
+  providerPlayerKey: string,
+  name: string,
+  position: string,
+  percent: number,
+): ProviderPlayerDetail {
+  return {
+    providerPlayerKey,
+    name,
+    primaryPosition: position,
+    displayPosition: position,
+    eligiblePositions: undefined,
+    rosterStatus: "rostered",
+    actual: undefined,
+    projected: undefined,
+    percentStarted: {
+      percent,
+      delta: null,
+      coverage: { type: "week", week: 3 },
+      cuts: [{ cutType: "diamond", percent: 0 }],
+    },
   };
 }
 
@@ -866,6 +928,38 @@ const customDetails = [
   customDetail("461.p.20002", "RB One", "RB", 5),
   customDetail("461.p.20003", "RB Two", "RB", 15),
   customDetail("461.p.20004", "QB Two", "QB", 1),
+];
+
+const startedLeague: ProviderLeagueSettings = {
+  ...customLeague,
+  statCategories: [
+    {
+      statId: 4,
+      name: "Yards",
+      displayName: "Yards",
+      abbreviation: "Yds",
+      group: "",
+      enabled: true,
+      positionTypes: [],
+    },
+    {
+      statId: 9,
+      name: "Touchdowns",
+      displayName: "TD",
+      abbreviation: "TD",
+      group: "",
+      enabled: true,
+      positionTypes: [],
+    },
+  ],
+  statModifiers: [],
+};
+
+const startedDetails: ReadonlyArray<ProviderPlayerDetail> = [
+  startedDetail("461.p.20001", "QB One", "QB", 30),
+  startedDetail("461.p.20002", "RB One", "RB", 20),
+  startedDetail("461.p.20003", "RB Two", "RB", 90),
+  startedDetail("461.p.20004", "QB Two", "QB", 5),
 ];
 
 const humanEditedRoster: ProviderRoster = {

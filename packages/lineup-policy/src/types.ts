@@ -5,13 +5,56 @@ import type {
   PlayerSelection,
   PositionType,
   RosterSlot,
-  SelectionBasis,
   SlotId,
 } from "@lineupkeep/lineup-solver";
 
 export type Period =
   | { readonly kind: "week"; readonly week: number }
   | { readonly kind: "date"; readonly date: string };
+
+export type ValueSourceKind = "projected-points" | "scoring-rules" | "percent-started";
+
+export type PercentStartedPopulation =
+  | { readonly kind: "overall" }
+  | { readonly kind: "cut"; readonly cut: string };
+
+export type ValueSource =
+  | {
+      readonly kind: "projected-points";
+      readonly projections: ReadonlyArray<PlayerProjection>;
+      readonly realised: ReadonlyArray<PlayerRealisedPoints>;
+    }
+  | {
+      readonly kind: "scoring-rules";
+      readonly window: ReadonlyArray<Period>;
+      readonly scoring: ScoringProfile;
+      readonly observations: ReadonlyArray<PeriodObservation>;
+    }
+  | {
+      readonly kind: "percent-started";
+      readonly started: ReadonlyArray<PlayerPercentStarted>;
+    };
+
+export type PlayerProjection = {
+  readonly id: PlayerId;
+  readonly points: Exact;
+};
+
+export type PlayerRealisedPoints = {
+  readonly id: PlayerId;
+  readonly points: Exact;
+};
+
+export type PlayerPercentStarted = {
+  readonly id: PlayerId;
+  readonly percent: Exact | undefined;
+  readonly cuts: ReadonlyArray<PercentStartedCut>;
+};
+
+export type PercentStartedCut = {
+  readonly cut: string;
+  readonly percent: Exact;
+};
 
 export type PlayerAvailability =
   | { readonly kind: "available" }
@@ -46,13 +89,10 @@ export type PeriodObservation = {
 };
 
 export type LineupPolicyInput = {
-  readonly selectionBasis: SelectionBasis;
   readonly period: Period;
-  readonly window: ReadonlyArray<Period>;
-  readonly scoring: ScoringProfile;
+  readonly source: ValueSource | undefined;
   readonly slots: ReadonlyArray<RosterSlot>;
   readonly players: ReadonlyArray<PolicyPlayer>;
-  readonly observations: ReadonlyArray<PeriodObservation>;
 };
 
 export type LineupPolicyResult =
@@ -64,15 +104,31 @@ export type LineupPolicyResult =
   | { readonly kind: "refusal"; readonly refusal: LineupPolicyRefusal };
 
 export type LineupPolicyRefusal =
-  | { readonly kind: "no-scoring-rules" }
+  | { readonly kind: "no-value-source" }
   | { readonly kind: "no-observed-periods"; readonly window: ReadonlyArray<Period> };
 
 export type PlayerValuation = {
   readonly playerId: PlayerId;
   readonly availability: AvailabilityAssessment;
-  readonly countedPeriods: ReadonlyArray<Period>;
-  readonly skippedPeriods: ReadonlyArray<Period>;
-  readonly periodPoints: ReadonlyArray<Exact>;
-  readonly average: Exact | undefined;
   readonly selection: PlayerSelection;
+  readonly value: ValueAssessment;
 };
+
+export type ValueAssessment =
+  | {
+      readonly kind: "realised-points";
+      readonly countedPeriods: ReadonlyArray<Period>;
+      readonly skippedPeriods: ReadonlyArray<Period>;
+      readonly periodPoints: ReadonlyArray<Exact>;
+      readonly average: Exact | undefined;
+    }
+  | {
+      readonly kind: "projected-points";
+      readonly projection: Exact | undefined;
+      readonly realised: Exact | undefined;
+    }
+  | {
+      readonly kind: "percent-started";
+      readonly population: PercentStartedPopulation;
+      readonly percent: Exact | undefined;
+    };
