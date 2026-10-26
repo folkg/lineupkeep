@@ -80,6 +80,11 @@ import { QueryTokens } from "./QueryTokens.ts";
 
 const defaultLeagueGroups: ReadonlyArray<LeagueGroup> = ["overview", "scoring", "roster_rules"];
 const defaultPlayerGroups: ReadonlyArray<PlayerGroup> = ["identity", "availability", "eligibility"];
+const playerScheduleUnsupported = {
+  status: "unsupported" as const,
+  detail:
+    "Yahoo publishes no per-player games-remaining or probable-starter field. A roster entry carries the professional-team abbreviation and, where the league publishes one, the bye week; remaining player-games are available per fantasy team from get_matchups and get_team_summary.",
+};
 
 type ReadOutcome<A> =
   | { readonly _tag: "ok"; readonly value: A }
@@ -600,6 +605,7 @@ export const FantasyQueriesLive = Layer.effect(
         team,
         ...(roster.coverage.type === "week" ? { period: { week: roster.coverage.week } } : {}),
         coverage: [leagueCoverage(leagueOutcome, fetchedAt), rosterCoverage],
+        playerSchedule: playerScheduleUnsupported,
         failures: leagueFailure(leagueOutcome),
         budget: queryBudget,
       };
@@ -1220,6 +1226,7 @@ export const FantasyQueriesLive = Layer.effect(
         status: "ok",
         team,
         period: input.period,
+        schedule: matchupSchedule(outcome.value, context.owned.team.sport),
         coverage: [
           leagueCoverage(leagueOutcome, fetchedAt),
           coverage("matchups", "matchups", fetchedAt, input.period),
@@ -2089,6 +2096,7 @@ function rosterWithoutData(
     status: outcome._tag === "unsupported" ? "unsupported" : "failed",
     team,
     ...(period === undefined ? {} : { period }),
+    playerSchedule: playerScheduleUnsupported,
     players: [],
     coverage: [
       leagueCoverage(league, fetchedAt),
@@ -2122,6 +2130,31 @@ function searchWithoutData(
   };
 }
 
+function matchupSchedule(
+  entries: ReadonlyArray<ProviderMatchup>,
+  sport: "football" | "hockey",
+): MatchupsData["schedule"] {
+  const supported = entries.some(
+    (matchup) =>
+      matchup.home.remainingGames !== undefined || matchup.away.remainingGames !== undefined,
+  );
+  if (supported) {
+    return {
+      status: "available",
+      unit: "fantasy_team_player_games",
+      detail:
+        "Remaining games are a provider-published fantasy-team total of player-games for the scoring week, not a per-player count.",
+    };
+  }
+  return {
+    status: "unsupported",
+    detail:
+      sport === "football"
+        ? "Yahoo publishes no remaining-game count for football: a player plays at most one game per scoring week, and each roster entry carries the bye week instead."
+        : "The provider reported no remaining-game count for the scoring week.",
+  };
+}
+
 function matchupsUnavailable(
   team: QueryTeam,
   period: QueryPeriod,
@@ -2134,6 +2167,7 @@ function matchupsUnavailable(
     team,
     period,
     matchups: [],
+    schedule: { status: "unsupported", detail },
     coverage: [
       leagueCoverage(league, fetchedAt),
       unsupportedCoverage("matchups", "matchups", fetchedAt, detail),
@@ -2155,6 +2189,13 @@ function matchupsWithoutData(
     team,
     period,
     matchups: [],
+    schedule: {
+      status: "unsupported",
+      detail:
+        outcome._tag === "unsupported"
+          ? outcome.detail
+          : "The provider did not return matchup data for the scoring week.",
+    },
     coverage: [
       outcome._tag === "ok"
         ? coverage("matchups", "matchups", fetchedAt, period)

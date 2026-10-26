@@ -93,12 +93,14 @@ empty array is never read as zero. When standings are requested, that response p
 otherwise it pages scoring categories.
 
 `get_matchups` carries per-category values and the category winner (or a tie) for category
-leagues, plus `remainingGames` for the scoring week where the provider publishes it. Yahoo
-publishes that remaining-game count only as a fantasy-team total of player-games (National Hockey
-League); a football player plays at most one game per scoring week, so football omits it rather
-than reporting zero. The provider publishes no per-player or per-professional-team remaining-game
-count and no probable-starter field; `search_players` and `get_rosters` therefore report
-`proTeam` and provider ownership/started percentages without inventing either.
+leagues, plus `remainingGames` for the scoring week where the provider publishes it. Its `schedule`
+section states the unit or declares the capability unsupported with the reason: Yahoo publishes
+that remaining-game count only as a fantasy-team total of player-games (National Hockey League),
+and a football player plays at most one game per scoring week. The provider publishes no per-player
+or per-professional-team remaining-game count and no probable-starter field, so `get_rosters`
+returns a `playerSchedule` declaration saying so and reports `proTeam`, injury, and the bye week
+where published; `search_players` reports provider ownership/started percentages without inventing
+either.
 
 `get_transactions` maps `scope: team` onto the provider's team filter. The provider has no date
 filter: `since`/`until` filter the bounded window the provider returns, `window` reports how many

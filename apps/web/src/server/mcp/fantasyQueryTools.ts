@@ -72,7 +72,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_rosters", {
     description:
-      "Read one linked team's roster for an exact league week. Every entry carries the provider's professional-team abbreviation so schedule context needs no second lookup. The compact shape is the default; full detail adds provider-reported injury, bye, flexibility, and drop metadata. A week the provider does not cover fails explicitly instead of being guessed.",
+      "Read one linked team's roster for an exact league week. Every entry carries the provider's professional-team abbreviation so schedule context needs no second lookup. The compact shape is the default; full detail adds provider-reported injury, bye, flexibility, and drop metadata. Yahoo publishes no per-player games-remaining or probable-starter field, so `playerSchedule` states that with the reason instead of returning an empty schedule. A week the provider does not cover fails explicitly instead of being guessed.",
     parameters: GetRostersInput,
     success: Schema.toCodecJson(RosterResult),
     failure: ToolFailure,
@@ -111,7 +111,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_matchups", {
     description:
-      "Read matchups for one linked team and one explicit league week. Each side reports points, the provider projection where published, win probability, per-category values and category winners for category leagues, and remaining player-games for the week where the provider publishes them (hockey; football plays one game per week). Matchups use private counterparty references; an uncovered week is reported explicitly, and a league format without weekly matchups returns an unsupported result with the reason.",
+      "Read matchups for one linked team and one explicit league week. Each side reports points, the provider projection where published, win probability, per-category values and category winners for category leagues, and remaining player-games for the week where the provider publishes them. The result's `schedule` section names the unit (`fantasy_team_player_games`) or declares remaining games unsupported with the reason: football plays one game per player per scoring week. Matchups use private counterparty references; an uncovered week is reported explicitly, and a league format without weekly matchups returns an unsupported result with the reason.",
     parameters: GetMatchupsInput,
     success: Schema.toCodecJson(MatchupsResult),
     failure: ToolFailure,

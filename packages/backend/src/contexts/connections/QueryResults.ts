@@ -251,11 +251,17 @@ export const RosterPlayer = Schema.Struct({
 });
 export type RosterPlayer = typeof RosterPlayer.Type;
 
+const PlayerSchedule = Schema.Struct({
+  status: Schema.Literal("unsupported"),
+  detail: Schema.String,
+});
+
 export const RosterData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
   period: Schema.optional(QueryPeriod),
   coverage: Schema.Array(QueryCoverage),
+  playerSchedule: PlayerSchedule,
   players: Schema.Array(RosterPlayer),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,
@@ -507,11 +513,21 @@ const Matchup = Schema.Struct({
   categoryWinners: Schema.optional(Schema.Array(MatchupCategoryWinner)),
 });
 
+const MatchupSchedule = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    unit: Schema.Literal("fantasy_team_player_games"),
+    detail: Schema.String,
+  }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]);
+
 export const MatchupsData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
   period: QueryPeriod,
   matchups: Schema.Array(Matchup),
+  schedule: MatchupSchedule,
   coverage: Schema.Array(QueryCoverage),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,

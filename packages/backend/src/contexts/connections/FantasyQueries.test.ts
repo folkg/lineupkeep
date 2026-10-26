@@ -297,6 +297,8 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
     }
     assert.strictEqual(compact.players.length, 2);
     assert.strictEqual(compact.period?.week, 3);
+    assert.strictEqual(compact.playerSchedule.status, "unsupported");
+    assert.include(compact.playerSchedule.detail, "per-player games-remaining");
     assert.strictEqual(Array.getUnsafe(compact.players, 0).byeWeek, undefined);
     assert.strictEqual(Array.getUnsafe(full.players, 0).byeWeek, 7);
     assert.strictEqual(Array.getUnsafe(full.players, 1).injury.code, "O");
@@ -1340,6 +1342,15 @@ it.effect("reports this week's and next week's remaining player-games for hockey
         },
       }),
     ]);
+
+    const matchups = yield* queries.getMatchups(owner, { team: teamId, period: { week: 3 } });
+    assert.strictEqual(matchups.status, "ok");
+    if (matchups.status === "ok") {
+      assert.strictEqual(matchups.schedule.status, "available");
+      if (matchups.schedule.status === "available") {
+        assert.strictEqual(matchups.schedule.unit, "fantasy_team_player_games");
+      }
+    }
 
     const summary = yield* queries.getTeamSummary(owner, { team: teamId });
     assert.strictEqual(summary.status, "ok");
