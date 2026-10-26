@@ -973,7 +973,8 @@ function statBasis(
   if (
     sport === "football" &&
     period !== undefined &&
-    (currentWeek === undefined || period.week < currentWeek)
+    currentWeek !== undefined &&
+    period.week < currentWeek
   ) {
     return { type: "week", week: period.week };
   }

@@ -521,8 +521,15 @@ it.effect("never pairs an unsupported stat group with a period failure", () =>
     }
     const player = Array.getUnsafe(hydrated.players, 0);
     assert.strictEqual(player.actualStats?.status, "unsupported");
+    if (player.actualStats?.status === "unsupported") {
+      assert.include(player.actualStats.detail, "did not report a weekly period");
+    }
     assert.strictEqual(player.projections?.status, "unsupported");
     assert.deepStrictEqual(hydrated.failures, []);
+    const detailsCoverage = hydrated.coverage.find(
+      (entry) => entry.resource === "players" && entry.status === "degraded",
+    );
+    assert.include(detailsCoverage?.detail, "did not report a weekly period");
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 

@@ -898,6 +898,35 @@ it.effect("reads season statistics on a season basis when no completed week is a
   }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
 });
 
+it.effect("uses the season basis when the current week is unknown", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
+  return Effect.gen(function* () {
+    const provider = yield* ProviderGateway;
+
+    const details = yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerPlayerKeys: ["466.p.20001"],
+      sport: "football",
+      period: { week: 6 },
+      currentWeek: undefined,
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=season",
+    );
+    assert.deepStrictEqual(details[0]?.actual, {
+      basis: { type: "season" },
+      stats: [
+        { statId: 4, value: 1640 },
+        { statId: 9, value: 11 },
+        { statId: 79, value: null },
+      ],
+    });
+  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+});
+
 it.effect("reads season statistics for hockey instead of requesting a weekly series", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlSeasonPlayerDetails));
   return Effect.gen(function* () {

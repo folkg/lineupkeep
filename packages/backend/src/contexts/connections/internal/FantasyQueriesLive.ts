@@ -753,7 +753,16 @@ export const FantasyQueriesLive = Layer.effect(
             detailsOutcome._tag === "unsupported"
               ? detailsOutcome.detail
               : detailsOutcome.failure.message;
-          coverageEntries.push(unsupportedCoverage("players", "player_details", fetchedAt));
+          coverageEntries.push(
+            detailsOutcome._tag === "unsupported"
+              ? unsupportedCoverage("players", "player_details", fetchedAt)
+              : degradedCoverage(
+                  "players",
+                  "player_details",
+                  fetchedAt,
+                  detailsOutcome.failure.message,
+                ),
+          );
           if (
             detailsOutcome._tag === "failed" &&
             detailsOutcome.failure.code !== "period_unavailable"
