@@ -26,6 +26,7 @@ import {
   yahooInjuryStatusCodes,
   yahooObservationWindow,
   yahooScoringProfile,
+  yahooStatusReserveListed,
   yahooTargetPeriod,
 } from "./YahooLineup.ts";
 import type { YahooLineupReader, YahooPeriodHistory, YahooStartRate } from "./YahooLineup.ts";
@@ -51,8 +52,10 @@ describe("Yahoo scoring translation", () => {
         }).tier,
     );
 
-    expect(new Set(tiers)).toEqual(new Set(["might-play", "will-not-play"]));
     expect(tiers).toHaveLength(yahooInjuryStatusCodes.length);
+    expect(new Set(yahooInjuryStatusCodes)).toEqual(
+      new Set(["healthy", "O", "IR", "IR+", "IR-LT", "NA", "SUSP", "D", "DTD", "Q", "P", "GTD"]),
+    );
     expect(
       assessAvailability(policyPlayerWith(yahooAvailability(undefined)), {
         kind: "week",
@@ -63,8 +66,43 @@ describe("Yahoo scoring translation", () => {
       assessAvailability(policyPlayerWith(yahooAvailability("PUP-2027")), {
         kind: "week",
         week: targetWeek,
+      }),
+    ).toEqual({ tier: "might-play", fact: "unrecognised-status", code: "PUP-2027" });
+  });
+
+  it("reads the status table as two facts per code", () => {
+    const table = yahooInjuryStatusCodes.map((code) => [
+      code,
+      assessAvailability(policyPlayerWith(yahooAvailability(code)), {
+        kind: "week",
+        week: targetWeek,
       }).tier,
-    ).toBe("might-play");
+      yahooStatusReserveListed(code),
+    ]);
+
+    expect(table).toEqual([
+      ["healthy", "will-play", false],
+      ["O", "will-not-play", true],
+      ["IR", "will-not-play", true],
+      ["IR+", "will-not-play", true],
+      ["IR-LT", "will-not-play", true],
+      ["NA", "will-not-play", true],
+      ["SUSP", "will-not-play", true],
+      ["D", "might-play", false],
+      ["DTD", "might-play", false],
+      ["Q", "might-play", false],
+      ["P", "might-play", false],
+      ["GTD", "might-play", false],
+    ]);
+  });
+
+  it("records which uncertain code produced the doubtful tier", () => {
+    const assessment = assessAvailability(policyPlayerWith(yahooAvailability("Q")), {
+      kind: "week",
+      week: targetWeek,
+    });
+
+    expect(assessment).toEqual({ tier: "might-play", fact: "uncertain-status", code: "Q" });
   });
 
   it("treats a bye in the target period as an absence, not a low score", () => {

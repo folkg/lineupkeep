@@ -139,23 +139,37 @@ export function yahooObservationWindow(
     : completedDates(league, target.date);
 }
 
-const availabilityByInjuryCode: Readonly<Record<string, PlayerAvailability>> = {
-  O: { kind: "excluded", reason: "out" },
-  IR: { kind: "excluded", reason: "injured-reserve" },
-  "IR-LT": { kind: "excluded", reason: "injured-reserve" },
-  SUSP: { kind: "excluded", reason: "suspended" },
-  NA: { kind: "excluded", reason: "not-active" },
-  DTD: { kind: "uncertain", reason: "day-to-day" },
+const healthyStatus: YahooStatus = { availability: { kind: "available" }, reserveListed: false };
+
+const yahooStatusTable: Readonly<Record<string, YahooStatus>> = {
+  healthy: healthyStatus,
+  O: { availability: { kind: "excluded", reason: "out" }, reserveListed: true },
+  IR: { availability: { kind: "excluded", reason: "injured-reserve" }, reserveListed: true },
+  "IR+": { availability: { kind: "excluded", reason: "injured-reserve" }, reserveListed: true },
+  "IR-LT": { availability: { kind: "excluded", reason: "injured-reserve" }, reserveListed: true },
+  NA: { availability: { kind: "excluded", reason: "not-active" }, reserveListed: true },
+  SUSP: { availability: { kind: "excluded", reason: "suspended" }, reserveListed: true },
+  D: { availability: { kind: "uncertain", code: "D" }, reserveListed: false },
+  DTD: { availability: { kind: "uncertain", code: "DTD" }, reserveListed: false },
+  Q: { availability: { kind: "uncertain", code: "Q" }, reserveListed: false },
+  P: { availability: { kind: "uncertain", code: "P" }, reserveListed: false },
+  GTD: { availability: { kind: "uncertain", code: "GTD" }, reserveListed: false },
 };
 
 export function yahooAvailability(injuryCode: string | undefined): PlayerAvailability {
   if (injuryCode === undefined) {
-    return { kind: "available" };
+    return healthyStatus.availability;
   }
-  return availabilityByInjuryCode[injuryCode] ?? { kind: "unrecognised", code: injuryCode };
+  return yahooStatusTable[injuryCode]?.availability ?? { kind: "unrecognised", code: injuryCode };
 }
 
-export const yahooInjuryStatusCodes: ReadonlyArray<string> = Object.keys(availabilityByInjuryCode);
+export const yahooInjuryStatusCodes: ReadonlyArray<string> = Object.keys(yahooStatusTable);
+
+export function yahooStatusReserveListed(injuryCode: string | undefined): boolean {
+  return injuryCode === undefined
+    ? healthyStatus.reserveListed
+    : (yahooStatusTable[injuryCode]?.reserveListed ?? false);
+}
 
 export function yahooTargetPeriod(roster: ProviderRoster): Period {
   return roster.coverage.type === "week"
@@ -309,4 +323,9 @@ export type YahooLineupReader = {
 export type YahooPeriodHistory = {
   readonly period: Period;
   readonly details: ReadonlyArray<ProviderPlayerDetail>;
+};
+
+type YahooStatus = {
+  readonly availability: PlayerAvailability;
+  readonly reserveListed: boolean;
 };

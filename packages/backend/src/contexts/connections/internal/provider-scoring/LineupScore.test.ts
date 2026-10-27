@@ -106,7 +106,7 @@ describe("scoring from completed periods", () => {
 describe("availability", () => {
   const tiers: ReadonlyArray<readonly [PlayerAvailability, string]> = [
     [{ kind: "available" }, "will-play"],
-    [{ kind: "uncertain", reason: "day-to-day" }, "might-play"],
+    [{ kind: "uncertain", code: "DTD" }, "might-play"],
     [{ kind: "unrecognised", code: "PUP-2027" }, "might-play"],
     [{ kind: "excluded", reason: "out" }, "will-not-play"],
     [{ kind: "excluded", reason: "injured-reserve" }, "will-not-play"],

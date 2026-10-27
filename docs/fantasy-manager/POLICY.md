@@ -205,12 +205,12 @@ use it this period.
 
 Each player carries one availability tier for the target period, drawn from an ordered ladder:
 
-| Tier            | Meaning                    | Provider facts that select it                                       |
-| --------------- | -------------------------- | ------------------------------------------------------------------- |
-| `will-play`     | expected to appear         | no status code, and the team has a game                             |
-| `might-play`    | may appear                 | `DTD`; any status code the adapter does not recognise               |
-| `will-not-play` | will not appear, but could | `O`, `IR`, `IR-LT`, `SUSP`, `NA`                                    |
-| `not-scheduled` | no game to appear in       | no game for the player's team in the target period, including a bye |
+| Tier            | Meaning                    | Provider facts that select it                                               |
+| --------------- | -------------------------- | --------------------------------------------------------------------------- |
+| `will-play`     | expected to appear         | no status code, and the team has a game                                     |
+| `might-play`    | may appear                 | `D`, `DTD`, `Q`, `P`, `GTD`; any status code the adapter does not recognise |
+| `will-not-play` | will not appear, but could | `O`, `IR`, `IR+`, `IR-LT`, `SUSP`, `NA`                                     |
+| `not-scheduled` | no game to appear in       | no game for the player's team in the target period, including a bye         |
 
 The ladder is four rungs because the provider distinguishes "may appear" from "will not appear" and
 neither of those is the same fact as "there is no game". A doubtful player takes a contested starting
@@ -237,6 +237,39 @@ Only the adapter interprets provider codes, and it does so in one table. This po
 facts into tiers in one total function, so every fact reaches exactly one rung; a test walks every
 code the adapter can emit and proves it reaches one declared tier. The solver is told only the
 ordered ladder and each player's rung, so it stays provider-neutral.
+
+### The status table, in full
+
+The adapter's table is explicit, because the mapping is provider knowledge rather than something to
+derive: every code it knows reaches one tier, and every code it does not know reaches `might-play` as
+a recorded uncertainty. The `reserve list` column records the reference's reading of which statuses
+normally park a player on an inactive list. It is evidence, not a rule: reserve eligibility is read
+from the provider's published `eligible_positions` and is **never** inferred from a status code
+([RR1](#slots-eligibility-and-locks)).
+
+| Status         | Tier            | Reserve list | Note                                                                 |
+| -------------- | --------------- | ------------ | -------------------------------------------------------------------- |
+| healthy (none) | `will-play`     | no           | the provider emits no code for a healthy player                      |
+| `O`            | `will-not-play` | yes          | out                                                                  |
+| `IR`           | `will-not-play` | yes          | injured reserve                                                      |
+| `IR+`          | `will-not-play` | yes          | short-term injured reserve                                           |
+| `IR-LT`        | `will-not-play` | yes          | long-term injured reserve                                            |
+| `NA`           | `will-not-play` | yes          | not active                                                           |
+| `SUSP`         | `will-not-play` | yes          | suspended                                                            |
+| `D`            | `might-play`    | no           | doubtful                                                             |
+| `DTD`          | `might-play`    | no           | day to day                                                           |
+| `Q`            | `might-play`    | no           | questionable                                                         |
+| `P`            | `might-play`    | no           | probable                                                             |
+| `GTD`          | `might-play`    | no           | game-time decision                                                   |
+| anything else  | `might-play`    | no           | recorded as an unrecognised code with the code kept on the valuation |
+
+The reference lists `Questionable`, `Probable`, and `Game Time Decision` as _healthy_, so its value
+penalty does not touch them. This policy places them on `might-play` instead: "may appear" is what
+those codes say, and a player the provider has not confirmed is not the same fact as a healthy one.
+The disagreement is deliberate. It costs a doubtful star a contested position against a healthy
+journeyman, and it buys the owner's stated rule that availability outranks value without arithmetic.
+The reference's own `TODO` asks whether a game-time decision should count as healthy, so this is not
+a settled fact there either.
 
 ### An unrecognised status is doubtful, and it is recorded
 

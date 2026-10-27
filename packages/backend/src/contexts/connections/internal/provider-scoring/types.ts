@@ -101,14 +101,14 @@ type CommunityStartRateCut = {
 export type PlayerAvailability =
   | { readonly kind: "available" }
   | { readonly kind: "excluded"; readonly reason: ExclusionReason }
-  | { readonly kind: "uncertain"; readonly reason: "day-to-day" }
+  | { readonly kind: "uncertain"; readonly code: string }
   | { readonly kind: "unrecognised"; readonly code: string };
 
 type ExclusionReason = "out" | "injured-reserve" | "suspended" | "not-active";
 
 export type AvailabilityAssessment =
   | { readonly tier: "will-play"; readonly fact: "available" }
-  | { readonly tier: "might-play"; readonly fact: "day-to-day" }
+  | { readonly tier: "might-play"; readonly fact: "uncertain-status"; readonly code: string }
   | { readonly tier: "might-play"; readonly fact: "unrecognised-status"; readonly code: string }
   | { readonly tier: "will-not-play"; readonly fact: "excluded"; readonly reason: ExclusionReason }
   | { readonly tier: "not-scheduled"; readonly fact: "no-game"; readonly period: Period };

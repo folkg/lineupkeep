@@ -29,7 +29,7 @@ function statusAssessment(availability: PlayerAvailability): AvailabilityAssessm
     case "available":
       return { tier: "will-play", fact: "available" };
     case "uncertain":
-      return { tier: "might-play", fact: "day-to-day" };
+      return { tier: "might-play", fact: "uncertain-status", code: availability.code };
     case "unrecognised":
       return { tier: "might-play", fact: "unrecognised-status", code: availability.code };
     case "excluded":
