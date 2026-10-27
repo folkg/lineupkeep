@@ -1,6 +1,7 @@
 import { Effect, Redacted, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
+import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import { planAssignments } from "#contexts/connections/internal/LineupPlanning.ts";
 import type { PlanAssignmentsResult } from "#contexts/connections/internal/LineupPlanning.ts";
 import type {
@@ -16,6 +17,7 @@ import type {
   ProviderLineupRequest,
   ProviderRoster,
   ProviderRosterPlayer,
+  ProviderStartingLineup,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderPlayerDetail } from "#contexts/connections/Provider.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -24,9 +26,14 @@ import {
   planYahooLineup,
   yahooAvailability,
   yahooCapabilities,
+  yahooDefaultStartingLineupRole,
   yahooInjuryStatusCodes,
   yahooObservationWindow,
   yahooScoringProfile,
+  yahooStartingLineupRole,
+  yahooStartingLineupRoleBySport,
+  yahooStartingLineupRule,
+  yahooStartingLineupRuleByRole,
   yahooStatusReserveListed,
   yahooTargetPeriod,
 } from "./YahooLineup.ts";
@@ -292,39 +299,74 @@ describe("Yahoo scoring translation", () => {
 
     expect(
       assessAvailability(
-        { ...policyPlayerWith(yahooAvailability(undefined)), confirmedStart: true },
+        { ...policyPlayerWith(yahooAvailability(undefined)), startingLineup: "confirmed-starting" },
         period,
       ),
     ).toEqual({ tier: "confirmed-start", fact: "confirmed-start" });
     expect(
       assessAvailability(
-        { ...policyPlayerWith(yahooAvailability(undefined)), confirmedStart: false },
+        { ...policyPlayerWith(yahooAvailability(undefined)), startingLineup: "unconfirmed" },
         period,
       ).tier,
     ).toBe("will-play");
   });
 
-  it("keeps an injury status above the confirmed-start refinement", () => {
+  it("places a confirmed non-starter who cannot appear below an unconfirmed player who might", () => {
     const period = { kind: "date" as const, date: "2026-10-26" };
 
     expect(
       assessAvailability(
-        { ...policyPlayerWith(yahooAvailability("O")), confirmedStart: true },
+        {
+          ...policyPlayerWith(yahooAvailability(undefined)),
+          startingLineup: "confirmed-not-starting",
+          startingLineupRule: "unlikely-to-play",
+        },
+        period,
+      ),
+    ).toEqual({ tier: "unlikely-to-play", fact: "confirmed-not-starting" });
+    expect(
+      assessAvailability(
+        {
+          ...policyPlayerWith(yahooAvailability(undefined)),
+          startingLineup: "confirmed-not-starting",
+          startingLineupRule: "not-an-availability-fact",
+        },
+        period,
+      ).tier,
+    ).toBe("will-play");
+  });
+
+  it("keeps an injury status above the starting-lineup refinement", () => {
+    const period = { kind: "date" as const, date: "2026-10-26" };
+
+    expect(
+      assessAvailability(
+        { ...policyPlayerWith(yahooAvailability("O")), startingLineup: "confirmed-starting" },
         period,
       ).tier,
     ).toBe("will-not-play");
     expect(
       assessAvailability(
-        { ...policyPlayerWith(yahooAvailability("Q")), confirmedStart: true },
+        { ...policyPlayerWith(yahooAvailability("Q")), startingLineup: "confirmed-starting" },
         period,
       ).tier,
     ).toBe("might-play");
+    expect(
+      assessAvailability(
+        {
+          ...policyPlayerWith(yahooAvailability("O")),
+          startingLineup: "confirmed-not-starting",
+          startingLineupRule: "unlikely-to-play",
+        },
+        period,
+      ).tier,
+    ).toBe("will-not-play");
   });
 
   it("starts the confirmed starter ahead of an unconfirmed player of equal score", () => {
     const roster = centerRoster([
       { key: "unconfirmed", slot: "C", scheduled: true },
-      { key: "confirmed", slot: "BN", scheduled: true, confirmedStart: true },
+      { key: "confirmed", slot: "BN", scheduled: true, startingLineup: "confirmed-starting" },
     ]);
 
     const { outcome, decision } = planCenters(roster, [
@@ -344,7 +386,13 @@ describe("Yahoo scoring translation", () => {
 
   it("keeps a confirmed starter who is out below a healthy player", () => {
     const roster = centerRoster([
-      { key: "confirmed-out", slot: "C", scheduled: true, confirmedStart: true, injuryCode: "O" },
+      {
+        key: "confirmed-out",
+        slot: "C",
+        scheduled: true,
+        startingLineup: "confirmed-starting",
+        injuryCode: "O",
+      },
       { key: "healthy", slot: "BN", scheduled: true },
     ]);
 
@@ -357,6 +405,205 @@ describe("Yahoo scoring translation", () => {
       { providerPlayerKey: "confirmed-out", slot: "BN" },
       { providerPlayerKey: "healthy", slot: "C" },
     ]);
+  });
+
+  it("starts an unconfirmed goalie ahead of a confirmed backup whatever the scores", () => {
+    const roster = goalieRoster([
+      { key: "backup", slot: "G", scheduled: true, startingLineup: "confirmed-not-starting" },
+      { key: "unconfirmed", slot: "G", scheduled: true },
+      { key: "starter", slot: "BN", scheduled: true, startingLineup: "confirmed-starting" },
+    ]);
+
+    const { outcome, decision } = planGoalies(roster, [
+      ["backup", 90],
+      ["unconfirmed", 5],
+      ["starter", 1],
+    ]);
+
+    expect(outcome.players).toEqual([
+      { providerPlayerKey: "backup", score: 9000, availability: "unlikely-to-play" },
+      { providerPlayerKey: "unconfirmed", score: 500, availability: "will-play" },
+      { providerPlayerKey: "starter", score: 100, availability: "confirmed-start" },
+    ]);
+    expect(planned(decision).assignments).toEqual([
+      { providerPlayerKey: "backup", slot: "BN" },
+      { providerPlayerKey: "starter", slot: "G" },
+    ]);
+  });
+
+  it("keeps a goalie's score when only their starting-lineup fact changes", () => {
+    const facts = (startingLineup: ProviderStartingLineup): ProviderRoster =>
+      goalieRoster([
+        { key: "goalie", slot: "G", scheduled: true, startingLineup },
+        { key: "other", slot: "G", scheduled: true },
+      ]);
+
+    const percents = [
+      ["goalie", 55],
+      ["other", 45],
+    ] as const;
+
+    expect(planGoalies(facts("confirmed-not-starting"), percents).outcome.players[0]?.score).toBe(
+      planGoalies(facts("confirmed-starting"), percents).outcome.players[0]?.score,
+    );
+  });
+
+  it("fills a required goalie slot from a confirmed backup when every other goalie has no game", () => {
+    const roster = goalieRoster([
+      { key: "backup", slot: "BN", scheduled: true, startingLineup: "confirmed-not-starting" },
+      { key: "idle", slot: "G", scheduled: false },
+    ]);
+
+    const { decision } = planGoalies(
+      roster,
+      [
+        ["backup", 1],
+        ["idle", 99],
+      ],
+      1,
+    );
+
+    expect(planned(decision).assignments).toEqual([
+      { providerPlayerKey: "backup", slot: "G" },
+      { providerPlayerKey: "idle", slot: "BN" },
+    ]);
+  });
+
+  it("keeps an injured-out player below a confirmed backup goalie", () => {
+    const roster = goalieRoster([
+      { key: "out", slot: "G", scheduled: true, injuryCode: "O" },
+      { key: "backup", slot: "BN", scheduled: true, startingLineup: "confirmed-not-starting" },
+    ]);
+
+    const { decision } = planGoalies(
+      roster,
+      [
+        ["out", 99],
+        ["backup", 1],
+      ],
+      1,
+    );
+
+    expect(planned(decision).assignments).toEqual([
+      { providerPlayerKey: "out", slot: "BN" },
+      { providerPlayerKey: "backup", slot: "G" },
+    ]);
+  });
+
+  it("keeps a doubtful goalie above one who is confirmed not starting", () => {
+    const roster = goalieRoster([
+      { key: "doubtful", slot: "G", scheduled: true, injuryCode: "DTD" },
+      { key: "backup", slot: "BN", scheduled: true, startingLineup: "confirmed-not-starting" },
+    ]);
+
+    const { decision } = planGoalies(
+      roster,
+      [
+        ["doubtful", 1],
+        ["backup", 99],
+      ],
+      1,
+    );
+
+    expect(planned(decision).assignments).toEqual([]);
+  });
+
+  it("does not demote a skater who is outside their real team's starting lineup", () => {
+    const roster = centerRoster([
+      {
+        key: "not-starting",
+        slot: "BN",
+        scheduled: true,
+        startingLineup: "confirmed-not-starting",
+      },
+      { key: "unconfirmed", slot: "C", scheduled: true },
+    ]);
+
+    const { outcome, decision } = planCenters(roster, [
+      ["not-starting", 90],
+      ["unconfirmed", 5],
+    ]);
+
+    expect(outcome.players.map((player) => player.availability)).toEqual([
+      "will-play",
+      "will-play",
+    ]);
+    expect(planned(decision).assignments).toEqual([
+      { providerPlayerKey: "not-starting", slot: "C" },
+      { providerPlayerKey: "unconfirmed", slot: "BN" },
+    ]);
+  });
+
+  it("declares how a confirmed non-start is read for every sport and position class", () => {
+    const sports: ReadonlyArray<FantasySport> = ["football", "hockey", "baseball", "basketball"];
+
+    expect(Object.keys(yahooStartingLineupRoleBySport).sort()).toEqual([...sports].sort());
+    expect(yahooCapabilities.sports).toEqual(["football", "hockey"]);
+
+    for (const sport of sports) {
+      const roles = yahooStartingLineupRoleBySport[sport];
+      expect(Object.keys(roles).length).toBeGreaterThan(0);
+      for (const [position, role] of Object.entries(roles)) {
+        expect(yahooStartingLineupRole(sport, position)).toBe(role);
+        expect(yahooStartingLineupRule(sport, position)).toBe(yahooStartingLineupRuleByRole[role]);
+      }
+    }
+
+    expect(yahooStartingLineupRuleByRole).toEqual({
+      goalie: "unlikely-to-play",
+      "starting-pitcher": "unlikely-to-play",
+      "relief-pitcher": "not-an-availability-fact",
+      "position-player": "not-an-availability-fact",
+    });
+    expect(yahooStartingLineupRole("hockey", "G")).toBe("goalie");
+    expect(yahooStartingLineupRole("baseball", "SP")).toBe("starting-pitcher");
+    expect(yahooStartingLineupRole("baseball", "RP")).toBe("relief-pitcher");
+    expect(yahooStartingLineupRole("baseball", "P")).toBe("relief-pitcher");
+    expect(yahooStartingLineupRole("baseball", "OF")).toBe("position-player");
+    expect(yahooStartingLineupRole("football", "QB")).toBe("position-player");
+    expect(yahooStartingLineupRole("basketball", "PG")).toBe("position-player");
+    expect(yahooDefaultStartingLineupRole).toBe("position-player");
+    expect(yahooStartingLineupRole("hockey", "undeclared")).toBe(yahooDefaultStartingLineupRole);
+    expect(yahooStartingLineupRule("hockey", "undeclared")).toBe("not-an-availability-fact");
+  });
+
+  it("refuses to plan a sport the adapter does not publish", () => {
+    const outcome = runPlan({ ...hockeyRequest(), sport: "baseball" }, { rates: [] });
+
+    expect(outcome).toEqual({
+      kind: "refused",
+      refusal: "structural",
+      provenance: "yahoo/unsupported-sport",
+      detail: "This provider does not plan lineups for this sport.",
+    });
+  });
+
+  it("does not demote a football player who is outside the starting lineup", () => {
+    const roster = recordedRoster(true);
+    const rotated = {
+      ...roster,
+      players: roster.players.map((player, index) =>
+        index === 3 ? { ...player, startingLineup: "confirmed-not-starting" as const } : player,
+      ),
+    };
+    const outcome = runPlan(
+      { ...recordedRequest(), roster: rotated },
+      {
+        rates: [],
+        history: [
+          {
+            period: { kind: "week", week: recordedWeek },
+            details: recordedRosterRows.map((row, index) => playerDetail(index, row.stats)),
+          },
+        ],
+      },
+    );
+
+    expect(outcome.kind).toBe("scored");
+    if (outcome.kind !== "scored") {
+      throw new Error("Expected scored values.");
+    }
+    expect(outcome.players[3]?.availability).toBe("will-play");
   });
 
   it("prices a games-limited league from percent owned and ranks, not the crowd", () => {
@@ -665,15 +912,49 @@ function centerLeague(): ProviderLeagueSettings {
   };
 }
 
+function goalieLeague(goalieSlots = 2): ProviderLeagueSettings {
+  return {
+    ...hockeyLeague(),
+    rosterPositions: [position("G", goalieSlots), position("BN", 2), position("IR", 1)],
+  };
+}
+
 function centerRoster(
   rows: ReadonlyArray<{
     readonly key: string;
     readonly slot: string;
     readonly scheduled: boolean;
-    readonly confirmedStart?: boolean;
+    readonly startingLineup?: ProviderStartingLineup;
     readonly injuryCode?: string;
     readonly eligiblePositions?: ReadonlyArray<string>;
   }>,
+): ProviderRoster {
+  return hockeyRosterOf(rows, "C", "P");
+}
+
+function goalieRoster(
+  rows: ReadonlyArray<{
+    readonly key: string;
+    readonly slot: string;
+    readonly scheduled: boolean;
+    readonly startingLineup?: ProviderStartingLineup;
+    readonly injuryCode?: string;
+  }>,
+): ProviderRoster {
+  return hockeyRosterOf(rows, "G", "G");
+}
+
+function hockeyRosterOf(
+  rows: ReadonlyArray<{
+    readonly key: string;
+    readonly slot: string;
+    readonly scheduled: boolean;
+    readonly startingLineup?: ProviderStartingLineup;
+    readonly injuryCode?: string;
+    readonly eligiblePositions?: ReadonlyArray<string>;
+  }>,
+  primaryPosition: string,
+  positionType: string,
 ): ProviderRoster {
   return {
     providerTeamKey: "recorded-hockey-team",
@@ -682,18 +963,18 @@ function centerRoster(
     players: rows.map((row) => ({
       providerPlayerKey: row.key,
       name: row.key,
-      displayPosition: "C",
-      primaryPosition: "C",
-      positionType: "P",
+      displayPosition: primaryPosition,
+      primaryPosition,
+      positionType,
       proTeamAbbreviation: undefined,
-      eligiblePositions: row.eligiblePositions ?? ["C"],
+      eligiblePositions: row.eligiblePositions ?? [primaryPosition],
       slot: row.slot,
       isEditable: true,
       injuryCode: row.injuryCode,
       injuryDetail: undefined,
       byeWeek: null,
       scheduled: row.scheduled,
-      confirmedStart: row.confirmedStart === true,
+      startingLineup: row.startingLineup ?? "unconfirmed",
       undroppable: null,
     })),
   };
@@ -706,7 +987,28 @@ function planCenters(
   readonly outcome: Extract<ProviderLineupOutcome, { kind: "scored" }>;
   readonly decision: PlanAssignmentsResult;
 } {
-  const league = centerLeague();
+  return planWithLeague(centerLeague(), roster, percents);
+}
+
+function planGoalies(
+  roster: ProviderRoster,
+  percents: ReadonlyArray<readonly [string, number]>,
+  goalieSlots = 2,
+): {
+  readonly outcome: Extract<ProviderLineupOutcome, { kind: "scored" }>;
+  readonly decision: PlanAssignmentsResult;
+} {
+  return planWithLeague(goalieLeague(goalieSlots), roster, percents);
+}
+
+function planWithLeague(
+  league: ProviderLeagueSettings,
+  roster: ProviderRoster,
+  percents: ReadonlyArray<readonly [string, number]>,
+): {
+  readonly outcome: Extract<ProviderLineupOutcome, { kind: "scored" }>;
+  readonly decision: PlanAssignmentsResult;
+} {
   const outcome = runPlan(
     { ...hockeyRequest(), league, roster },
     { rates: percents.map(([key, percent]) => startRate(key, percent, [])) },
@@ -735,7 +1037,8 @@ function policyPlayerWith(availability: PlayerAvailability): PolicyPlayer {
     id: "recorded-player",
     availability,
     scheduled: true,
-    confirmedStart: false,
+    startingLineup: "unconfirmed",
+    startingLineupRule: "not-an-availability-fact",
     nonGamePeriods: [],
   };
 }
@@ -794,7 +1097,7 @@ function rosterPlayer(index: number, row: RecordedRow, editable: boolean): Provi
     injuryDetail: undefined,
     byeWeek: row.byeWeek,
     scheduled: row.scheduled,
-    confirmedStart: false,
+    startingLineup: "unconfirmed",
     undroppable: null,
   };
 }
@@ -885,7 +1188,7 @@ function hockeyRosterPlayer(providerPlayerKey: string, slot: string): ProviderRo
     injuryDetail: undefined,
     byeWeek: null,
     scheduled: true,
-    confirmedStart: false,
+    startingLineup: "unconfirmed",
     undroppable: null,
   };
 }

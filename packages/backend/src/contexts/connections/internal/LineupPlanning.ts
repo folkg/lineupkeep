@@ -36,6 +36,7 @@ const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
   makeAvailabilityTier("confirmed-start"),
   makeAvailabilityTier("will-play"),
   makeAvailabilityTier("might-play"),
+  makeAvailabilityTier("unlikely-to-play"),
   makeAvailabilityTier("will-not-play"),
   makeAvailabilityTier("not-scheduled"),
 ];

@@ -275,7 +275,7 @@ it.effect("plans a league without points rules from the published started percen
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-it.effect("records whether each player had a game in the run observation", () =>
+it.effect("records each player's scheduled and starting-lineup facts in the run observation", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;
     const worker = yield* LineupWorker;
@@ -288,7 +288,7 @@ it.effect("records whether each player had a game in the run observation", () =>
         player.providerPlayerKey === "461.p.20003"
           ? { ...player, scheduled: false }
           : player.providerPlayerKey === "461.p.20004"
-            ? { ...player, confirmedStart: true }
+            ? { ...player, startingLineup: "confirmed-not-starting" }
             : player,
       ),
     });
@@ -310,12 +310,12 @@ it.effect("records whether each player had a game in the run observation", () =>
     );
 
     assert.deepStrictEqual(
-      observation.players.map((player) => [player.name, player.scheduled, player.confirmedStart]),
+      observation.players.map((player) => [player.name, player.scheduled, player.startingLineup]),
       [
-        ["QB One", true, false],
-        ["RB One", true, false],
-        ["RB Two", false, false],
-        ["QB Two", true, true],
+        ["QB One", true, "unconfirmed"],
+        ["RB One", true, "unconfirmed"],
+        ["RB Two", false, "unconfirmed"],
+        ["QB Two", true, "confirmed-not-starting"],
       ],
     );
   }).pipe(Effect.provide(LineupTestLayer)),
@@ -1159,7 +1159,7 @@ function customPlayer(
     injuryDetail: undefined,
     byeWeek: null,
     scheduled: true,
-    confirmedStart: false,
+    startingLineup: "unconfirmed",
     undroppable: false,
   };
 }
@@ -1464,7 +1464,7 @@ const roster: ProviderRoster = {
       injuryDetail: undefined,
       byeWeek: 7,
       scheduled: true,
-      confirmedStart: false,
+      startingLineup: "unconfirmed",
       undroppable: false,
     },
     {
@@ -1481,7 +1481,7 @@ const roster: ProviderRoster = {
       injuryDetail: undefined,
       byeWeek: 7,
       scheduled: true,
-      confirmedStart: false,
+      startingLineup: "unconfirmed",
       undroppable: false,
     },
   ],

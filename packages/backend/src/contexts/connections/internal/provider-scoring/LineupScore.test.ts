@@ -5,7 +5,14 @@ import { scoreLineup } from "./LineupScore.ts";
 import type { LineupScoreInput, LineupScoreResult } from "./LineupScore.ts";
 import { periodKey } from "./Period.ts";
 import { scoringProfile } from "./ScoringProfile.ts";
-import type { Period, PlayerAvailability, PolicyPlayer, ValueSource } from "./types.ts";
+import type {
+  Period,
+  PlayerAvailability,
+  PolicyPlayer,
+  StartingLineup,
+  StartingLineupRule,
+  ValueSource,
+} from "./types.ts";
 
 const target: Period = { kind: "week", week: 7 };
 const window = [3, 4, 5, 6].map((week) => ({ kind: "week" as const, week }));
@@ -499,9 +506,17 @@ function player(
   availability: PlayerAvailability = { kind: "available" },
   nonGamePeriods: ReadonlyArray<Period> = [],
   scheduled = true,
-  confirmedStart = false,
+  startingLineup: StartingLineup = "unconfirmed",
+  startingLineupRule: StartingLineupRule = "not-an-availability-fact",
 ): PolicyPlayer {
-  return { id, availability, scheduled, confirmedStart, nonGamePeriods };
+  return {
+    id,
+    availability,
+    scheduled,
+    startingLineup,
+    startingLineupRule,
+    nonGamePeriods,
+  };
 }
 
 function scoringRules(values: ReadonlyArray<number | undefined>): ValueSource {

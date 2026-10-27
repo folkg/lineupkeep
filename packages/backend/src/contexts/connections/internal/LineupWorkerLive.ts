@@ -1089,7 +1089,7 @@ function observe(
     slot: player.slot,
     editable: player.isEditable === true,
     scheduled: player.scheduled,
-    confirmedStart: player.confirmedStart,
+    startingLineup: player.startingLineup,
   }));
   const window = league.periodWindow;
   return {

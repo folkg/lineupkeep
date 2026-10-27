@@ -84,8 +84,8 @@ export const providerTeams = pgTable(
     provider: text("provider").notNull(),
     providerTeamKey: text("provider_team_key").notNull(),
     providerLeagueKey: text("provider_league_key").notNull(),
-    league: text("league", { enum: ["nfl", "nhl"] }).notNull(),
-    sport: text("sport", { enum: ["football", "hockey"] }).notNull(),
+    league: text("league", { enum: ["nfl", "nhl", "mlb", "nba"] }).notNull(),
+    sport: text("sport", { enum: ["football", "hockey", "baseball", "basketball"] }).notNull(),
     season: integer("season").notNull(),
     name: text("name").notNull(),
     availability: text("availability", { enum: ["available", "unavailable"] })

@@ -11,6 +11,7 @@ import {
   LineupTrigger,
   LineupUuid,
 } from "#contexts/connections/LineupRun.ts";
+import { ProviderStartingLineup } from "#contexts/connections/Provider.ts";
 
 export const LineupLeaseRef = Schema.Struct({
   token: LineupUuid,
@@ -24,7 +25,7 @@ export const LineupObservedPlayer = Schema.Struct({
   slot: Schema.NonEmptyString,
   editable: Schema.Boolean,
   scheduled: Schema.Boolean,
-  confirmedStart: Schema.optional(Schema.Boolean),
+  startingLineup: ProviderStartingLineup,
 });
 export type LineupObservedPlayer = typeof LineupObservedPlayer.Type;
 

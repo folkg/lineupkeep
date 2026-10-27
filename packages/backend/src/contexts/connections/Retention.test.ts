@@ -196,7 +196,7 @@ const roster: ProviderRoster = {
       injuryDetail: undefined,
       byeWeek: 7,
       scheduled: true,
-      confirmedStart: false,
+      startingLineup: "unconfirmed",
       undroppable: false,
     },
     {
@@ -213,7 +213,7 @@ const roster: ProviderRoster = {
       injuryDetail: undefined,
       byeWeek: 7,
       scheduled: true,
-      confirmedStart: false,
+      startingLineup: "unconfirmed",
       undroppable: false,
     },
   ],

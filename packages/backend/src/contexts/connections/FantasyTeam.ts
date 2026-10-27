@@ -6,10 +6,10 @@ export const TeamId = Schema.String.pipe(Schema.check(Schema.isUUID()), Schema.b
 export type TeamId = typeof TeamId.Type;
 export const decodeTeamId = Schema.decodeUnknownSync(TeamId);
 
-export const FantasyLeague = Schema.Literals(["nfl", "nhl"]);
+export const FantasyLeague = Schema.Literals(["nfl", "nhl", "mlb", "nba"]);
 export type FantasyLeague = typeof FantasyLeague.Type;
 
-export const FantasySport = Schema.Literals(["football", "hockey"]);
+export const FantasySport = Schema.Literals(["football", "hockey", "baseball", "basketball"]);
 export type FantasySport = typeof FantasySport.Type;
 
 export const TeamAvailability = Schema.Literals(["available", "unavailable"]);

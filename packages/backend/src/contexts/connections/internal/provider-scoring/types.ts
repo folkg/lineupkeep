@@ -138,14 +138,23 @@ export type AvailabilityAssessment =
   | { readonly tier: "will-play"; readonly fact: "available" }
   | { readonly tier: "might-play"; readonly fact: "uncertain-status"; readonly code: string }
   | { readonly tier: "might-play"; readonly fact: "unrecognised-status"; readonly code: string }
+  | {
+      readonly tier: "unlikely-to-play";
+      readonly fact: "confirmed-not-starting";
+    }
   | { readonly tier: "will-not-play"; readonly fact: "excluded"; readonly reason: ExclusionReason }
   | { readonly tier: "not-scheduled"; readonly fact: "no-game"; readonly period: Period };
+
+export type StartingLineup = "confirmed-starting" | "confirmed-not-starting" | "unconfirmed";
+
+export type StartingLineupRule = "unlikely-to-play" | "not-an-availability-fact";
 
 export type PolicyPlayer = {
   readonly id: string;
   readonly availability: PlayerAvailability;
+  readonly startingLineup: StartingLineup;
+  readonly startingLineupRule: StartingLineupRule;
   readonly scheduled: boolean;
-  readonly confirmedStart: boolean;
   readonly nonGamePeriods: ReadonlyArray<Period>;
 };
 

@@ -1754,7 +1754,7 @@ function rosterFixture(input: {
       injuryDetail: index === 1 ? "Out" : undefined,
       byeWeek: 7,
       scheduled: true,
-      confirmedStart: false,
+      startingLineup: "unconfirmed",
       undroppable: false,
     })),
   };

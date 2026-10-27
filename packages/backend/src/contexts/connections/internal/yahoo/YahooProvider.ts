@@ -8,6 +8,7 @@ import {
   SchemaTransformation,
 } from "effect";
 
+import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import type {
   PlayerRank,
   RankType,
@@ -76,10 +77,12 @@ const leagueSport = {
   nfl: "football",
   nhl: "hockey",
 } as const;
-const reviewHosts = {
+const reviewHosts: Readonly<Record<FantasySport, string>> = {
+  basketball: "basketball.fantasysports.yahoo.com",
+  baseball: "baseball.fantasysports.yahoo.com",
   football: "football.fantasysports.yahoo.com",
   hockey: "hockey.fantasysports.yahoo.com",
-} as const;
+};
 const searchStatus = {
   free_agent: "FA",
   waiver: "W",
@@ -182,7 +185,7 @@ export const yahooProvider = Effect.gen(function* () {
   const readLeague = Effect.fn("YahooProvider.readLeague")(function* (
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
-      readonly sport: "football" | "hockey";
+      readonly sport: FantasySport;
     },
   ) {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_league");
@@ -393,7 +396,7 @@ export const yahooProvider = Effect.gen(function* () {
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
       readonly providerPlayerKeys: ReadonlyArray<string>;
-      readonly sport: "football" | "hockey";
+      readonly sport: FantasySport;
       readonly period: ProviderScoringWeek | undefined;
       readonly currentPeriod: number | undefined;
     },
@@ -423,7 +426,7 @@ export const yahooProvider = Effect.gen(function* () {
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
       readonly providerPlayerKeys: ReadonlyArray<string>;
-      readonly sport: "football" | "hockey";
+      readonly sport: FantasySport;
       readonly periods: ReadonlyArray<ProviderScoringWeek>;
       readonly currentPeriod: number | undefined;
     },
@@ -1040,7 +1043,7 @@ function providerLeagueKey(teamKey: string): string {
 function leagueSettings(
   payload: typeof LeaguePayload.Type,
   requestedLeagueKey: string,
-  sport: "football" | "hockey",
+  sport: FantasySport,
 ): Effect.Effect<ProviderLeagueSettings, ProviderResponseInvalid | ProviderOperationUnsupported> {
   return Effect.gen(function* () {
     const attributes = payload.league;
@@ -1320,7 +1323,7 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
     injuryDetail: optionalNonEmpty(player.injury_note) ?? optionalNonEmpty(player.status_full),
     byeWeek: player.bye_weeks?.week ?? null,
     scheduled: scheduledIn(player.opponent),
-    confirmedStart: confirmedStartIn(player.starting_status),
+    startingLineup: startingLineupIn(player.starting_status),
     undroppable: player.is_undroppable ?? null,
   };
 }
@@ -1330,8 +1333,15 @@ function scheduledIn(opponent: string | null): boolean {
   return named !== undefined && named !== "Bye";
 }
 
-function confirmedStartIn(status: ReadonlyArray<typeof StartingStatus.Type> | undefined): boolean {
-  return status?.some((entry) => entry.is_starting === 1) === true;
+function startingLineupIn(
+  status: ReadonlyArray<typeof StartingStatus.Type> | undefined,
+): ProviderRosterPlayer["startingLineup"] {
+  if (status?.some((entry) => entry.is_starting === 1) === true) {
+    return "confirmed-starting";
+  }
+  return status?.some((entry) => entry.is_starting === 0) === true
+    ? "confirmed-not-starting"
+    : "unconfirmed";
 }
 
 function pitcherSlotOf(league: ProviderLeagueSettings): string | undefined {
@@ -1602,7 +1612,7 @@ function sameCoverage(left: ProviderRosterCoverage, right: ProviderRosterCoverag
 }
 
 function statBasis(
-  sport: "football" | "hockey",
+  sport: FantasySport,
   period: ProviderScoringWeek | undefined,
   currentWeek: number | undefined,
 ): ProviderStatBasis {
@@ -1995,7 +2005,7 @@ function reviewUrl(base: URL, intent: ProviderReviewLinkInput["intent"]): URL {
   return target;
 }
 
-function reviewBase(url: string, sport: "football" | "hockey", leagueId: string): URL {
+function reviewBase(url: string, sport: FantasySport, leagueId: string): URL {
   const parsed = new URL(url);
   if (
     parsed.protocol !== "https:" ||

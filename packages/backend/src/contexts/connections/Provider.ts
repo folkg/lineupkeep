@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import type { Effect } from "effect";
 
-import type { FantasySport } from "./FantasyTeam.ts";
+import { FantasyLeague, FantasySport } from "./FantasyTeam.ts";
 import type { LineupTargetPeriod } from "./LineupRun.ts";
 import { ProviderKey } from "./ProviderKey.ts";
 import type { LeagueFormat } from "./QueryValues.ts";
@@ -34,8 +34,8 @@ export const ProviderTeam = Schema.Struct({
   provider: ProviderKey,
   providerTeamKey: Schema.NonEmptyString,
   providerLeagueKey: Schema.NonEmptyString,
-  league: Schema.Literals(["nfl", "nhl"]),
-  sport: Schema.Literals(["football", "hockey"]),
+  league: FantasyLeague,
+  sport: FantasySport,
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
   name: Schema.NonEmptyString,
 });
@@ -337,6 +337,13 @@ export type ProviderWriteResult =
   | { readonly status: "not_sent"; readonly reason: "session_incomplete" | "request_failed" }
   | { readonly status: "unknown" };
 
+export const ProviderStartingLineup = Schema.Literals([
+  "confirmed-starting",
+  "confirmed-not-starting",
+  "unconfirmed",
+]);
+export type ProviderStartingLineup = typeof ProviderStartingLineup.Type;
+
 export type ProviderRosterPlayer = {
   readonly providerPlayerKey: string;
   readonly name: string;
@@ -351,7 +358,7 @@ export type ProviderRosterPlayer = {
   readonly injuryDetail: string | undefined;
   readonly byeWeek: number | null;
   readonly scheduled: boolean;
-  readonly confirmedStart: boolean;
+  readonly startingLineup: ProviderStartingLineup;
   readonly undroppable: boolean | null;
 };
 
@@ -559,6 +566,7 @@ export const ProviderAvailabilityTier = Schema.Literals([
   "confirmed-start",
   "will-play",
   "might-play",
+  "unlikely-to-play",
   "will-not-play",
   "not-scheduled",
 ]);

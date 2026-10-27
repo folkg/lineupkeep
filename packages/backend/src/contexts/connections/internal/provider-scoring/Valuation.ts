@@ -1,13 +1,19 @@
 import { exactToUnits } from "./Exact.ts";
 import type { Exact } from "./Exact.ts";
 import { periodsEqual } from "./Period.ts";
-import type { AvailabilityAssessment, Period, PlayerAvailability, PolicyPlayer } from "./types.ts";
+import type {
+  AvailabilityAssessment,
+  Period,
+  PolicyPlayer,
+  StartingLineup,
+  StartingLineupRule,
+} from "./types.ts";
 
 export function assessAvailability(player: PolicyPlayer, period: Period): AvailabilityAssessment {
   if (!hasGame(player, period)) {
     return { tier: "not-scheduled", fact: "no-game", period };
   }
-  return statusAssessment(player.availability, player.confirmedStart);
+  return statusAssessment(player);
 }
 
 export function selectionUnits(points: Exact, scale: number): number {
@@ -24,20 +30,31 @@ function hasGame(player: PolicyPlayer, period: Period): boolean {
   );
 }
 
-function statusAssessment(
-  availability: PlayerAvailability,
-  confirmedStart: boolean,
-): AvailabilityAssessment {
-  switch (availability.kind) {
+function statusAssessment(player: PolicyPlayer): AvailabilityAssessment {
+  switch (player.availability.kind) {
     case "available":
-      return confirmedStart
-        ? { tier: "confirmed-start", fact: "confirmed-start" }
-        : { tier: "will-play", fact: "available" };
+      return startingAssessment(player.startingLineup, player.startingLineupRule);
     case "uncertain":
-      return { tier: "might-play", fact: "uncertain-status", code: availability.code };
+      return { tier: "might-play", fact: "uncertain-status", code: player.availability.code };
     case "unrecognised":
-      return { tier: "might-play", fact: "unrecognised-status", code: availability.code };
+      return { tier: "might-play", fact: "unrecognised-status", code: player.availability.code };
     case "excluded":
-      return { tier: "will-not-play", fact: "excluded", reason: availability.reason };
+      return { tier: "will-not-play", fact: "excluded", reason: player.availability.reason };
+  }
+}
+
+function startingAssessment(
+  lineup: StartingLineup,
+  rule: StartingLineupRule,
+): AvailabilityAssessment {
+  switch (lineup) {
+    case "confirmed-starting":
+      return { tier: "confirmed-start", fact: "confirmed-start" };
+    case "confirmed-not-starting":
+      return rule === "unlikely-to-play"
+        ? { tier: "unlikely-to-play", fact: "confirmed-not-starting" }
+        : { tier: "will-play", fact: "available" };
+    case "unconfirmed":
+      return { tier: "will-play", fact: "available" };
   }
 }

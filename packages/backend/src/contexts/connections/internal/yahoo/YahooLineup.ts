@@ -1,5 +1,6 @@
 import { DateTime, Effect } from "effect";
 
+import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import { parseExact } from "#contexts/connections/internal/provider-scoring/Exact.ts";
 import { scoreLineup } from "#contexts/connections/internal/provider-scoring/LineupScore.ts";
 import type { ScoredPlayer } from "#contexts/connections/internal/provider-scoring/LineupScore.ts";
@@ -15,6 +16,7 @@ import type {
   PlayerOwnership,
   PlayerRank,
   PolicyPlayer,
+  StartingLineupRule,
   StatObservation,
   ValueSource,
 } from "#contexts/connections/internal/provider-scoring/types.ts";
@@ -33,13 +35,21 @@ import type {
 } from "#contexts/connections/Provider.ts";
 import type { ProviderReadFailure } from "#contexts/connections/Provider.ts";
 
+const supportedSports = ["football", "hockey"] as const;
+
+type SupportedSport = (typeof supportedSports)[number];
+
+function isSupportedSport(sport: FantasySport): sport is SupportedSport {
+  return supportedSports.some((supported) => supported === sport);
+}
+
 export const yahooCapabilities: ProviderCapabilities = {
   fantasyDay: {
     timeZone: "America/Los_Angeles",
     boundary: "local-midnight",
     version: "yahoo-pacific-midnight/1",
   },
-  sports: ["football", "hockey"],
+  sports: [...supportedSports],
   playerSearch: {
     sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
     providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
@@ -55,7 +65,7 @@ export const yahooCapabilities: ProviderCapabilities = {
     {
       subject: "probable_starters",
       detail:
-        "Yahoo publishes no probable-starter field on its fantasy read surface, so participation is reported only through the provider's injury status.",
+        "Yahoo publishes a real-world starting status for goalies and pitchers only, and only once that game's starter is announced. Every other position carries no starting signal and stays unconfirmed, so participation for them is reported only through the provider's injury status.",
     },
     {
       subject: "projections",
@@ -83,11 +93,19 @@ export function planYahooLineup(
   read: YahooLineupReader,
 ): Effect.Effect<ProviderLineupOutcome, ProviderReadFailure> {
   return Effect.gen(function* () {
+    if (!isSupportedSport(input.sport)) {
+      return {
+        kind: "refused",
+        refusal: "structural",
+        provenance: "yahoo/unsupported-sport",
+        detail: "This provider does not plan lineups for this sport.",
+      };
+    }
     const period = targetPeriod(input.target);
     const gamesLimited =
       input.league.maxGamesPlayed !== undefined || input.league.maxInningsPitched !== undefined;
     const gamesPlayed = gamesLimited ? yield* read.readGamesPlayed() : [];
-    const players = policyPlayers(input.roster, period, gamesPlayed);
+    const players = policyPlayers(input, period, gamesPlayed);
     const facts = yield* read.readPlayerFacts();
     const sources: Array<ValueSource> = [];
     if (gamesLimited) {
@@ -174,6 +192,87 @@ const yahooStatusTable: Readonly<Record<string, YahooStatus>> = {
   GTD: { availability: { kind: "uncertain", code: "GTD" }, reserveListed: false },
 };
 
+export type StartingLineupRole =
+  | "goalie"
+  | "starting-pitcher"
+  | "relief-pitcher"
+  | "position-player";
+
+export const yahooStartingLineupRoleBySport: Readonly<
+  Record<FantasySport, Readonly<Record<string, StartingLineupRole>>>
+> = {
+  football: {
+    DEF: "position-player",
+    K: "position-player",
+    QB: "position-player",
+    "Q/W/R/T": "position-player",
+    RB: "position-player",
+    TE: "position-player",
+    "W/R": "position-player",
+    "W/T": "position-player",
+    WR: "position-player",
+  },
+  hockey: {
+    C: "position-player",
+    D: "position-player",
+    F: "position-player",
+    G: "goalie",
+    LW: "position-player",
+    RW: "position-player",
+  },
+  baseball: {
+    "1B": "position-player",
+    "2B": "position-player",
+    "3B": "position-player",
+    C: "position-player",
+    CF: "position-player",
+    CI: "position-player",
+    DH: "position-player",
+    IF: "position-player",
+    LF: "position-player",
+    MI: "position-player",
+    OF: "position-player",
+    P: "relief-pitcher",
+    RF: "position-player",
+    RP: "relief-pitcher",
+    SP: "starting-pitcher",
+    SS: "position-player",
+    Util: "position-player",
+  },
+  basketball: {
+    C: "position-player",
+    F: "position-player",
+    G: "position-player",
+    PF: "position-player",
+    PG: "position-player",
+    SF: "position-player",
+    SG: "position-player",
+    Util: "position-player",
+  },
+};
+
+export const yahooStartingLineupRuleByRole: Readonly<
+  Record<StartingLineupRole, StartingLineupRule>
+> = {
+  goalie: "unlikely-to-play",
+  "starting-pitcher": "unlikely-to-play",
+  "relief-pitcher": "not-an-availability-fact",
+  "position-player": "not-an-availability-fact",
+};
+
+export const yahooDefaultStartingLineupRole: StartingLineupRole = "position-player";
+
+export function yahooStartingLineupRole(sport: FantasySport, position: string): StartingLineupRole {
+  const roles = Object.hasOwn(yahooStartingLineupRoleBySport, sport)
+    ? yahooStartingLineupRoleBySport[sport]
+    : undefined;
+  return roles?.[position] ?? yahooDefaultStartingLineupRole;
+}
+
+export function yahooStartingLineupRule(sport: FantasySport, position: string): StartingLineupRule {
+  return yahooStartingLineupRuleByRole[yahooStartingLineupRole(sport, position)];
+}
+
 export function yahooAvailability(injuryCode: string | undefined): PlayerAvailability {
   if (injuryCode === undefined) {
     return healthyStatus.availability;
@@ -204,16 +303,17 @@ function providerValue(player: ScoredPlayer): ProviderPlayerValue {
 }
 
 function policyPlayers(
-  roster: ProviderRoster,
+  input: ProviderLineupRequest,
   period: Period,
   gamesPlayed: ReadonlyArray<ProviderGamesPlayed>,
 ): ReadonlyArray<PolicyPlayer> {
   const limits = new Map(gamesPlayed.map((entry) => [entry.position, entry]));
-  return roster.players.map((player) => ({
+  return input.roster.players.map((player) => ({
     id: player.providerPlayerKey,
     availability: yahooAvailability(player.injuryCode),
     scheduled: participationCounts(player, limits) ? player.scheduled : true,
-    confirmedStart: player.confirmedStart,
+    startingLineup: player.startingLineup,
+    startingLineupRule: yahooStartingLineupRule(input.sport, player.primaryPosition),
     nonGamePeriods: nonGamePeriods(player, period),
   }));
 }

@@ -137,6 +137,48 @@ describe("provider-neutral lineup placement", () => {
     expect(result.assignments).toContainEqual({ providerPlayerKey: "playing", slot: "QB" });
   });
 
+  it("orders a doubtful player above one confirmed outside the starting lineup", () => {
+    const result = planned(
+      planAssignments({
+        league: league(),
+        roster: roster([
+          member("doubtful", "QB", "BN", ["QB"], "might-play"),
+          member("backup", "QB", "QB", ["QB"], "unlikely-to-play"),
+        ]),
+        values: values([
+          ["doubtful", 1, "might-play"],
+          ["backup", 9000, "unlikely-to-play"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([
+      { providerPlayerKey: "doubtful", slot: "QB" },
+      { providerPlayerKey: "backup", slot: "BN" },
+    ]);
+  });
+
+  it("orders a player confirmed outside the starting lineup above an injured-out player", () => {
+    const result = planned(
+      planAssignments({
+        league: league(),
+        roster: roster([
+          member("backup", "QB", "BN", ["QB"], "unlikely-to-play"),
+          member("out", "QB", "QB", ["QB"], "will-not-play"),
+        ]),
+        values: values([
+          ["backup", 1, "unlikely-to-play"],
+          ["out", 9000, "will-not-play"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([
+      { providerPlayerKey: "backup", slot: "QB" },
+      { providerPlayerKey: "out", slot: "BN" },
+    ]);
+  });
+
   it("fills a required starting slot with a player who cannot play when nobody else can", () => {
     const result = planned(
       planAssignments({
@@ -622,7 +664,7 @@ function member(
     injuryDetail: undefined,
     byeWeek: null,
     scheduled: availability !== "not-scheduled",
-    confirmedStart: false,
+    startingLineup: "unconfirmed",
     undroppable: null,
   };
 }

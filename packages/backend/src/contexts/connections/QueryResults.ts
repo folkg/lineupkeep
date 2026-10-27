@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 import { ConnectionId } from "./Connection.ts";
-import { TeamId } from "./FantasyTeam.ts";
+import { FantasySport, TeamId } from "./FantasyTeam.ts";
 import {
   CounterpartyRef,
   Cursor,
@@ -21,7 +21,7 @@ import {
 } from "./QueryValues.ts";
 
 export const ListTeamsInput = Schema.Struct({
-  sport: Schema.optional(Schema.Literals(["football", "hockey"])),
+  sport: Schema.optional(FantasySport),
   season: Schema.optional(Schema.Int.check(Schema.isGreaterThan(1900))),
   connection: Schema.optional(ConnectionId),
   cursor: Schema.optional(Cursor),

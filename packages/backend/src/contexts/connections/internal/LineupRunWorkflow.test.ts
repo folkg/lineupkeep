@@ -217,6 +217,7 @@ const observation = {
         slot: "QB",
         editable: false,
         scheduled: true,
+        startingLineup: "confirmed-starting" as const,
       },
       {
         key: "461.p.10002",
@@ -224,6 +225,7 @@ const observation = {
         slot: "BN",
         editable: true,
         scheduled: false,
+        startingLineup: "unconfirmed" as const,
       },
     ],
     lockedPlayers: 1,

@@ -1,6 +1,7 @@
 import { DateTime, Effect, Layer } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import type {
   ProviderLeagueSettings,
   ProviderLeagueTeam,
@@ -246,7 +247,7 @@ function reviewLink(
   tokens: QueryTokens["Service"],
   provider: Provider,
   league: ProviderLeagueSettings,
-  sport: "football" | "hockey",
+  sport: FantasySport,
   rosterKeys: ReadonlySet<string>,
   leagueTeams: ReadonlyArray<ProviderLeagueTeam> | undefined,
   leagueTeamsUnsupported: string | undefined,
@@ -410,7 +411,7 @@ function reviewLink(
 function buildLink(
   provider: Provider,
   league: ProviderLeagueSettings,
-  sport: "football" | "hockey",
+  sport: FantasySport,
   kind: ReviewIntent["kind"],
   providerIntent: ProviderReviewIntent,
   players: ReadonlyArray<PlayerRef>,

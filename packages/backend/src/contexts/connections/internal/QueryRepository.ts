@@ -52,8 +52,8 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         readonly provider: string;
         readonly providerTeamKey: string;
         readonly providerLeagueKey: string;
-        readonly league: "nfl" | "nhl";
-        readonly sport: "football" | "hockey";
+        readonly league: "nfl" | "nhl" | "mlb" | "nba";
+        readonly sport: "football" | "hockey" | "baseball" | "basketball";
         readonly season: number;
         readonly name: string;
         readonly availability: "available" | "unavailable";

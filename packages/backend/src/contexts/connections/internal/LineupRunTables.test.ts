@@ -95,6 +95,7 @@ it.effect("round-trips delivery and write-intent rows", () =>
           slot: "QB",
           editable: false,
           scheduled: true,
+          startingLineup: "confirmed-starting",
         },
       ],
       status: "intended",

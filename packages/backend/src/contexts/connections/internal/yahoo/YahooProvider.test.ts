@@ -714,11 +714,11 @@ it.effect("reads the participation member as a scheduled fact", () => {
     });
 
     assert.deepStrictEqual(
-      roster.players.map((player) => [player.name, player.scheduled, player.confirmedStart]),
+      roster.players.map((player) => [player.name, player.scheduled, player.startingLineup]),
       [
-        ["Synthetic At Home", true, false],
-        ["Synthetic Off Night", false, false],
-        ["Synthetic On Bye", false, false],
+        ["Synthetic At Home", true, "confirmed-not-starting"],
+        ["Synthetic Off Night", false, "unconfirmed"],
+        ["Synthetic On Bye", false, "unconfirmed"],
       ],
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
@@ -736,8 +736,8 @@ it.effect("reads a confirmed real-world start as its own fact", () => {
     });
 
     assert.deepStrictEqual(
-      roster.players.map((player) => [player.name, player.scheduled, player.confirmedStart]),
-      [["Synthetic Confirmed Goalie", true, true]],
+      roster.players.map((player) => [player.name, player.scheduled, player.startingLineup]),
+      [["Synthetic Confirmed Goalie", true, "confirmed-starting"]],
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -790,7 +790,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         injuryDetail: undefined,
         byeWeek: 7,
         scheduled: true,
-        confirmedStart: true,
+        startingLineup: "confirmed-starting",
         undroppable: false,
       },
       {
@@ -807,7 +807,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         injuryDetail: "Synthetic injury note",
         byeWeek: null,
         scheduled: false,
-        confirmedStart: false,
+        startingLineup: "unconfirmed",
         undroppable: true,
       },
     ]);
@@ -2238,7 +2238,7 @@ function rosterMember(
     injuryDetail: undefined,
     byeWeek: null,
     scheduled: true,
-    confirmedStart: false,
+    startingLineup: "unconfirmed",
     undroppable: false,
   };
 }
