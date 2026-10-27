@@ -43,6 +43,8 @@ export type LineupImplementation = typeof LineupImplementation.Type;
 export const providerNativeImplementationVersion = "provider-native/1" as const;
 export const customPolicyImplementationVersion = "custom-policy/1" as const;
 
+export const activeLineupImplementation: LineupImplementation = "custom_policy";
+
 export const LineupPolicyProvenance = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("planned"),
@@ -54,6 +56,7 @@ export const LineupPolicyProvenance = Schema.Union([
     version: Schema.NonEmptyString,
     code: Schema.NonEmptyString,
     detail: Schema.NonEmptyString,
+    basis: Schema.optional(Schema.NonEmptyString),
   }),
 ]);
 export type LineupPolicyProvenance = typeof LineupPolicyProvenance.Type;
@@ -63,6 +66,7 @@ export const LineupPolicyRefusalProvenance = Schema.Struct({
   version: Schema.NonEmptyString,
   code: Schema.NonEmptyString,
   detail: Schema.NonEmptyString,
+  basis: Schema.optional(Schema.NonEmptyString),
 });
 export type LineupPolicyRefusalProvenance = typeof LineupPolicyRefusalProvenance.Type;
 

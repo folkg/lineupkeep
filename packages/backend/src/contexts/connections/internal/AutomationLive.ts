@@ -4,7 +4,6 @@ import type { UserId } from "#contexts/auth/User.ts";
 import { Automation, AutomationFailed } from "#contexts/connections/Automation.ts";
 import type { AutomationSummary } from "#contexts/connections/Automation.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
-import { nativeLineupImplementation } from "#contexts/connections/LineupRun.ts";
 import { LineupDispatcher } from "#contexts/connections/LineupWork.ts";
 import { RetentionSweep } from "#contexts/connections/Retention.ts";
 
@@ -34,7 +33,6 @@ export const AutomationLive = Layer.effect(
           runs: entries.map(({ team }): NewScheduledLineupRun => ({
             team: team.id,
             connectionId: team.connectionId,
-            implementation: nativeLineupImplementation,
           })),
         })),
       );

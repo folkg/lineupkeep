@@ -26,7 +26,11 @@ import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
 import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
-import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
+import {
+  FakeProviderWorld,
+  ProviderFakeTest,
+  refuseCustomPlanning,
+} from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { TeamRepository } from "./internal/TeamRepository.ts";
 import { TeamsLive } from "./internal/TeamsLive.ts";
@@ -329,6 +333,7 @@ it.effect("includes the latest verified run in team activity", () =>
     const runs = yield* LineupRuns;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seedTeam(fake);
+    yield* refuseCustomPlanning(fake);
     yield* control(teams, seeded, "enable");
 
     const submitted = yield* runs.submit(owner, lineupRequest(seeded));

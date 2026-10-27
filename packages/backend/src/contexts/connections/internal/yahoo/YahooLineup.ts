@@ -1,5 +1,8 @@
 import {
   lineupPolicyVersion,
+  lineupRefusalKind,
+  noValueSourceRefusalCode,
+  noValueSourceRefusalDetail,
   planLineup,
   lineupAssignments,
   periodKey,
@@ -128,7 +131,7 @@ export function planYahooLineup(
     if (translated.kind === "refused") {
       return {
         kind: "refused",
-        action: "block",
+        refusal: lineupRefusalKind(translated.code),
         policyVersion: lineupPolicyVersion,
         code: translated.code,
         detail: translated.detail,
@@ -199,12 +202,13 @@ export function yahooTargetPeriod(roster: ProviderRoster): Period {
 
 function refusedLineup(refusals: ReadonlyArray<LineupPlanRefusal>): ProviderLineupOutcome {
   const refusal = refusals.at(-1);
+  const code = refusal?.code ?? noValueSourceRefusalCode;
   return {
     kind: "refused",
-    action: "native",
+    refusal: lineupRefusalKind(code),
     policyVersion: lineupPolicyVersion,
-    code: refusal?.code ?? "policy:no-value-source",
-    detail: refusal?.detail ?? "This league publishes no value source the custom policy can use.",
+    code,
+    detail: refusal?.detail ?? noValueSourceRefusalDetail,
     basis: undefined,
   };
 }

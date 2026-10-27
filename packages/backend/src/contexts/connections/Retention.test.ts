@@ -21,7 +21,11 @@ import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
 import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
-import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
+import {
+  FakeProviderWorld,
+  ProviderFakeTest,
+  refuseCustomPlanning,
+} from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { RetentionSweepLive } from "./internal/RetentionSweepRepository.ts";
 import { LineupRequestInput } from "./LineupRun.ts";
@@ -36,6 +40,7 @@ it.effect("removes expired diagnostics and outcomes without touching unresolved 
     const retention = yield* RetentionSweep;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seedTeam(fake);
+    yield* refuseCustomPlanning(fake);
     const team = seeded.team;
     const startedAt = yield* DateTime.now;
 

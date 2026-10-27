@@ -22,6 +22,45 @@ const lineupPlanRefusalCodes = {
   reserveSlot: "assignment:reserve-slot",
 } as const;
 
+export const noValueSourceRefusalCode = "policy:no-value-source" as const;
+export const noValueSourceRefusalDetail =
+  "This league publishes no value source the custom policy can use, so its lineup cannot be valued.";
+
+const refusalKinds = {
+  [noValueSourceRefusalCode]: "structural",
+  "policy:no-observed-periods": "transient",
+  "solver:unusable-selection-value": "transient",
+  "solver:lock-references-unknown-slot": "transient",
+  "solver:locked-player-ineligible-for-slot": "transient",
+  "solver:lock-capacity-exceeded": "transient",
+  "solver:roster-exceeds-slot-capacity": "transient",
+  "solver:player-has-no-legal-slot": "transient",
+  "solver:required-starting-position-unfillable": "transient",
+  "solver:no-legal-assignment": "transient",
+  [lineupPlanRefusalCodes.membership]: "transient",
+  [lineupPlanRefusalCodes.lockedPlayer]: "transient",
+  [lineupPlanRefusalCodes.reserveSlot]: "transient",
+} as const satisfies Record<RefusalCode, LineupRefusalKind>;
+
+export type RefusalCode =
+  | typeof noValueSourceRefusalCode
+  | "policy:no-observed-periods"
+  | "solver:unusable-selection-value"
+  | "solver:lock-references-unknown-slot"
+  | "solver:locked-player-ineligible-for-slot"
+  | "solver:lock-capacity-exceeded"
+  | "solver:roster-exceeds-slot-capacity"
+  | "solver:player-has-no-legal-slot"
+  | "solver:required-starting-position-unfillable"
+  | "solver:no-legal-assignment"
+  | typeof lineupPlanRefusalCodes.membership
+  | typeof lineupPlanRefusalCodes.lockedPlayer
+  | typeof lineupPlanRefusalCodes.reserveSlot;
+
+export function lineupRefusalKind(code: RefusalCode): LineupRefusalKind {
+  return refusalKinds[code];
+}
+
 export function planLineup(inputs: ReadonlyArray<LineupPolicyInput>): LineupPlanResult {
   const refusals: Array<LineupPlanRefusal> = [];
   for (const input of ordered(inputs)) {
@@ -51,10 +90,10 @@ export function planLineup(inputs: ReadonlyArray<LineupPolicyInput>): LineupPlan
   return { kind: "refused", refusals };
 }
 
-export function describeLineupRefusal(code: string, player: string): string {
+export function describeLineupRefusal(code: RefusalCode, player: string): string {
   switch (code) {
-    case "policy:no-value-source":
-      return "This league publishes no value source the custom policy can use, so its lineup cannot be valued.";
+    case noValueSourceRefusalCode:
+      return noValueSourceRefusalDetail;
     case "policy:no-observed-periods":
       return "No completed scoring period is available to value the roster, so the custom policy cannot plan a lineup.";
     case "solver:unusable-selection-value":
@@ -79,8 +118,6 @@ export function describeLineupRefusal(code: string, player: string): string {
       return `The plan moves ${namedPlayer(player)}, but the provider reports that player as locked. No lineup change was made. Refresh the team and run again after the lock clears.`;
     case lineupPlanRefusalCodes.reserveSlot:
       return `The plan moves ${namedPlayer(player)} through a reserve slot, which this operation does not write. No lineup change was made. Move the player out of the reserve list on the provider, or leave the lineup unchanged.`;
-    default:
-      return "The lineup cannot be planned from the available facts.";
   }
 }
 
@@ -134,12 +171,12 @@ function solverRefusal(source: ValueSourceKind, refusal: LineupRefusal): LineupP
   return describedRefusal(source, `solver:${refusal.reason}`);
 }
 
-function describedRefusal(source: ValueSourceKind, code: string): LineupPlanRefusal {
+function describedRefusal(source: ValueSourceKind, code: RefusalCode): LineupPlanRefusal {
   return { source, code, detail: describeLineupRefusal(code, "") };
 }
 
 function refusal(
-  code: string,
+  code: RefusalCode,
   player: LineupAssignmentFacts["players"][number] | undefined,
 ): LineupAssignmentResult {
   return {
@@ -169,13 +206,15 @@ export type LineupAssignmentResult =
       readonly kind: "request";
       readonly assignments: ReadonlyArray<{ readonly playerKey: string; readonly slot: string }>;
     }
-  | { readonly kind: "refused"; readonly code: string; readonly detail: string };
+  | { readonly kind: "refused"; readonly code: RefusalCode; readonly detail: string };
 
 export type LineupPlanRefusal = {
   readonly source: ValueSourceKind;
-  readonly code: string;
+  readonly code: RefusalCode;
   readonly detail: string;
 };
+
+export type LineupRefusalKind = "structural" | "transient";
 
 export type LineupPlanResult =
   | {

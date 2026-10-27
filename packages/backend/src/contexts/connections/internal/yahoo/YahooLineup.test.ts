@@ -288,7 +288,7 @@ describe("Yahoo league translation", () => {
     expect(result.code).toBe("assignment:plan-membership");
   });
 
-  it("plans through the provider capability and reports a named native refusal", () => {
+  it("reports a transient refusal when the roster cannot fill a required starting slot", () => {
     const unfillable = runPlan(
       hockeyRequest(),
       [hockeyDetail("hockey-player-0", 43, []), hockeyDetail("hockey-player-1", 12, [])],
@@ -298,7 +298,7 @@ describe("Yahoo league translation", () => {
     if (unfillable.kind !== "refused") {
       throw new Error("Expected a refusal.");
     }
-    expect(unfillable.action).toBe("native");
+    expect(unfillable.refusal).toBe("transient");
     expect(unfillable.code).toBe("solver:required-starting-position-unfillable");
 
     const fromRules = runPlan(

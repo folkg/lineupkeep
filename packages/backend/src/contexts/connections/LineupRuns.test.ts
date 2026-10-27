@@ -27,7 +27,11 @@ import { lineupRuns, lineupTeamLeases, lineupWriteIntents } from "./internal/Lin
 import type { LineupRunRecord } from "./internal/LineupRunTables.ts";
 import { LineupRunState } from "./internal/LineupRunWorkflow.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
-import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
+import {
+  FakeProviderWorld,
+  ProviderFakeTest,
+  refuseCustomPlanning,
+} from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { TeamAutomationState } from "./internal/TeamAutomationWorkflow.ts";
 import { LineupRequestConflict, LineupRequestInput, LineupRunNotFound } from "./LineupRun.ts";
@@ -41,49 +45,54 @@ import type {
   ProviderTeam,
 } from "./Provider.ts";
 
-it.effect("creates one durable run per team and verifies the native change", () =>
-  Effect.gen(function* () {
-    const runs = yield* LineupRuns;
-    const fake = yield* FakeProviderWorld;
-    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+it.effect(
+  "creates one durable run per team, falls back to the native action, and verifies it",
+  () =>
+    Effect.gen(function* () {
+      const runs = yield* LineupRuns;
+      const fake = yield* FakeProviderWorld;
+      const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+      yield* refuseCustomPlanning(fake);
 
-    const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
+      const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
 
-    assert.strictEqual(submitted.delivery, "queued");
-    assert.strictEqual(submitted.runs.length, 1);
-    assert.strictEqual(submitted.runs[0]?.status, "completed");
-    assert.strictEqual(submitted.runs[0]?.implementation, "provider_native");
-    assert.strictEqual(submitted.runs[0]?.implementationVersion, "provider-native/1");
-    assert.strictEqual(submitted.runs[0]?.outcome?.kind, "changed");
-    assert.strictEqual(submitted.runs[0]?.outcome?.verified, true);
-    assert.strictEqual(submitted.runs[0]?.outcome?.reconciled, false);
-    assert.strictEqual(submitted.runs[0]?.outcome?.implementation, "provider_native");
-    assert.strictEqual(submitted.runs[0]?.outcome?.lockedPlayers, 1);
-    assert.strictEqual(submitted.runs[0]?.outcome?.editablePlayers, 1);
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+      assert.strictEqual(submitted.delivery, "queued");
+      assert.strictEqual(submitted.runs.length, 1);
+      assert.strictEqual(submitted.runs[0]?.status, "completed");
+      assert.strictEqual(submitted.runs[0]?.implementation, "custom_policy");
+      assert.strictEqual(submitted.runs[0]?.implementationVersion, "custom-policy/1");
+      assert.strictEqual(submitted.runs[0]?.outcome?.kind, "changed");
+      assert.strictEqual(submitted.runs[0]?.outcome?.verified, true);
+      assert.strictEqual(submitted.runs[0]?.outcome?.reconciled, false);
+      assert.strictEqual(submitted.runs[0]?.outcome?.implementation, "provider_native");
+      assert.strictEqual(submitted.runs[0]?.outcome?.policy?.kind, "refused");
+      assert.strictEqual(submitted.runs[0]?.outcome?.lockedPlayers, 1);
+      assert.strictEqual(submitted.runs[0]?.outcome?.editablePlayers, 1);
+      assert.strictEqual(yield* fake.nativeCallCount, 1);
+      assert.strictEqual(yield* fake.explicitCallCount, 0);
 
-    const replay = yield* runs.submit(owner, lineupRequest(team.id, requestId));
-    assert.deepStrictEqual(
-      replay.runs.map((run) => run.run),
-      submitted.runs.map((run) => run.run),
-    );
-    assert.strictEqual(yield* fake.nativeCallCount, 1);
+      const replay = yield* runs.submit(owner, lineupRequest(team.id, requestId));
+      assert.deepStrictEqual(
+        replay.runs.map((run) => run.run),
+        submitted.runs.map((run) => run.run),
+      );
+      assert.strictEqual(yield* fake.nativeCallCount, 1);
 
-    const conflict = yield* Effect.flip(
-      runs.submit(owner, lineupRequest(team.id, requestId, { coverage: "week", week: 4 })),
-    );
-    assert.instanceOf(conflict, LineupRequestConflict);
+      const conflict = yield* Effect.flip(
+        runs.submit(owner, lineupRequest(team.id, requestId, { coverage: "week", week: 4 })),
+      );
+      assert.instanceOf(conflict, LineupRequestConflict);
 
-    const listed = yield* runs.get(owner, { request: requestId });
-    assert.strictEqual(listed.status, "ok");
-    assert.strictEqual(listed.runs.length, 1);
-    assert.strictEqual(listed.page.complete, true);
+      const listed = yield* runs.get(owner, { request: requestId });
+      assert.strictEqual(listed.status, "ok");
+      assert.strictEqual(listed.runs.length, 1);
+      assert.strictEqual(listed.page.complete, true);
 
-    const foreign = yield* Effect.flip(
-      runs.get(other, { runs: submitted.runs.map((run) => run.run) }),
-    );
-    assert.instanceOf(foreign, LineupRunNotFound);
-  }).pipe(Effect.provide(LineupTestLayer)),
+      const foreign = yield* Effect.flip(
+        runs.get(other, { runs: submitted.runs.map((run) => run.run) }),
+      );
+      assert.instanceOf(foreign, LineupRunNotFound);
+    }).pipe(Effect.provide(LineupTestLayer)),
 );
 
 it.effect("reconciles a lost provider response only when readback proves the change", () =>
@@ -91,6 +100,7 @@ it.effect("reconciles a lost provider response only when readback proves the cha
     const runs = yield* LineupRuns;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* refuseCustomPlanning(fake);
     yield* fake.setNativeAction("lost_response");
 
     const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
@@ -109,6 +119,7 @@ it.effect("keeps a lost response uncertain when readback does not prove a change
     const worker = yield* LineupWorker;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* refuseCustomPlanning(fake);
     yield* fake.setNativeAction("lost_response");
     yield* fake.setNativeAfter(undefined);
 
@@ -134,6 +145,7 @@ it.effect("reports a definitive provider rejection as failed, never completed", 
     const runs = yield* LineupRuns;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* refuseCustomPlanning(fake);
     yield* fake.setNativeAction("reject");
 
     const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
@@ -151,7 +163,7 @@ it.effect("applies and verifies changed explicit assignments", () =>
     const worker = yield* LineupWorker;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedCustom(fake);
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -183,7 +195,7 @@ it.effect("plans a league without points rules from the published started percen
     yield* fake.setLeague(startedLeague);
     yield* fake.setRoster(customRoster);
     yield* fake.setPlayerDetails(startedDetails);
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -215,7 +227,7 @@ it.effect("fails loudly when a provider response stops matching the decoder", ()
     yield* fake.failLeague(
       ProviderResponseInvalid.make({ operation: "read_league", field: "league.stat_modifiers" }),
     );
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -244,7 +256,7 @@ it.effect("reports exactly which explicit assignments differed after acceptance"
     const fake = yield* FakeProviderWorld;
     const team = yield* seedCustom(fake);
     yield* fake.setExplicitAfter(customRoster);
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -271,7 +283,7 @@ it.effect("reports unplanned readback changes as a mismatch after acceptance", (
     const fake = yield* FakeProviderWorld;
     const team = yield* seedCustom(fake);
     yield* fake.setExplicitAfter(explicitWithExtraEdit);
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -302,7 +314,7 @@ it.effect("fails an invalid explicit assignment request without retrying", () =>
     const fake = yield* FakeProviderWorld;
     const team = yield* seedCustom(fake);
     yield* fake.setExplicitAction("invalid");
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -328,7 +340,7 @@ it.effect("uses the recorded acceptance when verification resumes", () =>
     const worker = yield* LineupWorker;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedCustom(fake);
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
     const completed = yield* loadRun(repository, runId);
@@ -394,7 +406,7 @@ it.effect("reconciles a lost explicit response when the readback matches the pla
     const fake = yield* FakeProviderWorld;
     const team = yield* seedCustom(fake);
     yield* fake.setExplicitAction("lost_response");
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -421,7 +433,7 @@ it.effect(
       const team = yield* seedCustom(fake);
       yield* fake.setExplicitAction("lost_response");
       yield* fake.setExplicitAfter(humanEditedRoster);
-      const runId = yield* createCustomRun(repository, team);
+      const runId = yield* createQueuedRun(repository, team);
 
       yield* worker.deliver([runId]);
 
@@ -447,7 +459,7 @@ it.effect("retries a lost explicit response only when the readback is unchanged"
     const team = yield* seedCustom(fake);
     yield* fake.setExplicitAction("lost_response");
     yield* fake.setExplicitAfter(customRoster);
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -496,13 +508,39 @@ it.effect("retries a lost explicit response only when the readback is unchanged"
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-it.effect("falls back to the native action when the custom policy cannot score a league", () =>
+it.effect("plans a manual run with the custom policy", () =>
+  Effect.gen(function* () {
+    const runs = yield* LineupRuns;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* fake.setLeague(startedLeague);
+    yield* fake.setRoster(customRoster);
+    yield* fake.setPlayerDetails(startedDetails);
+
+    const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
+
+    assert.strictEqual(submitted.runs[0]?.status, "completed");
+    assert.strictEqual(submitted.runs[0]?.implementation, "custom_policy");
+    assert.strictEqual(submitted.runs[0]?.outcome?.implementation, "custom_policy");
+    assert.strictEqual(submitted.runs[0]?.outcome?.policy?.kind, "planned");
+    assert.strictEqual(
+      submitted.runs[0]?.outcome?.policy?.basis,
+      "community-start-rate:overall:week:3",
+    );
+    assert.strictEqual(submitted.runs[0]?.outcome?.changes.length, 2);
+    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    assert.strictEqual(yield* fake.nativeCallCount, 0);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect("falls back to the native action when the planner reports a structural refusal", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;
     const worker = yield* LineupWorker;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
-    const runId = yield* createCustomRun(repository, team);
+    yield* refuseCustomPlanning(fake);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -515,9 +553,138 @@ it.effect("falls back to the native action when the custom policy cannot score a
     assert.strictEqual(run.state.outcome.kind, "changed");
     assert.strictEqual(run.state.outcome.implementation, "provider_native");
     assert.strictEqual(run.state.outcome.policy?.kind, "refused");
+    if (run.state.outcome.policy?.kind !== "refused") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.policy.code, "policy:no-value-source");
+    assert.match(run.state.outcome.policy.detail, /publishes no value source/u);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
     assert.strictEqual(yield* fake.explicitCallCount, 0);
   }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect("blocks a run when the planner reports a transient refusal", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedCustom(fake);
+    yield* fake.setPlanRefusal({
+      refusal: "transient",
+      code: "policy:no-observed-periods",
+      detail:
+        "No completed scoring period is available to value the roster, so the custom policy cannot plan a lineup.",
+    });
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.status, "blocked");
+    assert.strictEqual(run.state._tag, "Blocked");
+    if (run.state._tag !== "Blocked") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.kind, "blocked");
+    assert.strictEqual(run.state.outcome.implementation, "custom_policy");
+    assert.strictEqual(run.state.outcome.policy?.kind, "refused");
+    if (run.state.outcome.policy?.kind !== "refused") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.policy.code, "policy:no-observed-periods");
+    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    assert.strictEqual(yield* fake.explicitCallCount, 0);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect("runs a queued intent on the active implementation after the cutover", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const database = yield* ConnectionsDatabase;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedCustom(fake);
+    const runId = yield* createQueuedRun(repository, team);
+    yield* setStoredImplementation(database, runId, "provider_native");
+
+    yield* worker.deliver([runId]);
+
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.implementation, "custom_policy");
+    assert.strictEqual(run.implementationVersion, "custom-policy/1");
+    assert.strictEqual(run.state._tag, "Completed");
+    if (run.state._tag !== "Completed") {
+      return;
+    }
+    assert.strictEqual(run.state.implementation, "custom_policy");
+    assert.strictEqual(run.state.outcome.implementation, "custom_policy");
+    assert.strictEqual(yield* fake.explicitCallCount, 1);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect(
+  "reconciles an in-flight attempt instead of re-planning it under the active implementation",
+  () =>
+    Effect.gen(function* () {
+      const repository = yield* LineupRunRepository;
+      const database = yield* ConnectionsDatabase;
+      const worker = yield* LineupWorker;
+      const fake = yield* FakeProviderWorld;
+      const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+      yield* refuseCustomPlanning(fake);
+      const runId = yield* createQueuedRun(repository, team);
+      yield* worker.deliver([runId]);
+
+      const intents = yield* database
+        .select({ id: lineupWriteIntents.id, attempt: lineupWriteIntents.attempt })
+        .from(lineupWriteIntents)
+        .where(eq(lineupWriteIntents.runId, runId))
+        .limit(1);
+      const intent = intents[0];
+      assert.isDefined(intent);
+      const completed = yield* loadRun(repository, runId);
+      const state = yield* Schema.encodeEffect(Schema.toCodecJson(LineupRunState))({
+        _tag: "RetryWait",
+        team: completed.teamId,
+        target: completed.target,
+        trigger: completed.trigger,
+        implementation: "provider_native",
+        implementationVersion: "provider-native/1",
+        updatedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
+        attempt: completed.attempts,
+        reason: "provider_outcome_unknown",
+        detail: "The provider response was lost before the native action was verified.",
+        retryAt: DateTime.makeUnsafe("1969-12-31T23:59:00Z"),
+        writeIntent: { id: intent.id, attempt: intent.attempt },
+      });
+      yield* database
+        .update(lineupRuns)
+        .set({
+          state,
+          status: "retry-wait",
+          implementation: "provider_native",
+          implementationVersion: "provider-native/1",
+        })
+        .where(eq(lineupRuns.id, runId));
+      yield* database
+        .update(lineupTeamLeases)
+        .set({ expiresAt: DateTime.toDateUtc(DateTime.makeUnsafe("1969-12-31T23:59:00Z")) })
+        .where(eq(lineupTeamLeases.runId, runId));
+
+      yield* worker.deliver([runId]);
+
+      const reconciled = yield* loadRun(repository, runId);
+      assert.strictEqual(reconciled.implementation, "provider_native");
+      assert.strictEqual(reconciled.status, "completed");
+      assert.strictEqual(reconciled.state._tag, "Completed");
+      if (reconciled.state._tag !== "Completed") {
+        return;
+      }
+      assert.strictEqual(reconciled.state.outcome.implementation, "provider_native");
+      assert.strictEqual(reconciled.state.outcome.reconciled, true);
+      assert.strictEqual(yield* fake.nativeCallCount, 1);
+      assert.strictEqual(yield* fake.explicitCallCount, 0);
+    }).pipe(Effect.provide(LineupTestLayer)),
 );
 
 it.effect("replans from a fresh read instead of writing a stale explicit plan", () =>
@@ -527,7 +694,7 @@ it.effect("replans from a fresh read instead of writing a stale explicit plan", 
     const fake = yield* FakeProviderWorld;
     const team = yield* seedCustom(fake);
     yield* fake.setRosterAfterNextRead(humanEditedRoster);
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -555,7 +722,7 @@ it.effect("blocks an explicit write when the roster membership changed", () =>
       ...customRoster,
       players: [...customRoster.players, customPlayer("461.p.20005", "TE One", "TE", "BN")],
     });
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -575,7 +742,7 @@ it.effect("blocks an explicit write when the roster period changed", () =>
       ...customRoster,
       coverage: { type: "week", week: 4 },
     });
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
 
@@ -592,7 +759,7 @@ it.effect("blocks an explicit write when the scoring week changes during plannin
     const fake = yield* FakeProviderWorld;
     const team = yield* seedCustom(fake);
     const gate = yield* fake.blockRosterRead;
-    const runId = yield* createCustomRun(repository, team);
+    const runId = yield* createQueuedRun(repository, team);
 
     const fiber = yield* Effect.forkChild(worker.deliver([runId]));
     yield* Deferred.await(gate.started);
@@ -615,6 +782,7 @@ it.effect("lets a manual run bypass pause and enrollment after observation", () 
     const database = yield* ConnectionsDatabase;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* refuseCustomPlanning(fake);
     const gate = yield* fake.blockRosterRead;
 
     const fiber = yield* Effect.forkChild(runs.submit(owner, lineupRequest(team.id, requestId)));
@@ -695,6 +863,7 @@ it.effect("serializes duplicate workers and does not replay a completed team", (
     const worker = yield* LineupWorker;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* refuseCustomPlanning(fake);
     const created = yield* repository.createRequest({
       userId: owner,
       requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a4",
@@ -735,6 +904,7 @@ it.effect("keeps a partial multi-team batch honest and never replays a completed
     const database = yield* ConnectionsDatabase;
     const worker = yield* LineupWorker;
     const fake = yield* FakeProviderWorld;
+    yield* refuseCustomPlanning(fake);
     const seeded = yield* seed(fake, [
       teamFixture("461.l.1000.t.1", "Alpha"),
       teamFixture("461.l.1000.t.2", "Beta"),
@@ -782,7 +952,37 @@ it.effect("keeps a partial multi-team batch honest and never replays a completed
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-function createCustomRun(
+function setStoredImplementation(
+  database: ConnectionsDatabase["Service"],
+  runId: import("./LineupRun.ts").LineupRunId,
+  implementation: "provider_native" | "custom_policy",
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    const rows = yield* database
+      .select({ state: lineupRuns.state })
+      .from(lineupRuns)
+      .where(eq(lineupRuns.id, runId))
+      .limit(1);
+    const row = rows[0];
+    if (row === undefined) {
+      return yield* Effect.die(new Error("The queued run could not be loaded"));
+    }
+    const stored = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(LineupRunState))(row.state);
+    const implementationVersion =
+      implementation === "custom_policy" ? "custom-policy/1" : "provider-native/1";
+    const state = yield* Schema.encodeEffect(Schema.toCodecJson(LineupRunState))({
+      ...stored,
+      implementation,
+      implementationVersion,
+    });
+    yield* database
+      .update(lineupRuns)
+      .set({ state, implementation, implementationVersion })
+      .where(eq(lineupRuns.id, runId));
+  }).pipe(Effect.orDie);
+}
+
+function createQueuedRun(
   repository: LineupRunRepository["Service"],
   team: { readonly id: import("./FantasyTeam.ts").TeamId; readonly connectionId: ConnectionId },
 ): Effect.Effect<import("./LineupRun.ts").LineupRunId> {
@@ -797,7 +997,6 @@ function createCustomRun(
           connectionId: team.connectionId,
           target: { coverage: "week", week: 3 },
           trigger: "manual",
-          implementation: "custom_policy",
         },
       ],
     });

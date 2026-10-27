@@ -16,7 +16,6 @@ import {
   LineupRunNotFound,
   LineupSelectionInvalid,
   LineupTeamNotFound,
-  nativeLineupImplementation,
 } from "#contexts/connections/LineupRun.ts";
 import { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import type { LineupRunsShape } from "#contexts/connections/LineupRuns.ts";
@@ -54,7 +53,6 @@ export const LineupRunsLive = Layer.effect(
             connectionId: owned.team.connectionId,
             target: request.period,
             trigger: "manual",
-            implementation: nativeLineupImplementation,
           })),
         })
         .pipe(mapRepositoryError);

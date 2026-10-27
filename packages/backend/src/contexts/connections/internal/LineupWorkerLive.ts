@@ -221,7 +221,7 @@ export const LineupWorkerLive = Layer.effect(
         return { kind: "blocked" as const };
       }
       if (planned.kind === "refused") {
-        if (planned.action === "block") {
+        if (planned.refusal === "transient") {
           yield* block(run, "assignment_refused", planned.detail, policyRecordOf(planned));
           return { kind: "blocked" as const };
         }
@@ -283,9 +283,8 @@ export const LineupWorkerLive = Layer.effect(
         return { kind: "blocked" as const };
       }
       if (replanned.kind === "refused") {
-        if (replanned.action === "block") {
-          yield* block(run, "assignment_refused", replanned.detail, policyRecordOf(replanned));
-          return { kind: "blocked" as const };
+        if (replanned.refusal === "structural") {
+          return preparedNative(context, observation, refusalProvenance(replanned));
         }
         yield* block(
           run,
@@ -1236,6 +1235,7 @@ function refusalProvenance(
     version: outcome.policyVersion,
     code: outcome.code,
     detail: outcome.detail,
+    ...(outcome.basis === undefined ? {} : { basis: outcome.basis }),
   };
 }
 
@@ -1253,14 +1253,7 @@ function policyRecordOf(
 ): AttemptRecord {
   return {
     implementation: customLineupImplementation,
-    policy:
-      outcome.basis === undefined
-        ? refusalProvenance(outcome)
-        : {
-            kind: "planned",
-            version: outcome.policyVersion,
-            basis: outcome.basis,
-          },
+    policy: refusalProvenance(outcome),
   };
 }
 

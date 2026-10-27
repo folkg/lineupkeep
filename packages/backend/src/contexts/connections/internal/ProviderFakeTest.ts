@@ -1,6 +1,9 @@
 import {
   lineupAssignments,
   lineupPolicyVersion,
+  lineupRefusalKind,
+  noValueSourceRefusalCode,
+  noValueSourceRefusalDetail,
   planLineup,
   trailingPeriodCount,
 } from "@lineupkeep/lineup-policy";
@@ -33,6 +36,7 @@ import type {
   ProviderLeagueTeam,
   ProviderLineupAssignment,
   ProviderLineupOutcome,
+  ProviderLineupRefusal,
   ProviderLineupRequest,
   ProviderMatchup,
   ProviderNativeTarget,
@@ -52,6 +56,12 @@ import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
 
 type FakeWriteAction = "accept" | "reject" | "lost_response" | "unavailable" | "invalid";
+
+type FakePlanRefusal = {
+  readonly refusal: ProviderLineupRefusal;
+  readonly code: string;
+  readonly detail: string;
+};
 
 type FakeGate = {
   readonly started: Deferred.Deferred<void>;
@@ -87,6 +97,7 @@ type FakeProviderState = {
   readonly explicitAfter: ProviderRoster | undefined;
   readonly explicitRequests: ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>;
   readonly explicitCalls: number;
+  readonly planRefusal: FakePlanRefusal | undefined;
 };
 
 export type FakeProviderWorldShape = {
@@ -125,7 +136,16 @@ export type FakeProviderWorldShape = {
   readonly setExplicitAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly explicitRequests: Effect.Effect<ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>>;
   readonly explicitCallCount: Effect.Effect<number>;
+  readonly setPlanRefusal: (refusal: FakePlanRefusal | undefined) => Effect.Effect<void>;
 };
+
+export function refuseCustomPlanning(fake: FakeProviderWorldShape): Effect.Effect<void> {
+  return fake.setPlanRefusal({
+    refusal: "structural",
+    code: "policy:no-value-source",
+    detail: "This league publishes no value source the custom policy can use.",
+  });
+}
 
 export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakeProviderWorldShape>()(
   "@lineupkeep/backend/contexts/connections/internal/ProviderFakeTest/FakeProviderWorld",
@@ -162,6 +182,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         explicitAfter: undefined,
         explicitRequests: [],
         explicitCalls: 0,
+        planRefusal: undefined,
       });
       const modify = (
         update: (current: FakeProviderState) => FakeProviderState,
@@ -219,6 +240,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setExplicitAfter: (explicitAfter) => modify((current) => ({ ...current, explicitAfter })),
         explicitRequests: Effect.map(Ref.get(state), (current) => current.explicitRequests),
         explicitCallCount: Effect.map(Ref.get(state), (current) => current.explicitCalls),
+        setPlanRefusal: (planRefusal) => modify((current) => ({ ...current, planRefusal })),
       } satisfies FakeProviderWorldShape;
     }),
   );
@@ -573,17 +595,17 @@ const providerFake = Effect.gen(function* () {
     }),
     planLineup: Effect.fn("FakeProvider.planLineup")(function* (input: ProviderLineupRequest) {
       const current = yield* prepare(input, "read_player_details");
-      const outcome = planFakeLineup(input, current.playerDetails);
-      if (outcome.kind === "refused") {
+      if (current.planRefusal !== undefined) {
         return {
           kind: "refused" as const,
-          action: "native" as const,
+          refusal: current.planRefusal.refusal,
           policyVersion: lineupPolicyVersion,
-          code: outcome.code,
-          detail: outcome.detail,
+          code: current.planRefusal.code,
+          detail: current.planRefusal.detail,
           basis: undefined,
         };
       }
+      const outcome = planFakeLineup(input, current.playerDetails);
       return outcome;
     }),
   } satisfies ProviderShape;
@@ -683,12 +705,13 @@ function planFakeLineup(
   const planned = planLineup(candidates);
   if (planned.kind === "refused") {
     const refusal = planned.refusals.at(-1);
+    const code = refusal?.code ?? noValueSourceRefusalCode;
     return {
       kind: "refused",
-      action: "native",
+      refusal: lineupRefusalKind(code),
       policyVersion: lineupPolicyVersion,
-      code: refusal?.code ?? "policy:no-value-source",
-      detail: refusal?.detail ?? "This league publishes no value source the custom policy can use.",
+      code,
+      detail: refusal?.detail ?? noValueSourceRefusalDetail,
       basis: undefined,
     };
   }
@@ -705,7 +728,7 @@ function planFakeLineup(
   if (translated.kind === "refused") {
     return {
       kind: "refused",
-      action: "block",
+      refusal: lineupRefusalKind(translated.code),
       policyVersion: lineupPolicyVersion,
       code: translated.code,
       detail: translated.detail,

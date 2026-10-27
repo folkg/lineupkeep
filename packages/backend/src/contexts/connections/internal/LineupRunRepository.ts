@@ -7,6 +7,7 @@ import type { ConnectionId } from "#contexts/connections/Connection.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupRunOutcome } from "#contexts/connections/LineupRun.ts";
 import {
+  activeLineupImplementation,
   customLineupImplementation,
   customPolicyImplementationVersion,
   LineupPersistenceFailed,
@@ -14,7 +15,6 @@ import {
   LineupRequestId,
   LineupRunId,
   LineupUuid,
-  nativeLineupImplementation,
   providerNativeImplementationVersion,
 } from "#contexts/connections/LineupRun.ts";
 import type {
@@ -66,7 +66,6 @@ export type NewLineupRun = {
   readonly connectionId: ConnectionId;
   readonly target: LineupTargetPeriod;
   readonly trigger: LineupTrigger;
-  readonly implementation?: LineupImplementation;
 };
 
 type CreatedLineupRequest = {
@@ -88,7 +87,6 @@ const nonTerminalRunStatuses = [
 export type NewScheduledLineupRun = {
   readonly team: TeamId;
   readonly connectionId: ConnectionId;
-  readonly implementation?: LineupImplementation;
 };
 
 export type ClaimedLineupRun = {
@@ -179,14 +177,14 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 input.runs,
                 (run) =>
                   Effect.gen(function* () {
-                    const implementation = run.implementation ?? nativeLineupImplementation;
+                    const implementation = activeLineupImplementation;
                     const state: LineupRunState = {
                       _tag: "Queued",
                       team: run.team,
                       target: run.target,
                       trigger: run.trigger,
                       implementation,
-                      implementationVersion: implementationVersion(implementation),
+                      implementationVersion: implementationVersionOf(implementation),
                       queuedAt: now,
                       updatedAt: now,
                     };
@@ -202,7 +200,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                       status: lineupRunStatus(state),
                       state,
                       implementation,
-                      implementationVersion: implementationVersion(implementation),
+                      implementationVersion: implementationVersionOf(implementation),
                       attempts: 0,
                       nextActionAt: null,
                       createdAt: now,
@@ -262,14 +260,14 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               input.runs,
               (run) =>
                 Effect.gen(function* () {
-                  const implementation = run.implementation ?? nativeLineupImplementation;
+                  const implementation = activeLineupImplementation;
                   const state: LineupRunState = {
                     _tag: "Queued",
                     team: run.team,
                     target: { coverage: "current" },
                     trigger: "scheduled",
                     implementation,
-                    implementationVersion: implementationVersion(implementation),
+                    implementationVersion: implementationVersionOf(implementation),
                     queuedAt: input.at,
                     updatedAt: input.at,
                   };
@@ -285,7 +283,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                     status: lineupRunStatus(state),
                     state,
                     implementation,
-                    implementationVersion: implementationVersion(implementation),
+                    implementationVersion: implementationVersionOf(implementation),
                     attempts: 0,
                     nextActionAt: null,
                     createdAt: input.at,
@@ -482,7 +480,10 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               if (row === undefined) {
                 return Option.none<ClaimedLineupRun>();
               }
-              const record = yield* decodeRun(row);
+              const record = alignClaimedImplementation(
+                yield* decodeRun(row),
+                activeLineupImplementation,
+              );
               const state = record.state;
               if (isTerminal(state)) {
                 return Option.none<ClaimedLineupRun>();
@@ -1355,6 +1356,43 @@ function isTerminal(state: LineupRunState): boolean {
   }
 }
 
+function alignClaimedImplementation(
+  record: LineupRunRecord,
+  implementation: LineupImplementation,
+): LineupRunRecord {
+  if (hasWriteInFlight(record.state) || record.implementation === implementation) {
+    return record;
+  }
+  const implementationVersion = implementationVersionOf(implementation);
+  return {
+    ...record,
+    implementation,
+    implementationVersion,
+    state: { ...record.state, implementation, implementationVersion },
+  };
+}
+
+function hasWriteInFlight(state: LineupRunState): boolean {
+  switch (state._tag) {
+    case "Applying":
+    case "Verifying":
+      return true;
+    case "RetryWait":
+    case "Uncertain":
+      return state.writeIntent !== undefined;
+    case "Queued":
+    case "Reading":
+    case "Planning":
+    case "Validating":
+    case "Completed":
+    case "Skipped":
+    case "Blocked":
+    case "Failed":
+    case "Superseded":
+      return false;
+  }
+}
+
 function planState(
   state: LineupRunState,
   event: LineupRunEvent,
@@ -1493,7 +1531,7 @@ function mapPersistenceFailure(cause: unknown): LineupPersistenceFailed {
   return LineupPersistenceFailed.make({ cause });
 }
 
-function implementationVersion(implementation: LineupImplementation): string {
+function implementationVersionOf(implementation: LineupImplementation): string {
   return implementation === customLineupImplementation
     ? customPolicyImplementationVersion
     : providerNativeImplementationVersion;

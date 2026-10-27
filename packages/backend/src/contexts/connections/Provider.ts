@@ -567,6 +567,8 @@ export type ProviderLineupRequest = ProviderSessionMaterial & {
   readonly target: LineupTargetPeriod;
 };
 
+export type ProviderLineupRefusal = "structural" | "transient";
+
 export type ProviderLineupOutcome =
   | {
       readonly kind: "planned";
@@ -576,7 +578,7 @@ export type ProviderLineupOutcome =
     }
   | {
       readonly kind: "refused";
-      readonly action: "native" | "block";
+      readonly refusal: ProviderLineupRefusal;
       readonly policyVersion: string;
       readonly code: string;
       readonly detail: string;

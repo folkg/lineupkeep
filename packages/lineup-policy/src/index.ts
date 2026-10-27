@@ -6,7 +6,14 @@ export {
   startCutPreference,
   valueSourceLadder,
 } from "./source.ts";
-export { describeLineupRefusal, lineupAssignments, planLineup } from "./plan.ts";
+export {
+  describeLineupRefusal,
+  lineupAssignments,
+  lineupRefusalKind,
+  noValueSourceRefusalCode,
+  noValueSourceRefusalDetail,
+  planLineup,
+} from "./plan.ts";
 export { assessAvailability } from "./valuation.ts";
 export { trailingPeriodCount, trailingWindow } from "./window.ts";
 export type {

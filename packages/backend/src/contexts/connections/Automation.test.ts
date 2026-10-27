@@ -27,7 +27,11 @@ import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
 import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
-import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
+import {
+  FakeProviderWorld,
+  ProviderFakeTest,
+  refuseCustomPlanning,
+} from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { RetentionSweepLive } from "./internal/RetentionSweepRepository.ts";
 import { TeamRepository } from "./internal/TeamRepository.ts";
@@ -43,6 +47,7 @@ it.effect("runs one current-period automation per team per hour", () =>
     const runs = yield* LineupRuns;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    yield* refuseCustomPlanning(fake);
     const teams = yield* Teams;
     yield* teams.control(owner, [{ team, action: "enable" }]);
 
@@ -55,6 +60,8 @@ it.effect("runs one current-period automation per team per hour", () =>
     assert.strictEqual(current.runs.length, 1);
     assert.deepStrictEqual(current.runs[0]?.target, { coverage: "current" });
     assert.strictEqual(current.runs[0]?.trigger, "scheduled");
+    assert.strictEqual(current.runs[0]?.implementation, "custom_policy");
+    assert.strictEqual(current.runs[0]?.outcome?.implementation, "provider_native");
     assert.strictEqual(current.runs[0]?.status, "completed");
     assert.strictEqual(yield* fake.nativeCallCount, 1);
 
@@ -74,6 +81,7 @@ it.effect("collapses several missed hourly ticks into one current run", () =>
     const automation = yield* Automation;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    yield* refuseCustomPlanning(fake);
     const teams = yield* Teams;
     yield* teams.control(owner, [{ team, action: "enable" }]);
 
@@ -124,6 +132,7 @@ it.effect("completes a current hockey run in a rotisserie league with no scoring
       roster: hockeyRoster,
       nativeAfter: hockeyNativeAfter,
     });
+    yield* refuseCustomPlanning(fake);
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-25T19:00:00Z")));
     const requested = yield* Schema.decodeEffect(LineupRequestInput)({
       requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164f9",
@@ -153,6 +162,7 @@ it.effect("resolves the current fantasy day for a head-to-head hockey league wit
       roster: hockeyRoster,
       nativeAfter: hockeyNativeAfter,
     });
+    yield* refuseCustomPlanning(fake);
     yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-25T19:00:00Z")));
     const requested = yield* Schema.decodeEffect(LineupRequestInput)({
       requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164fa",
@@ -203,6 +213,7 @@ it.effect("repairs an undispatched scheduled delivery before scheduling another"
     const runs = yield* LineupRuns;
     const fake = yield* FakeProviderWorld;
     const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    yield* refuseCustomPlanning(fake);
     const teams = yield* Teams;
     yield* teams.control(owner, [{ team, action: "enable" }]);
     const now = yield* DateTime.now;
