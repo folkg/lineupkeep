@@ -31,7 +31,9 @@ const basis = makeSelectionBasis("test-basis");
 const willPlay = makeAvailabilityTier("will-play");
 const mightPlay = makeAvailabilityTier("might-play");
 const willNotPlay = makeAvailabilityTier("will-not-play");
+const notScheduled = makeAvailabilityTier("not-scheduled");
 const tiers = [willPlay, mightPlay, willNotPlay];
+const longerLadder = [willPlay, mightPlay, willNotPlay, notScheduled];
 
 describe("lineup optimization", () => {
   it("starts the highest-value legal players across flexible positions", () => {
@@ -458,6 +460,56 @@ describe("availability tiers", () => {
 });
 
 describe("problem contract", () => {
+  it("ranks every adjacent pair of rungs above the one below it", () => {
+    const pairs = longerLadder.slice(0, -1).map((tier, index) => [tier, longerLadder[index + 1]]);
+
+    for (const [above, below] of pairs) {
+      const problem = lineupProblem(
+        [startingSlot("RB", 1, "required", ["RB"]), benchSlot("BN", 1)],
+        [
+          player("above", 0, { positions: ["RB"], availabilityTier: above }),
+          player("below", 100, { positions: ["RB"], availabilityTier: below }),
+        ],
+        longerLadder,
+      );
+
+      const plan = planFrom(solveLineup(problem));
+
+      expect(plan.assignments).toEqual([assignment("above", "RB"), assignment("below", "BN")]);
+      expect(plan.totalSelectionValue).toBe(0);
+    }
+  });
+
+  it("cannot buy dominance over a player with no game with value", () => {
+    const problem = lineupProblem(
+      [startingSlot("RB", 1, "required", ["RB"]), benchSlot("BN", 1)],
+      [
+        player("available", 0, { positions: ["RB"] }),
+        player("idle", 100, { positions: ["RB"], availabilityTier: notScheduled }),
+      ],
+      longerLadder,
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("available", "RB"), assignment("idle", "BN")]);
+    expect(plan.totalSelectionValue).toBe(0);
+  });
+
+  it("moves a player out of a reserve list they are no longer eligible for", () => {
+    const problem = lineupProblem(
+      [startingSlot("C", 1, "required", ["C"]), reserveSlot("IR", 1), benchSlot("BN", 1)],
+      [
+        player("starter", 10, { positions: ["C"], currentSlotId: slotId("C") }),
+        player("moved", 5, { positions: ["C"], currentSlotId: slotId("IR") }),
+      ],
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("moved", "BN"), assignment("starter", "C")]);
+  });
+
   it("rejects a player whose availability tier is not declared", () => {
     const problem = lineupProblem(
       [benchSlot("BN", 1)],

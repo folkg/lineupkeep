@@ -671,6 +671,9 @@ function planFakeLineup(
 }
 
 function fakeAvailabilityOf(player: ProviderRoster["players"][number]): ProviderAvailabilityTier {
+  if (!player.scheduled) {
+    return "not-scheduled";
+  }
   switch (player.injuryCode) {
     case undefined:
       return "will-play";

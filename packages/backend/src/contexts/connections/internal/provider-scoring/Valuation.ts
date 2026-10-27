@@ -5,7 +5,7 @@ import type { AvailabilityAssessment, Period, PlayerAvailability, PolicyPlayer }
 
 export function assessAvailability(player: PolicyPlayer, period: Period): AvailabilityAssessment {
   if (!hasGame(player, period)) {
-    return { tier: "will-not-play", fact: "no-game", period };
+    return { tier: "not-scheduled", fact: "no-game", period };
   }
   return statusAssessment(player.availability);
 }
@@ -19,7 +19,9 @@ export function selectionUnits(points: Exact, scale: number): number {
 }
 
 function hasGame(player: PolicyPlayer, period: Period): boolean {
-  return !player.nonGamePeriods.some((candidate) => periodsEqual(candidate, period));
+  return (
+    player.scheduled && !player.nonGamePeriods.some((candidate) => periodsEqual(candidate, period))
+  );
 }
 
 function statusAssessment(availability: PlayerAvailability): AvailabilityAssessment {

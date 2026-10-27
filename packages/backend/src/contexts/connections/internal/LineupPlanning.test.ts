@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  ProviderAvailabilityTier,
   ProviderLeagueSettings,
   ProviderPlayerValue,
   ProviderRoster,
@@ -72,6 +73,147 @@ describe("provider-neutral lineup placement", () => {
     );
 
     expect(result.assignments).toEqual([]);
+  });
+
+  it("starts a player who cannot play ahead of one with no game to play in", () => {
+    const result = planned(
+      planAssignments({
+        league: league(),
+        roster: roster([
+          member("out", "QB", "BN", ["QB"], "will-not-play"),
+          member("idle", "QB", "QB", ["QB"], "not-scheduled"),
+        ]),
+        values: values([
+          ["out", 100, "will-not-play"],
+          ["idle", 9900, "not-scheduled"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([
+      { providerPlayerKey: "out", slot: "QB" },
+      { providerPlayerKey: "idle", slot: "BN" },
+    ]);
+  });
+
+  it("starts a player with a game ahead of both lower rungs", () => {
+    const result = planned(
+      planAssignments({
+        league: league(),
+        roster: roster([
+          member("playing", "QB", "BN", ["QB"], "will-play"),
+          member("out", "QB", "QB", ["QB"], "will-not-play"),
+          member("idle", "QB", "BN", ["QB"], "not-scheduled"),
+        ]),
+        values: values([
+          ["playing", 1, "will-play"],
+          ["out", 9000, "will-not-play"],
+          ["idle", 8000, "not-scheduled"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toContainEqual({ providerPlayerKey: "playing", slot: "QB" });
+  });
+
+  it("fills a required starting slot with a player who cannot play when nobody else can", () => {
+    const result = planned(
+      planAssignments({
+        league: league(),
+        roster: roster([member("p1", "QB", "QB", ["QB"], "not-scheduled")]),
+        values: values([["p1", 900]]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([]);
+  });
+
+  it("keeps a bye player on the bench while an active player can start in a weekly league", () => {
+    const active = planned(
+      planAssignments({
+        league: league(),
+        roster: roster([
+          member("bye", "QB", "QB", ["QB"], "not-scheduled"),
+          member("active", "QB", "BN", ["QB"], "will-play"),
+        ]),
+        values: values([
+          ["bye", 9900, "not-scheduled"],
+          ["active", 100, "will-play"],
+        ]),
+      }),
+    );
+
+    expect(active.assignments).toEqual([
+      { providerPlayerKey: "bye", slot: "BN" },
+      { providerPlayerKey: "active", slot: "QB" },
+    ]);
+
+    const allOnBye = planned(
+      planAssignments({
+        league: league(),
+        roster: roster([
+          member("bye-one", "QB", "QB", ["QB"], "not-scheduled"),
+          member("bye-two", "QB", "BN", ["QB"], "not-scheduled"),
+        ]),
+        values: values([
+          ["bye-one", 900, "not-scheduled"],
+          ["bye-two", 800, "not-scheduled"],
+        ]),
+      }),
+    );
+
+    expect(allOnBye.assignments).toEqual([]);
+  });
+
+  it("produces the same plan on a second run over its own output", () => {
+    const first = planned(
+      planAssignments({
+        league: league([
+          { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
+          { position: "RB", kind: "starting", count: 1, eligibility: ["RB"] },
+          { position: "BN", kind: "bench", count: 2, eligibility: [] },
+        ]),
+        roster: roster([
+          member("p1", "QB", "QB", ["QB"]),
+          member("p2", "RB", "RB", ["RB"]),
+          member("p3", "QB", "BN", ["QB"]),
+          member("p4", "RB", "BN", ["RB"]),
+        ]),
+        values: values([
+          ["p1", 100],
+          ["p2", 400],
+          ["p3", 900],
+          ["p4", 300],
+        ]),
+      }),
+    );
+    const current = roster([
+      member("p1", "QB", "QB", ["QB"]),
+      member("p2", "RB", "RB", ["RB"]),
+      member("p3", "QB", "BN", ["QB"]),
+      member("p4", "RB", "BN", ["RB"]),
+    ]);
+    const applied = applyAssignments(current, first.assignments);
+
+    const second = planned(
+      planAssignments({
+        league: league([
+          { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
+          { position: "RB", kind: "starting", count: 1, eligibility: ["RB"] },
+          { position: "BN", kind: "bench", count: 2, eligibility: [] },
+        ]),
+        roster: applied,
+        values: values([
+          ["p1", 100],
+          ["p2", 400],
+          ["p3", 900],
+          ["p4", 300],
+        ]),
+      }),
+    );
+
+    expect(first.assignments).toHaveLength(2);
+    expect(second.assignments).toEqual([]);
   });
 
   it("refuses a plan that moves a player through a reserve slot", () => {
@@ -233,6 +375,7 @@ function member(
   primaryPosition: string,
   slot: string,
   eligiblePositions: ReadonlyArray<string>,
+  availability: ProviderAvailabilityTier = "will-play",
 ): ProviderRoster["players"][number] {
   return {
     providerPlayerKey,
@@ -247,17 +390,31 @@ function member(
     injuryCode: undefined,
     injuryDetail: undefined,
     byeWeek: null,
-    scheduled: true,
+    scheduled: availability !== "not-scheduled",
     undroppable: null,
   };
 }
 
 function values(
-  scores: ReadonlyArray<readonly [string, number | null]>,
+  scores: ReadonlyArray<readonly [string, number | null, ProviderAvailabilityTier?]>,
 ): ReadonlyArray<ProviderPlayerValue> {
-  return scores.map(([providerPlayerKey, score]) => ({
+  return scores.map(([providerPlayerKey, score, availability]) => ({
     providerPlayerKey,
     score,
-    availability: "will-play",
+    availability: availability ?? "will-play",
   }));
+}
+
+function applyAssignments(
+  current: ProviderRoster,
+  assignments: ReadonlyArray<{ readonly providerPlayerKey: string; readonly slot: string }>,
+): ProviderRoster {
+  const slots = new Map(assignments.map((entry) => [entry.providerPlayerKey, entry.slot]));
+  return {
+    ...current,
+    players: current.players.map((player) => ({
+      ...player,
+      slot: slots.get(player.providerPlayerKey) ?? player.slot,
+    })),
+  };
 }

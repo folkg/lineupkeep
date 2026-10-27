@@ -1087,6 +1087,7 @@ function observe(
     name: player.name,
     slot: player.slot,
     editable: player.isEditable === true,
+    scheduled: player.scheduled,
   }));
   const window = league.periodWindow;
   return {
@@ -1113,6 +1114,7 @@ function compare(
     readonly name: string;
     readonly slot: string;
     readonly editable: boolean;
+    readonly scheduled: boolean;
   }>,
   roster: ProviderRoster,
 ):

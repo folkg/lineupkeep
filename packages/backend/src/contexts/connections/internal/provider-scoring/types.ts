@@ -107,11 +107,12 @@ export type AvailabilityAssessment =
   | { readonly tier: "might-play"; readonly fact: "day-to-day" }
   | { readonly tier: "might-play"; readonly fact: "unrecognised-status"; readonly code: string }
   | { readonly tier: "will-not-play"; readonly fact: "excluded"; readonly reason: ExclusionReason }
-  | { readonly tier: "will-not-play"; readonly fact: "no-game"; readonly period: Period };
+  | { readonly tier: "not-scheduled"; readonly fact: "no-game"; readonly period: Period };
 
 export type PolicyPlayer = {
   readonly id: string;
   readonly availability: PlayerAvailability;
+  readonly scheduled: boolean;
   readonly nonGamePeriods: ReadonlyArray<Period>;
 };
 

@@ -189,17 +189,21 @@ use it this period.
 
 Each player carries one availability tier for the target period, drawn from an ordered ladder:
 
-| Tier            | Meaning            | Provider facts that select it                                |
-| --------------- | ------------------ | ------------------------------------------------------------ |
-| `will-play`     | expected to appear | no status code                                               |
-| `might-play`    | may appear         | `DTD`; any status code the adapter does not recognise        |
-| `will-not-play` | will not appear    | `O`, `IR`, `IR-LT`, `SUSP`, `NA`; a bye in the target period |
+| Tier            | Meaning                    | Provider facts that select it                                       |
+| --------------- | -------------------------- | ------------------------------------------------------------------- |
+| `will-play`     | expected to appear         | no status code, and the team has a game                             |
+| `might-play`    | may appear                 | `DTD`; any status code the adapter does not recognise               |
+| `will-not-play` | will not appear, but could | `O`, `IR`, `IR-LT`, `SUSP`, `NA`                                    |
+| `not-scheduled` | no game to appear in       | no game for the player's team in the target period, including a bye |
 
-The ladder is three rungs because the provider itself distinguishes "may appear" from "will not
-appear", and that distinction does work in the objective: a doubtful player takes a contested starting
-position ahead of a suspended one, and a player who will play takes it ahead of both. A two-rung
-ladder would either treat day to day as healthy — the flaw this policy exists to avoid — or treat it
-as out, losing the ordering that fills a doubtful player ahead of an absent one.
+The ladder is four rungs because the provider distinguishes "may appear" from "will not appear" and
+neither of those is the same fact as "there is no game". A doubtful player takes a contested starting
+position ahead of a suspended one, and a player who will play takes it ahead of both. An injured
+player who is dressing is preferred over a healthy player whose team is not playing, when a position
+would otherwise stay empty. A three-rung ladder could express only one of those orderings; collapsing
+participation into "will not play" also loses the run record's ability to say why a player was benched.
+
+[ADR 0006](adr/0006-availability-tiers.md) records the fourth-rung amendment and its evidence.
 
 The ordering produces the intended behaviour directly, without any discount:
 
@@ -210,8 +214,8 @@ The ordering produces the intended behaviour directly, without any discount:
   doubtful player fills it ahead of an unavailable one, because the lower tiers and then the value
   term prefer something to nothing. That is the game-time-decision case.
 - Two unavailable players compete on value, so the better of them takes the place.
-- A bye is an availability fact, not a zero value. A player on bye keeps their mean and is marked
-  `will-not-play`.
+- A bye is an availability fact, not a zero value. A player on bye keeps their own value and is marked
+  `not-scheduled`, exactly as a player whose team has no game that date.
 
 Only the adapter interprets provider codes, and it does so in one table. This policy turns those
 facts into tiers in one total function, so every fact reaches exactly one rung; a test walks every
@@ -298,7 +302,7 @@ Reading the table:
   `(4.00 + 11.00 + 14.30) / 3 = 9.767` → **9.77**. Counting the bye as a zero would have produced
   7.33 and underrated them.
 - `BN-8` and `BN-13` have values of 16.10 and 9.80, and week 7 _is_ their bye. They are
-  `will-not-play` for the week and their values are untouched: a bye says nothing about how well a
+  `not-scheduled` for the week and their values are untouched: a bye says nothing about how well a
   player has been scoring.
 - `BN-11` is on injured reserve, so week 7 is `will-not-play`. Their four recorded weeks genuinely
   scored nothing, so their value is a real **0.00**.
@@ -384,7 +388,7 @@ the two goalies the crowd starts most.
    game is invisible until it is behind them, and a returning starter keeps a depressed value while
    missed weeks are still inside the window.
 5. **Byes excluded, injuries counted.** A published bye is a known absence of opportunity, so it is
-   excluded from the mean and the player is `will-not-play` for that period. A week a player was
+   excluded from the mean and the player is `not-scheduled` for that period. A week a player was
    injured looks like a zero performance, because the provider's dense series cannot distinguish the
    two.
 6. **A crowd signal is hindsight about other people.** Percent started follows what other managers

@@ -138,7 +138,7 @@ describe("availability", () => {
     );
 
     expect(result.players[0]?.availability).toEqual({
-      tier: "will-not-play",
+      tier: "not-scheduled",
       fact: "no-game",
       period: target,
     });
@@ -435,8 +435,9 @@ function player(
   id: string,
   availability: PlayerAvailability = { kind: "available" },
   nonGamePeriods: ReadonlyArray<Period> = [],
+  scheduled = true,
 ): PolicyPlayer {
-  return { id, availability, nonGamePeriods };
+  return { id, availability, scheduled, nonGamePeriods };
 }
 
 function scoringRules(values: ReadonlyArray<number | undefined>): ValueSource {

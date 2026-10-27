@@ -175,6 +175,7 @@ function policyPlayers(roster: ProviderRoster, period: Period): ReadonlyArray<Po
   return roster.players.map((player) => ({
     id: player.providerPlayerKey,
     availability: yahooAvailability(player.injuryCode),
+    scheduled: player.scheduled,
     nonGamePeriods: nonGamePeriods(player, period),
   }));
 }

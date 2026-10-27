@@ -94,6 +94,7 @@ it.effect("round-trips delivery and write-intent rows", () =>
           name: "Locked Starter",
           slot: "QB",
           editable: false,
+          scheduled: true,
         },
       ],
       status: "intended",

@@ -556,6 +556,7 @@ export const ProviderAvailabilityTier = Schema.Literals([
   "will-play",
   "might-play",
   "will-not-play",
+  "not-scheduled",
 ]);
 export type ProviderAvailabilityTier = typeof ProviderAvailabilityTier.Type;
 

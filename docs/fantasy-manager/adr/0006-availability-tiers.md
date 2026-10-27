@@ -61,6 +61,23 @@ policy rather than the provider-agnostic solver.
 - The exact assignment encoding grows one weight per rung, each larger than everything below it plus a
   full ladder of counts, so tier dominance is proved rather than approximated.
 
+## Amended: a fourth rung for a player with no game
+
+**2026-10-27, owner-approved.** The ladder gains `not-scheduled` below `will-not-play`. The original
+three rungs were drawn from the provider's status codes alone, and that was the whole problem: a
+player whose team is not playing carries no status code, so a ladder selected only by status could not
+see the fact at all. Measured on the owner's account, the planner started fifteen of fifty-seven
+players whose teams had no game that date, because the only consumer of "no game" could fire for a
+weekly period and every hockey league is date-scoped.
+
+The two facts are different and deserve adjacent rungs. `will-not-play` says the player will not appear
+though they could; `not-scheduled` says there is no game to appear in. The reference prefers the
+former when a position must be filled by someone who cannot contribute, and that ordering is kept
+here. Availability is still a dimension and never a discount: a player with no game keeps their value.
+
+The rung is declared by policy with the rest of the ladder, so the solver is unchanged — it compares
+rungs by declared order and needs no new rung, weight, or objective term.
+
 ## Deferred
 
 Real-world starting status (for example a backup quarterback) is not on the ladder. The provider

@@ -1,6 +1,8 @@
 import { Effect, Redacted, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
+import { planAssignments } from "#contexts/connections/internal/LineupPlanning.ts";
+import type { PlanAssignmentsResult } from "#contexts/connections/internal/LineupPlanning.ts";
 import type {
   PlayerAvailability,
   PolicyPlayer,
@@ -73,7 +75,7 @@ describe("Yahoo scoring translation", () => {
     );
 
     expect(assessment).toEqual({
-      tier: "will-not-play",
+      tier: "not-scheduled",
       fact: "no-game",
       period: { kind: "week", week: targetWeek },
     });
@@ -132,7 +134,7 @@ describe("Yahoo scoring translation", () => {
       score: 1702,
       availability: "will-play",
     });
-    expect(outcome.players[2]?.availability).toBe("will-not-play");
+    expect(outcome.players[2]?.availability).toBe("not-scheduled");
   });
 
   it("publishes one final score per player from the started percentage", () => {
@@ -184,6 +186,87 @@ describe("Yahoo scoring translation", () => {
       4400,
       ...recordedRosterRows.slice(1).map(() => null),
     ]);
+  });
+
+  it("tiers a player whose team is not playing at the bottom rung with the no-game fact", () => {
+    const period = { kind: "date" as const, date: "2026-10-26" };
+
+    expect(
+      assessAvailability({ ...policyPlayerWith(yahooAvailability("O")), scheduled: false }, period),
+    ).toEqual({ tier: "not-scheduled", fact: "no-game", period });
+    expect(
+      assessAvailability(
+        { ...policyPlayerWith(yahooAvailability(undefined)), scheduled: false },
+        period,
+      ).tier,
+    ).toBe("not-scheduled");
+  });
+
+  it("starts the player who has a game ahead of a higher-scoring player who does not", () => {
+    const roster = centerRoster([
+      { key: "idle", slot: "C", scheduled: false },
+      { key: "playing", slot: "BN", scheduled: true },
+    ]);
+
+    const { outcome, decision } = planCenters(roster, [
+      ["idle", 47],
+      ["playing", 13],
+    ]);
+
+    expect(outcome.players).toEqual([
+      { providerPlayerKey: "idle", score: 4700, availability: "not-scheduled" },
+      { providerPlayerKey: "playing", score: 1300, availability: "will-play" },
+    ]);
+    expect(planned(decision).assignments).toEqual([
+      { providerPlayerKey: "idle", slot: "BN" },
+      { providerPlayerKey: "playing", slot: "C" },
+    ]);
+  });
+
+  it("never starts a player without a game over one who has a game, whatever their scores", () => {
+    const roster = centerRoster([
+      { key: "idle", slot: "C", scheduled: false },
+      { key: "playing", slot: "BN", scheduled: true },
+    ]);
+
+    for (const [idlePercent, playingPercent] of [
+      [99, 1],
+      [50, 50],
+      [0, 0],
+    ] as const) {
+      const { decision } = planCenters(roster, [
+        ["idle", idlePercent],
+        ["playing", playingPercent],
+      ]);
+
+      expect(planned(decision).assignments).toContainEqual({
+        providerPlayerKey: "playing",
+        slot: "C",
+      });
+    }
+  });
+
+  it("changes the plan exactly when a player without a game holds a slot a playing player could fill", () => {
+    const percents = [
+      ["idle", 47],
+      ["playing", 13],
+    ] as const;
+    const hidden = centerRoster([
+      { key: "idle", slot: "C", scheduled: true },
+      { key: "playing", slot: "BN", scheduled: true },
+    ]);
+    const supplied = centerRoster([
+      { key: "idle", slot: "C", scheduled: false },
+      { key: "playing", slot: "BN", scheduled: true },
+    ]);
+    const benched = centerRoster([
+      { key: "idle", slot: "BN", scheduled: false },
+      { key: "playing", slot: "C", scheduled: true },
+    ]);
+
+    expect(planned(planCenters(hidden, percents).decision).assignments).toEqual([]);
+    expect(planned(planCenters(supplied, percents).decision).assignments).toHaveLength(2);
+    expect(planned(planCenters(benched, percents).decision).assignments).toEqual([]);
   });
 });
 
@@ -247,12 +330,78 @@ function startRate(
   };
 }
 
+function centerLeague(): ProviderLeagueSettings {
+  return {
+    ...hockeyLeague(),
+    rosterPositions: [position("C", 1), position("BN", 2), position("IR", 1)],
+  };
+}
+
+function centerRoster(
+  rows: ReadonlyArray<{
+    readonly key: string;
+    readonly slot: string;
+    readonly scheduled: boolean;
+    readonly injuryCode?: string;
+    readonly eligiblePositions?: ReadonlyArray<string>;
+  }>,
+): ProviderRoster {
+  return {
+    providerTeamKey: "recorded-hockey-team",
+    providerLeagueKey: "recorded-hockey-league",
+    coverage: { type: "date", date: "2026-10-26" },
+    players: rows.map((row) => ({
+      providerPlayerKey: row.key,
+      name: row.key,
+      displayPosition: "C",
+      primaryPosition: "C",
+      positionType: "P",
+      proTeamAbbreviation: undefined,
+      eligiblePositions: row.eligiblePositions ?? ["C"],
+      slot: row.slot,
+      isEditable: true,
+      injuryCode: row.injuryCode,
+      injuryDetail: undefined,
+      byeWeek: null,
+      scheduled: row.scheduled,
+      undroppable: null,
+    })),
+  };
+}
+
+function planCenters(
+  roster: ProviderRoster,
+  percents: ReadonlyArray<readonly [string, number]>,
+): {
+  readonly outcome: Extract<ProviderLineupOutcome, { kind: "scored" }>;
+  readonly decision: PlanAssignmentsResult;
+} {
+  const league = centerLeague();
+  const outcome = runPlan(
+    { ...hockeyRequest(), league, roster },
+    { rates: percents.map(([key, percent]) => startRate(key, percent, [])) },
+  );
+  if (outcome.kind !== "scored") {
+    throw new Error("Expected scored values.");
+  }
+  return { outcome, decision: planAssignments({ league, roster, values: outcome.players }) };
+}
+
+function planned(
+  result: PlanAssignmentsResult,
+): Extract<PlanAssignmentsResult, { kind: "planned" }> {
+  if (result.kind !== "planned") {
+    throw new Error(`Expected a plan, received ${result.detail}.`);
+  }
+  return result;
+}
+
 function weekTarget(week: number): ProviderLineupRequest["target"] {
   return Schema.decodeSync(LineupTargetPeriod)({ coverage: "week", week });
 }
 
 function policyPlayerWith(availability: PlayerAvailability): PolicyPlayer {
-  return { id: "recorded-player", availability, nonGamePeriods: [] };
+  return { id: "recorded-player", availability, scheduled: true, nonGamePeriods: [] };
 }
 
 function recordedLeague(): ProviderLeagueSettings {

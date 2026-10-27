@@ -33,6 +33,7 @@ const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
   makeAvailabilityTier("will-play"),
   makeAvailabilityTier("might-play"),
   makeAvailabilityTier("will-not-play"),
+  makeAvailabilityTier("not-scheduled"),
 ];
 
 export function planAssignments(input: PlanAssignmentsInput): PlanAssignmentsResult {

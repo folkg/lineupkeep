@@ -23,9 +23,14 @@ import { LineupDeliveryLocal } from "./internal/LineupDeliveryLocal.ts";
 import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
 import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
-import { lineupRuns, lineupTeamLeases, lineupWriteIntents } from "./internal/LineupRunTables.ts";
+import {
+  lineupRunDiagnostics,
+  lineupRuns,
+  lineupTeamLeases,
+  lineupWriteIntents,
+} from "./internal/LineupRunTables.ts";
 import type { LineupRunRecord } from "./internal/LineupRunTables.ts";
-import { LineupRunState } from "./internal/LineupRunWorkflow.ts";
+import { LineupObservation, LineupRunState } from "./internal/LineupRunWorkflow.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
 import {
   FakeProviderWorld,
@@ -210,6 +215,48 @@ it.effect("plans a league without points rules from the published started percen
     assert.strictEqual(run.state.outcome.changes.length, 2);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect("records whether each player had a game in the run observation", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedCustom(fake);
+    yield* fake.setRoster({
+      ...customRoster,
+      players: customRoster.players.map((player) =>
+        player.providerPlayerKey === "461.p.20003" ? { ...player, scheduled: false } : player,
+      ),
+    });
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const rows = yield* database
+      .select({ data: lineupRunDiagnostics.data })
+      .from(lineupRunDiagnostics)
+      .where(
+        and(eq(lineupRunDiagnostics.runId, runId), eq(lineupRunDiagnostics.kind, "observation")),
+      )
+      .limit(1);
+    const stored = rows[0];
+    assert.isDefined(stored);
+    const observation = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(LineupObservation))(
+      stored.data,
+    );
+
+    assert.deepStrictEqual(
+      observation.players.map((player) => [player.name, player.scheduled]),
+      [
+        ["QB One", true],
+        ["RB One", true],
+        ["RB Two", false],
+        ["QB Two", true],
+      ],
+    );
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
