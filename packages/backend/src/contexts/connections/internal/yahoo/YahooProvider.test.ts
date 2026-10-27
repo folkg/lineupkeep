@@ -13,6 +13,7 @@ import {
 
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import {
+  ProviderOperationUnsupported,
   ProviderPeriodMismatch,
   ProviderRequestFailed,
   ProviderResponseInvalid,
@@ -50,6 +51,8 @@ import {
   yahooNflLeagueSettingsWithTextTeamCount,
   yahooNflLeagueSettingsWithoutEndWeek,
   yahooNhlLeagueSettings,
+  yahooNhlLeagueSettingsWith,
+  yahooNflLeagueSettingsWith,
   yahooNhlRoster,
   yahooRosterWithOpponentKinds,
   yahooRosterWithoutOpponent,
@@ -546,6 +549,95 @@ it.effect("reads a rotisserie league that publishes no scoring-week window", () 
         ["Shots on Goal", true],
       ],
     );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("derives a weekly cadence from the league's own declared deadline", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      yahooNhlLeagueSettingsWith({
+        league_key: "466.l.4003",
+        league_id: "4003",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4003",
+        weekly_deadline: "3",
+        edit_key: "12",
+      }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4003",
+      sport: "hockey",
+    });
+
+    assert.strictEqual(league.rosterCoverage, "week");
+    assert.strictEqual(league.weeklyDeadline, "3");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect(
+  "resolves a week target and reads a week roster for a league that declares a weekly deadline",
+  () => {
+    const internet = recordingInternet((request) =>
+      jsonResponse(
+        request.url.pathname.endsWith("/settings")
+          ? yahooNflLeagueSettingsWith({ weekly_deadline: "3", edit_key: "6" })
+          : yahooNflRoster,
+      ),
+    );
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+
+      const league = yield* provider.readLeague({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        sport: "football",
+      });
+      const roster = yield* provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "466.l.4000.t.1",
+        period: { type: "week", week: 6 },
+      });
+
+      assert.strictEqual(league.rosterCoverage, "week");
+      assert.strictEqual(league.periodWindow?.current, 6);
+      assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
+      assert.strictEqual(
+        internet.calls[1]?.url.pathname,
+        "/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent",
+      );
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
+
+it.effect("refuses a league whose declared deadline identifies no cadence", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      yahooNhlLeagueSettingsWith({
+        league_key: "466.l.4004",
+        league_id: "4004",
+        weekly_deadline: "fortnightly",
+        edit_key: "whenever",
+      }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readLeague({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4004",
+        sport: "hockey",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderOperationUnsupported);
+    assert.include(error.reason, "fortnightly");
+    assert.include(error.reason, "lineup period cannot be resolved");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

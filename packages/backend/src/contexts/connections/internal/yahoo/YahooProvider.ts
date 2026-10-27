@@ -11,6 +11,7 @@ import {
 import { communityStartRateCut } from "#contexts/connections/internal/provider-scoring/ValueSource.ts";
 import {
   ProviderPeriodMismatch,
+  ProviderOperationUnsupported,
   ProviderRequestFailed,
   ProviderResponseInvalid,
   ProviderReviewLinkInvalid,
@@ -70,10 +71,6 @@ const leagueSport = {
   nfl: "football",
   nhl: "hockey",
 } as const;
-const rosterCoverageBySport = {
-  football: "week",
-  hockey: "date",
-} as const satisfies Record<"football" | "hockey", ProviderCoverageKind>;
 const reviewHosts = {
   football: "football.fantasysports.yahoo.com",
   hockey: "hockey.fantasysports.yahoo.com",
@@ -990,7 +987,7 @@ function leagueSettings(
   payload: typeof LeaguePayload.Type,
   requestedLeagueKey: string,
   sport: "football" | "hockey",
-): Effect.Effect<ProviderLeagueSettings, ProviderResponseInvalid> {
+): Effect.Effect<ProviderLeagueSettings, ProviderResponseInvalid | ProviderOperationUnsupported> {
   return Effect.gen(function* () {
     const attributes = payload.league;
     const settings = singleEntry(attributes.settings);
@@ -1001,6 +998,7 @@ function leagueSettings(
       });
     }
     const periodWindow = yield* weekWindow(attributes);
+    const rosterCoverage = yield* declaredRosterCoverage(attributes);
     const webUrl = yield* Effect.try({
       try: () => reviewBase(attributes.url, sport, leagueIdFromKey(attributes.league_key)).href,
       catch: () => ProviderResponseInvalid.make({ operation: "read_league", field: "league.url" }),
@@ -1022,7 +1020,7 @@ function leagueSettings(
       usesFaab: settings.uses_faab,
       draftStatus: optionalNonEmpty(attributes.draft_status),
       periodWindow,
-      rosterCoverage: rosterCoverageBySport[sport],
+      rosterCoverage,
       rosterPositions: settings.roster_positions.map(({ roster_position }) => {
         const kind = rosterSlotKind(roster_position.position, roster_position.is_starting_position);
         return {
@@ -1051,6 +1049,47 @@ function leagueSettings(
     };
   });
 }
+
+function declaredRosterCoverage(
+  attributes: (typeof LeaguePayload.Type)["league"],
+): Effect.Effect<ProviderCoverageKind, ProviderOperationUnsupported> {
+  const deadline = attributes.weekly_deadline ?? "";
+  const coverage =
+    weeklyDeadlineCoverage[deadline] ?? editKeyCoverage(editKeyOf(attributes.edit_key));
+  if (coverage !== undefined) {
+    return Effect.succeed(coverage);
+  }
+  return ProviderOperationUnsupported.make({
+    operation: "read_league",
+    reason: `The league declares weekly deadline ${JSON.stringify(deadline)} and editable period ${JSON.stringify(attributes.edit_key ?? null)}. Neither identifies a weekly or daily roster cadence, so this league's lineup period cannot be resolved.`,
+  });
+}
+
+function editKeyOf(editKey: string | number | undefined): string | undefined {
+  return editKey === undefined ? undefined : String(editKey);
+}
+
+function editKeyCoverage(editKey: string | undefined): ProviderCoverageKind | undefined {
+  if (editKey === undefined) {
+    return undefined;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(editKey)) {
+    return "date";
+  }
+  return /^\d+$/u.test(editKey) ? "week" : undefined;
+}
+
+const weeklyDeadlineCoverage: Readonly<Record<string, ProviderCoverageKind>> = {
+  intraday: "date",
+  game: "date",
+  "1": "week",
+  "2": "week",
+  "3": "week",
+  "4": "week",
+  "5": "week",
+  "6": "week",
+  "7": "week",
+};
 
 function leagueFormat(
   scoringType: string,
@@ -2080,6 +2119,7 @@ const LeagueAttributes = Schema.Struct({
   scoring_type: Schema.NonEmptyString,
   scoring_label: Schema.optional(Schema.String),
   weekly_deadline: Schema.optional(Schema.String),
+  edit_key: Schema.optional(Schema.Union([Schema.String, Schema.Finite])),
   season: Season,
   draft_status: Schema.optional(Schema.String),
 });

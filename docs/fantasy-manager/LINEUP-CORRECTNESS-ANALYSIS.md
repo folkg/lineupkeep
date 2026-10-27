@@ -164,12 +164,12 @@ disposition. "Seam" means `Provider*` contracts in
 
 ### Present but wrong or unused where it should be used
 
-| Fact               | Problem                                                                                                                                                                                                                                          | Disposition                                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `weeklyDeadline`   | coverage is chosen by **sport** (`rosterCoverageBySport`), not by the league. A weekly-deadline hockey league resolves a date target and then mismatches the roster's own week coverage. The reference takes coverage from the roster read.      | fix in step 7 (independent of the reported bug, but the same class of "we assumed instead of asking")       |
-| `injuryCode` table | `O`, `IR`, `IR-LT`, `SUSP`, `NA`, `DTD` are mapped. `Q`, `P`, `GTD` — which the reference lists as _healthy_ — land on `unrecognised` → `might-play`. The behaviour is defensible; the mapping is an accident.                                   | make it explicit in the table with the tier each code earns, and record the disagreement with the reference |
-| percent cut        | we request `diamond`, which is published and **zero for every player in every league**. The roster-level guard ("prefer the cut when any player's cut is above zero") therefore never fires, so every plan silently uses the overall percentage. | §5; switch the literal to the populated cut                                                                 |
-| `byeWeek`          | only consulted for weekly coverage; harmless once participation is read, redundant for football                                                                                                                                                  | keep; it is the football-specific spelling of the same fact                                                 |
+| Fact               | Problem                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Disposition                                                                                                                                          |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `weeklyDeadline`   | coverage was chosen by **sport** (`rosterCoverageBySport`), not by the league, so a weekly-deadline hockey league resolved a date target and then mismatched the roster's own week coverage. Measured 2026-10-27, the deadline alone is not enough: `intraday` is daily, `1`–`7` weekly, and the empty deadline appears on both a weekly football league and two daily hockey leagues. The league's `edit_key` is the provider's own identifier of the current editable period and names the same cadence in the same units. | **fixed**: coverage now comes from the league's declared deadline, falling back to the edit key's shape, and an unclassifiable pair refuses the read |
+| `injuryCode` table | `O`, `IR`, `IR-LT`, `SUSP`, `NA`, `DTD` are mapped. `Q`, `P`, `GTD` — which the reference lists as _healthy_ — land on `unrecognised` → `might-play`. The behaviour is defensible; the mapping is an accident.                                                                                                                                                                                                                                                                                                               | make it explicit in the table with the tier each code earns, and record the disagreement with the reference                                          |
+| percent cut        | we request `diamond`, which is published and **zero for every player in every league**. The roster-level guard ("prefer the cut when any player's cut is above zero") therefore never fires, so every plan silently uses the overall percentage.                                                                                                                                                                                                                                                                             | §5; switch the literal to the populated cut                                                                                                          |
+| `byeWeek`          | only consulted for weekly coverage; harmless once participation is read, redundant for football                                                                                                                                                                                                                                                                                                                                                                                                                              | keep; it is the football-specific spelling of the same fact                                                                                          |
 
 ### Deliberately rejected, with the reason
 
@@ -565,13 +565,20 @@ automation after step 2 is verified against a live read, not before.**
 ### Step 7 — cadence from the league, not the sport
 
 - **Layer:** Yahoo adapter (`rosterCoverage`) and target resolution.
-- **Change:** derive coverage from the league's `weeklyDeadline` (or from the roster's own
-  `coverage_type`, as the reference does), rather than from the sport. Add the `weekly_deadline`
-  values the adapter cannot classify to the refusal vocabulary rather than guessing.
+- **Change:** derive coverage from the league's declared `weekly_deadline` and `edit_key`, rather than
+  from the sport. A daily deadline (`intraday`, `game`) is date coverage; a weekday deadline (`1`–`7`)
+  is week coverage; an empty deadline follows the edit key, which is a date for a daily league and a
+  scoring-week number for a weekly one. A pair the adapter cannot classify refuses the league read
+  with `provider.operation_unsupported` and a reason naming both values.
 - **Test:** a league declaring a weekly deadline resolves a week target and reads a week roster; a
-  daily league keeps resolving dates.
+  daily league keeps resolving dates; an unclassifiable deadline refuses.
 - **Behaviour:** a weekly-deadline hockey league stops mismatching. Not part of the reported defect;
   same class of error.
+- **Evidence:** read-only, all five teams, 2026-10-27 — `intraday` with a date edit key on two hockey
+  teams, an empty deadline with a date edit key on the other two, and an empty deadline with the week
+  number `8` on the football team. Roster reads declared `date` for the four hockey teams and `week`
+  for football. The deadline alone therefore cannot decide: the empty literal appears on both
+  cadences.
 
 ### Deferred, with the condition that would reopen them
 

@@ -167,6 +167,11 @@ export const yahooNflLeagueSettingsForAnotherLeague = nflLeaguePayload({
   league_key: "466.l.9999",
 });
 
+export const yahooNflLeagueSettingsWith = (
+  attributes: Readonly<Record<string, unknown>>,
+): { fantasy_content: Record<string, unknown> } =>
+  nflLeaguePayload({ ...nflLeagueAttributes, ...attributes });
+
 function withoutAttribute<T extends Record<string, unknown>>(
   record: T,
   attribute: keyof T,
@@ -378,7 +383,7 @@ export const yahooNhlRotoLeagueSettings = {
         draft_status: "postdraft",
         num_teams: 12,
         max_teams: "20",
-        edit_key: "42",
+        edit_key: "2026-10-25",
         weekly_deadline: "",
         roster_type: "roster",
         league_update_timestamp: "1790000000",
@@ -536,6 +541,23 @@ export const yahooNhlRotoLeagueSettings = {
     ],
   },
 };
+
+const nhlLeagueAttributes = yahooNhlLeagueSettings.fantasy_content.league[0];
+
+export function yahooNhlLeagueSettingsWith(attributes: Readonly<Record<string, unknown>>): {
+  fantasy_content: Record<string, unknown>;
+} {
+  return {
+    fantasy_content: {
+      ...yahooNhlLeagueSettings.fantasy_content,
+      "yahoo:uri": `/fantasy/v2/league/${String(attributes["league_key"])}/settings`,
+      league: [
+        { ...nhlLeagueAttributes, ...attributes },
+        yahooNhlLeagueSettings.fantasy_content.league[1],
+      ],
+    },
+  };
+}
 
 export const yahooNflRoster = {
   fantasy_content: {
