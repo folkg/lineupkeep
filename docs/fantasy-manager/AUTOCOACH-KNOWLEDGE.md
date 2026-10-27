@@ -27,11 +27,17 @@ the piece our rewrite dropped.
 
 ```
 start_score(player) =
-    base(player)                                  # percent started, or inverse rank, or points
+    base(player)                                  # percent started, inverse rank, or (max-games
+                                                  #   leagues) the ownership score, see §5
   × injury_factor(player)                         # 1, or 1e-3, or 1e-3 × 1e-1 on long-term IR
   × participation_factor(player)                  # 1e-7 when the player has no game
   × (starting_factor if confirmed starting)       # ×100 for a starting goalie / starting pitcher
 ```
+
+A league with a per-position games limit takes a different branch entirely: its base is the ownership
+score — a roster-share and rank composite, not the crowd's daily start share — and its participation
+penalty applies only while the position is under its games pace. Both are recorded in [§5](#5-per-player-facts)
+and [§8](#8-max-games-per-position-and-churn).
 
 The multipliers are chosen so their ranges cannot collide:
 `1e-7 (no game) < 1e-3 (injured) < 1e-2 (confirmed not starting, baseball and the max-games path only)
@@ -148,26 +154,26 @@ Every roster player is flattened from the provider's `player` node by
 `yahooPlayerProcessing.service.ts` into `IPlayer` (`common/types/Player.ts`). This table is the
 complete set of facts the reference reads, what each drives, and the lesson.
 
-| #   | Fact                       | Provider field                                                                    | Drives                                                           | Note                                    |
-| --- | -------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------- |
-| P1  | has a game                 | `opponent` (string), `"Bye"`, or absent                                           | participation factor `1e-7`                                      | the fact our rewrite dropped            |
-| P2  | postponed game             | external `postponedTeams` set from the Yahoo Graphite scoreboard                  | overrides P1 to "no game"                                        | separate read, not a roster field       |
-| P3  | injury status              | `status_full`, default `"Healthy"`                                                | injury factor, long-term factor                                  | long name, not the code                 |
-| P4  | long-term IR               | player's _eligible positions_ include `IL` or `IR`                                | extra `×0.1`                                                     | eligibility, not status                 |
-| P5  | real-world starting status | `starting_status.is_starting` (`0`/`1`, else `"N/A"`)                             | `×100` when starting; `×1e-2` when explicitly not starting (MLB) | goalies and pitchers only               |
-| P6  | percent started            | `percent_started.value`, or a cut's value                                         | base score for NBA/NHL/MLB                                       | one cut, default `"diamond"`            |
-| P7  | percent owned              | `percent_owned.value`                                                             | base-score fallback; ownership score                             | unit misuse, see §12                    |
-| P8  | percent-owned delta        | `percent_owned.delta`                                                             | ownership score adjustment, capped at +4                         | add/drop only                           |
-| P9  | ranks                      | `player_ranks` for `L30, L14, PS7, PSR, L4W, PW, PN4W`                            | NFL and weekly base score; ownership score                       | ordinal, never a value                  |
-| P10 | eligible positions         | `eligible_positions[].position`                                                   | slot eligibility, long-term IR, all position counting            | includes slot names, not only positions |
-| P11 | display position           | `display_position` split on `,`                                                   | position-cap filter for add candidates                           | can differ from eligibility             |
-| P12 | editable                   | `is_editable` (`1`/`0`)                                                           | the player is excluded from every move when false                | the lock                                |
-| P13 | undroppable                | `is_undroppable` (`1`/`0`)                                                        | never a drop candidate                                           |                                         |
-| P14 | ownership type             | `ownership.ownership_type` (`waivers`/`freeagents`), `waiver_date`                | add/drop mechanics                                               |                                         |
-| P15 | selected position          | `selected_position.position`                                                      | current slot                                                     |                                         |
-| P16 | bye week                   | `bye_weeks.week`                                                                  | not read; P1 covers it for football                              |                                         |
-| P17 | games played by position   | team-level `games_played.games_played_by_position` (`played`, `max`, `projected`) | max-games capacity reduction and churn                           | team-scoped, not per player             |
-| P18 | innings pitched            | team-level `games_played.innings_pitched` (`pitched`, `max`, `projected`)         | the same for pitchers                                            |                                         |
+| #   | Fact                       | Provider field                                                                    | Drives                                                              | Note                                    |
+| --- | -------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------- |
+| P1  | has a game                 | `opponent` (string), `"Bye"`, or absent                                           | participation factor `1e-7`                                         | the fact our rewrite dropped            |
+| P2  | postponed game             | external `postponedTeams` set from the Yahoo Graphite scoreboard                  | overrides P1 to "no game"                                           | separate read, not a roster field       |
+| P3  | injury status              | `status_full`, default `"Healthy"`                                                | injury factor, long-term factor                                     | long name, not the code                 |
+| P4  | long-term IR               | player's _eligible positions_ include `IL` or `IR`                                | extra `×0.1`                                                        | eligibility, not status                 |
+| P5  | real-world starting status | `starting_status.is_starting` (`0`/`1`, else `"N/A"`)                             | `×100` when starting; `×1e-2` when explicitly not starting (MLB)    | goalies and pitchers only               |
+| P6  | percent started            | `percent_started.value`, or a cut's value                                         | base score for NBA/NHL/MLB, unless the league caps games            | one cut, default `"diamond"`            |
+| P7  | percent owned              | `percent_owned.value`                                                             | **max-games base score**; ownership score; percent-started fallback | the anti-churn metric, see §5           |
+| P8  | percent-owned delta        | `percent_owned.delta`                                                             | ownership score adjustment, capped at +4                            | add/drop only                           |
+| P9  | ranks                      | `player_ranks` for `L30, L14, PS7, PSR, L4W, PW, PN4W`                            | NFL and weekly base score; ownership score                          | ordinal, never a value                  |
+| P10 | eligible positions         | `eligible_positions[].position`                                                   | slot eligibility, long-term IR, all position counting               | includes slot names, not only positions |
+| P11 | display position           | `display_position` split on `,`                                                   | position-cap filter for add candidates                              | can differ from eligibility             |
+| P12 | editable                   | `is_editable` (`1`/`0`)                                                           | the player is excluded from every move when false                   | the lock                                |
+| P13 | undroppable                | `is_undroppable` (`1`/`0`)                                                        | never a drop candidate                                              |                                         |
+| P14 | ownership type             | `ownership.ownership_type` (`waivers`/`freeagents`), `waiver_date`                | add/drop mechanics                                                  |                                         |
+| P15 | selected position          | `selected_position.position`                                                      | current slot                                                        |                                         |
+| P16 | bye week                   | `bye_weeks.week`                                                                  | not read; P1 covers it for football                                 |                                         |
+| P17 | games played by position   | team-level `games_played.games_played_by_position` (`played`, `max`, `projected`) | max-games capacity reduction and churn                              | team-scoped, not per player             |
+| P18 | innings pitched            | team-level `games_played.innings_pitched` (`pitched`, `max`, `projected`)         | the same for pitchers                                               |                                         |
 
 Details worth keeping:
 
@@ -211,6 +217,65 @@ Details worth keeping:
 - **P17/P18 are team-scoped.** `games_played` and `innings_pitched` live on the user's team object
   (`teams;out=transactions,games_played`), not on a player or on league settings. League settings do
   carry `max_games_played` and `max_innings_pitched`; the reference parses them and uses neither.
+- **P6 and the cut literals.** The reference requests `percent_started.cut_types=diamond` and reads the
+  requested cut when present, falling back to the node's own `value` (the overall percentage) when the
+  cut is missing. The default cut is hard-coded as `"diamond"` in `getPercentValueForCut`. **Which cut
+  is populated is a provider fact, not a code fact**: on the owner's account `diamond` is published and
+  `0` for every player in every league, while `platinum`, `gold`, `silver`, and `bronze` are populated
+  and differ from the overall value. The evidence and the resulting recommendation are in
+  [the correctness analysis](LINEUP-CORRECTNESS-ANALYSIS.md#5-percent-cuts-platinum-is-populated-diamond-is-dead).
+  So the reference's `"diamond"` default silently degrades to the overall percentage, which is why its
+  results looked plausible.
+
+### The ownership score, in full
+
+The ownership score is the base for every league with a games limit, and the comparison used for every
+add, drop, and swap. `ownershipScoreFunctionFactory` (`playerOwnershipScoreFunctions.service.ts`) builds
+it from four parts:
+
+```
+ownershipScore(player) =
+    0.5 × (percent_owned − positionalScarcityOffset(player))
+  + 0.5 × rankScore(player)
+  + min(percent_owned_delta, 4)
+```
+
+- **Percent owned, weighted 0.5 (`OWNERSHIP_FACTOR`).** The share of leagues that roster the player. It
+  is a season-long, slow-moving signal: it changes when a player is picked up or dropped across the
+  provider's whole population, not when a crowd makes a daily lineup choice. Half the score is
+  therefore stable from day to day.
+- **Rank score, weighted 0.5.** For every rank type present, add
+  `min(numPlayersInLeague / rank, weight / 5)`, then multiply the sum by 5, so each rank contributes at
+  most its declared weight and the total is on a 0–100 scale. `numPlayersInLeague` is
+  `num_teams × numStandardRosterSpots` (every declared slot except the inactive lists). The weights are
+  per sport and are the only per-sport part of the composite: `last30Days 40, last14Days 30, next7Days
+  10, restOfSeason 20` for NHL/MLB/NBA, and `last4Weeks 40, projectedWeek 35, next4Weeks 25` for NFL.
+  Absent ranks are `-1` and skipped. These are trailing-form and forward-looking _orderings_, so they
+  also move slowly — a rank is not recomputed on a per-date basis.
+- **Ownership delta, bounded at +4 (`OWNERSHIP_DELTA_ADJUSTMENT_BOUND`).** `min(percent_owned_delta, 4)`
+  is a small nudge toward players being picked up right now. The bound is one-sided: a drop in
+  ownership is not penalised.
+- **Positional scarcity offset.** `percent_owned − offset`, where the offset is the percent owned of the
+  _replacement-level_ player at the position. `getReplacementLevels` allocates the league's starting
+  slots × teams across positions, distributes bench and flex capacity proportionally (capped by
+  `POSITIONAL_MAX_EXTRA_PLAYERS`), and the offset is the ownership of that Nth-best available player,
+  read raw from the provider's top-players list. A player with several eligible positions takes the
+  _minimum_ offset, i.e. the most favourable comparison. The purpose is comparability across
+  positions: a league whose defence pool is deep has a high replacement-level ownership at defence, so
+  a 20 %-owned defenceman scores below a 20 %-owned centre in a shallow pool.
+
+**Why a max-games league uses this and not percent started.** Two independent anti-churn devices:
+
+1. **A stable base.** Percent owned plus trailing rank barely moves between days; percent started is
+   _by construction_ a daily number ("share of leagues that started him for this date"). A games limit
+   turns every unnecessary start into a spent game from a fixed budget, so a daily-moving ordering
+   churns the lineup and burns the budget on whoever the crowd liked that day. The owner's recollection
+   — that the max-games path used percent owned "to encourage less churning of positions" — is
+   exactly what the code does: `scoreFunctionMaxGamesPlayed` takes
+   `base = ownershipScoreFunction(player)` and never touches percent started.
+2. **A pace-dependent participation rule** (`M5`/`M6`): above the position's games pace, incumbents get
+   a bounded boost and participation is ignored; below it, a player with no game is multiplied by
+   `1e-7` and the lineup churns freely to bank games.
 
 ## 6. Roster slot semantics
 
@@ -327,6 +392,14 @@ Applies to baseball (and would apply to basketball). League declares `max_games_
   declared count by one and gives the unit to `BN` (`Team.ts:134`). With `max = 82` the buffer yields a
   83.23-game allowance, "to allow for some day-to-day variance" — so you stop starting at that position
   once you are projected to exceed the cap, rather than being forced to bench at the cap.
+- **M1a. The base score on this path is the ownership score, not percent started.**
+  `scoreFunctionMaxGamesPlayed` starts from `ownershipScoreFunction(player)` — percent owned minus the
+  positional scarcity offset, half-weighted, plus a half-weighted rank composite, plus a bounded
+  ownership delta — and applies the injury factors to that. `getInitialScore`, the percent-started
+  base every other sport path uses, is never called here. That is the concrete form of "leagues with
+  max games played used percent owned to encourage less churning": the metric is slow-moving by
+  construction, where percent started is a daily figure. See
+  [the ownership score](#the-ownership-score-in-full).
 - **M2. The reduction is repeated per position** (`reduceAvailableRosterSpots` called once per
   over-cap position), and for innings pitched it falls back from `P` to `RP` to `SP` because the
   innings cap is recorded per position type.
@@ -336,8 +409,11 @@ Applies to baseball (and would apply to basketball). League declares `max_games_
   0.90 at the start of the season to 0.99 at the end (`scoreFunctionMaxGamesPlayed`).
 - **M5. Above the threshold, incumbents are protected.** If a player's position pace
   (`projected / max`) is above the threshold and the player is _not_ reserve-eligible, they get
-  `+((pace - threshold) / (1 - threshold)) × 10` added to their score — a boost between 0 and 10,
-  explicitly "to make it harder to replace players that are currently in the lineup".
+  `+((pace - threshold) / (1 - threshold)) × 10` added to their score — a boost between 0 and 10 on a
+  base that runs roughly 0–104, so up to about a tenth of the scale, explicitly "to make it harder to
+  replace players that are currently in the lineup". Note what is absent while the pace is above the
+  threshold: **no participation penalty at all**. A good player who is not playing today keeps his
+  full score and his boost, because the point is to stop spending games on him unnecessarily.
 - **M6. Below the threshold, participation decides.** The score is multiplied by `1e-7` when the player
   has no game, "to introduce more churn by swapping in players with games more regularly". A player
   playing today beats a better player who is not, and the better player is saved for a day they play.
@@ -484,6 +560,18 @@ Recorded so they are not copied by accident. Severity is my reading; each is sep
 - **J12. The churn threshold and its +10 boost are arbitrary but load-bearing.** They are the only
   thing preventing daily churn in a max-games league, and they are the reason a better player can be
   benched: the boost is added _after_ the value, in the value's units.
+- **J13. The percent-started cut literal `"diamond"` is dead and the fallback hides it.** Every cut
+  request is validated only by the fact that the response echoes it, so `diamond` returns `0` for every
+  player in every one of the owner's leagues while `platinum`, `gold`, `silver`, and `bronze` are
+  populated. Because `getPercentValueForCut` falls back to the overall `value` when the cut value is
+  missing — and because `0` is a number, not missing — the code has two ways to silently end up on the
+  overall percentage and no way to tell. A wrong literal should be an observed empty population, not a
+  quiet fall back; pick the literal from evidence and fail the read when it is uniformly zero.
+- **J14. Two different base metrics behind one name.** `start_score` means "percent started with
+  factors" in three paths and "ownership composite with factors" in the max-games path. The branch is
+  invisible in the type, the name, and the call site; only the max-games entry point reveals it. It
+  works because the two metrics live in disjoint leagues, but it is the kind of overload that makes a
+  score unexplainable later.
 
 ## 13. Facts the reference does not establish
 
@@ -507,6 +595,13 @@ Kept so nobody mistakes absence for a decision.
   a healthy player on IR; it does not say which one drives the provider's own enforcement.
 - **U8. Nothing about multiple lineups per day.** The reference rewrites the current period and has no
   notion of a decision per game.
+- **U9. What a cut population _is_.** The provider publishes `platinum`, `diamond`, `gold`, `silver`,
+  and `bronze` cuts of the started and owned percentages. Which leagues each cohort contains is not
+  documented here and was not established; only which literals are populated, and that they differ
+  from the overall value, is measured (see
+  [the cut evidence](LINEUP-CORRECTNESS-ANALYSIS.md#5-percent-cuts-platinum-is-populated-diamond-is-dead)).
+  A request that names several cuts at once is not honoured: the cut container is omitted entirely, so
+  one literal per request is the only reliable shape.
 
 ## 14. Index
 

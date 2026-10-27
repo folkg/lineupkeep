@@ -96,11 +96,13 @@ Across the four teams: **15 of 57 starting units are occupied by players whose t
 eligible (started slot, benched player) pairs, i.e. thirteen swaps that a participation-aware ordering
 would have made. The plan the worker would write changes
 **nothing** on three of the four teams, i.e. the algorithm is _satisfied_ with the lineup the owner
-complained about. On the fourth, the plan is refused outright (§6), so that team also changes nothing.
+complained about. On the fourth, the plan is refused outright (§7), so that team also changes nothing.
 
 **The ordering is the whole explanation.** Each violation pair is one started player and one benched
 player, both eligible for the same starting slot, with the scores the provider published for that date
-(hundredths of a percent started):
+(hundredths of a percent started). The recorded provenance names the population as `overall`, which is
+the second half of the story: the requested cut (`diamond`) is published and zero for every player, so
+the plan silently used the overall percentage — see §5:
 
 | Team     | Starting slot | Started player's score | Best eligible benched player's score | Started player has a game? |
 | -------- | ------------- | ---------------------: | -----------------------------------: | -------------------------- |
@@ -119,13 +121,13 @@ field a player who is not playing. The missing input is not a weight or a tie-br
 swap exists and the lineup is the best available from that roster. hockey-1's single no-game starter is
 a goaltender, and no benched goaltender has a game, so again no swap exists. Neither is evidence
 against the bug; both are the "player who cannot play must fill a required slot" case that must keep
-working (§8, test 2).
+working (§9, test 2).
 
 **The roster also shows the reserve problem the owner described.** Eight players sit in reserve slots
 across the four teams. Seven of them **have a game today**. One of those seven carries **no injury code
 at all** — a healthy player parked on `IR+`. The reference treats that as a roster problem
 (`healthyOnIL`); our planner tries to promote the healthy player, discovers the move transits a reserve
-slot, and refuses the whole team. See §6.
+slot, and refuses the whole team. See §7.
 
 ## 4. Fact inventory against the seam
 
@@ -153,20 +155,21 @@ disposition. "Seam" means `Provider*` contracts in
 
 | Fact                                                 | Reference source                                            | Consequence today                                                         | Disposition                                            |
 | ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ |
-| **has a game in the target period**                  | `opponent` on the roster player (string / `null` / `"Bye"`) | **the reported failure**                                                  | **in scope, first** (§5)                               |
-| **real-world starting status**                       | `starting_status.is_starting` (goalies, pitchers)           | a backup goalie with a game is indistinguishable from a confirmed starter | in scope, later (§9 step 5)                            |
-| games played by position, `played`/`max`/`projected` | team-level `games_played`                                   | no max-games support                                                      | deferred: unreachable in football/hockey (§7)          |
+| **has a game in the target period**                  | `opponent` on the roster player (string / `null` / `"Bye"`) | **the reported failure**                                                  | **in scope, first** (§6)                               |
+| **real-world starting status**                       | `starting_status.is_starting` (goalies, pitchers)           | a backup goalie with a game is indistinguishable from a confirmed starter | in scope, later (§10 step 6)                           |
+| games played by position, `played`/`max`/`projected` | team-level `games_played`                                   | no max-games support                                                      | deferred: unreachable in football/hockey (§8)          |
 | innings pitched                                      | team-level `games_played.innings_pitched`                   | same                                                                      | deferred: not a supported sport                        |
-| postponed games                                      | external schedule/scoreboard read                           | a postponed game would look like a game                                   | deferred with a named limitation (§9)                  |
+| postponed games                                      | external schedule/scoreboard read                           | a postponed game would look like a game                                   | deferred with a named limitation (§10)                 |
 | pending transactions                                 | roster `transactions` (waivers, pending trades)             | a player in a pending transaction is a free variable                      | deliberately out of scope; the lock is its future home |
 
 ### Present but wrong or unused where it should be used
 
-| Fact               | Problem                                                                                                                                                                                                                                     | Disposition                                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `weeklyDeadline`   | coverage is chosen by **sport** (`rosterCoverageBySport`), not by the league. A weekly-deadline hockey league resolves a date target and then mismatches the roster's own week coverage. The reference takes coverage from the roster read. | fix in step 6 (independent of the reported bug, but the same class of "we assumed instead of asking")       |
-| `injuryCode` table | `O`, `IR`, `IR-LT`, `SUSP`, `NA`, `DTD` are mapped. `Q`, `P`, `GTD` — which the reference lists as _healthy_ — land on `unrecognised` → `might-play`. The behaviour is defensible; the mapping is an accident.                              | make it explicit in the table with the tier each code earns, and record the disagreement with the reference |
-| `byeWeek`          | only consulted for weekly coverage; harmless once participation is read, redundant for football                                                                                                                                             | keep; it is the football-specific spelling of the same fact                                                 |
+| Fact               | Problem                                                                                                                                                                                                                                          | Disposition                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `weeklyDeadline`   | coverage is chosen by **sport** (`rosterCoverageBySport`), not by the league. A weekly-deadline hockey league resolves a date target and then mismatches the roster's own week coverage. The reference takes coverage from the roster read.      | fix in step 7 (independent of the reported bug, but the same class of "we assumed instead of asking")       |
+| `injuryCode` table | `O`, `IR`, `IR-LT`, `SUSP`, `NA`, `DTD` are mapped. `Q`, `P`, `GTD` — which the reference lists as _healthy_ — land on `unrecognised` → `might-play`. The behaviour is defensible; the mapping is an accident.                                   | make it explicit in the table with the tier each code earns, and record the disagreement with the reference |
+| percent cut        | we request `diamond`, which is published and **zero for every player in every league**. The roster-level guard ("prefer the cut when any player's cut is above zero") therefore never fires, so every plan silently uses the overall percentage. | §5; switch the literal to the populated cut                                                                 |
+| `byeWeek`          | only consulted for weekly coverage; harmless once participation is read, redundant for football                                                                                                                                                  | keep; it is the football-specific spelling of the same fact                                                 |
 
 ### Deliberately rejected, with the reason
 
@@ -182,7 +185,68 @@ disposition. "Seam" means `Provider*` contracts in
 | the +10 pace boost and the `1.0`-scaled churn threshold                                                   | a value adjustment standing in for "do not churn equal players"; our solver's minimum-change tie-break does it exactly, without units                    |
 | the team-level `is_editable`, `edit_key`, `is_flex`, `on_disabled_list`, `minimum_games`, `is_prescoring` | redundant with per-player locks, or unused by the reference too                                                                                          |
 
-## 5. Where the participation fact belongs
+## 5. Percent cuts: platinum is populated, diamond is dead
+
+The value basis for every hockey league is the crowd's started percentage. The provider can publish that
+percentage for several populations, called cuts, and a cut is requested per read. Which cut we request is
+therefore a real decision, and our current choice is wrong.
+
+**What the reference does.** It requests `percent_started.cut_types=diamond` and reads the requested
+cut when present, falling back to the node's overall `value` when the cut is absent
+(`getPercentValueForCut`, default `"diamond"`). So the reference's behaviour is "diamond, or overall".
+
+**What the provider actually publishes.** Read-only, all five teams, 2026-10-27, one cut literal per
+request, percent started (percent owned behaves the same way). `positive/total` is the number of players
+with a value above zero out of those carrying the cut; `distinct` is the number of distinct values.
+
+| Team       | Overall                   | Platinum                 | Diamond                   | Gold               | Silver             | Bronze             |
+| ---------- | ------------------------- | ------------------------ | ------------------------- | ------------------ | ------------------ | ------------------ |
+| football-1 | 15/15, distinct 13, 1–98  | 14/14, distinct 12, 1–98 | **0/14, distinct 1, 0–0** | 14/14, distinct 14 | 14/14, distinct 14 | 15/15, distinct 14 |
+| hockey-1   | 21/21, distinct 18, 5–97  | 21/21, distinct 20, 1–96 | **0/21, distinct 1, 0–0** | 21/21, distinct 17 | 21/21, distinct 18 | 21/21, distinct 20 |
+| hockey-2   | 18/18, distinct 16, 13–99 | 18/18, distinct 17, 2–98 | **0/18, distinct 1, 0–0** | 18/18, distinct 13 | 18/18, distinct 16 | 18/18, distinct 18 |
+| hockey-3   | 22/22, distinct 19, 3–97  | 22/22, distinct 16, 1–96 | **0/21, distinct 1, 0–0** | 22/22, distinct 16 | 22/22, distinct 15 | 22/22, distinct 17 |
+| hockey-4   | 22/22, distinct 19, 2–95  | 20/20, distinct 18, 1–94 | **0/19, distinct 1, 0–0** | 20/20, distinct 15 | 20/20, distinct 19 | 22/22, distinct 20 |
+
+Four further measurements:
+
+- **Diamond is zero for percent owned as well as percent started**, in every league, for every player.
+  It is a published literal with no data behind it in this account.
+- **Platinum, gold, silver, and bronze are all populated** and all differ from the overall value. On the
+  four hockey teams, 81 of 83 players carry both values, and **no** player's platinum value equals their
+  overall value: these are different populations, not a rescaling.
+- **A cut can omit a player.** Football's platinum cut carries 14 of 15 roster players, hockey-4's 20
+  of 22. A cut is a narrower population, so absence means "not measured in this cohort", not
+  "unmeasured".
+- **Asking for several cuts in one request returns no cut container at all.** One literal per request is
+  the only reliable shape; a comma-separated list silently yields nothing.
+
+**Does the choice matter?** Re-planning the four hockey rosters with the same scores and the same
+availability tiers, changing only the population, moves **0 to 2 of 15 starting assignments** per team
+(two on the 19-player team, none on the two 22-player teams). It is a real but modest effect on these
+rosters — not the difference between a sane and an insane lineup.
+
+**Recommendation: request `platinum`.** Precisely:
+
+1. **Stop asking for `diamond`.** It costs a request parameter and a guard that can never fire, and it
+   hides the fact that we are on the overall population. A cut whose every value is zero is a finding to
+   record, not a state to normalise.
+2. **Prefer `platinum` for the plan**, keeping the existing roster-level guard in a corrected form: use
+   the cut only when every player who has an overall value also has a cut value; otherwise use the
+   overall percentage for the whole plan. That keeps one population per plan (the current policy's rule)
+   and avoids benching a player the provider _did_ measure, just not in that cohort.
+3. **Record the population on the plan**, as the provenance label already does (`overall` today), so a
+   later reader can tell which cohort priced the lineup.
+4. **Fail loudly if the chosen cut becomes uniformly zero.** That is the guard that would have caught
+   `diamond` immediately.
+
+Why platinum rather than gold, silver, or bronze: the populated cuts all carry signal, and the two
+decision-relevant facts are that platinum is populated and that the owner's recollection of the old
+app's behaviour points at it. The cohort definitions are not documented by the provider and this pass
+did not establish them; picking the cut the reference's own operators remember is a better use of the
+available evidence than picking the one with the widest spread today. This is a value-basis choice
+inside the provider: no seam change, no solver change, and it does not touch availability.
+
+## 6. Where the participation fact belongs
 
 The rule this project applies: **a fact crosses the seam as a neutral concept when the application needs
 it for a decision that is not provider-specific and a second provider could plausibly supply it
@@ -221,6 +285,10 @@ ordering is worth keeping, and it needs a fourth rung `not-scheduled` below `wil
 | `will-not-play` | will not appear, but could | `O`, `IR`, `IR-LT`, `SUSP`, `NA`; a bye |
 | `not-scheduled` | no game to appear in       | no game in the target period            |
 
+**Decided:** on 2026-10-27 the owner approved adding the fourth rung, `not-scheduled`, below
+`will-not-play`. That amends [ADR 0006](../adr/0006-availability-tiers.md)'s three-rung decision, so the
+correction must also add the ADR note that records it; the solver is unaffected either way.
+
 The ladder is declared by policy (`LineupPlanning.availabilityLadder`) and carried on the problem; the
 solver compares rungs by declared order and needs no change. The fourth rung only arbitrates between
 players who cannot contribute, so it can never displace a contributor — the first three terms decide
@@ -238,7 +306,7 @@ contribute.
 because the run record stays unable to distinguish "benched: injured" from "benched: no game", which is
 the failure mode this document exists to correct, and because the reference's ordering is then lost.
 
-## 6. The reserve rule
+## 7. The reserve rule
 
 ### The facts
 
@@ -308,37 +376,62 @@ must be **writable by construction**: reserve slots accept only players who alre
 is one expression change in `LineupPlanning` (`reserveEligible` becomes "may remain where they are")
 and it removes the refusal without inventing a partial-write protocol. A reserve player can then still
 leave (their non-reserve slots are unaffected), the displaced player lands on the bench, and a team is
-never blocked by a capability gap. Step 5 of §9 turns the full shuffle back on after one authorised
+never blocked by a capability gap. Step 6 of §10 turns the full shuffle back on after one authorised
 acceptance write.
 
-## 7. Max games per position and churn
+## 8. Max games per position and churn
 
 **Decision: deferred, with the shape recorded.**
 
-- It is **unreachable in our supported sports**. Yahoo's per-position games limit is a baseball and
-  basketball setting; football plays one game per week and hockey has no games limit in a Yahoo league.
-  Our football league publishes no such setting, and the roster read exposes no `games_played`.
-- The reference's expression is **capacity, not factors** (document A, M1): a position projected above
-  its cap loses a starting unit to the bench, and the ordinary overfilled rule benches the worst player
-  there. That is directly expressible in our problem — reduce the starting slot's capacity, and mark the
-  remaining unit optional if required capacity would otherwise over-constrain — with no new objective
-  term.
-- The reference's _churn_ half (M5/M6: a 0..10 boost for incumbents above the pace threshold, and a
-  `1e-7` penalty below it) must **not** be ported. Its purpose is "do not churn a good player, do churn
-  when the pace is slack", and our solver already has an exact version of the first half as the
-  minimum-change tie-break. The second half ("slot the player who is playing today") is what the
-  availability ladder now does, without a threshold.
-- What it would need: a `gamesPlayed` fact on the seam — per position, `{played, max, projected}` — read
-  from the team object, plus a policy decision about which games count. That is a new read, a new
-  contract field, and a product decision, not a correction to this defect.
+Three parts, decided separately, because they have three different fates.
+
+**(a) The value basis: percent owned, not percent started.** This is the part the owner remembered, and
+the code confirms it: `scoreFunctionMaxGamesPlayed` starts from `ownershipScoreFunction(player)` and
+never calls the percent-started base at all (document A, M1a, and its §5 _The ownership score, in full_). The reason is anti-churn. Percent started is a **daily** figure — the share of leagues that
+started the player _for that date_ — so an ordering built on it changes every day. In a league where
+every start consumes a game from a fixed per-position budget, daily re-ordering spends the budget on
+whoever the crowd liked that day. Percent owned is a **season-long roster share**, half the composite,
+with trailing rank as the other half: both move slowly, so the ordering is stable and the lineup stops
+churning. That is exactly "used percent owned as the metric there to encourage less churning of
+positions".
+
+For us this is a **value-basis decision inside the provider**, not an objective change: the seam carries
+one final score per player, so a max-games provider policy would construct its score from percent owned,
+ranks, the bounded ownership delta and the positional-scarcity offset — and publish it. Nothing about
+availability, the ladder, or the solver is involved. Two consequences if we ever support such a sport:
+the score is no longer "crowd start share" and the provenance label must say so; and the positional
+scarcity offset becomes load-bearing, because percent owned is not comparable across positions without
+it.
+
+**(b) The constraint: shrink capacity.** This part transfers exactly (document A, M1). A position
+projected above its cap loses a starting unit to the bench and the ordinary overfilled rule benches the
+worst player there. In our problem that is a reduced starting slot capacity — the remaining unit marked
+optional if required capacity would otherwise over-constrain — with no new objective term and no
+factor multiplication.
+
+**(c) The churn mechanics: do not port the arithmetic.** The reference adds a 0..10 boost to incumbents
+above the pace threshold and multiplies by `1e-7` for a player with no game below it. Both are value
+adjustments standing in for two rules we can express directly and exactly: "do not churn equal players"
+is already the solver's minimum-change tie-break, and "slot the player who is playing today" is the
+availability ladder — except that the reference _suppresses_ participation above the pace threshold to
+conserve games. That suppression is the one behaviour with no current equivalent, and it is a real
+product question, not a port: it means deliberately benching a player who is playing, to save his games
+for later. Recorded as a decision for whoever adds the sport.
+
+**Decision: deferred as a whole, because it is unreachable in our supported sports.** Yahoo's
+per-position games limit is a baseball and basketball setting; football plays one game per week and
+Yahoo hockey has no such limit. Our football league publishes no such setting and the roster read
+exposes no `games_played`. Reopening condition: a supported sport that declares the limit. What it would
+then need is a `gamesPlayed` fact on the seam — per position, `{played, max, projected}`, read from the
+team object — plus the two decisions above.
 
 **Churn we do have.** Our scheduler creates a scheduled run per eligible team **every hour**
 (`infra/hosts/cloudRun.ts`: `"0 * * * *"`), where the reference set lineups for a league only when a game
 was about to start (document A, H3). The minimum-change tie-break keeps a stable plan stable, so this is
 not a correctness defect — but it is more writes than the reference, and it makes "the plan is a fixed
-point on unchanged inputs" a test worth having (§8, test 4).
+point on unchanged inputs" a test worth having (§9, test 4).
 
-## 8. Sanity checklist, as tests
+## 9. Sanity checklist, as tests
 
 Each is a statement a correct algorithm must satisfy, phrased to become a test. The layer in brackets is
 where the test belongs.
@@ -379,13 +472,25 @@ where the test belongs.
 18. **[unit, provider]** The roster read requests the participation member and parses it: `null` and
     absent → not scheduled, `"Bye"` → not scheduled, any other string → scheduled; a payload without
     the member is a shape failure, not "everyone is playing".
+19. **[policy]** The started-percentage read requests the populated cut (`platinum`), not `diamond`, and
+    a cut that comes back present, complete, and uniformly zero is treated as a finding rather than
+    silently replaced by the overall value.
+20. **[policy]** A plan uses one population: either the cut for every player who has one, or the overall
+    percentage for all, chosen once per roster and recorded in the provenance; a player the cut omits is
+    priced from the overall percentage rather than benched as unmeasured.
+21. **[policy, deferred sport]** If a league declares a per-position games limit, its final score is
+    built from the ownership composite (percent owned, ranks, bounded delta, positional scarcity) and
+    never from percent started; its games limit is expressed as starting-slot capacity, and no
+    availability or value factor is multiplied by a pace threshold.
 
-Tests 1, 2, and 18 fail today by construction. Tests 4–8 and 12–17 fail today because the fact never
-arrives. Tests 3, 9, 10, and 11 pass today and must keep passing.
+Tests 1, 2, 18, and 19 fail today by construction. Tests 4–8 and 12–17 fail today because the
+participation fact never arrives; test 20 fails today because the diamond guard always falls through to
+the overall value. Tests 3, 9, 10, and 11 pass today and must keep passing. Test 21 is a design
+condition for a sport we do not yet support.
 
-## 9. The ordered correction
+## 10. The ordered correction
 
-Six steps. Each is independently testable, and steps 1–2 are the whole fix for the reported bug. No
+Seven steps. Each is independently testable, and steps 1–2 are the whole fix for the reported bug. No
 step changes the solver, the architecture, or the provider boundary. **Re-enable the four hockey teams'
 automation after step 2 is verified against a live read, not before.**
 
@@ -422,7 +527,20 @@ automation after step 2 is verified against a live read, not before.**
   adds a field, not a leak).
 - **Behaviour:** none; the next failure is diagnosable.
 
-### Step 4 — make the plan writable, then unblock the fourth team
+### Step 4 — price from the populated population
+
+- **Layer:** Yahoo adapter (`readStartRates` request literal; the cut-preference rule in the provider's
+  scoring modules).
+- **Change:** request `percent_started.cut_types=platinum` instead of `diamond`; keep the roster-level
+  completeness guard, corrected to "every player with an overall value also has a cut value"; record
+  the population actually used in the plan provenance; treat a uniformly zero cut as a recorded finding
+  and fall back to the overall percentage, not as a silent success.
+- **Tests:** 19, 20.
+- **Behaviour:** three of the owner's five teams would price from platinum and two from the overall
+  percentage, moving at most two starting assignments per team today. No seam change, no solver change,
+  and it is independent of availability, so it can land before or after step 2.
+
+### Step 5 — make the plan writable, then unblock the fourth team
 
 - **Layer:** planner (`LineupPlanning.rosterPlayer` reserve eligibility; the `assignments` refusal).
 - **Change:** reserve occupancy is "may remain where they are" until reserve writes are verified; the
@@ -430,11 +548,11 @@ automation after step 2 is verified against a live read, not before.**
   mapped in the provider's code table until it is unreachable, then delete it deliberately.
 - **Tests:** 13 (partially: leaving reserve works), 14, 12.
 - **Behaviour:** the team currently refused on `assignment:reserve-slot` produces a plan again. The
-  full two-way shuffle waits for step 5.
+  full two-way shuffle waits for step 6.
 
-### Step 5 — verify and enable reserve writes
+### Step 6 — verify and enable reserve writes
 
-- **Layer:** provider write path; the planner restriction from step 4.
+- **Layer:** provider write path; the planner restriction from step 5.
 - **Change:** one authorised acceptance write that moves a player into a reserve list and one that moves
   them out, read back and compared, following the pattern already used for the explicit-assignment
   verification in [the write verification record](RESEARCH.md#live-yahoo-explicit-assignment-write-verification-2026-10-26).
@@ -444,7 +562,7 @@ automation after step 2 is verified against a live read, not before.**
 - **Gate:** a live write, so owner authorisation, exactly like the earlier explicit-write acceptance.
 - **Behaviour:** the IR shuffle the owner described, in both directions.
 
-### Step 6 — cadence from the league, not the sport
+### Step 7 — cadence from the league, not the sport
 
 - **Layer:** Yahoo adapter (`rosterCoverage`) and target resolution.
 - **Change:** derive coverage from the league's `weeklyDeadline` (or from the roster's own
@@ -459,14 +577,14 @@ automation after step 2 is verified against a live read, not before.**
 
 | Item                                                  | Condition                                                                                                                                                      |
 | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| max games per position, and its pace arithmetic       | a supported sport that declares the limit; §7 records the shape                                                                                                |
+| max games per position, and its pace arithmetic       | a supported sport that declares the limit; §8 records the shape                                                                                                |
 | postponement                                          | the first observed postponed game, or a schedule read for another reason                                                                                       |
-| confirmed starting goalie/pitcher (`starting_status`) | next after step 5; it is a participation refinement the reference used, and ADR 0006's premise that the provider publishes no such signal is wrong for goalies |
+| confirmed starting goalie/pitcher (`starting_status`) | next after step 6; it is a participation refinement the reference used, and ADR 0006's premise that the provider publishes no such signal is wrong for goalies |
 | `Q`/`P`/`GTD` mapping                                 | before the next season's injury-code drift; make the table explicit now                                                                                        |
 | category- and rotisserie-aware scoring                | unchanged from ADR 0009; the crowd share is still the only value for our hockey leagues                                                                        |
 | transaction coupling                                  | when an add/drop surface exists; pending transactions lock players                                                                                             |
 
-## 10. What this correction does not change
+## 11. What this correction does not change
 
 - The solver, its objective, its encodings, and its proofs. The ladder length is policy data it already
   accepts.
