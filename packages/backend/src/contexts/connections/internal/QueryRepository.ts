@@ -7,7 +7,7 @@ import {
   ConnectionCredentialGeneration,
   ConnectionId,
   ConnectionStatus,
-  Provider,
+  ProviderKey,
 } from "#contexts/connections/Connection.ts";
 import type { ConnectionError } from "#contexts/connections/Connection.ts";
 import { FantasyTeam, TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -32,7 +32,7 @@ export type OwnedTeam = {
   readonly connection: {
     readonly id: ConnectionId;
     readonly status: ConnectionStatus;
-    readonly provider: Provider;
+    readonly provider: ProviderKey;
     readonly generation: ConnectionCredentialGeneration;
     readonly envelope: string;
   };
@@ -49,7 +49,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         readonly id: string;
         readonly connectionId: string;
         readonly userId: string;
-        readonly provider: "yahoo";
+        readonly provider: string;
         readonly providerTeamKey: string;
         readonly providerLeagueKey: string;
         readonly league: "nfl" | "nhl";
@@ -65,7 +65,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         readonly status: "linking" | "ready" | "reconnect-required" | "disconnected";
         readonly generation: number | null;
         readonly envelope: string | null;
-        readonly credentialProvider: "yahoo" | null;
+        readonly credentialProvider: string | null;
       }): Effect.Effect<OwnedTeam, QueryConnectionNotReady | QueryPersistenceFailed> =>
         Effect.gen(function* () {
           const teamId = yield* Schema.decodeEffect(TeamId)(row.id).pipe(
@@ -92,7 +92,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
                 Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
               ),
               status,
-              provider: yield* Schema.decodeEffect(Provider)(row.credentialProvider).pipe(
+              provider: yield* Schema.decodeEffect(ProviderKey)(row.credentialProvider).pipe(
                 Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
               ),
               generation: yield* Schema.decodeEffect(ConnectionCredentialGeneration)(
@@ -172,7 +172,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
           connection: {
             id: team.connectionId,
             status,
-            provider: yield* Schema.decodeEffect(Provider)(row.credentialProvider).pipe(
+            provider: yield* Schema.decodeEffect(ProviderKey)(row.credentialProvider).pipe(
               Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
             ),
             generation: yield* Schema.decodeEffect(ConnectionCredentialGeneration)(

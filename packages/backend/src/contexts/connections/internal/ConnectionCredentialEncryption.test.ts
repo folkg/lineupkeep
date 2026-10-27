@@ -4,6 +4,7 @@ import { Context, Effect, Layer, Redacted, Schema } from "effect";
 
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./ConnectionEncryptionKey.ts";
@@ -16,13 +17,13 @@ it.effect("round-trips a provider session through a versioned AES-GCM envelope",
     const envelope = yield* encryption.encrypt({
       userId: owner,
       connectionId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       plaintext,
     });
     const decrypted = yield* encryption.decrypt({
       userId: owner,
       connectionId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       envelope,
     });
 
@@ -41,13 +42,13 @@ it.effect("uses a unique nonce for every encryption", () =>
     const first = yield* encryption.encrypt({
       userId: owner,
       connectionId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       plaintext,
     });
     const second = yield* encryption.encrypt({
       userId: owner,
       connectionId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       plaintext,
     });
     const firstEnvelope = yield* Schema.decodeEffect(Schema.fromJsonString(EnvelopeView))(first);
@@ -64,7 +65,7 @@ it.effect("rejects tampered ciphertext, nonce, key version, and envelope version
     const envelope = yield* encryption.encrypt({
       userId: owner,
       connectionId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       plaintext: Redacted.make("canary-cookie-value"),
     });
     const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(EnvelopeView))(envelope);
@@ -93,7 +94,12 @@ it.effect("rejects tampered ciphertext, nonce, key version, and envelope version
     yield* Effect.forEach(tampered, (value) =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          encryption.decrypt({ userId: owner, connectionId, provider: "yahoo", envelope: value }),
+          encryption.decrypt({
+            userId: owner,
+            connectionId,
+            provider: decodeProviderKey("yahoo"),
+            envelope: value,
+          }),
         );
         assert.strictEqual(error._tag, "connection.credential_decryption_failed");
         assert.notInclude(String(error), "canary-cookie-value");
@@ -108,18 +114,23 @@ it.effect("rejects cross-owner and cross-connection decryption", () =>
     const envelope = yield* encryption.encrypt({
       userId: owner,
       connectionId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       plaintext: Redacted.make("canary-cookie-value"),
     });
 
     const wrongOwner = yield* Effect.flip(
-      encryption.decrypt({ userId: other, connectionId, provider: "yahoo", envelope }),
+      encryption.decrypt({
+        userId: other,
+        connectionId,
+        provider: decodeProviderKey("yahoo"),
+        envelope,
+      }),
     );
     const wrongConnection = yield* Effect.flip(
       encryption.decrypt({
         userId: owner,
         connectionId: otherConnection,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         envelope,
       }),
     );
@@ -143,18 +154,28 @@ it.effect("rejects a different key and a different key version", () => {
     const envelope = yield* encryption.encrypt({
       userId: owner,
       connectionId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       plaintext: Redacted.make("canary-cookie-value"),
     });
     const wrongKeyContext = yield* Effect.scoped(Layer.build(EncryptionLayerFor(otherKey)));
     const wrongKeyEncryption = Context.get(wrongKeyContext, ConnectionCredentialEncryption);
     const wrongKey = yield* Effect.flip(
-      wrongKeyEncryption.decrypt({ userId: owner, connectionId, provider: "yahoo", envelope }),
+      wrongKeyEncryption.decrypt({
+        userId: owner,
+        connectionId,
+        provider: decodeProviderKey("yahoo"),
+        envelope,
+      }),
     );
     const wrongVersionContext = yield* Effect.scoped(Layer.build(EncryptionLayerFor(otherVersion)));
     const wrongVersionEncryption = Context.get(wrongVersionContext, ConnectionCredentialEncryption);
     const wrongVersion = yield* Effect.flip(
-      wrongVersionEncryption.decrypt({ userId: owner, connectionId, provider: "yahoo", envelope }),
+      wrongVersionEncryption.decrypt({
+        userId: owner,
+        connectionId,
+        provider: decodeProviderKey("yahoo"),
+        envelope,
+      }),
     );
 
     assert.strictEqual(wrongKey._tag, "connection.credential_decryption_failed");
@@ -169,7 +190,12 @@ it.effect("rejects malformed envelopes", () =>
     yield* Effect.forEach(["not-json", "{}", "null"], (envelope) =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          encryption.decrypt({ userId: owner, connectionId, provider: "yahoo", envelope }),
+          encryption.decrypt({
+            userId: owner,
+            connectionId,
+            provider: decodeProviderKey("yahoo"),
+            envelope,
+          }),
         );
         assert.strictEqual(error._tag, "connection.credential_decryption_failed");
       }),

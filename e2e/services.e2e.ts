@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import { Schema } from "effect";
 
 import { ServiceIdentity } from "./serviceSetup.ts";
@@ -42,7 +43,7 @@ test("signs in named personas headlessly and isolates persisted service outcomes
 
   const connection = await services.exercise(owner, "start an owned link", "startLinking", {
     requestId: randomUUID(),
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     pairingCode: "ABCD2345",
   });
   const owned = await services.inspect(owner, "read persisted connections", "readConnections");
@@ -79,7 +80,7 @@ test("uses named browser personas with their real sessions for service calls", a
 
   await services.exercise(page, "start a link as the browser owner", "startLinking", {
     requestId: randomUUID(),
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     pairingCode: "ABCD2345",
   });
   const isolated = await services.inspect(
@@ -102,8 +103,8 @@ test("replays concurrent batch links and rolls back mixed-owner cancellations in
   const owner = await services.signIn("batch-owner");
   const other = await services.signIn("batch-other");
   const inputs = [
-    { requestId: randomUUID(), provider: "yahoo", pairingCode: "ABCD2345" },
-    { requestId: randomUUID(), provider: "yahoo", pairingCode: "WXYZ6789" },
+    { requestId: randomUUID(), provider: decodeProviderKey("yahoo"), pairingCode: "ABCD2345" },
+    { requestId: randomUUID(), provider: decodeProviderKey("yahoo"), pairingCode: "WXYZ6789" },
   ];
   await test.step("Baseline: [batch-owner] has no connections", async () => {
     expect(
@@ -136,7 +137,7 @@ test("replays concurrent batch links and rolls back mixed-owner cancellations in
   )(
     await services.exercise(other, "start a foreign link", "startLinking", {
       requestId: randomUUID(),
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode: "ABCD2345",
     }),
   );

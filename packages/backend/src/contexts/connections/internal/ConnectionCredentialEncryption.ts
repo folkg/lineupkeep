@@ -1,7 +1,7 @@
 import { Config, Context, Crypto, Effect, Layer, Redacted, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
-import type { ConnectionId, Provider } from "#contexts/connections/Connection.ts";
+import type { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
 
 import { ConnectionEncryptionKey } from "./ConnectionEncryptionKey.ts";
 
@@ -9,14 +9,14 @@ export type ConnectionCredentialEncryptionShape = {
   readonly encrypt: (input: {
     readonly userId: UserId;
     readonly connectionId: ConnectionId;
-    readonly provider: Provider;
+    readonly provider: ProviderKey;
     readonly plaintext: Redacted.Redacted<string>;
   }) => Effect.Effect<string, CredentialEncryptionFailed>;
 
   readonly decrypt: (input: {
     readonly userId: UserId;
     readonly connectionId: ConnectionId;
-    readonly provider: Provider;
+    readonly provider: ProviderKey;
     readonly envelope: string;
   }) => Effect.Effect<Redacted.Redacted<string>, CredentialDecryptionFailed>;
 };
@@ -54,7 +54,7 @@ function makeCredentialEncryption(): Effect.Effect<
     const encrypt = Effect.fn("ConnectionCredentialEncryption.encrypt")(function* (input: {
       readonly userId: UserId;
       readonly connectionId: ConnectionId;
-      readonly provider: Provider;
+      readonly provider: ProviderKey;
       readonly plaintext: Redacted.Redacted<string>;
     }) {
       const nonce = yield* crypto
@@ -81,7 +81,7 @@ function makeCredentialEncryption(): Effect.Effect<
     const decrypt = Effect.fn("ConnectionCredentialEncryption.decrypt")(function* (input: {
       readonly userId: UserId;
       readonly connectionId: ConnectionId;
-      readonly provider: Provider;
+      readonly provider: ProviderKey;
       readonly envelope: string;
     }) {
       const envelope = yield* Schema.decodeEffect(Schema.fromJsonString(CredentialEnvelope))(
@@ -148,7 +148,7 @@ function decryptBytes(input: {
 function additionalData(input: {
   readonly userId: UserId;
   readonly connectionId: ConnectionId;
-  readonly provider: Provider;
+  readonly provider: ProviderKey;
   readonly keyVersion: number;
 }): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(

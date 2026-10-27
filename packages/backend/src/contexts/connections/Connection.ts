@@ -1,15 +1,16 @@
 import { UserId } from "@lineupkeep/backend/auth/User";
 import { Schema } from "effect";
 
+import { ProviderKey } from "./ProviderKey.ts";
+
+export { ProviderKey };
+
 export const ConnectionId = Schema.String.pipe(
   Schema.check(Schema.isUUID()),
   Schema.brand("ConnectionId"),
 );
 export type ConnectionId = typeof ConnectionId.Type;
 export const decodeConnectionId = Schema.decodeUnknownSync(ConnectionId);
-
-export const Provider = Schema.Literals(["yahoo"]);
-export type Provider = typeof Provider.Type;
 
 export const ConnectionStatus = Schema.Literals([
   "linking",
@@ -30,7 +31,7 @@ const ConnectionTimestamp = Schema.DateTimeUtc;
 export const ProviderConnection = Schema.Struct({
   id: ConnectionId,
   userId: UserId,
-  provider: Provider,
+  provider: ProviderKey,
   status: ConnectionStatus,
   pairingCode: Schema.optional(Schema.String),
   linkingExpiresAt: Schema.optional(ConnectionTimestamp),
@@ -61,7 +62,7 @@ const ProviderSessionValue = Schema.RedactedFromValue(
 
 export const StartLinkingInput = Schema.Struct({
   requestId: ConnectionRequestId,
-  provider: Provider,
+  provider: ProviderKey,
   pairingCode: ConnectionPairingCode,
 });
 export type StartLinkingInput = typeof StartLinkingInput.Type;
@@ -73,7 +74,7 @@ export type ConnectionIdInput = typeof ConnectionIdInput.Type;
 
 export const CompleteLinkingInput = Schema.Struct({
   id: ConnectionId,
-  provider: Provider,
+  provider: ProviderKey,
   session: ProviderSessionValue,
 });
 export type CompleteLinkingInput = typeof CompleteLinkingInput.Type;
@@ -87,14 +88,14 @@ export type StartReconnectInput = typeof StartReconnectInput.Type;
 
 export const CompleteReconnectInput = Schema.Struct({
   id: ConnectionId,
-  provider: Provider,
+  provider: ProviderKey,
   session: ProviderSessionValue,
 });
 export type CompleteReconnectInput = typeof CompleteReconnectInput.Type;
 
 export const ReconnectInput = Schema.Struct({
   id: ConnectionId,
-  provider: Provider,
+  provider: ProviderKey,
   session: ProviderSessionValue,
   expectedGeneration: ConnectionCredentialGeneration,
 });

@@ -1,104 +1,150 @@
 import {
-  buildLineupProblem,
   lineupPolicyVersion,
+  planLineup,
+  lineupAssignments,
   periodKey,
-  preferredValueSource,
   trailingPeriodCount,
-  trailingWindow,
 } from "@lineupkeep/lineup-policy";
 import type {
   LineupPolicyInput,
-  LineupPolicyRefusal,
-  PercentStartedCut,
+  LineupPlanRefusal,
   Period,
   PeriodObservation,
   PlayerAvailability,
-  PlayerPercentStarted,
-  PlayerValuation,
+  PlayerCommunityStartRate,
+  PlayerProjection,
+  PlayerRealisedPoints,
   PolicyPlayer,
-  ValueSourceKind,
 } from "@lineupkeep/lineup-policy";
 import type { StatObservation } from "@lineupkeep/lineup-scoring";
-import { parseExact, scoringProfile } from "@lineupkeep/lineup-scoring";
+import { parseExact, scorePeriod, scoringProfile } from "@lineupkeep/lineup-scoring";
 import type { Exact, ScoringProfile } from "@lineupkeep/lineup-scoring";
-import { makePlayerId, makeSlotId, solveLineup } from "@lineupkeep/lineup-solver";
-import type {
-  LineupPlan,
-  LineupProblem,
-  LineupRefusal,
-  RosterSlot,
-  SelectionBasis,
-  SlotEligibility,
-} from "@lineupkeep/lineup-solver";
-import { DateTime } from "effect";
+import { makePlayerId, makeSlotId } from "@lineupkeep/lineup-solver";
+import type { PlayerId, RosterSlot, SlotEligibility } from "@lineupkeep/lineup-solver";
+import { DateTime, Effect } from "effect";
 
 import type {
+  ProviderCapabilities,
+  ProviderCommunityStartRate,
   ProviderLeagueSettings,
-  ProviderPercentStarted,
+  ProviderLineupOutcome,
+  ProviderLineupRequest,
   ProviderPlayerDetail,
   ProviderRoster,
   ProviderRosterPlayer,
+  ProviderRosterPosition,
 } from "#contexts/connections/Provider.ts";
+import type { ProviderReadFailure } from "#contexts/connections/Provider.ts";
 
-export { lineupPolicyVersion };
-
-export function planYahooLineup(input: LineupPolicyInput): YahooLineupResult {
-  const verdict = buildLineupProblem(input);
-  if (verdict.kind === "refusal") {
-    return { kind: "refused", refusal: { kind: "policy", refusal: verdict.refusal } };
-  }
-  const solved = solveLineup(verdict.problem);
-  if (solved.kind === "refusal") {
-    return { kind: "refused", refusal: { kind: "solver", refusal: solved.refusal } };
-  }
-  return {
-    kind: "planned",
-    plan: solved.plan,
-    problem: verdict.problem,
-    selectionBasis: solved.plan.selectionBasis,
-    valuations: verdict.valuations,
-  };
-}
-
-export function yahooValueSourceKinds(
-  league: ProviderLeagueSettings,
-): ReadonlyArray<ValueSourceKind> {
-  return league.statModifiers.length > 0
-    ? ["scoring-rules", "percent-started"]
-    : ["percent-started"];
-}
-
-export function yahooPointsPolicyInput(input: YahooPeriodLineupInput): LineupPolicyInput {
-  const players = yahooPolicyPlayers(input.roster);
-  const window = trailingWindow(input.history.map((entry) => entry.period));
-  return {
-    period: yahooTargetPeriod(input.roster),
-    source: {
-      kind: "scoring-rules",
-      window,
-      scoring: yahooScoringProfile(input.league),
-      observations: observationsFor(input.history, window, players),
+export const yahooCapabilities: ProviderCapabilities = {
+  fantasyDay: {
+    timeZone: "America/Los_Angeles",
+    boundary: "local-midnight",
+    version: "yahoo-pacific-midnight/1",
+  },
+  sports: ["football", "hockey"],
+  playerSearch: {
+    sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
+    providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
+    weeklyStatSortSports: ["football"],
+  },
+  publishesProjections: false,
+  publishesCommunityStartRate: true,
+  statBases: ["week", "season"],
+  limitations: [
+    {
+      subject: "player_schedule",
+      detail:
+        "Yahoo publishes no per-player games-remaining or probable-starter field. A roster entry carries the professional-team abbreviation and, where the league publishes one, the bye week; remaining player-games are available per fantasy team from get_matchups and get_team_summary.",
     },
-    slots: yahooLeagueSlots(input.league),
-    players,
-  };
-}
-
-export function yahooStartedPolicyInput(input: YahooStartedLineupInput): LineupPolicyInput {
-  const details = new Map(
-    input.details.map((detail) => [detail.providerPlayerKey, detail.percentStarted]),
-  );
-  return {
-    period: yahooTargetPeriod(input.roster),
-    source: {
-      kind: "percent-started",
-      started: input.roster.players.map((player) =>
-        startedFor(player.providerPlayerKey, details.get(player.providerPlayerKey)),
-      ),
+    {
+      subject: "probable_starters",
+      detail:
+        "Yahoo publishes no probable-starter field on its fantasy read surface, so participation is reported only through the provider's injury status.",
     },
-    slots: yahooLeagueSlots(input.league),
-    players: yahooPolicyPlayers(input.roster),
-  };
+    {
+      subject: "projections",
+      detail: "Yahoo exposes no projected player statistics.",
+    },
+    {
+      subject: "team_remaining_games",
+      detail:
+        "Yahoo publishes no remaining-game count for football: a player plays at most one game per scoring week, and each roster entry carries the bye week instead.",
+    },
+    {
+      subject: "lock_timing",
+      detail:
+        "Yahoo's exact fantasy-day rollover and per-player lock timing are not verified. This reports the league's declared period range only.",
+    },
+    {
+      subject: "historical_seasons",
+      detail: "Only the linked team's current season is validated for this provider.",
+    },
+  ],
+};
+
+export function planYahooLineup(
+  input: ProviderLineupRequest,
+  read: YahooLineupReader,
+): Effect.Effect<ProviderLineupOutcome, ProviderReadFailure> {
+  return Effect.gen(function* () {
+    const slots = yahooLeagueSlots(input.league);
+    const candidates: Array<LineupPolicyInput> = [];
+    if (yahooCapabilities.publishesProjections) {
+      candidates.push(projectedPointsInput(input, yield* read.readDetails()));
+    }
+    if (input.league.statModifiers.length > 0) {
+      const history = yield* read.readHistory(
+        yahooObservationWindow(input.league, targetPeriod(input.target)),
+      );
+      candidates.push(
+        yahooPointsPolicyInput({ league: input.league, roster: input.roster, history }),
+      );
+    }
+    if (yahooCapabilities.publishesCommunityStartRate) {
+      candidates.push(
+        yahooCommunityStartRatePolicyInput({
+          league: input.league,
+          roster: input.roster,
+          details: yield* read.readDetails(),
+        }),
+      );
+    }
+
+    const planned = planLineup(candidates);
+    if (planned.kind === "refused") {
+      return refusedLineup(planned.refusals);
+    }
+    const translated = lineupAssignments({
+      plan: planned.plan,
+      slots: slots.map((slot) => ({ id: slot.id, kind: slot.kind })),
+      players: input.roster.players.map((player) => ({
+        playerKey: player.providerPlayerKey,
+        name: player.name,
+        slot: player.slot,
+        editable: player.isEditable === true,
+      })),
+    });
+    if (translated.kind === "refused") {
+      return {
+        kind: "refused",
+        action: "block",
+        policyVersion: lineupPolicyVersion,
+        code: translated.code,
+        detail: translated.detail,
+        basis: planned.basis,
+      };
+    }
+    return {
+      kind: "planned",
+      policyVersion: lineupPolicyVersion,
+      basis: planned.basis,
+      assignments: translated.assignments.map((assignment) => ({
+        providerPlayerKey: assignment.playerKey,
+        slot: assignment.slot,
+      })),
+    };
+  });
 }
 
 export function yahooScoringProfile(league: ProviderLeagueSettings): ScoringProfile {
@@ -114,178 +160,17 @@ export function yahooScoringProfile(league: ProviderLeagueSettings): ScoringProf
   });
 }
 
-export function yahooScorable(league: ProviderLeagueSettings): boolean {
-  return preferredValueSource(yahooValueSourceKinds(league)) !== undefined;
-}
-
 export function yahooObservationWindow(
   league: ProviderLeagueSettings,
-  roster: ProviderRoster,
+  target: Period,
 ): ReadonlyArray<Period> {
-  const target = yahooTargetPeriod(roster);
   return target.kind === "week"
     ? completedWeeks(league, target.week)
     : completedDates(league, target.date);
 }
 
-export function yahooAssignmentRequest(input: YahooAssignmentInput): YahooAssignmentResult {
-  const rosterPlayers = new Map(
-    input.roster.players.map((player) => [player.providerPlayerKey, player]),
-  );
-  const plannedSlots = new Map(
-    input.plan.assignments.map((assignment) => [assignment.playerId, assignment.slotId]),
-  );
-  const missingPlayerKeys = [...rosterPlayers.keys()].filter(
-    (key) => !plannedSlots.has(makePlayerId(key)),
-  );
-  const unknownPlayerIds = input.plan.assignments
-    .map((assignment) => assignment.playerId)
-    .filter((playerId) => !rosterPlayers.has(playerId));
-  if (missingPlayerKeys.length > 0 || unknownPlayerIds.length > 0) {
-    return {
-      kind: "refused",
-      refusal: { kind: "plan-membership", missingPlayerKeys, unknownPlayerIds },
-    };
-  }
-
-  const startingSlots = new Set(
-    input.league.rosterPositions
-      .filter((position) => position.isStarting)
-      .map((position) => position.position),
-  );
-  const assignments: Array<YahooPlannedAssignment> = [];
-  for (const player of input.roster.players) {
-    const targetSlot = plannedSlots.get(makePlayerId(player.providerPlayerKey));
-    if (targetSlot === undefined || targetSlot === player.slot) {
-      continue;
-    }
-    if (player.isEditable !== true) {
-      return {
-        kind: "refused",
-        refusal: {
-          kind: "locked-player",
-          playerKey: player.providerPlayerKey,
-          from: player.slot,
-          to: targetSlot,
-        },
-      };
-    }
-    if (isReserveList(player.slot, startingSlots) || isReserveList(targetSlot, startingSlots)) {
-      return {
-        kind: "refused",
-        refusal: {
-          kind: "reserve-list",
-          playerKey: player.providerPlayerKey,
-          from: player.slot,
-          to: targetSlot,
-        },
-      };
-    }
-    assignments.push({ playerKey: player.providerPlayerKey, slot: targetSlot });
-  }
-
-  return assignments.length === 0 ? { kind: "no_op" } : { kind: "request", assignments };
-}
-
-export function describeYahooLineupRefusal(refusal: YahooLineupRefusal): string {
-  switch (refusal.kind) {
-    case "policy":
-      return describePolicyRefusal(refusal.refusal);
-    case "solver":
-      return describeSolverRefusal(refusal.refusal);
-  }
-}
-
-export function yahooLineupRefusalCode(refusal: YahooLineupRefusal): string {
-  return refusal.kind === "policy"
-    ? `policy:${refusal.refusal.kind}`
-    : `solver:${refusal.refusal.reason}`;
-}
-
-function describePolicyRefusal(refusal: LineupPolicyRefusal): string {
-  switch (refusal.kind) {
-    case "no-value-source":
-      return "This league publishes neither points rules nor a started percentage, so its lineup cannot be valued by the custom policy.";
-    case "no-observed-periods":
-      return "No completed scoring period is available to value the roster, so the custom policy cannot plan a lineup.";
-  }
-}
-
-function describeSolverRefusal(refusal: LineupRefusal): string {
-  switch (refusal.reason) {
-    case "unusable-selection-value":
-      return "Some roster players have no usable selection value, so a complete lineup cannot be planned.";
-    case "lock-references-unknown-slot":
-      return "A locked player occupies a slot this league does not declare, so the lineup cannot be planned.";
-    case "locked-player-ineligible-for-slot":
-      return "A locked player is not eligible for the slot they occupy, so the lineup cannot be planned.";
-    case "lock-capacity-exceeded":
-      return "Locked players exceed a slot's declared capacity, so the lineup cannot be planned.";
-    case "roster-exceeds-slot-capacity":
-      return "The roster has more players than the league's declared slots, so the lineup cannot be planned without dropping a player.";
-    case "player-has-no-legal-slot":
-      return "Some roster players have no legal slot, so the lineup cannot be planned.";
-    case "required-starting-position-unfillable":
-      return "A required starting position cannot be filled from the current roster.";
-    case "no-legal-assignment":
-      return "No complete legal assignment of this roster exists.";
-  }
-}
-
-function completedWeeks(league: ProviderLeagueSettings, targetWeek: number): ReadonlyArray<Period> {
-  const firstWeek = league.periodWindow?.startWeek ?? 1;
-  const periods: Array<Period> = [];
-  for (let week = targetWeek - trailingPeriodCount; week < targetWeek; week += 1) {
-    if (week >= firstWeek) {
-      periods.push({ kind: "week", week });
-    }
-  }
-  return periods;
-}
-
-function completedDates(league: ProviderLeagueSettings, targetDate: string): ReadonlyArray<Period> {
-  const target = DateTime.makeUnsafe(`${targetDate}T00:00:00.000Z`);
-  const periods: Array<Period> = [];
-  for (let offset = trailingPeriodCount; offset >= 1; offset -= 1) {
-    const date = DateTime.formatIsoDate(DateTime.add(target, { days: -offset }));
-    if (league.startDate === undefined || date >= league.startDate) {
-      periods.push({ kind: "date", date });
-    }
-  }
-  return periods;
-}
-
-function isReserveList(slot: string, startingSlots: ReadonlySet<string>): boolean {
-  return !startingSlots.has(slot) && slot !== benchPosition;
-}
-
 export function yahooLeagueSlots(league: ProviderLeagueSettings): ReadonlyArray<RosterSlot> {
   return league.rosterPositions.map(rosterSlot);
-}
-
-function yahooPolicyPlayer(player: ProviderRosterPlayer, period: Period): PolicyPlayer {
-  return {
-    id: makePlayerId(player.providerPlayerKey),
-    eligiblePositions: player.eligiblePositions,
-    availability: yahooAvailability(player.injuryCode),
-    locked: player.isEditable !== true,
-    currentSlotId: makeSlotId(player.slot),
-    nonGamePeriods: nonGamePeriods(player, period),
-  };
-}
-
-export function yahooTargetPeriod(roster: ProviderRoster): Period {
-  const coverage = roster.coverage;
-  return coverage.type === "week"
-    ? { kind: "week", week: coverage.week }
-    : { kind: "date", date: coverage.date };
-}
-
-export function yahooAvailability(injuryCode: string | undefined): PlayerAvailability {
-  if (injuryCode === undefined) {
-    return { kind: "available" };
-  }
-  return availabilityByInjuryCode[injuryCode] ?? { kind: "unrecognised", code: injuryCode };
 }
 
 const availabilityByInjuryCode: Readonly<Record<string, PlayerAvailability>> = {
@@ -297,25 +182,149 @@ const availabilityByInjuryCode: Readonly<Record<string, PlayerAvailability>> = {
   DTD: { kind: "uncertain", reason: "day-to-day" },
 };
 
-export const yahooInjuryStatusCodes: ReadonlyArray<string> = Object.keys(availabilityByInjuryCode);
-
-function yahooPolicyPlayers(roster: ProviderRoster): ReadonlyArray<PolicyPlayer> {
-  const period = yahooTargetPeriod(roster);
-  return roster.players.map((player) => yahooPolicyPlayer(player, period));
+export function yahooAvailability(injuryCode: string | undefined): PlayerAvailability {
+  if (injuryCode === undefined) {
+    return { kind: "available" };
+  }
+  return availabilityByInjuryCode[injuryCode] ?? { kind: "unrecognised", code: injuryCode };
 }
 
-function startedFor(
-  providerPlayerKey: string,
-  started: ProviderPercentStarted | undefined,
-): PlayerPercentStarted {
+export const yahooInjuryStatusCodes: ReadonlyArray<string> = Object.keys(availabilityByInjuryCode);
+
+export function yahooTargetPeriod(roster: ProviderRoster): Period {
+  return roster.coverage.type === "week"
+    ? { kind: "week", week: roster.coverage.week }
+    : { kind: "date", date: roster.coverage.date };
+}
+
+function refusedLineup(refusals: ReadonlyArray<LineupPlanRefusal>): ProviderLineupOutcome {
+  const refusal = refusals.at(-1);
   return {
-    id: makePlayerId(providerPlayerKey),
-    percent: exactPercent(started?.percent ?? null),
-    cuts: (started?.cuts ?? []).flatMap((cut) => {
+    kind: "refused",
+    action: "native",
+    policyVersion: lineupPolicyVersion,
+    code: refusal?.code ?? "policy:no-value-source",
+    detail: refusal?.detail ?? "This league publishes no value source the custom policy can use.",
+    basis: undefined,
+  };
+}
+
+function projectedPointsInput(
+  input: ProviderLineupRequest,
+  details: ReadonlyArray<ProviderPlayerDetail>,
+): LineupPolicyInput {
+  const period = targetPeriodOf(input.roster);
+  const slots = yahooLeagueSlots(input.league);
+  const players = policyPlayers(input.roster, period);
+  const scoring = yahooScoringProfile(input.league);
+  const byKey = new Map(details.map((detail) => [detail.providerPlayerKey, detail]));
+  const projections: Array<PlayerProjection> = [];
+  const realised: Array<PlayerRealisedPoints> = [];
+  for (const player of players) {
+    const detail = byKey.get(player.id);
+    const projection = pointsOf(scoring, detail?.projected?.stats);
+    if (projection !== undefined) {
+      projections.push({ id: player.id, points: projection });
+    }
+    const actual = pointsOf(scoring, detail?.actual?.stats);
+    if (actual !== undefined) {
+      realised.push({ id: player.id, points: actual });
+    }
+  }
+  return {
+    period,
+    source: { kind: "projected-points", projections, realised },
+    slots,
+    players,
+  };
+}
+
+export function yahooPointsPolicyInput(
+  input: YahooPolicyFacts & { readonly history: ReadonlyArray<YahooPeriodHistory> },
+): LineupPolicyInput {
+  const period = targetPeriodOf(input.roster);
+  const slots = yahooLeagueSlots(input.league);
+  const players = policyPlayers(input.roster, period);
+  const window = yahooObservationWindow(input.league, period);
+  return {
+    period,
+    source: {
+      kind: "scoring-rules",
+      window,
+      scoring: yahooScoringProfile(input.league),
+      observations: observationsFor(input.history, window),
+    },
+    slots,
+    players,
+  };
+}
+
+export function yahooCommunityStartRatePolicyInput(
+  input: YahooPolicyFacts & { readonly details: ReadonlyArray<ProviderPlayerDetail> },
+): LineupPolicyInput {
+  const period = targetPeriodOf(input.roster);
+  const slots = yahooLeagueSlots(input.league);
+  const players = policyPlayers(input.roster, period);
+  const byKey = new Map(
+    input.details.map((detail) => [detail.providerPlayerKey, detail.communityStartRate]),
+  );
+  return {
+    period,
+    source: {
+      kind: "community-start-rate",
+      started: players.map((player) => startRateOf(player.id, byKey.get(player.id))),
+    },
+    slots,
+    players,
+  };
+}
+
+function policyPlayers(roster: ProviderRoster, period: Period): ReadonlyArray<PolicyPlayer> {
+  return roster.players.map((player) => ({
+    id: makePlayerId(player.providerPlayerKey),
+    eligiblePositions: player.eligiblePositions,
+    availability: yahooAvailability(player.injuryCode),
+    locked: player.isEditable !== true,
+    currentSlotId: makeSlotId(player.slot),
+    nonGamePeriods: nonGamePeriods(player, period),
+  }));
+}
+
+function rosterSlot(position: ProviderRosterPosition): RosterSlot {
+  const id = makeSlotId(position.position);
+  const kind = position.kind;
+  const eligibility = slotEligibility(position.eligibility);
+  switch (kind) {
+    case "starting":
+      return {
+        kind: "starting",
+        id,
+        capacity: position.count,
+        requirement: "required",
+        eligibility,
+      };
+    case "bench":
+    case "reserve":
+      return { kind, id, capacity: position.count, eligibility };
+  }
+}
+
+function slotEligibility(positions: ReadonlyArray<string>): SlotEligibility {
+  return positions.length === 0
+    ? { kind: "any" }
+    : { kind: "positions", positions: [...positions] };
+}
+
+function startRateOf(
+  playerId: PlayerId,
+  startRate: ProviderCommunityStartRate | undefined,
+): PlayerCommunityStartRate {
+  return {
+    id: playerId,
+    percent: exactPercent(startRate?.percent ?? null),
+    cuts: (startRate?.cuts ?? []).flatMap((cut) => {
       const percent = exactPercent(cut.percent);
-      return percent === undefined
-        ? []
-        : [{ cut: cut.cutType, percent } satisfies PercentStartedCut];
+      return percent === undefined ? [] : [{ cut: cut.cut, percent }];
     }),
   };
 }
@@ -324,30 +333,18 @@ function exactPercent(percent: number | null): Exact | undefined {
   return percent === null ? undefined : parseExact(String(percent));
 }
 
-function rosterSlot(position: ProviderRosterPosition): RosterSlot {
-  const id = makeSlotId(position.position);
-  if (position.isStarting) {
-    return {
-      kind: "starting",
-      id,
-      capacity: position.count,
-      requirement: "required",
-      eligibility: slotPositions(position.position),
-    };
+function pointsOf(
+  scoring: ScoringProfile,
+  stats: ReadonlyArray<{ readonly statId: number; readonly value: number | null }> | undefined,
+): Exact | undefined {
+  if (stats === undefined) {
+    return undefined;
   }
-  if (position.position === benchPosition) {
-    return { kind: "bench", id, capacity: position.count, eligibility: { kind: "any" } };
-  }
-  return {
-    kind: "reserve",
-    id,
-    capacity: position.count,
-    eligibility: slotPositions(position.position),
-  };
-}
-
-function slotPositions(position: string): SlotEligibility {
-  return { kind: "positions", positions: [position] };
+  const score = scorePeriod(
+    scoring,
+    stats.map((stat) => ({ statId: String(stat.statId), value: stat.value })),
+  );
+  return score.kind === "scored" ? score.points : undefined;
 }
 
 function nonGamePeriods(player: ProviderRosterPlayer, period: Period): ReadonlyArray<Period> {
@@ -360,16 +357,19 @@ function nonGamePeriods(player: ProviderRosterPlayer, period: Period): ReadonlyA
 function observationsFor(
   history: ReadonlyArray<YahooPeriodHistory>,
   window: ReadonlyArray<Period>,
-  players: ReadonlyArray<PolicyPlayer>,
 ): ReadonlyArray<PeriodObservation> {
   const stats = statsByPeriodAndPlayer(history);
-  return window.map((period) => ({
-    period,
-    players: players.flatMap((player) => {
-      const observations = stats.get(periodKey(period))?.get(player.id);
-      return observations === undefined ? [] : [{ id: player.id, stats: observations }];
-    }),
-  }));
+  return window.map((period) => {
+    const players =
+      stats.get(periodKey(period)) ?? new Map<string, ReadonlyArray<StatObservation>>();
+    return {
+      period,
+      players: [...players].map(([id, observations]) => ({
+        id: makePlayerId(id),
+        stats: observations,
+      })),
+    };
+  });
 }
 
 function statsByPeriodAndPlayer(
@@ -393,72 +393,62 @@ function observationsOf(detail: ProviderPlayerDetail): ReadonlyArray<StatObserva
   return detail.actual?.stats.map((stat) => ({ statId: String(stat.statId), value: stat.value }));
 }
 
-const benchPosition = "BN";
-
-type ProviderRosterPosition = ProviderLeagueSettings["rosterPositions"][number];
-
-export type YahooPeriodLineupInput = {
-  readonly league: ProviderLeagueSettings;
-  readonly roster: ProviderRoster;
-  readonly history: ReadonlyArray<YahooPeriodHistory>;
-};
-
-export type YahooStartedLineupInput = {
-  readonly league: ProviderLeagueSettings;
-  readonly roster: ProviderRoster;
-  readonly details: ReadonlyArray<ProviderPlayerDetail>;
-};
-
-export type YahooAssignmentInput = {
-  readonly league: ProviderLeagueSettings;
-  readonly roster: ProviderRoster;
-  readonly plan: LineupPlan;
-};
-
-type YahooPlannedAssignment = {
-  readonly playerKey: string;
-  readonly slot: string;
-};
-
-export type YahooAssignmentResult =
-  | { readonly kind: "request"; readonly assignments: ReadonlyArray<YahooPlannedAssignment> }
-  | { readonly kind: "no_op" }
-  | { readonly kind: "refused"; readonly refusal: YahooAssignmentRefusal };
-
-export type YahooAssignmentRefusal =
-  | {
-      readonly kind: "plan-membership";
-      readonly missingPlayerKeys: ReadonlyArray<string>;
-      readonly unknownPlayerIds: ReadonlyArray<string>;
+function completedWeeks(league: ProviderLeagueSettings, targetWeek: number): ReadonlyArray<Period> {
+  const firstWeek = league.periodWindow?.start ?? 1;
+  const periods: Array<Period> = [];
+  for (let week = targetWeek - trailingPeriodCount; week < targetWeek; week += 1) {
+    if (week >= firstWeek) {
+      periods.push({ kind: "week", week });
     }
-  | {
-      readonly kind: "locked-player";
-      readonly playerKey: string;
-      readonly from: string;
-      readonly to: string;
+  }
+  return periods;
+}
+
+function completedDates(league: ProviderLeagueSettings, targetDate: string): ReadonlyArray<Period> {
+  const target = DateTime.makeUnsafe(`${targetDate}T00:00:00.000Z`);
+  const periods: Array<Period> = [];
+  for (let offset = trailingPeriodCount; offset >= 1; offset -= 1) {
+    const date = DateTime.formatIsoDate(DateTime.add(target, { days: -offset }));
+    if (league.startDate === undefined || date >= league.startDate) {
+      periods.push({ kind: "date", date });
     }
-  | {
-      readonly kind: "reserve-list";
-      readonly playerKey: string;
-      readonly from: string;
-      readonly to: string;
-    };
+  }
+  return periods;
+}
+
+function targetPeriodOf(roster: ProviderRoster): Period {
+  return roster.coverage.type === "week"
+    ? { kind: "week", week: roster.coverage.week }
+    : { kind: "date", date: roster.coverage.date };
+}
+
+function targetPeriod(target: ProviderLineupRequest["target"]): Period {
+  switch (target.coverage) {
+    case "week":
+      return { kind: "week", week: target.week };
+    case "date":
+      return { kind: "date", date: target.date };
+    case "current":
+      throw new Error("A provider lineup plan requires a resolved target period");
+  }
+}
+
+export type YahooPolicyFacts = {
+  readonly league: ProviderLeagueSettings;
+  readonly roster: ProviderRoster;
+};
+
+export type YahooLineupReader = {
+  readonly readDetails: () => Effect.Effect<
+    ReadonlyArray<ProviderPlayerDetail>,
+    ProviderReadFailure
+  >;
+  readonly readHistory: (
+    periods: ReadonlyArray<Period>,
+  ) => Effect.Effect<ReadonlyArray<YahooPeriodHistory>, ProviderReadFailure>;
+};
 
 export type YahooPeriodHistory = {
   readonly period: Period;
   readonly details: ReadonlyArray<ProviderPlayerDetail>;
 };
-
-export type YahooLineupResult =
-  | {
-      readonly kind: "planned";
-      readonly plan: LineupPlan;
-      readonly problem: LineupProblem;
-      readonly selectionBasis: SelectionBasis;
-      readonly valuations: ReadonlyArray<PlayerValuation>;
-    }
-  | { readonly kind: "refused"; readonly refusal: YahooLineupRefusal };
-
-export type YahooLineupRefusal =
-  | { readonly kind: "policy"; readonly refusal: LineupPolicyRefusal }
-  | { readonly kind: "solver"; readonly refusal: LineupRefusal };

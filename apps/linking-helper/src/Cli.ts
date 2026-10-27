@@ -11,6 +11,7 @@ import type { LinkingUpload } from "./LinkingUpload.ts";
 import { LinkingUploadLive } from "./LinkingUpload.ts";
 import type { ProviderBrowser } from "./ProviderBrowser.ts";
 import { ProviderBrowserLive } from "./ProviderBrowser.ts";
+import { helperDefaultProvider, helperProvider, helperProviderList } from "./providers.ts";
 import { Terminal, TerminalLive } from "./Terminal.ts";
 
 export type CliCommand =
@@ -36,7 +37,7 @@ export function parseCliArguments(
     return invalid(`Unknown command "${first}". Use "lineupkeep link".`);
   }
 
-  let provider = "yahoo";
+  let provider: string = helperDefaultProvider().key;
   let appUrlValue = environment["LINEUPKEEP_APP_URL"] ?? defaultAppUrl;
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
@@ -67,8 +68,11 @@ export function parseCliArguments(
     return invalid(`Unknown option "${argument}".`);
   }
 
-  if (provider !== "yahoo") {
-    return invalid(`Unsupported provider "${provider}". Only yahoo is supported.`);
+  const selected = helperProvider(provider);
+  if (selected === undefined) {
+    return invalid(
+      `Unsupported provider "${provider}". Supported providers: ${helperProviderList()}.`,
+    );
   }
   const appUrl = parseAppUrl(appUrlValue);
   if (appUrl === undefined) {
@@ -80,8 +84,10 @@ export function parseCliArguments(
     _tag: "Link",
     options: {
       appUrl,
-      provider: "yahoo",
-      providerLoginUrl: new URL("https://football.fantasysports.yahoo.com/"),
+      provider: selected.key,
+      providerLabel: selected.label,
+      providerLoginUrl: selected.loginUrl,
+      sessionCookies: selected.sessionCookies,
       headless: false,
       loginTimeout: Duration.minutes(10),
       profileRoot: tmpdir(),
@@ -127,16 +133,16 @@ const defaultAppUrl = "http://localhost:5173";
 const helpText = `lineupkeep — local provider linking helper
 
 Usage:
-  lineupkeep link [--provider yahoo] [--app-url <url>]
+  lineupkeep link [--provider <key>] [--app-url <url>]
   lineupkeep --help
 
 Options:
-  --provider   Provider to link. Only yahoo is supported.
+  --provider   Provider to link. Supported providers: ${helperProviderList()}.
   --app-url    Lineupkeep origin. Defaults to LINEUPKEEP_APP_URL or ${defaultAppUrl}.
   --help       Show this help.
 
 The helper keeps the device code and access token in memory, never in arguments or output.
-It opens Yahoo in a temporary Chromium profile and removes that profile when it finishes.`;
+It opens the provider's sign-in page in a temporary Chromium profile and removes that profile when it finishes.`;
 
 function invalid(message: string): CliCommand {
   return { _tag: "Invalid", message };

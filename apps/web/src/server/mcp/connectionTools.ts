@@ -3,7 +3,7 @@ import {
   ConnectionCredentialGeneration,
   ConnectionId,
   ConnectionStatus,
-  Provider,
+  ProviderKey,
 } from "@lineupkeep/backend/connections/Connection";
 import type {
   ConnectionError,
@@ -21,7 +21,7 @@ const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String 
 
 const ConnectionView = Schema.Struct({
   id: ConnectionId,
-  provider: Provider,
+  provider: ProviderKey,
   status: ConnectionStatus,
   linkingExpiresAt: Schema.optional(Schema.DateTimeUtc),
   credentialGeneration: Schema.optional(ConnectionCredentialGeneration),

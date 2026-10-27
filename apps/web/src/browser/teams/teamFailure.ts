@@ -1,4 +1,5 @@
 import { AuthenticationRequestFailure } from "#browser/session/AuthenticationRequestFailure.ts";
+import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 import type {
   LineupRunError,
   LineupRunRequestResult,
@@ -67,7 +68,7 @@ export function describeTeamFailure(error: unknown): TeamFailure {
       case "team.refresh_failed":
         return {
           kind: "unconfirmed",
-          message: "We could not refresh teams from Yahoo. Try again.",
+          message: `We could not refresh teams from ${defaultProviderName()}. Try again.`,
         };
     }
   }

@@ -2,7 +2,7 @@ import { and, count, eq, gte, lte, or } from "drizzle-orm";
 import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
-import type { ConnectionId, Provider } from "#contexts/connections/Connection.ts";
+import type { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
 import { hostedLinkingWindowMillis } from "#contexts/connections/ConnectionLimits.ts";
 import {
   HostedLinkingExpired,
@@ -38,7 +38,7 @@ type Record = HostedLinkingRecord;
 type CreateHostedLinkingCommand = {
   readonly id: HostedLinkingSessionId;
   readonly connectionId: ConnectionId;
-  readonly provider: Provider;
+  readonly provider: ProviderKey;
   readonly ticketHash: string;
 };
 

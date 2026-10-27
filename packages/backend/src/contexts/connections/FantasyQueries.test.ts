@@ -3,6 +3,8 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Array, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+
 import { StartLinkingInput } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import { FantasyQueries } from "./FantasyQueries.ts";
@@ -479,7 +481,7 @@ it.effect(
             rosterStatus: "rostered",
             actual: { basis: { type: "season" }, stats: [{ statId: 11, value: 4 }] },
             projected: undefined,
-            percentStarted: undefined,
+            communityStartRate: undefined,
           },
         ],
       });
@@ -1513,11 +1515,13 @@ function seed(
     ]);
     const linkingInput = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode: "ABCD2345",
     });
     const linking = Array.getUnsafe(yield* connections.startLinking(owner, [linkingInput]), 0);
-    yield* connections.completeLinking(owner, [{ id: linking.id, provider: "yahoo", session }]);
+    yield* connections.completeLinking(owner, [
+      { id: linking.id, provider: decodeProviderKey("yahoo"), session },
+    ]);
     const discovered = yield* connections.discoverTeams(owner, [{ id: linking.id }]);
     return discovered.map((row) => ({ id: row.id }));
   }).pipe(Effect.orDie);
@@ -1578,7 +1582,7 @@ function matchupFixture(input: {
 function team(providerTeamKey: string, name: string, league: "nfl" | "nhl" = "nfl"): ProviderTeam {
   const providerLeagueKey = providerTeamKey.slice(0, providerTeamKey.lastIndexOf(".t."));
   return {
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     providerTeamKey,
     providerLeagueKey,
     league,
@@ -1593,11 +1597,12 @@ const hockeyLeagueFixture: ProviderLeagueSettings = {
   name: "Hockey League",
   webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
   season: 2026,
-  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 24 },
+  periodWindow: { current: 3, start: 1, end: 24 },
   rosterCoverage: "date",
   startDate: "2026-10-01",
   endDate: "2027-04-10",
   teamCount: 10,
+  format: "head_to_head_categories",
   scoringType: "head",
   scoringLabel: "H2H",
   weeklyDeadline: "daily",
@@ -1606,8 +1611,8 @@ const hockeyLeagueFixture: ProviderLeagueSettings = {
   usesFaab: false,
   draftStatus: "postdraft",
   rosterPositions: [
-    { position: "C", positionType: "P", count: 2, isStarting: true },
-    { position: "BN", positionType: "B", count: 4, isStarting: false },
+    { position: "C", positionType: "P", count: 2, kind: "starting", eligibility: ["C"] },
+    { position: "BN", positionType: "B", count: 4, kind: "bench", eligibility: [] },
   ],
   statCategories: [
     {
@@ -1633,6 +1638,7 @@ const rotoLeagueFixture: ProviderLeagueSettings = {
   startDate: "2026-10-01",
   endDate: "2027-04-10",
   teamCount: 10,
+  format: "rotisserie",
   scoringType: "roto",
   scoringLabel: "Roto",
   weeklyDeadline: undefined,
@@ -1645,13 +1651,15 @@ const rotoLeagueFixture: ProviderLeagueSettings = {
       position: "C",
       positionType: "P",
       count: 2,
-      isStarting: true,
+      kind: "starting",
+      eligibility: ["C"],
     },
     {
       position: "BN",
       positionType: "B",
       count: 4,
-      isStarting: false,
+      kind: "bench",
+      eligibility: [],
     },
   ],
   statCategories: [
@@ -1673,11 +1681,12 @@ const leagueFixture: ProviderLeagueSettings = {
   name: "Alpha League",
   webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
   season: 2026,
-  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 17 },
+  periodWindow: { current: 3, start: 1, end: 17 },
   rosterCoverage: "week",
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,
+  format: "head_to_head_points",
   scoringType: "head",
   scoringLabel: "H2H",
   weeklyDeadline: undefined,
@@ -1686,8 +1695,8 @@ const leagueFixture: ProviderLeagueSettings = {
   usesFaab: false,
   draftStatus: "postdraft",
   rosterPositions: [
-    { position: "QB", positionType: "O", count: 1, isStarting: true },
-    { position: "BN", positionType: "B", count: 6, isStarting: false },
+    { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
+    { position: "BN", positionType: "B", count: 6, kind: "bench", eligibility: [] },
   ],
   statCategories: [
     {
@@ -1753,7 +1762,7 @@ const playerDetails = [
     rosterStatus: "rostered" as const,
     actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 275 }] },
     projected: undefined,
-    percentStarted: undefined,
+    communityStartRate: undefined,
   },
   {
     providerPlayerKey: "461.p.10002",
@@ -1764,7 +1773,7 @@ const playerDetails = [
     rosterStatus: "rostered" as const,
     actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 0 }] },
     projected: undefined,
-    percentStarted: undefined,
+    communityStartRate: undefined,
   },
   {
     providerPlayerKey: "461.p.10003",
@@ -1775,7 +1784,7 @@ const playerDetails = [
     rosterStatus: "free_agent" as const,
     actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 0 }] },
     projected: undefined,
-    percentStarted: undefined,
+    communityStartRate: undefined,
   },
 ];
 

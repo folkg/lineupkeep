@@ -1,3 +1,4 @@
+import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { LineupRunView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 export function automationLabel(team: TeamSummaryView): string {
@@ -18,13 +19,13 @@ export function availabilityLabel(team: TeamSummaryView): string {
 export function connectionLabel(team: TeamSummaryView): string {
   switch (team.connectionStatus) {
     case "ready":
-      return "Yahoo connected";
+      return `${providerDisplayName(team.team.provider)} connected`;
     case "reconnect-required":
-      return "Reconnect Yahoo";
+      return `Reconnect ${providerDisplayName(team.team.provider)}`;
     case "linking":
-      return "Yahoo pairing in progress";
+      return `${providerDisplayName(team.team.provider)} pairing in progress`;
     case "disconnected":
-      return "Yahoo disconnected";
+      return `${providerDisplayName(team.team.provider)} disconnected`;
   }
 }
 

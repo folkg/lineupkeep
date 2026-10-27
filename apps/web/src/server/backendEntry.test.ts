@@ -8,6 +8,7 @@ import {
   decodeConnectionId,
   type ConnectionError,
 } from "@lineupkeep/backend/connections/Connection";
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import {
   makeRequestContext,
   requestContextLayer,
@@ -46,7 +47,7 @@ it.effect("returns ownership-free ISO dates through the authenticated result", (
     const connection = yield* Schema.decodeEffect(ProviderConnection)({
       id: "0fbcaf9b-f3bd-4b27-952b-d80ad6383b99",
       userId: "signed-in-user",
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       status: "linking",
       linkingExpiresAt: timestamp,
       createdAt: timestamp,
@@ -62,7 +63,7 @@ it.effect("returns ownership-free ISO dates through the authenticated result", (
       type: "success",
       data: {
         id: connection.id,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         status: "linking",
         linkingExpiresAt: "2026-01-02T03:04:05.000Z",
         createdAt: "2026-01-02T03:04:05.000Z",

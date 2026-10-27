@@ -11,6 +11,7 @@ import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
+import { defaultProviderName, providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import {
@@ -61,8 +62,9 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No teams yet.">
-                <TextLink to="/connections">Connect Yahoo</TextLink> to import the teams this
-                account can manage. If you join another league on Yahoo, refresh to import it.
+                <TextLink to="/connections">Connect {defaultProviderName()}</TextLink> to import the
+                teams this account can manage. If you join another league on {defaultProviderName()}
+                , refresh to import it.
               </EmptyState>
             }
             when={props.teams().length > 0}
@@ -100,7 +102,8 @@ function TeamRow(props: TeamRowProps): JSX.Element {
             {props.team.team.name}
           </TextLink>
           <Text size="caption" tone="muted">
-            {leagueLabel(props.team.team.league)} · {sportLabel(props.team.team.sport)} · Yahoo
+            {leagueLabel(props.team.team.league)} · {sportLabel(props.team.team.sport)} ·{" "}
+            {providerDisplayName(props.team.team.provider)}
           </Text>
         </Inline>
         <Inline gap="md">
@@ -153,7 +156,9 @@ function TeamRow(props: TeamRowProps): JSX.Element {
           </Button>
         </Show>
         <Show when={props.team.connectionStatus === "reconnect-required"}>
-          <TextLink to="/connections">Reconnect Yahoo</TextLink>
+          <TextLink to="/connections">
+            Reconnect {providerDisplayName(props.team.team.provider)}
+          </TextLink>
         </Show>
       </Inline>
     </RuleListItem>

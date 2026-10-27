@@ -16,7 +16,7 @@ import { UserId } from "#contexts/auth/User.ts";
 import {
   ConnectionCredentialGeneration,
   ConnectionId,
-  Provider,
+  ProviderKey,
 } from "#contexts/connections/Connection.ts";
 import {
   FantasyLeague,
@@ -36,7 +36,7 @@ export const providerConnections = pgTable(
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     requestId: text("request_id").notNull(),
-    provider: text("provider", { enum: ["yahoo"] }).notNull(),
+    provider: text("provider").notNull(),
     status: text("status", {
       enum: ["linking", "ready", "reconnect-required", "disconnected"],
     }).notNull(),
@@ -64,7 +64,7 @@ export const providerCredentials = pgTable(
   {
     connectionId: text("connection_id").primaryKey(),
     userId: text("user_id").notNull(),
-    provider: text("provider", { enum: ["yahoo"] }).notNull(),
+    provider: text("provider").notNull(),
     generation: integer("generation").notNull(),
     envelope: text("envelope").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -81,7 +81,7 @@ export const providerTeams = pgTable(
     id: uuid("id").notNull().defaultRandom(),
     connectionId: text("connection_id").notNull(),
     userId: text("user_id").notNull(),
-    provider: text("provider", { enum: ["yahoo"] }).notNull(),
+    provider: text("provider").notNull(),
     providerTeamKey: text("provider_team_key").notNull(),
     providerLeagueKey: text("provider_league_key").notNull(),
     league: text("league", { enum: ["nfl", "nhl"] }).notNull(),
@@ -115,7 +115,7 @@ const FantasyTeamSelect = createSelectSchema(providerTeams, {
   id: TeamId,
   connectionId: ConnectionId,
   userId: UserId,
-  provider: Provider,
+  provider: ProviderKey,
   providerTeamKey: Schema.NonEmptyString,
   providerLeagueKey: Schema.NonEmptyString,
   league: FantasyLeague,
@@ -136,7 +136,7 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
       id: TeamId,
       connectionId: ConnectionId,
       userId: UserId,
-      provider: Provider,
+      provider: ProviderKey,
       providerTeamKey: Schema.NonEmptyString,
       providerLeagueKey: Schema.NonEmptyString,
       league: FantasyLeague,

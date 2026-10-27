@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
+
 import { expect, signIn, signUp, test } from "./support";
 
 test("renders Sign out in the server HTML when signed in", async ({ newUser, page }) => {
@@ -39,7 +41,7 @@ test("returns home on sign-out and back to the account's connections on sign-in"
   const account = await signUp(page);
   await services.exercise(page, "start the owner's link", "startLinking", {
     requestId: randomUUID(),
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     pairingCode: "ABCD2345",
   });
 

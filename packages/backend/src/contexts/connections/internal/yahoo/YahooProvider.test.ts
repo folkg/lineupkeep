@@ -3,14 +3,14 @@ import type { Tracer } from "effect";
 import { Array, Cause, Effect, Exit, Layer, Redacted, Tracer as EffectTracer } from "effect";
 
 import {
-  ProviderCrumbUnavailable,
-  ProviderGateway,
   ProviderPeriodMismatch,
   ProviderRequestFailed,
   ProviderResponseInvalid,
   ProviderReviewLinkInvalid,
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 import type { PublicInternetOptions } from "#runtime/PublicInternet.ts";
 
@@ -48,7 +48,7 @@ import {
   yahooNhlMatchupsWithGames,
   yahooNhlRotoStandings,
 } from "./YahooPayloadFixturesTest.ts";
-import { YahooProvider } from "./YahooProvider.ts";
+import { yahooProvider } from "./YahooProvider.ts";
 
 it.effect("validates a session with one exact read request", () => {
   const internet = recordingInternet((request) =>
@@ -57,7 +57,7 @@ it.effect("validates a session with one exact read request", () => {
       : jsonResponse({}, 404),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     yield* provider.validateSession(sessionInput);
 
@@ -77,7 +77,7 @@ it.effect("validates a session with one exact read request", () => {
       timeoutMs: 30_000,
       maxResponseBytes: 4_194_304,
     });
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("discovers both supported leagues with exact batches and stable team identity", () => {
@@ -87,7 +87,7 @@ it.effect("discovers both supported leagues with exact batches and stable team i
       : jsonResponse(yahooNflTeams),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const teams = yield* provider.discoverTeams(sessionInput);
 
@@ -100,7 +100,7 @@ it.effect("discovers both supported leagues with exact batches and stable team i
     );
     assert.deepStrictEqual(teams, [
       {
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         providerTeamKey: "466.l.4000.t.1",
         providerLeagueKey: "466.l.4000",
         league: "nfl",
@@ -109,7 +109,7 @@ it.effect("discovers both supported leagues with exact batches and stable team i
         name: "Synthetic NFL Team",
       },
       {
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         providerTeamKey: "466.l.4002.t.3",
         providerLeagueKey: "466.l.4002",
         league: "nhl",
@@ -120,37 +120,19 @@ it.effect("discovers both supported leagues with exact batches and stable team i
     ]);
     assert.isTrue(internet.calls.every((call) => call.options?.timeoutMs === 30_000));
     assert.isTrue(internet.calls.every((call) => call.options?.maxResponseBytes === 4_194_304));
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects a discovered game that does not match the requested sport", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlTeams));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(provider.discoverTeams(sessionInput));
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.strictEqual(error.field, "game.code");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
-});
-
-it.effect("reads a redacted crumb from the fixed service origin", () => {
-  const internet = recordingInternet(() =>
-    jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } }),
-  );
-  return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
-
-    const result = yield* provider.readCrumb(sessionInput);
-
-    assert.strictEqual(Redacted.value(result.crumb), "canary-crumb-value");
-    assert.strictEqual(
-      internet.calls[0]?.url.href,
-      "https://pub-api.fantasysports.yahoo.com/fantasy/v3/getCrumb?format=json_f",
-    );
-    assert.strictEqual(internet.calls[0]?.headers["cookie"], Redacted.value(sessionInput.session));
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("sends the native start-active action to the read-write roster endpoint", () => {
@@ -179,9 +161,9 @@ it.effect("sends the native start-active action to the read-write roster endpoin
   });
 
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
-    const result = yield* provider.applyNativeStartActive({
+    const result = yield* provider.applyNativeAction({
       ...sessionInput,
       providerTeamKey: "461.l.1000.t.1",
       target: { type: "week", week: 7 },
@@ -202,7 +184,7 @@ it.effect("sends the native start-active action to the read-write roster endpoin
     assert.include(write.body, "<week>7</week>");
     assert.include(write.body, "<action>start_active_players</action>");
     assert.notInclude(write.body, "roster_action");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(layer))));
+  }).pipe(Effect.provide(yahooLayer(layer)));
 });
 
 it.effect("sends explicit player assignments to the read-write roster endpoint", () => {
@@ -231,7 +213,7 @@ it.effect("sends explicit player assignments to the read-write roster endpoint",
   });
 
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const result = yield* provider.applyExplicitAssignments({
       ...sessionInput,
@@ -258,7 +240,7 @@ it.effect("sends explicit player assignments to the read-write roster endpoint",
       write.body,
       '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster><coverage_type>week</coverage_type><week>7</week><players><player><player_key>461.p.10001</player_key><position>RB</position></player><player><player_key>461.p.10002</player_key><position>BN</position></player></players></roster></fantasy_content>',
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(layer))));
+  }).pipe(Effect.provide(yahooLayer(layer)));
 });
 
 it.effect("reports an explicit assignment rejection without retrying a different body", () => {
@@ -274,7 +256,7 @@ it.effect("reports an explicit assignment rejection without retrying a different
   });
 
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const result = yield* provider.applyExplicitAssignments({
       ...sessionInput,
@@ -284,20 +266,20 @@ it.effect("reports an explicit assignment rejection without retrying a different
     });
 
     assert.deepStrictEqual(result, { status: "rejected", reason: "invalid_request" });
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(layer))));
+  }).pipe(Effect.provide(yahooLayer(layer)));
 });
 
 it.effect("rejects rejected sessions without exposing the cookie or response body", () => {
   const internet = recordingInternet(() => new Response("private-provider-body", { status: 401 }));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(provider.validateSession(sessionInput));
 
     assert.instanceOf(error, ProviderSessionRejected);
     assert.notInclude(String(error), Redacted.value(sessionInput.session));
     assert.notInclude(String(error), "private-provider-body");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("cancels a rejected response body inside the request scope", () => {
@@ -317,12 +299,12 @@ it.effect("cancels a rejected response body inside the request scope", () => {
       ),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     yield* Effect.flip(provider.validateSession(sessionInput));
 
     assert.isTrue(cancelled);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect.each([
@@ -345,13 +327,13 @@ it.effect.each([
 ])("rejects $name without exposing provider content", ({ body }) => {
   const internet = recordingInternet(() => jsonResponse(body));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(provider.discoverTeams(sessionInput));
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.notInclude(String(error), "private-provider-body");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects discovery when the provider returns no session user", () => {
@@ -359,12 +341,12 @@ it.effect("rejects discovery when the provider returns no session user", () => {
     jsonResponse({ fantasy_content: { users: { count: 0 } } }),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(provider.discoverTeams(sessionInput));
 
     assert.instanceOf(error, ProviderSessionRejected);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects redirects through PublicInternet", () => {
@@ -374,25 +356,29 @@ it.effect("rejects redirects through PublicInternet", () => {
     ),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(provider.validateSession(sessionInput));
 
     assert.instanceOf(error, ProviderRequestFailed);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("reports a missing crumb as a typed unavailable failure", () => {
-  const internet = recordingInternet(() =>
-    jsonResponse({ service: { "xml:lang": "en-US", crumb: null } }),
+it.effect("reports a missing write token as an unsent write", () => {
+  const internet = recordingInternet((request) =>
+    request.url.pathname === "/fantasy/v3/getCrumb"
+      ? jsonResponse({ service: { "xml:lang": "en-US", crumb: null } })
+      : jsonResponse({}, 404),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
-
-    const error = yield* Effect.flip(provider.readCrumb(sessionInput));
-
-    assert.instanceOf(error, ProviderCrumbUnavailable);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+    const provider = yield* testProvider;
+    const result = yield* provider.applyNativeAction({
+      ...sessionInput,
+      providerTeamKey: "461.l.1000.t.1",
+      target: { type: "week", week: 3 },
+    });
+    assert.deepStrictEqual(result, { status: "not_sent", reason: "session_incomplete" });
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("keeps cookies, crumbs, and raw payloads out of spans", () => {
@@ -408,7 +394,7 @@ it.effect("keeps cookies, crumbs, and raw payloads out of spans", () => {
     Promise.resolve(new Response("private-provider-body", { status: 401 })),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     yield* Effect.exit(provider.validateSession(sessionInput));
 
@@ -431,7 +417,7 @@ it.effect("keeps cookies, crumbs, and raw payloads out of spans", () => {
     }
     assert.isTrue(spans.some((span) => span.attributes.has("server.address")));
   }).pipe(
-    Effect.provide(YahooProvider.pipe(Layer.provide(internet))),
+    Effect.provide(yahooLayer(internet)),
     Effect.withSpan("provider.test"),
     Effect.withTracer(tracer),
   );
@@ -440,7 +426,7 @@ it.effect("keeps cookies, crumbs, and raw payloads out of spans", () => {
 it.effect("reads an NFL league whose settings publish extra and renamed fields", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflLeagueSettings));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const league = yield* provider.readLeague({
       ...sessionInput,
@@ -454,21 +440,17 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
     );
     assert.strictEqual(internet.calls[0]?.headers["cookie"], Redacted.value(sessionInput.session));
     assert.strictEqual(league.name, "Synthetic NFL League");
-    assert.deepStrictEqual(league.periodWindow, { currentWeek: 6, startWeek: 1, endWeek: 17 });
+    assert.deepStrictEqual(league.periodWindow, { current: 6, start: 1, end: 17 });
     assert.strictEqual(league.rosterCoverage, "week");
     assert.strictEqual(league.weeklyDeadline, undefined);
     assert.deepStrictEqual(
-      league.rosterPositions.map((position) => [
-        position.position,
-        position.count,
-        position.isStarting,
-      ]),
+      league.rosterPositions.map((position) => [position.position, position.count, position.kind]),
       [
-        ["QB", 1, true],
-        ["WR", 2, true],
-        ["W/R/T", 1, true],
-        ["BN", 6, false],
-        ["IR", 1, false],
+        ["QB", 1, "starting"],
+        ["WR", 2, "starting"],
+        ["W/R/T", 1, "starting"],
+        ["BN", 6, "bench"],
+        ["IR", 1, "reserve"],
       ],
     );
     assert.deepStrictEqual(
@@ -489,13 +471,13 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
       { statId: 9, points: "6" },
       { statId: 13, points: "0.5" },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads an NHL head-to-head league with qualifying-days settings and no modifiers", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlLeagueSettings));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const league = yield* provider.readLeague({
       ...sessionInput,
@@ -503,7 +485,7 @@ it.effect("reads an NHL head-to-head league with qualifying-days settings and no
       sport: "hockey",
     });
 
-    assert.deepStrictEqual(league.periodWindow, { currentWeek: 3, startWeek: 1, endWeek: 24 });
+    assert.deepStrictEqual(league.periodWindow, { current: 3, start: 1, end: 24 });
     assert.strictEqual(league.rosterCoverage, "date");
     assert.strictEqual(league.webUrl, "https://hockey.fantasysports.yahoo.com/hockey/4001");
     assert.strictEqual(league.weeklyDeadline, "game");
@@ -513,13 +495,13 @@ it.effect("reads an NHL head-to-head league with qualifying-days settings and no
     );
     assert.deepStrictEqual(league.statModifiers, []);
     assert.strictEqual(league.statCategories.length, 3);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads a rotisserie league that publishes no scoring-week window", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlRotoLeagueSettings));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const league = yield* provider.readLeague({
       ...sessionInput,
@@ -547,13 +529,13 @@ it.effect("reads a rotisserie league that publishes no scoring-week window", () 
         ["Shots on Goal", true],
       ],
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("names the week-window field when only part of the window is published", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflLeagueSettingsWithoutEndWeek));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readLeague({
@@ -565,13 +547,13 @@ it.effect("names the week-window field when only part of the window is published
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.strictEqual(error.field, "league.end_week");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("names the field that is genuinely unverifiable", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflLeagueSettingsWithTextTeamCount));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readLeague({
@@ -584,13 +566,13 @@ it.effect("names the field that is genuinely unverifiable", () => {
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.strictEqual(error.field, "league.num_teams");
     assert.notInclude(String(error), "Synthetic NFL League");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects a league response for another league and names the identity field", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflLeagueSettingsForAnotherLeague));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readLeague({
@@ -603,13 +585,13 @@ it.effect("rejects a league response for another league and names the identity f
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.strictEqual(error.field, "league.league_key");
     assert.notInclude(String(error), "Synthetic NFL League");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads an exact selected week roster with whole verified fields", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const roster = yield* provider.readRoster({
       ...sessionInput,
@@ -656,13 +638,13 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         undroppable: true,
       },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads a week-scoped roster container from a captured payload", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const roster = yield* provider.readRoster({
       ...sessionInput,
@@ -683,13 +665,13 @@ it.effect("reads a week-scoped roster container from a captured payload", () => 
         ["Synthetic Reserve", "BN", false, "O"],
       ],
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects a roster returned for a different team", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readRoster({
@@ -701,13 +683,13 @@ it.effect("rejects a roster returned for a different team", () => {
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.strictEqual(error.field, "team.team_key");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects a roster whose container and entries disagree on the week", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflRosterWeekMismatch));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readRoster({
@@ -718,13 +700,13 @@ it.effect("rejects a roster whose container and entries disagree on the week", (
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("refuses to relabel a date-scoped roster as a week", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readRoster({
@@ -737,7 +719,7 @@ it.effect("refuses to relabel a date-scoped roster as a week", () => {
     assert.instanceOf(error, ProviderPeriodMismatch);
     assert.deepStrictEqual(error.requested, { type: "week", week: 4 });
     assert.deepStrictEqual(error.covered, { type: "date", date: "2026-10-25" });
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("treats a rejected week selector as uncovered period coverage", () => {
@@ -747,7 +729,7 @@ it.effect("treats a rejected week selector as uncovered period coverage", () => 
       : jsonResponse(yahooNhlRoster),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readRoster({
@@ -761,13 +743,13 @@ it.effect("treats a rejected week selector as uncovered period coverage", () => 
     assert.deepStrictEqual(error.requested, { type: "week", week: 6 });
     assert.strictEqual(error.covered, null);
     assert.strictEqual(internet.calls.length, 1);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads a date-scoped roster from a captured payload", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const roster = yield* provider.readRoster({
       ...sessionInput,
@@ -783,13 +765,13 @@ it.effect("reads a date-scoped roster from a captured payload", () => {
         ["Synthetic Goalie", "BN", ["G"]],
       ],
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads a date target without sending a period selector", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const roster = yield* provider.readRoster({
       ...sessionInput,
@@ -802,13 +784,13 @@ it.effect("reads a date target without sending a period selector", () => {
       internet.calls[0]?.url.href,
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4002.t.3/roster?format=json",
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reports a date period mismatch without relabelling another day", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readRoster({
@@ -821,13 +803,13 @@ it.effect("reports a date period mismatch without relabelling another day", () =
     assert.instanceOf(error, ProviderPeriodMismatch);
     assert.deepStrictEqual(error.requested, { type: "date", date: "2026-10-24" });
     assert.deepStrictEqual(error.covered, { type: "date", date: "2026-10-25" });
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("sends a week selector only for a week target", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const roster = yield* provider.readRoster({
       ...sessionInput,
@@ -840,13 +822,13 @@ it.effect("sends a week selector only for a week target", () => {
       internet.calls[0]?.url.href,
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6?format=json",
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reports a period mismatch instead of relabelling another week", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readRoster({
@@ -859,13 +841,13 @@ it.effect("reports a period mismatch instead of relabelling another week", () =>
     assert.instanceOf(error, ProviderPeriodMismatch);
     assert.deepStrictEqual(error.requested, { type: "week", week: 4 });
     assert.deepStrictEqual(error.covered, { type: "week", week: 6 });
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects an empty roster as an unestablished period", () => {
   const internet = recordingInternet(() => jsonResponse(yahooEmptyRoster));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readRoster({
@@ -876,13 +858,13 @@ it.effect("rejects an empty roster as an unestablished period", () => {
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("searches free agents with one exact request and typed availability", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const result = yield* provider.searchPlayers({
       ...sessionInput,
@@ -909,8 +891,8 @@ it.effect("searches free agents with one exact request and typed availability", 
         availability: "free_agent",
         percentOwned: 42.5,
         percentOwnedDelta: 3,
-        percentStarted: 31.5,
-        percentStartedDelta: -2,
+        communityStartRate: 31.5,
+        communityStartRateChange: -2,
       },
       {
         providerPlayerKey: "466.p.20007",
@@ -921,8 +903,8 @@ it.effect("searches free agents with one exact request and typed availability", 
         availability: "waiver",
         percentOwned: null,
         percentOwnedDelta: null,
-        percentStarted: null,
-        percentStartedDelta: null,
+        communityStartRate: null,
+        communityStartRateChange: null,
       },
       {
         providerPlayerKey: "466.p.20008",
@@ -933,17 +915,17 @@ it.effect("searches free agents with one exact request and typed availability", 
         availability: "free_agent",
         percentOwned: 0,
         percentOwnedDelta: 0,
-        percentStarted: null,
-        percentStartedDelta: null,
+        communityStartRate: null,
+        communityStartRateChange: null,
       },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("searches waiver players without a query", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     yield* provider.searchPlayers({
       ...sessionInput,
@@ -960,13 +942,13 @@ it.effect("searches waiver players without a query", () => {
       internet.calls[0]?.url.href,
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned,percent_started?format=json",
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("searches the whole player pool without an availability filter", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     yield* provider.searchPlayers({
       ...sessionInput,
@@ -983,13 +965,13 @@ it.effect("searches the whole player pool without an availability filter", () =>
       internet.calls[0]?.url.href,
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned,percent_started?format=json",
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("sorts by a league stat and by provider ranks with explicit sort types", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     yield* provider.searchPlayers({
       ...sessionInput,
@@ -1019,13 +1001,13 @@ it.effect("sorts by a league stat and by provider ranks with explicit sort types
         "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=AR;sort_type=week;count=10;out=ownership,percent_owned,percent_started?format=json",
       ],
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("refuses a stat sort without a stat id", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.searchPlayers({
@@ -1042,13 +1024,13 @@ it.effect("refuses a stat sort without a stat id", () => {
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.deepStrictEqual(internet.calls, []);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects an unbounded player search without a request", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.searchPlayers({
@@ -1065,13 +1047,13 @@ it.effect("rejects an unbounded player search without a request", () => {
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.deepStrictEqual(internet.calls, []);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads completed-week football statistics on a weekly basis", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflWeekPlayerDetails));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
@@ -1079,8 +1061,8 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       period: { week: 6 },
-      startedPeriod: { type: "week", week: 6 },
-      currentWeek: 7,
+      startRateCoverage: { type: "week", week: 6 },
+      currentPeriod: 7,
     });
 
     assert.strictEqual(
@@ -1104,21 +1086,21 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
           ],
         },
         projected: undefined,
-        percentStarted: {
+        communityStartRate: {
           percent: 38,
-          delta: 10,
+          change: 10,
           coverage: { type: "week", week: 6 },
-          cuts: [{ cutType: "diamond", percent: 0 }],
+          cuts: [{ cut: "diamond", percent: 0 }],
         },
       },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads season statistics on a season basis when no completed week is available", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
@@ -1126,8 +1108,8 @@ it.effect("reads season statistics on a season basis when no completed week is a
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       period: { week: 6 },
-      startedPeriod: { type: "week", week: 6 },
-      currentWeek: 6,
+      startRateCoverage: { type: "week", week: 6 },
+      currentPeriod: 6,
     });
 
     assert.strictEqual(
@@ -1144,13 +1126,13 @@ it.effect("reads season statistics on a season basis when no completed week is a
     });
     assert.strictEqual(details[0]?.rosterStatus, "free_agent");
     assert.strictEqual(details[0]?.projected, undefined);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads a bounded player history in one request per period", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const history = yield* provider.readPlayerHistory({
       ...sessionInput,
@@ -1158,7 +1140,7 @@ it.effect("reads a bounded player history in one request per period", () => {
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       periods: [{ week: 6 }, { week: 7 }],
-      currentWeek: 6,
+      currentPeriod: 6,
     });
 
     assert.deepStrictEqual(
@@ -1171,13 +1153,13 @@ it.effect("reads a bounded player history in one request per period", () => {
     assert.notInclude(internet.calls[0]?.url.href, "percent_started");
     assert.strictEqual(history[0]?.details[0]?.providerPlayerKey, "466.p.20001");
     assert.strictEqual(history[1]?.details[0]?.providerPlayerKey, "466.p.20001");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("uses the season basis when the current week is unknown", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
@@ -1185,8 +1167,8 @@ it.effect("uses the season basis when the current week is unknown", () => {
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       period: { week: 6 },
-      startedPeriod: { type: "week", week: 6 },
-      currentWeek: undefined,
+      startRateCoverage: { type: "week", week: 6 },
+      currentPeriod: undefined,
     });
 
     assert.strictEqual(
@@ -1201,13 +1183,13 @@ it.effect("uses the season basis when the current week is unknown", () => {
         { statId: 79, value: null },
       ],
     });
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads season statistics for hockey instead of requesting a weekly series", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlSeasonPlayerDetails));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
@@ -1215,19 +1197,19 @@ it.effect("reads season statistics for hockey instead of requesting a weekly ser
       providerPlayerKeys: ["466.p.30001"],
       sport: "hockey",
       period: undefined,
-      startedPeriod: { type: "date", date: "2026-10-26" },
-      currentWeek: 7,
+      startRateCoverage: { type: "date", date: "2026-10-26" },
+      currentPeriod: 7,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/players;player_keys=466.p.30001;out=stats,ownership,percent_started?format=json&stats.type=season&percent_started.cut_types=diamond",
     );
-    assert.deepStrictEqual(details[0]?.percentStarted, {
+    assert.deepStrictEqual(details[0]?.communityStartRate, {
       percent: 43,
-      delta: -3,
+      change: -3,
       coverage: { type: "date", date: "2026-10-26" },
-      cuts: [{ cutType: "diamond", percent: 0 }],
+      cuts: [{ cut: "diamond", percent: 0 }],
     });
     assert.deepStrictEqual(details[0]?.actual, {
       basis: { type: "season" },
@@ -1238,13 +1220,13 @@ it.effect("reads season statistics for hockey instead of requesting a weekly ser
       ],
     });
     assert.strictEqual(details[0]?.rosterStatus, "waiver");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reports no actual statistics when the provider omits the series", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlWeekPlayerDetails));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
@@ -1252,26 +1234,26 @@ it.effect("reports no actual statistics when the provider omits the series", () 
       providerPlayerKeys: ["466.p.30001"],
       sport: "hockey",
       period: undefined,
-      startedPeriod: undefined,
-      currentWeek: undefined,
+      startRateCoverage: undefined,
+      currentPeriod: undefined,
     });
 
     assert.strictEqual(details[0]?.actual, undefined);
     assert.strictEqual(details[0]?.name, "Synthetic Skater");
     assert.strictEqual(details[0]?.projected, undefined);
-    assert.deepStrictEqual(details[0]?.percentStarted, {
+    assert.deepStrictEqual(details[0]?.communityStartRate, {
       percent: 43,
-      delta: -3,
+      change: -3,
       coverage: { type: "date", date: "2026-10-26" },
-      cuts: [{ cutType: "diamond", percent: 0 }],
+      cuts: [{ cut: "diamond", percent: 0 }],
     });
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("decodes a started percentage and its diamond cut in one node", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflPlayerDetailsWithPopulatedCut));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
@@ -1279,34 +1261,34 @@ it.effect("decodes a started percentage and its diamond cut in one node", () => 
       providerPlayerKeys: ["466.p.20001", "466.p.20002"],
       sport: "football",
       period: { week: 6 },
-      startedPeriod: { type: "week", week: 6 },
-      currentWeek: 7,
+      startRateCoverage: { type: "week", week: 6 },
+      currentPeriod: 7,
     });
 
     assert.deepStrictEqual(
-      details.map((detail) => detail.percentStarted),
+      details.map((detail) => detail.communityStartRate),
       [
         {
           percent: 38,
-          delta: 10,
+          change: 10,
           coverage: { type: "week", week: 6 },
-          cuts: [{ cutType: "diamond", percent: 41 }],
+          cuts: [{ cut: "diamond", percent: 41 }],
         },
         {
           percent: 72,
-          delta: -4,
+          change: -4,
           coverage: { type: "week", week: 6 },
-          cuts: [{ cutType: "diamond", percent: 65 }],
+          cuts: [{ cut: "diamond", percent: 65 }],
         },
       ],
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("keeps a zero cut percentage instead of treating it as absent", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflPlayerDetailsWithUnpopulatedCut));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
@@ -1314,15 +1296,15 @@ it.effect("keeps a zero cut percentage instead of treating it as absent", () => 
       providerPlayerKeys: ["466.p.20001", "466.p.20002"],
       sport: "football",
       period: { week: 6 },
-      startedPeriod: { type: "week", week: 6 },
-      currentWeek: 7,
+      startRateCoverage: { type: "week", week: 6 },
+      currentPeriod: 7,
     });
 
     assert.deepStrictEqual(
-      details.map((detail) => detail.percentStarted?.cuts),
-      [[{ cutType: "diamond", percent: 0 }], [{ cutType: "diamond", percent: 0 }]],
+      details.map((detail) => detail.communityStartRate?.cuts),
+      [[{ cut: "diamond", percent: 0 }], [{ cut: "diamond", percent: 0 }]],
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reports an absent started percentage as absent", () => {
@@ -1330,7 +1312,7 @@ it.effect("reports an absent started percentage as absent", () => {
     jsonResponse(yahooNhlPlayerDetailsWithoutStartedPercentage),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
@@ -1338,8 +1320,8 @@ it.effect("reports an absent started percentage as absent", () => {
       providerPlayerKeys: ["466.p.30001"],
       sport: "hockey",
       period: undefined,
-      startedPeriod: undefined,
-      currentWeek: undefined,
+      startRateCoverage: undefined,
+      currentPeriod: undefined,
     });
 
     assert.deepStrictEqual(details, [
@@ -1352,10 +1334,10 @@ it.effect("reports an absent started percentage as absent", () => {
         rosterStatus: "rostered",
         actual: undefined,
         projected: undefined,
-        percentStarted: undefined,
+        communityStartRate: undefined,
       },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reports a missing started value for one player without failing the read", () => {
@@ -1363,7 +1345,7 @@ it.effect("reports a missing started value for one player without failing the re
     jsonResponse(yahooNhlPlayerDetailsWithMissingStartedValue),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const details = yield* provider.readPlayerDetails({
       ...sessionInput,
@@ -1371,18 +1353,18 @@ it.effect("reports a missing started value for one player without failing the re
       providerPlayerKeys: ["466.p.30001", "466.p.30002"],
       sport: "hockey",
       period: undefined,
-      startedPeriod: { type: "date", date: "2026-10-26" },
-      currentWeek: undefined,
+      startRateCoverage: { type: "date", date: "2026-10-26" },
+      currentPeriod: undefined,
     });
 
-    assert.deepStrictEqual(details[0]?.percentStarted, {
+    assert.deepStrictEqual(details[0]?.communityStartRate, {
       percent: null,
-      delta: null,
+      change: null,
       coverage: { type: "date", date: "2026-10-26" },
-      cuts: [{ cutType: "diamond", percent: null }],
+      cuts: [{ cut: "diamond", percent: null }],
     });
-    assert.strictEqual(details[1]?.percentStarted?.percent, 43);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+    assert.strictEqual(details[1]?.communityStartRate?.percent, 43);
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("fails loudly when a started percentage cannot be parsed", () => {
@@ -1390,7 +1372,7 @@ it.effect("fails loudly when a started percentage cannot be parsed", () => {
     jsonResponse(yahooNhlPlayerDetailsWithUnparseableStartedValue),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readPlayerDetails({
@@ -1399,14 +1381,14 @@ it.effect("fails loudly when a started percentage cannot be parsed", () => {
         providerPlayerKeys: ["466.p.30001"],
         sport: "hockey",
         period: undefined,
-        startedPeriod: { type: "date", date: "2026-10-26" },
-        currentWeek: undefined,
+        startRateCoverage: { type: "date", date: "2026-10-26" },
+        currentPeriod: undefined,
       }),
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.strictEqual(error.field, "league.players.0.percent_started.value");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("fails loudly when no player carries a started percentage", () => {
@@ -1414,7 +1396,7 @@ it.effect("fails loudly when no player carries a started percentage", () => {
     jsonResponse(yahooNhlPlayerDetailsWithoutStartedPercentage),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readPlayerDetails({
@@ -1423,14 +1405,14 @@ it.effect("fails loudly when no player carries a started percentage", () => {
         providerPlayerKeys: ["466.p.30001"],
         sport: "hockey",
         period: undefined,
-        startedPeriod: { type: "date", date: "2026-10-26" },
-        currentWeek: undefined,
+        startRateCoverage: { type: "date", date: "2026-10-26" },
+        currentPeriod: undefined,
       }),
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.strictEqual(error.field, "league.players.percent_started");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reports the covered started period when it differs from the request", () => {
@@ -1438,7 +1420,7 @@ it.effect("reports the covered started period when it differs from the request",
     jsonResponse(yahooNflPlayerDetailsWithMismatchedStartedCoverage),
   );
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readPlayerDetails({
@@ -1447,21 +1429,21 @@ it.effect("reports the covered started period when it differs from the request",
         providerPlayerKeys: ["466.p.20001"],
         sport: "football",
         period: { week: 6 },
-        startedPeriod: { type: "week", week: 6 },
-        currentWeek: 7,
+        startRateCoverage: { type: "week", week: 6 },
+        currentPeriod: 7,
       }),
     );
 
     assert.instanceOf(error, ProviderPeriodMismatch);
     assert.deepStrictEqual(error.requested, { type: "week", week: 6 });
     assert.deepStrictEqual(error.covered, { type: "week", week: 5 });
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads a league scoreboard for the requested week", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflMatchups));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const matchups = yield* provider.readMatchups({
       ...sessionInput,
@@ -1503,13 +1485,13 @@ it.effect("reads a league scoreboard for the requested week", () => {
         categoryWinners: [],
       },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads head-to-head point standings with record and season points", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflStandings));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const standings = yield* provider.readStandings({
       ...sessionInput,
@@ -1552,13 +1534,13 @@ it.effect("reads head-to-head point standings with record and season points", ()
         categoryPoints: [],
       },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads category standings with season category totals and no roto points", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlCategoryStandings));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const standings = yield* provider.readStandings({
       ...sessionInput,
@@ -1578,13 +1560,13 @@ it.effect("reads category standings with season category totals and no roto poin
     ]);
     assert.deepStrictEqual(first?.categoryPoints, []);
     assert.isNull(first?.gamesBack);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads rotisserie standings without inventing a win-loss record", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlRotoStandings));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const standings = yield* provider.readStandings({
       ...sessionInput,
@@ -1604,13 +1586,13 @@ it.effect("reads rotisserie standings without inventing a win-loss record", () =
       { statId: 1, value: 37 },
       { statId: 2, value: 54 },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects standings for another league", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflStandings));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readStandings({ ...sessionInput, providerLeagueKey: "466.l.4999" }),
@@ -1618,13 +1600,13 @@ it.effect("rejects standings for another league", () => {
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.strictEqual(error.field, "league.league_key");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads category matchup values, winners, and remaining player-games", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlMatchupsWithGames));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const matchups = yield* provider.readMatchups({
       ...sessionInput,
@@ -1662,13 +1644,13 @@ it.effect("reads category matchup values, winners, and remaining player-games", 
     assert.isFalse(matchup.isTied);
     assert.strictEqual(matchup.weekStart, "2026-10-19");
     assert.strictEqual(matchup.weekEnd, "2026-10-25");
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reports a scoreboard period mismatch", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflMatchups));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readMatchups({
@@ -1681,13 +1663,13 @@ it.effect("reports a scoreboard period mismatch", () => {
     assert.instanceOf(error, ProviderPeriodMismatch);
     assert.deepStrictEqual(error.requested, { type: "week", week: 4 });
     assert.deepStrictEqual(error.covered, { type: "week", week: 6 });
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("scopes a transaction read to one team in the same league", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     yield* provider.readTransactions({
       ...sessionInput,
@@ -1700,13 +1682,13 @@ it.effect("scopes a transaction read to one team in the same league", () => {
       internet.calls[0]?.url.href,
       "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;count=25;team_key=466.l.4000.t.1?format=json",
     );
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("refuses a transaction team filter from another league", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readTransactions({
@@ -1719,13 +1701,13 @@ it.effect("refuses a transaction team filter from another league", () => {
 
     assert.instanceOf(error, ProviderResponseInvalid);
     assert.deepStrictEqual(internet.calls, []);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads bounded league transaction history with dropped-player identity", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const transactions = yield* provider.readTransactions({
       ...sessionInput,
@@ -1780,13 +1762,13 @@ it.effect("reads bounded league transaction history with dropped-player identity
         ],
       },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("reads league team membership", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflLeagueTeams));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const teams = yield* provider.readLeagueTeams({
       ...sessionInput,
@@ -1809,13 +1791,13 @@ it.effect("reads league team membership", () => {
         name: "Synthetic Rival",
       },
     ]);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("rejects league membership that names another league", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflLeagueTeamsForAnotherLeague));
   return Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
       provider.readLeagueTeams({
@@ -1825,7 +1807,7 @@ it.effect("rejects league membership that names another league", () => {
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
-  }).pipe(Effect.provide(YahooProvider.pipe(Layer.provide(internet.layer))));
+  }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect.each([
@@ -1855,7 +1837,7 @@ it.effect.each([
   },
 ])("builds a review-only $name link on the exact provider host", ({ intent, expected }) =>
   Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const link = yield* provider.buildReviewLink({
       providerLeagueKey: "461.l.1000",
@@ -1870,16 +1852,12 @@ it.effect.each([
     assert.strictEqual(url.search, `?${expected}`);
     assert.notInclude(url.pathname, "submit");
     assert.notInclude(url.pathname, "confirm");
-  }).pipe(
-    Effect.provide(
-      YahooProvider.pipe(Layer.provide(recordingInternet(() => jsonResponse({})).layer)),
-    ),
-  ),
+  }).pipe(Effect.provide(yahooLayer(recordingInternet(() => jsonResponse({}))))),
 );
 
 it.effect("rejects review links for a foreign host or a non-numeric player key", () =>
   Effect.gen(function* () {
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
     const foreign = yield* Effect.flip(
       provider.buildReviewLink({
@@ -1902,11 +1880,7 @@ it.effect("rejects review links for a foreign host or a non-numeric player key",
     assert.strictEqual(foreign.reason, "unsupported-league-url");
     assert.instanceOf(nonNumeric, ProviderReviewLinkInvalid);
     assert.strictEqual(nonNumeric.reason, "unsupported-player-key");
-  }).pipe(
-    Effect.provide(
-      YahooProvider.pipe(Layer.provide(recordingInternet(() => jsonResponse({})).layer)),
-    ),
-  ),
+  }).pipe(Effect.provide(yahooLayer(recordingInternet(() => jsonResponse({}))))),
 );
 
 type RecordedRequest = {
@@ -1945,7 +1919,20 @@ function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status });
 }
 
+const testProvider = Effect.gen(function* () {
+  const registry = yield* ProviderRegistry;
+  return yield* registry.requireProvider(decodeProviderKey("yahoo"));
+});
+
+function yahooLayer(
+  internet: Layer.Layer<PublicInternet> | { readonly layer: Layer.Layer<PublicInternet> },
+): Layer.Layer<ProviderRegistry> {
+  return Layer.effect(ProviderRegistry)(
+    Effect.map(yahooProvider, (provider) => ProviderRegistry.of(providerRegistryOf([provider]))),
+  ).pipe(Layer.provide("layer" in internet ? internet.layer : internet));
+}
+
 const sessionInput = {
-  provider: "yahoo" as const,
+  provider: decodeProviderKey("yahoo"),
   session: Redacted.make("A1=canary-cookie-value; A3=another-cookie-value"),
 };

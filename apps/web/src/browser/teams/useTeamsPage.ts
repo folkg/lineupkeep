@@ -4,6 +4,7 @@ import type { Accessor } from "solid-js";
 
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
+import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 import type {
   TeamChangeView,
   TeamControlData,
@@ -45,7 +46,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     ...teamMutations.refresh(props.remote()),
     onSuccess: (view: TeamRefreshView, variables, onMutateResult, context) => {
       storeRefreshedTeamList(view, variables, onMutateResult, context);
-      setFeedback({ type: "success", message: "Teams refreshed from Yahoo." });
+      setFeedback({ type: "success", message: `Teams refreshed from ${defaultProviderName()}.` });
     },
     onError: reportFailure,
     onSettled: () => setRefreshing(false),
@@ -67,7 +68,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     refresh: () => props.onRefresh(),
     refreshTeams: () => {
       setRefreshing(true);
-      setFeedback({ type: "pending", message: "Refreshing teams from Yahoo…" });
+      setFeedback({ type: "pending", message: `Refreshing teams from ${defaultProviderName()}…` });
       void refreshTeams.mutate(undefined);
     },
     setEnabled: (team, enabled) => changeAutomation(team, enabled ? "enable" : "disable"),

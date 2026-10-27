@@ -8,6 +8,7 @@ import {
   HostedLinkingFailureReason,
   HostedLinkingSessionId,
 } from "#contexts/connections/HostedLinking.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { snapshotOf } from "#utilities/machine.ts";
 
 import { HostedLinkingRow } from "./HostedLinkingTables.ts";
@@ -73,7 +74,7 @@ it.effect("checks generated event sequences against the hosted linking machine",
         Arbitrary.map(({ at }) => ({
           _tag: "Active" as const,
           connectionId,
-          provider: "yahoo" as const,
+          provider: decodeProviderKey("yahoo"),
           startedAt: at,
           expiresAt: at,
           updatedAt: at,
@@ -119,7 +120,7 @@ const connectionId = decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3");
 const input = {
   _tag: "Active" as const,
   connectionId,
-  provider: "yahoo" as const,
+  provider: decodeProviderKey("yahoo"),
   startedAt: at,
   expiresAt: DateTime.addDuration(at, "10 minutes"),
   updatedAt: at,

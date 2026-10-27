@@ -4,6 +4,7 @@ import { MachineTest } from "@typeonce/effect-machine/testing";
 import { Arbitrary, DateTime, Effect, Schema } from "effect";
 
 import { ConnectionCredentialGeneration } from "#contexts/connections/Connection.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
 import {
   ConnectionLifecycleState,
@@ -132,7 +133,7 @@ it.effect.each(invariants)("preserves $name across generated scenarios", (invari
       inputArbitrary: values.pipe(
         Arbitrary.map(({ at }) => ({
           _tag: "Linking" as const,
-          provider: "yahoo" as const,
+          provider: decodeProviderKey("yahoo"),
           expiresAt: at,
           updatedAt: at,
         })),
@@ -180,7 +181,7 @@ function makeGeneration(value: number): ConnectionCredentialGeneration {
 const at = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
 const input = {
   _tag: "Linking" as const,
-  provider: "yahoo" as const,
+  provider: decodeProviderKey("yahoo"),
   expiresAt: DateTime.makeUnsafe("2026-01-01T00:10:00Z"),
   updatedAt: at,
 };

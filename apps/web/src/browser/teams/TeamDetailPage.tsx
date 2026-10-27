@@ -13,6 +13,7 @@ import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
+import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import {
@@ -87,7 +88,10 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
         <Inline gap="md">
           <StateLine label="Availability" value={availabilityLabel(props.team)} />
           <StateLine label="Automation" value={automationLabel(props.team)} />
-          <StateLine label="Yahoo" value={connectionLabel(props.team)} />
+          <StateLine
+            label={providerDisplayName(props.team.team.provider)}
+            value={connectionLabel(props.team)}
+          />
         </Inline>
         <Show when={pauseResumeLabel(props.team)}>
           {(label) => (
@@ -132,7 +136,9 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
             </Button>
           </Show>
           <Show when={props.team.connectionStatus === "reconnect-required"}>
-            <TextLink to="/connections">Reconnect Yahoo</TextLink>
+            <TextLink to="/connections">
+              Reconnect {providerDisplayName(props.team.team.provider)}
+            </TextLink>
           </Show>
         </Inline>
         <TextLink search={{ surface: "team", team: props.team.team.id }} to="/feedback">

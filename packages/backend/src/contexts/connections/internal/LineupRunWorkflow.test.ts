@@ -206,7 +206,7 @@ const observation = {
   at,
   observation: {
     target,
-    leagueCurrentWeek: 3,
+    leagueCurrentPeriod: 3,
     leagueStartWeek: 1,
     leagueEndWeek: 17,
     starterSlots: ["QB"],
@@ -232,7 +232,7 @@ const plan = {
   _tag: "PlanPrepared" as const,
   at,
   plan: {
-    _tag: "start_active_players" as const,
+    _tag: "native_action" as const,
     target,
     connectionGeneration: 1,
     lockedPlayers: 1,

@@ -8,19 +8,20 @@ import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
+import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { statusMessage } from "./useHostedLinking";
 import type { HostedLinkingController } from "./useHostedLinking";
 
 export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element {
   return (
-    <Stack as="section" gap="sm" labelledBy="yahoo-signin-title">
-      <Heading id="yahoo-signin-title" level={2} size="section">
-        Yahoo sign-in
+    <Stack as="section" gap="sm" labelledBy="provider-signin-title">
+      <Heading id="provider-signin-title" level={2} size="section">
+        {defaultProviderName()} sign-in
       </Heading>
       <Text size="body" tone="muted">
-        Sign in through a temporary browser. Your password is entered on Yahoo's page; Lineupkeep
-        keeps only the encrypted session.
+        Sign in through a temporary browser. Your password is entered on {defaultProviderName()}'s
+        page; Lineupkeep keeps only the encrypted session.
       </Text>
       <Show
         fallback={
@@ -30,7 +31,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
               pendingLabel="Starting…"
               onClick={props.controller.start}
             >
-              Connect Yahoo
+              Connect {defaultProviderName()}
             </Button>
             <Text size="caption" tone="muted">
               No helper to install.
@@ -57,8 +58,8 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
                 : statusMessage(props.controller.status())}
             </Text>
             <Text size="caption" tone="muted">
-              Keystrokes are typed into Yahoo's page through the temporary browser and are never
-              stored or logged.
+              Keystrokes are typed into {defaultProviderName()}'s page through the temporary browser
+              and are never stored or logged.
             </Text>
             <Text size="caption" tone="muted">
               This sign-in expires at{" "}

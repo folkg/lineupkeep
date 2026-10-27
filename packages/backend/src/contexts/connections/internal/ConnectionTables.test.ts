@@ -7,6 +7,7 @@ import {
   ConnectionCredentialGeneration,
   decodeConnectionId,
 } from "#contexts/connections/Connection.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { snapshotOf } from "#utilities/machine.ts";
 
 import { ConnectionLifecycleWorkflow } from "./ConnectionLifecycleWorkflow.ts";
@@ -76,7 +77,7 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
             createdAt: time,
             state: {
               _tag: "Linking" as const,
-              provider: "yahoo" as const,
+              provider: decodeProviderKey("yahoo"),
               expiresAt: time,
               updatedAt: at,
             },
@@ -85,21 +86,21 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
             record.state,
             {
               _tag: "Ready" as const,
-              provider: "yahoo" as const,
+              provider: decodeProviderKey("yahoo"),
               approvedAt: time,
               credentialGeneration: makeGeneration(generation),
               updatedAt: time,
             },
             {
               _tag: "ReconnectRequired" as const,
-              provider: "yahoo" as const,
+              provider: decodeProviderKey("yahoo"),
               reconnectRequiredAt: time,
               credentialGeneration: makeGeneration(generation),
               updatedAt: time,
             },
             {
               _tag: "Disconnected" as const,
-              provider: "yahoo" as const,
+              provider: decodeProviderKey("yahoo"),
               disconnectedAt: time,
               updatedAt: time,
             },
@@ -128,7 +129,7 @@ it.effect("round-trips discovered team rows through the codec", () =>
       id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b2",
       connectionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
       userId: "owner",
-      provider: "yahoo" as const,
+      provider: decodeProviderKey("yahoo"),
       providerTeamKey: "461.l.1000.t.1",
       providerLeagueKey: "461.l.1000",
       league: "nfl" as const,
@@ -164,7 +165,7 @@ it.effect("rejects incomplete lifecycle rows through the codec", () =>
       userId: "owner",
       requestId: "request",
       pairingCode: "ABCD2345",
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       expiresAt: at,
       approvedAt: at,
       credentialGeneration: 1,
@@ -200,7 +201,7 @@ function makeGeneration(value: number): ConnectionCredentialGeneration {
 const at = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
 const input = {
   _tag: "Linking" as const,
-  provider: "yahoo" as const,
+  provider: decodeProviderKey("yahoo"),
   pairingCode: "ABCD2345",
   expiresAt: DateTime.makeUnsafe("2026-01-01T00:10:00Z"),
   updatedAt: at,

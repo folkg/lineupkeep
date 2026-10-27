@@ -27,6 +27,7 @@ import {
   FakeProviderWorld,
   ProviderFakeTest,
 } from "@lineupkeep/backend/connections/internal/ProviderFakeTest";
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import {
   EmailDeliveryTest,
   EmailOutbox,
@@ -50,7 +51,7 @@ it.effect(
       yield* approve(auth, grant.user_code, owner.cookie);
       yield* provider.setTeams([
         {
-          provider: "yahoo",
+          provider: decodeProviderKey("yahoo"),
           providerTeamKey: "nfl.l.123.t.1",
           providerLeagueKey: "nfl.l.123",
           league: "nfl",
@@ -64,14 +65,17 @@ it.effect(
 
       const { response, text } = yield* upload(token, {
         userCode: grant.user_code,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
       const teams = yield* connections.discoverTeams(owner.id, [{ id: linking.id }]);
       const listed = yield* connections.list(owner.id);
 
       assert.strictEqual(response.status, 200);
-      assert.deepStrictEqual(yield* jsonOfText(text), { status: "ready", provider: "yahoo" });
+      assert.deepStrictEqual(yield* jsonOfText(text), {
+        status: "ready",
+        provider: decodeProviderKey("yahoo"),
+      });
       assert.notInclude(text, sessionValue);
       assert.notInclude(text, token);
       assert.strictEqual(listed[0]?.status, "ready");
@@ -97,7 +101,7 @@ it.effect(
       const linking = yield* startLinking(connections, owner.id, firstGrant.user_code);
       yield* upload(firstToken, {
         userCode: firstGrant.user_code,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
 
@@ -117,13 +121,16 @@ it.effect(
 
       const { response, text } = yield* upload(secondToken, {
         userCode: secondGrant.user_code,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
       const listed = yield* connections.list(owner.id);
 
       assert.strictEqual(response.status, 200);
-      assert.deepStrictEqual(yield* jsonOfText(text), { status: "ready", provider: "yahoo" });
+      assert.deepStrictEqual(yield* jsonOfText(text), {
+        status: "ready",
+        provider: decodeProviderKey("yahoo"),
+      });
       assert.strictEqual(listed[0]?.status, "ready");
       assert.strictEqual(listed[0]?.credentialGeneration, 2);
     }).pipe(Effect.provide(TestLayer)),
@@ -142,13 +149,13 @@ it.effect(
 
       const anonymous = yield* upload(undefined, {
         userCode: grant.user_code,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
       const invalid = yield* upload(token, "not-json");
       const wrongCode = yield* upload(token, {
         userCode: "ZZZZ9999",
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
 
@@ -179,7 +186,7 @@ it.effect(
       const token = yield* redeem(auth, grant.device_code, metadataClientId);
       const { response, text } = yield* upload(token, {
         userCode: grant.user_code,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
 
@@ -235,7 +242,7 @@ it.effect(
 
       const { response } = yield* upload(otherToken, {
         userCode: ownerGrant.user_code,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
       const listed = yield* connections.list(owner.id);
@@ -265,7 +272,7 @@ it.effect(
 
       const expiredResult = yield* upload(expiredToken, {
         userCode: expiredGrant.user_code,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
 
@@ -280,7 +287,7 @@ it.effect(
       yield* connections.cancelLinking(owner.id, [{ id: cancelled.id }]);
       const cancelledResult = yield* upload(cancelledToken, {
         userCode: cancelledGrant.user_code,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
 
@@ -308,7 +315,7 @@ it.effect(
 
       const { response, text } = yield* upload(token, {
         userCode: grant.user_code,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
       const listed = yield* connections.list(owner.id);
@@ -501,7 +508,7 @@ function startLinking(
 ): Effect.Effect<ProviderConnection> {
   const input = Schema.decodeSync(StartLinkingInput)({
     requestId,
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     pairingCode,
   });
   return connections.startLinking(userId, [input]).pipe(

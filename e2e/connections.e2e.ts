@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import type { APIRequestContext, Page } from "@playwright/test";
 import { Schema } from "effect";
 
@@ -90,7 +91,7 @@ test("renders a persisted pairing before client scripts and hydrates cancellatio
   await signUp(page);
   await services.arrange(page, "a linking connection", "startLinking", {
     requestId: randomUUID(),
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     pairingCode: "ABCD2345",
   });
   const hydrationWarnings: string[] = [];
@@ -139,7 +140,7 @@ test("keeps another person's connections invisible", async ({ page, newUser, ser
   await signUp(page);
   await services.exercise(page, "start the owner's link", "startLinking", {
     requestId: randomUUID(),
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     pairingCode: "ABCD2345",
   });
   await page.reload();
@@ -158,7 +159,7 @@ test("refuses an unauthenticated helper upload with a safe error", async ({ requ
   const response = await request.post(`${origin}/api/linking/complete`, {
     data: {
       userCode: "ABCD2345",
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       session: "T=test-session-canary; Y=test-user-canary",
     },
     headers: { origin },

@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import { ConnectionId, Provider } from "./Connection.ts";
+import { ConnectionId, ProviderKey } from "./Connection.ts";
 import {
   FantasyLeague,
   FantasySport,
@@ -11,6 +11,14 @@ import {
 
 export const queryCursorTtlMillis = 15 * 60 * 1000;
 const queryPageMaximumLimit = 50;
+
+export const LeagueFormat = Schema.Literals([
+  "head_to_head_categories",
+  "head_to_head_points",
+  "rotisserie",
+  "unknown",
+]);
+export type LeagueFormat = typeof LeagueFormat.Type;
 
 export const QueryPeriod = Schema.Struct({
   week: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(99)),
@@ -72,7 +80,7 @@ export type QueryStatus = typeof QueryStatus.Type;
 export const QueryTeam = Schema.Struct({
   id: TeamId,
   name: Schema.NonEmptyString,
-  provider: Provider,
+  provider: ProviderKey,
   league: FantasyLeague,
   sport: FantasySport,
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
@@ -82,7 +90,7 @@ export type QueryTeam = typeof QueryTeam.Type;
 export const TeamListRow = Schema.Struct({
   team: TeamId,
   connection: ConnectionId,
-  provider: Provider,
+  provider: ProviderKey,
   league: FantasyLeague,
   sport: FantasySport,
   season: Schema.Int.check(Schema.isGreaterThan(1900)),

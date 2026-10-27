@@ -6,12 +6,10 @@ import type { UserId } from "#contexts/auth/User.ts";
 import { UserId as UserIdSchema } from "#contexts/auth/User.ts";
 import type { ProviderConnection } from "#contexts/connections/Connection.ts";
 import { ConnectionStatus, decodeConnectionId } from "#contexts/connections/Connection.ts";
-import {
-  fantasyDayLabel,
-  fantasyDayPolicy,
-  nextFantasyDayBoundary,
-} from "#contexts/connections/FantasyDay.ts";
+import { fantasyDayLabel, nextFantasyDayBoundary } from "#contexts/connections/FantasyDay.ts";
 import { FantasyTeam, TeamId } from "#contexts/connections/FantasyTeam.ts";
+import type { ProviderFantasyDay } from "#contexts/connections/Provider.ts";
+import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import { TeamNotFound, TeamPersistenceFailed } from "#contexts/connections/Teams.ts";
 import type { TeamAutomationAction, TeamControlInput } from "#contexts/connections/Teams.ts";
 import { anyOf, excludedValues } from "#database/dbUtilities.ts";
@@ -72,6 +70,15 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
   {
     make: Effect.gen(function* () {
       const database = yield* ConnectionsDatabase;
+      const registry = yield* ProviderRegistry;
+
+      const fantasyDayOf = (team: FantasyTeam): ProviderFantasyDay => {
+        const provider = registry.get(team.provider);
+        if (provider === undefined) {
+          throw new Error(`Team ${team.id} references an unregistered provider`);
+        }
+        return provider.capabilities.fantasyDay;
+      };
 
       const list = Effect.fn("TeamRepository.list")(function* (userId: UserId) {
         const rows = yield* database
@@ -203,7 +210,12 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
                   });
                   continue;
                 }
-                const plan = yield* planControl(entry.team, input.action, now);
+                const plan = yield* planControl(
+                  entry.team,
+                  input.action,
+                  now,
+                  fantasyDayOf(entry.team),
+                );
                 switch (plan._tag) {
                   case "Changed":
                     results.push({
@@ -481,6 +493,7 @@ function planControl(
   team: FantasyTeam,
   action: TeamAutomationAction,
   now: DateTime.Utc,
+  fantasyDay: ProviderFantasyDay,
 ): Effect.Effect<ControlPlan> {
   switch (action) {
     case "enable":
@@ -488,7 +501,7 @@ function planControl(
     case "disable":
       return planDisable(team, now);
     case "pause-today":
-      return planPauseToday(team, now);
+      return planPauseToday(team, now, fantasyDay);
     case "resume":
       return planResume(team, now);
   }
@@ -515,19 +528,22 @@ function planDisable(team: FantasyTeam, now: DateTime.Utc): Effect.Effect<Contro
   }
 }
 
-function planPauseToday(team: FantasyTeam, now: DateTime.Utc): Effect.Effect<ControlPlan> {
+function planPauseToday(
+  team: FantasyTeam,
+  now: DateTime.Utc,
+  fantasyDay: ProviderFantasyDay,
+): Effect.Effect<ControlPlan> {
   switch (team.automation.status) {
     case "enabled": {
-      const policy = fantasyDayPolicy(team.provider, team.league);
       return transition(
         team,
         {
           _tag: "Paused",
           at: now,
-          resumesAt: nextFantasyDayBoundary(now, policy),
-          timeZone: policy.timeZone,
-          fantasyDay: fantasyDayLabel(now, policy),
-          policyVersion: policy.version,
+          resumesAt: nextFantasyDayBoundary(now, fantasyDay),
+          timeZone: fantasyDay.timeZone,
+          fantasyDay: fantasyDayLabel(now, fantasyDay),
+          policyVersion: fantasyDay.version,
         },
         now,
       );

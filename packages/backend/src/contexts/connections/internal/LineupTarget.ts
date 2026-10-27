@@ -1,9 +1,8 @@
 import { DateTime, Schema } from "effect";
 
-import type { FantasyDayPolicy } from "#contexts/connections/FantasyDay.ts";
 import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
-import type { ProviderLeagueSettings } from "#contexts/connections/Provider.ts";
+import type { ProviderFantasyDay, ProviderLeagueSettings } from "#contexts/connections/Provider.ts";
 
 export type TargetResolution =
   | { readonly status: "resolved"; readonly target: LineupTargetPeriod }
@@ -20,14 +19,14 @@ export type TargetResolution =
 export function resolveTarget(
   requested: LineupTargetPeriod,
   league: ProviderLeagueSettings,
-  policy: FantasyDayPolicy,
+  fantasyDay: ProviderFantasyDay,
   now: DateTime.Utc,
 ): TargetResolution {
   switch (league.rosterCoverage) {
     case "week":
       return resolveWeekTarget(requested, league);
     case "date":
-      return resolveDateTarget(requested, league, fantasyDayLabel(now, policy));
+      return resolveDateTarget(requested, league, fantasyDayLabel(now, fantasyDay));
   }
 }
 
@@ -47,19 +46,19 @@ function resolveWeekTarget(
         "The provider publishes no scoring-week window for this league, so a scoring week cannot be resolved.",
     };
   }
-  const week = requested.coverage === "current" ? window.currentWeek : requested.week;
-  if (week < window.startWeek || week > window.endWeek) {
+  const week = requested.coverage === "current" ? window.current : requested.week;
+  if (week < window.start || week > window.end) {
     return {
       status: "blocked",
       reason: "outside_season",
-      detail: `Week ${String(week)} is outside the league's declared scoring range (weeks ${String(window.startWeek)} to ${String(window.endWeek)}).`,
+      detail: `Week ${String(week)} is outside the league's declared scoring range (weeks ${String(window.start)} to ${String(window.end)}).`,
     };
   }
-  if (week !== window.currentWeek) {
+  if (week !== window.current) {
     return {
       status: "blocked",
       reason: "stale_period",
-      detail: `Week ${String(week)} is not the provider's current scoring week (week ${String(window.currentWeek)}).`,
+      detail: `Week ${String(week)} is not the provider's current scoring week (week ${String(window.current)}).`,
     };
   }
   return { status: "resolved", target: { coverage: "week", week } };

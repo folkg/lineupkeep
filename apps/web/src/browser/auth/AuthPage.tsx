@@ -6,6 +6,7 @@ import { IntroPanel } from "#browser/brand-ui/IntroPanel.tsx";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Spread } from "#browser/shared-ui/Spread.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
+import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { SignInForm } from "./SignInForm";
 import type { SignInMethodsQueryOptions } from "./signInQueries";
@@ -21,12 +22,12 @@ export function AuthPage(props: AuthPageProps): JSX.Element {
             cue="Your lineup. Looked after."
             title={
               <Heading level={1} size="statement">
-                Sign in. Then connect Yahoo.
+                Sign in. Then connect {defaultProviderName()}.
               </Heading>
             }
           >
             <Text size="lede" tone="muted">
-              Sign in by email code. Then one Yahoo sign-in finds your teams.
+              Sign in by email code. Then one {defaultProviderName()} sign-in finds your teams.
             </Text>
           </IntroPanel>
         }

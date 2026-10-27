@@ -12,6 +12,7 @@ import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
 import type { ConnectionView } from "#contracts/connections/connectionContract.ts";
+import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 
 export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
   return (
@@ -55,6 +56,7 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
           <ConnectionMeta connection={props.connection} />
           <Show when={props.connection.status === "reconnect-required"}>
             <ReconnectForm
+              provider={props.connection.provider}
               code={props.reconnectCode}
               pending={props.reconnecting}
               onChange={props.onChangeReconnectCode}
@@ -65,13 +67,14 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
       }
     >
       <Heading level={3} size="item">
-        Yahoo connection
+        {providerDisplayName(props.connection.provider)} connection
       </Heading>
     </Entry>
   );
 }
 
 function ReconnectForm(props: {
+  readonly provider: string;
   readonly code: string;
   readonly pending: boolean;
   readonly onChange: (value: string) => void;
@@ -80,8 +83,9 @@ function ReconnectForm(props: {
   return (
     <Form gap="sm" onSubmit={props.onStart}>
       <Text size="caption" tone="muted">
-        Run the Lineupkeep helper again, enter the new pairing code here, and finish the Yahoo
-        sign-in. The helper uploads the new session; your team automation settings stay unchanged.
+        Run the Lineupkeep helper again, enter the new pairing code here, and finish the{" "}
+        {providerDisplayName(props.provider)} sign-in. The helper uploads the new session; your team
+        automation settings stay unchanged.
       </Text>
       <TextField
         autocomplete="off"

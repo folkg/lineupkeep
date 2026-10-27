@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import { Schema } from "effect";
 
 import { expect, signUp, test } from "./support";
@@ -16,7 +17,7 @@ test("authorizes named browser personas independently through the fixture", asyn
   await signUp(other);
   await services.exercise(page, "start the owner's link", "startLinking", {
     requestId: randomUUID(),
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     pairingCode: "ABCD2345",
   });
   const ownerClient = await mcp(["connections:read"], page);
@@ -27,7 +28,7 @@ test("authorizes named browser personas independently through the fixture", asyn
 
   expect(owned.isError).toBe(false);
   expect(owned.structuredContent).toMatchObject({
-    connections: [{ provider: "yahoo", status: "linking" }],
+    connections: [{ provider: decodeProviderKey("yahoo"), status: "linking" }],
   });
   expect(isolated.structuredContent).toEqual({ connections: [] });
   const calls = test

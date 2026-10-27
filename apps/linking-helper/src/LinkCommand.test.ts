@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { linkingHelperClient } from "@lineupkeep/backend/auth/AuthorizationScopes";
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import { Array, Duration, Effect, Layer, Redacted } from "effect";
 
 import type { DeviceFlowFailure } from "./DeviceAuthorization.ts";
@@ -132,8 +133,10 @@ function runWith(scenario: {
 
 const options: LinkCommandOptions = {
   appUrl: new URL("http://localhost:5173"),
-  provider: "yahoo",
+  provider: decodeProviderKey("yahoo"),
+  providerLabel: "Yahoo",
   providerLoginUrl: new URL("https://football.fantasysports.yahoo.com/"),
+  sessionCookies: ["T", "Y"],
   headless: false,
   loginTimeout: Duration.minutes(10),
   profileRoot: "/tmp",

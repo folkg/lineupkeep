@@ -3,7 +3,7 @@ import { index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Schema, SchemaTransformation } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
-import { ConnectionId, Provider } from "#contexts/connections/Connection.ts";
+import { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
 import {
   HostedLinkingFailureReason,
   HostedLinkingSessionId,
@@ -18,7 +18,7 @@ export const hostedLinkingSessions = pgTable(
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     connectionId: text("connection_id").notNull(),
-    provider: text("provider", { enum: ["yahoo"] }).notNull(),
+    provider: text("provider").notNull(),
     status: text("status", {
       enum: ["active", "completing", "completed", "cancelled", "expired", "failed"],
     }).notNull(),
@@ -75,7 +75,7 @@ export const HostedLinkingRow = HostedLinkingRowSelect.pipe(
           const id = yield* Schema.decodeEffect(HostedLinkingSessionId)(row.id);
           const userId = yield* Schema.decodeEffect(UserId)(row.userId);
           const connectionId = yield* Schema.decodeEffect(ConnectionId)(row.connectionId);
-          const provider = yield* Schema.decodeEffect(Provider)(row.provider);
+          const provider = yield* Schema.decodeEffect(ProviderKey)(row.provider);
           const content = {
             connectionId,
             provider,
@@ -99,7 +99,7 @@ export const HostedLinkingRow = HostedLinkingRowSelect.pipe(
 
 type RowContent = {
   readonly connectionId: ConnectionId;
-  readonly provider: "yahoo";
+  readonly provider: ProviderKey;
   readonly startedAt: DateTime.Utc;
   readonly expiresAt: DateTime.Utc;
   readonly updatedAt: DateTime.Utc;

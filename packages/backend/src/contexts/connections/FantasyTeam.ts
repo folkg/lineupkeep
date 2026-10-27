@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import { ConnectionId, Provider } from "./Connection.ts";
+import { ConnectionId, ProviderKey } from "./Connection.ts";
 
 export const TeamId = Schema.String.pipe(Schema.check(Schema.isUUID()), Schema.brand("TeamId"));
 export type TeamId = typeof TeamId.Type;
@@ -36,7 +36,7 @@ export type TeamAutomation = typeof TeamAutomation.Type;
 export const FantasyTeam = Schema.Struct({
   id: TeamId,
   connectionId: ConnectionId,
-  provider: Provider,
+  provider: ProviderKey,
   providerTeamKey: Schema.NonEmptyString,
   providerLeagueKey: Schema.NonEmptyString,
   league: FantasyLeague,

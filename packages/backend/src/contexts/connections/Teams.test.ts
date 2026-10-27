@@ -4,6 +4,8 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { and, eq } from "drizzle-orm";
 import { Array, Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+
 import {
   ConnectionCredentialGeneration,
   type ConnectionError,
@@ -25,8 +27,8 @@ import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { providerCredentials, providerTeams } from "./internal/ConnectionTables.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { TeamAutomationState } from "./internal/TeamAutomationWorkflow.ts";
-import { ProviderGateway } from "./Provider.ts";
 import type { ProviderTeam } from "./Provider.ts";
+import { ProviderRegistry } from "./ProviderRegistry.ts";
 
 it.effect("discovers multiple teams in one league and persists them disabled", () =>
   Effect.gen(function* () {
@@ -129,7 +131,7 @@ it.effect("requires a new credential generation after the provider rejects disco
       yield* connections.reconnect(owner, [
         {
           id: ready.id,
-          provider: "yahoo",
+          provider: decodeProviderKey("yahoo"),
           session,
           expectedGeneration: makeGeneration(1),
         },
@@ -216,7 +218,9 @@ function connect(
   return Effect.gen(function* () {
     const linking = Array.getUnsafe(yield* connections.startLinking(owner, [connectInput]), 0);
     const ready = Array.getUnsafe(
-      yield* connections.completeLinking(owner, [{ id: linking.id, provider: "yahoo", session }]),
+      yield* connections.completeLinking(owner, [
+        { id: linking.id, provider: decodeProviderKey("yahoo"), session },
+      ]),
       0,
     );
     return { id: ready.id };
@@ -225,7 +229,7 @@ function connect(
 
 function team(providerTeamKey: string, name: string): ProviderTeam {
   return {
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     providerTeamKey,
     providerLeagueKey: "nhl",
     league: "nhl",
@@ -249,7 +253,7 @@ function findTeam(teams: ReadonlyArray<FantasyTeam>, providerTeamKey: string): F
 
 function ConnectionsLayerFor(
   crypto: Layer.Layer<Crypto.Crypto>,
-): Layer.Layer<Connections | ConnectionsDatabase | FakeProviderWorld | ProviderGateway> {
+): Layer.Layer<Connections | ConnectionsDatabase | FakeProviderWorld | ProviderRegistry> {
   return ConnectionsLive.pipe(
     Layer.provide(ConnectionRepository.layer),
     Layer.provideMerge(ConnectionsDatabaseTest),
@@ -265,12 +269,12 @@ const other = decodeUserId("other");
 const session = Redacted.make("A1=test-session-cookie");
 const startInput = Schema.decodeSync(StartLinkingInput)({
   requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
-  provider: "yahoo",
+  provider: decodeProviderKey("yahoo"),
   pairingCode: "ABCD2345",
 });
 const connectInput = Schema.decodeSync(StartLinkingInput)({
   requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",
-  provider: "yahoo",
+  provider: decodeProviderKey("yahoo"),
   pairingCode: "WXYZ6789",
 });
 const EncryptionTestLayer = ConnectionCredentialEncryption.forKey(

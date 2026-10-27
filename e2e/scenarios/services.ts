@@ -2,6 +2,7 @@ import { ConnectionIdInput, StartLinkingInput } from "@lineupkeep/backend/connec
 import type { ProviderConnection } from "@lineupkeep/backend/connections/Connection";
 import { Connections } from "@lineupkeep/backend/connections/Connections";
 import type { FantasyTeam } from "@lineupkeep/backend/connections/FantasyTeam";
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import { Array, DateTime, Effect, Redacted, Schema } from "effect";
 
 import type { ServiceProgram } from "#e2e/serviceContract.ts";
@@ -46,7 +47,7 @@ export const connectYahooAndDiscoverTeams: ServiceProgram = (user, arguments_) =
       yield* connections.startLinking(user.id, [
         yield* Schema.decodeUnknownEffect(StartLinkingInput)({
           requestId: input.requestId,
-          provider: "yahoo",
+          provider: decodeProviderKey("yahoo"),
           pairingCode: input.pairingCode,
         }),
       ]),
@@ -54,7 +55,11 @@ export const connectYahooAndDiscoverTeams: ServiceProgram = (user, arguments_) =
     );
     const completed = Array.getUnsafe(
       yield* connections.completeLinking(user.id, [
-        { id: linking.id, provider: "yahoo", session: Redacted.make("A1=e2e-provider-session") },
+        {
+          id: linking.id,
+          provider: decodeProviderKey("yahoo"),
+          session: Redacted.make("A1=e2e-provider-session"),
+        },
       ]),
       0,
     );

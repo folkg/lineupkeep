@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import { Provider } from "./Connection.ts";
+import { ProviderKey } from "./Connection.ts";
 
 export const linkingHelperUploadPath = "/api/linking/complete";
 
@@ -10,7 +10,7 @@ const ProviderSessionValue = Schema.RedactedFromValue(
 
 export const LinkingHelperUploadRequest = Schema.Struct({
   userCode: Schema.Trim.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(64))),
-  provider: Provider,
+  provider: ProviderKey,
   session: ProviderSessionValue,
 });
 export type LinkingHelperUploadRequest = typeof LinkingHelperUploadRequest.Type;
@@ -19,7 +19,7 @@ export const LinkingHelperUploadRequestJson = Schema.fromJsonString(LinkingHelpe
 
 export const LinkingHelperUploadSuccess = Schema.Struct({
   status: Schema.Literal("ready"),
-  provider: Provider,
+  provider: ProviderKey,
 });
 export type LinkingHelperUploadSuccess = typeof LinkingHelperUploadSuccess.Type;
 

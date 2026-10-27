@@ -4,6 +4,8 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Duration, Effect, Layer, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+
 import { Connections } from "./Connections.ts";
 import {
   HostedLinkingExpired,
@@ -63,7 +65,7 @@ it.effect("completes once, stores the validated connection, and discovers teams"
     const fake = yield* FakeProviderWorld;
     yield* fake.setTeams([
       {
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         providerTeamKey: "nfl.l.1000.t.1",
         providerLeagueKey: "nfl.l.1000",
         league: "nfl",
@@ -77,14 +79,14 @@ it.effect("completes once, stores the validated connection, and discovers teams"
     const completed = yield* hosted.complete(owner, {
       id: started.session.id,
       ticket: Redacted.value(started.ticket),
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       session,
     });
     const replay = yield* Effect.flip(
       hosted.complete(owner, {
         id: started.session.id,
         ticket: Redacted.value(started.ticket),
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session,
       }),
     );
@@ -114,7 +116,7 @@ it.effect("expires a session after its window and refuses completion", () =>
       hosted.complete(owner, {
         id: started.session.id,
         ticket: Redacted.value(started.ticket),
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session,
       }),
     );
@@ -137,7 +139,7 @@ it.effect("cancels idempotently and rejects completion after cancellation", () =
       hosted.complete(owner, {
         id: started.session.id,
         ticket: Redacted.value(started.ticket),
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session,
       }),
     );
@@ -198,7 +200,9 @@ const HostedLinkingTestLayer = HostedLinkingLive.pipe(
   Layer.provide(NodeCrypto.layer),
 );
 
-const startInput = Schema.decodeSync(StartHostedLinkingInput)({ provider: "yahoo" });
+const startInput = Schema.decodeSync(StartHostedLinkingInput)({
+  provider: decodeProviderKey("yahoo"),
+});
 
 const owner = decodeUserId("owner");
 const other = decodeUserId("other");

@@ -53,7 +53,7 @@ export type ConnectionRemote = {
   readonly disconnect: (input: ConnectionIdData) => Promise<ConnectionChangeView>;
   readonly complete: (input: CompleteLinkingData) => Promise<ConnectionChangeView>;
   readonly reconnect: (input: ReconnectData) => Promise<ConnectionChangeView>;
-  readonly startHosted: (input: { readonly provider: "yahoo" }) => Promise<StartHostedLinkingView>;
+  readonly startHosted: (input: { readonly provider: string }) => Promise<StartHostedLinkingView>;
   readonly cancelHosted: (
     input: typeof HostedLinkingSessionInput.Encoded,
   ) => Promise<CancelHostedLinkingView>;

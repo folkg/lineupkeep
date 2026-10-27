@@ -72,7 +72,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_rosters", {
     description:
-      "Read one linked team's roster for an exact league week. Every entry carries the provider's professional-team abbreviation so schedule context needs no second lookup. The compact shape is the default; full detail adds provider-reported injury, bye, flexibility, and drop metadata. Yahoo publishes no per-player games-remaining or probable-starter field, so `playerSchedule` states that with the reason instead of returning an empty schedule. A week the provider does not cover fails explicitly instead of being guessed.",
+      "Read one linked team's roster for an exact league week. Every entry carries the provider's professional-team abbreviation so schedule context needs no second lookup. The compact shape is the default; full detail adds provider-reported injury, bye, flexibility, and drop metadata. A provider that publishes no per-player games-remaining or probable-starter field says so with the reason instead of returning an empty schedule. A week the provider does not cover fails explicitly instead of being guessed.",
     parameters: GetRostersInput,
     success: Schema.toCodecJson(RosterResult),
     failure: ToolFailure,
@@ -85,7 +85,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      "Search a bounded provider player pool for one linked team, with availability, position, and validated sort filters. Omit the query to list the pool; a blank query is rejected with the remedy. Each row reports provider percent owned with its weekly change, and percent started with its change where the league publishes it; a missing signal is null, never zero. Sort by `name`, `position`, `ownership`, Yahoo's `actual_rank` or `overall_rank`, or a league scoring category through `stat` (the reference comes from `get_league` scoring). Ranked and stat sorts accept a `statPeriod` of `season` (the default) or `week`; Yahoo rejects weekly sorts for hockey, so hockey answers with the remedy instead of forwarding a request it would refuse.",
+      "Search a bounded provider player pool for one linked team, with availability, position, and validated sort filters. Omit the query to list the pool; a blank query is rejected with the remedy. Each row reports provider percent owned with its weekly change, and percent started with its change where the league publishes it; a missing signal is null, never zero. Sort by `name`, `position`, `ownership`, the provider's `actual_rank` or `overall_rank`, or a league scoring category through `stat` (the reference comes from `get_league` scoring). Ranked and stat sorts accept a `statPeriod` of `season` (the default) or `week` where the provider accepts a weekly stat sort; an unsupported combination answers with the remedy instead of forwarding a request the provider would refuse.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,
@@ -98,7 +98,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_players", {
     description:
-      "Hydrate a bounded selection of up to 25 private player references for one linked team. Choose identity, availability, eligibility, actual stats, or scoring context groups. Identity also resolves for players no longer on the roster, from transaction history. Actual statistics declare a week or season basis; Yahoo exposes no projected player statistics, so the projections group always reports unsupported. Missing stats remain null rather than zero.",
+      "Hydrate a bounded selection of up to 25 private player references for one linked team. Choose identity, availability, eligibility, actual stats, or scoring context groups. Identity also resolves for players no longer on the roster, from transaction history. Actual statistics declare a week or season basis; a provider that publishes no projected player statistics reports the projections group as unsupported with the reason. Missing stats remain null rather than zero.",
     parameters: GetPlayersInput,
     success: Schema.toCodecJson(PlayersResult),
     failure: ToolFailure,

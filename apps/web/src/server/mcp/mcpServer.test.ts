@@ -10,6 +10,7 @@ import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupSubmitData } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupRunsShape } from "@lineupkeep/backend/connections/LineupRuns";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import { PlayerRef, QuerySelectionInvalid } from "@lineupkeep/backend/connections/QueryValues";
 import type { TeamsShape } from "@lineupkeep/backend/connections/Teams";
 import { Teams } from "@lineupkeep/backend/connections/Teams";
@@ -344,7 +345,7 @@ it("requires transaction review scope and returns human-review-only links", asyn
     team: {
       id: teamId,
       name: "Alpha",
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       league: "nfl",
       sport: "football",
       season: 2026,

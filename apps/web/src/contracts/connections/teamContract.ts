@@ -28,7 +28,7 @@ type TeamAutomationView = {
 export type TeamView = {
   readonly id: string;
   readonly connectionId: string;
-  readonly provider: "yahoo";
+  readonly provider: string;
   readonly providerTeamKey: string;
   readonly providerLeagueKey: string;
   readonly league: FantasyLeague;

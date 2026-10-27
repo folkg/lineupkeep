@@ -10,11 +10,11 @@ import type { PlayerId, SelectionBasis } from "@lineupkeep/lineup-solver";
 
 import { containsPeriod, periodKey } from "./period.ts";
 import type {
+  CommunityStartRatePopulation,
   Period,
-  PlayerPercentStarted,
+  PlayerCommunityStartRate,
   PlayerRealisedPoints,
   PolicyPlayer,
-  PercentStartedPopulation,
   ValueAssessment,
   ValueSource,
   ValueSourceKind,
@@ -24,7 +24,7 @@ import { selectionUnits } from "./valuation.ts";
 export const valueSourceLadder: ReadonlyArray<ValueSourceKind> = [
   "projected-points",
   "scoring-rules",
-  "percent-started",
+  "community-start-rate",
 ];
 
 export const startCutPreference: ReadonlyArray<string> = ["diamond"];
@@ -37,9 +37,9 @@ export function preferredValueSource(
   return valueSourceLadder.find((kind) => available.includes(kind));
 }
 
-export function percentStartedPopulation(
-  started: ReadonlyArray<PlayerPercentStarted>,
-): PercentStartedPopulation {
+export function communityStartRatePopulation(
+  started: ReadonlyArray<PlayerCommunityStartRate>,
+): CommunityStartRatePopulation {
   for (const cut of startCutPreference) {
     const populated = started.some((player) =>
       player.cuts.some(
@@ -62,8 +62,8 @@ export function resolveValueSource(input: {
       return projectedPointsSource(input.source, input.period);
     case "scoring-rules":
       return scoringRulesSource(input.source);
-    case "percent-started":
-      return percentStartedSource(input.source, input.period);
+    case "community-start-rate":
+      return communityStartRateSource(input.source, input.period);
   }
 }
 
@@ -79,7 +79,7 @@ type SourceValue = {
 
 type ProjectedPointsSource = Extract<ValueSource, { readonly kind: "projected-points" }>;
 type ScoringRulesSource = Extract<ValueSource, { readonly kind: "scoring-rules" }>;
-type PercentStartedSource = Extract<ValueSource, { readonly kind: "percent-started" }>;
+type CommunityStartRateSource = Extract<ValueSource, { readonly kind: "community-start-rate" }>;
 
 function projectedPointsSource(source: ProjectedPointsSource, period: Period): ResolvedValueSource {
   const basis = makeSelectionBasis(`projected-points:${periodKey(period)}`);
@@ -146,10 +146,13 @@ function scoringRulesSource(source: ScoringRulesSource): ResolvedValueSource {
   };
 }
 
-function percentStartedSource(source: PercentStartedSource, period: Period): ResolvedValueSource {
-  const population = percentStartedPopulation(source.started);
+function communityStartRateSource(
+  source: CommunityStartRateSource,
+  period: Period,
+): ResolvedValueSource {
+  const population = communityStartRatePopulation(source.started);
   const basis = makeSelectionBasis(
-    `percent-started:${populationKey(population)}:${periodKey(period)}`,
+    `community-start-rate:${populationKey(population)}:${periodKey(period)}`,
   );
   const started = new Map(source.started.map((player) => [player.id, player]));
   return {
@@ -158,7 +161,7 @@ function percentStartedSource(source: PercentStartedSource, period: Period): Res
       const entry = started.get(player.id);
       const percent = entry === undefined ? undefined : percentOf(entry, population);
       return {
-        assessment: { kind: "percent-started", population, percent },
+        assessment: { kind: "community-start-rate", population, percent },
         units: percent === undefined ? undefined : selectionUnits(percent, valueScale),
       };
     },
@@ -166,8 +169,8 @@ function percentStartedSource(source: PercentStartedSource, period: Period): Res
 }
 
 function percentOf(
-  started: PlayerPercentStarted,
-  population: PercentStartedPopulation,
+  started: PlayerCommunityStartRate,
+  population: CommunityStartRatePopulation,
 ): Exact | undefined {
   switch (population.kind) {
     case "overall":
@@ -177,7 +180,7 @@ function percentOf(
   }
 }
 
-function populationKey(population: PercentStartedPopulation): string {
+function populationKey(population: CommunityStartRatePopulation): string {
   switch (population.kind) {
     case "overall":
       return "overall";

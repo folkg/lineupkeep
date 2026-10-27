@@ -14,6 +14,7 @@ import type {
   HostedBrowserMessage,
   HostedBrowserStatus,
 } from "#contracts/connections/hostedBrowserProtocol.ts";
+import { defaultProviderKey, defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { describeConnectionFailure } from "./connectionFailure";
 import type { ConnectionRemote } from "./connectionRemote";
@@ -81,7 +82,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
     if (message === "expired") {
       setFailure({
         type: "attention",
-        message: "This sign-in session expired. Start again to reconnect Yahoo.",
+        message: `This sign-in session expired. Start again to reconnect ${defaultProviderName()}.`,
       });
     }
   };
@@ -149,7 +150,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
       if (!ready() && session() !== undefined) {
         setFailure({
           type: "attention",
-          message: "The secure browser disconnected. Start again to reconnect Yahoo.",
+          message: `The secure browser disconnected. Start again to reconnect ${defaultProviderName()}.`,
         });
         finish("failed");
       }
@@ -174,7 +175,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
     setStarting(true);
     void options
       .remote()
-      .startHosted({ provider: "yahoo" })
+      .startHosted({ provider: defaultProviderKey })
       .then((view) => {
         if (disposed) {
           void options.remote().cancelHosted({ id: view.session.id });
@@ -227,14 +228,14 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
 function failureMessage(reason: HostedBrowserMessageFailure): string {
   switch (reason) {
     case "session_rejected":
-      return "Yahoo did not accept this session. Check the account and try again.";
+      return `${defaultProviderName()} did not accept this session. Check the account and try again.`;
     case "provider_unavailable":
-      return "Yahoo could not be reached. Try again in a moment.";
+      return `${defaultProviderName()} could not be reached. Try again in a moment.`;
     case "browser_unavailable":
     case "page_unavailable":
       return "The secure browser could not start. Try again or use the local helper.";
     case "expired":
-      return "This sign-in session expired. Start again to reconnect Yahoo.";
+      return `This sign-in session expired. Start again to reconnect ${defaultProviderName()}.`;
     case "completion_failed":
       return "We could not confirm the sign-in. Try again or use the local helper.";
   }
@@ -245,13 +246,13 @@ export function statusMessage(status: HostedBrowserStatus): string {
     case "starting":
       return "Starting a private browser session…";
     case "loading":
-      return "Loading the Yahoo sign-in page…";
+      return `Loading the ${defaultProviderName()} sign-in page…`;
     case "waiting":
       return "Finish signing in. This window updates automatically.";
     case "two-factor":
-      return "Yahoo asked for an additional verification step. Complete it here.";
+      return `${defaultProviderName()} asked for an additional verification step. Complete it here.`;
     case "blocked":
-      return "Yahoo blocked this sign-in. Cancel and try again, or use the local helper.";
+      return `${defaultProviderName()} blocked this sign-in. Cancel and try again, or use the local helper.`;
   }
 }
 

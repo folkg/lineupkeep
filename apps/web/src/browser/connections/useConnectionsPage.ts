@@ -8,6 +8,7 @@ import type {
   ConnectionChangeView,
   ConnectionView,
 } from "#contracts/connections/connectionContract.ts";
+import { defaultProviderKey, defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { describeConnectionFailure } from "./connectionFailure";
 import { connectionMutations, storeRefreshedConnections } from "./connectionMutations";
@@ -62,8 +63,7 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
       storeRefreshedConnections(change, variables, onMutateResult, context);
       setFeedback({
         type: "success",
-        message:
-          "Reconnect started. Finish the Yahoo sign-in in the helper, then refresh this page.",
+        message: `Reconnect started. Finish the ${defaultProviderName()} sign-in in the helper, then refresh this page.`,
         recovery: {
           label: "Refresh status",
           pendingLabel: "Refreshing…",
@@ -119,7 +119,11 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
       }
       pendingRequestId ??= crypto.randomUUID();
       setFeedback({ type: "pending", message: "Starting helper pairing…" });
-      void start.mutate({ requestId: pendingRequestId, provider: "yahoo", pairingCode: code });
+      void start.mutate({
+        requestId: pendingRequestId,
+        provider: defaultProviderKey,
+        pairingCode: code,
+      });
     },
     approveLinking: (connection: ConnectionView) => {
       setApprovingId(connection.id);

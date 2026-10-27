@@ -3,9 +3,13 @@ import { env } from "node:process";
 import { assert, it } from "@effect/vitest";
 import { DateTime } from "effect";
 
-import { fantasyDayPolicy, nextFantasyDayBoundary } from "./FantasyDay.ts";
+import { nextFantasyDayBoundary } from "./FantasyDay.ts";
 
-const policy = fantasyDayPolicy("yahoo", "nfl");
+const policy = {
+  timeZone: "America/Los_Angeles",
+  boundary: "local-midnight" as const,
+  version: "yahoo-pacific-midnight/1",
+};
 
 it("expires at the next Pacific midnight rather than a fixed offset", () => {
   const beforeMidnight = nextFantasyDayBoundary(

@@ -1,4 +1,4 @@
-import type { Provider } from "@lineupkeep/backend/connections/Connection";
+import type { ProviderKey } from "@lineupkeep/backend/connections/Connection";
 import {
   linkingHelperUploadPath,
   LinkingHelperUploadFailure,
@@ -17,7 +17,7 @@ export type LinkingUploadInput = {
   readonly appUrl: URL;
   readonly token: Redacted.Redacted<string>;
   readonly userCode: string;
-  readonly provider: Provider;
+  readonly provider: ProviderKey;
   readonly session: Redacted.Redacted<string>;
 };
 

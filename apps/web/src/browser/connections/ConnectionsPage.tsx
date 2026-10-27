@@ -11,6 +11,7 @@ import { Page } from "#browser/shared-ui/Page.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
+import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { ConnectionList } from "./ConnectionList";
 import type { ConnectionListQueryOptions } from "./connectionQueries";
@@ -33,7 +34,7 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Connect Yahoo once. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage."
+        lede={`Connect ${defaultProviderName()} once. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage.`}
         title="Connections"
       >
         <Stack gap="xl">
@@ -69,7 +70,7 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
               </Heading>
               <Text size="body" tone="muted">
                 Run the Lineupkeep helper on your computer and enter the code it shows. The code
-                expires after ten minutes; the helper signs in to Yahoo itself.
+                expires after ten minutes; the helper signs in to {defaultProviderName()} itself.
               </Text>
               <Form gap="sm" onSubmit={page.startLinking}>
                 <Stack gap="sm" measure="control">

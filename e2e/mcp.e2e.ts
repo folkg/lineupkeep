@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import type { Page } from "@playwright/test";
 import { Schema } from "effect";
 
@@ -149,7 +150,7 @@ test("lists the owner's connection status over MCP without exposing account iden
   )(
     await services.exercise(page, "start the owner's link", "startLinking", {
       requestId: randomUUID(),
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode: "ABCD2345",
     }),
   );
@@ -160,7 +161,7 @@ test("lists the owner's connection status over MCP without exposing account iden
 
   expect(listed.isError).toBe(false);
   expect(listed.structuredContent).toMatchObject({
-    connections: [{ id: connection.id, provider: "yahoo", status: "linking" }],
+    connections: [{ id: connection.id, provider: decodeProviderKey("yahoo"), status: "linking" }],
   });
   expect(JSON.stringify(listed.structuredContent)).not.toContain("userId");
 

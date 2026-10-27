@@ -24,8 +24,9 @@ import type {
 } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
-import { ProviderGateway } from "#contexts/connections/Provider.ts";
 import type { ProviderFailure } from "#contexts/connections/Provider.ts";
+import type { ProviderKey } from "#contexts/connections/ProviderKey.ts";
+import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import type { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
@@ -41,7 +42,7 @@ export const ConnectionsLive = Layer.effect(
   Connections,
   Effect.gen(function* () {
     const repository = yield* ConnectionRepository;
-    const provider = yield* ProviderGateway;
+    const registry = yield* ProviderRegistry;
     const encryption = yield* ConnectionCredentialEncryption;
 
     const list = (
@@ -76,19 +77,24 @@ export const ConnectionsLive = Layer.effect(
     const validateSession = (
       id: ConnectionId,
       input: {
-        readonly provider: "yahoo";
+        readonly provider: ProviderKey;
         readonly session: Parameters<typeof encryption.encrypt>[0]["plaintext"];
       },
     ): Effect.Effect<void, ConnectionError> =>
-      provider
-        .validateSession({ provider: input.provider, session: input.session })
-        .pipe(Effect.mapError((error) => connectionProviderError(id, error)));
+      registry.requireProvider(input.provider).pipe(
+        Effect.mapError(() => ConnectionProviderRejected.make({ id })),
+        Effect.flatMap((provider) =>
+          provider
+            .validateSession({ provider: input.provider, session: input.session })
+            .pipe(Effect.mapError((error) => connectionProviderError(id, error))),
+        ),
+      );
 
     const encryptCredential = (
       userId: UserId,
       id: ConnectionId,
       input: {
-        readonly provider: "yahoo";
+        readonly provider: ProviderKey;
         readonly session: Parameters<typeof encryption.encrypt>[0]["plaintext"];
       },
     ): Effect.Effect<string, ConnectionError> =>
@@ -304,6 +310,9 @@ export const ConnectionsLive = Layer.effect(
             provider: credential.provider,
             envelope: credential.envelope,
           })
+          .pipe(Effect.mapError(() => credentialPersistenceFailure()));
+        const provider = yield* registry
+          .requireProvider(credential.provider)
           .pipe(Effect.mapError(() => credentialPersistenceFailure()));
         const teams = yield* provider
           .discoverTeams({ provider: credential.provider, session })

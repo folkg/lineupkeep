@@ -167,7 +167,7 @@ function requireConsistentSource(
       );
       return;
     }
-    case "percent-started": {
+    case "community-start-rate": {
       requireUniqueIds(
         source.started.map((entry) => entry.id),
         "started percentage",

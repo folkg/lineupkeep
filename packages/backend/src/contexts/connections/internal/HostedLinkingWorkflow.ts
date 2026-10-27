@@ -1,12 +1,12 @@
 import { Machine } from "@typeonce/effect-machine";
 import { Schema } from "effect";
 
-import { ConnectionId, Provider } from "#contexts/connections/Connection.ts";
+import { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
 import { HostedLinkingFailureReason } from "#contexts/connections/HostedLinking.ts";
 
 const HostedLinkingContent = {
   connectionId: ConnectionId,
-  provider: Provider,
+  provider: ProviderKey,
   startedAt: Schema.DateTimeUtc,
   expiresAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,

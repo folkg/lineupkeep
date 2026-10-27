@@ -6,6 +6,7 @@ import type { Element } from "solid-js";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { themeBootstrapScript } from "#browser/app-shell/theme.ts";
 import { sessionQueries } from "#browser/session/sessionQueries.ts";
+import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import "#web/styles.css";
 
@@ -17,8 +18,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { title: `${productName} — Your lineup. Looked after.` },
       {
         name: "description",
-        content:
-          "Connect Yahoo once. Lineupkeep checks each enabled team's current scoring period every hour and makes the same teams available to an authorized MCP client.",
+        content: `Connect ${defaultProviderName()} once. Lineupkeep checks each enabled team's current scoring period every hour and makes the same teams available to an authorized MCP client.`,
       },
     ],
     links: [{ rel: "icon", type: "image/svg+xml", href: "/brand/lineupkeep-mark.svg" }],

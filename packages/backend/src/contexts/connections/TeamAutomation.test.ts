@@ -6,6 +6,7 @@ import { Array, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect
 import { Config } from "effect";
 import { TestClock } from "effect/testing";
 
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 
@@ -390,11 +391,13 @@ function seedTeams(
     yield* fake.setNativeAfter(nativeAfter);
     const linkingInput = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e2",
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode: "ABCD2345",
     });
     const linking = Array.getUnsafe(yield* connections.startLinking(owner, [linkingInput]), 0);
-    yield* connections.completeLinking(owner, [{ id: linking.id, provider: "yahoo", session }]);
+    yield* connections.completeLinking(owner, [
+      { id: linking.id, provider: decodeProviderKey("yahoo"), session },
+    ]);
     const foundTeams = yield* connections.discoverTeams(owner, [{ id: linking.id }]);
     return foundTeams.map((team) => team.id);
   }).pipe(Effect.orDie);
@@ -411,7 +414,7 @@ beforeEach(() => {
 });
 
 const teamFixture: ProviderTeam = {
-  provider: "yahoo",
+  provider: decodeProviderKey("yahoo"),
   providerTeamKey: "461.l.1000.t.1",
   providerLeagueKey: "461.l.1000",
   league: "nfl",
@@ -442,11 +445,12 @@ const league: ProviderLeagueSettings = {
   name: "Alpha League",
   webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
   season: 2026,
-  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 17 },
+  periodWindow: { current: 3, start: 1, end: 17 },
   rosterCoverage: "week",
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,
+  format: "head_to_head_categories",
   scoringType: "head",
   scoringLabel: "H2H",
   weeklyDeadline: undefined,
@@ -455,8 +459,8 @@ const league: ProviderLeagueSettings = {
   usesFaab: false,
   draftStatus: "postdraft",
   rosterPositions: [
-    { position: "QB", positionType: "O", count: 1, isStarting: true },
-    { position: "BN", positionType: "B", count: 1, isStarting: false },
+    { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
+    { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
   ],
   statCategories: [],
   statModifiers: [],
@@ -554,7 +558,7 @@ const RunsTest = LineupRunsLive.pipe(
 );
 const ConnectionsTest = ConnectionsLive.pipe(
   Layer.provide(ConnectionRepositoryTest),
-  Layer.provideMerge(ProviderFakeTest),
+  Layer.provide(ProviderFakeTest),
   Layer.provide(EncryptionTestLayer),
 );
 const TeamsRepositoryTest = TeamRepository.layer.pipe(Layer.provide(DatabaseLayer));
@@ -567,7 +571,6 @@ const TeamsTestLayer = Layer.mergeAll(
   TeamsRepositoryTest,
   RunsTest,
   ConnectionsTest,
-  ProviderFakeTest,
 ).pipe(
   Layer.provideMerge(DatabaseLayer),
   Layer.provideMerge(ProviderFakeTest),

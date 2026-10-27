@@ -1,15 +1,18 @@
 import { assert, it } from "@effect/vitest";
 import { DateTime, Schema } from "effect";
 
-import { fantasyDayPolicy } from "#contexts/connections/FantasyDay.ts";
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import type { LineupTargetPeriod as TargetPeriod } from "#contexts/connections/LineupRun.ts";
 import type { ProviderLeagueSettings } from "#contexts/connections/Provider.ts";
 
 import { resolveTarget } from "./LineupTarget.ts";
 
-const footballPolicy = fantasyDayPolicy("yahoo", "nfl");
-const hockeyPolicy = fantasyDayPolicy("yahoo", "nhl");
+const footballPolicy = {
+  timeZone: "America/Los_Angeles",
+  boundary: "local-midnight" as const,
+  version: "yahoo-pacific-midnight/1",
+};
+const hockeyPolicy = footballPolicy;
 
 it("resolves the provider's current scoring week for a week-scoped roster", () => {
   const resolution = resolveTarget(
@@ -74,7 +77,7 @@ it("names a scoring week outside the league's declared range", () => {
 it("names a current week the league places outside its declared range", () => {
   const resolution = resolveTarget(
     { coverage: "current" },
-    { ...footballLeague, periodWindow: { currentWeek: 18, startWeek: 1, endWeek: 17 } },
+    { ...footballLeague, periodWindow: { current: 18, start: 1, end: 17 } },
     footballPolicy,
     instant("2026-10-25T19:00:00Z"),
   );
@@ -245,11 +248,12 @@ const footballLeague: ProviderLeagueSettings = {
   name: "Football League",
   webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
   season: 2026,
-  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 17 },
+  periodWindow: { current: 3, start: 1, end: 17 },
   rosterCoverage: "week",
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,
+  format: "head_to_head_categories",
   scoringType: "head",
   scoringLabel: "H2H",
   weeklyDeadline: undefined,
@@ -267,7 +271,7 @@ const hockeyLeague: ProviderLeagueSettings = {
   providerLeagueKey: "465.l.2000",
   name: "Hockey League",
   webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
-  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 24 },
+  periodWindow: { current: 3, start: 1, end: 24 },
   rosterCoverage: "date",
   startDate: "2026-10-01",
   endDate: "2027-04-10",

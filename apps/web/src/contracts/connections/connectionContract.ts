@@ -3,7 +3,7 @@ import type {
   ConnectionError,
   ConnectionIdInput,
   ConnectionStatus,
-  Provider,
+  ProviderKey,
   ReconnectInput,
   StartLinkingInput,
   StartReconnectInput,
@@ -14,7 +14,7 @@ import type { UseCaseResult } from "#contracts/useCaseContract.ts";
 
 export type ConnectionView = {
   readonly id: string;
-  readonly provider: Provider;
+  readonly provider: ProviderKey;
   readonly status: ConnectionStatus;
   readonly pairingCode?: string;
   readonly linkingExpiresAt?: string;
@@ -50,7 +50,7 @@ export type ConnectionRequestResult<A> =
 export type HostedLinkingSessionView = {
   readonly id: string;
   readonly connectionId: string;
-  readonly provider: Provider;
+  readonly provider: ProviderKey;
   readonly status: "active" | "completing" | "completed" | "cancelled" | "expired" | "failed";
   readonly startedAt: string;
   readonly expiresAt: string;

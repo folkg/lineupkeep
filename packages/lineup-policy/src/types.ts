@@ -12,9 +12,9 @@ export type Period =
   | { readonly kind: "week"; readonly week: number }
   | { readonly kind: "date"; readonly date: string };
 
-export type ValueSourceKind = "projected-points" | "scoring-rules" | "percent-started";
+export type ValueSourceKind = "projected-points" | "scoring-rules" | "community-start-rate";
 
-export type PercentStartedPopulation =
+export type CommunityStartRatePopulation =
   | { readonly kind: "overall" }
   | { readonly kind: "cut"; readonly cut: string };
 
@@ -31,8 +31,8 @@ export type ValueSource =
       readonly observations: ReadonlyArray<PeriodObservation>;
     }
   | {
-      readonly kind: "percent-started";
-      readonly started: ReadonlyArray<PlayerPercentStarted>;
+      readonly kind: "community-start-rate";
+      readonly started: ReadonlyArray<PlayerCommunityStartRate>;
     };
 
 export type PlayerProjection = {
@@ -45,13 +45,13 @@ export type PlayerRealisedPoints = {
   readonly points: Exact;
 };
 
-export type PlayerPercentStarted = {
+export type PlayerCommunityStartRate = {
   readonly id: PlayerId;
   readonly percent: Exact | undefined;
-  readonly cuts: ReadonlyArray<PercentStartedCut>;
+  readonly cuts: ReadonlyArray<CommunityStartRateCut>;
 };
 
-export type PercentStartedCut = {
+export type CommunityStartRateCut = {
   readonly cut: string;
   readonly percent: Exact;
 };
@@ -128,7 +128,7 @@ export type ValueAssessment =
       readonly realised: Exact | undefined;
     }
   | {
-      readonly kind: "percent-started";
-      readonly population: PercentStartedPopulation;
+      readonly kind: "community-start-rate";
+      readonly population: CommunityStartRatePopulation;
       readonly percent: Exact | undefined;
     };

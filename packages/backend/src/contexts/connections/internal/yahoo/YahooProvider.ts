@@ -1,7 +1,6 @@
 import {
   DateTime,
   Effect,
-  Layer,
   Option,
   Redacted,
   Schema,
@@ -10,8 +9,6 @@ import {
 } from "effect";
 
 import {
-  ProviderCrumbUnavailable,
-  ProviderGateway,
   ProviderPeriodMismatch,
   ProviderRequestFailed,
   ProviderResponseInvalid,
@@ -27,10 +24,11 @@ import type {
   ProviderMatchup,
   ProviderNativeTarget,
   ProviderOperation,
-  ProviderPercentStarted,
+  ProviderCommunityStartRate,
   ProviderPeriod,
   ProviderPeriodKind,
   ProviderPeriodWindow,
+  ProviderLineupRequest,
   ProviderPlayerDetail,
   ProviderPlayerPeriod,
   ProviderPlayerSearchInput,
@@ -43,13 +41,15 @@ import type {
   ProviderReviewLinkInput,
   ProviderStanding,
   ProviderStandings,
-  ProviderStartPercentageCut,
+  ProviderStartRateCut,
   ProviderStatValue,
   ProviderTeam,
   ProviderTeamScore,
   ProviderTransaction,
+  ProviderShape,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { normalizeYahooJson } from "./YahooJson.ts";
@@ -59,6 +59,7 @@ import {
   yahooWriteDeadlineMillis,
   yahooWriteResponseLimitBytes,
 } from "./YahooLimits.ts";
+import { planYahooLineup, yahooCapabilities } from "./YahooLineup.ts";
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
 const serviceOrigin = new URL("https://pub-api.fantasysports.yahoo.com");
@@ -100,556 +101,586 @@ const maximumSelectedPlayers = 25;
 const maximumHistoryPlayers = 200;
 const maximumUpstreamLimit = 50;
 
-type ReadOperation =
-  | "validate_session"
-  | "discover_teams"
-  | "read_crumb"
-  | "read_league"
-  | "read_standings"
-  | "read_roster"
-  | "read_player_details"
-  | "read_player_history"
-  | "search_players"
-  | "read_matchups"
-  | "read_transactions"
-  | "read_league_teams"
-  | "apply_native_start_active";
+type ReadOperation = ProviderOperation;
+type WriteOperation = "apply_native_action" | "apply_explicit_assignments";
 
-export const YahooProvider = Layer.effect(
-  ProviderGateway,
-  Effect.gen(function* () {
-    const internet = yield* PublicInternet;
+export const yahooProvider = Effect.gen(function* () {
+  const internet = yield* PublicInternet;
 
-    const validateSession = Effect.fn("YahooProvider.validateSession")(function* (
-      input: ProviderSessionMaterial,
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "validate_session");
-      const cookie = yield* sessionCookie(input, "validate_session");
+  const validateSession = Effect.fn("YahooProvider.validateSession")(function* (
+    input: ProviderSessionMaterial,
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "validate_session");
+    const cookie = yield* sessionCookie(input, "validate_session");
+    const payload = yield* readJson(internet, {
+      operation: "validate_session",
+      origin: readOrigin,
+      path: "/fantasy/v2/users;use_login=1",
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const session = yield* decodePayload(SessionPayload, payload, "validate_session");
+    if (session.users.length === 0) {
+      return yield* ProviderSessionRejected.make({ operation: "validate_session" });
+    }
+  });
+
+  const discoverTeams = Effect.fn("YahooProvider.discoverTeams")(function* (
+    input: ProviderSessionMaterial,
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "discover_teams");
+    const cookie = yield* sessionCookie(input, "discover_teams");
+    const teams: ProviderTeam[] = [];
+    for (const league of supportedLeagues) {
       const payload = yield* readJson(internet, {
-        operation: "validate_session",
+        operation: "discover_teams",
         origin: readOrigin,
-        path: "/fantasy/v2/users;use_login=1",
+        path: `/fantasy/v2/users;use_login=1/games;game_keys=${league}/teams`,
         query: { format: "json" },
         cookie,
         normalize: true,
       });
-      const session = yield* decodePayload(SessionPayload, payload, "validate_session");
-      if (session.users.length === 0) {
-        return yield* ProviderSessionRejected.make({ operation: "validate_session" });
+      const decoded = yield* decodePayload(TeamsPayload, payload, "discover_teams");
+      if (decoded.users.length === 0) {
+        return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
       }
-    });
-
-    const discoverTeams = Effect.fn("YahooProvider.discoverTeams")(function* (
-      input: ProviderSessionMaterial,
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "discover_teams");
-      const cookie = yield* sessionCookie(input, "discover_teams");
-      const teams: ProviderTeam[] = [];
-      for (const league of supportedLeagues) {
-        const payload = yield* readJson(internet, {
-          operation: "discover_teams",
-          origin: readOrigin,
-          path: `/fantasy/v2/users;use_login=1/games;game_keys=${league}/teams`,
-          query: { format: "json" },
-          cookie,
-          normalize: true,
-        });
-        const decoded = yield* decodePayload(TeamsPayload, payload, "discover_teams");
-        if (decoded.users.length === 0) {
-          return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
-        }
-        for (const team of yield* teamsFromPayload(decoded, league)) {
-          teams.push(team);
-        }
+      for (const team of yield* teamsFromPayload(decoded, league)) {
+        teams.push(team);
       }
-      yield* Effect.annotateCurrentSpan("provider.team_count", teams.length);
-      return teams;
-    });
+    }
+    yield* Effect.annotateCurrentSpan("provider.team_count", teams.length);
+    return teams;
+  });
 
-    const readCrumb = Effect.fn("YahooProvider.readCrumb")(function* (
-      input: ProviderSessionMaterial,
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "read_crumb");
-      const cookie = yield* sessionCookie(input, "read_crumb");
-      const payload = yield* readJson(internet, {
-        operation: "read_crumb",
-        origin: serviceOrigin,
-        path: "/fantasy/v3/getCrumb",
-        query: { format: "json_f" },
-        cookie,
-        normalize: false,
-      });
-      const decoded = yield* decodePayload(CrumbPayload, payload, "read_crumb");
-      const crumb = decoded.service.crumb?.trim();
-      if (crumb === undefined || crumb.length === 0) {
-        return yield* ProviderCrumbUnavailable.make({ operation: "read_crumb" });
-      }
-      return { crumb: Redacted.make(crumb) };
+  const readCrumb = Effect.fn("YahooProvider.readCrumb")(function* (
+    input: ProviderSessionMaterial,
+    operation: WriteOperation,
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", operation);
+    yield* Effect.annotateCurrentSpan("provider.write_step", "write_token");
+    const cookie = yield* sessionCookie(input, operation);
+    const payload = yield* readJson(internet, {
+      operation,
+      origin: serviceOrigin,
+      path: "/fantasy/v3/getCrumb",
+      query: { format: "json_f" },
+      cookie,
+      normalize: false,
     });
+    const decoded = yield* decodePayload(CrumbPayload, payload, operation);
+    const crumb = decoded.service.crumb?.trim();
+    if (crumb === undefined || crumb.length === 0) {
+      return yield* YahooCrumbUnavailable.make({ operation });
+    }
+    return { crumb: Redacted.make(crumb) };
+  });
 
-    const readLeague = Effect.fn("YahooProvider.readLeague")(function* (
-      input: ProviderSessionMaterial & {
-        readonly providerLeagueKey: string;
-        readonly sport: "football" | "hockey";
-      },
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "read_league");
-      const cookie = yield* sessionCookie(input, "read_league");
-      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league");
-      const payload = yield* readJson(internet, {
-        operation: "read_league",
-        origin: readOrigin,
-        path: `/fantasy/v2/league/${leagueKey}/settings`,
-        query: { format: "json" },
-        cookie,
-        normalize: true,
-      });
-      const decoded = yield* decodePayload(LeaguePayload, payload, "read_league");
-      const settings = yield* leagueSettings(decoded, input.providerLeagueKey, input.sport);
-      yield* Effect.annotateCurrentSpan({
-        "provider.stat_category_count": settings.statCategories.length,
-        "provider.roster_position_count": settings.rosterPositions.length,
-      });
-      return settings;
+  const readLeague = Effect.fn("YahooProvider.readLeague")(function* (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly sport: "football" | "hockey";
+    },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_league");
+    const cookie = yield* sessionCookie(input, "read_league");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league");
+    const payload = yield* readJson(internet, {
+      operation: "read_league",
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${leagueKey}/settings`,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
     });
-
-    const readStandings = Effect.fn("YahooProvider.readStandings")(function* (
-      input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "read_standings");
-      const cookie = yield* sessionCookie(input, "read_standings");
-      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_standings");
-      const payload = yield* readJson(internet, {
-        operation: "read_standings",
-        origin: readOrigin,
-        path: `/fantasy/v2/league/${leagueKey}/standings`,
-        query: { format: "json" },
-        cookie,
-        normalize: true,
-      });
-      const decoded = yield* decodePayload(StandingsPayload, payload, "read_standings");
-      const standings = yield* standingsFromPayload(decoded, leagueKey);
-      yield* Effect.annotateCurrentSpan("provider.standing_count", standings.teams.length);
-      return standings;
+    const decoded = yield* decodePayload(LeaguePayload, payload, "read_league");
+    const settings = yield* leagueSettings(decoded, input.providerLeagueKey, input.sport);
+    yield* Effect.annotateCurrentSpan({
+      "provider.stat_category_count": settings.statCategories.length,
+      "provider.roster_position_count": settings.rosterPositions.length,
     });
+    return settings;
+  });
 
-    const readRoster = Effect.fn("YahooProvider.readRoster")(function* (
-      input: ProviderSessionMaterial & {
-        readonly providerTeamKey: string;
-        readonly period: ProviderRosterCoverage | undefined;
-      },
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "read_roster");
-      const cookie = yield* sessionCookie(input, "read_roster");
-      const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_roster");
-      const week = input.period?.type === "week" ? yield* ValidWeek(input.period.week) : undefined;
-      const periodSuffix = week === undefined ? "" : `;week=${String(week)}`;
-      const payload = yield* readJson(internet, {
-        operation: "read_roster",
-        origin: readOrigin,
-        path: `/fantasy/v2/team/${teamKey}/roster${periodSuffix}`,
-        query: { format: "json" },
-        cookie,
-        normalize: true,
-      }).pipe(
-        Effect.catchTag("provider.request_failed", (error) =>
-          Effect.fail(
-            error.status === 400 && week !== undefined
-              ? ProviderPeriodMismatch.make({
-                  operation: "read_roster",
-                  requested: { type: "week", week },
-                  covered: null,
-                })
-              : error,
-          ),
+  const readStandings = Effect.fn("YahooProvider.readStandings")(function* (
+    input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_standings");
+    const cookie = yield* sessionCookie(input, "read_standings");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_standings");
+    const payload = yield* readJson(internet, {
+      operation: "read_standings",
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${leagueKey}/standings`,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(StandingsPayload, payload, "read_standings");
+    const standings = yield* standingsFromPayload(decoded, leagueKey);
+    yield* Effect.annotateCurrentSpan("provider.standing_count", standings.teams.length);
+    return standings;
+  });
+
+  const readRoster = Effect.fn("YahooProvider.readRoster")(function* (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly period: ProviderRosterCoverage | undefined;
+    },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_roster");
+    const cookie = yield* sessionCookie(input, "read_roster");
+    const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_roster");
+    const week = input.period?.type === "week" ? yield* ValidWeek(input.period.week) : undefined;
+    const periodSuffix = week === undefined ? "" : `;week=${String(week)}`;
+    const payload = yield* readJson(internet, {
+      operation: "read_roster",
+      origin: readOrigin,
+      path: `/fantasy/v2/team/${teamKey}/roster${periodSuffix}`,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    }).pipe(
+      Effect.catchTag("provider.request_failed", (error) =>
+        Effect.fail(
+          error.status === 400 && week !== undefined
+            ? ProviderPeriodMismatch.make({
+                operation: "read_roster",
+                requested: { type: "week", week },
+                covered: null,
+              })
+            : error,
         ),
-      );
-      const decoded = yield* decodePayload(TeamRosterPayload, payload, "read_roster");
-      const roster = yield* rosterFromPayload(decoded, input.providerTeamKey, input.period);
-      yield* Effect.annotateCurrentSpan("provider.player_count", roster.players.length);
-      return roster;
-    });
+      ),
+    );
+    const decoded = yield* decodePayload(TeamRosterPayload, payload, "read_roster");
+    const roster = yield* rosterFromPayload(decoded, input.providerTeamKey, input.period);
+    yield* Effect.annotateCurrentSpan("provider.player_count", roster.players.length);
+    return roster;
+  });
 
-    const applyNativeStartActive: (
+  const applyNativeAction: (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly target: ProviderNativeTarget;
+    },
+  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =
+    Effect.fn("YahooProvider.applyNativeAction")(function* (
       input: ProviderSessionMaterial & {
         readonly providerTeamKey: string;
         readonly target: ProviderNativeTarget;
       },
-    ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =
-      Effect.fn("YahooProvider.applyNativeStartActive")(function* (
-        input: ProviderSessionMaterial & {
-          readonly providerTeamKey: string;
-          readonly target: ProviderNativeTarget;
-        },
-      ) {
-        yield* Effect.annotateCurrentSpan("provider.operation", "apply_native_start_active");
-        const target = yield* ValidNativeTarget(input.target, "apply_native_start_active");
-        yield* Effect.annotateCurrentSpan("provider.native_action", "start_active_players");
-        return yield* writeRoster(
-          input,
-          "apply_native_start_active",
-          nativeStartActiveBody(target),
-        );
-      });
+    ) {
+      yield* Effect.annotateCurrentSpan("provider.operation", "apply_native_action");
+      const target = yield* ValidNativeTarget(input.target, "apply_native_action");
+      yield* Effect.annotateCurrentSpan("provider.native_action", "start_active_players");
+      return yield* writeRoster(input, "apply_native_action", nativeStartActiveBody(target));
+    });
 
-    const applyExplicitAssignments: (
+  const applyExplicitAssignments: (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly target: ProviderNativeTarget;
+      readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
+    },
+  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =
+    Effect.fn("YahooProvider.applyExplicitAssignments")(function* (
       input: ProviderSessionMaterial & {
         readonly providerTeamKey: string;
         readonly target: ProviderNativeTarget;
         readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
       },
-    ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =
-      Effect.fn("YahooProvider.applyExplicitAssignments")(function* (
-        input: ProviderSessionMaterial & {
-          readonly providerTeamKey: string;
-          readonly target: ProviderNativeTarget;
-          readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
-        },
-      ) {
-        yield* Effect.annotateCurrentSpan("provider.operation", "apply_explicit_assignments");
-        const target = yield* ValidNativeTarget(input.target, "apply_explicit_assignments");
-        const assignments = yield* ValidAssignments(input.assignments);
-        yield* Effect.annotateCurrentSpan("provider.assignment_count", assignments.length);
-        return yield* writeRoster(
-          input,
-          "apply_explicit_assignments",
-          explicitAssignmentsBody(target, assignments),
-        );
-      });
+    ) {
+      yield* Effect.annotateCurrentSpan("provider.operation", "apply_explicit_assignments");
+      const target = yield* ValidNativeTarget(input.target, "apply_explicit_assignments");
+      const assignments = yield* ValidAssignments(input.assignments);
+      yield* Effect.annotateCurrentSpan("provider.assignment_count", assignments.length);
+      return yield* writeRoster(
+        input,
+        "apply_explicit_assignments",
+        explicitAssignmentsBody(target, assignments),
+      );
+    });
 
-    const writeRoster = (
-      input: ProviderSessionMaterial & { readonly providerTeamKey: string },
-      operation: "apply_native_start_active" | "apply_explicit_assignments",
-      body: string,
-    ): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
-      Effect.gen(function* () {
-        const cookie = yield* sessionCookie(input, operation);
-        const teamKey = yield* ValidTeamKey(input.providerTeamKey, operation);
-        const crumb = yield* Effect.result(readCrumb(input));
-        if (crumb._tag === "Failure") {
-          if (crumb.failure._tag === "provider.session_rejected") {
-            return yield* crumb.failure;
-          }
-          return crumb.failure._tag === "provider.crumb_unavailable"
-            ? { status: "not_sent" as const, reason: "crumb_unavailable" as const }
-            : { status: "not_sent" as const, reason: "request_failed" as const };
+  const writeRoster = (
+    input: ProviderSessionMaterial & { readonly providerTeamKey: string },
+    operation: WriteOperation,
+    body: string,
+  ): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
+    Effect.gen(function* () {
+      const cookie = yield* sessionCookie(input, operation);
+      const teamKey = yield* ValidTeamKey(input.providerTeamKey, operation);
+      const crumb = yield* Effect.result(readCrumb(input, operation));
+      if (crumb._tag === "Failure") {
+        if (crumb.failure._tag === "provider.session_rejected") {
+          return yield* crumb.failure;
         }
-        const url = yahooWriteUrl(
-          `/fantasy/v2/team/${teamKey}/roster`,
-          Redacted.value(crumb.success.crumb),
-        );
-        const response = yield* Effect.scoped(
-          internet
-            .request(
-              new Request(url, {
-                method: "PUT",
-                headers: {
-                  accept: "application/json",
-                  "content-type": "application/xml",
-                  cookie,
-                },
-                body,
-              }),
-              {
-                timeoutMs: yahooWriteDeadlineMillis,
-                maxResponseBytes: yahooWriteResponseLimitBytes,
+        return crumb.failure._tag === "provider.crumb_unavailable"
+          ? { status: "not_sent" as const, reason: "session_incomplete" as const }
+          : { status: "not_sent" as const, reason: "request_failed" as const };
+      }
+      const url = yahooWriteUrl(
+        `/fantasy/v2/team/${teamKey}/roster`,
+        Redacted.value(crumb.success.crumb),
+      );
+      const response = yield* Effect.scoped(
+        internet
+          .request(
+            new Request(url, {
+              method: "PUT",
+              headers: {
+                accept: "application/json",
+                "content-type": "application/xml",
+                cookie,
               },
-            )
-            .pipe(
-              Effect.flatMap((result) => discardBody(result).pipe(Effect.as(result.status))),
-              Effect.catchTag("PublicInternetUnavailable", () => Effect.void),
-            ),
-        );
-        if (response === undefined) {
-          return { status: "unknown" as const };
-        }
-        yield* Effect.annotateCurrentSpan("http.response.status_code", response);
-        if (response === 401 || response === 403) {
-          return yield* ProviderSessionRejected.make({ operation });
-        }
-        if (response === 404) {
-          return { status: "rejected" as const, reason: "not_found" as const };
-        }
-        if (response === 408 || response === 429) {
-          return { status: "not_sent" as const, reason: "request_failed" as const };
-        }
-        if (response >= 500) {
-          return { status: "unknown" as const };
-        }
-        if (response >= 400) {
-          return { status: "rejected" as const, reason: "invalid_request" as const };
-        }
-        return { status: "accepted" as const };
-      });
-
-    const readPlayerPeriod = Effect.fnUntraced(function* (input: {
-      readonly cookie: string;
-      readonly leagueKey: string;
-      readonly playerKeys: ReadonlyArray<string>;
-      readonly basis: ProviderStatBasis;
-      readonly startedPeriod: ProviderRosterCoverage | undefined;
-      readonly operation: "read_player_details" | "read_player_history";
-    }) {
-      const payload = yield* readJson(internet, {
-        operation: input.operation,
-        origin: readOrigin,
-        path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")}${playerDetailOutput(input.operation)}`,
-        query: playerDetailQuery(input.basis, input.operation),
-        cookie: input.cookie,
-        normalize: true,
-      });
-      const decoded = yield* decodePayload(PlayerDetailsPayload, payload, input.operation);
-      return yield* playerDetailsFromPayload(
-        decoded,
-        input.leagueKey,
-        input.basis,
-        input.startedPeriod,
+              body,
+            }),
+            {
+              timeoutMs: yahooWriteDeadlineMillis,
+              maxResponseBytes: yahooWriteResponseLimitBytes,
+            },
+          )
+          .pipe(
+            Effect.flatMap((result) => discardBody(result).pipe(Effect.as(result.status))),
+            Effect.catchTag("PublicInternetUnavailable", () => Effect.void),
+          ),
       );
-    });
-
-    const readPlayerDetails = Effect.fn("YahooProvider.readPlayerDetails")(function* (
-      input: ProviderSessionMaterial & {
-        readonly providerLeagueKey: string;
-        readonly providerPlayerKeys: ReadonlyArray<string>;
-        readonly sport: "football" | "hockey";
-        readonly period: ProviderPeriod | undefined;
-        readonly startedPeriod: ProviderRosterCoverage | undefined;
-        readonly currentWeek: number | undefined;
-      },
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "read_player_details");
-      const cookie = yield* sessionCookie(input, "read_player_details");
-      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_details");
-      const period =
-        input.period === undefined ? undefined : { week: yield* ValidWeek(input.period.week) };
-      const playerKeys = yield* ValidPlayerKeys(input.providerPlayerKeys, "read_player_details");
-      const basis = statBasis(input.sport, period, input.currentWeek);
-      const details = yield* readPlayerPeriod({
-        cookie,
-        leagueKey,
-        playerKeys,
-        basis,
-        startedPeriod: input.startedPeriod,
-        operation: "read_player_details",
-      });
-      yield* Effect.annotateCurrentSpan({
-        "provider.player_count": details.length,
-        "provider.stat_basis": basis.type,
-        "provider.percent_started_count": details.filter((detail) =>
-          hasStartPercentage(detail.percentStarted),
-        ).length,
-      });
-      return details;
-    });
-
-    const readPlayerHistory = Effect.fn("YahooProvider.readPlayerHistory")(function* (
-      input: ProviderSessionMaterial & {
-        readonly providerLeagueKey: string;
-        readonly providerPlayerKeys: ReadonlyArray<string>;
-        readonly sport: "football" | "hockey";
-        readonly periods: ReadonlyArray<ProviderPeriod>;
-        readonly currentWeek: number | undefined;
-      },
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "read_player_history");
-      const cookie = yield* sessionCookie(input, "read_player_history");
-      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_history");
-      const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys);
-      const periods = yield* ValidPlayerPeriods(input.periods);
-      const history: Array<ProviderPlayerPeriod> = [];
-      for (const period of periods) {
-        const basis = statBasis(input.sport, period, input.currentWeek);
-        const details: Array<ProviderPlayerDetail> = [];
-        for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
-          const chunkDetails = yield* readPlayerPeriod({
-            cookie,
-            leagueKey,
-            playerKeys: playerKeys.slice(index, index + maximumSelectedPlayers),
-            basis,
-            startedPeriod: undefined,
-            operation: "read_player_history",
-          });
-          for (const detail of chunkDetails) {
-            details.push(detail);
-          }
-        }
-        history.push({ period, details });
+      if (response === undefined) {
+        return { status: "unknown" as const };
       }
-      yield* Effect.annotateCurrentSpan({
-        "provider.period_count": history.length,
-      });
-      return history;
-    });
-
-    const searchPlayers = Effect.fn("YahooProvider.searchPlayers")(function* (
-      input: ProviderPlayerSearchInput,
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "search_players");
-      const cookie = yield* sessionCookie(input, "search_players");
-      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "search_players");
-      const limit = yield* ValidSearchLimit(input.limit);
-      const query = yield* ValidSearchQuery(input.query);
-      const statId = yield* ValidSearchStat(input.sort, input.statId);
-      const search = query === undefined ? "" : `;search=${encodeURIComponent(query)}`;
-      const status =
-        input.availability === "all" ? "" : `;status=${searchStatus[input.availability]}`;
-      const sortValue = searchSortValue(input.sort, statId);
-      const sortType = rankedSearchSorts.has(input.sort) ? `;sort_type=${input.statType}` : "";
-      const payload = yield* readJson(internet, {
-        operation: "search_players",
-        origin: readOrigin,
-        path:
-          `/fantasy/v2/league/${leagueKey}/players` +
-          status +
-          `;sort=${sortValue}${sortType}` +
-          `;count=${String(limit)}${search}` +
-          ";out=ownership,percent_owned,percent_started",
-        query: { format: "json" },
-        cookie,
-        normalize: true,
-      });
-      const decoded = yield* decodePayload(PlayerSearchPayload, payload, "search_players");
-      if (decoded.league.league_key !== leagueKey) {
-        return yield* responseMismatch({ operation: "search_players", field: "league.league_key" });
+      yield* Effect.annotateCurrentSpan("http.response.status_code", response);
+      if (response === 401 || response === 403) {
+        return yield* ProviderSessionRejected.make({ operation });
       }
-      const players = decoded.league.players.map(toSearchPlayer);
-      yield* Effect.annotateCurrentSpan("provider.player_count", players.length);
-      return { players };
+      if (response === 404) {
+        return { status: "rejected" as const, reason: "not_found" as const };
+      }
+      if (response === 408 || response === 429) {
+        return { status: "not_sent" as const, reason: "request_failed" as const };
+      }
+      if (response >= 500) {
+        return { status: "unknown" as const };
+      }
+      if (response >= 400) {
+        return { status: "rejected" as const, reason: "invalid_request" as const };
+      }
+      return { status: "accepted" as const };
     });
 
-    const readMatchups = Effect.fn("YahooProvider.readMatchups")(function* (
-      input: ProviderSessionMaterial & {
-        readonly providerLeagueKey: string;
-        readonly period: ProviderPeriod;
-      },
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "read_matchups");
-      const cookie = yield* sessionCookie(input, "read_matchups");
-      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_matchups");
-      const week = yield* ValidWeek(input.period.week);
-      const payload = yield* readJson(internet, {
-        operation: "read_matchups",
-        origin: readOrigin,
-        path: `/fantasy/v2/league/${leagueKey}/scoreboard;week=${String(week)}`,
-        query: { format: "json" },
-        cookie,
-        normalize: true,
-      });
-      const decoded = yield* decodePayload(MatchupsPayload, payload, "read_matchups");
-      const matchups = yield* matchupsFromPayload(decoded, leagueKey, input.period);
-      yield* Effect.annotateCurrentSpan("provider.matchup_count", matchups.length);
-      return matchups;
+  const readPlayerPeriod = Effect.fnUntraced(function* (input: {
+    readonly cookie: string;
+    readonly leagueKey: string;
+    readonly playerKeys: ReadonlyArray<string>;
+    readonly basis: ProviderStatBasis;
+    readonly startRateCoverage: ProviderRosterCoverage | undefined;
+    readonly operation: "read_player_details" | "read_player_history";
+  }) {
+    const payload = yield* readJson(internet, {
+      operation: input.operation,
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")}${playerDetailOutput(input.operation)}`,
+      query: playerDetailQuery(input.basis, input.operation),
+      cookie: input.cookie,
+      normalize: true,
     });
+    const decoded = yield* decodePayload(PlayerDetailsPayload, payload, input.operation);
+    return yield* playerDetailsFromPayload(
+      decoded,
+      input.leagueKey,
+      input.basis,
+      input.startRateCoverage,
+    );
+  });
 
-    const readTransactions = Effect.fn("YahooProvider.readTransactions")(function* (
-      input: ProviderSessionMaterial & {
-        readonly providerLeagueKey: string;
-        readonly providerTeamKey: string | undefined;
-        readonly limit: number;
-      },
-    ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "read_transactions");
-      const cookie = yield* sessionCookie(input, "read_transactions");
-      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_transactions");
-      const limit = yield* ValidTransactionLimit(input.limit);
-      const teamFilter = yield* ValidLeagueTeamKey(
-        input.providerTeamKey,
-        leagueKey,
-        "read_transactions",
-      );
-      const payload = yield* readJson(internet, {
-        operation: "read_transactions",
-        origin: readOrigin,
-        path: `/fantasy/v2/league/${leagueKey}/transactions;count=${String(limit)}` + teamFilter,
-        query: { format: "json" },
-        cookie,
-        normalize: true,
-      });
-      const decoded = yield* decodePayload(TransactionsPayload, payload, "read_transactions");
-      if (decoded.league.league_key !== leagueKey) {
-        return yield* responseMismatch({
-          operation: "read_transactions",
-          field: "league.league_key",
+  const readPlayerDetails = Effect.fn("YahooProvider.readPlayerDetails")(function* (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerPlayerKeys: ReadonlyArray<string>;
+      readonly sport: "football" | "hockey";
+      readonly period: ProviderPeriod | undefined;
+      readonly startRateCoverage: ProviderRosterCoverage | undefined;
+      readonly currentPeriod: number | undefined;
+    },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_player_details");
+    const cookie = yield* sessionCookie(input, "read_player_details");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_details");
+    const period =
+      input.period === undefined ? undefined : { week: yield* ValidWeek(input.period.week) };
+    const playerKeys = yield* ValidPlayerKeys(input.providerPlayerKeys, "read_player_details");
+    const basis = statBasis(input.sport, period, input.currentPeriod);
+    const details = yield* readPlayerPeriod({
+      cookie,
+      leagueKey,
+      playerKeys,
+      basis,
+      startRateCoverage: input.startRateCoverage,
+      operation: "read_player_details",
+    });
+    yield* Effect.annotateCurrentSpan({
+      "provider.player_count": details.length,
+      "provider.stat_basis": basis.type,
+      "provider.start_rate_count": details.filter((detail) =>
+        hasStartPercentage(detail.communityStartRate),
+      ).length,
+    });
+    return details;
+  });
+
+  const readPlayerHistory = Effect.fn("YahooProvider.readPlayerHistory")(function* (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerPlayerKeys: ReadonlyArray<string>;
+      readonly sport: "football" | "hockey";
+      readonly periods: ReadonlyArray<ProviderPeriod>;
+      readonly currentPeriod: number | undefined;
+    },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_player_history");
+    const cookie = yield* sessionCookie(input, "read_player_history");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_history");
+    const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys);
+    const periods = yield* ValidPlayerPeriods(input.periods);
+    const history: Array<ProviderPlayerPeriod> = [];
+    for (const period of periods) {
+      const basis = statBasis(input.sport, period, input.currentPeriod);
+      const details: Array<ProviderPlayerDetail> = [];
+      for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
+        const chunkDetails = yield* readPlayerPeriod({
+          cookie,
+          leagueKey,
+          playerKeys: playerKeys.slice(index, index + maximumSelectedPlayers),
+          basis,
+          startRateCoverage: undefined,
+          operation: "read_player_history",
         });
+        for (const detail of chunkDetails) {
+          details.push(detail);
+        }
       }
-      const transactions = yield* decodeTransactions(decoded.league.transactions);
-      yield* Effect.annotateCurrentSpan("provider.transaction_count", transactions.length);
-      return transactions;
+      history.push({ period, details });
+    }
+    yield* Effect.annotateCurrentSpan({
+      "provider.period_count": history.length,
     });
+    return history;
+  });
 
-    const readLeagueTeams = Effect.fn("YahooProvider.readLeagueTeams")(function* (
-      input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
+  const searchPlayers = Effect.fn("YahooProvider.searchPlayers")(function* (
+    input: ProviderPlayerSearchInput,
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "search_players");
+    const cookie = yield* sessionCookie(input, "search_players");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "search_players");
+    const limit = yield* ValidSearchLimit(input.limit);
+    const query = yield* ValidSearchQuery(input.query);
+    const statId = yield* ValidSearchStat(input.sort, input.statId);
+    const search = query === undefined ? "" : `;search=${encodeURIComponent(query)}`;
+    const status =
+      input.availability === "all" ? "" : `;status=${searchStatus[input.availability]}`;
+    const sortValue = searchSortValue(input.sort, statId);
+    const sortType = rankedSearchSorts.has(input.sort) ? `;sort_type=${input.statType}` : "";
+    const payload = yield* readJson(internet, {
+      operation: "search_players",
+      origin: readOrigin,
+      path:
+        `/fantasy/v2/league/${leagueKey}/players` +
+        status +
+        `;sort=${sortValue}${sortType}` +
+        `;count=${String(limit)}${search}` +
+        ";out=ownership,percent_owned,percent_started",
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(PlayerSearchPayload, payload, "search_players");
+    if (decoded.league.league_key !== leagueKey) {
+      return yield* responseMismatch({ operation: "search_players", field: "league.league_key" });
+    }
+    const players = decoded.league.players.map(toSearchPlayer);
+    yield* Effect.annotateCurrentSpan("provider.player_count", players.length);
+    return { players };
+  });
+
+  const readMatchups = Effect.fn("YahooProvider.readMatchups")(function* (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly period: ProviderPeriod;
+    },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_matchups");
+    const cookie = yield* sessionCookie(input, "read_matchups");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_matchups");
+    const week = yield* ValidWeek(input.period.week);
+    const payload = yield* readJson(internet, {
+      operation: "read_matchups",
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${leagueKey}/scoreboard;week=${String(week)}`,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(MatchupsPayload, payload, "read_matchups");
+    const matchups = yield* matchupsFromPayload(decoded, leagueKey, input.period);
+    yield* Effect.annotateCurrentSpan("provider.matchup_count", matchups.length);
+    return matchups;
+  });
+
+  const readTransactions = Effect.fn("YahooProvider.readTransactions")(function* (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKey: string | undefined;
+      readonly limit: number;
+    },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_transactions");
+    const cookie = yield* sessionCookie(input, "read_transactions");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_transactions");
+    const limit = yield* ValidTransactionLimit(input.limit);
+    const teamFilter = yield* ValidLeagueTeamKey(
+      input.providerTeamKey,
+      leagueKey,
+      "read_transactions",
+    );
+    const payload = yield* readJson(internet, {
+      operation: "read_transactions",
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${leagueKey}/transactions;count=${String(limit)}` + teamFilter,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(TransactionsPayload, payload, "read_transactions");
+    if (decoded.league.league_key !== leagueKey) {
+      return yield* responseMismatch({
+        operation: "read_transactions",
+        field: "league.league_key",
+      });
+    }
+    const transactions = yield* decodeTransactions(decoded.league.transactions);
+    yield* Effect.annotateCurrentSpan("provider.transaction_count", transactions.length);
+    return transactions;
+  });
+
+  const readLeagueTeams = Effect.fn("YahooProvider.readLeagueTeams")(function* (
+    input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_league_teams");
+    const cookie = yield* sessionCookie(input, "read_league_teams");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league_teams");
+    const payload = yield* readJson(internet, {
+      operation: "read_league_teams",
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${leagueKey}/teams`,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(LeagueTeamsPayload, payload, "read_league_teams");
+    if (
+      decoded.league.league_key !== leagueKey ||
+      decoded.league.teams.some((team) => providerLeagueKey(team.team_key) !== leagueKey)
     ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "read_league_teams");
-      const cookie = yield* sessionCookie(input, "read_league_teams");
-      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league_teams");
-      const payload = yield* readJson(internet, {
-        operation: "read_league_teams",
-        origin: readOrigin,
-        path: `/fantasy/v2/league/${leagueKey}/teams`,
-        query: { format: "json" },
-        cookie,
-        normalize: true,
-      });
-      const decoded = yield* decodePayload(LeagueTeamsPayload, payload, "read_league_teams");
-      if (
-        decoded.league.league_key !== leagueKey ||
-        decoded.league.teams.some((team) => providerLeagueKey(team.team_key) !== leagueKey)
-      ) {
-        return yield* responseMismatch({ operation: "read_league_teams" });
-      }
-      return decoded.league.teams.map((team) => ({
-        providerTeamKey: team.team_key,
-        providerLeagueKey: leagueKey,
-        name: team.name,
-      }));
-    });
+      return yield* responseMismatch({ operation: "read_league_teams" });
+    }
+    return decoded.league.teams.map((team) => ({
+      providerTeamKey: team.team_key,
+      providerLeagueKey: leagueKey,
+      name: team.name,
+    }));
+  });
 
-    const buildReviewLink = Effect.fn("YahooProvider.buildReviewLink")(function* (
-      input: ProviderReviewLinkInput,
+  const buildReviewLink = Effect.fn("YahooProvider.buildReviewLink")(function* (
+    input: ProviderReviewLinkInput,
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "build_review_link");
+    const base = yield* Effect.try({
+      try: () =>
+        reviewBase(input.leagueWebUrl, input.sport, leagueIdFromKey(input.providerLeagueKey)),
+      catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-league-url" }),
+    });
+    const url = yield* Effect.try({
+      try: () => reviewUrl(base, input.intent),
+      catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-player-key" }),
+    });
+    if (
+      url.origin !== base.origin ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.hash !== "" ||
+      !url.pathname.startsWith(`${base.pathname}/`) ||
+      [...url.searchParams.keys()].some((name) => name !== "apid" && name !== "dpid")
     ) {
-      yield* Effect.annotateCurrentSpan("provider.operation", "build_review_link");
-      const base = yield* Effect.try({
-        try: () =>
-          reviewBase(input.leagueWebUrl, input.sport, leagueIdFromKey(input.providerLeagueKey)),
-        catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-league-url" }),
-      });
-      const url = yield* Effect.try({
-        try: () => reviewUrl(base, input.intent),
-        catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-player-key" }),
-      });
-      if (
-        url.origin !== base.origin ||
-        url.username !== "" ||
-        url.password !== "" ||
-        url.hash !== "" ||
-        !url.pathname.startsWith(`${base.pathname}/`) ||
-        [...url.searchParams.keys()].some((name) => name !== "apid" && name !== "dpid")
-      ) {
-        return yield* ProviderReviewLinkInvalid.make({ reason: "unsupported-review-surface" });
-      }
-      return url.href;
-    });
+      return yield* ProviderReviewLinkInvalid.make({ reason: "unsupported-review-surface" });
+    }
+    return url.href;
+  });
 
-    return ProviderGateway.of({
-      validateSession,
-      discoverTeams,
-      readCrumb,
-      readLeague,
-      readStandings,
-      readRoster,
-      applyNativeStartActive,
-      applyExplicitAssignments,
-      readPlayerDetails,
-      readPlayerHistory,
-      searchPlayers,
-      readMatchups,
-      readTransactions,
-      readLeagueTeams,
-      buildReviewLink,
-    });
-  }),
-);
+  return {
+    key,
+    capabilities: yahooCapabilities,
+    validateSession,
+    discoverTeams,
+    readLeague,
+    readStandings,
+    readRoster,
+    applyNativeAction,
+    applyExplicitAssignments,
+    readPlayerDetails,
+    readPlayerHistory,
+    searchPlayers,
+    readMatchups,
+    readTransactions,
+    readLeagueTeams,
+    buildReviewLink,
+    planLineup: (input: ProviderLineupRequest) =>
+      planYahooLineup(input, {
+        readDetails: () =>
+          readPlayerDetails({
+            provider: input.provider,
+            session: input.session,
+            providerLeagueKey: input.providerLeagueKey,
+            providerPlayerKeys: input.roster.players.map(
+              (player: ProviderRosterPlayer) => player.providerPlayerKey,
+            ),
+            sport: input.sport,
+            period: undefined,
+            startRateCoverage: input.roster.coverage,
+            currentPeriod: input.league.periodWindow?.current,
+          }),
+        readHistory: (periods) =>
+          readPlayerHistory({
+            provider: input.provider,
+            session: input.session,
+            providerLeagueKey: input.providerLeagueKey,
+            providerPlayerKeys: input.roster.players.map(
+              (player: ProviderRosterPlayer) => player.providerPlayerKey,
+            ),
+            sport: input.sport,
+            periods: periods.flatMap((period) =>
+              period.kind === "week" ? [{ week: period.week }] : [],
+            ),
+            currentPeriod: input.league.periodWindow?.current,
+          }).pipe(
+            Effect.map((entries) =>
+              entries.map((entry) => ({
+                period: { kind: "week" as const, week: entry.period.week },
+                details: entry.details,
+              })),
+            ),
+          ),
+      }),
+  } satisfies ProviderShape;
+});
+
+const key = decodeProviderKey("yahoo");
+
+class YahooCrumbUnavailable extends Schema.TaggedError<
+  YahooCrumbUnavailable,
+  { readonly brand: unique symbol }
+>()("provider.crumb_unavailable", {
+  operation: Schema.Literals(["apply_native_action", "apply_explicit_assignments"]),
+}) {}
 
 function sessionCookie(
   input: ProviderSessionMaterial,
@@ -927,7 +958,7 @@ function teamsFromPayload(
         }
         for (const team of game.teams ?? []) {
           teams.push({
-            provider: "yahoo" as const,
+            provider: key,
             providerTeamKey: team.team_key,
             providerLeagueKey: providerLeagueKey(team.team_key),
             league,
@@ -973,6 +1004,7 @@ function leagueSettings(
       startDate: optionalNonEmpty(attributes.start_date),
       endDate: optionalNonEmpty(attributes.end_date),
       teamCount: attributes.num_teams,
+      format: leagueFormat(attributes.scoring_type, settings.stat_modifiers?.stats.length ?? 0),
       scoringType: attributes.scoring_type,
       scoringLabel: optionalNonEmpty(attributes.scoring_label),
       weeklyDeadline: optionalNonEmpty(attributes.weekly_deadline),
@@ -982,12 +1014,16 @@ function leagueSettings(
       draftStatus: optionalNonEmpty(attributes.draft_status),
       periodWindow,
       rosterCoverage: rosterCoverageBySport[sport],
-      rosterPositions: settings.roster_positions.map(({ roster_position }) => ({
-        position: roster_position.position,
-        positionType: optionalNonEmpty(roster_position.position_type),
-        count: roster_position.count,
-        isStarting: roster_position.is_starting_position,
-      })),
+      rosterPositions: settings.roster_positions.map(({ roster_position }) => {
+        const kind = rosterSlotKind(roster_position.position, roster_position.is_starting_position);
+        return {
+          position: roster_position.position,
+          positionType: optionalNonEmpty(roster_position.position_type),
+          kind,
+          count: roster_position.count,
+          eligibility: kind === "bench" ? [] : [roster_position.position],
+        };
+      }),
       statCategories: settings.stat_categories.stats.map(({ stat }) => ({
         statId: stat.stat_id,
         name: stat.name,
@@ -1007,6 +1043,26 @@ function leagueSettings(
   });
 }
 
+function leagueFormat(
+  scoringType: string,
+  modifierCount: number,
+): "head_to_head_categories" | "head_to_head_points" | "rotisserie" | "unknown" {
+  if (scoringType === "roto") {
+    return "rotisserie";
+  }
+  if (scoringType !== "head") {
+    return "unknown";
+  }
+  return modifierCount === 0 ? "head_to_head_categories" : "head_to_head_points";
+}
+
+function rosterSlotKind(position: string, isStarting: boolean): "starting" | "bench" | "reserve" {
+  if (isStarting) {
+    return "starting";
+  }
+  return position === "BN" ? "bench" : "reserve";
+}
+
 function weekWindow(
   attributes: (typeof LeaguePayload.Type)["league"],
 ): Effect.Effect<ProviderPeriodWindow | undefined, ProviderResponseInvalid> {
@@ -1014,7 +1070,7 @@ function weekWindow(
   const startWeek = attributes.start_week;
   const endWeek = attributes.end_week;
   if (currentWeek !== undefined && startWeek !== undefined && endWeek !== undefined) {
-    return Effect.succeed({ currentWeek, startWeek, endWeek });
+    return Effect.succeed({ current: currentWeek, start: startWeek, end: endWeek });
   }
   if (currentWeek === undefined && startWeek === undefined && endWeek === undefined) {
     return Effect.as(Effect.void, undefined);
@@ -1213,7 +1269,7 @@ function playerDetailsFromPayload(
         rosterStatus: rosterStatusOf(player.ownership?.ownership_type),
         actual: series === undefined ? undefined : { basis, stats: series },
         projected: undefined,
-        percentStarted: yield* percentStartedOf(
+        communityStartRate: yield* communityStartRateOf(
           player.percent_started,
           `league.players.${String(index)}.percent_started`,
           startedCoverage,
@@ -1223,7 +1279,7 @@ function playerDetailsFromPayload(
     if (
       startedCoverage !== undefined &&
       details.length > 0 &&
-      details.every((detail) => !hasStartPercentage(detail.percentStarted))
+      details.every((detail) => !hasStartPercentage(detail.communityStartRate))
     ) {
       return yield* responseMismatch({
         operation: "read_player_details",
@@ -1234,16 +1290,16 @@ function playerDetailsFromPayload(
   });
 }
 
-function hasStartPercentage(started: ProviderPercentStarted | undefined): boolean {
+function hasStartPercentage(started: ProviderCommunityStartRate | undefined): boolean {
   return started !== undefined && started.percent !== null;
 }
 
-function percentStartedOf(
+function communityStartRateOf(
   payload: typeof PercentStartedPayload.Type | undefined,
   field: string,
   expected: ProviderRosterCoverage | undefined,
 ): Effect.Effect<
-  ProviderPercentStarted | undefined,
+  ProviderCommunityStartRate | undefined,
   ProviderResponseInvalid | ProviderPeriodMismatch
 > {
   return Effect.gen(function* () {
@@ -1258,11 +1314,11 @@ function percentStartedOf(
         covered: coverage,
       });
     }
-    const cuts: Array<ProviderStartPercentageCut> = [];
+    const cuts: Array<ProviderStartRateCut> = [];
     for (const [index, entry] of (payload.percent_started_cut_types ?? []).entries()) {
       const cut = entry.percent_started_cut_type;
       cuts.push({
-        cutType: cut.cut_type,
+        cut: cut.cut_type,
         percent: yield* percentageOf(
           cut.value,
           `${field}.percent_started_cut_types.${String(index)}.value`,
@@ -1271,7 +1327,7 @@ function percentStartedOf(
     }
     return {
       percent: yield* percentageOf(payload.value, `${field}.value`),
-      delta: yield* percentDeltaOf(payload.delta, `${field}.delta`),
+      change: yield* percentDeltaOf(payload.delta, `${field}.delta`),
       coverage,
       cuts,
     };
@@ -1404,9 +1460,9 @@ function toSearchPlayer(
       player.percent_owned === undefined ? null : providerNumber(player.percent_owned.value),
     percentOwnedDelta:
       player.percent_owned === undefined ? null : providerNumber(player.percent_owned.delta),
-    percentStarted:
+    communityStartRate:
       player.percent_started === undefined ? null : providerNumber(player.percent_started.value),
-    percentStartedDelta:
+    communityStartRateChange:
       player.percent_started === undefined ? null : providerNumber(player.percent_started.delta),
   };
 }

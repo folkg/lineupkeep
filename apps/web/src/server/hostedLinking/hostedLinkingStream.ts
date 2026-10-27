@@ -83,7 +83,7 @@ async function authorizeStream(
   if (factory === undefined) {
     return rejectUpgrade(501, "Hosted browser linking is unavailable");
   }
-  const providerLogin = providerLoginConfig(environment, request.url);
+  const providerLogin = providerLoginConfig(environment, request.url, linking.provider);
   const browserSession: HostedBrowserSession = {
     id: linking.id,
     userId,

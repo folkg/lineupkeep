@@ -34,10 +34,11 @@ import { RetentionSweepLive } from "#contexts/connections/internal/RetentionSwee
 import { TeamRepository } from "#contexts/connections/internal/TeamRepository.ts";
 import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
 import { TransactionReviewsLive } from "#contexts/connections/internal/TransactionReviewsLive.ts";
-import { YahooProvider } from "#contexts/connections/internal/yahoo/YahooProvider.ts";
+import { yahooProvider } from "#contexts/connections/internal/yahoo/YahooProvider.ts";
 import type { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import type { LineupDispatcher, LineupWorker } from "#contexts/connections/LineupWork.ts";
 import type { Notifications } from "#contexts/connections/Notifications.ts";
+import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
 import type { RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { Teams } from "#contexts/connections/Teams.ts";
 import type { TransactionReviews } from "#contexts/connections/TransactionReview.ts";
@@ -59,7 +60,9 @@ const AuthLayer = AuthLive.pipe(
   Layer.provide(AuthDatabase.layer),
   Layer.provide(EmailDeliveryLayer),
 );
-const ProviderLayer = YahooProvider;
+const ProviderLayer = Layer.effect(ProviderRegistry)(
+  Effect.map(yahooProvider, (yahoo) => ProviderRegistry.of(providerRegistryOf([yahoo]))),
+);
 const CredentialEncryptionLayer = ConnectionCredentialEncryption.layer;
 const RepositoryLayer = ConnectionRepository.layer.pipe(Layer.provide(ConnectionsDatabase.layer));
 const ConnectionsLayer = ConnectionsLive.pipe(
@@ -113,7 +116,10 @@ const LineupRunsLayer = LineupRunsLive.pipe(
   Layer.provide(QueryRepositoryLayer),
   Layer.provide(LineupDispatcherLayer),
 );
-const TeamRepositoryLayer = TeamRepository.layer.pipe(Layer.provide(ConnectionsDatabase.layer));
+const TeamRepositoryLayer = TeamRepository.layer.pipe(
+  Layer.provide(ConnectionsDatabase.layer),
+  Layer.provide(ProviderLayer),
+);
 const TeamsLayer = TeamsLive.pipe(
   Layer.provide(TeamRepositoryLayer),
   Layer.provide(LineupRepositoryLayer),

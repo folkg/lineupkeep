@@ -1,8 +1,24 @@
+import {
+  lineupAssignments,
+  lineupPolicyVersion,
+  planLineup,
+  trailingPeriodCount,
+} from "@lineupkeep/lineup-policy";
+import type {
+  LineupPolicyInput,
+  Period,
+  PeriodObservation,
+  PlayerAvailability,
+  PlayerCommunityStartRate,
+  PolicyPlayer,
+} from "@lineupkeep/lineup-policy";
+import type { Exact, StatObservation } from "@lineupkeep/lineup-scoring";
+import { parseExact, scoringProfile } from "@lineupkeep/lineup-scoring";
+import { makePlayerId, makeSlotId } from "@lineupkeep/lineup-solver";
+import type { RosterSlot } from "@lineupkeep/lineup-solver";
 import { Context, Deferred, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
 
 import {
-  ProviderCrumbUnavailable,
-  ProviderGateway,
   ProviderOperationUnsupported,
   ProviderPeriodMismatch,
   ProviderRequestFailed,
@@ -12,9 +28,12 @@ import {
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
 import type {
+  ProviderCapabilities,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderLineupAssignment,
+  ProviderLineupOutcome,
+  ProviderLineupRequest,
   ProviderMatchup,
   ProviderNativeTarget,
   ProviderOperation,
@@ -22,11 +41,15 @@ import type {
   ProviderReviewLinkInput,
   ProviderRoster,
   ProviderRosterCoverage,
+  ProviderRosterPosition,
+  ProviderShape,
   ProviderStandings,
   ProviderTeam,
   ProviderTransaction,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
 
 type FakeWriteAction = "accept" | "reject" | "lost_response" | "unavailable" | "invalid";
 
@@ -39,7 +62,6 @@ type FakeProviderState = {
   readonly sessionRejected: boolean;
   readonly teams: ReadonlyArray<ProviderTeam>;
   readonly requestFailure: FakeRequestFailure | undefined;
-  readonly crumbAvailable: boolean;
   readonly discoveryGate: Option.Option<FakeGate>;
   readonly rosterReadGate: Option.Option<FakeGate>;
   readonly league: ProviderLeagueSettings | undefined;
@@ -72,7 +94,6 @@ export type FakeProviderWorldShape = {
   readonly rejectSession: (rejected: boolean) => Effect.Effect<void>;
   readonly setTeams: (teams: ReadonlyArray<ProviderTeam>) => Effect.Effect<void>;
   readonly failRequests: (failure: FakeRequestFailure | undefined) => Effect.Effect<void>;
-  readonly setCrumbAvailable: (available: boolean) => Effect.Effect<void>;
   readonly blockDiscovery: Effect.Effect<FakeGate>;
   readonly unblockDiscovery: Effect.Effect<void>;
   readonly blockRosterRead: Effect.Effect<FakeGate>;
@@ -116,7 +137,6 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         sessionRejected: false,
         teams: [],
         requestFailure: undefined,
-        crumbAvailable: true,
         discoveryGate: Option.none(),
         rosterReadGate: Option.none(),
         league: undefined,
@@ -152,8 +172,6 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           modify((current) => ({ ...current, sessionRejected: rejected })),
         setTeams: (teams) => modify((current) => ({ ...current, teams })),
         failRequests: (requestFailure) => modify((current) => ({ ...current, requestFailure })),
-        setCrumbAvailable: (crumbAvailable) =>
-          modify((current) => ({ ...current, crumbAvailable })),
         blockDiscovery: Effect.gen(function* () {
           const gate: FakeGate = {
             started: yield* Deferred.make<void>(),
@@ -206,373 +224,604 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
   );
 }
 
-export const ProviderFakeTest = Layer.effect(
-  ProviderGateway,
-  Effect.gen(function* () {
-    const world = yield* FakeProviderWorld;
+const providerFake = Effect.gen(function* () {
+  const world = yield* FakeProviderWorld;
 
-    const prepare = (
-      input: ProviderSessionMaterial,
-      operation: ProviderOperation,
-    ): Effect.Effect<
-      FakeProviderState,
-      | ProviderSessionRejected
-      | ProviderOperationUnsupported
-      | ProviderRequestFailed
-      | ProviderResponseInvalid
-    > =>
-      Effect.gen(function* () {
-        yield* validate(input, operation);
-        const current = yield* Ref.get(world.state);
-        if (current.sessionRejected) {
-          return yield* ProviderSessionRejected.make({ operation });
-        }
-        if (current.unsupported.has(operation)) {
-          return yield* ProviderOperationUnsupported.make({
-            operation,
-            reason: `The fake provider does not support ${operation}.`,
-          });
-        }
-        yield* requestFailure(current, operation);
-        return current;
-      });
-
-    return ProviderGateway.of({
-      validateSession: Effect.fn("FakeProvider.validateSession")(function* (input) {
-        yield* validate(input, "validate_session");
-        const current = yield* Ref.get(world.state);
-        if (current.sessionRejected) {
-          return yield* ProviderSessionRejected.make({ operation: "validate_session" });
-        }
-        yield* requestFailure(current, "validate_session");
-      }),
-      discoverTeams: Effect.fn("FakeProvider.discoverTeams")(function* (input) {
-        yield* validate(input, "discover_teams");
-        const current = yield* Ref.get(world.state);
-        if (current.sessionRejected) {
-          return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
-        }
-        yield* requestFailure(current, "discover_teams");
-        const gate = Option.getOrUndefined(current.discoveryGate);
-        if (gate !== undefined) {
-          yield* Deferred.succeed(gate.started, undefined);
-          yield* Deferred.await(gate.release);
-        }
-        const latest = yield* Ref.get(world.state);
-        return latest.teams;
-      }),
-      readCrumb: Effect.fn("FakeProvider.readCrumb")(function* (input) {
-        yield* validate(input, "read_crumb");
-        const current = yield* Ref.get(world.state);
-        if (current.sessionRejected) {
-          return yield* ProviderSessionRejected.make({ operation: "read_crumb" });
-        }
-        yield* requestFailure(current, "read_crumb");
-        if (!current.crumbAvailable) {
-          return yield* ProviderCrumbUnavailable.make({ operation: "read_crumb" });
-        }
-        return { crumb: Redacted.make("fake-provider-crumb") };
-      }),
-      readLeague: Effect.fn("FakeProvider.readLeague")(function* (input) {
-        const current = yield* prepare(input, "read_league");
-        if (current.leagueFailure !== undefined) {
-          return yield* ProviderResponseInvalid.make({
-            operation: "read_league",
-            ...(current.leagueFailure.field === undefined
-              ? {}
-              : { field: current.leagueFailure.field }),
-          });
-        }
-        if (current.league === undefined) {
-          return yield* ProviderOperationUnsupported.make({
-            operation: "read_league",
-            reason: "No league settings are configured for the fake provider.",
-          });
-        }
-        if (current.league.providerLeagueKey !== input.providerLeagueKey) {
-          return yield* ProviderResponseInvalid.make({ operation: "read_league" });
-        }
-        return current.league;
-      }),
-      readStandings: Effect.fn("FakeProvider.readStandings")(function* (input) {
-        const current = yield* prepare(input, "read_standings");
-        if (current.standingsFailure !== undefined) {
-          return yield* ProviderResponseInvalid.make({
-            operation: "read_standings",
-            ...(current.standingsFailure.field === undefined
-              ? {}
-              : { field: current.standingsFailure.field }),
-          });
-        }
-        if (current.standings === undefined) {
-          return yield* ProviderOperationUnsupported.make({
-            operation: "read_standings",
-            reason: "No standings are configured for the fake provider.",
-          });
-        }
-        if (current.standings.providerLeagueKey !== input.providerLeagueKey) {
-          return yield* ProviderResponseInvalid.make({ operation: "read_standings" });
-        }
-        return current.standings;
-      }),
-      readRoster: Effect.fn("FakeProvider.readRoster")(function* (input) {
-        const current = yield* prepare(input, "read_roster");
-        yield* Ref.update(world.state, (state) => ({
-          ...state,
-          rosterPeriods: [...state.rosterPeriods, input.period],
-        }));
-        if (current.roster === undefined) {
-          return yield* ProviderOperationUnsupported.make({
-            operation: "read_roster",
-            reason: "No roster is configured for the fake provider.",
-          });
-        }
-        if (current.roster.providerTeamKey !== input.providerTeamKey) {
-          return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
-        }
-        const gate = Option.getOrUndefined(current.rosterReadGate);
-        if (gate !== undefined) {
-          yield* Deferred.succeed(gate.started, undefined);
-          yield* Deferred.await(gate.release);
-          yield* Ref.update(world.state, (current) => ({
-            ...current,
-            rosterReadGate: Option.none(),
-          }));
-        }
-        const coverage = current.roster.coverage;
-        if (
-          input.period !== undefined &&
-          (input.period.type !== coverage.type ||
-            (input.period.type === "week" &&
-              coverage.type === "week" &&
-              input.period.week !== coverage.week) ||
-            (input.period.type === "date" &&
-              coverage.type === "date" &&
-              input.period.date !== coverage.date))
-        ) {
-          return yield* ProviderPeriodMismatch.make({
-            operation: "read_roster",
-            requested: input.period,
-            covered: coverage,
-          });
-        }
-        if (current.rosterAfterNextRead !== undefined) {
-          yield* Ref.update(world.state, (state) => ({
-            ...state,
-            roster: current.rosterAfterNextRead,
-            rosterAfterNextRead: undefined,
-          }));
-        }
-        return current.roster;
-      }),
-      applyNativeStartActive: Effect.fn("FakeProvider.applyNativeStartActive")(function* (input) {
-        const current = yield* prepare(input, "apply_native_start_active").pipe(
-          Effect.mapError((error) =>
-            error._tag === "provider.session_rejected"
-              ? error
-              : ProviderResponseInvalid.make({ operation: "apply_native_start_active" }),
-          ),
-        );
-        if (current.roster === undefined) {
-          return yield* ProviderResponseInvalid.make({
-            operation: "apply_native_start_active",
-          });
-        }
-        if (current.roster.providerTeamKey !== input.providerTeamKey) {
-          return { status: "rejected" as const, reason: "not_found" as const };
-        }
-        yield* Ref.update(world.state, (state) => ({
-          ...state,
-          nativeCalls: state.nativeCalls + 1,
-          nativeTargets: [...state.nativeTargets, input.target],
-        }));
-        const result: ProviderWriteResult = writeResult(current.nativeAction);
-        if (current.nativeAction === "accept" || current.nativeAction === "lost_response") {
-          const after = current.nativeAfter ?? current.roster;
-          yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));
-        }
-        return result;
-      }),
-      applyExplicitAssignments: Effect.fn("FakeProvider.applyExplicitAssignments")(
-        function* (input) {
-          const current = yield* prepare(input, "apply_explicit_assignments").pipe(
-            Effect.mapError((error) =>
-              error._tag === "provider.session_rejected"
-                ? error
-                : ProviderResponseInvalid.make({ operation: "apply_explicit_assignments" }),
-            ),
-          );
-          if (current.roster === undefined) {
-            return yield* ProviderResponseInvalid.make({
-              operation: "apply_explicit_assignments",
-            });
-          }
-          if (current.roster.providerTeamKey !== input.providerTeamKey) {
-            return { status: "rejected" as const, reason: "not_found" as const };
-          }
-          yield* Ref.update(world.state, (state) => ({
-            ...state,
-            explicitCalls: state.explicitCalls + 1,
-            explicitRequests: [...state.explicitRequests, input.assignments],
-          }));
-          if (current.explicitAction === "invalid") {
-            return yield* ProviderResponseInvalid.make({
-              operation: "apply_explicit_assignments",
-            });
-          }
-          const result: ProviderWriteResult = writeResult(current.explicitAction);
-          if (current.explicitAction === "accept" || current.explicitAction === "lost_response") {
-            const after =
-              current.explicitAfter ?? applyAssignments(current.roster, input.assignments);
-            yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));
-          }
-          return result;
-        },
-      ),
-      readPlayerDetails: Effect.fn("FakeProvider.readPlayerDetails")(function* (input) {
-        const current = yield* prepare(input, "read_player_details");
-        if (current.playerDetailsFailure !== undefined) {
-          return yield* ProviderPeriodMismatch.make({
-            operation: "read_player_details",
-            requested: current.playerDetailsFailure.requested,
-            covered: current.playerDetailsFailure.covered,
-          });
-        }
-        const requested = new Set(input.providerPlayerKeys);
-        return current.playerDetails.filter((player) => requested.has(player.providerPlayerKey));
-      }),
-      readPlayerHistory: Effect.fn("FakeProvider.readPlayerHistory")(function* (input) {
-        const current = yield* prepare(input, "read_player_history");
-        if (current.playerDetailsFailure !== undefined) {
-          return yield* ProviderPeriodMismatch.make({
-            operation: "read_player_history",
-            requested: current.playerDetailsFailure.requested,
-            covered: current.playerDetailsFailure.covered,
-          });
-        }
-        const requested = new Set(input.providerPlayerKeys);
-        const details = current.playerDetails.filter((player) =>
-          requested.has(player.providerPlayerKey),
-        );
-        return input.periods.map((period) => ({ period, details }));
-      }),
-      searchPlayers: Effect.fn("FakeProvider.searchPlayers")(function* (input) {
-        const current = yield* prepare(input, "search_players");
-        const query = input.query?.toLocaleLowerCase();
-        const filtered = current.playerDetails.flatMap((player) => {
-          if (
-            player.rosterStatus === "unknown" ||
-            player.name === undefined ||
-            player.primaryPosition === undefined ||
-            player.displayPosition === undefined ||
-            player.eligiblePositions === undefined
-          ) {
-            return [];
-          }
-          if (input.availability !== "all" && player.rosterStatus !== input.availability) {
-            return [];
-          }
-          if (
-            query !== undefined &&
-            query !== "" &&
-            !player.name.toLocaleLowerCase().includes(query)
-          ) {
-            return [];
-          }
-          return [
-            {
-              providerPlayerKey: player.providerPlayerKey,
-              name: player.name,
-              primaryPosition: player.primaryPosition,
-              displayPosition: player.displayPosition,
-              eligiblePositions: player.eligiblePositions,
-              availability: player.rosterStatus,
-              percentOwned: null,
-              percentOwnedDelta: null,
-              percentStarted: null,
-              percentStartedDelta: null,
-            },
-          ];
+  const prepare = (
+    input: ProviderSessionMaterial,
+    operation: ProviderOperation,
+  ): Effect.Effect<
+    FakeProviderState,
+    | ProviderSessionRejected
+    | ProviderOperationUnsupported
+    | ProviderRequestFailed
+    | ProviderResponseInvalid
+  > =>
+    Effect.gen(function* () {
+      yield* validate(input, operation);
+      const current = yield* Ref.get(world.state);
+      if (current.sessionRejected) {
+        return yield* ProviderSessionRejected.make({ operation });
+      }
+      if (current.unsupported.has(operation)) {
+        return yield* ProviderOperationUnsupported.make({
+          operation,
+          reason: `The fake provider does not support ${operation}.`,
         });
-        const sorted = [...filtered].sort((left, right) => {
-          switch (input.sort) {
-            case "name":
-              return left.name.localeCompare(right.name);
-            case "position":
-              return left.primaryPosition.localeCompare(right.primaryPosition);
-            case "ownership":
-            case "actual_rank":
-            case "overall_rank":
-            case "stat":
-              return 0;
-          }
-        });
-        return { players: sorted.slice(0, input.limit) };
-      }),
-      readMatchups: Effect.fn("FakeProvider.readMatchups")(function* (input) {
-        const current = yield* prepare(input, "read_matchups");
-        return current.matchups.filter((matchup) => matchup.period.week === input.period.week);
-      }),
-      readTransactions: Effect.fn("FakeProvider.readTransactions")(function* (input) {
-        const current = yield* prepare(input, "read_transactions");
-        return current.transactions
-          .filter(
-            (transaction) =>
-              input.providerTeamKey === undefined ||
-              transaction.teams.some((team) => team.providerTeamKey === input.providerTeamKey),
-          )
-          .slice(0, input.limit);
-      }),
-      readLeagueTeams: Effect.fn("FakeProvider.readLeagueTeams")(function* (input) {
-        const current = yield* prepare(input, "read_league_teams");
-        return current.leagueTeams.filter(
-          (team) => team.providerLeagueKey === input.providerLeagueKey,
-        );
-      }),
-      buildReviewLink: Effect.fn("FakeProvider.buildReviewLink")(function* (
-        input: ProviderReviewLinkInput,
-      ) {
-        const current = yield* Ref.get(world.state);
-        if (current.reviewLinkUrl !== undefined) {
-          return current.reviewLinkUrl;
-        }
-        if (current.reviewLinkFailure !== undefined) {
-          return yield* ProviderReviewLinkInvalid.make({
-            reason: current.reviewLinkFailure.reason,
-          });
-        }
-        const page = input.intent.kind === "trade" ? "trade" : "add";
-        const url = new URL(
-          `https://review.example.test/league/${input.providerLeagueKey}/${page}`,
-        );
-        const append = (name: "apid" | "dpid", key: string): void => {
-          url.searchParams.append(name, key.slice(key.lastIndexOf(".p.") + 3));
-        };
-        switch (input.intent.kind) {
-          case "add":
-            append("apid", input.intent.add);
-            break;
-          case "add_drop":
-            append("apid", input.intent.add);
-            append("dpid", input.intent.drop);
-            break;
-          case "drop":
-            append("dpid", input.intent.drop);
-            break;
-          case "trade":
-            for (const key of input.intent.send) {
-              append("apid", key);
-            }
-            for (const key of input.intent.receive) {
-              append("dpid", key);
-            }
-            break;
-        }
-        return url.href;
-      }),
+      }
+      yield* requestFailure(current, operation);
+      return current;
     });
-  }),
+
+  return {
+    key: decodeProviderKey("yahoo"),
+    capabilities: fakeCapabilities,
+    validateSession: Effect.fn("FakeProvider.validateSession")(function* (input) {
+      yield* validate(input, "validate_session");
+      const current = yield* Ref.get(world.state);
+      if (current.sessionRejected) {
+        return yield* ProviderSessionRejected.make({ operation: "validate_session" });
+      }
+      yield* requestFailure(current, "validate_session");
+    }),
+    discoverTeams: Effect.fn("FakeProvider.discoverTeams")(function* (input) {
+      yield* validate(input, "discover_teams");
+      const current = yield* Ref.get(world.state);
+      if (current.sessionRejected) {
+        return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
+      }
+      yield* requestFailure(current, "discover_teams");
+      const gate = Option.getOrUndefined(current.discoveryGate);
+      if (gate !== undefined) {
+        yield* Deferred.succeed(gate.started, undefined);
+        yield* Deferred.await(gate.release);
+      }
+      const latest = yield* Ref.get(world.state);
+      return latest.teams;
+    }),
+    readLeague: Effect.fn("FakeProvider.readLeague")(function* (input) {
+      const current = yield* prepare(input, "read_league");
+      if (current.leagueFailure !== undefined) {
+        return yield* ProviderResponseInvalid.make({
+          operation: "read_league",
+          ...(current.leagueFailure.field === undefined
+            ? {}
+            : { field: current.leagueFailure.field }),
+        });
+      }
+      if (current.league === undefined) {
+        return yield* ProviderOperationUnsupported.make({
+          operation: "read_league",
+          reason: "No league settings are configured for the fake provider.",
+        });
+      }
+      if (current.league.providerLeagueKey !== input.providerLeagueKey) {
+        return yield* ProviderResponseInvalid.make({ operation: "read_league" });
+      }
+      return current.league;
+    }),
+    readStandings: Effect.fn("FakeProvider.readStandings")(function* (input) {
+      const current = yield* prepare(input, "read_standings");
+      if (current.standingsFailure !== undefined) {
+        return yield* ProviderResponseInvalid.make({
+          operation: "read_standings",
+          ...(current.standingsFailure.field === undefined
+            ? {}
+            : { field: current.standingsFailure.field }),
+        });
+      }
+      if (current.standings === undefined) {
+        return yield* ProviderOperationUnsupported.make({
+          operation: "read_standings",
+          reason: "No standings are configured for the fake provider.",
+        });
+      }
+      if (current.standings.providerLeagueKey !== input.providerLeagueKey) {
+        return yield* ProviderResponseInvalid.make({ operation: "read_standings" });
+      }
+      return current.standings;
+    }),
+    readRoster: Effect.fn("FakeProvider.readRoster")(function* (input) {
+      const current = yield* prepare(input, "read_roster");
+      yield* Ref.update(world.state, (state) => ({
+        ...state,
+        rosterPeriods: [...state.rosterPeriods, input.period],
+      }));
+      if (current.roster === undefined) {
+        return yield* ProviderOperationUnsupported.make({
+          operation: "read_roster",
+          reason: "No roster is configured for the fake provider.",
+        });
+      }
+      if (current.roster.providerTeamKey !== input.providerTeamKey) {
+        return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
+      }
+      const gate = Option.getOrUndefined(current.rosterReadGate);
+      if (gate !== undefined) {
+        yield* Deferred.succeed(gate.started, undefined);
+        yield* Deferred.await(gate.release);
+        yield* Ref.update(world.state, (current) => ({
+          ...current,
+          rosterReadGate: Option.none(),
+        }));
+      }
+      const coverage = current.roster.coverage;
+      if (
+        input.period !== undefined &&
+        (input.period.type !== coverage.type ||
+          (input.period.type === "week" &&
+            coverage.type === "week" &&
+            input.period.week !== coverage.week) ||
+          (input.period.type === "date" &&
+            coverage.type === "date" &&
+            input.period.date !== coverage.date))
+      ) {
+        return yield* ProviderPeriodMismatch.make({
+          operation: "read_roster",
+          requested: input.period,
+          covered: coverage,
+        });
+      }
+      if (current.rosterAfterNextRead !== undefined) {
+        yield* Ref.update(world.state, (state) => ({
+          ...state,
+          roster: current.rosterAfterNextRead,
+          rosterAfterNextRead: undefined,
+        }));
+      }
+      return current.roster;
+    }),
+    applyNativeAction: Effect.fn("FakeProvider.applyNativeAction")(function* (input) {
+      const current = yield* prepare(input, "apply_native_action").pipe(
+        Effect.mapError((error) =>
+          error._tag === "provider.session_rejected"
+            ? error
+            : ProviderResponseInvalid.make({ operation: "apply_native_action" }),
+        ),
+      );
+      if (current.roster === undefined) {
+        return yield* ProviderResponseInvalid.make({
+          operation: "apply_native_action",
+        });
+      }
+      if (current.roster.providerTeamKey !== input.providerTeamKey) {
+        return { status: "rejected" as const, reason: "not_found" as const };
+      }
+      yield* Ref.update(world.state, (state) => ({
+        ...state,
+        nativeCalls: state.nativeCalls + 1,
+        nativeTargets: [...state.nativeTargets, input.target],
+      }));
+      const result: ProviderWriteResult = writeResult(current.nativeAction);
+      if (current.nativeAction === "accept" || current.nativeAction === "lost_response") {
+        const after = current.nativeAfter ?? current.roster;
+        yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));
+      }
+      return result;
+    }),
+    applyExplicitAssignments: Effect.fn("FakeProvider.applyExplicitAssignments")(function* (input) {
+      const current = yield* prepare(input, "apply_explicit_assignments").pipe(
+        Effect.mapError((error) =>
+          error._tag === "provider.session_rejected"
+            ? error
+            : ProviderResponseInvalid.make({ operation: "apply_explicit_assignments" }),
+        ),
+      );
+      if (current.roster === undefined) {
+        return yield* ProviderResponseInvalid.make({
+          operation: "apply_explicit_assignments",
+        });
+      }
+      if (current.roster.providerTeamKey !== input.providerTeamKey) {
+        return { status: "rejected" as const, reason: "not_found" as const };
+      }
+      yield* Ref.update(world.state, (state) => ({
+        ...state,
+        explicitCalls: state.explicitCalls + 1,
+        explicitRequests: [...state.explicitRequests, input.assignments],
+      }));
+      if (current.explicitAction === "invalid") {
+        return yield* ProviderResponseInvalid.make({
+          operation: "apply_explicit_assignments",
+        });
+      }
+      const result: ProviderWriteResult = writeResult(current.explicitAction);
+      if (current.explicitAction === "accept" || current.explicitAction === "lost_response") {
+        const after = current.explicitAfter ?? applyAssignments(current.roster, input.assignments);
+        yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));
+      }
+      return result;
+    }),
+    readPlayerDetails: Effect.fn("FakeProvider.readPlayerDetails")(function* (input) {
+      const current = yield* prepare(input, "read_player_details");
+      if (current.playerDetailsFailure !== undefined) {
+        return yield* ProviderPeriodMismatch.make({
+          operation: "read_player_details",
+          requested: current.playerDetailsFailure.requested,
+          covered: current.playerDetailsFailure.covered,
+        });
+      }
+      const requested = new Set(input.providerPlayerKeys);
+      return current.playerDetails.filter((player) => requested.has(player.providerPlayerKey));
+    }),
+    readPlayerHistory: Effect.fn("FakeProvider.readPlayerHistory")(function* (input) {
+      const current = yield* prepare(input, "read_player_history");
+      if (current.playerDetailsFailure !== undefined) {
+        return yield* ProviderPeriodMismatch.make({
+          operation: "read_player_history",
+          requested: current.playerDetailsFailure.requested,
+          covered: current.playerDetailsFailure.covered,
+        });
+      }
+      const requested = new Set(input.providerPlayerKeys);
+      const details = current.playerDetails.filter((player) =>
+        requested.has(player.providerPlayerKey),
+      );
+      return input.periods.map((period) => ({ period, details }));
+    }),
+    searchPlayers: Effect.fn("FakeProvider.searchPlayers")(function* (input) {
+      const current = yield* prepare(input, "search_players");
+      const query = input.query?.toLocaleLowerCase();
+      const filtered = current.playerDetails.flatMap((player) => {
+        if (
+          player.rosterStatus === "unknown" ||
+          player.name === undefined ||
+          player.primaryPosition === undefined ||
+          player.displayPosition === undefined ||
+          player.eligiblePositions === undefined
+        ) {
+          return [];
+        }
+        if (input.availability !== "all" && player.rosterStatus !== input.availability) {
+          return [];
+        }
+        if (
+          query !== undefined &&
+          query !== "" &&
+          !player.name.toLocaleLowerCase().includes(query)
+        ) {
+          return [];
+        }
+        return [
+          {
+            providerPlayerKey: player.providerPlayerKey,
+            name: player.name,
+            primaryPosition: player.primaryPosition,
+            displayPosition: player.displayPosition,
+            eligiblePositions: player.eligiblePositions,
+            availability: player.rosterStatus,
+            percentOwned: null,
+            percentOwnedDelta: null,
+            communityStartRate: null,
+            communityStartRateChange: null,
+          },
+        ];
+      });
+      const sorted = [...filtered].sort((left, right) => {
+        switch (input.sort) {
+          case "name":
+            return left.name.localeCompare(right.name);
+          case "position":
+            return left.primaryPosition.localeCompare(right.primaryPosition);
+          case "ownership":
+          case "actual_rank":
+          case "overall_rank":
+          case "stat":
+            return 0;
+        }
+      });
+      return { players: sorted.slice(0, input.limit) };
+    }),
+    readMatchups: Effect.fn("FakeProvider.readMatchups")(function* (input) {
+      const current = yield* prepare(input, "read_matchups");
+      return current.matchups.filter((matchup) => matchup.period.week === input.period.week);
+    }),
+    readTransactions: Effect.fn("FakeProvider.readTransactions")(function* (input) {
+      const current = yield* prepare(input, "read_transactions");
+      return current.transactions
+        .filter(
+          (transaction) =>
+            input.providerTeamKey === undefined ||
+            transaction.teams.some((team) => team.providerTeamKey === input.providerTeamKey),
+        )
+        .slice(0, input.limit);
+    }),
+    readLeagueTeams: Effect.fn("FakeProvider.readLeagueTeams")(function* (input) {
+      const current = yield* prepare(input, "read_league_teams");
+      return current.leagueTeams.filter(
+        (team) => team.providerLeagueKey === input.providerLeagueKey,
+      );
+    }),
+    buildReviewLink: Effect.fn("FakeProvider.buildReviewLink")(function* (
+      input: ProviderReviewLinkInput,
+    ) {
+      const current = yield* Ref.get(world.state);
+      if (current.reviewLinkUrl !== undefined) {
+        return current.reviewLinkUrl;
+      }
+      if (current.reviewLinkFailure !== undefined) {
+        return yield* ProviderReviewLinkInvalid.make({
+          reason: current.reviewLinkFailure.reason,
+        });
+      }
+      const page = input.intent.kind === "trade" ? "trade" : "add";
+      const url = new URL(`https://review.example.test/league/${input.providerLeagueKey}/${page}`);
+      const append = (name: "apid" | "dpid", key: string): void => {
+        url.searchParams.append(name, key.slice(key.lastIndexOf(".p.") + 3));
+      };
+      switch (input.intent.kind) {
+        case "add":
+          append("apid", input.intent.add);
+          break;
+        case "add_drop":
+          append("apid", input.intent.add);
+          append("dpid", input.intent.drop);
+          break;
+        case "drop":
+          append("dpid", input.intent.drop);
+          break;
+        case "trade":
+          for (const key of input.intent.send) {
+            append("apid", key);
+          }
+          for (const key of input.intent.receive) {
+            append("dpid", key);
+          }
+          break;
+      }
+      return url.href;
+    }),
+    planLineup: Effect.fn("FakeProvider.planLineup")(function* (input: ProviderLineupRequest) {
+      const current = yield* prepare(input, "read_player_details");
+      const outcome = planFakeLineup(input, current.playerDetails);
+      if (outcome.kind === "refused") {
+        return {
+          kind: "refused" as const,
+          action: "native" as const,
+          policyVersion: lineupPolicyVersion,
+          code: outcome.code,
+          detail: outcome.detail,
+          basis: undefined,
+        };
+      }
+      return outcome;
+    }),
+  } satisfies ProviderShape;
+});
+
+export const ProviderFakeTest = Layer.effect(ProviderRegistry)(
+  Effect.map(providerFake, (provider) => ProviderRegistry.of(providerRegistryOf([provider]))),
 ).pipe(Layer.provideMerge(FakeProviderWorld.layer));
+
+const fakeCapabilities: ProviderCapabilities = {
+  fantasyDay: {
+    timeZone: "America/Los_Angeles",
+    boundary: "local-midnight",
+    version: "yahoo-pacific-midnight/1",
+  },
+  sports: ["football", "hockey"],
+  playerSearch: {
+    sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
+    providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
+    weeklyStatSortSports: ["football"],
+  },
+  publishesProjections: false,
+  publishesCommunityStartRate: true,
+  statBases: ["week", "season"],
+  limitations: [
+    {
+      subject: "player_schedule",
+      detail:
+        "This provider publishes no per-player games-remaining or probable-starter field. A roster entry carries the professional-team abbreviation and, where the league publishes one, the bye week; remaining player-games are available per fantasy team from get_matchups and get_team_summary.",
+    },
+    {
+      subject: "probable_starters",
+      detail:
+        "This provider publishes no probable-starter field on its fantasy read surface, so participation is reported only through the provider's injury status.",
+    },
+    {
+      subject: "projections",
+      detail: "This provider does not expose projected player statistics.",
+    },
+    {
+      subject: "team_remaining_games",
+      detail:
+        "This provider publishes no remaining-game count for football: a player plays at most one game per scoring week, and each roster entry carries the bye week instead.",
+    },
+    {
+      subject: "lock_timing",
+      detail:
+        "This provider's exact fantasy-day rollover and per-player lock timing are not verified. This reports the league's declared period range only.",
+    },
+    {
+      subject: "historical_seasons",
+      detail: "Only the linked team's current season is validated for this provider.",
+    },
+  ],
+};
+
+function planFakeLineup(
+  input: ProviderLineupRequest,
+  details: ReadonlyArray<ProviderPlayerDetail>,
+): ProviderLineupOutcome {
+  const period = targetPeriod(input.roster);
+  const slots = input.league.rosterPositions.map(rosterSlot);
+  const players = input.roster.players.map(policyPlayer);
+  const candidates: Array<LineupPolicyInput> = [];
+  if (input.league.statModifiers.length > 0) {
+    const window = observationWindow(input.league, period);
+    candidates.push({
+      period,
+      source: {
+        kind: "scoring-rules",
+        window,
+        scoring: scoringProfile({
+          categories: input.league.statCategories.map((category) => ({
+            statId: category.statId,
+            label: category.name,
+          })),
+          rules: input.league.statModifiers.map((modifier) => ({
+            statId: modifier.statId,
+            points: modifier.points,
+          })),
+        }),
+        observations: window.map((windowPeriod) => observationOf(windowPeriod, players, details)),
+      },
+      slots,
+      players,
+    });
+  }
+  candidates.push({
+    period,
+    source: {
+      kind: "community-start-rate",
+      started: players.map((player) => startRateOf(player, details)),
+    },
+    slots,
+    players,
+  });
+  const planned = planLineup(candidates);
+  if (planned.kind === "refused") {
+    const refusal = planned.refusals.at(-1);
+    return {
+      kind: "refused",
+      action: "native",
+      policyVersion: lineupPolicyVersion,
+      code: refusal?.code ?? "policy:no-value-source",
+      detail: refusal?.detail ?? "This league publishes no value source the custom policy can use.",
+      basis: undefined,
+    };
+  }
+  const translated = lineupAssignments({
+    plan: planned.plan,
+    slots: slots.map((slot) => ({ id: slot.id, kind: slot.kind })),
+    players: input.roster.players.map((player) => ({
+      playerKey: player.providerPlayerKey,
+      name: player.name,
+      slot: player.slot,
+      editable: player.isEditable === true,
+    })),
+  });
+  if (translated.kind === "refused") {
+    return {
+      kind: "refused",
+      action: "block",
+      policyVersion: lineupPolicyVersion,
+      code: translated.code,
+      detail: translated.detail,
+      basis: planned.basis,
+    };
+  }
+  return {
+    kind: "planned",
+    policyVersion: lineupPolicyVersion,
+    basis: planned.basis,
+    assignments: translated.assignments.map((assignment) => ({
+      providerPlayerKey: assignment.playerKey,
+      slot: assignment.slot,
+    })),
+  };
+}
+
+function observationOf(
+  period: Period,
+  players: ReadonlyArray<PolicyPlayer>,
+  details: ReadonlyArray<ProviderPlayerDetail>,
+): PeriodObservation {
+  const byKey = new Map(details.map((detail) => [detail.providerPlayerKey, detail]));
+  return {
+    period,
+    players: players.flatMap((player) => {
+      const observations = statsOf(byKey.get(player.id));
+      return observations === undefined ? [] : [{ id: player.id, stats: observations }];
+    }),
+  };
+}
+
+function statsOf(
+  detail: ProviderPlayerDetail | undefined,
+): ReadonlyArray<StatObservation> | undefined {
+  return detail?.actual?.stats.map((stat) => ({ statId: String(stat.statId), value: stat.value }));
+}
+
+function startRateOf(
+  player: PolicyPlayer,
+  details: ReadonlyArray<ProviderPlayerDetail>,
+): PlayerCommunityStartRate {
+  const startRate = details.find(
+    (detail) => detail.providerPlayerKey === player.id,
+  )?.communityStartRate;
+  return {
+    id: player.id,
+    percent: percentOf(startRate?.percent ?? null),
+    cuts: (startRate?.cuts ?? []).flatMap((cut) => {
+      const percent = percentOf(cut.percent);
+      return percent === undefined ? [] : [{ cut: cut.cut, percent }];
+    }),
+  };
+}
+
+function percentOf(percent: number | null): Exact | undefined {
+  return percent === null ? undefined : parseExact(String(percent));
+}
+
+function policyPlayer(player: ProviderRoster["players"][number]): PolicyPlayer {
+  return {
+    id: makePlayerId(player.providerPlayerKey),
+    eligiblePositions: player.eligiblePositions,
+    availability: availabilityOf(player),
+    locked: player.isEditable !== true,
+    currentSlotId: makeSlotId(player.slot),
+    nonGamePeriods: [],
+  };
+}
+
+function availabilityOf(player: ProviderRoster["players"][number]): PlayerAvailability {
+  if (player.injuryCode === undefined) {
+    return { kind: "available" };
+  }
+  return { kind: "unrecognised", code: player.injuryCode };
+}
+
+function rosterSlot(position: ProviderRosterPosition): RosterSlot {
+  const id = makeSlotId(position.position);
+  const eligibility =
+    position.eligibility.length === 0
+      ? { kind: "any" as const }
+      : { kind: "positions" as const, positions: [...position.eligibility] };
+  switch (position.kind) {
+    case "starting":
+      return {
+        kind: "starting",
+        id,
+        capacity: position.count,
+        requirement: "required",
+        eligibility,
+      };
+    case "bench":
+    case "reserve":
+      return { kind: position.kind, id, capacity: position.count, eligibility };
+  }
+}
+
+function targetPeriod(roster: ProviderRoster): Period {
+  return roster.coverage.type === "week"
+    ? { kind: "week", week: roster.coverage.week }
+    : { kind: "date", date: roster.coverage.date };
+}
+
+function observationWindow(league: ProviderLeagueSettings, target: Period): ReadonlyArray<Period> {
+  if (target.kind === "date") {
+    return [target];
+  }
+  const periods: Array<Period> = [];
+  for (let week = target.week - trailingPeriodCount; week < target.week; week += 1) {
+    if (week >= (league.periodWindow?.start ?? 1)) {
+      periods.push({ kind: "week", week });
+    }
+  }
+  return periods;
+}
 
 function validate(
   input: ProviderSessionMaterial,
@@ -595,7 +844,7 @@ function writeResult(action: FakeWriteAction): ProviderWriteResult {
     case "lost_response":
       return { status: "unknown" };
     case "unavailable":
-      return { status: "unknown" };
+      return { status: "not_sent", reason: "request_failed" };
     case "reject":
       return { status: "rejected", reason: "invalid_request" };
     case "invalid":

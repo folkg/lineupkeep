@@ -4,6 +4,7 @@ import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Array, DateTime, Effect, Layer, Redacted, Ref, Schema } from "effect";
 
 import { UserDirectory } from "#contexts/auth/UserDirectory.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import type { EmailMessage } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
@@ -79,7 +80,7 @@ it.effect("opens one incident and sends one email for a connection expiration", 
       throw new Error("Expected one delivered email");
     }
     assert.strictEqual(message.to, "owner@example.com");
-    assert.match(message.subject, /reconnect Yahoo/i);
+    assert.match(message.subject, /reconnect/i);
     assert.isDefined(message.idempotencyKey);
     assert.notInclude(message.text, "A1=test-session-cookie");
   }).pipe(Effect.provide(TestLayer)),
@@ -99,7 +100,7 @@ it.effect("cancels the notification when the connection is reconnected", () =>
     yield* connections.reconnect(owner, [
       {
         id: ready.id,
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session,
         expectedGeneration: credentialGeneration(ready),
       },
@@ -152,12 +153,14 @@ function connect(
     connectSerial += 1;
     const input = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId: `018f79ea-7d86-7c18-9b4a-8b4d0c916${String(connectSerial).padStart(3, "0")}`,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode: "ABCD2345",
     });
     const linking = Array.getUnsafe(yield* connections.startLinking(owner, [input]), 0);
     const linked = Array.getUnsafe(
-      yield* connections.completeLinking(owner, [{ id: linking.id, provider: "yahoo", session }]),
+      yield* connections.completeLinking(owner, [
+        { id: linking.id, provider: decodeProviderKey("yahoo"), session },
+      ]),
       0,
     );
     return linked;

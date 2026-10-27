@@ -28,9 +28,9 @@ export type LineupObservedPlayer = typeof LineupObservedPlayer.Type;
 
 export const LineupObservation = Schema.Struct({
   target: LineupTargetPeriod,
-  leagueCurrentWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  leagueStartWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
-  leagueEndWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  leagueCurrentPeriod: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  leagueStartPeriod: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  leagueEndPeriod: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   starterSlots: Schema.Array(Schema.NonEmptyString),
   players: Schema.Array(LineupObservedPlayer),
   lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -45,7 +45,7 @@ const LineupPlannedAssignment = Schema.Struct({
 type LineupPlannedAssignment = typeof LineupPlannedAssignment.Type;
 
 export const LineupPlan = Schema.TaggedUnion({
-  start_active_players: {
+  native_action: {
     target: LineupTargetPeriod,
     connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
     lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

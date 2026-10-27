@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { Array, Config, Deferred, Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
 import { DateTime } from "effect";
 
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 
@@ -198,7 +199,7 @@ it.effect("plans a league without points rules from the published started percen
     if (policy?.kind !== "planned") {
       return;
     }
-    assert.strictEqual(policy.basis, "percent-started:overall:week:3");
+    assert.strictEqual(policy.basis, "community-start-rate:overall:week:3");
     assert.strictEqual(run.state.outcome.changes.length, 2);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
@@ -597,7 +598,7 @@ it.effect("blocks an explicit write when the scoring week changes during plannin
     yield* Deferred.await(gate.started);
     yield* fake.setLeague({
       ...customLeague,
-      periodWindow: { currentWeek: 4, startWeek: 1, endWeek: 17 },
+      periodWindow: { current: 4, start: 1, end: 17 },
     });
     yield* Deferred.succeed(gate.release, undefined);
     yield* Fiber.join(fiber);
@@ -879,7 +880,7 @@ function customDetail(
     rosterStatus: "rostered",
     actual: { basis: { type: "week", week: 2 }, stats: [{ statId: 4, value }] },
     projected: undefined,
-    percentStarted: undefined,
+    communityStartRate: undefined,
   };
 }
 
@@ -898,11 +899,11 @@ function startedDetail(
     rosterStatus: "rostered",
     actual: undefined,
     projected: undefined,
-    percentStarted: {
+    communityStartRate: {
       percent,
-      delta: null,
+      change: null,
       coverage: { type: "week", week: 3 },
-      cuts: [{ cutType: "diamond", percent: 0 }],
+      cuts: [{ cut: "diamond", percent: 0 }],
     },
   };
 }
@@ -912,11 +913,12 @@ const customLeague: ProviderLeagueSettings = {
   name: "Custom League",
   webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
   season: 2026,
-  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 17 },
+  periodWindow: { current: 3, start: 1, end: 17 },
   rosterCoverage: "week",
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,
+  format: "head_to_head_points",
   scoringType: "head",
   scoringLabel: "H2H",
   weeklyDeadline: undefined,
@@ -925,9 +927,9 @@ const customLeague: ProviderLeagueSettings = {
   usesFaab: false,
   draftStatus: "postdraft",
   rosterPositions: [
-    { position: "QB", positionType: "O", count: 1, isStarting: true },
-    { position: "RB", positionType: "O", count: 1, isStarting: true },
-    { position: "BN", positionType: "B", count: 2, isStarting: false },
+    { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
+    { position: "RB", positionType: "O", count: 1, kind: "starting", eligibility: ["RB"] },
+    { position: "BN", positionType: "B", count: 2, kind: "bench", eligibility: [] },
   ],
   statCategories: [
     {
@@ -1067,11 +1069,13 @@ function seed(
     yield* fake.setNativeAfter(nativeAfter);
     const linkingInput = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode: "ABCD2345",
     });
     const linking = Array.getUnsafe(yield* connections.startLinking(owner, [linkingInput]), 0);
-    yield* connections.completeLinking(owner, [{ id: linking.id, provider: "yahoo", session }]);
+    yield* connections.completeLinking(owner, [
+      { id: linking.id, provider: decodeProviderKey("yahoo"), session },
+    ]);
     const discovered = yield* connections.discoverTeams(owner, [{ id: linking.id }]);
     return discovered.map((row) => ({ id: row.id, connectionId: row.connectionId }));
   }).pipe(Effect.orDie);
@@ -1079,7 +1083,7 @@ function seed(
 
 function teamFixture(providerTeamKey: string, name: string): ProviderTeam {
   return {
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     providerTeamKey,
     providerLeagueKey: "461.l.1000",
     league: "nfl",
@@ -1104,11 +1108,12 @@ const league: ProviderLeagueSettings = {
   name: "Alpha League",
   webUrl: "https://football.fantasysports.yahoo.com/f1/1000",
   season: 2026,
-  periodWindow: { currentWeek: 3, startWeek: 1, endWeek: 17 },
+  periodWindow: { current: 3, start: 1, end: 17 },
   rosterCoverage: "week",
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,
+  format: "head_to_head_categories",
   scoringType: "head",
   scoringLabel: "H2H",
   weeklyDeadline: undefined,
@@ -1117,8 +1122,8 @@ const league: ProviderLeagueSettings = {
   usesFaab: false,
   draftStatus: "postdraft",
   rosterPositions: [
-    { position: "QB", positionType: "O", count: 1, isStarting: true },
-    { position: "BN", positionType: "B", count: 1, isStarting: false },
+    { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
+    { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
   ],
   statCategories: [],
   statModifiers: [],

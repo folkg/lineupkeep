@@ -11,6 +11,7 @@ export class ProviderBrowser extends Context.Service<ProviderBrowser, ProviderBr
 
 type ProviderLoginOptions = {
   readonly loginUrl: URL;
+  readonly sessionCookies: ReadonlyArray<string>;
   readonly headless: boolean;
   readonly timeout: Duration.Duration;
   readonly profileRoot: string;
@@ -108,10 +109,11 @@ function waitForSession(
       if (cookies._tag === "Failure") {
         return yield* cookies.failure;
       }
-      const token = cookies.success.find((cookie) => cookie.name === "T" && cookie.value !== "");
-      const user = cookies.success.find((cookie) => cookie.name === "Y" && cookie.value !== "");
-      if (token !== undefined && user !== undefined) {
-        return Redacted.make(`T=${token.value}; Y=${user.value}`);
+      const session = options.sessionCookies.map((name) =>
+        cookies.success.find((cookie) => cookie.name === name && cookie.value !== ""),
+      );
+      if (session.every((cookie) => cookie !== undefined)) {
+        return Redacted.make(session.map((cookie) => `${cookie.name}=${cookie.value}`).join("; "));
       }
       if (browserContext.pages().length === 0) {
         return yield* ProviderLoginClosed.make({});

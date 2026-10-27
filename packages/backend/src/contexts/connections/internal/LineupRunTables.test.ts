@@ -86,7 +86,7 @@ it.effect("round-trips delivery and write-intent rows", () =>
       connectionGeneration: 2,
       leaseToken: yield* Schema.decodeEffect(LineupUuid)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a8"),
       leaseGeneration: 4,
-      action: "start_active_players",
+      action: "native_action",
       target: { coverage: "week", week: 3 },
       before: [
         {

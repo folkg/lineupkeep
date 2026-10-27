@@ -2,35 +2,39 @@ import {
   availabilityLadder,
   assessAvailability,
   buildLineupProblem,
-  preferredValueSource,
+  lineupAssignments,
+  planLineup,
 } from "@lineupkeep/lineup-policy";
 import type { PlayerAvailability, PolicyPlayer } from "@lineupkeep/lineup-policy";
 import { makeAvailabilityTier, makePlayerId, makeSlotId } from "@lineupkeep/lineup-solver";
 import type { PlayerId, RosterSlot } from "@lineupkeep/lineup-solver";
+import { Effect, Redacted, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
+import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import type {
   ProviderLeagueSettings,
+  ProviderLineupOutcome,
+  ProviderLineupRequest,
   ProviderPlayerDetail,
   ProviderRoster,
   ProviderRosterPlayer,
 } from "#contexts/connections/Provider.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
 import {
   planYahooLineup,
-  yahooAssignmentRequest,
   yahooAvailability,
+  yahooCapabilities,
+  yahooCommunityStartRatePolicyInput,
   yahooInjuryStatusCodes,
   yahooLeagueSlots,
   yahooObservationWindow,
   yahooPointsPolicyInput,
-  yahooScorable,
   yahooScoringProfile,
-  yahooStartedPolicyInput,
   yahooTargetPeriod,
-  yahooValueSourceKinds,
 } from "./YahooLineup.ts";
-import type { YahooPeriodLineupInput } from "./YahooLineup.ts";
+import type { YahooPeriodHistory } from "./YahooLineup.ts";
 
 const recordedWeek = 6;
 const targetWeek = 7;
@@ -45,9 +49,7 @@ describe("Yahoo league translation", () => {
   });
 
   it("models starting, bench, and reserve slots from the declared roster positions", () => {
-    const slots = yahooLeagueSlots(recordedLeague());
-
-    expect(slots.map(describeSlot)).toEqual([
+    expect(yahooLeagueSlots(recordedLeague()).map(describeSlot)).toEqual([
       "starting QB x1 [QB] required",
       "starting RB x2 [RB] required",
       "starting WR x2 [WR] required",
@@ -82,6 +84,7 @@ describe("Yahoo league translation", () => {
     expect(yahooAvailability("NA")).toEqual({ kind: "excluded", reason: "not-active" });
     expect(yahooAvailability("DTD")).toEqual({ kind: "uncertain", reason: "day-to-day" });
     expect(yahooAvailability("PROBABLE")).toEqual({ kind: "unrecognised", code: "PROBABLE" });
+    expect(yahooAvailability("")).toEqual({ kind: "unrecognised", code: "" });
   });
 
   it("reads the lineup period from the roster's own coverage", () => {
@@ -93,8 +96,8 @@ describe("Yahoo league translation", () => {
     expect(yahooTargetPeriod(dated)).toEqual({ kind: "date", date: "2026-10-26" });
   });
 
-  it("declares one selection basis for the observed window", () => {
-    const input = yahooPointsPolicyInput(recordedPolicyInput(true));
+  it("declares the league's selection basis from the observed window", () => {
+    const input = yahooPointsPolicyInput(recordedPolicyFacts());
 
     expect(input.period).toEqual({ kind: "week", week: targetWeek });
     expect(input.source?.kind).toBe("scoring-rules");
@@ -102,7 +105,7 @@ describe("Yahoo league translation", () => {
   });
 
   it("keeps the recorded lineup when the provider reports every player locked", () => {
-    const result = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(false)));
+    const result = planLineup([yahooPointsPolicyInput(recordedPolicyFacts(false))]);
 
     expect(result.kind).toBe("planned");
     if (result.kind !== "planned") {
@@ -110,14 +113,14 @@ describe("Yahoo league translation", () => {
     }
     expect(result.plan.totalSelectionValue).toBe(9802);
     expect(result.plan.comparison.slotChanges).toEqual([]);
-    expect(result.selectionBasis).toBe("mean-points-per-period:week:6");
+    expect(result.basis).toBe("mean-points-per-period:week:3,week:4,week:5,week:6");
   });
 
   it("starts the better players when the same roster is editable", () => {
-    const result = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
+    const result = planLineup([yahooPointsPolicyInput(recordedPolicyFacts(true))]);
 
     if (result.kind !== "planned") {
-      throw new Error(`Expected a plan, received ${result.refusal.kind}.`);
+      throw new Error(`Expected a plan, received ${result.refusals[0]?.code ?? "no refusal"}.`);
     }
     expect(result.plan.totalSelectionValue).toBe(9002);
     expect(new Set(result.plan.comparison.addedStarters)).toEqual(
@@ -128,20 +131,19 @@ describe("Yahoo league translation", () => {
     );
   });
 
-  it("offers the started percentage to a league that publishes no points rules", () => {
-    expect(yahooValueSourceKinds(hockeyLeague())).toEqual(["percent-started"]);
-    expect(yahooValueSourceKinds(recordedLeague())).toEqual(["scoring-rules", "percent-started"]);
-    expect(preferredValueSource(yahooValueSourceKinds(recordedLeague()))).toBe("scoring-rules");
-    expect(preferredValueSource(yahooValueSourceKinds(hockeyLeague()))).toBe("percent-started");
+  it("declares which value sources the provider publishes", () => {
+    expect(yahooCapabilities.publishesProjections).toBe(false);
+    expect(yahooCapabilities.publishesCommunityStartRate).toBe(true);
+    expect(yahooCapabilities.playerSearch.weeklyStatSortSports).toEqual(["football"]);
   });
 
-  it("values a hockey roster by the started percentage the provider publishes", () => {
-    const input = yahooStartedPolicyInput({
+  it("values a hockey roster by the community start rate the provider publishes", () => {
+    const input = yahooCommunityStartRatePolicyInput({
       league: hockeyLeague(),
       roster: hockeyRoster(),
       details: [
-        hockeyDetail("hockey-player-0", 43, [{ cutType: "diamond", percent: 51 }]),
-        hockeyDetail("hockey-player-1", 12, [{ cutType: "diamond", percent: 8 }]),
+        hockeyDetail("hockey-player-0", 43, [{ cut: "diamond", percent: 51 }]),
+        hockeyDetail("hockey-player-1", 12, [{ cut: "diamond", percent: 8 }]),
       ],
     });
     const verdict = buildLineupProblem(input);
@@ -149,66 +151,56 @@ describe("Yahoo league translation", () => {
     if (verdict.kind !== "problem") {
       throw new Error(`Expected a problem, received ${verdict.refusal.kind}.`);
     }
-    expect(verdict.problem.selectionBasis).toBe("percent-started:cut-diamond:date:2026-10-26");
+    expect(verdict.problem.selectionBasis).toBe("community-start-rate:cut-diamond:date:2026-10-26");
     expect(verdict.valuations.map((valuation) => valuation.selection)).toEqual([
       {
         kind: "known",
-        basis: "percent-started:cut-diamond:date:2026-10-26",
+        basis: "community-start-rate:cut-diamond:date:2026-10-26",
         units: 5100,
       },
       {
         kind: "known",
-        basis: "percent-started:cut-diamond:date:2026-10-26",
+        basis: "community-start-rate:cut-diamond:date:2026-10-26",
         units: 800,
       },
     ]);
   });
 
-  it("benches a roster player the provider publishes no started percentage for", () => {
-    const policyInput = yahooStartedPolicyInput({
+  it("benches a roster player the provider publishes no community start rate for", () => {
+    const policyInput = yahooCommunityStartRatePolicyInput({
       league: {
         ...hockeyLeague(),
-        rosterPositions: [position("C", 1, true), position("BN", 2, false)],
+        rosterPositions: [position("C", 1), position("BN", 2)],
       },
       roster: hockeyRoster(),
       details: [hockeyDetail("hockey-player-0", 43, [])],
     });
-    const verdict = buildLineupProblem(policyInput);
+    const planned = planLineup([policyInput]);
 
-    if (verdict.kind !== "problem") {
-      throw new Error(`Expected a problem, received ${verdict.refusal.kind}.`);
+    if (planned.kind !== "planned") {
+      throw new Error(`Expected a plan, received ${planned.refusals[0]?.code ?? "no refusal"}.`);
     }
-    expect(verdict.valuations[1]?.selection).toEqual({
+    expect(planned.valuations[1]?.selection).toEqual({
       kind: "unusable",
-      basis: "percent-started:overall:date:2026-10-26",
+      basis: "community-start-rate:overall:date:2026-10-26",
       reason: "missing",
     });
-
-    const result = planYahooLineup(policyInput);
-
-    if (result.kind !== "planned") {
-      throw new Error(`Expected a plan, received ${result.refusal.kind}.`);
-    }
-    expect(result.plan.assignments).toContainEqual({
+    expect(planned.plan.assignments).toContainEqual({
       playerId: makePlayerId("hockey-player-1"),
       slotId: makeSlotId("BN"),
     });
-    expect(result.plan.comparison.addedStarters).toEqual([]);
-    expect(result.plan.comparison.removedStarters).toEqual([]);
-    expect(result.plan.totalSelectionValue).toBe(4300);
+    expect(planned.plan.comparison.addedStarters).toEqual([]);
+    expect(planned.plan.comparison.removedStarters).toEqual([]);
+    expect(planned.plan.totalSelectionValue).toBe(4300);
   });
 
   it("translates only the changed editable assignments and retains every roster member", () => {
-    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
-    if (parsed.kind !== "planned") {
+    const planned = planLineup([yahooPointsPolicyInput(recordedPolicyFacts(true))]);
+    if (planned.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
 
-    const result = yahooAssignmentRequest({
-      league: recordedLeague(),
-      roster: recordedRoster(true),
-      plan: parsed.plan,
-    });
+    const result = translate(recordedLeague(), recordedRoster(true), planned.plan);
 
     expect(result.kind).toBe("request");
     if (result.kind !== "request") {
@@ -217,7 +209,7 @@ describe("Yahoo league translation", () => {
     const currentSlots = new Map(
       recordedRoster(true).players.map((player) => [player.providerPlayerKey, player.slot]),
     );
-    expect(result.assignments).toHaveLength(parsed.plan.comparison.slotChanges.length);
+    expect(result.assignments).toHaveLength(planned.plan.comparison.slotChanges.length);
     expect(new Set(result.assignments.map((assignment) => assignment.playerKey)).size).toBe(
       result.assignments.length,
     );
@@ -228,98 +220,109 @@ describe("Yahoo league translation", () => {
   });
 
   it("sends nothing when the plan already matches the observed lineup", () => {
-    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(false)));
-    if (parsed.kind !== "planned") {
+    const planned = planLineup([yahooPointsPolicyInput(recordedPolicyFacts(false))]);
+    if (planned.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
 
-    expect(
-      yahooAssignmentRequest({
-        league: recordedLeague(),
-        roster: recordedRoster(false),
-        plan: parsed.plan,
-      }),
-    ).toEqual({ kind: "no_op" });
+    expect(translate(recordedLeague(), recordedRoster(false), planned.plan)).toEqual({
+      kind: "request",
+      assignments: [],
+    });
   });
 
   it("refuses to move a player the provider reports as locked", () => {
-    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
-    if (parsed.kind !== "planned") {
+    const planned = planLineup([yahooPointsPolicyInput(recordedPolicyFacts(true))]);
+    if (planned.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
 
-    const result = yahooAssignmentRequest({
-      league: recordedLeague(),
-      roster: recordedRoster(false),
-      plan: parsed.plan,
-    });
+    const result = translate(recordedLeague(), recordedRoster(false), planned.plan);
 
     expect(result.kind).toBe("refused");
     if (result.kind !== "refused") {
       throw new Error("Expected a refusal.");
     }
-    expect(result.refusal.kind).toBe("locked-player");
+    expect(result.code).toBe("assignment:locked-player");
   });
 
   it("refuses a plan that moves a player through a reserve list", () => {
-    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
-    if (parsed.kind !== "planned") {
+    const planned = planLineup([yahooPointsPolicyInput(recordedPolicyFacts(true))]);
+    if (planned.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
     const plan = {
-      ...parsed.plan,
-      assignments: parsed.plan.assignments.map((assignment) =>
+      ...planned.plan,
+      assignments: planned.plan.assignments.map((assignment) =>
         assignment.playerId === recordedPlayerId(7)
           ? { ...assignment, slotId: makeSlotId("IR") }
           : assignment,
       ),
     };
 
-    const result = yahooAssignmentRequest({
-      league: recordedLeague(),
-      roster: recordedRoster(true),
-      plan,
-    });
+    const result = translate(recordedLeague(), recordedRoster(true), plan);
 
     expect(result.kind).toBe("refused");
     if (result.kind !== "refused") {
       throw new Error("Expected a refusal.");
     }
-    expect(result.refusal.kind).toBe("reserve-list");
+    expect(result.code).toBe("assignment:reserve-slot");
   });
 
   it("refuses a plan that does not assign every roster member", () => {
-    const parsed = planYahooLineup(yahooPointsPolicyInput(recordedPolicyInput(true)));
-    if (parsed.kind !== "planned") {
+    const planned = planLineup([yahooPointsPolicyInput(recordedPolicyFacts(true))]);
+    if (planned.kind !== "planned") {
       throw new Error("Expected a plan.");
     }
     const plan = {
-      ...parsed.plan,
-      assignments: parsed.plan.assignments.slice(1),
+      ...planned.plan,
+      assignments: planned.plan.assignments.slice(1),
     };
 
-    const result = yahooAssignmentRequest({
-      league: recordedLeague(),
-      roster: recordedRoster(true),
-      plan,
-    });
+    const result = translate(recordedLeague(), recordedRoster(true), plan);
 
     expect(result.kind).toBe("refused");
     if (result.kind !== "refused") {
       throw new Error("Expected a refusal.");
     }
-    expect(result.refusal.kind).toBe("plan-membership");
+    expect(result.code).toBe("assignment:plan-membership");
+  });
+
+  it("plans through the provider capability and reports a named native refusal", () => {
+    const unfillable = runPlan(
+      hockeyRequest(),
+      [hockeyDetail("hockey-player-0", 43, []), hockeyDetail("hockey-player-1", 12, [])],
+      [],
+    );
+    expect(unfillable.kind).toBe("refused");
+    if (unfillable.kind !== "refused") {
+      throw new Error("Expected a refusal.");
+    }
+    expect(unfillable.action).toBe("native");
+    expect(unfillable.code).toBe("solver:required-starting-position-unfillable");
+
+    const fromRules = runPlan(
+      recordedRequest(),
+      recordedPolicyFacts()
+        .history.map((entry) => entry.details)
+        .flat(),
+      recordedPolicyFacts().history,
+    );
+    expect(fromRules.kind).toBe("planned");
+    if (fromRules.kind !== "planned") {
+      throw new Error("Expected a plan.");
+    }
+    expect(fromRules.basis).toBe("mean-points-per-period:week:3,week:4,week:5,week:6");
+    expect(fromRules.assignments).toHaveLength(4);
   });
 
   it("derives the completed observation window from the target period", () => {
-    expect(yahooObservationWindow(recordedLeague(), recordedRoster(true))).toEqual([
+    expect(yahooObservationWindow(recordedLeague(), { kind: "week", week: targetWeek })).toEqual([
       { kind: "week", week: 3 },
       { kind: "week", week: 4 },
       { kind: "week", week: 5 },
       { kind: "week", week: 6 },
     ]);
-    expect(yahooScorable(recordedLeague())).toBe(true);
-    expect(yahooScorable(hockeyLeague())).toBe(true);
   });
 });
 
@@ -334,7 +337,11 @@ function recordedPlayerId(index: number): PlayerId {
   return makePlayerId(`player-${String(index)}`);
 }
 
-function recordedPolicyInput(editable: boolean): YahooPeriodLineupInput {
+function recordedPolicyFacts(editable = true): {
+  readonly league: ProviderLeagueSettings;
+  readonly roster: ProviderRoster;
+  readonly history: ReadonlyArray<YahooPeriodHistory>;
+} {
   return {
     league: recordedLeague(),
     roster: recordedRoster(editable),
@@ -347,6 +354,68 @@ function recordedPolicyInput(editable: boolean): YahooPeriodLineupInput {
   };
 }
 
+const hockeyTarget = Schema.decodeSync(LineupTargetPeriod)({
+  coverage: "date",
+  date: "2026-10-26",
+});
+
+function hockeyRequest(): ProviderLineupRequest {
+  return {
+    provider: decodeProviderKey("yahoo"),
+    session: Redacted.make("recorded-session"),
+    providerTeamKey: "recorded-hockey-team",
+    providerLeagueKey: "recorded-hockey-league",
+    sport: "hockey",
+    league: hockeyLeague(),
+    roster: hockeyRoster(),
+    target: hockeyTarget,
+  };
+}
+
+function recordedRequest(): ProviderLineupRequest {
+  return {
+    provider: decodeProviderKey("yahoo"),
+    session: Redacted.make("recorded-session"),
+    providerTeamKey: "recorded-team",
+    providerLeagueKey: "recorded-league",
+    sport: "football",
+    league: recordedLeague(),
+    roster: recordedRoster(true),
+    target: { coverage: "week", week: targetWeek },
+  };
+}
+
+function runPlan(
+  request: ProviderLineupRequest,
+  details: ReadonlyArray<ProviderPlayerDetail>,
+  history: ReadonlyArray<YahooPeriodHistory>,
+): ProviderLineupOutcome {
+  return Effect.runSync(
+    planYahooLineup(request, {
+      readDetails: () => Effect.succeed(details),
+      readHistory: () => Effect.succeed(history),
+    }),
+  );
+}
+
+function translate(
+  league: ProviderLeagueSettings,
+  roster: ProviderRoster,
+  plan: Parameters<typeof lineupAssignments>[0]["plan"],
+): ReturnType<typeof lineupAssignments> {
+  const slots = yahooLeagueSlots(league);
+  return lineupAssignments({
+    plan,
+    slots: slots.map((slot) => ({ id: slot.id, kind: slot.kind })),
+    players: roster.players.map((player) => ({
+      playerKey: player.providerPlayerKey,
+      name: player.name,
+      slot: player.slot,
+      editable: player.isEditable === true,
+    })),
+  });
+}
+
 function recordedLeague(): ProviderLeagueSettings {
   return {
     providerLeagueKey: "recorded-league",
@@ -356,6 +425,7 @@ function recordedLeague(): ProviderLeagueSettings {
     startDate: "2026-09-01",
     endDate: "2026-12-29",
     teamCount: 12,
+    format: "head_to_head_points",
     scoringType: "head",
     scoringLabel: "Head-to-Head",
     weeklyDeadline: undefined,
@@ -363,7 +433,7 @@ function recordedLeague(): ProviderLeagueSettings {
     waiverRule: undefined,
     usesFaab: false,
     draftStatus: "postdraft",
-    periodWindow: { currentWeek: targetWeek, startWeek: 1, endWeek: 17 },
+    periodWindow: { current: targetWeek, start: 1, end: 17 },
     rosterCoverage: "week",
     rosterPositions: recordedRosterPositions,
     statCategories: recordedCategories,
@@ -419,7 +489,7 @@ function playerDetail(
       stats: stats.map(([statId, value]) => ({ statId, value })),
     },
     projected: undefined,
-    percentStarted: undefined,
+    communityStartRate: undefined,
   };
 }
 
@@ -432,6 +502,7 @@ function hockeyLeague(): ProviderLeagueSettings {
     startDate: "2026-10-01",
     endDate: "2027-04-10",
     teamCount: 12,
+    format: "head_to_head_categories",
     scoringType: "head",
     scoringLabel: "Head-to-Head",
     weeklyDeadline: "",
@@ -439,17 +510,17 @@ function hockeyLeague(): ProviderLeagueSettings {
     waiverRule: undefined,
     usesFaab: false,
     draftStatus: "postdraft",
-    periodWindow: { currentWeek: 5, startWeek: 1, endWeek: 26 },
+    periodWindow: { current: 5, start: 1, end: 26 },
     rosterCoverage: "date",
     rosterPositions: [
-      position("C", 2, true),
-      position("LW", 2, true),
-      position("RW", 2, true),
-      position("D", 4, true),
-      position("G", 2, true),
-      position("BN", 7, false),
-      position("IR", 2, false),
-      position("IR+", 1, false),
+      position("C", 2),
+      position("LW", 2),
+      position("RW", 2),
+      position("D", 4),
+      position("G", 2),
+      position("BN", 7),
+      position("IR", 2),
+      position("IR+", 1),
     ],
     statCategories: [
       category(1, "Goals", "G"),
@@ -494,7 +565,7 @@ function hockeyRosterPlayer(providerPlayerKey: string, slot: string): ProviderRo
 function hockeyDetail(
   providerPlayerKey: string,
   percent: number,
-  cuts: ReadonlyArray<{ readonly cutType: string; readonly percent: number }>,
+  cuts: ReadonlyArray<{ readonly cut: string; readonly percent: number }>,
 ): ProviderPlayerDetail {
   return {
     providerPlayerKey,
@@ -505,11 +576,11 @@ function hockeyDetail(
     rosterStatus: "rostered",
     actual: undefined,
     projected: undefined,
-    percentStarted: {
+    communityStartRate: {
       percent,
-      delta: null,
+      change: null,
       coverage: { type: "date", date: "2026-10-26" },
-      cuts: cuts.map((cut) => ({ cutType: cut.cutType, percent: cut.percent })),
+      cuts: cuts.map((cut) => ({ cut: cut.cut, percent: cut.percent })),
     },
   };
 }
@@ -528,9 +599,16 @@ function policyPlayerWith(availability: PlayerAvailability): PolicyPlayer {
 function position(
   positionName: string,
   count: number,
-  isStarting: boolean,
 ): ProviderLeagueSettings["rosterPositions"][number] {
-  return { position: positionName, positionType: undefined, count, isStarting };
+  const kind =
+    positionName === "BN" ? "bench" : positionName.startsWith("IR") ? "reserve" : "starting";
+  return {
+    position: positionName,
+    positionType: undefined,
+    kind,
+    count,
+    eligibility: kind === "bench" ? [] : [positionName],
+  };
 }
 
 function category(
@@ -645,15 +723,15 @@ const recordedCategories: ReadonlyArray<ReturnType<typeof category>> = [
 ];
 
 const recordedRosterPositions: ReadonlyArray<ReturnType<typeof position>> = [
-  position("QB", 1, true),
-  position("RB", 2, true),
-  position("WR", 2, true),
-  position("TE", 1, true),
-  position("W/R/T", 1, true),
-  position("K", 1, true),
-  position("DEF", 1, true),
-  position("BN", 6, false),
-  position("IR", 1, false),
+  position("QB", 1),
+  position("RB", 2),
+  position("WR", 2),
+  position("TE", 1),
+  position("W/R/T", 1),
+  position("K", 1),
+  position("DEF", 1),
+  position("BN", 6),
+  position("IR", 1),
 ];
 
 const recordedRosterRows: ReadonlyArray<ReturnType<typeof player>> = [

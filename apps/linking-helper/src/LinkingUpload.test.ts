@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import { Effect, Layer, Redacted, Schema } from "effect";
 
 import { AppTransport } from "./AppTransport.ts";
@@ -49,7 +50,7 @@ it.effect(
       assert.strictEqual(request.headers.get("authorization"), `Bearer ${tokenValue}`);
       assert.deepStrictEqual(body, {
         userCode: "ABCD2345",
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         session: sessionValue,
       });
     }),
@@ -115,7 +116,7 @@ const input = {
   appUrl: new URL("http://localhost:5173"),
   token: Redacted.make(tokenValue),
   userCode: "ABCD2345",
-  provider: "yahoo" as const,
+  provider: decodeProviderKey("yahoo"),
   session: Redacted.make(sessionValue),
 };
 

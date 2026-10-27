@@ -1,16 +1,14 @@
-import { Context, Schema } from "effect";
-import type { Effect, Redacted } from "effect";
+import { Schema } from "effect";
+import type { Effect } from "effect";
 
-const ProviderSport = Schema.Literals(["football", "hockey"]);
-type ProviderSport = typeof ProviderSport.Type;
-
-const ProviderLeague = Schema.Literals(["nfl", "nhl"]);
-type ProviderLeague = typeof ProviderLeague.Type;
+import type { FantasySport } from "./FantasyTeam.ts";
+import type { LineupTargetPeriod } from "./LineupRun.ts";
+import { ProviderKey } from "./ProviderKey.ts";
+import type { LeagueFormat } from "./QueryValues.ts";
 
 const ProviderOperation = Schema.Literals([
   "validate_session",
   "discover_teams",
-  "read_crumb",
   "read_league",
   "read_standings",
   "read_roster",
@@ -21,37 +19,266 @@ const ProviderOperation = Schema.Literals([
   "read_transactions",
   "read_league_teams",
   "build_review_link",
-  "apply_native_start_active",
+  "apply_native_action",
   "apply_explicit_assignments",
 ]);
 export type ProviderOperation = typeof ProviderOperation.Type;
 
 export const ProviderSessionMaterial = Schema.Struct({
-  provider: Schema.Literals(["yahoo"]),
+  provider: ProviderKey,
   session: Schema.Redacted(Schema.String),
 });
 export type ProviderSessionMaterial = typeof ProviderSessionMaterial.Type;
 
 export const ProviderTeam = Schema.Struct({
-  provider: Schema.Literals(["yahoo"]),
+  provider: ProviderKey,
   providerTeamKey: Schema.NonEmptyString,
   providerLeagueKey: Schema.NonEmptyString,
-  league: ProviderLeague,
-  sport: ProviderSport,
+  league: Schema.Literals(["nfl", "nhl"]),
+  sport: Schema.Literals(["football", "hockey"]),
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
   name: Schema.NonEmptyString,
 });
 export type ProviderTeam = typeof ProviderTeam.Type;
 
-type ProviderCrumb = {
-  readonly crumb: Redacted.Redacted<string>;
+export const ProviderFantasyDay = Schema.Struct({
+  timeZone: Schema.NonEmptyString,
+  boundary: Schema.Literal("local-midnight"),
+  version: Schema.NonEmptyString,
+});
+export type ProviderFantasyDay = typeof ProviderFantasyDay.Type;
+
+const ProviderLimitationSubject = Schema.Literals([
+  "player_schedule",
+  "probable_starters",
+  "projections",
+  "community_start_rate",
+  "team_remaining_games",
+  "lock_timing",
+  "historical_seasons",
+]);
+export type ProviderLimitationSubject = typeof ProviderLimitationSubject.Type;
+
+type ProviderLimitation = {
+  readonly subject: ProviderLimitationSubject;
+  readonly detail: string;
 };
 
-type ProviderRosterPosition = {
+export type ProviderCapabilities = {
+  readonly fantasyDay: ProviderFantasyDay;
+  readonly sports: ReadonlyArray<FantasySport>;
+  readonly playerSearch: {
+    readonly sorts: ReadonlyArray<ProviderPlayerSearchSort>;
+    readonly providerOrderedSorts: ReadonlyArray<ProviderPlayerSearchSort>;
+    readonly weeklyStatSortSports: ReadonlyArray<FantasySport>;
+  };
+  readonly publishesProjections: boolean;
+  readonly publishesCommunityStartRate: boolean;
+  readonly statBases: ReadonlyArray<ProviderStatBasis["type"]>;
+  readonly limitations: ReadonlyArray<ProviderLimitation>;
+};
+
+const ProviderDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
+
+export const ProviderRosterCoverage = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("week"),
+    week: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(99)),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("date"),
+    date: ProviderDate,
+  }),
+]);
+export type ProviderRosterCoverage = typeof ProviderRosterCoverage.Type;
+
+export class ProviderSessionRejected extends Schema.TaggedError<
+  ProviderSessionRejected,
+  { readonly brand: unique symbol }
+>()("provider.session_rejected", {
+  operation: ProviderOperation,
+}) {}
+
+export class ProviderRequestFailed extends Schema.TaggedError<
+  ProviderRequestFailed,
+  { readonly brand: unique symbol }
+>()("provider.request_failed", {
+  operation: ProviderOperation,
+  status: Schema.optional(Schema.Int),
+}) {}
+
+export class ProviderResponseInvalid extends Schema.TaggedError<
+  ProviderResponseInvalid,
+  { readonly brand: unique symbol }
+>()("provider.response_invalid", {
+  operation: ProviderOperation,
+  field: Schema.optional(Schema.String),
+}) {}
+
+export class ProviderOperationUnsupported extends Schema.TaggedError<
+  ProviderOperationUnsupported,
+  { readonly brand: unique symbol }
+>()("provider.operation_unsupported", {
+  operation: ProviderOperation,
+  reason: Schema.String,
+}) {}
+
+export class ProviderPeriodMismatch extends Schema.TaggedError<
+  ProviderPeriodMismatch,
+  { readonly brand: unique symbol }
+>()("provider.period_mismatch", {
+  operation: ProviderOperation,
+  requested: ProviderRosterCoverage,
+  covered: Schema.NullOr(ProviderRosterCoverage),
+}) {}
+
+export class ProviderReviewLinkInvalid extends Schema.TaggedError<
+  ProviderReviewLinkInvalid,
+  { readonly brand: unique symbol }
+>()("provider.review_link_invalid", {
+  reason: Schema.Literals([
+    "unsupported-player-key",
+    "unsupported-league-url",
+    "unsupported-review-surface",
+  ]),
+}) {}
+
+export class ProviderUnregistered extends Schema.TaggedError<
+  ProviderUnregistered,
+  { readonly brand: unique symbol }
+>()("provider.unregistered", {
+  provider: Schema.String,
+}) {}
+
+export type ProviderFailure =
+  | ProviderSessionRejected
+  | ProviderRequestFailed
+  | ProviderResponseInvalid;
+
+export type ProviderReadFailure =
+  | ProviderFailure
+  | ProviderOperationUnsupported
+  | ProviderPeriodMismatch;
+
+export type Provider = ProviderShape;
+
+export type ProviderShape = {
+  readonly key: ProviderKey;
+
+  readonly capabilities: ProviderCapabilities;
+
+  readonly validateSession: (
+    input: ProviderSessionMaterial,
+  ) => Effect.Effect<void, ProviderFailure>;
+
+  readonly discoverTeams: (
+    input: ProviderSessionMaterial,
+  ) => Effect.Effect<ReadonlyArray<ProviderTeam>, ProviderFailure>;
+
+  readonly readLeague: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly sport: FantasySport;
+    },
+  ) => Effect.Effect<ProviderLeagueSettings, ProviderReadFailure>;
+
+  readonly readRoster: (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly period: ProviderRosterCoverage | undefined;
+    },
+  ) => Effect.Effect<ProviderRoster, ProviderReadFailure>;
+
+  readonly applyNativeAction: (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly target: ProviderNativeTarget;
+    },
+  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
+
+  readonly applyExplicitAssignments: (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly target: ProviderNativeTarget;
+      readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
+    },
+  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
+
+  readonly readPlayerDetails: (
+    input: ProviderSessionMaterial & ProviderPlayerReadInput,
+  ) => Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure>;
+
+  readonly readPlayerHistory: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerPlayerKeys: ReadonlyArray<string>;
+      readonly sport: FantasySport;
+      readonly periods: ReadonlyArray<ProviderPeriod>;
+      readonly currentPeriod: number | undefined;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderPlayerPeriod>, ProviderReadFailure>;
+
+  readonly searchPlayers: (
+    input: ProviderPlayerSearchInput,
+  ) => Effect.Effect<ProviderPlayerSearchResult, ProviderReadFailure>;
+
+  readonly readMatchups: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly period: ProviderPeriod;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderMatchup>, ProviderReadFailure>;
+
+  readonly readTransactions: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKey: string | undefined;
+      readonly limit: number;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderTransaction>, ProviderReadFailure>;
+
+  readonly readStandings: (
+    input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
+  ) => Effect.Effect<ProviderStandings, ProviderReadFailure>;
+
+  readonly readLeagueTeams: (
+    input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
+  ) => Effect.Effect<ReadonlyArray<ProviderLeagueTeam>, ProviderReadFailure>;
+
+  readonly buildReviewLink: (
+    input: ProviderReviewLinkInput,
+  ) => Effect.Effect<string, ProviderReviewLinkInvalid>;
+
+  readonly planLineup: (
+    input: ProviderLineupRequest,
+  ) => Effect.Effect<ProviderLineupOutcome, ProviderReadFailure>;
+};
+
+type ProviderPlayerReadInput = {
+  readonly providerLeagueKey: string;
+  readonly providerPlayerKeys: ReadonlyArray<string>;
+  readonly sport: FantasySport;
+  readonly period: ProviderPeriod | undefined;
+  readonly startRateCoverage: ProviderRosterCoverage | undefined;
+  readonly currentPeriod: number | undefined;
+};
+
+export type ProviderPeriodKind = ProviderRosterCoverage["type"];
+
+export type ProviderPeriodWindow = {
+  readonly current: number;
+  readonly start: number;
+  readonly end: number;
+};
+
+type ProviderRosterSlotKind = "starting" | "bench" | "reserve";
+
+export type ProviderRosterPosition = {
   readonly position: string;
   readonly positionType: string | undefined;
+  readonly kind: ProviderRosterSlotKind;
   readonly count: number;
-  readonly isStarting: boolean;
+  readonly eligibility: ReadonlyArray<string>;
 };
 
 type ProviderStatCategory = {
@@ -69,29 +296,6 @@ type ProviderStatModifier = {
   readonly points: string;
 };
 
-export type ProviderPeriodWindow = {
-  readonly currentWeek: number;
-  readonly startWeek: number;
-  readonly endWeek: number;
-};
-
-const ProviderPeriodKind = Schema.Literals(["week", "date"]);
-export type ProviderPeriodKind = typeof ProviderPeriodKind.Type;
-
-const ProviderDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
-
-const ProviderRosterCoverage = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("week"),
-    week: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(99)),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("date"),
-    date: ProviderDate,
-  }),
-]);
-export type ProviderRosterCoverage = typeof ProviderRosterCoverage.Type;
-
 export type ProviderLeagueSettings = {
   readonly providerLeagueKey: string;
   readonly name: string;
@@ -100,6 +304,7 @@ export type ProviderLeagueSettings = {
   readonly startDate: string | undefined;
   readonly endDate: string | undefined;
   readonly teamCount: number;
+  readonly format: LeagueFormat;
   readonly scoringType: string;
   readonly scoringLabel: string | undefined;
   readonly weeklyDeadline: string | undefined;
@@ -131,7 +336,7 @@ export type ProviderWriteResult =
       readonly status: "rejected";
       readonly reason: "invalid_request" | "not_found" | "premium_required";
     }
-  | { readonly status: "not_sent"; readonly reason: "crumb_unavailable" | "request_failed" }
+  | { readonly status: "not_sent"; readonly reason: "session_incomplete" | "request_failed" }
   | { readonly status: "unknown" };
 
 export type ProviderRosterPlayer = {
@@ -172,16 +377,16 @@ export type ProviderPlayerStatGroup = {
   readonly stats: ReadonlyArray<ProviderStatValue>;
 };
 
-export type ProviderStartPercentageCut = {
-  readonly cutType: string;
+export type ProviderStartRateCut = {
+  readonly cut: string;
   readonly percent: number | null;
 };
 
-export type ProviderPercentStarted = {
+export type ProviderCommunityStartRate = {
   readonly percent: number | null;
-  readonly delta: number | null;
+  readonly change: number | null;
   readonly coverage: ProviderRosterCoverage | null;
-  readonly cuts: ReadonlyArray<ProviderStartPercentageCut>;
+  readonly cuts: ReadonlyArray<ProviderStartRateCut>;
 };
 
 export type ProviderPlayerDetail = {
@@ -193,7 +398,7 @@ export type ProviderPlayerDetail = {
   readonly rosterStatus: "rostered" | "free_agent" | "waiver" | "unknown";
   readonly actual: ProviderPlayerStatGroup | undefined;
   readonly projected: ProviderPlayerStatGroup | undefined;
-  readonly percentStarted: ProviderPercentStarted | undefined;
+  readonly communityStartRate: ProviderCommunityStartRate | undefined;
 };
 
 export type ProviderPlayerPeriod = {
@@ -215,7 +420,7 @@ export type ProviderPlayerSearchInput = ProviderSessionMaterial & {
   readonly availability: "all" | "free_agent" | "waiver";
   readonly sort: ProviderPlayerSearchSort;
   readonly statId: number | undefined;
-  readonly statType: "season" | "week";
+  readonly statType: ProviderStatBasis["type"];
   readonly limit: number;
 };
 
@@ -229,8 +434,8 @@ export type ProviderPlayerSearchResult = {
     readonly availability: "free_agent" | "waiver" | "rostered" | "unknown";
     readonly percentOwned: number | null;
     readonly percentOwnedDelta: number | null;
-    readonly percentStarted: number | null;
-    readonly percentStartedDelta: number | null;
+    readonly communityStartRate: number | null;
+    readonly communityStartRateChange: number | null;
   }>;
 };
 
@@ -349,173 +554,31 @@ export type ProviderReviewIntent =
 export type ProviderReviewLinkInput = {
   readonly providerLeagueKey: string;
   readonly leagueWebUrl: string;
-  readonly sport: ProviderSport;
+  readonly sport: FantasySport;
   readonly intent: ProviderReviewIntent;
 };
 
-export type ProviderFailure =
-  | ProviderSessionRejected
-  | ProviderRequestFailed
-  | ProviderResponseInvalid;
-
-export type ProviderReadFailure =
-  | ProviderFailure
-  | ProviderOperationUnsupported
-  | ProviderPeriodMismatch;
-
-export class ProviderSessionRejected extends Schema.TaggedError<
-  ProviderSessionRejected,
-  { readonly brand: unique symbol }
->()("provider.session_rejected", {
-  operation: ProviderOperation,
-}) {}
-
-export class ProviderRequestFailed extends Schema.TaggedError<
-  ProviderRequestFailed,
-  { readonly brand: unique symbol }
->()("provider.request_failed", {
-  operation: ProviderOperation,
-  status: Schema.optional(Schema.Int),
-}) {}
-
-export class ProviderResponseInvalid extends Schema.TaggedError<
-  ProviderResponseInvalid,
-  { readonly brand: unique symbol }
->()("provider.response_invalid", {
-  operation: ProviderOperation,
-  field: Schema.optional(Schema.String),
-}) {}
-
-export class ProviderCrumbUnavailable extends Schema.TaggedError<
-  ProviderCrumbUnavailable,
-  { readonly brand: unique symbol }
->()("provider.crumb_unavailable", {
-  operation: ProviderOperation,
-}) {}
-
-export class ProviderOperationUnsupported extends Schema.TaggedError<
-  ProviderOperationUnsupported,
-  { readonly brand: unique symbol }
->()("provider.operation_unsupported", {
-  operation: ProviderOperation,
-  reason: Schema.String,
-}) {}
-
-export class ProviderPeriodMismatch extends Schema.TaggedError<
-  ProviderPeriodMismatch,
-  { readonly brand: unique symbol }
->()("provider.period_mismatch", {
-  operation: ProviderOperation,
-  requested: ProviderRosterCoverage,
-  covered: Schema.NullOr(ProviderRosterCoverage),
-}) {}
-
-export class ProviderReviewLinkInvalid extends Schema.TaggedError<
-  ProviderReviewLinkInvalid,
-  { readonly brand: unique symbol }
->()("provider.review_link_invalid", {
-  reason: Schema.Literals([
-    "unsupported-player-key",
-    "unsupported-league-url",
-    "unsupported-review-surface",
-  ]),
-}) {}
-
-export type ProviderGatewayShape = {
-  readonly validateSession: (
-    input: ProviderSessionMaterial,
-  ) => Effect.Effect<void, ProviderFailure>;
-
-  readonly discoverTeams: (
-    input: ProviderSessionMaterial,
-  ) => Effect.Effect<ReadonlyArray<ProviderTeam>, ProviderFailure>;
-
-  readonly readCrumb: (
-    input: ProviderSessionMaterial,
-  ) => Effect.Effect<ProviderCrumb, ProviderFailure | ProviderCrumbUnavailable>;
-
-  readonly readLeague: (
-    input: ProviderSessionMaterial & {
-      readonly providerLeagueKey: string;
-      readonly sport: ProviderSport;
-    },
-  ) => Effect.Effect<ProviderLeagueSettings, ProviderReadFailure>;
-
-  readonly readRoster: (
-    input: ProviderSessionMaterial & {
-      readonly providerTeamKey: string;
-      readonly period: ProviderRosterCoverage | undefined;
-    },
-  ) => Effect.Effect<ProviderRoster, ProviderReadFailure>;
-
-  readonly applyNativeStartActive: (
-    input: ProviderSessionMaterial & {
-      readonly providerTeamKey: string;
-      readonly target: ProviderNativeTarget;
-    },
-  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
-
-  readonly applyExplicitAssignments: (
-    input: ProviderSessionMaterial & {
-      readonly providerTeamKey: string;
-      readonly target: ProviderNativeTarget;
-      readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
-    },
-  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
-
-  readonly readPlayerDetails: (
-    input: ProviderSessionMaterial & {
-      readonly providerLeagueKey: string;
-      readonly providerPlayerKeys: ReadonlyArray<string>;
-      readonly sport: ProviderSport;
-      readonly period: ProviderPeriod | undefined;
-      readonly startedPeriod: ProviderRosterCoverage | undefined;
-      readonly currentWeek: number | undefined;
-    },
-  ) => Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure>;
-
-  readonly readPlayerHistory: (
-    input: ProviderSessionMaterial & {
-      readonly providerLeagueKey: string;
-      readonly providerPlayerKeys: ReadonlyArray<string>;
-      readonly sport: ProviderSport;
-      readonly periods: ReadonlyArray<ProviderPeriod>;
-      readonly currentWeek: number | undefined;
-    },
-  ) => Effect.Effect<ReadonlyArray<ProviderPlayerPeriod>, ProviderReadFailure>;
-
-  readonly searchPlayers: (
-    input: ProviderPlayerSearchInput,
-  ) => Effect.Effect<ProviderPlayerSearchResult, ProviderReadFailure>;
-
-  readonly readMatchups: (
-    input: ProviderSessionMaterial & {
-      readonly providerLeagueKey: string;
-      readonly period: ProviderPeriod;
-    },
-  ) => Effect.Effect<ReadonlyArray<ProviderMatchup>, ProviderReadFailure>;
-
-  readonly readTransactions: (
-    input: ProviderSessionMaterial & {
-      readonly providerLeagueKey: string;
-      readonly providerTeamKey: string | undefined;
-      readonly limit: number;
-    },
-  ) => Effect.Effect<ReadonlyArray<ProviderTransaction>, ProviderReadFailure>;
-
-  readonly readStandings: (
-    input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
-  ) => Effect.Effect<ProviderStandings, ProviderReadFailure>;
-
-  readonly readLeagueTeams: (
-    input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
-  ) => Effect.Effect<ReadonlyArray<ProviderLeagueTeam>, ProviderReadFailure>;
-
-  readonly buildReviewLink: (
-    input: ProviderReviewLinkInput,
-  ) => Effect.Effect<string, ProviderReviewLinkInvalid>;
+export type ProviderLineupRequest = ProviderSessionMaterial & {
+  readonly providerTeamKey: string;
+  readonly providerLeagueKey: string;
+  readonly sport: FantasySport;
+  readonly league: ProviderLeagueSettings;
+  readonly roster: ProviderRoster;
+  readonly target: LineupTargetPeriod;
 };
 
-export class ProviderGateway extends Context.Service<ProviderGateway, ProviderGatewayShape>()(
-  "@lineupkeep/backend/contexts/connections/Provider/ProviderGateway",
-) {}
+export type ProviderLineupOutcome =
+  | {
+      readonly kind: "planned";
+      readonly policyVersion: string;
+      readonly basis: string;
+      readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
+    }
+  | {
+      readonly kind: "refused";
+      readonly action: "native" | "block";
+      readonly policyVersion: string;
+      readonly code: string;
+      readonly detail: string;
+      readonly basis: string | undefined;
+    };

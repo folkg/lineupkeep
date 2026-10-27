@@ -20,6 +20,7 @@ it.live(
 
         const session = yield* browser.signIn({
           loginUrl: server.url,
+          sessionCookies: ["T", "Y"],
           headless: true,
           timeout: Duration.seconds(5),
           profileRoot,
@@ -47,6 +48,7 @@ it.live(
         const error = yield* Effect.flip(
           browser.signIn({
             loginUrl: server.url,
+            sessionCookies: ["T", "Y"],
             headless: true,
             timeout: Duration.seconds(1),
             profileRoot,

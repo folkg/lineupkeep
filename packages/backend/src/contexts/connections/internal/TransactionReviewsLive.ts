@@ -7,7 +7,8 @@ import type {
   ProviderReadFailure,
   ProviderReviewIntent,
 } from "#contexts/connections/Provider.ts";
-import { ProviderGateway } from "#contexts/connections/Provider.ts";
+import type { Provider } from "#contexts/connections/Provider.ts";
+import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import {
   type CounterpartyRef,
   type PlayerRef,
@@ -45,7 +46,7 @@ export const TransactionReviewsLive = Layer.effect(
   TransactionReviews,
   Effect.gen(function* () {
     const repository = yield* QueryRepository;
-    const provider = yield* ProviderGateway;
+    const registry = yield* ProviderRegistry;
     const encryption = yield* ConnectionCredentialEncryption;
     const tokens = yield* QueryTokens;
 
@@ -109,7 +110,7 @@ export const TransactionReviewsLive = Layer.effect(
         const outcome = yield* readOutcome(
           context,
           "league",
-          provider.readLeague({
+          context.provider.readLeague({
             ...providerIdentity(context),
             providerLeagueKey: context.owned.team.providerLeagueKey,
             sport: context.owned.team.sport,
@@ -132,7 +133,7 @@ export const TransactionReviewsLive = Layer.effect(
       userId: UserId,
       input: TransactionReviewInput,
     ) {
-      const context = yield* loadTeamContext(repository, encryption, userId, input.team);
+      const context = yield* loadTeamContext(repository, encryption, registry, userId, input.team);
       const team = queryTeam(context.owned);
       const fetchedAt = yield* DateTime.now;
       const leagueOutcome = yield* readLeague(context);
@@ -143,7 +144,7 @@ export const TransactionReviewsLive = Layer.effect(
       const rosterOutcome = yield* readOutcome(
         context,
         "roster",
-        provider.readRoster({
+        context.provider.readRoster({
           ...providerIdentity(context),
           providerTeamKey: context.owned.team.providerTeamKey,
           period: undefined,
@@ -166,7 +167,7 @@ export const TransactionReviewsLive = Layer.effect(
         const teamsOutcome = yield* readOutcome(
           context,
           "league_teams",
-          provider.readLeagueTeams({
+          context.provider.readLeagueTeams({
             ...providerIdentity(context),
             providerLeagueKey: context.owned.team.providerLeagueKey,
           }),
@@ -192,7 +193,7 @@ export const TransactionReviewsLive = Layer.effect(
           reviewLink(
             context,
             tokens,
-            provider,
+            context.provider,
             league,
             context.owned.team.sport,
             rosterKeys,
@@ -243,7 +244,7 @@ export const TransactionReviewsLive = Layer.effect(
 function reviewLink(
   context: TeamContext,
   tokens: QueryTokens["Service"],
-  provider: ProviderGateway["Service"],
+  provider: Provider,
   league: ProviderLeagueSettings,
   sport: "football" | "hockey",
   rosterKeys: ReadonlySet<string>,
@@ -407,7 +408,7 @@ function reviewLink(
 }
 
 function buildLink(
-  provider: ProviderGateway["Service"],
+  provider: Provider,
   league: ProviderLeagueSettings,
   sport: "football" | "hockey",
   kind: ReviewIntent["kind"],

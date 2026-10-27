@@ -2,6 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
 import type { HostedBrowserKey } from "#contracts/connections/hostedBrowserProtocol.ts";
+import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { Button } from "./Button";
 import { Text } from "./Text";
@@ -62,7 +63,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
         type="button"
         ref={(element) => element.focus()}
         class="relative block aspect-[1100/720] w-full cursor-crosshair touch-none overflow-hidden bg-ink/5 p-0 text-left outline-none focus-visible:shadow-focus"
-        aria-label="Yahoo sign-in browser"
+        aria-label={`${defaultProviderName()} sign-in browser`}
         onClick={(event) => event.preventDefault()}
         onKeyDown={handleKeyDown}
         onPointerDown={handlePointerDown}
@@ -80,7 +81,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
         >
           {(frame) => (
             <img
-              alt="Yahoo sign-in page"
+              alt={`${defaultProviderName()} sign-in page`}
               class="h-full w-full select-none object-contain"
               draggable={false}
               src={frame()}

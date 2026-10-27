@@ -2,13 +2,15 @@ import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Redacted } from "effect";
 
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
-import { ProviderGateway, ProviderResponseInvalid, ProviderSessionRejected } from "./Provider.ts";
+import { ProviderResponseInvalid, ProviderSessionRejected } from "./Provider.ts";
 import type { ProviderTeam } from "./Provider.ts";
+import { decodeProviderKey } from "./ProviderKey.ts";
+import { ProviderRegistry } from "./ProviderRegistry.ts";
 
 it.effect("rejects a session without returning provider data", () =>
   Effect.gen(function* () {
     const world = yield* FakeProviderWorld;
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
     yield* world.rejectSession(true);
 
     const error = yield* Effect.flip(provider.validateSession(sessionInput));
@@ -22,10 +24,10 @@ it.effect("rejects a session without returning provider data", () =>
 it.effect("returns the current deterministic team set", () =>
   Effect.gen(function* () {
     const world = yield* FakeProviderWorld;
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
     const teams: ReadonlyArray<ProviderTeam> = [
       {
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         providerTeamKey: "nfl.l.1000.t.1",
         providerLeagueKey: "nfl.l.1000",
         league: "nfl",
@@ -34,7 +36,7 @@ it.effect("returns the current deterministic team set", () =>
         name: "First Team",
       },
       {
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         providerTeamKey: "nfl.l.1000.t.2",
         providerLeagueKey: "nfl.l.1000",
         league: "nfl",
@@ -52,7 +54,7 @@ it.effect("returns the current deterministic team set", () =>
 it.effect("maps provider failures to stable safe errors", () =>
   Effect.gen(function* () {
     const world = yield* FakeProviderWorld;
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
     yield* world.failRequests("invalid_response");
 
     const error = yield* Effect.flip(provider.discoverTeams(sessionInput));
@@ -65,10 +67,10 @@ it.effect("maps provider failures to stable safe errors", () =>
 it.effect("blocks discovery until the test releases the gate", () =>
   Effect.gen(function* () {
     const world = yield* FakeProviderWorld;
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
     yield* world.setTeams([
       {
-        provider: "yahoo",
+        provider: decodeProviderKey("yahoo"),
         providerTeamKey: "nhl.l.2000.t.3",
         providerLeagueKey: "nhl.l.2000",
         league: "nhl",
@@ -90,22 +92,23 @@ it.effect("blocks discovery until the test releases the gate", () =>
   }).pipe(Effect.provide(ProviderTestLayer)),
 );
 
-it.effect("returns a redacted crumb or a typed unavailable failure", () =>
+it.effect("declares its capabilities without a per-test call", () =>
   Effect.gen(function* () {
-    const world = yield* FakeProviderWorld;
-    const provider = yield* ProviderGateway;
+    const provider = yield* testProvider;
 
-    const available = yield* provider.readCrumb(sessionInput);
-    yield* world.setCrumbAvailable(false);
-    const unavailable = yield* Effect.flip(provider.readCrumb(sessionInput));
-
-    assert.strictEqual(Redacted.value(available.crumb), "fake-provider-crumb");
-    assert.strictEqual(unavailable._tag, "provider.crumb_unavailable");
+    assert.strictEqual(provider.capabilities.publishesProjections, false);
+    assert.strictEqual(provider.capabilities.publishesCommunityStartRate, true);
+    assert.isAbove(provider.capabilities.limitations.length, 0);
   }).pipe(Effect.provide(ProviderTestLayer)),
 );
 
+const testProvider = Effect.gen(function* () {
+  const registry = yield* ProviderRegistry;
+  return yield* registry.requireProvider(decodeProviderKey("yahoo"));
+});
+
 const sessionInput = {
-  provider: "yahoo" as const,
+  provider: decodeProviderKey("yahoo"),
   session: Redacted.make("fake-session-cookie"),
 };
 

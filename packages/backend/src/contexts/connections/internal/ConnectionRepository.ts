@@ -11,7 +11,7 @@ import {
   ConnectionLinkRejected,
   ConnectionNotFound,
   ConnectionPersistenceFailed,
-  Provider,
+  ProviderKey,
   decodeConnectionId,
 } from "#contexts/connections/Connection.ts";
 import {
@@ -54,7 +54,7 @@ type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transac
 
 export type CompleteLinkingCommand = {
   readonly id: ConnectionId;
-  readonly provider: Provider;
+  readonly provider: ProviderKey;
   readonly envelope: string;
 };
 
@@ -69,7 +69,7 @@ type ReconnectRequiredCommand = {
 
 export type ReadyCredential = {
   readonly connectionId: ConnectionId;
-  readonly provider: Provider;
+  readonly provider: ProviderKey;
   readonly generation: ConnectionCredentialGeneration;
   readonly envelope: string;
 };
@@ -1106,7 +1106,7 @@ function credentialRows(
 ): ReadonlyArray<{
   readonly connectionId: ConnectionId;
   readonly userId: UserId;
-  readonly provider: Provider;
+  readonly provider: ProviderKey;
   readonly generation: ConnectionCredentialGeneration;
   readonly envelope: string;
   readonly createdAt: Date;
@@ -1253,13 +1253,13 @@ type LockedTarget = {
 
 const ReadyCredentialRow = Schema.Struct({
   connectionId: ConnectionId,
-  provider: Provider,
+  provider: ProviderKey,
   generation: ConnectionCredentialGeneration,
   envelope: Schema.String,
 });
 
 const ActiveCredential = Schema.Struct({
-  provider: Provider,
+  provider: ProviderKey,
   generation: ConnectionCredentialGeneration,
   envelope: Schema.String,
 });

@@ -5,6 +5,7 @@ import { TeamId } from "./FantasyTeam.ts";
 import {
   CounterpartyRef,
   Cursor,
+  LeagueFormat,
   NarrowingResult,
   PageLimit,
   PlayerRef,
@@ -138,14 +139,6 @@ const ScoringCategory = Schema.Struct({
   positionTypes: Schema.Array(Schema.NonEmptyString),
   points: Schema.NullOr(Schema.String),
 });
-
-export const LeagueFormat = Schema.Literals([
-  "head_to_head_categories",
-  "head_to_head_points",
-  "rotisserie",
-  "unknown",
-]);
-export type LeagueFormat = typeof LeagueFormat.Type;
 
 const StandingCategory = Schema.Struct({
   stat: StatRef,
@@ -313,7 +306,7 @@ export const SearchPlayersInput = Schema.Struct({
     PlayerSort.pipe(
       Schema.annotate({
         description:
-          "Provider-backed order. `actual_rank` and `overall_rank` are Yahoo's actual and overall ranks; `stat` orders by the league scoring category in `stat`. `ownership` orders by percent owned descending. Yahoo rejects point-total sorts for hockey, so no points sort is offered.",
+          "Provider-backed order, offered only when the linked provider declares it. `actual_rank` and `overall_rank` are the provider's actual and overall ranks; `stat` orders by the league scoring category in `stat`. `ownership` orders by percent owned descending. The provider's declared limitations explain any sort it refuses, such as a point-total sort for a sport that does not offer it.",
       }),
     ),
   ),
@@ -347,8 +340,8 @@ const SearchPlayer = Schema.Struct({
   availability: Schema.Literals(["free_agent", "waiver", "rostered", "unknown"]),
   percentOwned: Schema.NullOr(Schema.Finite),
   percentOwnedDelta: Schema.NullOr(Schema.Finite),
-  percentStarted: Schema.NullOr(Schema.Finite),
-  percentStartedDelta: Schema.NullOr(Schema.Finite),
+  communityStartRate: Schema.NullOr(Schema.Finite),
+  communityStartRateChange: Schema.NullOr(Schema.Finite),
 });
 
 export const SearchPlayersData = Schema.Struct({
@@ -374,7 +367,7 @@ export const GetPlayersInput = Schema.Struct({
     Schema.Array(PlayerGroup).pipe(
       Schema.annotate({
         description:
-          "Groups to hydrate. `actual_stats` states its basis: weekly where the Yahoo sport publishes weekly series, otherwise season totals. `projections` is always unsupported for Yahoo, which exposes no projected player statistics.",
+          "Groups to hydrate. `actual_stats` states the basis the provider declares: weekly where it publishes weekly series, otherwise season totals. `projections` is available only where the provider publishes them; otherwise the group returns an unsupported status naming that limitation.",
       }),
     ),
   ),

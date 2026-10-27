@@ -1,10 +1,10 @@
 import { Machine } from "@typeonce/effect-machine";
 import { Schema } from "effect";
 
-import { ConnectionCredentialGeneration, Provider } from "#contexts/connections/Connection.ts";
+import { ConnectionCredentialGeneration, ProviderKey } from "#contexts/connections/Connection.ts";
 
 const ConnectionContent = {
-  provider: Provider,
+  provider: ProviderKey,
   updatedAt: Schema.DateTimeUtc,
 };
 

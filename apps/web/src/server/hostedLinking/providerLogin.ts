@@ -1,4 +1,4 @@
-import { providerOrigins } from "@lineupkeep/hosted-browser/provider";
+import { hostedBrowserOrigins, hostedBrowserProvider } from "@lineupkeep/hosted-browser/provider";
 
 export type ProviderLoginConfig = {
   readonly loginUrl: URL;
@@ -8,16 +8,21 @@ export type ProviderLoginConfig = {
 export function providerLoginConfig(
   environment: "development" | "production" | "test",
   requestUrl: string,
+  providerKey: string,
 ): ProviderLoginConfig {
+  const provider = hostedBrowserProvider(providerKey);
   if (environment === "production") {
+    if (provider === undefined) {
+      throw new Error(`No hosted browser login is configured for provider "${providerKey}"`);
+    }
     return {
-      loginUrl: new URL("https://login.yahoo.com/"),
-      allowedOrigins: providerOrigins,
+      loginUrl: new URL(provider.loginUrl),
+      allowedOrigins: provider.allowedOrigins,
     };
   }
   const origin = new URL(requestUrl).origin;
   return {
     loginUrl: new URL("/api/dev/provider-login", origin),
-    allowedOrigins: [origin],
+    allowedOrigins: [origin, ...hostedBrowserOrigins],
   };
 }

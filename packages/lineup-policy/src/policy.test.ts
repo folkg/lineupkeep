@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
 import { periodKey } from "./period.ts";
 import { buildLineupProblem } from "./policy.ts";
 import {
-  percentStartedPopulation,
+  communityStartRatePopulation,
   preferredValueSource,
   startCutPreference,
   valueSourceLadder,
@@ -28,11 +28,11 @@ import {
 import type {
   LineupPolicyInput,
   LineupPolicyResult,
-  PercentStartedCut,
+  CommunityStartRateCut,
   Period,
   PeriodObservation,
   PlayerAvailability,
-  PlayerPercentStarted,
+  PlayerCommunityStartRate,
   PlayerValuation,
   PolicyPlayer,
   ValueSource,
@@ -275,17 +275,21 @@ describe("availability", () => {
 });
 
 describe("value sources", () => {
-  it("orders the ladder from projections to rules to started percentages", () => {
-    expect(valueSourceLadder).toEqual(["projected-points", "scoring-rules", "percent-started"]);
+  it("orders the ladder from projections to rules to a community start rate", () => {
+    expect(valueSourceLadder).toEqual([
+      "projected-points",
+      "scoring-rules",
+      "community-start-rate",
+    ]);
     expect(startCutPreference).toEqual(["diamond"]);
   });
 
   it("treats a published cut as a population only when it carries a value", () => {
     expect(
-      percentStartedPopulation([{ id: makePlayerId("p1"), percent: undefined, cuts: [] }]),
+      communityStartRatePopulation([{ id: makePlayerId("p1"), percent: undefined, cuts: [] }]),
     ).toEqual({ kind: "overall" });
     expect(
-      percentStartedPopulation([
+      communityStartRatePopulation([
         {
           id: makePlayerId("p1"),
           percent: parseExact("40"),
@@ -294,7 +298,7 @@ describe("value sources", () => {
       ]),
     ).toEqual({ kind: "overall" });
     expect(
-      percentStartedPopulation([
+      communityStartRatePopulation([
         {
           id: makePlayerId("p1"),
           percent: parseExact("40"),
@@ -304,12 +308,12 @@ describe("value sources", () => {
     ).toEqual({ kind: "cut", cut: "diamond" });
   });
 
-  it("prefers projected points over league rules over a started percentage", () => {
-    expect(preferredValueSource(["percent-started", "scoring-rules", "projected-points"])).toBe(
-      "projected-points",
-    );
-    expect(preferredValueSource(["percent-started", "scoring-rules"])).toBe("scoring-rules");
-    expect(preferredValueSource(["percent-started"])).toBe("percent-started");
+  it("prefers projected points over league rules over a community start rate", () => {
+    expect(
+      preferredValueSource(["community-start-rate", "scoring-rules", "projected-points"]),
+    ).toBe("projected-points");
+    expect(preferredValueSource(["community-start-rate", "scoring-rules"])).toBe("scoring-rules");
+    expect(preferredValueSource(["community-start-rate"])).toBe("community-start-rate");
     expect(preferredValueSource([])).toBeUndefined();
   });
 
@@ -380,7 +384,7 @@ describe("value sources", () => {
     });
   });
 
-  it("values a started percentage in hundredths of a percent and applies availability", () => {
+  it("values a community start rate in hundredths of a percent and applies availability", () => {
     const result = buildLineupProblem(
       inputFor({
         source: startedSource([{ id: "p1", percent: 43, cuts: [] }]),
@@ -391,13 +395,13 @@ describe("value sources", () => {
     const valuation = valuationFrom(result, "p1");
 
     expect(valuation.value).toEqual({
-      kind: "percent-started",
+      kind: "community-start-rate",
       population: { kind: "overall" },
       percent: parseExact("43"),
     });
     expect(knownUnits(valuation)).toBe(4300);
     expect(valuation.availability.tier).toBe("will-play");
-    expect(problemFrom(result).selectionBasis).toBe("percent-started:overall:week:7");
+    expect(problemFrom(result).selectionBasis).toBe("community-start-rate:overall:week:7");
   });
 
   it("prefers a populated diamond cut over the overall percentage", () => {
@@ -414,10 +418,10 @@ describe("value sources", () => {
       }),
     );
 
-    expect(problemFrom(result).selectionBasis).toBe("percent-started:cut-diamond:week:7");
+    expect(problemFrom(result).selectionBasis).toBe("community-start-rate:cut-diamond:week:7");
     expect(unitsByPlayer(result)).toEqual({ p1: 5100, p2: 1200 });
     expect(valuationFrom(result, "p1").value).toEqual({
-      kind: "percent-started",
+      kind: "community-start-rate",
       population: { kind: "cut", cut: "diamond" },
       percent: parseExact("51"),
     });
@@ -437,7 +441,7 @@ describe("value sources", () => {
       }),
     );
 
-    expect(problemFrom(result).selectionBasis).toBe("percent-started:overall:week:7");
+    expect(problemFrom(result).selectionBasis).toBe("community-start-rate:overall:week:7");
     expect(unitsByPlayer(result)).toEqual({ p1: 4300, p2: 8000 });
   });
 
@@ -451,7 +455,7 @@ describe("value sources", () => {
 
     expect(valuationFrom(result, "p1").selection).toEqual({
       kind: "known",
-      basis: "percent-started:overall:week:7",
+      basis: "community-start-rate:overall:week:7",
       units: 0,
     });
   });
@@ -466,7 +470,7 @@ describe("value sources", () => {
 
     expect(valuationFrom(result, "p1").selection).toEqual({
       kind: "unusable",
-      basis: "percent-started:overall:week:7",
+      basis: "community-start-rate:overall:week:7",
       reason: "missing",
     });
     expect(solveLineup(problemFrom(result))).toEqual({
@@ -491,7 +495,7 @@ describe("value sources", () => {
 
     expect(valuationFrom(result, "unpublished").selection).toEqual({
       kind: "unusable",
-      basis: "percent-started:overall:week:7",
+      basis: "community-start-rate:overall:week:7",
       reason: "missing",
     });
     const plan = planFrom(solveLineup(problemFrom(result)));
@@ -898,13 +902,13 @@ function startedSource(
     readonly percent: number | undefined;
     readonly cuts: ReadonlyArray<{ readonly cut: string; readonly percent: number }>;
   }>,
-): Extract<ValueSource, { readonly kind: "percent-started" }> {
+): Extract<ValueSource, { readonly kind: "community-start-rate" }> {
   return {
-    kind: "percent-started",
-    started: entries.map((entry): PlayerPercentStarted => ({
+    kind: "community-start-rate",
+    started: entries.map((entry): PlayerCommunityStartRate => ({
       id: makePlayerId(entry.id),
       percent: entry.percent === undefined ? undefined : parseExact(String(entry.percent)),
-      cuts: entry.cuts.map((cut): PercentStartedCut => ({
+      cuts: entry.cuts.map((cut): CommunityStartRateCut => ({
         cut: cut.cut,
         percent: parseExact(String(cut.percent)),
       })),

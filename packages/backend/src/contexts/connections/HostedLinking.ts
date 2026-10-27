@@ -4,6 +4,7 @@ import type { Effect, Redacted } from "effect";
 
 import { ConnectionId } from "./Connection.ts";
 import type { ConnectionError, ProviderConnection } from "./Connection.ts";
+import { ProviderKey } from "./ProviderKey.ts";
 
 export const HostedLinkingSessionId = Schema.String.pipe(
   Schema.check(Schema.isUUID()),
@@ -36,7 +37,7 @@ export const HostedLinkingSession = Schema.Struct({
   id: HostedLinkingSessionId,
   userId: UserId,
   connectionId: ConnectionId,
-  provider: Schema.Literals(["yahoo"]),
+  provider: ProviderKey,
   status: HostedLinkingSessionStatus,
   startedAt: SessionTimestamp,
   expiresAt: SessionTimestamp,
@@ -51,7 +52,7 @@ export const HostedLinkingSession = Schema.Struct({
 export type HostedLinkingSession = typeof HostedLinkingSession.Type;
 
 export const StartHostedLinkingInput = Schema.Struct({
-  provider: Schema.Literals(["yahoo"]),
+  provider: ProviderKey,
 });
 export type StartHostedLinkingInput = typeof StartHostedLinkingInput.Type;
 
@@ -79,7 +80,7 @@ const ProviderSessionValue = Schema.RedactedFromValue(
 export const CompleteHostedLinkingInput = Schema.Struct({
   id: HostedLinkingSessionId,
   ticket: HostedLinkingTicket,
-  provider: Schema.Literals(["yahoo"]),
+  provider: ProviderKey,
   session: ProviderSessionValue,
 });
 export type CompleteHostedLinkingInput = typeof CompleteHostedLinkingInput.Type;

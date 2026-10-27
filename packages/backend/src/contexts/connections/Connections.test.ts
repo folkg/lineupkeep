@@ -6,6 +6,7 @@ import { Array, Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect
 import { TestClock } from "effect/testing";
 
 import { connectionLinkingWindowMillis } from "#contexts/connections/ConnectionLimits.ts";
+import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
 import {
   CompleteLinkingInput,
@@ -33,39 +34,53 @@ import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { providerConnections, providerCredentials } from "./internal/ConnectionTables.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
-import { ProviderGateway } from "./Provider.ts";
+import { ProviderRegistry } from "./ProviderRegistry.ts";
 
-it("rejects missing replay keys, unknown providers, and malformed identifiers", () => {
-  assert.throws(() => Schema.decodeUnknownSync(StartLinkingInput)({ provider: "yahoo" }));
+it("rejects missing replay keys, malformed providers, and malformed identifiers", () => {
   assert.throws(() =>
-    Schema.decodeUnknownSync(StartLinkingInput)({ requestId, provider: "espn", pairingCode }),
+    Schema.decodeUnknownSync(StartLinkingInput)({ provider: decodeProviderKey("yahoo") }),
+  );
+  assert.strictEqual(
+    Schema.decodeSync(StartLinkingInput)({ requestId, provider: "espn", pairingCode }).provider,
+    "espn",
+  );
+  assert.throws(() =>
+    Schema.decodeSync(StartLinkingInput)({ requestId, provider: "ESPN", pairingCode }),
   );
   assert.throws(() =>
     Schema.decodeSync(StartLinkingInput)({
       requestId: "not-a-uuid",
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode,
     }),
   );
   assert.throws(() =>
-    Schema.decodeSync(StartLinkingInput)({ requestId, provider: "yahoo", pairingCode: "  " }),
+    Schema.decodeSync(StartLinkingInput)({
+      requestId,
+      provider: decodeProviderKey("yahoo"),
+      pairingCode: "  ",
+    }),
   );
   assert.throws(() =>
     Schema.decodeSync(StartLinkingInput)({
       requestId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode: "A".repeat(65),
     }),
   );
   assert.throws(() => Schema.decodeSync(ConnectionId)("not-a-uuid"));
   assert.throws(() => Schema.decodeSync(ConnectionIdInput)({ id: "not-a-uuid" }));
   assert.throws(() =>
-    Schema.decodeSync(CompleteLinkingInput)({ id: connectionId, provider: "yahoo", session: "" }),
+    Schema.decodeSync(CompleteLinkingInput)({
+      id: connectionId,
+      provider: decodeProviderKey("yahoo"),
+      session: "",
+    }),
   );
   assert.throws(() =>
     Schema.decodeSync(ReconnectInput)({
       id: connectionId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       session: "A1=cookie",
       expectedGeneration: 0,
     }),
@@ -77,7 +92,7 @@ it.effect("replays concurrent linking starts without creating duplicate connecti
     const connections = yield* Connections;
     const input = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode,
     });
 
@@ -96,7 +111,7 @@ it.effect("scopes replay identity and cancellation to the verified owner", () =>
     const connections = yield* Connections;
     const input = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode,
     });
     const mine = Array.getUnsafe(yield* connections.startLinking(owner, [input]), 0);
@@ -116,7 +131,7 @@ it.effect("cancels a linking connection once and replays the disconnected result
     const connections = yield* Connections;
     const input = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode,
     });
     const linking = Array.getUnsafe(yield* connections.startLinking(owner, [input]), 0);
@@ -139,8 +154,12 @@ it.effect("rolls back a cancel batch containing another owner's connection", () 
   Effect.gen(function* () {
     const connections = yield* Connections;
     const inputs = yield* Schema.decodeEffect(Schema.Array(StartLinkingInput))([
-      { requestId, provider: "yahoo", pairingCode },
-      { requestId: secondRequestId, provider: "yahoo", pairingCode: secondPairingCode },
+      { requestId, provider: decodeProviderKey("yahoo"), pairingCode },
+      {
+        requestId: secondRequestId,
+        provider: decodeProviderKey("yahoo"),
+        pairingCode: secondPairingCode,
+      },
     ]);
     const owned = yield* connections.startLinking(owner, inputs);
     const foreign = Array.getUnsafe(
@@ -167,8 +186,12 @@ it.effect("creates and cancels heterogeneous batches in input order", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
     const inputs = yield* Schema.decodeEffect(Schema.Array(StartLinkingInput))([
-      { requestId, provider: "yahoo", pairingCode },
-      { requestId: secondRequestId, provider: "yahoo", pairingCode: secondPairingCode },
+      { requestId, provider: decodeProviderKey("yahoo"), pairingCode },
+      {
+        requestId: secondRequestId,
+        provider: decodeProviderKey("yahoo"),
+        pairingCode: secondPairingCode,
+      },
     ]);
 
     const created = yield* connections.startLinking(owner, inputs);
@@ -193,7 +216,7 @@ it.effect("bounds the linking window from the creation time", () =>
     const connections = yield* Connections;
     const input = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       pairingCode,
     });
     const connection = Array.getUnsafe(yield* connections.startLinking(owner, [input]), 0);
@@ -216,7 +239,7 @@ it.effect("rejects malformed stored connections through the public service", () 
       id: requestId,
       userId: owner,
       requestId,
-      provider: "yahoo",
+      provider: decodeProviderKey("yahoo"),
       status: "linking",
       pairingCode,
       expiresAt: null,
@@ -305,8 +328,12 @@ it.effect("rolls back a completion batch containing another owner's connection",
   Effect.gen(function* () {
     const connections = yield* Connections;
     const inputs = yield* Schema.decodeEffect(Schema.Array(StartLinkingInput))([
-      { requestId, provider: "yahoo", pairingCode },
-      { requestId: secondRequestId, provider: "yahoo", pairingCode: secondPairingCode },
+      { requestId, provider: decodeProviderKey("yahoo"), pairingCode },
+      {
+        requestId: secondRequestId,
+        provider: decodeProviderKey("yahoo"),
+        pairingCode: secondPairingCode,
+      },
     ]);
     const owned = yield* connections.startLinking(owner, inputs);
     const foreign = Array.getUnsafe(
@@ -424,13 +451,13 @@ function startLinking(
 }
 
 function completeInput(id: ConnectionId): CompleteLinkingInput {
-  return { id, provider: "yahoo", session };
+  return { id, provider: decodeProviderKey("yahoo"), session };
 }
 
 function reconnectInput(id: ConnectionId, expectedGeneration: number): ReconnectInput {
   return {
     id,
-    provider: "yahoo",
+    provider: decodeProviderKey("yahoo"),
     session,
     expectedGeneration: makeGeneration(expectedGeneration),
   };
@@ -442,7 +469,7 @@ function makeGeneration(value: number): ConnectionCredentialGeneration {
 
 function ConnectionsLayerFor(
   crypto: Layer.Layer<Crypto.Crypto>,
-): Layer.Layer<Connections | ConnectionsDatabase | FakeProviderWorld | ProviderGateway> {
+): Layer.Layer<Connections | ConnectionsDatabase | FakeProviderWorld | ProviderRegistry> {
   return ConnectionsLive.pipe(
     Layer.provide(ConnectionRepository.layer),
     Layer.provideMerge(ConnectionsDatabaseTest),
@@ -464,7 +491,7 @@ const session = Redacted.make("A1=test-session-cookie");
 
 const startInput = Schema.decodeSync(StartLinkingInput)({
   requestId,
-  provider: "yahoo",
+  provider: decodeProviderKey("yahoo"),
   pairingCode,
 });
 
@@ -482,7 +509,9 @@ it.effect("starts one explicit reconnect intent and completes it through a new s
     const connections = yield* Connections;
     const ready = Array.getUnsafe(yield* connections.startLinking(owner, [startInput]), 0);
     const linked = Array.getUnsafe(
-      yield* connections.completeLinking(owner, [{ id: ready.id, provider: "yahoo", session }]),
+      yield* connections.completeLinking(owner, [
+        { id: ready.id, provider: decodeProviderKey("yahoo"), session },
+      ]),
       0,
     );
     const intent = yield* Schema.decodeEffect(StartReconnectInput)({
@@ -494,7 +523,9 @@ it.effect("starts one explicit reconnect intent and completes it through a new s
     const started = Array.getUnsafe(yield* connections.startReconnect(owner, [intent]), 0);
     const replayed = Array.getUnsafe(yield* connections.startReconnect(owner, [intent]), 0);
     const completed = Array.getUnsafe(
-      yield* connections.completeReconnect(owner, [{ id: linked.id, provider: "yahoo", session }]),
+      yield* connections.completeReconnect(owner, [
+        { id: linked.id, provider: decodeProviderKey("yahoo"), session },
+      ]),
       0,
     );
 
