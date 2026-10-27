@@ -40,33 +40,6 @@ Without Resend configuration, development prints sign-in emails/codes to the ser
 Developer commands own origin and migrated database. Ctrl-C stops the app, not its database; `db:stop` retains data and `db:start` resumes it.
 **`bun run db:reset` deletes development data**, with typed confirmation or explicit `--yes`. Export needed data and stop development before maintenance.
 
-## Commands and required checks
-
-Bun installs dependencies and dispatches scripts; Node is the default runtime for application/tooling code. `package.json` owns commands.
-
-| Command                                                | When / purpose                                                                                      | Runs E2E          |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | ----------------- |
-| `bun checks`                                           | Every committed-code change: format, type-aware lint, architecture, unused code, tests, both builds | No                |
-| `bun run test:node` / `test:browser` / `test:chromium` | Focused Node, browser-mode, or Chromium regressions                                                 | No                |
-| `bun run test:e2e`                                     | Routes, UI, authentication, or server functions; production Node integration                        | Node target       |
-| `bun run test:e2e:cloudflare`                          | Server entry, backend runtime, database/auth composition, or deployment target                      | Cloudflare target |
-| `bun run test:e2e:container`                           | Node image, Dockerfile, container build/publication, host runtime, or container networking          | Container target  |
-| `bun run targets:verify`                               | Deployment-adapter upgrades or build/infrastructure changes; credential-free artifact checks        | No                |
-| `bun run db:generate` / `db:migrate`                   | Generate/review committed migrations / apply to stopped development                                 | No                |
-| `bun run verify --criteria <file> ...`                 | Assertion-linked evidence; see [verify-app](.agents/skills/verify-app/SKILL.md)                     | No                |
-
-### `checks` never runs E2E
-
-`bun checks` runs formatting, type-aware lint, architecture rules, unused-code detection, the Node and browser test suite, and both builds. It runs **no** E2E target, because E2E needs Docker, a production build, and real browser sessions. A green `checks` therefore never proves routes, hydration, authentication, persistence, or deployment-target behavior.
-
-After `checks`, run the E2E targets the change can break: any page, read, write, recovery, navigation, server function, protocol route, authentication path, backend runtime, or deployment configuration change needs its affected target; run all three when in doubt. Never run builds/E2Es/verification concurrently or edit source during an owned run. [Harness recovery](.agents/skills/verify-app/references/harness.md#ownership-and-recovery) owns interrupted runs.
-
-### Fast inner loop
-
-While iterating, run the one file that can fail: `bunx vitest run --project node <path>` (or `--project chromium <path>` for a Chromium-launching test, `--project browser <path>`, or add `-t "<test name>"`). Vitest has no changed-test cache that stays correct: `--changed` and `--related` silently skip suites reached through package aliases, so they are a convenience only and are never what `checks` runs. Finish with `bun checks` plus the affected E2E targets, not with a narrowed run.
-
-`bun run test` runs the Node, browser-mode, and Chromium-launching projects as separate Vitest invocations, so each releases its workers and browser before the next starts. Within the Node project, files share a worker pool sized from available parallelism: every file owns its migrated in-memory database, temporary directories, and ephemeral loopback ports, so a file is only serial against itself and parallel files cannot collide. Files that launch Chromium run one at a time in their own invocation, because browser startup starves against sibling Node workers. A file that mutates process-wide state, such as `PATH` for a fake container runtime, owns that state for its own process only.
-
 ## Loading and mutations
 
 Pages wait for primary data; writes return refreshed page data in the same response. See [loading and single-flight](docs/loading-and-single-flight.md) for loading choices, how writes refresh the page, and framework upgrade checks.

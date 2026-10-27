@@ -15,10 +15,9 @@ The approved identity is Lineupkeep, lowercase lineupkeep in the wordmark, with 
 ## Commands and checks
 
 Use the pinned Node runtime by default and Bun package manager.
-Run `bun checks` after every change to committed code; do not finish with failing checks.
-`bun checks` runs format, type-aware lint, architecture, unused code, the Node/browser tests, and both builds. It runs **no E2E target**, so a green `checks` never proves routes, hydration, authentication, persistence, or a deployment target.
-After `checks`, run every affected E2E target (`bun run test:e2e`, `test:e2e:cloudflare`, `test:e2e:container`), all three if in doubt; follow the [README check matrix](README.md#commands-and-required-checks) for those and for artifact checks. Run suites serially.
-While iterating, run one file with `bunx vitest run --project node <path>` (or `--project chromium <path>` for a Chromium-launching test, or `--project browser <path>`); `--changed`/`--related` are incomplete for this repository's aliases and never replace `checks`.
+While iterating, run one file with `bunx vitest run --project node <path>` (or `--project chromium <path>` for a Chromium-launching test, or `--project browser <path>`).
+Run `bun checks` before completing each jj change; do not start a new jj change with failing checks.
+After completing your entire task, run every affected E2E target (`bun run test:e2e`, `test:e2e:cloudflare`, `test:e2e:container`), all three if in doubt. Run suites serially.
 
 ## Safety
 
@@ -40,4 +39,5 @@ Before broad prerelease changes, inspect pinned source, official docs, catalog, 
 
 ## Performance
 
-Batch first: repositories and application services accept arrays; singular callers pass `[input]`. Gather IDs and commands, then call once—never perform per-item service/repository IO in loops, `Effect.forEach`, or arrays assembled for `Effect.all`/`Promise.all`. Use set-based writes and atomic mutations; bounded parameter-limit chunking belongs inside persistence. Add pragmatic owner/filter/order indexes for actual access paths; measure before specializing. The binding-aware lint rule catches direct imported services and simple aliases, not arbitrary interprocedural IO.
+Batch first: repositories and application services accept arrays; singular callers pass `[input]`. Gather IDs and commands, then call once. Never perform per-item service/repository IO in loops, `Effect.forEach`, or arrays assembled for `Effect.all`/`Promise.all`. Use set-based writes and atomic mutations; bounded parameter-limit chunking belongs inside persistence. Add pragmatic owner/filter/order indexes for actual access paths; measure before specializing. The binding-aware lint rule catches direct imported services and simple aliases, not arbitrary interprocedural IO.
+Add useful indexes for actual access paths, but do not over-index speculatively. Additional indexes can be added later after performance problems are observed. Err on the side of fewer indexes, not more, to avoid unnecessary write overhead.
