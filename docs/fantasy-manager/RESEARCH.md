@@ -796,6 +796,48 @@ What it does not establish:
   follow the native action's observed behaviour and the documented all-or-nothing rejection rule,
   not a live explicit rejection.
 
+### Reserve transit acceptance (2026-10-27)
+
+The owner authorized one acceptance write that moves one roster member **into** a reserve list and one
+that moves them **out**. A disposable gitignored harness (`.artifacts/chunk11/reserve-transit.ts`)
+decrypted the stored credential with the application's own credential service and called the committed
+`YahooProvider.applyExplicitAssignments` through `PublicInternet`, reading the roster back between and
+after the writes. Same roster only: the two requests name a slot for a player already on the team and
+never add, drop, or trade. Retained evidence holds slot names, status classifications, and counts
+only; no player name, player key, team key, league id, cookie, or crumb is recorded here.
+
+The subject was an editable bench member of a date-scoped hockey team whose published
+`eligible_positions` named the reserve list, with a free unit in that list. Every pre-condition was
+read from the provider immediately before the write: the player's slot, editability, eligibility, and
+the list's occupancy.
+
+| Observation                   |   Into the reserve list | Out of the reserve list |
+| ----------------------------- | ----------------------: | ----------------------: |
+| Request                       | one assignment, BN → IR | one assignment, IR → BN |
+| Write classified as           |                accepted |                accepted |
+| Readback slot                 |                      IR |                      BN |
+| Readback roster membership    |                      21 |                      21 |
+| Reserve occupancy after       |                  2 of 2 |                  1 of 2 |
+| Slot restored to the original |                       — |                     yes |
+
+What this establishes:
+
+- The read-write roster endpoint accepts a reserve-list slot label for a same-roster member, in both
+  directions, with the same partial body it accepts for starting and bench slots.
+- The readback is the authority and it agreed with the intended slots; membership was retained, so
+  nothing was added, dropped, or traded.
+- The conservative occupancy rule in the planner — “a reserve slot accepts only the player already in
+  it” — is no longer needed. Reserve eligibility is back to the provider's published
+  `eligible_positions`, so a plan may propose the injured-reserve shuffle the owner described.
+
+What it does not establish:
+
+- Reserve transit for a list the player is **not** published as eligible for. The adapter never sends
+  one, and it is the provider's own rule rather than an observed rejection.
+- Whether a reserve transit is accepted for a player whose game has started or whose slot is locked.
+  The subject was editable at the time; the adapter still never moves a locked player.
+- Whether a rejected reserve transit is reported with a specific error. No rejection was observed.
+
 ### Read-only batch-history re-verification (2026-10-26)
 
 A second read-only harness (`.artifacts/phase2-evidence/history-read.ts`) exercised the worker's
@@ -858,8 +900,8 @@ Still unverified after this pass:
   derived from documented behaviour, the native probe, and the behavioural fake.
 - Whether an assignment for a locked player is rejected with a specific provider error (the adapter
   never sends one).
-- Whether a reserve-list position (`IR`, `IR+`, `NA`) is accepted by this roster endpoint; the
-  adapter refuses reserve-list moves rather than relying on it.
+- Whether a reserve-list position (`IR`, `IR+`, `NA`) is accepted by this roster endpoint — verified on
+  2026-10-27, see [the reserve transit acceptance](#reserve-transit-acceptance-2026-10-27).
 - Whether a starting slot left empty is accepted, and whether the bench count is a hard maximum or a
   pooled allowance.
 - Concurrent human edits between the pre-write read and the provider applying the request. No

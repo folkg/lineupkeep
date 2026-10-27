@@ -237,28 +237,86 @@ describe("provider-neutral lineup placement", () => {
     expect(second.assignments).toEqual([]);
   });
 
-  it("keeps a reserve player where they are instead of refusing the team", () => {
+  it("moves a reserve player out and the player who cannot play in", () => {
     const result = planned(
       planAssignments({
         league: league([
-          { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
-          { position: "IR", kind: "reserve", count: 1, eligibility: ["QB"] },
+          { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
           { position: "BN", kind: "bench", count: 1, eligibility: [] },
         ]),
         roster: roster([
-          member("p1", "QB", "QB", ["QB"]),
-          member("p2", "QB", "IR", ["QB"]),
-          member("p3", "QB", "BN", ["QB"]),
+          member("hurt", "C", "C", ["C", "IR"], "will-not-play"),
+          member("parked", "C", "IR", ["C", "IR"], "will-play"),
+          member("backup", "C", "BN", ["C"], "will-play"),
         ]),
         values: values([
-          ["p1", 200],
-          ["p2", 1900],
-          ["p3", 100],
+          ["hurt", 9000, "will-not-play"],
+          ["parked", 900, "will-play"],
+          ["backup", 100, "will-play"],
         ]),
       }),
     );
 
-    expect(result.assignments).toEqual([]);
+    expect(result.assignments).toEqual([
+      { providerPlayerKey: "hurt", slot: "IR" },
+      { providerPlayerKey: "parked", slot: "C" },
+    ]);
+  });
+
+  it("lets published eligibility, not the injury code, decide reserve occupancy", () => {
+    const result = planned(
+      planAssignments({
+        league: league([
+          { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
+          { position: "BN", kind: "bench", count: 1, eligibility: [] },
+        ]),
+        roster: roster([
+          member("incumbent", "C", "C", ["C", "IR"], "will-play"),
+          member("better", "C", "BN", ["C"], "will-play"),
+          member("hurt", "C", "IR", ["C"], "will-not-play"),
+        ]),
+        values: values([
+          ["incumbent", 500, "will-play"],
+          ["better", 900, "will-play"],
+          ["hurt", 50, "will-not-play"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toHaveLength(3);
+    expect(result.assignments).toContainEqual({ providerPlayerKey: "better", slot: "C" });
+    expect(result.assignments).toContainEqual({ providerPlayerKey: "hurt", slot: "BN" });
+    expect(result.assignments).toContainEqual({ providerPlayerKey: "incumbent", slot: "IR" });
+  });
+
+  it("never places a player in a reserve list they are not published as eligible for", () => {
+    const result = planned(
+      planAssignments({
+        league: league([
+          { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
+          { position: "IR+", kind: "reserve", count: 1, eligibility: ["IR+"] },
+          { position: "BN", kind: "bench", count: 1, eligibility: [] },
+        ]),
+        roster: roster([
+          member("hurt", "C", "C", ["C", "IR+"], "will-not-play"),
+          member("parked", "C", "IR", ["C", "IR"], "will-play"),
+          member("backup", "C", "BN", ["C"], "will-play"),
+        ]),
+        values: values([
+          ["hurt", 9000, "will-not-play"],
+          ["parked", 900, "will-play"],
+          ["backup", 100, "will-play"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([
+      { providerPlayerKey: "hurt", slot: "IR+" },
+      { providerPlayerKey: "parked", slot: "C" },
+    ]);
   });
 
   it("moves a player out of a reserve list they are no longer eligible for", () => {
@@ -280,12 +338,12 @@ describe("provider-neutral lineup placement", () => {
     expect(result.assignments).toEqual([{ providerPlayerKey: "p2", slot: "BN" }]);
   });
 
-  it("benches a displaced player rather than moving anyone into a reserve slot", () => {
+  it("benches a displaced player the reserve list does not accept", () => {
     const result = planned(
       planAssignments({
         league: league([
           { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
-          { position: "IR", kind: "reserve", count: 1, eligibility: ["C", "IR"] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
           { position: "BN", kind: "bench", count: 1, eligibility: [] },
         ]),
         roster: roster([
@@ -303,6 +361,56 @@ describe("provider-neutral lineup placement", () => {
       { providerPlayerKey: "hurt", slot: "BN" },
       { providerPlayerKey: "healthy", slot: "C" },
     ]);
+  });
+
+  it("never refuses a plan because a change transits a reserve slot", () => {
+    const pool = league([
+      { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+      { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
+      { position: "IR+", kind: "reserve", count: 1, eligibility: ["IR+"] },
+      { position: "BN", kind: "bench", count: 2, eligibility: [] },
+    ]);
+    const candidates: ReadonlyArray<ReadonlyArray<ProviderRoster["players"][number]>> = [
+      [
+        member("hurt", "C", "C", ["C", "IR"], "will-not-play"),
+        member("parked", "C", "IR", ["C", "IR"], "will-play"),
+        member("backup", "C", "BN", ["C"], "will-play"),
+      ],
+      [
+        member("incumbent", "C", "C", ["C", "IR+"], "will-play"),
+        member("better", "C", "BN", ["C"], "will-play"),
+        member("hurt", "C", "IR+", ["C"], "will-not-play"),
+      ],
+      [
+        member("stale", "C", "IR", ["C"], "will-play"),
+        member("starter", "C", "C", ["C"], "will-play"),
+      ],
+      [
+        member("idle", "C", "C", ["C", "IR"], "not-scheduled"),
+        member("playing", "C", "BN", ["C", "IR+"], "will-play"),
+        member("parked", "C", "IR+", ["C", "IR+"], "will-not-play"),
+        member("spare", "C", "BN", ["C"], "will-play"),
+      ],
+    ];
+
+    for (const players of candidates) {
+      const result = planAssignments({
+        league: pool,
+        roster: roster(players),
+        values: values(
+          players.map((player, index) => [
+            player.providerPlayerKey,
+            (index + 1) * 100,
+            player.injuryCode === "O" ? "will-not-play" : "will-play",
+          ]),
+        ),
+      });
+
+      expect(result.kind).toBe("planned");
+      if (result.kind === "refused") {
+        expect(result.detail).not.toMatch(/reserve/u);
+      }
+    }
   });
 
   it("refuses when a required starting slot has no eligible player", () => {

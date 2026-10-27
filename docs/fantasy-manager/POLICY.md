@@ -325,11 +325,11 @@ position name means:
   pinned to the slot they already occupy. An unrecognised status does not pin anyone.
 - **Reserve lists stay distinct**: a player eligible for one reserve list is not automatically
   eligible for another.
-- **A reserve slot only accepts the player already in it.** Reserve writes have never been verified on
-  our side, so the plan is kept writable by construction rather than by refusing the team when a
-  reserve move would be best: a player can leave a reserve list for a starting or bench slot, and
-  nobody is moved onto one. The displaced player goes to the bench. `IR` shuffling in both directions
-  waits for one authorised acceptance write that moves a player into a reserve list and back.
+- **A reserve list is a legal destination only for a player published as eligible for it.** The
+  provider accepted a reserve transit in both directions on 2026-10-27
+  ([record](RESEARCH.md#reserve-transit-acceptance-2026-10-27)), so the plan writes reserve moves the
+  same way it writes starting and bench moves. A player can be moved onto a named reserve list they
+  are eligible for, and off one they are not. Nothing is inferred from the injury code.
 
 Two readings the provider evidence does not settle, stated so they can be corrected:
 

@@ -85,10 +85,7 @@ function rosterPlayer(
     availabilityTier: availabilityTier(value?.availability),
     selection: selection(value?.score ?? null),
     reserveEligible: slots.some(
-      (slot) =>
-        slot.kind === "reserve" &&
-        String(slot.id) === player.slot &&
-        slotAccepts(slot.eligibility, eligibility),
+      (slot) => slot.kind === "reserve" && slotAccepts(slot.eligibility, eligibility),
     ),
     lockedSlotId: player.isEditable === true ? undefined : makeSlotId(player.slot),
     currentSlotId: makeSlotId(player.slot),

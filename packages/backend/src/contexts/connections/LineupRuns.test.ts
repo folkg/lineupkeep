@@ -186,6 +186,36 @@ it.effect("applies and verifies changed explicit assignments", () =>
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
+it.effect("writes a reserve transit instead of blocking the team", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* fake.setLeague(reserveLeague);
+    yield* fake.setRoster(reserveRoster);
+    yield* fake.setPlayerScores(reserveScores);
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.status, "completed");
+    assert.strictEqual(run.state._tag, "Completed");
+    if (run.state._tag !== "Completed") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.kind, "changed");
+    assert.strictEqual(run.state.outcome.verified, true);
+    const requests = yield* fake.explicitRequests;
+    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    assert.deepStrictEqual(
+      requests[0]?.map((assignment) => assignment.slot).sort(),
+      ["IR", "QB"],
+    );
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
 it.effect("plans a league without points rules from the published started percentage", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;
@@ -1161,6 +1191,37 @@ const customScores = [
   { providerPlayerKey: "461.p.20002", score: 5, availability: undefined },
   { providerPlayerKey: "461.p.20003", score: 15, availability: undefined },
   { providerPlayerKey: "461.p.20004", score: 1, availability: undefined },
+];
+
+const reserveLeague: ProviderLeagueSettings = {
+  ...customLeague,
+  rosterPositions: [
+    { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
+    { position: "IR", positionType: "I", count: 1, kind: "reserve", eligibility: ["IR"] },
+    { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
+  ],
+};
+
+const reserveRoster: ProviderRoster = {
+  ...customRoster,
+  players: [
+    {
+      ...customPlayer("461.p.20001", "QB Hurt", "QB", "QB"),
+      eligiblePositions: ["QB", "IR"],
+      injuryCode: "O",
+    },
+    {
+      ...customPlayer("461.p.20002", "QB Parked", "QB", "IR"),
+      eligiblePositions: ["QB", "IR"],
+    },
+    customPlayer("461.p.20003", "QB Bench", "QB", "BN"),
+  ],
+};
+
+const reserveScores = [
+  { providerPlayerKey: "461.p.20001", score: 20, availability: undefined },
+  { providerPlayerKey: "461.p.20002", score: 30, availability: undefined },
+  { providerPlayerKey: "461.p.20003", score: 5, availability: undefined },
 ];
 
 const startedLeague: ProviderLeagueSettings = {

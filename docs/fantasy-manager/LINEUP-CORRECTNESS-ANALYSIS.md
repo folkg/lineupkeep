@@ -360,26 +360,25 @@ the ordering, exactly as in the reference (document A, D8) — there is no "shuf
 - Treating a reserve slot as a starting slot, so a parked player is credited with a start.
 - Treating reserve membership as value, so parking a player costs or gains points.
 - Letting a plan move any player into any reserve list, so the provider rejects the write.
-- **Refusing the whole team because one member's best destination is a reserve slot.** This is the
-  current behaviour and it is wrong: it is a missing write capability, not a lineup contradiction.
+- **Refusing the whole team because one member's best destination is a reserve slot.** This was the
+  behaviour and it was wrong: it was a missing write capability, not a lineup contradiction.
 - Dropping a player to make reserve room (document A, J9). We have no drop surface and must not acquire
   one by accident.
 
-### The writability constraint, and why it is in scope
+### The writability constraint, and how it was closed
 
-`LineupPlanning.assignments` refuses a plan when either endpoint of a change is a reserve slot
-(`assignment:reserve-slot`, transient). One of the owner's four teams is refused on exactly this today
-(§3). The refusal is honest caution — reserve writes have never been verified on our side — but it
-currently converts "we cannot write one move" into "this team gets no lineup at all", every hour.
+`LineupPlanning.assignments` once refused a plan when either endpoint of a change was a reserve slot
+(`assignment:reserve-slot`, transient). One of the owner's four teams was refused on exactly this
+(§3). The refusal was honest caution — reserve writes had never been verified on our side — but it
+converted "we cannot write one move" into "this team gets no lineup at all", every hour.
 
 The reference writes reserve moves through the same roster PUT it uses for everything else, in
-production (document A, W3), so the capability is real. Until we have verified it ourselves, the plan
-must be **writable by construction**: reserve slots accept only players who already occupy them. That
-is one expression change in `LineupPlanning` (`reserveEligible` becomes "may remain where they are")
-and it removes the refusal without inventing a partial-write protocol. A reserve player can then still
-leave (their non-reserve slots are unaffected), the displaced player lands on the bench, and a team is
-never blocked by a capability gap. Step 6 of §10 turns the full shuffle back on after one authorised
-acceptance write.
+production (document A, W3). On 2026-10-27 the owner authorized one acceptance write into a reserve
+list and one out, and the provider accepted both with a clean readback
+([record](RESEARCH.md#reserve-transit-acceptance-2026-10-27)). Reserve eligibility is therefore back
+to the provider's published `eligible_positions`, in both directions. The conservative intermediate
+rule — a reserve slot accepting only its current occupant — is gone, and with it the last reason a
+team could be refused for a move the operation was able to write all along.
 
 ## 8. Max games per position and churn
 
@@ -419,6 +418,32 @@ availability ladder — except that the reference _suppresses_ participation abo
 conserve games. That suppression is the one behaviour with no current equivalent, and it is a real
 product question, not a port: it means deliberately benching a player who is playing, to save his games
 for later. Recorded as a decision for whoever adds the sport.
+
+**Status: built as a design, not shipped (2026-10-27).** The owner asked for it now anyway, and this
+pass established how far the evidence goes. What is established:
+
+- `ranks` are published on the same roster read the plan already makes (`player_ranks` for all seven
+  types, string values), and `percent_owned` publishes `value` and `delta`. Both are read-only
+  verified on a hockey roster. That is the composite's second and third parts and the base.
+- The league declaration is published as `max_games_played` / `max_innings_pitched` in settings when a
+  league uses them; absent otherwise.
+- The team's per-position `played`/`max`/`projected` and its innings row exist only in the reference's
+  captured 2023 baseball fixture. A hockey team's `team/{key};out=games_played` returns no
+  `games_played` member at all, and no linked league declares a limit, so the fact cannot be observed
+  live in this account.
+- The composite's **positional-scarcity offset** is the part that cannot be built to the same standard.
+  The reference computes it from the provider's game-level top-players surface, allocated across the
+  league's slots by sport-specific add-cap tables, and caches the result per league in Firestore. That
+  allocation is transaction-valuation machinery this project has deliberately rejected, no captured
+  fixture contains the pool shape, and the metric is not comparable across positions without it
+  (§8a). Shipping the composite with the offset invented or omitted would be a quietly wrong value
+  basis in a league type no supported sport can reach.
+
+So the whole step stays unshipped rather than half-built. What it needs before it can be delivered:
+one supported sport or league that declares a games limit, the pool read's shape captured from that
+league, and an agreed definition of replacement level that does not import the transaction cap tables.
+The capacity half (§8b) and the participation suppression (§8c) are expressible in the existing
+objective and need no solver change; they wait on the same evidence.
 
 **Decision: deferred as a whole, because it is unreachable in our supported sports.** Yahoo's
 per-position games limit is a baseball and basketball setting; football plays one game per week and
@@ -463,8 +488,9 @@ where the test belongs.
     elsewhere; a player not eligible for a list is never assigned to it.
 13. **[integration]** A reserve player who will play and can fill a starting slot held by a player who
     will not play is started there, and the displaced player is retained in a legal slot.
-14. **[integration]** No plan produced for today's write contract moves a player into a reserve slot;
-    a team is never refused because such a move would have been best.
+14. **[integration]** A plan may move a player onto a reserve list they are published as eligible for,
+    and never onto one they are not; a team is never refused because a reserve move would have been
+    best.
 15. **[integration]** The plan places every roster member exactly once: nothing is dropped, nothing is
     invented.
 16. **[integration]** The same roster with participation hidden and participation supplied produces
@@ -562,6 +588,7 @@ automation after step 2 is verified against a live read, not before.**
 - **Tests:** 13 in full; a readback test that a reserve transit is rejected by the provider is _not_
   needed — the readback is the authority.
 - **Gate:** a live write, so owner authorisation, exactly like the earlier explicit-write acceptance.
+- **Done:** both transits accepted and read back on 2026-10-27; reserve eligibility restored.
 - **Behaviour:** the IR shuffle the owner described, in both directions.
 
 ### Step 7 — cadence from the league, not the sport
