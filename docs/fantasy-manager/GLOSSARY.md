@@ -15,7 +15,7 @@ A fantasy sports platform that hosts leagues and teams, such as Yahoo, ESPN, or 
 The identifier of the provider implementation a connection or team uses. The application resolves the implementation through the provider registry from this key; it never branches on a display name.
 
 **Provider capability**:
-A fact a provider declares about itself — its fantasy-day boundary, supported sports, player-search sorts, published value sources, statistic bases, and named limitations — that generic layers render and enforce instead of assuming one provider's behavior.
+A fact a provider declares about itself — its fantasy-day boundary, supported sports, player-search sorts and statistic periods, whether it publishes projections, and named limitations — that generic layers render and enforce instead of assuming one provider's behavior. How it constructs a score is not a declared capability.
 
 **League**:
 A provider-hosted fantasy competition with its own roster, scoring, and participation rules.
@@ -69,32 +69,25 @@ The portion of a roster whose players are retained but are not assigned to contr
 **Reserve list**:
 A restricted roster area whose players must meet the league's reserve eligibility rules, such as an injured reserve list.
 
-**Selection value**:
-The signed relative benefit assigned to starting a player for a particular period. It is a contribution estimate, not a health score, and availability never changes it. Values are comparable only within a consistent scoring basis; a negative value is worse than leaving a starting position empty when legally possible.
+**Final score**:
+The single signed number a provider publishes for one player for a target period, in that provider's own unit, which is the only value the lineup objective compares. A player without one is unscored rather than zero, and a provider that cannot score a league says so instead of publishing numbers. How the provider arrives at it — which measurement, which arithmetic, which period window — never crosses the provider seam.
+_Avoid_: Selection value when the seam is meant, projection, crowd points
 
-**Scoring basis**:
-One declared set of rules, statistic coverage, and period arithmetic that makes two selection values comparable, such as one league's points rules applied to one period basis. Values from different scoring bases are never combined.
-_Avoid_: Scoring model, formula, weighting
+**Scoring scheme**:
+A provider's own construction of final scores for one league, such as the league's points rules applied to realised statistics or a published crowd share, together with its period window and population. It is provider implementation detail; the generic layer only learns the winner's opaque label.
+_Avoid_: Value source, scoring model, lineup policy
 
-**Value source**:
-The published measurement a plan's selection values are taken from: provider-published projected points, announced league scoring rules applied to realised statistics, or the provider's community start rate. A provider may publish several; the policy prefers them in a declared order, and each plan's basis names the one it used.
-_Avoid_: Blended score, weighted input, provider-specific value type
-
-**Community start rate**:
-The share of the provider's leagues that started a player for a period, optionally published for a narrower population called a cut. It is an ordinal crowd signal — a popularity ordering — not an expected score, and it is never added to, multiplied by, or converted into points. A published zero means nobody started the player; a missing value is unknown.
-_Avoid_: Started percentage, ownership, start rate as a projection, crowd points
+**Score behind the plan (provenance)**:
+The opaque, provider-supplied label naming the scoring scheme that produced one plan, recorded on the run so a later reader can tell what happened. Nothing outside the provider parses it.
+_Avoid_: Scoring basis, basis string, policy version when the label is meant
 
 **Availability status**:
-A named, provider-reported fact about whether a player can appear in a period, such as healthy, out, day to day, injured reserve, suspended, not active, or no game. It never adjusts that player's selection value; it selects an availability tier.
+A named, provider-reported fact about whether a player can appear in a period, such as healthy, out, day to day, injured reserve, suspended, not active, or no game. It never adjusts that player's final score; it selects an availability tier.
 _Avoid_: Injury when it also covers byes, suspensions, and inactive players; availability condition when an ordering is meant
 
 **Availability tier**:
-One rung of an ordered ladder from most to least likely to appear — will play, might play, will not play — that the lineup objective ranks above selection value. The league policy names the ladder and decides which availability status selects which rung; the solver knows only the order.
+One rung of an ordered ladder from most to least likely to appear — will play, might play, will not play — that the lineup objective ranks above the final score. The provider selects the rung for each player from its own status facts; the generic layer declares only the order.
 _Avoid_: Health score, injury penalty, availability factor
-
-**Observation window**:
-The completed periods whose realised statistics are averaged into a player's selection value for a target period. The target period is never inside its own observation window.
-_Avoid_: History, lookback, sample
 
 ## Automation
 
@@ -119,9 +112,9 @@ An unresolved provider-access problem requiring the user to act, such as reconne
 **Uncertain lineup result**:
 A lineup attempt whose provider acceptance or resulting assignments cannot be established reliably. It is neither verified success nor proof that no change occurred.
 
-**Policy provenance**:
-The recorded implementation and selection policy, or the policy refusal that caused a fallback, for one lineup attempt. It lets a later reader tell what the attempt actually ran rather than what was requested.
-_Avoid_: Version when referring to the whole provenance
+**Plan provenance**:
+The recorded implementation and opaque provider label — or the provider's refusal and its explanation — for one lineup attempt. It lets a later reader tell what the attempt actually ran rather than what was requested.
+_Avoid_: Policy, basis, version when referring to the whole provenance
 
 **Structural refusal**:
 A planner refusal meaning the provider cannot value the league at all, so no later attempt could plan it either. The team falls back to the provider's own action and the reason is recorded.

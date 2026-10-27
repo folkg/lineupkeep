@@ -1,5 +1,11 @@
 # Provider registry, declared capabilities, and a provider-supplied planner
 
+> Partly superseded by [ADR 0009](0009-provider-score-ownership.md): the plan no longer crosses the
+> seam as assignments plus a scoring `basis`, capabilities no longer declare a community start rate or
+> statistic bases, and `@lineupkeep/lineup-policy` and `@lineupkeep/lineup-scoring` are now provider
+> scoring modules. The registry, provider key, declared-capability, and composition-root decisions
+> here still hold.
+
 ## Context
 
 [ADR 0001](0001-provider-neutral-product.md) made the product provider-neutral and kept Yahoo's

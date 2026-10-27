@@ -1,18 +1,23 @@
 # Lineup selection policy
 
-This is the opinionated layer that decides what a starting position is worth and when a player is
-worth occupying one at all. It is deliberately small, deliberately documented, and meant to be
-disagreed with: everything below is a decision, not a discovery. The arithmetic underneath it is
-exact; the choices are not.
+This document records two things that were once the same document and are now deliberately separate:
 
-Read [the glossary](GLOSSARY.md) for _selection value_, _availability tier_, _lineup optimization_,
+1. **The product's lineup objective** — how availability and score combine into one legal assignment.
+   This is generic: the generic planner builds the problem and `@lineupkeep/lineup-solver` solves it.
+2. **The Yahoo adapter's scoring policy** — how one provider turns its own published evidence into one
+   final score per player. This is provider implementation detail and lives in
+   `contexts/connections/internal/provider-scoring/`
+   ([ADR 0009](adr/0009-provider-score-ownership.md)).
+
+Everything below is a decision, not a discovery. The arithmetic underneath it is exact; the choices
+are not. Read [the glossary](GLOSSARY.md) for _final score_, _availability tier_, _lineup optimization_,
 and _native start-active action_, and [the research
 record](RESEARCH.md#live-yahoo-league-scoring-evidence-2026-10-26) for the provider evidence these
 decisions rest on.
 
 ## The objective
 
-**The solver maximises a lexicographic objective, not a single score.** In order:
+**The solver maximises a lexicographic objective over final scores, not a single score of its own.** In order:
 
 1. Every required starting position is filled. This is legality, not a preference.
 2. Starting positions are occupied by the most available tier of player, then by the next tier down.
@@ -32,13 +37,17 @@ player's value is counted there even though they will probably score nothing.
 That is a simplification whenever a league is not actually scored by points. A head-to-head category
 league is won by taking more categories than an opponent, not by accumulating a scalar; a rotisserie
 league is won by relative standing across categories. Both reward a _portfolio_ of stats rather than a
-total, and no per-player scalar reproduces either. So this policy never invents a scalar for a league
-whose format it does not model. It picks a value source the provider actually publishes, states which
-one it used in the basis string, and refuses when there is none.
+total, and no per-player scalar reproduces either. So the provisioner of scores never invents a scalar
+for a league whose format it does not model. The generic layer has no opinion about where a score came
+from: it receives one score per player, or the provider's refusal, and records the provider's opaque
+label for the scheme it used.
 
-## The value source ladder
+## The provider's scoring schemes
 
-Every league gets exactly one value source, chosen in this order:
+Everything in this section is internal to the Yahoo adapter. Another provider constructs scores its
+own way and this document does not bind it.
+
+Every league gets exactly one scoring scheme, chosen in this order:
 
 1. **Projected points** the provider publishes for that player and period. This is the primary the
    owner asked for. It is also the one Yahoo does not publish: an exhaustive probe of the player
@@ -50,13 +59,16 @@ Every league gets exactly one value source, chosen in this order:
 3. **Percent started**, the provider's published started percentage for the period. This is the
    owner's "crowdsourcing the decision": the share of leagues that started this player.
 
-A league uses one rung. The policy input carries exactly one source, and the basis string it derives
-names the source, so a problem cannot contain two measurement kinds and a value from one basis cannot
-be compared with a value from another. There is no fallback per player: a league on rung 2 does not
-value one player by rung 3, and a league on rung 3 does not mix in points.
+A league uses one rung. The adapter evaluates one scheme at a time, so a plan cannot contain two
+measurement kinds and a score from one scheme cannot be compared with a score from another. There is no
+fallback per player: a league on rung 2 does not score one player by rung 3, and a league on rung 3 does
+not mix in points.
 
-When no rung is available the policy refuses with `no-value-source`, and the worker keeps the
-provider's own start-active action for that team. Refusing is the deliberate answer, not a gap.
+When no rung yields scores the adapter returns a structural refusal with a label naming the reason, and
+the worker keeps the provider's own start-active action for that team. Refusing is the deliberate
+answer, not a gap. When a rung yields scores but the roster cannot be legally placed, the generic
+planner refuses transiently and the attempt blocks; it does not silently switch schemes, because the
+ladder's order is a judgement about evidence quality, not about roster shape.
 
 That refusal is **structural**: it says the provider cannot value this league, with these settings, at
 all, so no later attempt would find a rung either. Every other refusal is **transient** — it names a
@@ -71,7 +83,9 @@ The line between the two is deliberately narrow. A structural claim is about the
 provider's declarations, never about one read: absent published values are indistinguishable from
 values the provider does not publish, so an empty or unreadable read is transient and blocks rather
 than falling back. The observed condition in this account — Yahoo publishes started percentages for
-roster players in all five leagues — is why all five teams plan custom.
+roster players in all five leagues — is why all five teams plan custom. The generic planner's refusals
+(no legal assignment, an unscored player who cannot be parked, a roster that exceeds its slots) are
+always transient: they describe this roster now, not the league.
 
 ### Rung 1: projected points
 
@@ -85,7 +99,7 @@ only candidate for a required starting slot.
 
 ### Rung 2: league scoring rules
 
-One league, one target period, one window, one basis string. For a target week, the window is the
+One league, one target period, one window, one scoring scheme. For a target week, the window is the
 last four completed weeks. For a target date, it is the last four completed dates, once the adapter
 reads dated history.
 
@@ -117,7 +131,7 @@ Percent started is the share of Yahoo leagues that started a player for the targ
   wrong, inattentive, or starting the player for a category this league does not score.
 - It says nothing about the opponent, the scoreline, or whether a goaltender will actually get the
   start.
-- Its unit is a percentage of leagues. The plan's total selection value for this basis is therefore
+- Its unit is a percentage of leagues. The plan's total selection value for this scheme is therefore
   the sum of starting percentages in hundredths of a percent — the objective's value term, not a
   score.
 
@@ -142,14 +156,14 @@ evidence that the cut is populated.
 
 The policy therefore prefers the diamond cut only when at least one roster player's cut percentage is
 above zero, and otherwise uses the overall percentage. Both are the same source (percent started) and
-the same basis kind; the basis string names the population it used (`overall` or `cut-diamond`). The
+the same scheme; the recorded label names the population it used (`overall` or `cut-diamond`). The
 cost of the rule: if a diamond cohort genuinely exists but every rostered player has zero of it, the
 policy uses the overall percentage and loses the narrower signal. The alternative — trusting an
 all-zero cut — would rank the whole roster at zero and plan a lineup on noise.
 
 ## Which leagues are scoreable today
 
-| Sport    | Leagues available        | Points rules | Started percentage | Value source    |
+| Sport    | Leagues available        | Points rules | Started percentage | Scoring scheme  |
 | -------- | ------------------------ | ------------ | ------------------ | --------------- |
 | Football | 1 points league          | 33 modifiers | published          | league rules    |
 | Hockey   | 3 category, 1 rotisserie | none         | published          | percent started |
@@ -161,9 +175,10 @@ All four plan. One roster in the account holds an injured-reserve goaltender wit
 percentage; that player is parked on the reserve list and the league's fifteen starting slots are
 filled from the players the crowd does start.
 
-The basis string no longer carries a provider prefix: it names the measurement, which is what
-comparability depends on. Rows recorded in earlier write verifications show the previous
-`yahoo:mean-points-per-period:...` form.
+Each plan records the provider's opaque label for the scheme that produced it, prefixed with the
+provider key, for example `yahoo/community-start-rate:overall:date:2026-10-27`. Rows written before
+this correction keep the label recorded at the time, migrated verbatim from the old `basis` field;
+older verification records show the earlier `yahoo:mean-points-per-period:...` form.
 
 **Availability never enters this arithmetic.** The same player is worth the same number whether they
 are healthy, doubtful, or out. Nothing is halved for day to day, nothing is zeroed for out, and no
@@ -325,7 +340,7 @@ The provider published a started percentage for all 21 roster players (4 %–88 
 `coverage_type: date`). The diamond cut was published too and was `0` for every player, so the policy
 used the overall percentage:
 
-- basis `percent-started:overall:date:2026-10-26`
+- recorded label `percent-started:overall:date:2026-10-26`
 - value term 758.00 — the sum of the twelve starting started percentages, in hundredths of a percent
 - six slot changes, twelve of twelve required starting slots filled
 
@@ -358,7 +373,7 @@ the two goalies the crowd starts most.
 
 1. **One source, in its own unit.** A league is valued by points or by a started percentage, never by
    both and never by a converted mixture. A category league valued by the crowd is not priced in
-   categories, and it is not pretending to be: the basis string says what the number is.
+   categories, and it is not pretending to be: the recorded label says what the number is.
 2. **Rung two before rung three.** A league that publishes points rules uses them even though the
    crowd signal is also available. Points are what the league scores; the crowd is a proxy. The cost
    is that football never benefits from the crowd signal, even when the crowd disagrees with the
@@ -400,9 +415,9 @@ the two goalies the crowd starts most.
     skipped periods. The cost is that a productive player whose statistics the provider omitted can
     be benched without a refusal. The started-percentage basis does not do this: there, absent stays
     absent and the player is parked without a price.
-13. **The reported total is availability-blind, and in the basis's own unit.** It sums the starting
-    values and is the objective's value term, so it is not an expected score. Under the points basis
-    it is centi-points; under the started basis it is hundredths of a percent. It does not shrink when
+13. **The reported total is availability-blind, and in the scheme's own unit.** It sums the starting
+    values and is the objective's value term, so it is not an expected score. Under the points scheme
+    it is centi-points; under the started scheme it is hundredths of a percent. It does not shrink when
     an injured player is only filling a vacant position.
 14. **Starting positions are required.** Conservative against an unverified rule, at the cost of
     starting a negative player when every candidate is negative.
@@ -410,15 +425,22 @@ the two goalies the crowd starts most.
     become a rate and the policy does not invent a denominator.
 16. **Bench capacity is a hard maximum.** Unverified against the provider, but it cannot invent space.
 
-## What this policy does not do
+## What the generic planner does not do
 
-- It does not read a provider, validate a session, or refresh period coverage.
-- It does not write a lineup. It produces a plan; the provider adapter translates the changed
-  assignments into the provider's request and verifies the readback.
+- It does not read a provider, validate a session, choose a scoring scheme, or refresh period coverage.
+- It does not write a lineup. It produces the assignment; the provider adapter sends the changed
+  assignments as its request, and the worker verifies the readback.
+- It does not know a period, a sport, or an availability status code. It receives scores and tiers.
+- It does not mix score sets: one provider plan supplies one score per player, and a player without
+  one is unscored rather than zero.
+
+## What the Yahoo scoring scheme does not do
+
+- It does not read a provider endpoint by itself; the adapter supplies the observations and shares.
 - It does not consider opponents, matchups, remaining games, weather, probable starters, or whether a
   goaltender is confirmed to start. The provider does publish a real-world `starting_status` for a
   goaltender whose team plays that day, and a has-a-game `opponent` for every player; neither is read
-  by this adapter yet, and neither is a value basis — they are availability facts.
+  yet, and neither is scoring evidence — they are availability facts.
 - It does not use ranks or ownership, and it will not mix a weekly total with a season total in one
   value.
 - It does not optimise category outcomes, rotisserie standing, or playoff leverage. A started

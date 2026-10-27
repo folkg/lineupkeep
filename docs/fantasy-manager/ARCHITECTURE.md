@@ -38,17 +38,17 @@ Follow the starter's placement, Schema/Effect errors, Layers, row codecs, reposi
 
 Internal roles:
 
-| Module            | Interface responsibility                                                                                      | What stays hidden                                      |
-| ----------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Connections       | Start/finish linking, list safe metadata, reconnect/disconnect                                                | Cookie formats, secret versions, account fingerprints  |
-| Fantasy queries   | Discover teams/leagues, read selected roster/player/stat/matchup/history data                                 | Provider endpoints, nested parsing, hydration strategy |
-| Team automation   | Enable, disable, pause through fantasy-day end                                                                | Persistence and expiry mechanics                       |
-| Lineup runs       | Request, inspect, execute/reconcile a run                                                                     | Queue, leases, provider writes, retry mechanics        |
-| Provider adapter  | Interpret provider facts/rules, declare capabilities, plan a lineup, and perform bounded supported operations | Yahoo keys, T/Y, crumb, XML, web-link parameters       |
-| Selection policy  | Prepare comparable signed values and participation-aware decisions                                            | Diamond data and provider/sport-specific formulas      |
-| Assignment solver | Return the best legal complete assignment or infeasibility                                                    | No network, clock, Yahoo, sport, or player-name logic  |
+| Module            | Interface responsibility                                                                                                                               | What stays hidden                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Connections       | Start/finish linking, list safe metadata, reconnect/disconnect                                                                                         | Cookie formats, secret versions, account fingerprints                |
+| Fantasy queries   | Discover teams/leagues, read selected roster/player/stat/matchup/history data                                                                          | Provider endpoints, nested parsing, hydration strategy               |
+| Team automation   | Enable, disable, pause through fantasy-day end                                                                                                         | Persistence and expiry mechanics                                     |
+| Lineup runs       | Request, inspect, execute/reconcile a run                                                                                                              | Queue, leases, provider writes, retry mechanics                      |
+| Provider adapter  | Interpret provider facts/rules, declare capabilities, publish a final score per player and opaque provenance, and perform bounded supported operations | Yahoo keys, T/Y, crumb, XML, web-link parameters, scoring arithmetic |
+| Lineup planning   | Turn a provider's scores and declarations into the solver's neutral problem                                                                            | No period, sport, provider, or scoring-rule knowledge                |
+| Assignment solver | Return the best legal complete assignment or infeasibility                                                                                             | No network, clock, provider, sport, or player-name logic             |
 
-This is a responsibility map, not a mandate for one file or class per row. Keep small related functions together. A production Yahoo adapter and deliberately different synthetic test adapter justify the provider seam; no runtime plugin-loading system, speculative ESPN adapter, or arbitrary request language. Providers do declare capability facts (fantasy day, supported sports, search sorts, published value sources, statistic bases, and named limitations) because generic layers must render and enforce them without branching on a provider name.
+This is a responsibility map, not a mandate for one file or class per row. Keep small related functions together. A production Yahoo adapter and deliberately different synthetic test adapter justify the provider seam; no runtime plugin-loading system, speculative ESPN adapter, or arbitrary request language. Providers do declare capability facts (fantasy day, supported sports, search sorts, statistic periods, whether they publish projections, and named limitations) because generic layers must render and enforce them without branching on a provider name. They do not declare how they construct a score: a provider publishes one final score per player and an opaque provenance label, and its scoring modules stay inside the adapter ([ADR 0009](adr/0009-provider-score-ownership.md)).
 
 ## 3. Domain data: three shapes, not one giant player object
 

@@ -15,6 +15,11 @@ slot changes and never added, dropped, or traded a player.
 
 ## Live value-source resolution
 
+> This record is a historical account. The scoring scheme and the plan label it describes were later
+> moved inside the provider, and each run now records an opaque provider label instead of a `basis`
+> string ([ADR 0009](fantasy-manager/adr/0009-provider-score-ownership.md)). The live behaviour it
+> records is unchanged.
+
 Read-only, against the owner's linked account on 2026-10-27, through the committed `YahooProvider`
 and policy. One rung per league, in the ladder's order:
 

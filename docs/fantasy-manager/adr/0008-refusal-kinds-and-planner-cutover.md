@@ -37,7 +37,7 @@ example no value source on the ladder, or a declared capability that rules the l
 whose published values are missing is transient: blocking is honest, silently switching to a different
 action is not.
 
-The code-to-kind table lives with the codes in `@lineupkeep/lineup-policy`:
+The code-to-kind table lives with the codes inside the provider's scoring modules:
 
 | Code                                           | Kind       | Why                                                                |
 | ---------------------------------------------- | ---------- | ------------------------------------------------------------------ |
