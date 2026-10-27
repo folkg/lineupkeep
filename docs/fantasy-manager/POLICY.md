@@ -58,6 +58,21 @@ value one player by rung 3, and a league on rung 3 does not mix in points.
 When no rung is available the policy refuses with `no-value-source`, and the worker keeps the
 provider's own start-active action for that team. Refusing is the deliberate answer, not a gap.
 
+That refusal is **structural**: it says the provider cannot value this league, with these settings, at
+all, so no later attempt would find a rung either. Every other refusal is **transient** — it names a
+fact that could change: the observation window has no completed period yet, the provider's published
+values are missing for the roster right now, a locked player blocks a move, the roster admits no legal
+plan, or the plan would move a player through a reserve list this operation does not write. A
+transient refusal **blocks** the attempt with its named reason instead of quietly running the native
+action; the next scheduled tick is the retry, and a person can act on the roster, lock, period, or
+provider problem. The split is [ADR 0008](adr/0008-refusal-kinds-and-planner-cutover.md).
+
+The line between the two is deliberately narrow. A structural claim is about the league and the
+provider's declarations, never about one read: absent published values are indistinguishable from
+values the provider does not publish, so an empty or unreadable read is transient and blocks rather
+than falling back. The observed condition in this account — Yahoo publishes started percentages for
+roster players in all five leagues — is why all five teams plan custom.
+
 ### Rung 1: projected points
 
 A projection is used only as the provider publishes it, for the target period. Its unit is points at

@@ -146,6 +146,19 @@ schema. Restoring data or protected state is a separate, tested procedure; state
 restore does not roll back code. Record the previous revisions and image digest
 before a risky change.
 
+Phase 2 lineup implementation rollback is narrower than a revision move. The
+worker treats `activeLineupImplementation` (`packages/backend/src/contexts/connections/LineupRun.ts`)
+as the deployment's active implementation: fresh runs are stamped with it, and a
+claimed run that has written nothing is re-stamped to it before it plans. Setting
+it back to `provider_native` and deploying changes future execution only.
+Rollback does not restore historical assignments — a lineup the custom policy
+already wrote stays as the provider has it. A run with a write in flight resumes
+readback and reconciliation against its own recorded plan, never a re-plan. A
+wholesale revision rollback to a build that predates the custom planner cannot
+re-stamp runs already queued as `custom_policy`; drain those runs, or expect them
+to run on the older build's dispatch path. See
+[ADR 0008](fantasy-manager/adr/0008-refusal-kinds-and-planner-cutover.md).
+
 ### Deployed smoke results (2026-10-25)
 
 - `GET /` returned `200 text/html` (12,497 bytes, 0.28 s) with the Lineupkeep title.

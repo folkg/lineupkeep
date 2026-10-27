@@ -123,6 +123,17 @@ A lineup attempt whose provider acceptance or resulting assignments cannot be es
 The recorded implementation and selection policy, or the policy refusal that caused a fallback, for one lineup attempt. It lets a later reader tell what the attempt actually ran rather than what was requested.
 _Avoid_: Version when referring to the whole provenance
 
+**Structural refusal**:
+A planner refusal meaning the provider cannot value the league at all, so no later attempt could plan it either. The team falls back to the provider's own action and the reason is recorded.
+_Avoid_: Fallback when referring to the refusal itself
+
+**Transient refusal**:
+A planner refusal meaning the league can be valued but not from the facts available now, such as incomplete history, an unopened period, unreadable data, or a roster that admits no legal plan. The attempt blocks with a named reason and the next scheduled tick retries.
+_Avoid_: Error, temporary failure
+
+**Active lineup implementation**:
+The implementation a deployment stamps on fresh lineup runs. Changing it changes future execution only; it cannot restore assignments an earlier implementation already wrote.
+
 ## Feedback
 
 **Feedback report**:
