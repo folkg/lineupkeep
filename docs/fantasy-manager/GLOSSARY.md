@@ -11,6 +11,12 @@ _Avoid_: Provider account when referring to application identity
 **Provider**:
 A fantasy sports platform that hosts leagues and teams, such as Yahoo, ESPN, or Fantrax.
 
+**Provider key**:
+The identifier of the provider implementation a connection or team uses. The application resolves the implementation through the provider registry from this key; it never branches on a display name.
+
+**Provider capability**:
+A fact a provider declares about itself — its fantasy-day boundary, supported sports, player-search sorts, published value sources, statistic bases, and named limitations — that generic layers render and enforce instead of assuming one provider's behavior.
+
 **League**:
 A provider-hosted fantasy competition with its own roster, scoring, and participation rules.
 
@@ -71,12 +77,12 @@ One declared set of rules, statistic coverage, and period arithmetic that makes 
 _Avoid_: Scoring model, formula, weighting
 
 **Value source**:
-The one published measurement a league's selection values are taken from: provider-published projected points, announced league scoring rules applied to realised statistics, or the provider's started percentage. A league uses exactly one, and the basis names it.
-_Avoid_: Fallback chain, blended score, weighted input
+The published measurement a plan's selection values are taken from: provider-published projected points, announced league scoring rules applied to realised statistics, or the provider's community start rate. A provider may publish several; the policy prefers them in a declared order, and each plan's basis names the one it used.
+_Avoid_: Blended score, weighted input, provider-specific value type
 
-**Started percentage**:
+**Community start rate**:
 The share of the provider's leagues that started a player for a period, optionally published for a narrower population called a cut. It is an ordinal crowd signal — a popularity ordering — not an expected score, and it is never added to, multiplied by, or converted into points. A published zero means nobody started the player; a missing value is unknown.
-_Avoid_: Ownership, start rate as a projection, crowd points
+_Avoid_: Started percentage, ownership, start rate as a projection, crowd points
 
 **Availability status**:
 A named, provider-reported fact about whether a player can appear in a period, such as healthy, out, day to day, injured reserve, suspended, not active, or no game. It never adjusts that player's selection value; it selects an availability tier.

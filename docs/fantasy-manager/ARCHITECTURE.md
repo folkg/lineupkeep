@@ -38,17 +38,17 @@ Follow the starter's placement, Schema/Effect errors, Layers, row codecs, reposi
 
 Internal roles:
 
-| Module            | Interface responsibility                                                      | What stays hidden                                      |
-| ----------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Connections       | Start/finish linking, list safe metadata, reconnect/disconnect                | Cookie formats, secret versions, account fingerprints  |
-| Fantasy queries   | Discover teams/leagues, read selected roster/player/stat/matchup/history data | Provider endpoints, nested parsing, hydration strategy |
-| Team automation   | Enable, disable, pause through fantasy-day end                                | Persistence and expiry mechanics                       |
-| Lineup runs       | Request, inspect, execute/reconcile a run                                     | Queue, leases, provider writes, retry mechanics        |
-| Provider adapter  | Interpret provider facts/rules and perform bounded supported operations       | Yahoo keys, T/Y, crumb, XML, web-link parameters       |
-| Selection policy  | Prepare comparable signed values and participation-aware decisions            | Diamond data and provider/sport-specific formulas      |
-| Assignment solver | Return the best legal complete assignment or infeasibility                    | No network, clock, Yahoo, sport, or player-name logic  |
+| Module            | Interface responsibility                                                                                      | What stays hidden                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Connections       | Start/finish linking, list safe metadata, reconnect/disconnect                                                | Cookie formats, secret versions, account fingerprints  |
+| Fantasy queries   | Discover teams/leagues, read selected roster/player/stat/matchup/history data                                 | Provider endpoints, nested parsing, hydration strategy |
+| Team automation   | Enable, disable, pause through fantasy-day end                                                                | Persistence and expiry mechanics                       |
+| Lineup runs       | Request, inspect, execute/reconcile a run                                                                     | Queue, leases, provider writes, retry mechanics        |
+| Provider adapter  | Interpret provider facts/rules, declare capabilities, plan a lineup, and perform bounded supported operations | Yahoo keys, T/Y, crumb, XML, web-link parameters       |
+| Selection policy  | Prepare comparable signed values and participation-aware decisions                                            | Diamond data and provider/sport-specific formulas      |
+| Assignment solver | Return the best legal complete assignment or infeasibility                                                    | No network, clock, Yahoo, sport, or player-name logic  |
 
-This is a responsibility map, not a mandate for one file or class per row. Keep small related functions together. A production Yahoo adapter and deliberately different synthetic test adapter justify the provider seam; no runtime plugin-loading system, speculative ESPN adapter, generic capability catalog, or arbitrary request language.
+This is a responsibility map, not a mandate for one file or class per row. Keep small related functions together. A production Yahoo adapter and deliberately different synthetic test adapter justify the provider seam; no runtime plugin-loading system, speculative ESPN adapter, or arbitrary request language. Providers do declare capability facts (fantasy day, supported sports, search sorts, published value sources, statistic bases, and named limitations) because generic layers must render and enforce them without branching on a provider name.
 
 ## 3. Domain data: three shapes, not one giant player object
 
@@ -76,23 +76,25 @@ Preserve every roster member. An empty starter is allowed; dropping a player or 
 
 ## 4. Provider and policy resolution
 
-Resolve the owner and connection from stored team identity, then its provider implementation. Select policy using sport, league format/rules, target period, and available evidence—not provider name alone.
+Resolve the owner and connection from stored team identity, then its provider implementation from an injected registry keyed by provider key ([ADR 0007](adr/0007-provider-registry-and-planner-capability.md)). `runtime/ApplicationLayer.ts` is the only module that imports an adapter; a dependency-cruiser rule rejects any other import of a provider directory. Select policy using sport, league format/rules, target period, and available evidence—not provider name alone. The [provider boundary audit](PROVIDER-BOUNDARY-AUDIT.md) records every provider-specific fact that was found and where it now lives.
 
 Yahoo is the only initial live adapter, for NFL/NHL. Different providers may batch differently and define different periods/day boundaries. The generic operation remains the same; no public methods for Yahoo entitlement checks or diamond cohorts.
 
 Phase 1 `set_lineup` invoked native start-active. Phase 2 now requests `custom_policy` for scheduled and manual generic runs and falls back to native start-active when the policy refuses the league or the plan cannot be expressed as explicit assignments. Report `provider_native` versus `custom_policy` behavior and relevant policy version in safe results. A native invocation is not a projection-optimal guarantee and does not enforce the custom optimizer's signed-value objective.
 
+Planning is a provider capability: `provider.planLineup` receives neutral facts and returns a plan of explicit assignments or a named refusal with `action: "native"` or `action: "block"`. The generic worker owns the durable run machine, per-team serialization, observation, write intents, sending and readback, reconciliation, outcomes, retries, and the native fallback. It knows no value sources, scoring periods, sports, or provider vocabulary.
+
 Queued requests express intent, not a permanently selected algorithm. Resolve the active implementation when claiming fresh work; persist the selected version for that attempt. Do not reinterpret an already-sent native write after a deployment. Never overlap a replacement optimizer write with an unresolved prior write. The run records the requested implementation and its version; each attempt's write intent stores the plan that actually ran, including whether it used the provider-native action or explicit assignments and the policy provenance or refusal.
 
 ### Selection values
 
-- Prefer comparable projected points when usable; otherwise Yahoo's private policy uses diamond-manager started evidence.
+- The value source is a fallback ladder: comparable projected points when the provider publishes usable projections, otherwise scoring-rule observations, otherwise the provider's published community start rate, otherwise a named refusal with a remedy. A provider contributes only the candidates it can support.
 - Never compare raw projected points with raw percentages. Use one consistent basis for the relevant decision.
 - Zero is valid; missing is not zero. Do not synthesize an overall-ownership fallback or a positive sentinel without an explicit policy decision.
-- If evidence is incomplete, use the agreed fallback consistently. Where no comparison is possible, preserve affected assignments and report incomplete evidence; do not claim a globally optimal full-team result.
+- If evidence is incomplete, use the agreed fallback consistently. Where no comparison is possible, preserve affected assignments and report incomplete evidence; do not claim a globally optimal full-team result. An unselectable value source is a refusal, never an Effect defect.
 - Avoid double injury penalties when source projections already include participation assumptions.
 - Participation preference is soft, not an unconditional confirmed-starter tier. An unconfirmed player can beat empty; a negative-valued player should remain benched when legal.
-- Category leagues initially use a scalar heuristic, not category-win optimization. No user-facing scoring controls.
+- Category leagues initially use a scalar heuristic, not category-win optimization. No user-facing scoring controls. League format arrives as a provider-declared fact, so rotisserie and points-only leagues do not need a new branch in generic code.
 - Future baseball policy must distinguish starters, relievers, dual eligibility, relief appearances, and unconfirmed starts. Do not assume 'not today's announced starter' means a pitcher cannot contribute. MLB remains deferred.
 
 The exact opinionated formulas require worked sport-policy examples and tests before implementation. They are not inherited from the old app's multipliers. Meaningful free NHL scoring evidence remains an explicit Phase 2 gate: earlier probes did not establish useful diamond values or equivalent NHL projections. Do not hide this by treating all sampled zeros as proven useful data.
