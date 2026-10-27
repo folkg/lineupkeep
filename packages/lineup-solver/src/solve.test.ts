@@ -632,11 +632,11 @@ describe("lineup refusals", () => {
     }
   });
 
-  it("refuses an unusable selection value that could reach a starting position", () => {
+  it("refuses an unusable selection value that has no bench or reserve slot", () => {
     const refusal = refusalFrom(
       solveLineup(
         lineupProblem(
-          [startingSlot("FLEX", 1, "optional", ["RB"]), benchSlot("BN", 1)],
+          [startingSlot("FLEX", 1, "optional", ["RB"])],
           [
             player("missing", 0, {
               positions: ["RB"],
@@ -651,6 +651,23 @@ describe("lineup refusals", () => {
       reason: "unusable-selection-value",
       playerIds: [playerId("missing")],
     });
+  });
+
+  it("benches an unusable selection value that can start", () => {
+    const problem = lineupProblem(
+      [startingSlot("FLEX", 1, "optional", ["RB"]), benchSlot("BN", 1)],
+      [
+        player("starter", 1, { positions: ["RB"] }),
+        player("missing", 0, {
+          positions: ["RB"],
+          selection: unusableSelection(basis, "missing"),
+        }),
+      ],
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.assignments).toEqual([assignment("missing", "BN"), assignment("starter", "FLEX")]);
   });
 
   it("allows an unusable selection value for a player who cannot legally start", () => {

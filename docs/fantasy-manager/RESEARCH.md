@@ -628,19 +628,19 @@ read only what the resolved source needs — four completed weeks of statistics 
 publishes points rules, the target-period player detail read for a league that does not — and the
 committed policy planned the lineup from that one source.
 
-| League          | Format     | Modifiers | Source resolved | Basis                                                | Plan                                |
-| --------------- | ---------- | --------: | --------------- | ---------------------------------------------------- | ----------------------------------- |
-| football-1 (15) | head       |        33 | scoring rules   | `mean-points-per-period:week:3,week:4,week:5,week:6` | planned, 9/9 slots, 0 changes       |
-| hockey-1 (21)   | head       |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 12/12 slots, 6 changes     |
-| hockey-2 (19)   | head       |         0 | started percent | —                                                    | refused, `unusable-selection-value` |
-| hockey-3 (22)   | rotisserie |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 15/15 slots, 5 changes     |
-| hockey-4 (21)   | head       |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 15/15 slots, 2 changes     |
+| League          | Format     | Modifiers | Source resolved | Basis                                                | Plan                            |
+| --------------- | ---------- | --------: | --------------- | ---------------------------------------------------- | ------------------------------- |
+| football-1 (15) | head       |        33 | scoring rules   | `mean-points-per-period:week:3,week:4,week:5,week:6` | planned, 9/9 slots, 0 changes   |
+| hockey-1 (21)   | head       |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 12/12 slots, 6 changes |
+| hockey-2 (19)   | head       |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 15/15 slots, 3 changes |
+| hockey-3 (22)   | rotisserie |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 15/15 slots, 5 changes |
+| hockey-4 (21)   | head       |         0 | started percent | `percent-started:overall:date:2026-10-26`            | planned, 15/15 slots, 2 changes |
 
 The football plan is the roster the provider had already locked; it reports the same total the
 recorded worked example does. Every hockey league resolved to the overall started percentage because
-the diamond cut was `0` for every roster player again. The refused league is the one whose roster
-holds the injured-reserve goaltender with no published started percentage: the refusal names that
-player and the team keeps the native action.
+the diamond cut was `0` for every roster player again. The 19-player league is the one whose roster
+holds the injured-reserve goaltender with no published started percentage: that player has no value
+and is parked on the reserve list, so the other eighteen players price the plan.
 
 For the 21-player category league the plan's six changes were: two centre slots swapping a bench
 centre ahead of a starter, one left winger moving into a right wing slot ahead of a less-started

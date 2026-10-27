@@ -456,7 +456,7 @@ describe("value sources", () => {
     });
   });
 
-  it("refuses to plan when a player has no started percentage", () => {
+  it("refuses to plan when the only candidate for a required slot has no started percentage", () => {
     const result = buildLineupProblem(
       inputFor({
         source: startedSource([{ id: "p1", percent: undefined, cuts: [] }]),
@@ -473,6 +473,34 @@ describe("value sources", () => {
       kind: "refusal",
       refusal: { reason: "unusable-selection-value", playerIds: [makePlayerId("p1")] },
     });
+  });
+
+  it("benches a player with no started percentage when a bench slot can hold them", () => {
+    const result = buildLineupProblem(
+      inputFor({
+        source: startedSource([
+          { id: "valued", percent: 61, cuts: [] },
+          { id: "unpublished", percent: undefined, cuts: [] },
+        ]),
+        players: [
+          { id: "valued", slot: "QB", positions: ["QB"] },
+          { id: "unpublished", slot: "BN", positions: ["QB"] },
+        ],
+      }),
+    );
+
+    expect(valuationFrom(result, "unpublished").selection).toEqual({
+      kind: "unusable",
+      basis: "percent-started:overall:week:7",
+      reason: "missing",
+    });
+    const plan = planFrom(solveLineup(problemFrom(result)));
+
+    expect(plan.totalSelectionValue).toBe(6100);
+    expect(plan.assignments).toEqual([
+      { playerId: makePlayerId("unpublished"), slotId: makeSlotId("BN") },
+      { playerId: makePlayerId("valued"), slotId: makeSlotId("QB") },
+    ]);
   });
 
   it("starts a healthy player with a lower started percentage ahead of an excluded one", () => {

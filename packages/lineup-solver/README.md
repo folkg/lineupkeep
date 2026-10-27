@@ -146,9 +146,9 @@ come back as a game-time decision.
 
 ### Unusable selection values
 
-An unusable value is never treated as zero and never treated as a positive or negative number. If a player with an unusable value could legally occupy any starting position, `solveLineup` refuses with `unusable-selection-value` and names the players. The policy layer must resolve the value or make an explicit fallback decision before solving.
+An unusable value is never treated as zero and never treated as a positive or negative number. A player who has one is never assigned to a starting slot; the solver benches them, or parks them in a reserve slot, and the plan is returned.
 
-If the player cannot legally start — for example, the player is locked to the bench or is only bench-eligible — their unusable value cannot affect the objective. Their assignment is still exact and the plan is returned.
+`solveLineup` refuses with `unusable-selection-value` when benching is not a resolution: the player has no legal bench or reserve slot, or they are the only player who could occupy a required starting slot. The refusal names those players so the policy layer can resolve the value or make an explicit fallback decision.
 
 ### Tie-breaks
 
@@ -237,7 +237,7 @@ A refusal is a value with a specific subject, not a thrown string.
 
 | Reason                                  | Meaning                                                                                                                    |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `unusable-selection-value`              | One or more players have no usable selection value and could legally start.                                                |
+| `unusable-selection-value`              | One or more players have no usable selection value and cannot be benched away from a starting slot.                        |
 | `lock-references-unknown-slot`          | A player is locked to a slot that is not in the problem.                                                                   |
 | `locked-player-ineligible-for-slot`     | A locked player's position or reserve eligibility excludes the locked slot.                                                |
 | `lock-capacity-exceeded`                | More players are locked to a slot than its capacity.                                                                       |

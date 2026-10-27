@@ -64,7 +64,9 @@ A projection is used only as the provider publishes it, for the target period. I
 the provider's own scale. A realised total published alongside it is recorded as context and is
 **never summed** with it: a forward-looking decision takes the projection, and the realised total
 stays evidence. A player the provider publishes no projection for is `unusable` with reason
-`missing`, so the solver refuses rather than treating a missing projection as zero.
+`missing`: the solver never treats a missing projection as zero and never starts that player. It
+benches them while it can, and refuses only when the player has no bench or reserve slot or is the
+only candidate for a required starting slot.
 
 ### Rung 2: league scoring rules
 
@@ -108,8 +110,11 @@ Two facts about the published value shape matter:
 
 - **A zero is a real value**, meaning no crowd league started the player. It is not missing.
 - **A missing started percentage is unknown, not zero.** It appears as an absent fragment inside a
-  present node. A player without one is `unusable` with reason `missing`, so the solver refuses and
-  the refusal names them. The observed absence in this account is an injured-reserve goaltender.
+  present node. A player without one is `unusable` with reason `missing`: never zero, never the
+  average, never a copy of a teammate's value. The plan parks them on the bench or in a reserve slot
+  and starts eleven or twelve valued players; it refuses only when that player cannot be parked or is
+  the only candidate for a required starting slot. The observed absence in this account is an
+  injured-reserve goaltender, which the plan parks.
 
 #### The cut, and why the overall percentage wins here
 
@@ -137,8 +142,9 @@ all-zero cut — would rank the whole roster at zero and plan a lineup on noise.
 Every hockey league in the linked account publishes categories with no `stat_modifiers` at all, which
 is what a category or rotisserie league looks like in the provider's own settings. Their realised
 statistics are dense but there is no league rule that turns them into points, so they take rung 3.
-One of the four currently refuses because a single roster player — an injured-reserve goaltender who
-is eligible for a starting position — has no published started percentage.
+All four plan. One roster in the account holds an injured-reserve goaltender with no published started
+percentage; that player is parked on the reserve list and the league's fifteen starting slots are
+filled from the players the crowd does start.
 
 The basis string no longer carries a provider prefix: it names the measurement, which is what
 comparability depends on. Rows recorded in earlier write verifications show the previous
@@ -327,9 +333,11 @@ Where it is not obviously right:
   is not a rotisserie strategy: Roto is won on season-relative standing, so churn driven by today's
   starts can move against the standing.
 
-The other three hockey leagues resolve the same way. One of them refuses, and the refusal is the
-honest outcome: one roster player is an injured-reserve goaltender with no published started
-percentage, and the solver will not invent a value for them.
+The other three hockey leagues resolve the same way: 822.00, 927.00, and 988.00, with five, three,
+and two changes, and every required starting slot filled. The 19-player league whose value is 927.00
+is the one holding the injured-reserve goaltender from the previous section. No value is invented for
+them: the plan parked them on the reserve list, where they cannot reach a starting slot, and started
+the two goalies the crowd starts most.
 
 ## Tradeoffs you can disagree with
 
@@ -355,9 +363,10 @@ percentage, and the solver will not invent a value for them.
 7. **A published but empty cut is ignored.** The diamond cut is preferred only when at least one
    roster player's cut percentage is above zero. Trusting an all-zero cut would rank the roster at
    zero; using the overall percentage keeps a signal, at the cost of the narrower population.
-8. **A missing started percentage refuses the team.** It is unknown, not zero, and the solver will not
-   plan around an invented value. One injured-reserve goaltender who is eligible for a starting
-   position currently blocks one of the four hockey leagues.
+8. **A missing started percentage benches the player.** It is unknown, not zero, so the plan never
+   starts them: it parks them on the bench or a reserve list and values everyone else. The team
+   refuses only when that player has nowhere to sit, or is the only candidate for a required starting
+   slot — the case where a plan would have to invent a number or leave a position empty.
 9. **Availability outranks value, as a head count.** The tier terms count starters rather than adding
    their values, so availability dominance cannot be bought with value: a healthy player worth 0.00
    starts ahead of an injured player worth 21.67, or ahead of an injured player the crowd starts 91 %
@@ -375,7 +384,7 @@ percentage, and the solver will not invent a value for them.
     counted period does not block the run; they are priced as worthless and the gap is recorded as
     skipped periods. The cost is that a productive player whose statistics the provider omitted can
     be benched without a refusal. The started-percentage basis does not do this: there, absent stays
-    absent and the team refuses.
+    absent and the player is parked without a price.
 13. **The reported total is availability-blind, and in the basis's own unit.** It sums the starting
     values and is the objective's value term, so it is not an expected score. Under the points basis
     it is centi-points; under the started basis it is hundredths of a percent. It does not shrink when

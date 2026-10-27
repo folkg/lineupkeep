@@ -164,25 +164,38 @@ describe("Yahoo league translation", () => {
     ]);
   });
 
-  it("refuses to plan a started percentage lineup when a roster player has none", () => {
-    const result = planYahooLineup(
-      yahooStartedPolicyInput({
-        league: hockeyLeague(),
-        roster: hockeyRoster(),
-        details: [hockeyDetail("hockey-player-0", 43, [])],
-      }),
-    );
-
-    expect(result).toEqual({
-      kind: "refused",
-      refusal: {
-        kind: "solver",
-        refusal: {
-          reason: "unusable-selection-value",
-          playerIds: [makePlayerId("hockey-player-1")],
-        },
+  it("benches a roster player the provider publishes no started percentage for", () => {
+    const policyInput = yahooStartedPolicyInput({
+      league: {
+        ...hockeyLeague(),
+        rosterPositions: [position("C", 1, true), position("BN", 2, false)],
       },
+      roster: hockeyRoster(),
+      details: [hockeyDetail("hockey-player-0", 43, [])],
     });
+    const verdict = buildLineupProblem(policyInput);
+
+    if (verdict.kind !== "problem") {
+      throw new Error(`Expected a problem, received ${verdict.refusal.kind}.`);
+    }
+    expect(verdict.valuations[1]?.selection).toEqual({
+      kind: "unusable",
+      basis: "percent-started:overall:date:2026-10-26",
+      reason: "missing",
+    });
+
+    const result = planYahooLineup(policyInput);
+
+    if (result.kind !== "planned") {
+      throw new Error(`Expected a plan, received ${result.refusal.kind}.`);
+    }
+    expect(result.plan.assignments).toContainEqual({
+      playerId: makePlayerId("hockey-player-1"),
+      slotId: makeSlotId("BN"),
+    });
+    expect(result.plan.comparison.addedStarters).toEqual([]);
+    expect(result.plan.comparison.removedStarters).toEqual([]);
+    expect(result.plan.totalSelectionValue).toBe(4300);
   });
 
   it("translates only the changed editable assignments and retains every roster member", () => {

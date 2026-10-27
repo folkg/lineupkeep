@@ -55,7 +55,8 @@ period or player may not appear twice.
 
 **Projected points.** A player's value is the provider's projection for the target period, in
 hundredths. A realised total in the same source is recorded as context and never added to it. A player
-without a projection is `unusable` with reason `missing`.
+without a projection is `unusable` with reason `missing`: never zero, and never started. The solver
+benches that player while a bench or reserve slot can hold them.
 
 **Scoring rules.** For each player, each window period is either **counted** or **skipped**:
 
@@ -73,8 +74,9 @@ hundredths of a percent. It is an ordinal crowd signal, not an expected score: i
 multiplied by, or converted into points. The population is the first preferred cut (diamond) that
 carries a value above zero for at least one roster player, otherwise the overall percentage; a
 published-but-all-zero cut is treated as unpopulated. A published zero is a real value. A player
-without a value in the chosen population is `unusable` with reason `missing`, and the solver refuses
-rather than inventing one.
+without a value in the chosen population is `unusable` with reason `missing`: the plan parks them on
+the bench or in a reserve slot rather than inventing a number for them, and refuses only when they
+cannot be parked or are the only candidate for a required starting slot.
 
 Whichever source is active, availability is the same number for the same player: nothing is halved,
 zeroed, or refused for a status.
@@ -152,10 +154,10 @@ football roster.
 
 It also covers the value-source ladder and its cases: the ladder order, the derived basis per source,
 a projection used as the value with its realised total recorded but not added, a player without a
-projection refused instead of valued from statistics, a started percentage valued in hundredths, a
-populated diamond cut preferred over the overall percentage, an all-zero cut falling back to the
-overall percentage, a zero percentage kept as a real value, a missing percentage refused, and a
-healthy low-percentage player ranked above an excluded high-percentage one.
+projection left unusable instead of valued from statistics, a started percentage valued in hundredths,
+a populated diamond cut preferred over the overall percentage, an all-zero cut falling back to the
+overall percentage, a zero percentage kept as a real value, a missing percentage parked on the bench,
+and a healthy low-percentage player ranked above an excluded high-percentage one.
 
 ## Deliberately outside this package
 

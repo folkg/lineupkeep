@@ -232,12 +232,40 @@ function hasLegalUnit(prepared: PreparedProblem, player: RosterPlayer): boolean 
 function findUnusableSelectionRefusal(prepared: PreparedProblem): LineupRefusal | undefined {
   const playerIds = prepared.players
     .filter((player) => player.selection.kind === "unusable")
-    .filter((player) =>
-      prepared.units.some((unit) => isStartingSlot(unit.slot) && playerAllowedOnUnit(player, unit)),
-    )
+    .filter((player) => !canBeBenched(prepared, player) || requiredSlotDependsOn(prepared, player))
     .map((player) => player.id);
 
   return playerIds.length === 0 ? undefined : { reason: "unusable-selection-value", playerIds };
+}
+
+function canStart(prepared: PreparedProblem, player: RosterPlayer): boolean {
+  return prepared.units.some(
+    (unit) => isStartingSlot(unit.slot) && playerAllowedOnUnit(player, unit),
+  );
+}
+
+function canBeBenched(prepared: PreparedProblem, player: RosterPlayer): boolean {
+  return prepared.units.some(
+    (unit) => !isStartingSlot(unit.slot) && playerAllowedOnUnit(player, unit),
+  );
+}
+
+function requiredSlotDependsOn(prepared: PreparedProblem, player: RosterPlayer): boolean {
+  if (!canStart(prepared, player)) {
+    return false;
+  }
+  return prepared.units.some(
+    (unit) =>
+      isStartingSlot(unit.slot) &&
+      unit.slot.requirement === "required" &&
+      playerAllowedOnUnit(player, unit) &&
+      !prepared.players.some(
+        (other) =>
+          other.id !== player.id &&
+          other.selection.kind === "known" &&
+          playerAllowedOnUnit(other, unit),
+      ),
+  );
 }
 
 function findRequiredPositionRefusal(prepared: PreparedProblem): LineupRefusal | undefined {
@@ -368,7 +396,7 @@ function cellCost(
 
   const starting = isStartingSlot(unit.slot);
   if (starting && player.selection.kind !== "known") {
-    throw new Error("An unusable selection value reached a starting position.");
+    return scale.forbiddenCost;
   }
 
   const value = starting && player.selection.kind === "known" ? player.selection.units : 0;
