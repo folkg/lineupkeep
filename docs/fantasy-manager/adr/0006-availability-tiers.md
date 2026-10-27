@@ -82,13 +82,13 @@ rungs by declared order and needs no new rung, weight, or objective term.
 
 **2026-10-27.** The ladder gains `confirmed-start` above `will-play`. The premise this ADR first
 recorded in its _Deferred_ note — that the provider publishes no depth-chart or snap-share signal —
-was wrong for goalies and pitchers: the roster publishes `starting_status` on them, and measured on
-the owner's account it carries `is_starting: 1` for the goalie who will start and `0` for the
-backup. Percent started cannot tell those two apart, so a backup the crowd leaves unstarted could
-take a starting slot from the confirmed starter.
+was wrong for goalies: the roster publishes `starting_status` on them, and measured on the owner's
+account it carries `is_starting: 1` for the goalie who will start and `0` for the backup. Percent
+started cannot tell those two apart, so a backup the crowd leaves unstarted could take a starting
+slot from the confirmed starter.
 
 It is a participation refinement, not a fourth kind of absence, and it is expressed the only way this
-ADR allows: as a rung. The fact crosses the seam as `ProviderRosterPlayer.confirmedStart`, the adapter
+ADR allows: as a rung. The fact crosses the seam as `ProviderRosterPlayer.startingLineup`, the adapter
 turns it into a rung, and the solver still compares rungs by declared order. The refinement applies
 **only** to a player the status table already calls available, so it can never lift an injured or
 suspended player above a healthy one, and it never adjusts a value. A confirmed starter who is out
@@ -97,10 +97,64 @@ stays on `will-not-play`, below every player who will play.
 The trailing mean of realised points already prices the role a player actually had, and this rung does
 not touch it: expected opportunity stays in the value basis, and the ladder only says who will appear.
 
+## Amended: confirmed non-starting is its own state
+
+**2026-10-27.** The first amendment collapsed three provider states into two: `1` became confirmed
+starting and both `0` and an absent field became "not confirmed starting". A goalie confirmed to be
+the backup and a goalie whose starter had not been announced therefore landed on the same rung, and
+their scores decided the slot. The owner reported exactly that: a goalie the provider marked as not
+starting started ahead of an unconfirmed goalie, because percent started is not a participation
+signal.
+
+The seam keeps the provider's three states as `confirmed-starting`, `confirmed-not-starting`, and
+`unconfirmed`, and says nothing about what a non-start means. The adapter resolves that meaning from a
+declared, data-driven table keyed by sport and position rather than from a goalie branch:
+
+| Position class   | Provider positions                                                                     | A confirmed non-start means     |
+| ---------------- | -------------------------------------------------------------------------------------- | ------------------------------- |
+| goalie           | hockey `G`                                                                             | `unlikely-to-play`              |
+| starting pitcher | baseball `SP`                                                                          | `unlikely-to-play`, provisional |
+| relief pitcher   | baseball `RP`, `P`                                                                     | not an availability fact        |
+| position player  | hockey skaters; baseball batters, `Util`, `DH`; every football and basketball position | not an availability fact        |
+| undeclared       | any sport or position                                                                  | not an availability fact        |
+
+The two interpretations are the whole vocabulary, and the tables are data so the four sports the
+reference supported are all declared before any of them is a live adapter capability. A hockey goalie
+is the first class because only one goalie starts and the backup almost never appears. A baseball
+starting pitcher is the second because only today's announced starter takes the ball; a relief pitcher
+or a batter can appear without starting, so a non-start says nothing. Football and basketball are the
+cases that keep the table safe: a receiver or a bench player still plays in a rotation, so a non-start
+is not an availability fact. An undeclared sport maps to the `position player` class, whose rule is not
+an availability fact, so it can never silently bench a player. Adding a sport requires a position map
+and adding a class requires a rule; both are type-checked, and one test walks every declared sport,
+position, and class so an undecided entry is a visible gap rather than a default.
+
+Baseball is **provisional**. The reference read `is_starting` for every MLB player, applied a penalty
+when it was `0`, and separately penalised starting-pitcher-only eligibility, while its own comment
+worried about late confirmations and never settled the reliever case. This ADR keeps only the
+starting-pitcher rule; relief pitchers and generic pitchers are not demoted until a live baseball
+surface and the provider's own evidence settle it. [The research
+record](../RESEARCH.md#starting-lineup-interpretation-across-four-sports-2026-10-27) cites the
+reference code for every row.
+
+The ladder gains `unlikely-to-play` between `might-play` and `will-not-play`.
+
+The rung is a participation refinement below "might play" and above "will not play" because the two
+facts differ: a doubtful player might start, and a confirmed backup might still be pulled into the
+crease if the starter is injured in warmup, while an injured-out player has no path to appearing. A
+value still never buys a rung, and a starting-lineup fact never changes a value.
+
+Evidence, measured read-only on the owner's five linked teams on 2026-10-27: `starting_status`
+appeared on goalies only; two goalies on the same professional team carried `1` and `0` against the
+same opponent, which rules out reading `0` as "not announced"; a reported team carried one `0` and two
+absent goalies, all with a game; and no skater carried the field. The dated record is in
+[RESEARCH.md](../RESEARCH.md#starting-status-across-the-linked-account-2026-10-27).
+
 ## Deferred
 
-Real-world starting status (for example a backup quarterback) is **implemented for the players the
-provider publishes it for** — see the amendment above. The remaining scope is a provider that
-publishes a starting signal for every position, which Yahoo does not: the roster carries
-`starting_status` only for goalies and pitchers, and its meaning for a player whose game has not been
-announced yet is not established in either direction.
+Real-world starting status is **implemented for the players the provider publishes it for** — see the
+amendments above. The remaining scope is a provider that publishes a starting signal for every
+position, which Yahoo does not: the roster carries `starting_status` only for goalies and pitchers, and
+a skater's or batter's non-start is not an availability fact. The four-sport interpretation table is
+declared and tested, but full baseball and basketball request, scoring, and limits support remains
+deferred.

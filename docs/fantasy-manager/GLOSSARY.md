@@ -85,8 +85,12 @@ _Avoid_: Scoring basis, basis string, policy version when the label is meant
 A named, provider-reported fact about whether a player can appear in a period, such as healthy, out, day to day, injured reserve, suspended, not active, or no game. It never adjusts that player's final score; it selects an availability tier.
 _Avoid_: Injury when it also covers byes, suspensions, and inactive players; availability condition when an ordering is meant
 
+**Starting lineup fact**:
+A provider-reported fact that a player is confirmed in, confirmed outside, or unconfirmed for their real team's starting lineup. It is neutral and three-valued; whether being outside the lineup means the player is unlikely to appear is sport and position knowledge the provider adapter applies from a declared table covering every reference sport.
+_Avoid_: Starter bonus, confirmed-start when the fact is meant, probable starter when the value is unconfirmed
+
 **Availability tier**:
-One rung of an ordered ladder from most to least likely to appear — will play, might play, will not play — that the lineup objective ranks above the final score. The provider selects the rung for each player from its own status facts; the generic layer declares only the order.
+One rung of an ordered ladder from most to least likely to appear — confirmed start, will play, might play, unlikely to play, will not play, no game — that the lineup objective ranks above the final score. The provider selects the rung for each player from its own status and starting-lineup facts; the generic layer declares only the order.
 _Avoid_: Health score, injury penalty, availability factor
 
 ## Automation

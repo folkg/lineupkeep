@@ -908,3 +908,165 @@ Still unverified after this pass:
   provider compare-and-set or idempotency token exists; the adapter detects edits visible in the
   pre-write re-read and relies on all-or-nothing rejection otherwise, but cannot eliminate the
   final window.
+
+## Starting status across the linked account (2026-10-27)
+
+Read-only, no write attempted, using the stored provider session through the committed adapter and
+transport. The four hockey leagues are date-scoped and the football league is week-scoped. Every
+roster was read at one instant (18:21 America/New_York, about 40 minutes before the first puck drop),
+and only presence, integer flags, coverage, position, slot, and schedule are recorded here. No
+provider key, team or league identifier, player name, or payload value is retained.
+
+### The three states are distinct, and `0` means confirmed not starting
+
+The reported team's two goalies with a game returned different states from the same request:
+
+| Goalie state     | `starting_status` fragments                                         |
+| ---------------- | ------------------------------------------------------------------- |
+| confirmed backup | `{"coverage_type":"date","date":"<today>"}` and `{"is_starting":0}` |
+| unconfirmed      | key absent                                                          |
+
+Across the four hockey rosters, one roster carried two goalies on the **same** professional team with
+the same opponent: one returned `is_starting: 1` and the other `is_starting: 0`. Two goalies on one
+team cannot both be the announced starter, so `0` is the provider's explicit non-start, not a
+placeholder for "not announced yet". A goalie whose starter had not been announced carried no key at
+all. The two absent-with-game goalies on the reported team fit the same reading: their games were later
+that evening, when the field had not yet arrived.
+
+### Counts by team and position
+
+Goalies are counted separately because they are the only position that carried the field.
+
+| Roster     | Players | Skaters | Skaters with any flag | Goalies | Goalie `1` | Goalie `0` | Goalie absent | Absent with a game |
+| ---------- | ------: | ------: | --------------------: | ------: | ---------: | ---------: | ------------: | -----------------: |
+| football-1 |      15 |      15 |                     0 |       0 |          0 |          0 |             0 |                  0 |
+| hockey-1   |      21 |      17 |                     0 |       4 |          1 |          2 |             1 |                  0 |
+| hockey-2   |      19 |      15 |                     0 |       4 |          1 |          2 |             1 |                  0 |
+| hockey-3   |      22 |      18 |                     0 |       4 |          0 |          1 |             3 |                  2 |
+| hockey-4   |      22 |      19 |                     0 |       3 |          0 |          2 |             1 |                  0 |
+| **Total**  |  **99** |  **84** |                 **0** |  **15** |      **2** |      **7** |         **6** |              **2** |
+
+The reported team is hockey-3. Its confirmed backup held a starting `G` slot while the unconfirmed
+goalie sat on `BN` — the outcome the owner reported.
+
+One further goalie on a reserve list also returned `0`; an injury status and a starting-lineup fact are
+independent, and the status table keeps an excluded player on `will-not-play` regardless.
+
+### Skaters never carry the field
+
+No skater on any of the five rosters carried `starting_status`, with or without a game. A skater who is
+not in the real team's opening lineup still takes shifts, so the safe interpretation is that the field
+is not an availability fact for a skater even if a future payload carries one. A synthetic fixture
+already contains `is_starting: 0` on a skater, and the adapter maps it to no demotion; the regression is
+covered without claiming anything about live skater data.
+
+### Coverage is date-scoped only
+
+Every present entry carried `coverage_type: "date"` with that date, and no `week` field. In the
+date-scoped hockey leagues that matches the roster's own coverage. In the week-scoped football league
+the roster declares a week, and no football player carried the field at all in this observation — so a
+weekly league cannot use it to decide a whole week from a single day, and the adapter does not try. The
+fact is read per roster and per target period; it is not a week-long claim.
+
+### The league-wide "starting goalie" player filter is not a substitute
+
+The reference project fetched a league-wide list from
+`league/{key}/players;position=S_G;sort=AR;start=0`, cached it for a day, and accepted either that list
+or `is_starting === 1`. The same request was replayed read-only against the reported team's league and
+returned 8 players. It included a goalie whose professional team had **no game** that date, and it
+omitted both the confirmed backup and the two unconfirmed goalies. It is therefore a depth-chart role
+list, not a per-day confirmed-starter list, and it disagrees with the per-roster fact in both
+directions.
+
+The roster field is the reliable per-day signal for the positions it covers, so the external cached
+fetch is unnecessary. Its absence on a goalie is meaningful as "unconfirmed" rather than "not
+starting", which is exactly the distinction the ladder needs, and a role list cannot supply it. No
+additional read, cache, or scheduled job is justified.
+
+### Limits
+
+- One instant on one account. Announcement timing was inferred from game clock and the same-team pair,
+  not from a documented publication schedule.
+- No football player carried the field, so nothing here establishes football behaviour for any
+  position, and the adapter does not invent one.
+- Whether the provider ever publishes `is_starting: 0` for a skater is not established. The adapter is
+  built so that it would not demote one.
+
+## Starting lineup interpretation across four sports (2026-10-27)
+
+The interpretation is declared data in two steps: each sport's positions map to a position class, and
+each class maps to one of two rules. The reference project supported NFL, NHL, MLB, and NBA, and its
+code is the basis for every class below. The position maps cover all four sports now; only football and
+hockey are live adapter capabilities, so this records the rule and its provenance rather than claiming
+baseball or basketball request support.
+
+| Position class   | Rule                            | Basis                                                              |
+| ---------------- | ------------------------------- | ------------------------------------------------------------------ |
+| goalie           | `unlikely-to-play`              | only one goalie starts; the backup rarely appears                  |
+| starting pitcher | `unlikely-to-play`, provisional | reference penalises a non-starting starting-pitcher-only player    |
+| relief pitcher   | no availability fact            | a reliever can appear without being the announced starter          |
+| position player  | no availability fact            | skaters, batters, and football/basketball players play in rotation |
+| undeclared       | no availability fact            | conservative default; a signal never demotes what it does not know |
+
+The position maps are:
+
+| Sport      | Class `goalie` / `starting-pitcher` / `relief-pitcher` | Everything else           |
+| ---------- | ------------------------------------------------------ | ------------------------- |
+| hockey     | `G`                                                    | `C`, `LW`, `RW`, `F`, `D` |
+| baseball   | `SP`; `RP` and `P` are relief pitchers                 | batters, `Util`, `DH`     |
+| football   | none                                                   | every position            |
+| basketball | none                                                   | every position            |
+
+### Where each rule comes from
+
+- **Reading the field.** `server/core/src/common/services/yahooAPI/yahooPlayerProcessing.service.ts`
+  lines 109–111 read `starting_status.is_starting` and fall back to `"N/A"` when the key is absent. The
+  same file records eligible positions as slot names, which is why a batter and a pitcher are
+  distinguishable by `SP`/`RP`/`P` in the eligibility list.
+- **The cached starter lists.** `server/core/src/common/services/yahooAPI/yahooStartingPlayer.service.ts`
+  fetches a league-wide list through `yahooAPI.service.ts` lines 224–251 with `position=S_G` for NHL and
+  `position=S_P` for MLB, caches it for a day, and `isStartingPlayer` at
+  `server/core/src/common/services/playerScoreFunctions/playerStartScoreFunctions.service.ts` lines
+  299–301 accepts either the cached list or `is_starting === 1` with the comment "starters array is
+  not always accurate, so we need to check both". That is the reference's workaround for unreliable
+  announcement timing, not a different fact.
+- **Hockey.** `scoreFunctionNHL` (same file, around lines 195–205) treats a player as a starting goalie
+  only when eligible positions include `G`; it never penalises `is_starting: 0`. `applyScoreFactors`
+  multiplies a confirmed start by 100. The reference therefore had no non-start demotion for skaters,
+  and its goalie rung was a confirmed-start boost only.
+- **Football.** `scoreFunctionNFL` (around lines 246–270) never reads `is_starting`; there is no
+  participation rule to inherit. A player outside the starting lineup still plays in a rotation.
+- **Basketball.** `scoreFunctionNBA` (around lines 180–184) never reads `is_starting`. The only place a
+  basketball non-start appears is the games-limited churn path in `getScorePenaltyFactor` (lines
+  168–170), which multiplies `is_starting === 0` by `1e-7` as a pace heuristic. That is a capacity
+  device, not a claim that a bench player will not play, so it is not a starting-lineup rule.
+- **Baseball.** `scoreFunctionMLB` (lines 211–237) computes
+  `isNonStartingSP = eligible_positions.includes("SP") && !eligible_positions.includes("RP") && !isStartingPitcher`,
+  then applies `NOT_STARTING_FACTOR` when `is_starting === 0`, when `isNonStartingSP`, or when the
+  player is on the long-term injured list. Its own comment (lines 215–222) says the author was unsure
+  whether to boost starting pitchers, intended the penalty to stop a non-starting SP outranking an
+  appearing RP, and worried that penalising late-confirmed batters would leave a good unconfirmed
+  player on the bench. The owner reports the starter/reliever logic was never quite right.
+
+### Why the table is conservative
+
+The reference's MLB function applied `is_starting: 0` to **every** baseball player, including batters,
+despite its own comment that this was a stand-in for a different signal and that late confirmations
+make it risky. We keep only the part with a clear meaning: a starting pitcher who is confirmed not to
+start is unlikely to pitch today. Relief pitchers and generic pitchers can appear without being the
+announced starter, and batters always can, so they are not demoted. The same reasoning is why football
+and basketball are declared with no availability fact: their reference score functions never read the
+field, and their games are rotations rather than nine-inning or 60-minute single-starter roles.
+
+### What would settle baseball
+
+A live MLB surface would need to read `starting_status` around game time for starting pitchers, relief
+pitchers, and batters together, and compare it with the announced starter. The open questions are
+whether Yahoo emits `0` for relievers and batters at all, whether a confirmed non-starting SP ever
+pitches in relief on the same day, and whether a generic `P` primary position appears with a non-start
+signal. Until then the `SP` rule stays provisional and every other baseball position stays
+undemoted. That requires a baseball-capable provider read shape, which is out of scope for this
+change.
+
+The conservative default is unchanged: a sport or position absent from the table is `no availability
+fact`, so a new signal can never bench a player it does not understand.

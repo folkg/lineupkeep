@@ -137,31 +137,31 @@ disposition. "Seam" means `Provider*` contracts in
 
 ### Present and used by the lineup decision
 
-| Fact                                                                                                                       | Where it enters                                                                       | Used for                                                                                         |
-| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| injury code (`status`)                                                                                                     | `ProviderRosterPlayer.injuryCode` → `yahooAvailability` → `PolicyPlayer.availability` | selects `available` / `uncertain` / `excluded`                                                   |
-| confirmed real-world start (`starting_status.is_starting`)                                                                 | `ProviderRosterPlayer.confirmedStart` → `PolicyPlayer.confirmedStart`                 | lifts an available goalie or pitcher to the `confirmed-start` rung                               |
-| bye week (`bye_weeks.week`)                                                                                                | `ProviderRosterPlayer.byeWeek` → `nonGamePeriods`                                     | bye is `will-not-play` for **weekly** coverage only (R2)                                         |
-| eligible positions                                                                                                         | `ProviderRosterPlayer.eligiblePositions` → slot eligibility and `reserveEligible`     | which slots a player may occupy; reserve legality                                                |
-| selected slot                                                                                                              | `ProviderRosterPlayer.slot` → `currentSlotId`                                         | minimum-change tie-break, comparison, write delta                                                |
-| editable                                                                                                                   | `ProviderRosterPlayer.isEditable` → `lockedSlotId`                                    | locks                                                                                            |
-| percent started (overall, and a cut)                                                                                       | separate `readStartRates` → `ValueSource`                                             | final score for every hockey league                                                              |
-| league scoring rules                                                                                                       | `ProviderLeagueSettings.statModifiers`                                                | final score for football                                                                         |
-| roster positions, counts, `is_starting_position`                                                                           | `ProviderLeagueSettings.rosterPositions`                                              | slot model, capacities, starting/bench/reserve classification                                    |
-| league period window, coverage                                                                                             | `ProviderLeagueSettings`, `ProviderRoster.coverage`                                   | target resolution, period scoping                                                                |
-| `weeklyDeadline`                                                                                                           | `ProviderLeagueSettings.weeklyDeadline`                                               | **read but not used to decide cadence** (see below)                                              |
-| `is_undroppable`, `ownership`, `positionType`, `primaryPosition`, `displayPosition`, `proTeamAbbreviation`, `injuryDetail` | seam                                                                                  | present for the query surfaces; **unused by planning**, correctly (no drop/add, no display need) |
+| Fact                                                                                                                       | Where it enters                                                                       | Used for                                                                                               |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| injury code (`status`)                                                                                                     | `ProviderRosterPlayer.injuryCode` → `yahooAvailability` → `PolicyPlayer.availability` | selects `available` / `uncertain` / `excluded`                                                         |
+| confirmed real-world start (`starting_status.is_starting`)                                                                 | `ProviderRosterPlayer.startingLineup` → `PolicyPlayer.startingLineup`                 | lifts a confirmed starter to `confirmed-start`, places a confirmed backup goalie on `unlikely-to-play` |
+| bye week (`bye_weeks.week`)                                                                                                | `ProviderRosterPlayer.byeWeek` → `nonGamePeriods`                                     | bye is `will-not-play` for **weekly** coverage only (R2)                                               |
+| eligible positions                                                                                                         | `ProviderRosterPlayer.eligiblePositions` → slot eligibility and `reserveEligible`     | which slots a player may occupy; reserve legality                                                      |
+| selected slot                                                                                                              | `ProviderRosterPlayer.slot` → `currentSlotId`                                         | minimum-change tie-break, comparison, write delta                                                      |
+| editable                                                                                                                   | `ProviderRosterPlayer.isEditable` → `lockedSlotId`                                    | locks                                                                                                  |
+| percent started (overall, and a cut)                                                                                       | separate `readStartRates` → `ValueSource`                                             | final score for every hockey league                                                                    |
+| league scoring rules                                                                                                       | `ProviderLeagueSettings.statModifiers`                                                | final score for football                                                                               |
+| roster positions, counts, `is_starting_position`                                                                           | `ProviderLeagueSettings.rosterPositions`                                              | slot model, capacities, starting/bench/reserve classification                                          |
+| league period window, coverage                                                                                             | `ProviderLeagueSettings`, `ProviderRoster.coverage`                                   | target resolution, period scoping                                                                      |
+| `weeklyDeadline`                                                                                                           | `ProviderLeagueSettings.weeklyDeadline`                                               | **read but not used to decide cadence** (see below)                                                    |
+| `is_undroppable`, `ownership`, `positionType`, `primaryPosition`, `displayPosition`, `proTeamAbbreviation`, `injuryDetail` | seam                                                                                  | present for the query surfaces; **unused by planning**, correctly (no drop/add, no display need)       |
 
 ### Missing from the seam
 
-| Fact                                                 | Reference source                                            | Consequence today                                                         | Disposition                                               |
-| ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------- |
-| **has a game in the target period**                  | `opponent` on the roster player (string / `null` / `"Bye"`) | **the reported failure**                                                  | **in scope, first** (§6)                                  |
-| **real-world starting status**                       | `starting_status.is_starting` (goalies, pitchers)           | a backup goalie with a game is indistinguishable from a confirmed starter | **in scope, done**: seam fact, `confirmed-start` rung     |
-| games played by position, `played`/`max`/`projected` | team-level `games_played`                                   | capacity reduction and participation suppression                          | provider fact; only when the league declares a limit (§8) |
-| innings pitched                                      | team-level `games_played.innings_pitched`                   | same                                                                      | pitcher slot only; same gate (§8)                         |
-| postponed games                                      | external schedule/scoreboard read                           | a postponed game would look like a game                                   | deferred with a named limitation (§10)                    |
-| pending transactions                                 | roster `transactions` (waivers, pending trades)             | a player in a pending transaction is a free variable                      | deliberately out of scope; the lock is its future home    |
+| Fact                                                 | Reference source                                            | Consequence today                                                        | Disposition                                                                                                                             |
+| ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **has a game in the target period**                  | `opponent` on the roster player (string / `null` / `"Bye"`) | **the reported failure**                                                 | **in scope, first** (§6)                                                                                                                |
+| **real-world starting status**                       | `starting_status.is_starting` (goalies and pitchers)        | a backup goalie with a game is indistinguishable from an unconfirmed one | **in scope, done**: three-state seam fact, `confirmed-start` / `unlikely-to-play` rungs, and a declared four-sport interpretation table |
+| games played by position, `played`/`max`/`projected` | team-level `games_played`                                   | capacity reduction and participation suppression                         | provider fact; only when the league declares a limit (§8)                                                                               |
+| innings pitched                                      | team-level `games_played.innings_pitched`                   | same                                                                     | pitcher slot only; same gate (§8)                                                                                                       |
+| postponed games                                      | external schedule/scoreboard read                           | a postponed game would look like a game                                  | deferred with a named limitation (§10)                                                                                                  |
+| pending transactions                                 | roster `transactions` (waivers, pending trades)             | a player in a pending transaction is a free variable                     | deliberately out of scope; the lock is its future home                                                                                  |
 
 ### Present but wrong or unused where it should be used
 
@@ -279,13 +279,14 @@ So the fact crosses. Concretely:
 still _able_ to appear, and the reference prefers them over a player whose team is not playing. That
 ordering is worth keeping, and it needs a fourth rung `not-scheduled` below `will-not-play`:
 
-| Rung              | Meaning                              | Facts that select it                                          |
-| ----------------- | ------------------------------------ | ------------------------------------------------------------- |
-| `confirmed-start` | in their real team's starting lineup | an available status, and `starting_status.is_starting` is `1` |
-| `will-play`       | expected to appear                   | no status code, and scheduled                                 |
-| `might-play`      | may appear                           | `D`, `DTD`, `Q`, `P`, `GTD`, any unrecognised code            |
-| `will-not-play`   | will not appear, but could           | `O`, `IR`, `IR+`, `IR-LT`, `SUSP`, `NA`; a bye                |
-| `not-scheduled`   | no game to appear in                 | no game in the target period                                  |
+| Rung               | Meaning                                                       | Facts that select it                                               |
+| ------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `confirmed-start`  | in their real team's starting lineup                          | an available status, and a published starting status of `1`        |
+| `will-play`        | expected to appear                                            | no status code, scheduled, and no starting status or an unread `0` |
+| `might-play`       | may appear                                                    | `D`, `DTD`, `Q`, `P`, `GTD`, any unrecognised code                 |
+| `unlikely-to-play` | confirmed outside the starting lineup where one player starts | an available status, a published `0`, and a goalie position        |
+| `will-not-play`    | will not appear, but could                                    | `O`, `IR`, `IR+`, `IR-LT`, `SUSP`, `NA`; a bye                     |
+| `not-scheduled`    | no game to appear in                                          | no game in the target period                                       |
 
 **Decided:** on 2026-10-27 the owner approved adding the fourth rung, `not-scheduled`, below
 `will-not-play`. That amends [ADR 0006](../adr/0006-availability-tiers.md)'s three-rung decision, so the
@@ -638,14 +639,14 @@ automation after step 2 is verified against a live read, not before.**
 
 ### Deferred, with the condition that would reopen them
 
-| Item                                                  | Condition                                                                                                       |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| positional scarcity for the ownership composite       | a provider-neutral replacement-level definition; §8 records why it is separate                                  |
-| postponement                                          | the first observed postponed game, or a schedule read for another reason                                        |
-| confirmed starting goalie/pitcher (`starting_status`) | **done**: read from the roster and expressed as the top rung; ADR 0006's premise about the signal was corrected |
-| ``Q`/`P`/`GTD` mapping                                | **done**: the explicit status table records the tier and its disagreement with the reference                    |
-| category- and rotisserie-aware scoring                | unchanged from ADR 0009; the crowd share is still the only value for our hockey leagues                         |
-| transaction coupling                                  | when an add/drop surface exists; pending transactions lock players                                              |
+| Item                                            | Condition                                                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| positional scarcity for the ownership composite | a provider-neutral replacement-level definition; §8 records why it is separate                    |
+| postponement                                    | the first observed postponed game, or a schedule read for another reason                          |
+| confirmed starting goalie (`starting_status`)   | **done**: three-state seam fact; `confirmed-start` above `will-play`, `unlikely-to-play` below it |
+| ``Q`/`P`/`GTD` mapping                          | **done**: the explicit status table records the tier and its disagreement with the reference      |
+| category- and rotisserie-aware scoring          | unchanged from ADR 0009; the crowd share is still the only value for our hockey leagues           |
+| transaction coupling                            | when an add/drop surface exists; pending transactions lock players                                |
 
 ## 11. What this correction does not change
 
@@ -655,7 +656,7 @@ automation after step 2 is verified against a live read, not before.**
   interpretation, and no Yahoo vocabulary enters generic code.
 - The refusal model of ADR 0008, except that `assignment:reserve-slot` becomes unreachable by
   construction.
-- [ADR 0006](../adr/0006-availability-tiers.md)'s decision, except its _Deferred_ note about real-world
+- [ADR 0006](adr/0006-availability-tiers.md)'s decision, except its _Deferred_ note about real-world
   starting status, whose premise ("the provider publishes no depth-chart or snap-share signal today")
-  was contradicted by `starting_status` on goalies and pitchers. That note is corrected, and the fact
-  is now the `confirmed-start` rung.
+  was contradicted by `starting_status` on goalies. That note is corrected, the fact now crosses the
+  seam in three states, and the rungs are `confirmed-start` and `unlikely-to-play`.
