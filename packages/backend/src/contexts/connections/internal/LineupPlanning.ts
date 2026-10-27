@@ -20,6 +20,7 @@ import type {
 
 import type {
   ProviderAvailabilityTier,
+  ProviderGamesPlayed,
   ProviderLeagueSettings,
   ProviderLineupAssignment,
   ProviderPlayerValue,
@@ -28,6 +29,8 @@ import type {
 } from "#contexts/connections/Provider.ts";
 
 const selectionBasis: SelectionBasis = makeSelectionBasis("provider-score");
+
+const gamesBuffer = 1.015;
 
 const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
   makeAvailabilityTier("confirmed-start"),
@@ -38,7 +41,11 @@ const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
 ];
 
 export function planAssignments(input: PlanAssignmentsInput): PlanAssignmentsResult {
-  const slots = input.league.rosterPositions.map(rosterSlot);
+  const limits = new Map((input.gamesPlayed ?? []).map((entry) => [entry.position, entry]));
+  const lockedBySlot = lockedCounts(input.roster);
+  const slots = input.league.rosterPositions.flatMap((position) =>
+    rosterSlots(position, limits, lockedBySlot.get(position.position) ?? 0),
+  );
   const values = new Map(input.values.map((value) => [value.providerPlayerKey, value]));
   const players = input.roster.players.map((player) =>
     rosterPlayer(player, values.get(player.providerPlayerKey), slots),
@@ -88,7 +95,9 @@ function rosterPlayer(
       (slot) => slot.kind === "reserve" && slotAccepts(slot.eligibility, eligibility),
     ),
     lockedSlotId: player.isEditable === true ? undefined : makeSlotId(player.slot),
-    currentSlotId: makeSlotId(player.slot),
+    currentSlotId: slots.some((slot) => String(slot.id) === player.slot)
+      ? makeSlotId(player.slot)
+      : undefined,
   };
 }
 
@@ -105,22 +114,52 @@ function selection(score: number | null): PlayerSelection {
     : knownSelection(selectionBasis, score);
 }
 
-function rosterSlot(position: ProviderRosterPosition): RosterSlot {
+function lockedCounts(roster: ProviderRoster): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const player of roster.players) {
+    if (player.isEditable !== true) {
+      counts.set(player.slot, (counts.get(player.slot) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function rosterSlots(
+  position: ProviderRosterPosition,
+  limits: ReadonlyMap<string, ProviderGamesPlayed>,
+  locked: number,
+): ReadonlyArray<RosterSlot> {
   const id = makeSlotId(position.position);
   const eligibility = slotEligibility(position.eligibility);
-  switch (position.kind) {
-    case "starting":
-      return {
-        kind: "starting",
-        id,
-        capacity: position.count,
-        requirement: "required",
-        eligibility,
-      };
-    case "bench":
-    case "reserve":
-      return { kind: position.kind, id, capacity: position.count, eligibility };
+  if (position.kind !== "starting") {
+    return [{ kind: position.kind, id, capacity: position.count, eligibility }];
   }
+  const limit = limits.get(position.position);
+  switch (limit === undefined ? "none" : capacityReduction(limit)) {
+    case "none":
+      return [
+        { kind: "starting", id, capacity: position.count, requirement: "required", eligibility },
+      ];
+    case "one": {
+      const capacity = Math.min(Math.max(position.count - 1, locked), position.count);
+      return capacity === 0
+        ? []
+        : [{ kind: "starting", id, capacity, requirement: "optional", eligibility }];
+    }
+    case "exhausted": {
+      const capacity = Math.min(position.count, locked);
+      return capacity === 0
+        ? []
+        : [{ kind: "starting", id, capacity, requirement: "optional", eligibility }];
+    }
+  }
+}
+
+function capacityReduction(limit: ProviderGamesPlayed): "none" | "one" | "exhausted" {
+  if (limit.played >= limit.max) {
+    return "exhausted";
+  }
+  return limit.projected > limit.max * gamesBuffer ? "one" : "none";
 }
 
 function slotEligibility(positions: ReadonlyArray<string>): SlotEligibility {
@@ -161,6 +200,7 @@ export type PlanAssignmentsInput = {
   readonly league: ProviderLeagueSettings;
   readonly roster: ProviderRoster;
   readonly values: ReadonlyArray<ProviderPlayerValue>;
+  readonly gamesPlayed?: ReadonlyArray<ProviderGamesPlayed>;
 };
 
 export type PlanAssignmentsResult =

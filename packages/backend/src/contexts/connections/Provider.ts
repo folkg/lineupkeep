@@ -310,6 +310,8 @@ export type ProviderLeagueSettings = {
   readonly draftStatus: string | undefined;
   readonly periodWindow: ProviderPeriodWindow | undefined;
   readonly rosterCoverage: ProviderCoverageKind;
+  readonly maxGamesPlayed: number | undefined;
+  readonly maxInningsPitched: number | undefined;
   readonly rosterPositions: ReadonlyArray<ProviderRosterPosition>;
   readonly statCategories: ReadonlyArray<ProviderStatCategory>;
   readonly statModifiers: ReadonlyArray<ProviderStatModifier>;
@@ -567,6 +569,7 @@ export type ProviderLineupOutcome =
       readonly kind: "scored";
       readonly provenance: string;
       readonly players: ReadonlyArray<ProviderPlayerValue>;
+      readonly gamesPlayed: ReadonlyArray<ProviderGamesPlayed>;
     }
   | {
       readonly kind: "refused";
@@ -579,4 +582,11 @@ export type ProviderPlayerValue = {
   readonly providerPlayerKey: string;
   readonly score: number | null;
   readonly availability: ProviderAvailabilityTier;
+};
+
+export type ProviderGamesPlayed = {
+  readonly position: string;
+  readonly played: number;
+  readonly max: number;
+  readonly projected: number;
 };

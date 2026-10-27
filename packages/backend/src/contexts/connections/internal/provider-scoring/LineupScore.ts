@@ -129,6 +129,13 @@ function requireConsistentSource(
       );
       return;
     }
+    case "ownership-composite": {
+      requireUniqueIds(
+        source.players.map((entry) => entry.id),
+        "ownership facts",
+      );
+      return;
+    }
   }
 }
 

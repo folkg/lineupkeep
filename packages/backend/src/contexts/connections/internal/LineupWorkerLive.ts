@@ -300,6 +300,7 @@ export const LineupWorkerLive = Layer.effect(
         league: freshLeague,
         roster: revalidated,
         values: replanned.players,
+        gamesPlayed: replanned.gamesPlayed,
       });
       if (placed.kind === "refused") {
         yield* block(run, "assignment_refused", placed.detail, plannedRecordOf(replanned));

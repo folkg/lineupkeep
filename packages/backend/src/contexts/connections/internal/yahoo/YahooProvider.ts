@@ -8,6 +8,10 @@ import {
   SchemaTransformation,
 } from "effect";
 
+import type {
+  PlayerRank,
+  RankType,
+} from "#contexts/connections/internal/provider-scoring/types.ts";
 import { communityStartRateCut } from "#contexts/connections/internal/provider-scoring/ValueSource.ts";
 import {
   ProviderPeriodMismatch,
@@ -20,6 +24,7 @@ import {
 } from "#contexts/connections/Provider.ts";
 import type {
   ProviderCategoryWinner,
+  ProviderGamesPlayed,
   ProviderLeagueSettings,
   ProviderLineupAssignment,
   ProviderStatBasis,
@@ -61,7 +66,7 @@ import {
   yahooWriteResponseLimitBytes,
 } from "./YahooLimits.ts";
 import { planYahooLineup, yahooCapabilities } from "./YahooLineup.ts";
-import type { YahooStartRate, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
+import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
 const serviceOrigin = new URL("https://pub-api.fantasysports.yahoo.com");
@@ -452,7 +457,7 @@ export const yahooProvider = Effect.gen(function* () {
     return history;
   });
 
-  const readStartRates = Effect.fnUntraced(function* (input: {
+  const readPlayerFacts = Effect.fnUntraced(function* (input: {
     readonly provider: ProviderKey;
     readonly session: Redacted.Redacted<string>;
     readonly providerLeagueKey: string;
@@ -466,15 +471,55 @@ export const yahooProvider = Effect.gen(function* () {
     const payload = yield* readJson(internet, {
       operation: "read_player_details",
       origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/players;player_keys=${playerKeys.join(",")};out=percent_started`,
-      query: { format: "json", "percent_started.cut_types": communityStartRateCut },
+      path:
+        `/fantasy/v2/league/${leagueKey}/players;player_keys=${playerKeys.join(",")}` +
+        ";out=percent_started,percent_owned,ranks",
+      query: {
+        format: "json",
+        "percent_started.cut_types": communityStartRateCut,
+        ranks:
+          "last30days,last14days,projected_next7days,projected_season_remaining,last4weeks,projected_week,projected_next4weeks",
+      },
       cookie,
       normalize: true,
     });
     const decoded = yield* decodePayload(PlayerDetailsPayload, payload, "read_player_details");
-    const rates = yield* startRatesFromPayload(decoded, leagueKey, input.coverage);
-    yield* Effect.annotateCurrentSpan("provider.start_rate_count", rates.length);
+    const rates = yield* playerFactsFromPayload(decoded, leagueKey, input.coverage);
+    yield* Effect.annotateCurrentSpan("provider.player_fact_count", rates.length);
     return rates;
+  });
+
+  const readGamesPlayed = Effect.fnUntraced(function* (input: {
+    readonly provider: ProviderKey;
+    readonly session: Redacted.Redacted<string>;
+    readonly providerLeagueKey: string;
+    readonly providerTeamKey: string;
+    readonly pitcherSlot: string | undefined;
+  }) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_league");
+    const cookie = yield* sessionCookie(input, "read_league");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league");
+    const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_league");
+    if (providerLeagueKey(teamKey) !== leagueKey) {
+      return yield* ProviderResponseInvalid.make({ operation: "read_league", field: "team_key" });
+    }
+    const payload = yield* readJson(internet, {
+      operation: "read_league",
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${leagueKey}/teams;team_keys=${teamKey};out=games_played`,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(TeamGamesPlayedPayload, payload, "read_league");
+    const gamesPlayed = yield* gamesPlayedFromPayload(
+      decoded,
+      leagueKey,
+      teamKey,
+      input.pitcherSlot,
+    );
+    yield* Effect.annotateCurrentSpan("provider.games_played_position_count", gamesPlayed.length);
+    return gamesPlayed;
   });
 
   const searchPlayers = Effect.fn("YahooProvider.searchPlayers")(function* (
@@ -646,8 +691,8 @@ export const yahooProvider = Effect.gen(function* () {
     buildReviewLink,
     planLineup: (input: ProviderLineupRequest) =>
       planYahooLineup(input, {
-        readStartRates: () =>
-          readStartRates({
+        readPlayerFacts: () =>
+          readPlayerFacts({
             provider: input.provider,
             session: input.session,
             providerLeagueKey: input.providerLeagueKey,
@@ -655,6 +700,14 @@ export const yahooProvider = Effect.gen(function* () {
               (player: ProviderRosterPlayer) => player.providerPlayerKey,
             ),
             coverage: input.roster.coverage,
+          }),
+        readGamesPlayed: () =>
+          readGamesPlayed({
+            provider: input.provider,
+            session: input.session,
+            providerLeagueKey: input.providerLeagueKey,
+            providerTeamKey: input.providerTeamKey,
+            pitcherSlot: pitcherSlotOf(input.league),
           }),
         readHistory: (periods) =>
           readPlayerHistory({
@@ -791,7 +844,8 @@ function yahooUrl(origin: URL, path: string, query: Readonly<Record<string, stri
         key !== "format" &&
         key !== "stats.type" &&
         key !== "stats.week" &&
-        key !== "percent_started.cut_types",
+        key !== "percent_started.cut_types" &&
+        key !== "ranks",
     )
   ) {
     throw new Error("Yahoo request contains an unsupported query field");
@@ -1021,6 +1075,8 @@ function leagueSettings(
       draftStatus: optionalNonEmpty(attributes.draft_status),
       periodWindow,
       rosterCoverage,
+      maxGamesPlayed: declaredLimit(settings.max_games_played),
+      maxInningsPitched: declaredLimit(settings.max_innings_pitched),
       rosterPositions: settings.roster_positions.map(({ roster_position }) => {
         const kind = rosterSlotKind(roster_position.position, roster_position.is_starting_position);
         return {
@@ -1048,6 +1104,10 @@ function leagueSettings(
       })),
     };
   });
+}
+
+function declaredLimit(limit: number | undefined): number | undefined {
+  return limit !== undefined && limit > 0 ? limit : undefined;
 }
 
 function declaredRosterCoverage(
@@ -1274,6 +1334,78 @@ function confirmedStartIn(status: ReadonlyArray<typeof StartingStatus.Type> | un
   return status?.some((entry) => entry.is_starting === 1) === true;
 }
 
+function pitcherSlotOf(league: ProviderLeagueSettings): string | undefined {
+  return ["P", "RP", "SP"].find((name) =>
+    league.rosterPositions.some(
+      (position) => position.kind === "starting" && position.position === name,
+    ),
+  );
+}
+
+function gamesPlayedFromPayload(
+  payload: typeof TeamGamesPlayedPayload.Type,
+  requestedLeagueKey: string,
+  requestedTeamKey: string,
+  pitcherSlot: string | undefined,
+): Effect.Effect<ReadonlyArray<ProviderGamesPlayed>, ProviderResponseInvalid> {
+  return Effect.gen(function* () {
+    if (payload.league.league_key !== requestedLeagueKey) {
+      return yield* responseMismatch({ operation: "read_league", field: "league.league_key" });
+    }
+    const team = payload.league.teams.find((entry) => entry.team_key === requestedTeamKey);
+    if (team === undefined || team.games_played === undefined) {
+      return yield* responseMismatch({ operation: "read_league", field: "team.games_played" });
+    }
+    const rows: Array<ProviderGamesPlayed> = [];
+    for (const wrapper of team.games_played) {
+      const type = wrapper.games_played_by_position_type;
+      for (const entry of type.games_played ?? []) {
+        const games = entry.games_played_by_position.games_played;
+        rows.push({
+          position: entry.games_played_by_position.position,
+          played: games.played,
+          max: games.max,
+          projected: games.projected,
+        });
+      }
+      const innings = type.innings_pitched;
+      if (innings !== undefined && pitcherSlot !== undefined) {
+        rows.push({
+          position: pitcherSlot,
+          played: Number(innings.pitched),
+          max: Number(innings.max),
+          projected: Number(innings.projected),
+        });
+      }
+    }
+    return rows;
+  });
+}
+
+function playerRanksOf(
+  payload: ReadonlyArray<typeof PlayerRankPayload.Type> | undefined,
+): ReadonlyArray<PlayerRank> {
+  const ranks: Array<PlayerRank> = [];
+  for (const entry of payload ?? []) {
+    const type = rankTypeMap[entry.player_rank.rank_type];
+    const rank = Number(entry.player_rank.rank_value);
+    if (type !== undefined && Number.isInteger(rank) && rank > 0) {
+      ranks.push({ type, rank });
+    }
+  }
+  return ranks;
+}
+
+const rankTypeMap: Readonly<Record<string, RankType>> = {
+  L30: "L30",
+  L14: "L14",
+  PS7: "PS7",
+  PSR: "PSR",
+  L4W: "L4W",
+  PW: "PW",
+  PN4W: "PN4W",
+};
+
 function playerDetailQuery(basis: ProviderStatBasis): Record<string, string> {
   return basis.type === "week"
     ? { format: "json", "stats.type": "week", "stats.week": String(basis.week) }
@@ -1319,11 +1451,14 @@ function playerDetailsFromPayload(
   });
 }
 
-function startRatesFromPayload(
+function playerFactsFromPayload(
   payload: typeof PlayerDetailsPayload.Type,
   requestedLeagueKey: string,
   expected: ProviderRosterCoverage,
-): Effect.Effect<ReadonlyArray<YahooStartRate>, ProviderResponseInvalid | ProviderPeriodMismatch> {
+): Effect.Effect<
+  ReadonlyArray<YahooPlayerFacts>,
+  ProviderResponseInvalid | ProviderPeriodMismatch
+> {
   return Effect.gen(function* () {
     if (payload.league.league_key !== requestedLeagueKey) {
       return yield* responseMismatch({
@@ -1331,7 +1466,7 @@ function startRatesFromPayload(
         field: "league.league_key",
       });
     }
-    const rates: Array<YahooStartRate> = [];
+    const rates: Array<YahooPlayerFacts> = [];
     for (const player of payload.league.players) {
       const percentStarted = yield* communityStartRateOf(
         player.percent_started,
@@ -1339,7 +1474,19 @@ function startRatesFromPayload(
         expected,
       );
       if (percentStarted !== undefined) {
-        rates.push({ providerPlayerKey: player.player_key, ...percentStarted });
+        rates.push({
+          providerPlayerKey: player.player_key,
+          ...percentStarted,
+          percentOwned: yield* percentageOf(
+            player.percent_owned?.value,
+            `league.players.${player.player_key}.percent_owned.value`,
+          ),
+          percentOwnedDelta: yield* percentDeltaOf(
+            player.percent_owned?.delta,
+            `league.players.${player.player_key}.percent_owned.delta`,
+          ),
+          ranks: playerRanksOf(player.player_ranks),
+        });
       }
     }
     if (rates.length === 0) {
@@ -2157,6 +2304,8 @@ const StatModifierAttributes = Schema.Struct({
 });
 
 const LeagueSettingsAttributes = Schema.Struct({
+  max_games_played: Schema.optional(IntFromStringOrNumber),
+  max_innings_pitched: Schema.optional(IntFromStringOrNumber),
   roster_type: Schema.optional(Schema.String),
   waiver_type: Schema.optional(Schema.String),
   waiver_rule: Schema.optional(Schema.String),
@@ -2294,6 +2443,13 @@ const PercentStartedPayload = Schema.Struct({
   percent_started_cut_types: Schema.optional(Schema.Array(PercentStartedCut)),
 });
 
+const PlayerRankPayload = Schema.Struct({
+  player_rank: Schema.Struct({
+    rank_type: Schema.NonEmptyString,
+    rank_value: Schema.Union([Schema.String, Schema.Finite]),
+  }),
+});
+
 const PlayerDetailPayload = Schema.Struct({
   player_key: PlayerKey,
   name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
@@ -2303,6 +2459,7 @@ const PlayerDetailPayload = Schema.Struct({
   ownership: Schema.optional(PlayerOwnership),
   percent_owned: Schema.optional(PercentOwned),
   percent_started: Schema.optional(PercentStartedPayload),
+  player_ranks: Schema.optional(Schema.Array(PlayerRankPayload)),
   player_stats: Schema.optional(PlayerStats),
 });
 
@@ -2349,6 +2506,49 @@ const RemainingGamesPayload = Schema.Struct({
       remaining_games: IntFromStringOrNumber,
     }),
   ),
+});
+
+const GamesPlayedPositionPayload = Schema.Struct({
+  position: Schema.NonEmptyString,
+  games_played: Schema.Struct({
+    played: IntFromStringOrNumber,
+    max: IntFromStringOrNumber,
+    projected: IntFromStringOrNumber,
+  }),
+});
+
+const GamesPlayedByTypePayload = Schema.Struct({
+  position_type: Schema.optional(Schema.String),
+  games_played: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        games_played_by_position: GamesPlayedPositionPayload,
+      }),
+    ),
+  ),
+  innings_pitched: Schema.optional(
+    Schema.Struct({
+      pitched: Schema.Union([Schema.Finite, Schema.String]),
+      max: Schema.Union([Schema.Finite, Schema.String]),
+      projected: Schema.Union([Schema.Finite, Schema.String]),
+    }),
+  ),
+});
+
+const GamesPlayedTypePayload = Schema.Struct({
+  games_played_by_position_type: GamesPlayedByTypePayload,
+});
+
+const TeamGamesPlayedPayload = Schema.Struct({
+  league: Schema.Struct({
+    league_key: LeagueKey,
+    teams: Schema.Array(
+      Schema.Struct({
+        team_key: TeamKey,
+        games_played: Schema.optional(Schema.Array(GamesPlayedTypePayload)),
+      }),
+    ),
+  }),
 });
 
 const TeamStatsPayload = Schema.Struct({

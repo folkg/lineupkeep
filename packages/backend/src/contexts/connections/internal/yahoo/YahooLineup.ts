@@ -12,12 +12,15 @@ import type {
   ScoringProfile,
   PlayerAvailability,
   PlayerCommunityStartRate,
+  PlayerOwnership,
+  PlayerRank,
   PolicyPlayer,
   StatObservation,
   ValueSource,
 } from "#contexts/connections/internal/provider-scoring/types.ts";
 import type {
   ProviderCapabilities,
+  ProviderGamesPlayed,
   ProviderLeagueSettings,
   ProviderLineupOutcome,
   ProviderLineupRequest,
@@ -81,24 +84,38 @@ export function planYahooLineup(
 ): Effect.Effect<ProviderLineupOutcome, ProviderReadFailure> {
   return Effect.gen(function* () {
     const period = targetPeriod(input.target);
-    const players = policyPlayers(input.roster, period);
+    const gamesLimited =
+      input.league.maxGamesPlayed !== undefined || input.league.maxInningsPitched !== undefined;
+    const gamesPlayed = gamesLimited ? yield* read.readGamesPlayed() : [];
+    const players = policyPlayers(input.roster, period, gamesPlayed);
+    const facts = yield* read.readPlayerFacts();
     const sources: Array<ValueSource> = [];
-    if (input.league.statModifiers.length > 0) {
-      const window = yahooObservationWindow(input.league, period);
+    if (gamesLimited) {
       sources.push({
-        kind: "scoring-rules",
-        window,
-        scoring: yahooScoringProfile(input.league),
-        observations: observationsFor(
-          yield* read.readHistory(window.filter((entry) => entry.kind === "week")),
+        kind: "ownership-composite",
+        sport: input.sport,
+        teamCount: input.league.teamCount,
+        standardRosterSpots: standardRosterSpots(input.league),
+        players: ownershipFactsOf(players, facts),
+      });
+    } else {
+      if (input.league.statModifiers.length > 0) {
+        const window = yahooObservationWindow(input.league, period);
+        sources.push({
+          kind: "scoring-rules",
           window,
-        ),
+          scoring: yahooScoringProfile(input.league),
+          observations: observationsFor(
+            yield* read.readHistory(window.filter((entry) => entry.kind === "week")),
+            window,
+          ),
+        });
+      }
+      sources.push({
+        kind: "community-start-rate",
+        started: startRatesOf(players, facts),
       });
     }
-    sources.push({
-      kind: "community-start-rate",
-      started: startRatesOf(players, yield* read.readStartRates()),
-    });
 
     const scored = scoreLineup({ period, sources, players });
     if (scored.kind === "refused") {
@@ -113,6 +130,7 @@ export function planYahooLineup(
       kind: "scored",
       provenance: `yahoo/${scored.label}`,
       players: scored.players.map(providerValue),
+      gamesPlayed,
     };
   });
 }
@@ -185,14 +203,53 @@ function providerValue(player: ScoredPlayer): ProviderPlayerValue {
   };
 }
 
-function policyPlayers(roster: ProviderRoster, period: Period): ReadonlyArray<PolicyPlayer> {
+function policyPlayers(
+  roster: ProviderRoster,
+  period: Period,
+  gamesPlayed: ReadonlyArray<ProviderGamesPlayed>,
+): ReadonlyArray<PolicyPlayer> {
+  const limits = new Map(gamesPlayed.map((entry) => [entry.position, entry]));
   return roster.players.map((player) => ({
     id: player.providerPlayerKey,
     availability: yahooAvailability(player.injuryCode),
-    scheduled: player.scheduled,
+    scheduled: participationCounts(player, limits) ? player.scheduled : true,
     confirmedStart: player.confirmedStart,
     nonGamePeriods: nonGamePeriods(player, period),
   }));
+}
+
+function participationCounts(
+  player: ProviderRosterPlayer,
+  limits: ReadonlyMap<string, ProviderGamesPlayed>,
+): boolean {
+  const limit = limitOf(player, limits);
+  return limit === undefined || limit.projected <= limit.max;
+}
+
+function limitOf(
+  player: ProviderRosterPlayer,
+  limits: ReadonlyMap<string, ProviderGamesPlayed>,
+): ProviderGamesPlayed | undefined {
+  const current = limits.get(player.slot);
+  if (current !== undefined) {
+    return current;
+  }
+  return player.eligiblePositions
+    .map((position) => limits.get(position))
+    .filter((entry): entry is ProviderGamesPlayed => entry !== undefined && entry.max > 0)
+    .reduce<ProviderGamesPlayed | undefined>(
+      (lowest, entry) =>
+        lowest === undefined || entry.projected / entry.max < lowest.projected / lowest.max
+          ? entry
+          : lowest,
+      undefined,
+    );
+}
+
+function standardRosterSpots(league: ProviderLeagueSettings): number {
+  return league.rosterPositions
+    .filter((position) => position.kind !== "reserve")
+    .reduce((total, position) => total + position.count, 0);
 }
 
 function nonGamePeriods(player: ProviderRosterPlayer, period: Period): ReadonlyArray<Period> {
@@ -202,9 +259,28 @@ function nonGamePeriods(player: ProviderRosterPlayer, period: Period): ReadonlyA
   return [{ kind: "week", week: player.byeWeek }];
 }
 
+function ownershipFactsOf(
+  players: ReadonlyArray<PolicyPlayer>,
+  facts: ReadonlyArray<YahooPlayerFacts>,
+): ReadonlyArray<PlayerOwnership> {
+  const byKey = new Map(facts.map((fact) => [fact.providerPlayerKey, fact]));
+  return players.map((player) => {
+    const fact = byKey.get(player.id);
+    return {
+      id: player.id,
+      percentOwned: exactPercent(fact?.percentOwned ?? null),
+      delta:
+        fact?.percentOwnedDelta === null || fact?.percentOwnedDelta === undefined
+          ? undefined
+          : parseExact(String(fact.percentOwnedDelta)),
+      ranks: fact?.ranks ?? [],
+    };
+  });
+}
+
 function startRatesOf(
   players: ReadonlyArray<PolicyPlayer>,
-  rates: ReadonlyArray<YahooStartRate>,
+  rates: ReadonlyArray<YahooPlayerFacts>,
 ): ReadonlyArray<PlayerCommunityStartRate> {
   const byKey = new Map(rates.map((rate) => [rate.providerPlayerKey, rate]));
   return players.map((player) => {
@@ -300,7 +376,12 @@ function targetPeriod(target: ProviderLineupRequest["target"]): Period {
   }
 }
 
-export type YahooStartRate = { readonly providerPlayerKey: string } & YahooStartRateSummary;
+export type YahooPlayerFacts = YahooStartRateSummary & {
+  readonly providerPlayerKey: string;
+  readonly percentOwned: number | null;
+  readonly percentOwnedDelta: number | null;
+  readonly ranks: ReadonlyArray<PlayerRank>;
+};
 
 export type YahooStartRateSummary = {
   readonly percent: number | null;
@@ -315,7 +396,14 @@ export type YahooStartRateCut = {
 };
 
 export type YahooLineupReader = {
-  readonly readStartRates: () => Effect.Effect<ReadonlyArray<YahooStartRate>, ProviderReadFailure>;
+  readonly readPlayerFacts: () => Effect.Effect<
+    ReadonlyArray<YahooPlayerFacts>,
+    ProviderReadFailure
+  >;
+  readonly readGamesPlayed: () => Effect.Effect<
+    ReadonlyArray<ProviderGamesPlayed>,
+    ProviderReadFailure
+  >;
   readonly readHistory: (
     periods: ReadonlyArray<ProviderScoringWeek>,
   ) => Effect.Effect<ReadonlyArray<YahooPeriodHistory>, ProviderReadFailure>;

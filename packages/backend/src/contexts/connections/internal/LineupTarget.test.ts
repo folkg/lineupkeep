@@ -250,6 +250,8 @@ const footballLeague: ProviderLeagueSettings = {
   season: 2026,
   periodWindow: { current: 3, start: 1, end: 17 },
   rosterCoverage: "week",
+  maxGamesPlayed: undefined,
+  maxInningsPitched: undefined,
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,
@@ -273,6 +275,8 @@ const hockeyLeague: ProviderLeagueSettings = {
   webUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
   periodWindow: { current: 3, start: 1, end: 24 },
   rosterCoverage: "date",
+  maxGamesPlayed: undefined,
+  maxInningsPitched: undefined,
   startDate: "2026-10-01",
   endDate: "2027-04-10",
 };

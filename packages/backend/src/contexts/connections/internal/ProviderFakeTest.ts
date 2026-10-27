@@ -12,6 +12,7 @@ import {
 import type {
   ProviderAvailabilityTier,
   ProviderCapabilities,
+  ProviderGamesPlayed,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderLineupAssignment,
@@ -69,6 +70,7 @@ type FakeProviderState = {
   readonly rosterPeriods: ReadonlyArray<ProviderRosterCoverage | undefined>;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
   readonly playerScores: ReadonlyArray<FakePlayerScore>;
+  readonly gamesPlayed: ReadonlyArray<ProviderGamesPlayed>;
   readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
   readonly matchups: ReadonlyArray<ProviderMatchup>;
   readonly transactions: ReadonlyArray<ProviderTransaction>;
@@ -105,6 +107,7 @@ export type FakeProviderWorldShape = {
   readonly rosterPeriods: Effect.Effect<ReadonlyArray<ProviderRosterCoverage | undefined>>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
   readonly setPlayerScores: (scores: ReadonlyArray<FakePlayerScore>) => Effect.Effect<void>;
+  readonly setGamesPlayed: (gamesPlayed: ReadonlyArray<ProviderGamesPlayed>) => Effect.Effect<void>;
   readonly failPlayerDetails: (failure: ProviderPeriodMismatch | undefined) => Effect.Effect<void>;
   readonly setMatchups: (matchups: ReadonlyArray<ProviderMatchup>) => Effect.Effect<void>;
   readonly setTransactions: (
@@ -156,6 +159,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         rosterPeriods: [],
         playerDetails: [],
         playerScores: [],
+        gamesPlayed: [],
         playerDetailsFailure: undefined,
         matchups: [],
         transactions: [],
@@ -211,6 +215,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         rosterPeriods: Effect.map(Ref.get(state), (current) => current.rosterPeriods),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
         setPlayerScores: (playerScores) => modify((current) => ({ ...current, playerScores })),
+        setGamesPlayed: (gamesPlayed) => modify((current) => ({ ...current, gamesPlayed })),
         failPlayerDetails: (playerDetailsFailure) =>
           modify((current) => ({ ...current, playerDetailsFailure })),
         setMatchups: (matchups) => modify((current) => ({ ...current, matchups })),
@@ -593,7 +598,7 @@ const providerFake = Effect.gen(function* () {
           detail: current.planRefusal.detail,
         };
       }
-      return planFakeLineup(input, current.playerScores);
+      return planFakeLineup(input, current.playerScores, current.gamesPlayed);
     }),
   } satisfies ProviderShape;
 });
@@ -650,6 +655,7 @@ const fakeCapabilities: ProviderCapabilities = {
 function planFakeLineup(
   input: ProviderLineupRequest,
   scores: ReadonlyArray<FakePlayerScore>,
+  gamesPlayed: ReadonlyArray<ProviderGamesPlayed>,
 ): ProviderLineupOutcome {
   const byKey = new Map(scores.map((score) => [score.providerPlayerKey, score]));
   const values = input.roster.players.map((player): ProviderPlayerValue => {
@@ -661,7 +667,7 @@ function planFakeLineup(
     };
   });
   return values.some((value) => value.score !== null)
-    ? { kind: "scored", provenance: "fake/declared-score", players: values }
+    ? { kind: "scored", provenance: "fake/declared-score", players: values, gamesPlayed }
     : {
         kind: "refused",
         refusal: "structural",

@@ -137,7 +137,10 @@ const nflSettingsFragment = {
   },
 };
 
-function nflLeaguePayload(attributes: Readonly<Record<string, unknown>>): {
+function nflLeaguePayload(
+  attributes: Readonly<Record<string, unknown>>,
+  settings: Readonly<Record<string, unknown>> = nflSettingsFragment,
+): {
   fantasy_content: Record<string, unknown>;
 } {
   return {
@@ -146,7 +149,7 @@ function nflLeaguePayload(attributes: Readonly<Record<string, unknown>>): {
       "yahoo:uri": "/fantasy/v2/league/466.l.4000/settings",
       copyright: "Data provided by InnoDB",
       refresh_rate: "60",
-      league: [attributes, { settings: [nflSettingsFragment], count: 1 }],
+      league: [attributes, { settings: [settings], count: 1 }],
     },
   };
 }
@@ -166,6 +169,145 @@ export const yahooNflLeagueSettingsForAnotherLeague = nflLeaguePayload({
   ...nflLeagueAttributes,
   league_key: "466.l.9999",
 });
+
+export const yahooNflLeagueSettingsWithGamesLimit = nflLeaguePayload(nflLeagueAttributes, {
+  ...nflSettingsFragment,
+  max_games_played: "162",
+  max_innings_pitched: "1400",
+});
+
+export const yahooNflLeagueSettingsWithPitcherSlot = nflLeaguePayload(nflLeagueAttributes, {
+  ...nflSettingsFragment,
+  max_games_played: "162",
+  max_innings_pitched: "1400",
+  roster_positions: [
+    ...nflSettingsFragment.roster_positions,
+    { roster_position: { position: "P", position_type: "P", count: 1, is_starting_position: 1 } },
+  ],
+});
+
+export const yahooNflPlayerDetailsWithOwnership = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: {
+      league_key: "466.l.4000",
+      players: {
+        "0": {
+          player: [
+            [
+              { player_key: "466.p.20001" },
+              { name: { full: "Synthetic Owned Starter" } },
+              {
+                percent_started: {
+                  coverage_type: "week",
+                  week: "6",
+                  value: 20,
+                  percent_started_cut_types: {
+                    "0": { percent_started_cut_type: { cut_type: "platinum", value: 20 } },
+                    count: 1,
+                  },
+                },
+              },
+              {
+                percent_owned: {
+                  coverage_type: "week",
+                  week: "6",
+                  value: 80,
+                  delta: "2",
+                },
+              },
+              {
+                player_ranks: {
+                  "0": { player_rank: { rank_type: "L4W", rank_value: "1" } },
+                  "1": { player_rank: { rank_type: "PW", rank_value: "1" } },
+                  "2": { player_rank: { rank_type: "PN4W", rank_value: "1" } },
+                  count: 4,
+                },
+              },
+            ],
+          ],
+        },
+        "1": {
+          player: [
+            [
+              { player_key: "466.p.20002" },
+              { name: { full: "Synthetic Crowd Starter" } },
+              {
+                percent_started: {
+                  coverage_type: "week",
+                  week: "6",
+                  value: 90,
+                  percent_started_cut_types: {
+                    "0": { percent_started_cut_type: { cut_type: "platinum", value: 90 } },
+                    count: 1,
+                  },
+                },
+              },
+              {
+                percent_owned: {
+                  coverage_type: "week",
+                  week: "6",
+                  value: 5,
+                  delta: "0",
+                },
+              },
+              {
+                player_ranks: {
+                  "0": { player_rank: { rank_type: "L4W", rank_value: "30" } },
+                  count: 1,
+                },
+              },
+            ],
+          ],
+        },
+        count: 2,
+      },
+    },
+  },
+};
+
+export const yahooNflGamesPlayed = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: {
+      league_key: "466.l.4000",
+      teams: {
+        "0": {
+          team: [
+            { team_key: "466.l.4000.t.1" },
+            { name: "Synthetic Team" },
+            {
+              games_played: {
+                "0": {
+                  games_played_by_position_type: {
+                    position_type: "B",
+                    games_played: {
+                      "0": {
+                        games_played_by_position: {
+                          position: "QB",
+                          games_played: { played: 12, max: 17, projected: 17 },
+                        },
+                      },
+                      count: 1,
+                    },
+                  },
+                },
+                "1": {
+                  games_played_by_position_type: {
+                    position_type: "P",
+                    innings_pitched: { pitched: "82.1", max: "1400", projected: "1400.1" },
+                  },
+                },
+                count: 2,
+              },
+            },
+          ],
+        },
+        count: 1,
+      },
+    },
+  },
+};
 
 export const yahooNflLeagueSettingsWith = (
   attributes: Readonly<Record<string, unknown>>,

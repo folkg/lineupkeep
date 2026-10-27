@@ -154,14 +154,14 @@ disposition. "Seam" means `Provider*` contracts in
 
 ### Missing from the seam
 
-| Fact                                                 | Reference source                                            | Consequence today                                                         | Disposition                                            |
-| ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ |
-| **has a game in the target period**                  | `opponent` on the roster player (string / `null` / `"Bye"`) | **the reported failure**                                                  | **in scope, first** (§6)                               |
-| **real-world starting status**                       | `starting_status.is_starting` (goalies, pitchers)           | a backup goalie with a game is indistinguishable from a confirmed starter | **in scope, done**: seam fact, `confirmed-start` rung  |
-| games played by position, `played`/`max`/`projected` | team-level `games_played`                                   | no max-games support                                                      | deferred: unreachable in football/hockey (§8)          |
-| innings pitched                                      | team-level `games_played.innings_pitched`                   | same                                                                      | deferred: not a supported sport                        |
-| postponed games                                      | external schedule/scoreboard read                           | a postponed game would look like a game                                   | deferred with a named limitation (§10)                 |
-| pending transactions                                 | roster `transactions` (waivers, pending trades)             | a player in a pending transaction is a free variable                      | deliberately out of scope; the lock is its future home |
+| Fact                                                 | Reference source                                            | Consequence today                                                         | Disposition                                               |
+| ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **has a game in the target period**                  | `opponent` on the roster player (string / `null` / `"Bye"`) | **the reported failure**                                                  | **in scope, first** (§6)                                  |
+| **real-world starting status**                       | `starting_status.is_starting` (goalies, pitchers)           | a backup goalie with a game is indistinguishable from a confirmed starter | **in scope, done**: seam fact, `confirmed-start` rung     |
+| games played by position, `played`/`max`/`projected` | team-level `games_played`                                   | capacity reduction and participation suppression                          | provider fact; only when the league declares a limit (§8) |
+| innings pitched                                      | team-level `games_played.innings_pitched`                   | same                                                                      | pitcher slot only; same gate (§8)                         |
+| postponed games                                      | external schedule/scoreboard read                           | a postponed game would look like a game                                   | deferred with a named limitation (§10)                    |
+| pending transactions                                 | roster `transactions` (waivers, pending trades)             | a player in a pending transaction is a free variable                      | deliberately out of scope; the lock is its future home    |
 
 ### Present but wrong or unused where it should be used
 
@@ -419,38 +419,65 @@ conserve games. That suppression is the one behaviour with no current equivalent
 product question, not a port: it means deliberately benching a player who is playing, to save his games
 for later. Recorded as a decision for whoever adds the sport.
 
-**Status: built as a design, not shipped (2026-10-27).** The owner asked for it now anyway, and this
-pass established how far the evidence goes. What is established:
+**Status: shipped without the positional-scarcity offset (2026-10-27).** The owner asked for the
+capacity work now, and accepted that percent owned may be sufficient without the offset. The seam gained
+a `gamesPlayed` fact — per position `{played, max, projected}`, from the team's `games_played` member —
+and the provider uses it in three ways.
 
-- `ranks` are published on the same roster read the plan already makes (`player_ranks` for all seven
-  types, string values), and `percent_owned` publishes `value` and `delta`. Both are read-only
-  verified on a hockey roster. That is the composite's second and third parts and the base.
-- The league declaration is published as `max_games_played` / `max_innings_pitched` in settings when a
-  league uses them; absent otherwise.
-- The team's per-position `played`/`max`/`projected` and its innings row exist only in the reference's
-  captured 2023 baseball fixture. A hockey team's `team/{key};out=games_played` returns no
-  `games_played` member at all, and no linked league declares a limit, so the fact cannot be observed
-  live in this account.
-- The composite's **positional-scarcity offset** is the part that cannot be built to the same standard.
-  The reference computes it from the provider's game-level top-players surface, allocated across the
-  league's slots by sport-specific add-cap tables, and caches the result per league in Firestore. That
-  allocation is transaction-valuation machinery this project has deliberately rejected, no captured
-  fixture contains the pool shape, and the metric is not comparable across positions without it
-  (§8a). Shipping the composite with the offset invented or omitted would be a quietly wrong value
-  basis in a league type no supported sport can reach.
+**Which leagues take this path.** A league takes it when its settings declare `max_games_played` or
+`max_innings_pitched`. Every other league keeps the scoring-rules and community-start-rate ladder, so no
+football or hockey league in this account changes behaviour. The declaration is read from settings; the
+per-position allowance is read from the team object only when a limit is declared, because the read
+costs a request and answers nothing otherwise.
 
-So the whole step stays unshipped rather than half-built. What it needs before it can be delivered:
-one supported sport or league that declares a games limit, the pool read's shape captured from that
-league, and an agreed definition of replacement level that does not import the transaction cap tables.
-The capacity half (§8b) and the participation suppression (§8c) are expressible in the existing
-objective and need no solver change; they wait on the same evidence.
+**The value basis.** When a limit is declared the plan prices players from the ownership composite,
+published as provenance `yahoo/ownership-composite:no-positional-scarcity:<sport>:<period>`:
 
-**Decision: deferred as a whole, because it is unreachable in our supported sports.** Yahoo's
-per-position games limit is a baseball and basketball setting; football plays one game per week and
-Yahoo hockey has no such limit. Our football league publishes no such setting and the roster read
-exposes no `games_played`. Reopening condition: a supported sport that declares the limit. What it would
-then need is a `gamesPlayed` fact on the seam — per position, `{played, max, projected}`, read from the
-team object — plus the two decisions above.
+```
+0.5 × (percent_owned − 0) + 0.5 × rankScore + bounded(percent_owned_delta)
+```
+
+`rankScore` is the reference's shape with the weights it uses per sport (football: last4Weeks 40,
+projectedWeek 35, next4Weeks 25; hockey: last30Days 40, last14Days 30, next7Days 10, restOfSeason 20),
+each rank converted to `min(playersInLeague / rank, weight / 5) × 5` so a rank better than the league's
+starter pool cannot run away. `playersInLeague` is `teamCount × standardRosterSpots`, reserve slots
+excluded. The delta term is clamped to `±4` percentile points, matching the reference's bound. All
+arithmetic is exact; nothing is rounded until the selection units are formed.
+
+The offset is recorded as zero and named in the provenance label rather than silently omitted. Percent
+owned is not comparable across positions without it, so the composite ranks the positions the league
+declares with the weight the league gives them, and a player only competes for slots they are eligible
+for. Two forward consequences are unchanged from §8a: the score is no longer "crowd start share", and
+the label says so.
+
+**The constraint.** A position whose `played` has reached `max` loses its starting unit; a position
+whose `projected` exceeds `max` by more than 1.5% loses one unit, marked optional when required capacity
+would otherwise over-constrain. Capacity is reduced, never multiplied: no new objective term, no factor
+applied to a score. A slot the reduction closes is absent from the planning problem, and a player
+currently sitting there is planned out of it — except that locked players keep their units, so a locked
+player can never make the problem infeasible. A league with no declared limit is unaffected.
+
+**The churn mechanic.** Participation is ignored at a position whose projection exceeds its allowance:
+there, the plan treats every player as scheduled, because the cap already forces rotation and benching a
+player for a single off-day spends a game the league will not refund. Below the allowance — and when no
+row is published for the player's slot or any position they are eligible for — the actual `scheduled`
+fact stands. This is the reference's suppression rule, expressed as the availability ladder instead of a
+`0..10` value boost: the owner's "maybe percent owned is sufficient" is answered by the stable value
+basis, not by porting the boost arithmetic.
+
+**What was deliberately left out.** The positional-scarcity offset is a separate, provider-neutral
+concept: replacement level by position, useful for add/drop and trade valuation, portable beyond Yahoo.
+It is not a lineup question and it is not built here. Without it the composite is a cross-position
+ranking with a zero offset; with it, the same composite would price positions against replacement. The
+owner's instruction was to keep it out of this chunk and treat it as its own work.
+
+**What the live account could not show.** No linked league declares either limit, so the shipped path is
+covered by tests and fixtures rather than a live plan. The `games_played` shape is synthetic, adapted
+from the reference's captured baseball fixture: the position rows under `games_played_by_position_type`
+and an `innings_pitched` row for the pitcher slot. A hockey team's `team/{key};out=games_played` returns
+no `games_played` member, which the adapter treats as "no allowance published", not as a failure. The
+first real games-limited league is therefore the first live exercise of this path; its plan provenance
+will say `ownership-composite` and its capacity reductions will be visible as bench moves.
 
 **Churn we do have.** Our scheduler creates a scheduled run per eligible team **every hour**
 (`infra/hosts/cloudRun.ts`: `"0 * * * *"`), where the reference set lineups for a league only when a game
@@ -507,7 +534,7 @@ where the test belongs.
     percentage for all, chosen once per roster and recorded in the provenance; a player the cut omits is
     priced from the overall percentage rather than benched as unmeasured.
 21. **[policy, deferred sport]** If a league declares a per-position games limit, its final score is
-    built from the ownership composite (percent owned, ranks, bounded delta, positional scarcity) and
+    built from the ownership composite (percent owned, ranks, bounded delta, zero positional offset) and
     never from percent started; its games limit is expressed as starting-slot capacity, and no
     availability or value factor is multiplied by a pace threshold.
 
@@ -613,7 +640,7 @@ automation after step 2 is verified against a live read, not before.**
 
 | Item                                                  | Condition                                                                                                       |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| max games per position, and its pace arithmetic       | a supported sport that declares the limit; §8 records the shape                                                 |
+| positional scarcity for the ownership composite       | a provider-neutral replacement-level definition; §8 records why it is separate                                  |
 | postponement                                          | the first observed postponed game, or a schedule read for another reason                                        |
 | confirmed starting goalie/pitcher (`starting_status`) | **done**: read from the roster and expressed as the top rung; ADR 0006's premise about the signal was corrected |
 | ``Q`/`P`/`GTD` mapping                                | **done**: the explicit status table records the tier and its disagreement with the reference                    |

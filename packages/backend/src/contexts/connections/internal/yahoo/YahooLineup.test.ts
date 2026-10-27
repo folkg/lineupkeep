@@ -6,6 +6,7 @@ import type { PlanAssignmentsResult } from "#contexts/connections/internal/Lineu
 import type {
   PlayerAvailability,
   PolicyPlayer,
+  RankType,
 } from "#contexts/connections/internal/provider-scoring/types.ts";
 import { assessAvailability } from "#contexts/connections/internal/provider-scoring/Valuation.ts";
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
@@ -29,7 +30,7 @@ import {
   yahooStatusReserveListed,
   yahooTargetPeriod,
 } from "./YahooLineup.ts";
-import type { YahooLineupReader, YahooPeriodHistory, YahooStartRate } from "./YahooLineup.ts";
+import type { YahooLineupReader, YahooPeriodHistory, YahooPlayerFacts } from "./YahooLineup.ts";
 
 const recordedWeek = 6;
 const targetWeek = 7;
@@ -358,6 +359,145 @@ describe("Yahoo scoring translation", () => {
     ]);
   });
 
+  it("prices a games-limited league from percent owned and ranks, not the crowd", () => {
+    const league = gamesLimitedLeague();
+    const roster = centerRoster([
+      { key: "crowd", slot: "C", scheduled: true },
+      { key: "owned", slot: "BN", scheduled: true },
+    ]);
+
+    const outcome = runPlan(
+      { ...hockeyRequest(), league, roster },
+      {
+        rates: [ownedFacts("owned", 80, [["PS7", 1]]), ownedFacts("crowd", 5, [["PS7", 30]])],
+        gamesPlayed: [{ position: "C", played: 20, max: 82, projected: 20 }],
+      },
+    );
+
+    expect(outcome.kind).toBe("scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    expect(outcome.provenance).toBe(
+      "yahoo/ownership-composite:no-positional-scarcity:hockey:date:2026-10-26",
+    );
+    expect(outcome.players).toEqual([
+      { providerPlayerKey: "crowd", score: 55000, availability: "will-play" },
+      { providerPlayerKey: "owned", score: 450000, availability: "will-play" },
+    ]);
+    expect(
+      planned(planAssignments({ league, roster, values: outcome.players })).assignments,
+    ).toEqual([
+      { providerPlayerKey: "crowd", slot: "BN" },
+      { providerPlayerKey: "owned", slot: "C" },
+    ]);
+  });
+
+  it("bounds the ownership delta adjustment", () => {
+    const league = gamesLimitedLeague();
+    const roster = centerRoster([{ key: "rising", slot: "C", scheduled: true }]);
+
+    const outcome = runPlan(
+      { ...hockeyRequest(), league, roster },
+      {
+        rates: [ownedFacts("rising", 10, [], 9)],
+        gamesPlayed: [{ position: "C", played: 20, max: 82, projected: 20 }],
+      },
+    );
+
+    expect(outcome.kind).toBe("scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    expect(outcome.players[0]?.score).toBe(90000);
+  });
+
+  it("ignores participation only when the position's projection exceeds its allowance", () => {
+    const league = gamesLimitedLeague();
+    const roster = centerRoster([
+      { key: "idle", slot: "C", scheduled: false },
+      { key: "playing", slot: "BN", scheduled: true },
+    ]);
+    const facts = {
+      rates: [ownedFacts("idle", 90, [["PS7", 1]]), ownedFacts("playing", 10, [["PS7", 30]])],
+    };
+
+    const over = runPlan(
+      { ...hockeyRequest(), league, roster },
+      { ...facts, gamesPlayed: [{ position: "C", played: 70, max: 82, projected: 90 }] },
+    );
+
+    expect(over.kind).toBe("scored");
+    if (over.kind !== "scored") {
+      return;
+    }
+    expect(over.players).toEqual([
+      { providerPlayerKey: "idle", score: 500000, availability: "will-play" },
+      { providerPlayerKey: "playing", score: 80000, availability: "will-play" },
+    ]);
+    expect(planned(planAssignments({ league, roster, values: over.players })).assignments).toEqual(
+      [],
+    );
+
+    const under = runPlan(
+      { ...hockeyRequest(), league, roster },
+      { ...facts, gamesPlayed: [{ position: "C", played: 70, max: 82, projected: 82 }] },
+    );
+
+    expect(under.kind).toBe("scored");
+    if (under.kind !== "scored") {
+      return;
+    }
+    expect(under.players.map((player) => player.availability)).toEqual([
+      "not-scheduled",
+      "will-play",
+    ]);
+    expect(planned(planAssignments({ league, roster, values: under.players })).assignments).toEqual(
+      [
+        { providerPlayerKey: "idle", slot: "BN" },
+        { providerPlayerKey: "playing", slot: "C" },
+      ],
+    );
+  });
+
+  it("reads the allowance from an eligible position when the player's slot has none", () => {
+    const league = gamesLimitedLeague();
+    const roster = centerRoster([{ key: "idle", slot: "BN", scheduled: false }]);
+
+    const outcome = runPlan(
+      { ...hockeyRequest(), league, roster },
+      {
+        rates: [ownedFacts("idle", 90, [["PS7", 1]])],
+        gamesPlayed: [{ position: "C", played: 70, max: 82, projected: 90 }],
+      },
+    );
+
+    expect(outcome.kind).toBe("scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    expect(outcome.players[0]?.availability).toBe("will-play");
+  });
+
+  it("keeps participation when no games allowance is published", () => {
+    const league = gamesLimitedLeague();
+    const roster = centerRoster([{ key: "idle", slot: "BN", scheduled: false }]);
+
+    const outcome = runPlan(
+      { ...hockeyRequest(), league, roster },
+      {
+        rates: [ownedFacts("idle", 90, [["PS7", 1]])],
+        gamesPlayed: [],
+      },
+    );
+
+    expect(outcome.kind).toBe("scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    expect(outcome.players[0]?.availability).toBe("not-scheduled");
+  });
+
   it("starts a reserve player who has a game and benches the displaced player", () => {
     const roster = centerRoster([
       { key: "hurt", slot: "C", scheduled: true, injuryCode: "O" },
@@ -460,13 +600,20 @@ function recordedRequest(): ProviderLineupRequest {
 function runPlan(
   request: ProviderLineupRequest,
   facts: {
-    readonly rates: ReadonlyArray<YahooStartRate>;
+    readonly rates: ReadonlyArray<YahooPlayerFacts>;
     readonly history?: ReadonlyArray<YahooPeriodHistory>;
+    readonly gamesPlayed?: ReadonlyArray<{
+      readonly position: string;
+      readonly played: number;
+      readonly max: number;
+      readonly projected: number;
+    }>;
   },
 ): ProviderLineupOutcome {
   const history = facts.history ?? [];
   const reader: YahooLineupReader = {
-    readStartRates: () => Effect.succeed(facts.rates),
+    readPlayerFacts: () => Effect.succeed(facts.rates),
+    readGamesPlayed: () => Effect.succeed(facts.gamesPlayed ?? []),
     readHistory: () => Effect.succeed(history),
   };
   return Effect.runSync(planYahooLineup(request, reader));
@@ -476,13 +623,38 @@ function startRate(
   providerPlayerKey: string,
   percent: number,
   cuts: ReadonlyArray<{ readonly cut: string; readonly percent: number }>,
-): YahooStartRate {
+): YahooPlayerFacts {
   return {
     providerPlayerKey,
     percent,
     change: null,
     coverage: { type: "date", date: "2026-10-26" },
     cuts,
+    percentOwned: null,
+    percentOwnedDelta: null,
+    ranks: [],
+  };
+}
+
+function gamesLimitedLeague(): ProviderLeagueSettings {
+  return { ...centerLeague(), maxGamesPlayed: 82, maxInningsPitched: undefined };
+}
+
+function ownedFacts(
+  providerPlayerKey: string,
+  percentOwned: number,
+  ranks: ReadonlyArray<readonly [RankType, number]> = [],
+  delta = 0,
+): YahooPlayerFacts {
+  return {
+    providerPlayerKey,
+    percent: null,
+    change: null,
+    coverage: { type: "date", date: "2026-10-26" },
+    cuts: [],
+    percentOwned,
+    percentOwnedDelta: delta,
+    ranks: ranks.map(([type, rank]) => ({ type, rank })),
   };
 }
 
@@ -587,6 +759,8 @@ function recordedLeague(): ProviderLeagueSettings {
     draftStatus: "postdraft",
     periodWindow: { current: targetWeek, start: 1, end: 17 },
     rosterCoverage: "week",
+    maxGamesPlayed: undefined,
+    maxInningsPitched: undefined,
     rosterPositions: recordedRosterPositions,
     statCategories: recordedCategories,
     statModifiers: recordedStatModifiers,
@@ -663,6 +837,8 @@ function hockeyLeague(): ProviderLeagueSettings {
     draftStatus: "postdraft",
     periodWindow: { current: 5, start: 1, end: 26 },
     rosterCoverage: "date",
+    maxGamesPlayed: undefined,
+    maxInningsPitched: undefined,
     rosterPositions: [
       position("C", 2),
       position("LW", 2),

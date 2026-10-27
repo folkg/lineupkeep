@@ -28,6 +28,18 @@ export function multiplyExact(left: Exact, right: Exact): Exact {
   return exact(left.units * right.units, left.scale + right.scale);
 }
 
+export function divideByInteger(value: Exact, divisor: bigint, scale: number): Exact {
+  if (divisor === 0n) {
+    throw new Error("Cannot divide by zero.");
+  }
+  const numerator = unitsAtScale(value, value.scale + scale);
+  return exact(divideRoundHalfAwayFromZero(numerator, divisor), scale);
+}
+
+export function minExact(left: Exact, right: Exact): Exact {
+  return compareExact(left, right) <= 0 ? left : right;
+}
+
 export function compareExact(left: Exact, right: Exact): number {
   const scale = Math.max(left.scale, right.scale);
   const leftUnits = unitsAtScale(left, scale);

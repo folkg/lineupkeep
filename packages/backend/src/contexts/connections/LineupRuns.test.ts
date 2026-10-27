@@ -209,10 +209,37 @@ it.effect("writes a reserve transit instead of blocking the team", () =>
     assert.strictEqual(run.state.outcome.verified, true);
     const requests = yield* fake.explicitRequests;
     assert.strictEqual(yield* fake.explicitCallCount, 1);
+    assert.deepStrictEqual(requests[0]?.map((assignment) => assignment.slot).sort(), ["IR", "QB"]);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect("benches a player once a games-limited position's projection fills it", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* fake.setLeague(capacityLeague);
+    yield* fake.setRoster(capacityRoster);
+    yield* fake.setPlayerScores(capacityScores);
+    yield* fake.setGamesPlayed([{ position: "QB", played: 100, max: 162, projected: 165 }]);
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.status, "completed");
+    assert.strictEqual(run.state._tag, "Completed");
+    if (run.state._tag !== "Completed") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.kind, "changed");
     assert.deepStrictEqual(
-      requests[0]?.map((assignment) => assignment.slot).sort(),
-      ["IR", "QB"],
+      run.state.outcome.changes.map((change) => [change.name, change.from, change.to]),
+      [["QB Two", "QB", "BN"]],
     );
+    const requests = yield* fake.explicitRequests;
+    assert.deepStrictEqual(requests[0], [{ providerPlayerKey: "461.p.20002", slot: "BN" }]);
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
@@ -1144,6 +1171,8 @@ const customLeague: ProviderLeagueSettings = {
   season: 2026,
   periodWindow: { current: 3, start: 1, end: 17 },
   rosterCoverage: "week",
+  maxGamesPlayed: undefined,
+  maxInningsPitched: undefined,
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,
@@ -1222,6 +1251,31 @@ const reserveScores = [
   { providerPlayerKey: "461.p.20001", score: 20, availability: undefined },
   { providerPlayerKey: "461.p.20002", score: 30, availability: undefined },
   { providerPlayerKey: "461.p.20003", score: 5, availability: undefined },
+];
+
+const capacityLeague: ProviderLeagueSettings = {
+  ...customLeague,
+  rosterPositions: [
+    { position: "QB", positionType: "O", count: 2, kind: "starting", eligibility: ["QB"] },
+    { position: "BN", positionType: "B", count: 3, kind: "bench", eligibility: [] },
+  ],
+};
+
+const capacityRoster: ProviderRoster = {
+  ...customRoster,
+  players: [
+    customPlayer("461.p.20001", "QB One", "QB", "QB"),
+    customPlayer("461.p.20002", "QB Two", "QB", "QB"),
+    customPlayer("461.p.20003", "QB Three", "QB", "BN"),
+    customPlayer("461.p.20004", "QB Four", "QB", "BN"),
+  ],
+};
+
+const capacityScores = [
+  { providerPlayerKey: "461.p.20001", score: 10, availability: undefined },
+  { providerPlayerKey: "461.p.20002", score: 5, availability: undefined },
+  { providerPlayerKey: "461.p.20003", score: 3, availability: undefined },
+  { providerPlayerKey: "461.p.20004", score: 1, availability: undefined },
 ];
 
 const startedLeague: ProviderLeagueSettings = {
@@ -1370,6 +1424,8 @@ const league: ProviderLeagueSettings = {
   season: 2026,
   periodWindow: { current: 3, start: 1, end: 17 },
   rosterCoverage: "week",
+  maxGamesPlayed: undefined,
+  maxInningsPitched: undefined,
   startDate: "2026-09-03",
   endDate: "2026-12-28",
   teamCount: 10,

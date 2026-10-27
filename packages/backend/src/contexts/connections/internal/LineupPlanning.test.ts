@@ -413,6 +413,64 @@ describe("provider-neutral lineup placement", () => {
     }
   });
 
+  it("reduces a position's starting capacity when its projection exceeds the allowance", () => {
+    const games = league([
+      { position: "C", kind: "starting", count: 2, eligibility: ["C"] },
+      { position: "BN", kind: "bench", count: 3, eligibility: [] },
+    ]);
+    const members = roster([
+      member("c1", "C", "C", ["C"]),
+      member("c2", "C", "C", ["C"]),
+      member("c3", "C", "BN", ["C"]),
+      member("c4", "C", "BN", ["C"]),
+    ]);
+    const scores = values([
+      ["c1", 400],
+      ["c2", 300],
+      ["c3", 200],
+      ["c4", 100],
+    ]);
+
+    expect(
+      planned(planAssignments({ league: games, roster: members, values: scores })).assignments,
+    ).toEqual([]);
+    expect(
+      planned(
+        planAssignments({
+          league: games,
+          roster: members,
+          values: scores,
+          gamesPlayed: [{ position: "C", played: 100, max: 162, projected: 165 }],
+        }),
+      ).assignments,
+    ).toEqual([{ providerPlayerKey: "c2", slot: "BN" }]);
+  });
+
+  it("does not start a position whose maximum is already reached", () => {
+    const games = league([
+      { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+      { position: "BN", kind: "bench", count: 3, eligibility: [] },
+    ]);
+    const result = planned(
+      planAssignments({
+        league: games,
+        roster: roster([
+          member("c1", "C", "C", ["C"]),
+          member("c2", "C", "BN", ["C"]),
+          member("c3", "C", "BN", ["C"]),
+        ]),
+        values: values([
+          ["c1", 400],
+          ["c2", 300],
+          ["c3", 200],
+        ]),
+        gamesPlayed: [{ position: "C", played: 162, max: 162, projected: 170 }],
+      }),
+    );
+
+    expect(result.assignments).toEqual([{ providerPlayerKey: "c1", slot: "BN" }]);
+  });
+
   it("refuses when a required starting slot has no eligible player", () => {
     const result = planAssignments({
       league: league([
@@ -526,6 +584,8 @@ function league(
     draftStatus: undefined,
     periodWindow: { current: 3, start: 1, end: 17 },
     rosterCoverage: "week",
+    maxGamesPlayed: undefined,
+    maxInningsPitched: undefined,
     rosterPositions: positions.map((position) => ({ ...position, positionType: undefined })),
     statCategories: [],
     statModifiers: [],

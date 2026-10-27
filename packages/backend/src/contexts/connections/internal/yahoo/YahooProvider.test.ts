@@ -53,6 +53,10 @@ import {
   yahooNhlLeagueSettings,
   yahooNhlLeagueSettingsWith,
   yahooNflLeagueSettingsWith,
+  yahooNflLeagueSettingsWithGamesLimit,
+  yahooNflLeagueSettingsWithPitcherSlot,
+  yahooNflPlayerDetailsWithOwnership,
+  yahooNflGamesPlayed,
   yahooNhlRoster,
   yahooRosterWithConfirmedStart,
   yahooRosterWithOpponentKinds,
@@ -1396,6 +1400,144 @@ it.effect("reports no actual statistics when the provider omits the series", () 
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads a declared games limit and the team's per-position allowance", () => {
+  const internet = recordingInternet((request) =>
+    jsonResponse(
+      request.url.pathname.endsWith("/settings")
+        ? yahooNflLeagueSettingsWithGamesLimit
+        : request.url.pathname.includes("/teams;")
+          ? yahooNflGamesPlayed
+          : yahooNflPlayerDetailsWithOwnership,
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+    const outcome = yield* provider.planLineup(
+      planRequest({
+        league,
+        roster: planRoster({
+          providerLeagueKey: "466.l.4000",
+          coverage: weekSix,
+          members: qbAndWideReceiver,
+        }),
+        target: { coverage: "week", week: 6 },
+      }),
+    );
+
+    assert.strictEqual(league.maxGamesPlayed, 162);
+    assert.strictEqual(league.maxInningsPitched, 1400);
+    assert.strictEqual(outcome.kind, "scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    assert.deepStrictEqual(outcome.gamesPlayed, [
+      { position: "QB", played: 12, max: 17, projected: 17 },
+    ]);
+    assert.strictEqual(
+      internet.calls[1]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/teams;team_keys=466.l.4000.t.1;out=games_played?format=json",
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("maps the published innings allowance to the league's pitcher slot", () => {
+  const internet = recordingInternet((request) =>
+    jsonResponse(
+      request.url.pathname.endsWith("/settings")
+        ? yahooNflLeagueSettingsWithPitcherSlot
+        : request.url.pathname.includes("/teams;")
+          ? yahooNflGamesPlayed
+          : yahooNflPlayerDetailsWithOwnership,
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+    const outcome = yield* provider.planLineup(
+      planRequest({
+        league,
+        roster: planRoster({
+          providerLeagueKey: "466.l.4000",
+          coverage: weekSix,
+          members: qbAndWideReceiver,
+        }),
+        target: { coverage: "week", week: 6 },
+      }),
+    );
+
+    assert.strictEqual(outcome.kind, "scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    assert.deepStrictEqual(
+      outcome.gamesPlayed.find((entry) => entry.position === "P"),
+      { position: "P", played: 82.1, max: 1400, projected: 1400.1 },
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("prices a games-limited league from the ownership composite, not the crowd", () => {
+  const internet = recordingInternet((request) =>
+    jsonResponse(
+      request.url.pathname.endsWith("/settings")
+        ? yahooNflLeagueSettingsWithGamesLimit
+        : request.url.pathname.includes("/teams;")
+          ? yahooNflGamesPlayed
+          : yahooNflPlayerDetailsWithOwnership,
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+    const outcome = yield* provider.planLineup(
+      planRequest({
+        league,
+        roster: planRoster({
+          providerLeagueKey: "466.l.4000",
+          coverage: weekSix,
+          members: qbAndWideReceiver,
+        }),
+        target: { coverage: "week", week: 6 },
+      }),
+    );
+
+    assert.strictEqual(outcome.kind, "scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    assert.strictEqual(
+      outcome.provenance,
+      "yahoo/ownership-composite:no-positional-scarcity:football:week:6",
+    );
+    assert.deepStrictEqual(outcome.players, [
+      { providerPlayerKey: "466.p.20001", score: 920000, availability: "will-play" },
+      { providerPlayerKey: "466.p.20002", score: 125000, availability: "will-play" },
+    ]);
+    const factsRequest = internet.calls.find((call) => call.url.pathname.includes("/players;"));
+    assert.include(factsRequest?.url.href, ";out=percent_started,percent_owned,ranks");
+    assert.strictEqual(
+      factsRequest?.url.searchParams.get("ranks"),
+      "last30days,last14days,projected_next7days,projected_season_remaining,last4weeks,projected_week,projected_next4weeks",
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("scores a roster from the published started percentage and its platinum cut", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflPlayerDetailsWithPopulatedCut));
   return Effect.gen(function* () {
@@ -2112,6 +2254,8 @@ function planLeague(input: {
     season: 2026,
     periodWindow: input.rosterCoverage === "week" ? { current: 6, start: 1, end: 17 } : undefined,
     rosterCoverage: input.rosterCoverage,
+    maxGamesPlayed: undefined,
+    maxInningsPitched: undefined,
     startDate: "2026-09-03",
     endDate: "2026-12-28",
     teamCount: 10,

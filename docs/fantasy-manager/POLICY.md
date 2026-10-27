@@ -177,6 +177,47 @@ The cost of the rule: a cohort that genuinely excludes a player cannot price tha
 single omission makes the plan less narrow. The alternative — mixing the cut and the overall
 percentage inside one plan — prices two players from different populations, which is not a comparison.
 
+### Rung 2b: the ownership composite, for a league with a games limit
+
+A league that declares `max_games_played` or `max_innings_pitched` starts every start against a fixed
+per-position budget, so a daily crowd signal would spend the budget on whoever the crowd liked that day.
+Those leagues are priced from the ownership composite, even when the league also publishes points rules,
+because a budget-start league needs a basis that moves slowly:
+
+```
+0.5 × (percent_owned − 0) + 0.5 × rankScore + bounded(percent_owned_delta)
+```
+
+- **Percent owned** is the season-long share of leagues that roster the player. It moves slowly, which
+  is the point: the ordering does not churn with the crowd.
+- **`rankScore`** is the provider's trailing and projected ranks, weighted per sport — football keeps
+  last 4 weeks 40, projected week 35, next 4 weeks 25; hockey keeps last 30 days 40, last 14 days 30,
+  next 7 days 10, rest of season 20. Each rank becomes `min(playersInLeague / rank, weight / 5) × 5`,
+  where `playersInLeague` is `teamCount × standardRosterSpots` with reserve slots excluded. A rank
+  better than the league's starter pool cannot run away with the plan.
+- **The delta** is the week's change in percent owned, bounded to ±4 percentile points.
+- **The positional offset is zero**, and the provenance label says so:
+  `yahoo/ownership-composite:no-positional-scarcity:<sport>:<period>`. Percent owned is not comparable
+  across positions without a replacement-level offset, so the composite is a cross-position ranking
+  weighted by the positions this league declares, and a player competes only for slots they are eligible
+  for. The offset is its own provider-neutral concept — replacement level by position, useful for adds,
+  drops, and trades — and it is not built here.
+
+The constraint is **capacity, not a multiplier**. A position whose `played` has reached `max` loses a
+starting unit. A position whose `projected` exceeds `max` by more than 1.5% loses one unit, marked
+optional when a required unit would otherwise over-constrain the problem. Slots are reduced; scores are
+never scaled. A locked player keeps their unit, so the reduction cannot make the plan infeasible. A
+closed slot is absent from the problem and a player sitting there is planned out of it.
+
+Participation is suppressed only at a position whose projection already exceeds its allowance. There the
+cap forces rotation anyway, and benching a player for one off-day spends a game the league will not
+refund. Below the allowance the actual scheduled fact stands.
+
+**No league in this account declares either limit**, so no live plan has taken this path. The shape is
+covered by synthetic fixtures adapted from the provider's published example: position rows under
+`games_played_by_position_type`, and an `innings_pitched` row for a league whose starting slots include
+a pitcher.
+
 ## Which leagues are scoreable today
 
 | Sport    | Leagues available        | Points rules | Started percentage | Scoring scheme  |

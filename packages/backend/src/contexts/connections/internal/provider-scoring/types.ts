@@ -50,7 +50,11 @@ export type Period =
   | { readonly kind: "week"; readonly week: number }
   | { readonly kind: "date"; readonly date: string };
 
-export type ValueSourceKind = "projected-points" | "scoring-rules" | "community-start-rate";
+export type ValueSourceKind =
+  | "projected-points"
+  | "scoring-rules"
+  | "community-start-rate"
+  | "ownership-composite";
 
 export type CommunityStartRatePopulation =
   | { readonly kind: "cut"; readonly cut: string }
@@ -75,6 +79,13 @@ export type ValueSource =
   | {
       readonly kind: "community-start-rate";
       readonly started: ReadonlyArray<PlayerCommunityStartRate>;
+    }
+  | {
+      readonly kind: "ownership-composite";
+      readonly sport: FantasySport;
+      readonly teamCount: number;
+      readonly standardRosterSpots: number;
+      readonly players: ReadonlyArray<PlayerOwnership>;
     };
 
 type PlayerProjection = {
@@ -86,6 +97,22 @@ export type PlayerRealisedPoints = {
   readonly id: string;
   readonly points: Exact;
 };
+
+export type PlayerOwnership = {
+  readonly id: string;
+  readonly percentOwned: Exact | undefined;
+  readonly delta: Exact | undefined;
+  readonly ranks: ReadonlyArray<PlayerRank>;
+};
+
+export type PlayerRank = {
+  readonly type: RankType;
+  readonly rank: number;
+};
+
+export type RankType = "L30" | "L14" | "PS7" | "PSR" | "L4W" | "PW" | "PN4W";
+
+type FantasySport = "football" | "hockey";
 
 export type PlayerCommunityStartRate = {
   readonly id: string;
@@ -147,4 +174,11 @@ export type ValueAssessment =
       readonly kind: "community-start-rate";
       readonly population: CommunityStartRatePopulation;
       readonly percent: Exact | undefined;
+    }
+  | {
+      readonly kind: "ownership-composite";
+      readonly percentOwned: Exact | undefined;
+      readonly rankScore: Exact;
+      readonly deltaAdjustment: Exact;
+      readonly composite: Exact | undefined;
     };

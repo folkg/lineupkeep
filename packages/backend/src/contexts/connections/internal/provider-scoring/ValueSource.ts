@@ -1,4 +1,14 @@
-import { averageExact, compareExact, exactFromInteger, type Exact } from "./Exact.ts";
+import {
+  addExact,
+  averageExact,
+  compareExact,
+  divideByInteger,
+  exactFromInteger,
+  minExact,
+  multiplyExact,
+  parseExact,
+  type Exact,
+} from "./Exact.ts";
 import { containsPeriod, periodKey } from "./Period.ts";
 import { scorePeriod } from "./Scoring.ts";
 import type { StatObservation } from "./types.ts";
@@ -6,8 +16,10 @@ import type {
   CommunityStartRatePopulation,
   Period,
   PlayerCommunityStartRate,
+  PlayerRank,
   PlayerRealisedPoints,
   PolicyPlayer,
+  RankType,
   ValueAssessment,
   ValueSource,
   ValueSourceKind,
@@ -17,8 +29,20 @@ import { selectionUnits } from "./Valuation.ts";
 export const valueSourceLadder: ReadonlyArray<ValueSourceKind> = [
   "projected-points",
   "scoring-rules",
+  "ownership-composite",
   "community-start-rate",
 ];
+
+const ownershipDeltaBound = parseExact("4");
+const rankRatioScale = 6;
+const rankScoreScale = parseExact("5");
+const compositeScale = 4;
+const half = parseExact("0.5");
+
+const rankWeights: Readonly<Record<"football" | "hockey", Partial<Record<RankType, number>>>> = {
+  football: { L4W: 40, PW: 35, PN4W: 25 },
+  hockey: { L30: 40, L14: 30, PS7: 10, PSR: 20 },
+};
 
 export const communityStartRateCut = "platinum";
 
@@ -56,6 +80,8 @@ export function resolveValueSource(input: {
       return scoringRulesSource(input.source);
     case "community-start-rate":
       return communityStartRateSource(input.source, input.period);
+    case "ownership-composite":
+      return ownershipCompositeSource(input.source, input.period);
   }
 }
 
@@ -72,6 +98,7 @@ type SourceValue = {
 type ProjectedPointsSource = Extract<ValueSource, { readonly kind: "projected-points" }>;
 type ScoringRulesSource = Extract<ValueSource, { readonly kind: "scoring-rules" }>;
 type CommunityStartRateSource = Extract<ValueSource, { readonly kind: "community-start-rate" }>;
+type OwnershipCompositeSource = Extract<ValueSource, { readonly kind: "ownership-composite" }>;
 
 function projectedPointsSource(source: ProjectedPointsSource, period: Period): ResolvedValueSource {
   const label = `projected-points:${periodKey(period)}`;
@@ -154,6 +181,72 @@ function communityStartRateSource(
       };
     },
   };
+}
+
+function ownershipCompositeSource(
+  source: OwnershipCompositeSource,
+  period: Period,
+): ResolvedValueSource {
+  const label = `ownership-composite:no-positional-scarcity:${source.sport}:${periodKey(period)}`;
+  const byId = new Map(source.players.map((player) => [player.id, player]));
+  const playersInLeague = exactFromInteger(
+    BigInt(source.teamCount) * BigInt(source.standardRosterSpots),
+  );
+  return {
+    label,
+    valueOf: (player) => {
+      const facts = byId.get(player.id);
+      const percentOwned = facts?.percentOwned;
+      if (facts === undefined || percentOwned === undefined) {
+        return {
+          assessment: {
+            kind: "ownership-composite",
+            percentOwned: undefined,
+            rankScore: exactFromInteger(0n),
+            deltaAdjustment: exactFromInteger(0n),
+            composite: undefined,
+          },
+          units: undefined,
+        };
+      }
+      const deltaAdjustment =
+        facts.delta === undefined
+          ? exactFromInteger(0n)
+          : minExact(facts.delta, ownershipDeltaBound);
+      const rankScore = rankScoreOf(facts.ranks, source.sport, playersInLeague);
+      const composite = addExact(
+        addExact(multiplyExact(percentOwned, half), multiplyExact(rankScore, half)),
+        deltaAdjustment,
+      );
+      return {
+        assessment: {
+          kind: "ownership-composite",
+          percentOwned,
+          rankScore,
+          deltaAdjustment,
+          composite,
+        },
+        units: selectionUnits(composite, compositeScale),
+      };
+    },
+  };
+}
+
+function rankScoreOf(
+  ranks: ReadonlyArray<PlayerRank>,
+  sport: "football" | "hockey",
+  playersInLeague: Exact,
+): Exact {
+  const weights = rankWeights[sport];
+  const capped = ranks.flatMap((rank) => {
+    const weight = weights[rank.type];
+    if (weight === undefined || rank.rank < 1) {
+      return [];
+    }
+    const positionScore = divideByInteger(playersInLeague, BigInt(rank.rank), rankRatioScale);
+    return [minExact(positionScore, parseExact(String(weight / 5)))];
+  });
+  return multiplyExact(capped.reduce(addExact, exactFromInteger(0n)), rankScoreScale);
 }
 
 function percentOf(
