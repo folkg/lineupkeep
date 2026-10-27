@@ -41,34 +41,29 @@ export const LineupImplementation = Schema.Literals([
 export type LineupImplementation = typeof LineupImplementation.Type;
 
 export const providerNativeImplementationVersion = "provider-native/1" as const;
-export const customPolicyImplementationVersion = "custom-policy/1" as const;
+export const customPolicyImplementationVersion = "custom-policy/2" as const;
 
 export const activeLineupImplementation: LineupImplementation = "custom_policy";
 
-export const LineupPolicyProvenance = Schema.Union([
+export const LineupPlanProvenance = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("planned"),
-    version: Schema.NonEmptyString,
-    basis: Schema.NonEmptyString,
+    label: Schema.NonEmptyString,
   }),
   Schema.Struct({
     kind: Schema.Literal("refused"),
-    version: Schema.NonEmptyString,
-    code: Schema.NonEmptyString,
+    label: Schema.NonEmptyString,
     detail: Schema.NonEmptyString,
-    basis: Schema.optional(Schema.NonEmptyString),
   }),
 ]);
-export type LineupPolicyProvenance = typeof LineupPolicyProvenance.Type;
+export type LineupPlanProvenance = typeof LineupPlanProvenance.Type;
 
-export const LineupPolicyRefusalProvenance = Schema.Struct({
+export const LineupPlanRefusalProvenance = Schema.Struct({
   kind: Schema.Literal("refused"),
-  version: Schema.NonEmptyString,
-  code: Schema.NonEmptyString,
+  label: Schema.NonEmptyString,
   detail: Schema.NonEmptyString,
-  basis: Schema.optional(Schema.NonEmptyString),
 });
-export type LineupPolicyRefusalProvenance = typeof LineupPolicyRefusalProvenance.Type;
+export type LineupPlanRefusalProvenance = typeof LineupPlanRefusalProvenance.Type;
 
 export const LineupRunDifference = Schema.Struct({
   name: Schema.NonEmptyString,
@@ -159,7 +154,7 @@ export const LineupRunOutcome = Schema.Struct({
   changes: Schema.Array(LineupRunChange),
   differences: Schema.optional(Schema.Array(LineupRunDifference)),
   implementation: Schema.optional(LineupImplementation),
-  policy: Schema.optional(LineupPolicyProvenance),
+  provenance: Schema.optional(LineupPlanProvenance),
   lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });

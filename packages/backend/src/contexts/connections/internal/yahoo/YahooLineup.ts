@@ -1,41 +1,32 @@
-import {
-  lineupPolicyVersion,
-  lineupRefusalKind,
-  noValueSourceRefusalCode,
-  noValueSourceRefusalDetail,
-  planLineup,
-  lineupAssignments,
-  periodKey,
-  trailingPeriodCount,
-} from "@lineupkeep/lineup-policy";
-import type {
-  LineupPolicyInput,
-  LineupPlanRefusal,
-  Period,
-  PeriodObservation,
-  PlayerAvailability,
-  PlayerCommunityStartRate,
-  PlayerProjection,
-  PlayerRealisedPoints,
-  PolicyPlayer,
-} from "@lineupkeep/lineup-policy";
-import type { StatObservation } from "@lineupkeep/lineup-scoring";
-import { parseExact, scorePeriod, scoringProfile } from "@lineupkeep/lineup-scoring";
-import type { Exact, ScoringProfile } from "@lineupkeep/lineup-scoring";
-import { makePlayerId, makeSlotId } from "@lineupkeep/lineup-solver";
-import type { PlayerId, RosterSlot, SlotEligibility } from "@lineupkeep/lineup-solver";
 import { DateTime, Effect } from "effect";
 
+import { parseExact } from "#contexts/connections/internal/provider-scoring/Exact.ts";
+import { scoreLineup } from "#contexts/connections/internal/provider-scoring/LineupScore.ts";
+import type { ScoredPlayer } from "#contexts/connections/internal/provider-scoring/LineupScore.ts";
+import { trailingPeriodCount } from "#contexts/connections/internal/provider-scoring/ObservationWindow.ts";
+import { periodKey } from "#contexts/connections/internal/provider-scoring/Period.ts";
+import { scoringProfile } from "#contexts/connections/internal/provider-scoring/ScoringProfile.ts";
+import type {
+  Exact,
+  Period,
+  ScoringProfile,
+  PlayerAvailability,
+  PlayerCommunityStartRate,
+  PolicyPlayer,
+  StatObservation,
+  ValueSource,
+} from "#contexts/connections/internal/provider-scoring/types.ts";
 import type {
   ProviderCapabilities,
-  ProviderCommunityStartRate,
   ProviderLeagueSettings,
   ProviderLineupOutcome,
   ProviderLineupRequest,
   ProviderPlayerDetail,
+  ProviderPlayerValue,
   ProviderRoster,
+  ProviderRosterCoverage,
   ProviderRosterPlayer,
-  ProviderRosterPosition,
+  ProviderScoringWeek,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderReadFailure } from "#contexts/connections/Provider.ts";
 
@@ -52,8 +43,6 @@ export const yahooCapabilities: ProviderCapabilities = {
     weeklyStatSortSports: ["football"],
   },
   publishesProjections: false,
-  publishesCommunityStartRate: true,
-  statBases: ["week", "season"],
   limitations: [
     {
       subject: "player_schedule",
@@ -91,61 +80,39 @@ export function planYahooLineup(
   read: YahooLineupReader,
 ): Effect.Effect<ProviderLineupOutcome, ProviderReadFailure> {
   return Effect.gen(function* () {
-    const slots = yahooLeagueSlots(input.league);
-    const candidates: Array<LineupPolicyInput> = [];
-    if (yahooCapabilities.publishesProjections) {
-      candidates.push(projectedPointsInput(input, yield* read.readDetails()));
-    }
+    const period = targetPeriod(input.target);
+    const players = policyPlayers(input.roster, period);
+    const sources: Array<ValueSource> = [];
     if (input.league.statModifiers.length > 0) {
-      const history = yield* read.readHistory(
-        yahooObservationWindow(input.league, targetPeriod(input.target)),
-      );
-      candidates.push(
-        yahooPointsPolicyInput({ league: input.league, roster: input.roster, history }),
-      );
+      const window = yahooObservationWindow(input.league, period);
+      sources.push({
+        kind: "scoring-rules",
+        window,
+        scoring: yahooScoringProfile(input.league),
+        observations: observationsFor(
+          yield* read.readHistory(window.filter((entry) => entry.kind === "week")),
+          window,
+        ),
+      });
     }
-    if (yahooCapabilities.publishesCommunityStartRate) {
-      candidates.push(
-        yahooCommunityStartRatePolicyInput({
-          league: input.league,
-          roster: input.roster,
-          details: yield* read.readDetails(),
-        }),
-      );
-    }
-
-    const planned = planLineup(candidates);
-    if (planned.kind === "refused") {
-      return refusedLineup(planned.refusals);
-    }
-    const translated = lineupAssignments({
-      plan: planned.plan,
-      slots: slots.map((slot) => ({ id: slot.id, kind: slot.kind })),
-      players: input.roster.players.map((player) => ({
-        playerKey: player.providerPlayerKey,
-        name: player.name,
-        slot: player.slot,
-        editable: player.isEditable === true,
-      })),
+    sources.push({
+      kind: "community-start-rate",
+      started: startRatesOf(players, yield* read.readStartRates()),
     });
-    if (translated.kind === "refused") {
+
+    const scored = scoreLineup({ period, sources, players });
+    if (scored.kind === "refused") {
       return {
         kind: "refused",
-        refusal: lineupRefusalKind(translated.code),
-        policyVersion: lineupPolicyVersion,
-        code: translated.code,
-        detail: translated.detail,
-        basis: planned.basis,
+        refusal: scored.refusal,
+        provenance: `yahoo/${scored.code}`,
+        detail: scored.detail,
       };
     }
     return {
-      kind: "planned",
-      policyVersion: lineupPolicyVersion,
-      basis: planned.basis,
-      assignments: translated.assignments.map((assignment) => ({
-        providerPlayerKey: assignment.playerKey,
-        slot: assignment.slot,
-      })),
+      kind: "scored",
+      provenance: `yahoo/${scored.label}`,
+      players: scored.players.map(providerValue),
     };
   });
 }
@@ -172,10 +139,6 @@ export function yahooObservationWindow(
     : completedDates(league, target.date);
 }
 
-export function yahooLeagueSlots(league: ProviderLeagueSettings): ReadonlyArray<RosterSlot> {
-  return league.rosterPositions.map(rosterSlot);
-}
-
 const availabilityByInjuryCode: Readonly<Record<string, PlayerAvailability>> = {
   O: { kind: "excluded", reason: "out" },
   IR: { kind: "excluded", reason: "injured-reserve" },
@@ -200,155 +163,20 @@ export function yahooTargetPeriod(roster: ProviderRoster): Period {
     : { kind: "date", date: roster.coverage.date };
 }
 
-function refusedLineup(refusals: ReadonlyArray<LineupPlanRefusal>): ProviderLineupOutcome {
-  const refusal = refusals.at(-1);
-  const code = refusal?.code ?? noValueSourceRefusalCode;
+function providerValue(player: ScoredPlayer): ProviderPlayerValue {
   return {
-    kind: "refused",
-    refusal: lineupRefusalKind(code),
-    policyVersion: lineupPolicyVersion,
-    code,
-    detail: refusal?.detail ?? noValueSourceRefusalDetail,
-    basis: undefined,
-  };
-}
-
-function projectedPointsInput(
-  input: ProviderLineupRequest,
-  details: ReadonlyArray<ProviderPlayerDetail>,
-): LineupPolicyInput {
-  const period = targetPeriodOf(input.roster);
-  const slots = yahooLeagueSlots(input.league);
-  const players = policyPlayers(input.roster, period);
-  const scoring = yahooScoringProfile(input.league);
-  const byKey = new Map(details.map((detail) => [detail.providerPlayerKey, detail]));
-  const projections: Array<PlayerProjection> = [];
-  const realised: Array<PlayerRealisedPoints> = [];
-  for (const player of players) {
-    const detail = byKey.get(player.id);
-    const projection = pointsOf(scoring, detail?.projected?.stats);
-    if (projection !== undefined) {
-      projections.push({ id: player.id, points: projection });
-    }
-    const actual = pointsOf(scoring, detail?.actual?.stats);
-    if (actual !== undefined) {
-      realised.push({ id: player.id, points: actual });
-    }
-  }
-  return {
-    period,
-    source: { kind: "projected-points", projections, realised },
-    slots,
-    players,
-  };
-}
-
-export function yahooPointsPolicyInput(
-  input: YahooPolicyFacts & { readonly history: ReadonlyArray<YahooPeriodHistory> },
-): LineupPolicyInput {
-  const period = targetPeriodOf(input.roster);
-  const slots = yahooLeagueSlots(input.league);
-  const players = policyPlayers(input.roster, period);
-  const window = yahooObservationWindow(input.league, period);
-  return {
-    period,
-    source: {
-      kind: "scoring-rules",
-      window,
-      scoring: yahooScoringProfile(input.league),
-      observations: observationsFor(input.history, window),
-    },
-    slots,
-    players,
-  };
-}
-
-export function yahooCommunityStartRatePolicyInput(
-  input: YahooPolicyFacts & { readonly details: ReadonlyArray<ProviderPlayerDetail> },
-): LineupPolicyInput {
-  const period = targetPeriodOf(input.roster);
-  const slots = yahooLeagueSlots(input.league);
-  const players = policyPlayers(input.roster, period);
-  const byKey = new Map(
-    input.details.map((detail) => [detail.providerPlayerKey, detail.communityStartRate]),
-  );
-  return {
-    period,
-    source: {
-      kind: "community-start-rate",
-      started: players.map((player) => startRateOf(player.id, byKey.get(player.id))),
-    },
-    slots,
-    players,
+    providerPlayerKey: player.id,
+    score: player.units ?? null,
+    availability: player.availability.tier,
   };
 }
 
 function policyPlayers(roster: ProviderRoster, period: Period): ReadonlyArray<PolicyPlayer> {
   return roster.players.map((player) => ({
-    id: makePlayerId(player.providerPlayerKey),
-    eligiblePositions: player.eligiblePositions,
+    id: player.providerPlayerKey,
     availability: yahooAvailability(player.injuryCode),
-    locked: player.isEditable !== true,
-    currentSlotId: makeSlotId(player.slot),
     nonGamePeriods: nonGamePeriods(player, period),
   }));
-}
-
-function rosterSlot(position: ProviderRosterPosition): RosterSlot {
-  const id = makeSlotId(position.position);
-  const kind = position.kind;
-  const eligibility = slotEligibility(position.eligibility);
-  switch (kind) {
-    case "starting":
-      return {
-        kind: "starting",
-        id,
-        capacity: position.count,
-        requirement: "required",
-        eligibility,
-      };
-    case "bench":
-    case "reserve":
-      return { kind, id, capacity: position.count, eligibility };
-  }
-}
-
-function slotEligibility(positions: ReadonlyArray<string>): SlotEligibility {
-  return positions.length === 0
-    ? { kind: "any" }
-    : { kind: "positions", positions: [...positions] };
-}
-
-function startRateOf(
-  playerId: PlayerId,
-  startRate: ProviderCommunityStartRate | undefined,
-): PlayerCommunityStartRate {
-  return {
-    id: playerId,
-    percent: exactPercent(startRate?.percent ?? null),
-    cuts: (startRate?.cuts ?? []).flatMap((cut) => {
-      const percent = exactPercent(cut.percent);
-      return percent === undefined ? [] : [{ cut: cut.cut, percent }];
-    }),
-  };
-}
-
-function exactPercent(percent: number | null): Exact | undefined {
-  return percent === null ? undefined : parseExact(String(percent));
-}
-
-function pointsOf(
-  scoring: ScoringProfile,
-  stats: ReadonlyArray<{ readonly statId: number; readonly value: number | null }> | undefined,
-): Exact | undefined {
-  if (stats === undefined) {
-    return undefined;
-  }
-  const score = scorePeriod(
-    scoring,
-    stats.map((stat) => ({ statId: String(stat.statId), value: stat.value })),
-  );
-  return score.kind === "scored" ? score.points : undefined;
 }
 
 function nonGamePeriods(player: ProviderRosterPlayer, period: Period): ReadonlyArray<Period> {
@@ -358,20 +186,45 @@ function nonGamePeriods(player: ProviderRosterPlayer, period: Period): ReadonlyA
   return [{ kind: "week", week: player.byeWeek }];
 }
 
+function startRatesOf(
+  players: ReadonlyArray<PolicyPlayer>,
+  rates: ReadonlyArray<YahooStartRate>,
+): ReadonlyArray<PlayerCommunityStartRate> {
+  const byKey = new Map(rates.map((rate) => [rate.providerPlayerKey, rate]));
+  return players.map((player) => {
+    const rate = byKey.get(player.id);
+    return {
+      id: player.id,
+      percent: exactPercent(rate?.percent ?? null),
+      cuts: (rate?.cuts ?? []).flatMap((cut) => {
+        const percent = exactPercent(cut.percent);
+        return percent === undefined ? [] : [{ cut: cut.cut, percent }];
+      }),
+    };
+  });
+}
+
+function exactPercent(percent: number | null): Exact | undefined {
+  return percent === null ? undefined : parseExact(String(percent));
+}
+
 function observationsFor(
   history: ReadonlyArray<YahooPeriodHistory>,
   window: ReadonlyArray<Period>,
-): ReadonlyArray<PeriodObservation> {
+): ReadonlyArray<{
+  readonly period: Period;
+  readonly players: ReadonlyArray<{
+    readonly id: string;
+    readonly stats: ReadonlyArray<StatObservation>;
+  }>;
+}> {
   const stats = statsByPeriodAndPlayer(history);
   return window.map((period) => {
     const players =
       stats.get(periodKey(period)) ?? new Map<string, ReadonlyArray<StatObservation>>();
     return {
       period,
-      players: [...players].map(([id, observations]) => ({
-        id: makePlayerId(id),
-        stats: observations,
-      })),
+      players: [...players].map(([id, observations]) => ({ id, stats: observations })),
     };
   });
 }
@@ -420,12 +273,6 @@ function completedDates(league: ProviderLeagueSettings, targetDate: string): Rea
   return periods;
 }
 
-function targetPeriodOf(roster: ProviderRoster): Period {
-  return roster.coverage.type === "week"
-    ? { kind: "week", week: roster.coverage.week }
-    : { kind: "date", date: roster.coverage.date };
-}
-
 function targetPeriod(target: ProviderLineupRequest["target"]): Period {
   switch (target.coverage) {
     case "week":
@@ -437,18 +284,24 @@ function targetPeriod(target: ProviderLineupRequest["target"]): Period {
   }
 }
 
-export type YahooPolicyFacts = {
-  readonly league: ProviderLeagueSettings;
-  readonly roster: ProviderRoster;
+export type YahooStartRate = { readonly providerPlayerKey: string } & YahooStartRateSummary;
+
+export type YahooStartRateSummary = {
+  readonly percent: number | null;
+  readonly change: number | null;
+  readonly coverage: ProviderRosterCoverage | null;
+  readonly cuts: ReadonlyArray<YahooStartRateCut>;
+};
+
+export type YahooStartRateCut = {
+  readonly cut: string;
+  readonly percent: number | null;
 };
 
 export type YahooLineupReader = {
-  readonly readDetails: () => Effect.Effect<
-    ReadonlyArray<ProviderPlayerDetail>,
-    ProviderReadFailure
-  >;
+  readonly readStartRates: () => Effect.Effect<ReadonlyArray<YahooStartRate>, ProviderReadFailure>;
   readonly readHistory: (
-    periods: ReadonlyArray<Period>,
+    periods: ReadonlyArray<ProviderScoringWeek>,
   ) => Effect.Effect<ReadonlyArray<YahooPeriodHistory>, ProviderReadFailure>;
 };
 

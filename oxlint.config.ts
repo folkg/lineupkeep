@@ -589,8 +589,7 @@ const compositions = ["apps/web/src/browser/brand-ui/**/*.{ts,tsx}"];
 const tests = ["**/*.test.{ts,tsx}"];
 const lineupPure = [
   "packages/lineup-solver/src/**/*.ts",
-  "packages/lineup-scoring/src/**/*.ts",
-  "packages/lineup-policy/src/**/*.ts",
+  "packages/backend/src/contexts/connections/internal/provider-scoring/**/*.ts",
 ];
 const nodeTransport = ["packages/backend/src/runtime/public-internet/transport/node/**/*.ts"];
 const hostedBrowserShell = [
@@ -634,6 +633,7 @@ export default defineConfig({
     ...globals(),
     "repository/workflow-tests": "error",
     "repository/codec-tests": "error",
+    "repository/provider-scoring-vocabulary": "error",
   },
   overrides: [
     { files: ["**/*.{js,cjs,mjs}"], rules: { "no-redeclare": "error" } },

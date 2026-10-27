@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { addExact, exactFromInteger, parseExact } from "./exact.ts";
-import { describeScoring, scoringProfile } from "./profile.ts";
-import { scorePeriod } from "./score.ts";
+import { addExact, exactFromInteger, parseExact } from "./Exact.ts";
+import { scorePeriod } from "./Scoring.ts";
+import { scoringProfile } from "./ScoringProfile.ts";
 import type { Exact, StatObservation } from "./types.ts";
 
 const recordedRules: ReadonlyArray<readonly [number, string]> = [
@@ -467,21 +467,5 @@ describe("recorded league", () => {
 
     expect(totalFor(true)).toEqual(parseExact("98.02"));
     expect(totalFor(false)).toEqual(parseExact("49.2"));
-  });
-
-  it("reports the league's modifier coverage over the stat ids its players return", () => {
-    const returnedStatIds = recordedWeekStats.flatMap((row) =>
-      row.stats.map(([statId]) => String(statId)),
-    );
-
-    const coverage = describeScoring(recordedProfile, [...new Set(returnedStatIds)]);
-
-    expect(new Set(coverage.scored)).toEqual(
-      new Set(recordedRules.map(([statId]) => String(statId))),
-    );
-    expect(coverage.unscored).toEqual(["8", "31", "78"]);
-    expect(coverage.unusedRules).toEqual([]);
-    expect(coverage.rulesWithoutCategory).toEqual([]);
-    expect(coverage.categoriesWithoutRule).toEqual(["8", "31", "78"]);
   });
 });

@@ -481,7 +481,6 @@ it.effect(
             rosterStatus: "rostered",
             actual: { basis: { type: "season" }, stats: [{ statId: 11, value: 4 }] },
             projected: undefined,
-            communityStartRate: undefined,
           },
         ],
       });
@@ -1742,7 +1741,6 @@ function rosterFixture(input: {
       proTeamAbbreviation: index === 0 ? "SYN" : undefined,
       eligiblePositions: ["QB"],
       slot: index === 0 ? "QB" : "BN",
-      isFlex: false,
       isEditable: true,
       injuryCode: index === 1 ? "O" : undefined,
       injuryDetail: index === 1 ? "Out" : undefined,

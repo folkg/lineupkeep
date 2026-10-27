@@ -1373,79 +1373,81 @@ it.each([
   expect(result.status).toBeGreaterThan(0);
 });
 
-it("accepts a pure scoring engine and a policy that composes the solver", async () => {
+it("accepts a provider adapter that composes its own scoring modules", async () => {
   const result = await checkArchitecture({
-    "packages/lineup-scoring/src/index.ts":
+    "packages/backend/src/contexts/connections/internal/provider-scoring/LineupScore.ts":
       "export const score = (value: number): number => value * 2;",
-    "packages/lineup-solver/src/index.ts": "export const solve = (): number => 0;",
-    "packages/lineup-policy/src/policy.ts":
-      'import { score } from "../../lineup-scoring/src/index.ts"; import { solve } from "../../lineup-solver/src/index.ts"; export const plan = (): number => solve() + score(1);',
+    "packages/backend/src/contexts/connections/internal/yahoo/YahooLineup.ts":
+      'import { score } from "../provider-scoring/LineupScore.ts"; export const plan = (): number => score(1);',
   });
 
   expect(result.status, result.output).toBe(0);
 });
 
 it.each([
-  [
-    "an application contract",
-    'export { value } from "@lineupkeep/backend/connections/Provider";',
-    "packages/backend/src/contexts/connections/Provider.ts",
-  ],
-  [
-    "an Effect service import",
-    'import { Schema } from "effect"; export const value = Schema.String;',
-    undefined,
-  ],
-  [
-    "lineup assignment",
-    'import { solveLineup } from "@lineupkeep/lineup-solver"; export const value = solveLineup;',
-    "packages/lineup-solver/src/index.ts",
-  ],
-])("rejects %s in the pure scoring engine", async (_name, source, dependency) => {
+  "packages/backend/src/contexts/connections/internal/LineupPlanning.ts",
+  "packages/backend/src/contexts/connections/internal/LineupWorkerLive.ts",
+  "packages/backend/src/contexts/connections/QueryResults.ts",
+])("rejects provider score construction imported by %s", async (importer) => {
   const result = await checkArchitecture({
-    ...(dependency === undefined ? {} : { [dependency]: "export const value = 1;" }),
-    "packages/lineup-scoring/src/score.ts": source,
+    [importer]:
+      'import { scoreLineup } from "#contexts/connections/internal/provider-scoring/LineupScore.ts"; export const plan = scoreLineup;',
+    "packages/backend/src/contexts/connections/internal/provider-scoring/LineupScore.ts":
+      "export const scoreLineup = 1;",
   });
 
   expect(result.status).toBeGreaterThan(0);
-  expect(result.output).toContain("lineup-scoring-is-pure");
+  expect(result.output).toContain("provider-scoring-stays-in-the-adapter");
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain("implementation detail");
 });
 
 it.each([
+  ["an Effect service", 'import { Schema } from "effect"; export const value = Schema.String;', {}],
   [
     "an application contract",
-    'export { value } from "@lineupkeep/backend/connections/Provider";',
-    "packages/backend/src/contexts/connections/Provider.ts",
+    'export { value } from "../../Provider.ts";',
+    { "packages/backend/src/contexts/connections/Provider.ts": "export const value = 1;" },
   ],
-  [
-    "an Effect service import",
-    'import { Schema } from "effect"; export const value = Schema.String;',
-    undefined,
-  ],
-])("rejects %s in the lineup policy", async (_name, source, dependency) => {
+])("rejects %s in a provider scoring module", async (_name, source, extra) => {
   const result = await checkArchitecture({
-    ...(dependency === undefined ? {} : { [dependency]: "export const value = 1;" }),
-    "packages/lineup-policy/src/policy.ts": source,
+    ...extra,
+    "packages/backend/src/contexts/connections/internal/provider-scoring/LineupScore.ts": source,
   });
 
   expect(result.status).toBeGreaterThan(0);
-  expect(result.output).toContain("lineup-policy-is-pure");
+  expect(result.output).toContain("provider-scoring-is-self-contained");
 });
 
 it.each([
   ["the clock", "export const now = Date.now();"],
   ["network access", 'export const load = () => fetch("https://example.com");'],
-])("rejects %s in the pure scoring engine", async (_name, source) => {
-  const result = await checkLint({ "packages/lineup-scoring/src/score.ts": source });
+  ["randomness", "export const pick = Math.random();"],
+])("rejects %s in a provider scoring module", async (_name, source) => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/connections/internal/provider-scoring/LineupScore.ts": source,
+  });
 
   expect(result.status).toBeGreaterThan(0);
 });
 
-it.each([
-  ["the clock", "export const now = Date.now();"],
-  ["randomness", "export const pick = Math.random();"],
-])("rejects %s in the lineup policy", async (_name, source) => {
-  const result = await checkLint({ "packages/lineup-policy/src/policy.ts": source });
+it("rejects provider scoring vocabulary in generic code", async () => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/connections/QueryResults.ts":
+      "export const value = { communityStartRate: 1 };",
+  });
 
   expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("repository(provider-scoring-vocabulary)");
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+    "keep scoring vocabulary inside the provider adapter",
+  );
+});
+
+it.each([
+  "packages/backend/src/contexts/connections/internal/yahoo/YahooLineup.ts",
+  "packages/backend/src/contexts/connections/internal/provider-scoring/LineupScore.ts",
+])("accepts provider scoring vocabulary in %s", async (path) => {
+  const result = await checkLint({ [path]: "export const value = { communityStartRate: 1 };" });
+
+  expect(result.status, result.output).toBe(0);
 });

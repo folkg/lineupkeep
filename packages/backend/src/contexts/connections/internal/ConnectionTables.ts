@@ -218,7 +218,7 @@ function automationView(state: TeamAutomationState): TeamAutomation {
         resumesAt: state.resumesAt,
         timeZone: state.timeZone,
         fantasyDay: state.fantasyDay,
-        policyVersion: state.policyVersion,
+        fantasyDayVersion: state.fantasyDayVersion,
       };
   }
 }
@@ -235,7 +235,7 @@ function stateFromAutomation(automation: TeamAutomation): TeamAutomationState {
         automation.resumesAt === undefined ||
         automation.timeZone === undefined ||
         automation.fantasyDay === undefined ||
-        automation.policyVersion === undefined
+        automation.fantasyDayVersion === undefined
       ) {
         throw new Error("A paused team is missing its fantasy-day boundary");
       }
@@ -246,7 +246,7 @@ function stateFromAutomation(automation: TeamAutomation): TeamAutomationState {
         resumesAt: automation.resumesAt,
         timeZone: automation.timeZone,
         fantasyDay: automation.fantasyDay,
-        policyVersion: automation.policyVersion,
+        fantasyDayVersion: automation.fantasyDayVersion,
       };
   }
 }

@@ -240,7 +240,6 @@ export const RosterPlayer = Schema.Struct({
   }),
   byeWeek: Schema.optional(Schema.NullOr(Schema.Int)),
   undroppable: Schema.optional(Schema.NullOr(Schema.Boolean)),
-  isFlex: Schema.optional(Schema.NullOr(Schema.Boolean)),
 });
 export type RosterPlayer = typeof RosterPlayer.Type;
 
@@ -340,8 +339,8 @@ const SearchPlayer = Schema.Struct({
   availability: Schema.Literals(["free_agent", "waiver", "rostered", "unknown"]),
   percentOwned: Schema.NullOr(Schema.Finite),
   percentOwnedDelta: Schema.NullOr(Schema.Finite),
-  communityStartRate: Schema.NullOr(Schema.Finite),
-  communityStartRateChange: Schema.NullOr(Schema.Finite),
+  percentStarted: Schema.NullOr(Schema.Finite),
+  percentStartedChange: Schema.NullOr(Schema.Finite),
 });
 
 export const SearchPlayersData = Schema.Struct({

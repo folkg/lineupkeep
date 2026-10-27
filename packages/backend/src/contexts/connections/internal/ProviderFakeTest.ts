@@ -1,24 +1,3 @@
-import {
-  lineupAssignments,
-  lineupPolicyVersion,
-  lineupRefusalKind,
-  noValueSourceRefusalCode,
-  noValueSourceRefusalDetail,
-  planLineup,
-  trailingPeriodCount,
-} from "@lineupkeep/lineup-policy";
-import type {
-  LineupPolicyInput,
-  Period,
-  PeriodObservation,
-  PlayerAvailability,
-  PlayerCommunityStartRate,
-  PolicyPlayer,
-} from "@lineupkeep/lineup-policy";
-import type { Exact, StatObservation } from "@lineupkeep/lineup-scoring";
-import { parseExact, scoringProfile } from "@lineupkeep/lineup-scoring";
-import { makePlayerId, makeSlotId } from "@lineupkeep/lineup-solver";
-import type { RosterSlot } from "@lineupkeep/lineup-solver";
 import { Context, Deferred, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
 
 import {
@@ -31,6 +10,7 @@ import {
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
 import type {
+  ProviderAvailabilityTier,
   ProviderCapabilities,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
@@ -42,10 +22,10 @@ import type {
   ProviderNativeTarget,
   ProviderOperation,
   ProviderPlayerDetail,
+  ProviderPlayerValue,
   ProviderReviewLinkInput,
   ProviderRoster,
   ProviderRosterCoverage,
-  ProviderRosterPosition,
   ProviderShape,
   ProviderStandings,
   ProviderTeam,
@@ -57,9 +37,15 @@ import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/Prov
 
 type FakeWriteAction = "accept" | "reject" | "lost_response" | "unavailable" | "invalid";
 
+type FakePlayerScore = {
+  readonly providerPlayerKey: string;
+  readonly score: number | null;
+  readonly availability: ProviderAvailabilityTier | undefined;
+};
+
 type FakePlanRefusal = {
   readonly refusal: ProviderLineupRefusal;
-  readonly code: string;
+  readonly provenance: string;
   readonly detail: string;
 };
 
@@ -82,6 +68,7 @@ type FakeProviderState = {
   readonly rosterAfterNextRead: ProviderRoster | undefined;
   readonly rosterPeriods: ReadonlyArray<ProviderRosterCoverage | undefined>;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
+  readonly playerScores: ReadonlyArray<FakePlayerScore>;
   readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
   readonly matchups: ReadonlyArray<ProviderMatchup>;
   readonly transactions: ReadonlyArray<ProviderTransaction>;
@@ -117,6 +104,7 @@ export type FakeProviderWorldShape = {
   readonly setRosterAfterNextRead: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly rosterPeriods: Effect.Effect<ReadonlyArray<ProviderRosterCoverage | undefined>>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
+  readonly setPlayerScores: (scores: ReadonlyArray<FakePlayerScore>) => Effect.Effect<void>;
   readonly failPlayerDetails: (failure: ProviderPeriodMismatch | undefined) => Effect.Effect<void>;
   readonly setMatchups: (matchups: ReadonlyArray<ProviderMatchup>) => Effect.Effect<void>;
   readonly setTransactions: (
@@ -142,8 +130,8 @@ export type FakeProviderWorldShape = {
 export function refuseCustomPlanning(fake: FakeProviderWorldShape): Effect.Effect<void> {
   return fake.setPlanRefusal({
     refusal: "structural",
-    code: "policy:no-value-source",
-    detail: "This league publishes no value source the custom policy can use.",
+    provenance: "fake/no-score",
+    detail: "This league publishes no score the custom planner can use.",
   });
 }
 
@@ -167,6 +155,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         rosterAfterNextRead: undefined,
         rosterPeriods: [],
         playerDetails: [],
+        playerScores: [],
         playerDetailsFailure: undefined,
         matchups: [],
         transactions: [],
@@ -221,6 +210,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           modify((current) => ({ ...current, rosterAfterNextRead })),
         rosterPeriods: Effect.map(Ref.get(state), (current) => current.rosterPeriods),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
+        setPlayerScores: (playerScores) => modify((current) => ({ ...current, playerScores })),
         failPlayerDetails: (playerDetailsFailure) =>
           modify((current) => ({ ...current, playerDetailsFailure })),
         setMatchups: (matchups) => modify((current) => ({ ...current, matchups })),
@@ -514,8 +504,8 @@ const providerFake = Effect.gen(function* () {
             availability: player.rosterStatus,
             percentOwned: null,
             percentOwnedDelta: null,
-            communityStartRate: null,
-            communityStartRateChange: null,
+            percentStarted: null,
+            percentStartedChange: null,
           },
         ];
       });
@@ -599,14 +589,11 @@ const providerFake = Effect.gen(function* () {
         return {
           kind: "refused" as const,
           refusal: current.planRefusal.refusal,
-          policyVersion: lineupPolicyVersion,
-          code: current.planRefusal.code,
+          provenance: current.planRefusal.provenance,
           detail: current.planRefusal.detail,
-          basis: undefined,
         };
       }
-      const outcome = planFakeLineup(input, current.playerDetails);
-      return outcome;
+      return planFakeLineup(input, current.playerScores);
     }),
   } satisfies ProviderShape;
 });
@@ -628,8 +615,6 @@ const fakeCapabilities: ProviderCapabilities = {
     weeklyStatSortSports: ["football"],
   },
   publishesProjections: false,
-  publishesCommunityStartRate: true,
-  statBases: ["week", "season"],
   limitations: [
     {
       subject: "player_schedule",
@@ -664,186 +649,36 @@ const fakeCapabilities: ProviderCapabilities = {
 
 function planFakeLineup(
   input: ProviderLineupRequest,
-  details: ReadonlyArray<ProviderPlayerDetail>,
+  scores: ReadonlyArray<FakePlayerScore>,
 ): ProviderLineupOutcome {
-  const period = targetPeriod(input.roster);
-  const slots = input.league.rosterPositions.map(rosterSlot);
-  const players = input.roster.players.map(policyPlayer);
-  const candidates: Array<LineupPolicyInput> = [];
-  if (input.league.statModifiers.length > 0) {
-    const window = observationWindow(input.league, period);
-    candidates.push({
-      period,
-      source: {
-        kind: "scoring-rules",
-        window,
-        scoring: scoringProfile({
-          categories: input.league.statCategories.map((category) => ({
-            statId: category.statId,
-            label: category.name,
-          })),
-          rules: input.league.statModifiers.map((modifier) => ({
-            statId: modifier.statId,
-            points: modifier.points,
-          })),
-        }),
-        observations: window.map((windowPeriod) => observationOf(windowPeriod, players, details)),
-      },
-      slots,
-      players,
-    });
-  }
-  candidates.push({
-    period,
-    source: {
-      kind: "community-start-rate",
-      started: players.map((player) => startRateOf(player, details)),
-    },
-    slots,
-    players,
-  });
-  const planned = planLineup(candidates);
-  if (planned.kind === "refused") {
-    const refusal = planned.refusals.at(-1);
-    const code = refusal?.code ?? noValueSourceRefusalCode;
+  const byKey = new Map(scores.map((score) => [score.providerPlayerKey, score]));
+  const values = input.roster.players.map((player): ProviderPlayerValue => {
+    const declared = byKey.get(player.providerPlayerKey);
     return {
-      kind: "refused",
-      refusal: lineupRefusalKind(code),
-      policyVersion: lineupPolicyVersion,
-      code,
-      detail: refusal?.detail ?? noValueSourceRefusalDetail,
-      basis: undefined,
+      providerPlayerKey: player.providerPlayerKey,
+      score: declared?.score ?? null,
+      availability: declared?.availability ?? fakeAvailabilityOf(player),
     };
-  }
-  const translated = lineupAssignments({
-    plan: planned.plan,
-    slots: slots.map((slot) => ({ id: slot.id, kind: slot.kind })),
-    players: input.roster.players.map((player) => ({
-      playerKey: player.providerPlayerKey,
-      name: player.name,
-      slot: player.slot,
-      editable: player.isEditable === true,
-    })),
   });
-  if (translated.kind === "refused") {
-    return {
-      kind: "refused",
-      refusal: lineupRefusalKind(translated.code),
-      policyVersion: lineupPolicyVersion,
-      code: translated.code,
-      detail: translated.detail,
-      basis: planned.basis,
-    };
-  }
-  return {
-    kind: "planned",
-    policyVersion: lineupPolicyVersion,
-    basis: planned.basis,
-    assignments: translated.assignments.map((assignment) => ({
-      providerPlayerKey: assignment.playerKey,
-      slot: assignment.slot,
-    })),
-  };
-}
-
-function observationOf(
-  period: Period,
-  players: ReadonlyArray<PolicyPlayer>,
-  details: ReadonlyArray<ProviderPlayerDetail>,
-): PeriodObservation {
-  const byKey = new Map(details.map((detail) => [detail.providerPlayerKey, detail]));
-  return {
-    period,
-    players: players.flatMap((player) => {
-      const observations = statsOf(byKey.get(player.id));
-      return observations === undefined ? [] : [{ id: player.id, stats: observations }];
-    }),
-  };
-}
-
-function statsOf(
-  detail: ProviderPlayerDetail | undefined,
-): ReadonlyArray<StatObservation> | undefined {
-  return detail?.actual?.stats.map((stat) => ({ statId: String(stat.statId), value: stat.value }));
-}
-
-function startRateOf(
-  player: PolicyPlayer,
-  details: ReadonlyArray<ProviderPlayerDetail>,
-): PlayerCommunityStartRate {
-  const startRate = details.find(
-    (detail) => detail.providerPlayerKey === player.id,
-  )?.communityStartRate;
-  return {
-    id: player.id,
-    percent: percentOf(startRate?.percent ?? null),
-    cuts: (startRate?.cuts ?? []).flatMap((cut) => {
-      const percent = percentOf(cut.percent);
-      return percent === undefined ? [] : [{ cut: cut.cut, percent }];
-    }),
-  };
-}
-
-function percentOf(percent: number | null): Exact | undefined {
-  return percent === null ? undefined : parseExact(String(percent));
-}
-
-function policyPlayer(player: ProviderRoster["players"][number]): PolicyPlayer {
-  return {
-    id: makePlayerId(player.providerPlayerKey),
-    eligiblePositions: player.eligiblePositions,
-    availability: availabilityOf(player),
-    locked: player.isEditable !== true,
-    currentSlotId: makeSlotId(player.slot),
-    nonGamePeriods: [],
-  };
-}
-
-function availabilityOf(player: ProviderRoster["players"][number]): PlayerAvailability {
-  if (player.injuryCode === undefined) {
-    return { kind: "available" };
-  }
-  return { kind: "unrecognised", code: player.injuryCode };
-}
-
-function rosterSlot(position: ProviderRosterPosition): RosterSlot {
-  const id = makeSlotId(position.position);
-  const eligibility =
-    position.eligibility.length === 0
-      ? { kind: "any" as const }
-      : { kind: "positions" as const, positions: [...position.eligibility] };
-  switch (position.kind) {
-    case "starting":
-      return {
-        kind: "starting",
-        id,
-        capacity: position.count,
-        requirement: "required",
-        eligibility,
+  return values.some((value) => value.score !== null)
+    ? { kind: "scored", provenance: "fake/declared-score", players: values }
+    : {
+        kind: "refused",
+        refusal: "structural",
+        provenance: "fake/no-score",
+        detail: "This league publishes no score the custom planner can use.",
       };
-    case "bench":
-    case "reserve":
-      return { kind: position.kind, id, capacity: position.count, eligibility };
-  }
 }
 
-function targetPeriod(roster: ProviderRoster): Period {
-  return roster.coverage.type === "week"
-    ? { kind: "week", week: roster.coverage.week }
-    : { kind: "date", date: roster.coverage.date };
-}
-
-function observationWindow(league: ProviderLeagueSettings, target: Period): ReadonlyArray<Period> {
-  if (target.kind === "date") {
-    return [target];
+function fakeAvailabilityOf(player: ProviderRoster["players"][number]): ProviderAvailabilityTier {
+  switch (player.injuryCode) {
+    case undefined:
+      return "will-play";
+    case "DTD":
+      return "might-play";
+    default:
+      return "will-not-play";
   }
-  const periods: Array<Period> = [];
-  for (let week = target.week - trailingPeriodCount; week < target.week; week += 1) {
-    if (week >= (league.periodWindow?.start ?? 1)) {
-      periods.push({ kind: "week", week });
-    }
-  }
-  return periods;
 }
 
 function validate(

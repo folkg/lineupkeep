@@ -14,7 +14,7 @@ export const TeamAutomationState = Schema.TaggedUnion({
     resumesAt: Schema.DateTimeUtc,
     timeZone: Schema.NonEmptyString,
     fantasyDay: Schema.NonEmptyString,
-    policyVersion: Schema.NonEmptyString,
+    fantasyDayVersion: Schema.NonEmptyString,
   },
 });
 export type TeamAutomationState = typeof TeamAutomationState.Type;
@@ -28,7 +28,7 @@ export const TeamAutomationEvent = Schema.TaggedUnion({
     resumesAt: Schema.DateTimeUtc,
     timeZone: Schema.NonEmptyString,
     fantasyDay: Schema.NonEmptyString,
-    policyVersion: Schema.NonEmptyString,
+    fantasyDayVersion: Schema.NonEmptyString,
   },
   Resumed: { at: Schema.DateTimeUtc },
   PauseExpired: { at: Schema.DateTimeUtc },
@@ -69,7 +69,7 @@ export const TeamAutomationWorkflow = Machine.make({
             resumesAt: event.resumesAt,
             timeZone: event.timeZone,
             fantasyDay: event.fantasyDay,
-            policyVersion: event.policyVersion,
+            fantasyDayVersion: event.fantasyDayVersion,
           }),
         },
       },

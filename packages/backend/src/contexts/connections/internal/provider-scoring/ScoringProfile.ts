@@ -1,11 +1,5 @@
-import { parseExact } from "./exact.ts";
-import type {
-  ScoringCategory,
-  ScoringCoverage,
-  ScoringProfile,
-  ScoringRule,
-  StatId,
-} from "./types.ts";
+import { parseExact } from "./Exact.ts";
+import type { ScoringCategory, ScoringProfile, ScoringRule, StatId } from "./types.ts";
 
 export type ScoringProfileInput = {
   readonly categories: ReadonlyArray<{ readonly statId: number | string; readonly label: string }>;
@@ -36,22 +30,6 @@ export function scoringProfile(input: ScoringProfileInput): ScoringProfile {
   };
 }
 
-export function describeScoring(
-  profile: ScoringProfile,
-  observedStatIds: ReadonlyArray<StatId>,
-): ScoringCoverage {
-  const observed = new Set(observedStatIds);
-  const ruleIds = new Set(profile.rules.map((rule) => rule.statId));
-  const categoryIds = new Set(profile.categories.map((category) => category.statId));
-  return {
-    scored: sortedStatIds([...observed].filter((statId) => ruleIds.has(statId))),
-    unscored: sortedStatIds([...observed].filter((statId) => !ruleIds.has(statId))),
-    unusedRules: sortedStatIds([...ruleIds].filter((statId) => !observed.has(statId))),
-    rulesWithoutCategory: sortedStatIds([...ruleIds].filter((statId) => !categoryIds.has(statId))),
-    categoriesWithoutRule: sortedStatIds([...categoryIds].filter((statId) => !ruleIds.has(statId))),
-  };
-}
-
 function requireUniqueStatIds(statIds: ReadonlyArray<StatId>, subject: string): void {
   const seen = new Set<StatId>();
   for (const statId of statIds) {
@@ -60,8 +38,4 @@ function requireUniqueStatIds(statIds: ReadonlyArray<StatId>, subject: string): 
     }
     seen.add(statId);
   }
-}
-
-function sortedStatIds(statIds: ReadonlyArray<StatId>): ReadonlyArray<StatId> {
-  return [...statIds].sort((left, right) => left.localeCompare(right, "en", { numeric: true }));
 }

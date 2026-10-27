@@ -22,7 +22,7 @@ type TeamAutomationView = {
   readonly resumesAt?: string;
   readonly timeZone?: string;
   readonly fantasyDay?: string;
-  readonly policyVersion?: string;
+  readonly fantasyDayVersion?: string;
 };
 
 export type TeamView = {
@@ -78,12 +78,11 @@ export type LineupRunView = {
       readonly actual: string;
     }>;
     readonly implementation?: "provider_native" | "custom_policy";
-    readonly policy?:
-      | { readonly kind: "planned"; readonly version: string; readonly basis: string }
+    readonly provenance?:
+      | { readonly kind: "planned"; readonly label: string }
       | {
           readonly kind: "refused";
-          readonly version: string;
-          readonly code: string;
+          readonly label: string;
           readonly detail: string;
         };
     readonly lockedPlayers: number;

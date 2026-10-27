@@ -6,26 +6,14 @@ import {
   compareExact,
   exactFromInteger,
   exactToUnits,
-  formatExact,
   multiplyExact,
   parseExact,
-  subtractExact,
-} from "./exact.ts";
+} from "./Exact.ts";
 
 describe("exact decimals", () => {
-  it("round trips every plain decimal without losing digits", () => {
-    expect(formatExact(parseExact("0.04"))).toBe("0.04");
-    expect(formatExact(parseExact("-1"))).toBe("-1");
-    expect(formatExact(parseExact("10"))).toBe("10");
-    expect(formatExact(parseExact("-0.1"))).toBe("-0.1");
-    expect(formatExact(parseExact("0"))).toBe("0");
-    expect(formatExact(parseExact("0.000"))).toBe("0");
-  });
-
   it("adds without floating-point drift", () => {
     expect(addExact(parseExact("0.1"), parseExact("0.2"))).toEqual(parseExact("0.3"));
     expect(addExact(parseExact("0.04"), parseExact("0.1"))).toEqual(parseExact("0.14"));
-    expect(subtractExact(parseExact("0.3"), parseExact("0.1"))).toEqual(parseExact("0.2"));
   });
 
   it("multiplies whole stat values by decimal modifiers exactly", () => {

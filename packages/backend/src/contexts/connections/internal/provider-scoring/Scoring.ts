@@ -1,6 +1,6 @@
-import { addExact, exactFromInteger, multiplyExact, parseExact } from "./exact.ts";
+import { addExact, exactFromInteger, multiplyExact, parseExact } from "./Exact.ts";
+import type { Exact } from "./Exact.ts";
 import type {
-  Exact,
   PeriodCoverage,
   PeriodScore,
   PeriodScoreUnknown,

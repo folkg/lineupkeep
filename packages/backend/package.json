@@ -31,8 +31,6 @@
     "@effect/sql-pglite": "catalog:",
     "@electric-sql/pglite": "catalog:",
     "@lineupkeep/brand": "workspace:*",
-    "@lineupkeep/lineup-policy": "workspace:*",
-    "@lineupkeep/lineup-scoring": "workspace:*",
     "@lineupkeep/lineup-solver": "workspace:*",
     "@typeonce/effect-machine": "catalog:",
     "better-auth": "catalog:",

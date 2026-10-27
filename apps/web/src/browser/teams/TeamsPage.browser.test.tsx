@@ -64,7 +64,7 @@ const pausedTeam: TeamSummaryView = {
       resumesAt: "2026-10-26T07:00:00.000Z",
       timeZone: "America/Los_Angeles",
       fantasyDay: "2026-10-25",
-      policyVersion: "yahoo-pacific-midnight/1",
+      fantasyDayVersion: "yahoo-pacific-midnight/1",
     },
   },
 };

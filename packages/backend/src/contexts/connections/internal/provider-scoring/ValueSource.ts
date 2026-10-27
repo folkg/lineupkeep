@@ -1,14 +1,7 @@
-import {
-  averageExact,
-  compareExact,
-  exactFromInteger,
-  scorePeriod,
-} from "@lineupkeep/lineup-scoring";
-import type { Exact, StatObservation } from "@lineupkeep/lineup-scoring";
-import { makeSelectionBasis } from "@lineupkeep/lineup-solver";
-import type { PlayerId, SelectionBasis } from "@lineupkeep/lineup-solver";
-
-import { containsPeriod, periodKey } from "./period.ts";
+import { averageExact, compareExact, exactFromInteger, type Exact } from "./Exact.ts";
+import { containsPeriod, periodKey } from "./Period.ts";
+import { scorePeriod } from "./Scoring.ts";
+import type { StatObservation } from "./types.ts";
 import type {
   CommunityStartRatePopulation,
   Period,
@@ -19,7 +12,7 @@ import type {
   ValueSource,
   ValueSourceKind,
 } from "./types.ts";
-import { selectionUnits } from "./valuation.ts";
+import { selectionUnits } from "./Valuation.ts";
 
 export const valueSourceLadder: ReadonlyArray<ValueSourceKind> = [
   "projected-points",
@@ -27,17 +20,11 @@ export const valueSourceLadder: ReadonlyArray<ValueSourceKind> = [
   "community-start-rate",
 ];
 
-export const startCutPreference: ReadonlyArray<string> = ["diamond"];
+const startCutPreference: ReadonlyArray<string> = ["diamond"];
 
 const valueScale = 2;
 
-export function preferredValueSource(
-  available: ReadonlyArray<ValueSourceKind>,
-): ValueSourceKind | undefined {
-  return valueSourceLadder.find((kind) => available.includes(kind));
-}
-
-export function communityStartRatePopulation(
+function communityStartRatePopulation(
   started: ReadonlyArray<PlayerCommunityStartRate>,
 ): CommunityStartRatePopulation {
   for (const cut of startCutPreference) {
@@ -67,8 +54,8 @@ export function resolveValueSource(input: {
   }
 }
 
-type ResolvedValueSource = {
-  readonly basis: SelectionBasis;
+export type ResolvedValueSource = {
+  readonly label: string;
   readonly valueOf: (player: PolicyPlayer) => SourceValue;
 };
 
@@ -82,11 +69,11 @@ type ScoringRulesSource = Extract<ValueSource, { readonly kind: "scoring-rules" 
 type CommunityStartRateSource = Extract<ValueSource, { readonly kind: "community-start-rate" }>;
 
 function projectedPointsSource(source: ProjectedPointsSource, period: Period): ResolvedValueSource {
-  const basis = makeSelectionBasis(`projected-points:${periodKey(period)}`);
+  const label = `projected-points:${periodKey(period)}`;
   const projections = pointsById(source.projections);
   const realised = pointsById(source.realised);
   return {
-    basis,
+    label,
     valueOf: (player) => {
       const projection = projections.get(player.id);
       return {
@@ -102,12 +89,10 @@ function projectedPointsSource(source: ProjectedPointsSource, period: Period): R
 }
 
 function scoringRulesSource(source: ScoringRulesSource): ResolvedValueSource {
-  const basis = makeSelectionBasis(
-    `mean-points-per-period:${source.window.map(periodKey).join(",")}`,
-  );
+  const label = `mean-points-per-period:${source.window.map(periodKey).join(",")}`;
   const observations = observationsByKey(source.observations);
   return {
-    basis,
+    label,
     valueOf: (player) => {
       const countedPeriods: Array<Period> = [];
       const skippedPeriods: Array<Period> = [];
@@ -151,12 +136,10 @@ function communityStartRateSource(
   period: Period,
 ): ResolvedValueSource {
   const population = communityStartRatePopulation(source.started);
-  const basis = makeSelectionBasis(
-    `community-start-rate:${populationKey(population)}:${periodKey(period)}`,
-  );
+  const label = `community-start-rate:${populationKey(population)}:${periodKey(period)}`;
   const started = new Map(source.started.map((player) => [player.id, player]));
   return {
-    basis,
+    label,
     valueOf: (player) => {
       const entry = started.get(player.id);
       const percent = entry === undefined ? undefined : percentOf(entry, population);
@@ -189,7 +172,7 @@ function populationKey(population: CommunityStartRatePopulation): string {
   }
 }
 
-function pointsById(entries: ReadonlyArray<PlayerRealisedPoints>): ReadonlyMap<PlayerId, Exact> {
+function pointsById(entries: ReadonlyArray<PlayerRealisedPoints>): ReadonlyMap<string, Exact> {
   return new Map(entries.map((entry) => [entry.id, entry.points]));
 }
 
@@ -205,6 +188,6 @@ function observationsByKey(
   return index;
 }
 
-function observationKey(period: Period, playerId: PlayerId): string {
+function observationKey(period: Period, playerId: string): string {
   return `${periodKey(period)}|${playerId}`;
 }

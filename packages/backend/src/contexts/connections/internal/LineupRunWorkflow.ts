@@ -4,8 +4,8 @@ import { Schema } from "effect";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
   LineupImplementation,
-  LineupPolicyProvenance,
-  LineupPolicyRefusalProvenance,
+  LineupPlanProvenance,
+  LineupPlanRefusalProvenance,
   LineupRunOutcome,
   LineupTargetPeriod,
   LineupTrigger,
@@ -50,14 +50,14 @@ export const LineupPlan = Schema.TaggedUnion({
     connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
     lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    policy: Schema.optional(LineupPolicyRefusalProvenance),
+    provenance: Schema.optional(LineupPlanRefusalProvenance),
   },
   explicit_assignments: {
     target: LineupTargetPeriod,
     connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
     lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    policy: LineupPolicyProvenance,
+    provenance: LineupPlanProvenance,
     assignments: Schema.Array(LineupPlannedAssignment),
     sourceChanged: Schema.Boolean,
   },

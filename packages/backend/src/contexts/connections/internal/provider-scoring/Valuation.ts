@@ -1,7 +1,6 @@
-import { exactToUnits } from "@lineupkeep/lineup-scoring";
-import type { Exact } from "@lineupkeep/lineup-scoring";
-
-import { periodsEqual } from "./period.ts";
+import { exactToUnits } from "./Exact.ts";
+import type { Exact } from "./Exact.ts";
+import { periodsEqual } from "./Period.ts";
 import type { AvailabilityAssessment, Period, PlayerAvailability, PolicyPlayer } from "./types.ts";
 
 export function assessAvailability(player: PolicyPlayer, period: Period): AvailabilityAssessment {

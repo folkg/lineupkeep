@@ -157,6 +157,24 @@ const plugin = {
         },
       }),
     },
+    "provider-scoring-vocabulary": {
+      create: (context: CommentsRuleContext) => ({
+        Program: () => {
+          if (!isGenericSourceModule(context.filename)) {
+            return;
+          }
+          for (const [term, offset] of providerScoringVocabularyOccurrences(
+            context.sourceCode.text,
+          )) {
+            sourceReport(
+              context,
+              offset,
+              `\`${term}\` names how one provider constructs a score; keep scoring vocabulary inside the provider adapter and expose only a final score and opaque provenance.`,
+            );
+          }
+        },
+      }),
+    },
     "no-intrinsic-elements": {
       create: (context: DesignSystemRuleContext) => ({
         JSXOpeningElement: (node: DesignSystemJSXOpeningElement) => {
@@ -915,6 +933,53 @@ function serverFunctionResolve(
     scope = scope.upper;
   }
   return undefined;
+}
+
+const providerScoringVocabulary: ReadonlyArray<string> = [
+  "communityStartRate",
+  "community_start_rate",
+  "publishesCommunityStartRate",
+  "valueSourceLadder",
+  "valueSource",
+  "ValueSource",
+  "startCutPreference",
+  "cut-diamond",
+  "percent-started",
+  "scoringProfile",
+  "ScoringProfile",
+  "scorePeriod",
+  "mean-points-per-period",
+  "meanPointsPerPeriod",
+  "observationWindow",
+  "statBases",
+  "isFlex",
+];
+
+const providerScoringOwners = [
+  "/contexts/connections/internal/yahoo/",
+  "/contexts/connections/internal/provider-scoring/",
+];
+
+function isGenericSourceModule(filename: string): boolean {
+  const normalized = filename.replaceAll("\\", "/");
+  if (!normalized.includes("/src/") || normalized.endsWith(".test.ts")) {
+    return false;
+  }
+  return !providerScoringOwners.some((owner) => normalized.includes(owner));
+}
+
+function providerScoringVocabularyOccurrences(
+  source: string,
+): ReadonlyArray<readonly [string, number]> {
+  const occurrences: Array<readonly [string, number]> = [];
+  for (const term of providerScoringVocabulary) {
+    let offset = source.indexOf(term);
+    while (offset >= 0) {
+      occurrences.push([term, offset]);
+      offset = source.indexOf(term, offset + term.length);
+    }
+  }
+  return occurrences;
 }
 
 function sourceReport(context: CommentsRuleContext, offset: number, message: string): void {

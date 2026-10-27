@@ -15,7 +15,9 @@ const invariants = [
   define.state(
     "a paused team owns its fantasy-day context",
     ({ snapshot }) =>
-      ["timeZone", "fantasyDay", "policyVersion"].every((key) => key in snapshot.state.value) ===
+      ["timeZone", "fantasyDay", "fantasyDayVersion"].every(
+        (key) => key in snapshot.state.value,
+      ) ===
       (snapshot.state.path === "PausedUntilFantasyDayEnd"),
   ),
   define.step(
@@ -74,7 +76,7 @@ it.effect("generates event sequences without violating automation invariants", (
                   resumesAt: nextDay,
                   timeZone: "America/Los_Angeles",
                   fantasyDay: "2026-10-25",
-                  policyVersion: "yahoo-pacific-midnight/1",
+                  fantasyDayVersion: "yahoo-pacific-midnight/1",
                 };
               case "Resumed":
                 return { _tag: "Resumed", at };
@@ -141,7 +143,7 @@ const paused: TeamAutomationEvent = {
   resumesAt: nextDay,
   timeZone: "America/Los_Angeles",
   fantasyDay: "2026-10-25",
-  policyVersion: "yahoo-pacific-midnight/1",
+  fantasyDayVersion: "yahoo-pacific-midnight/1",
 };
 const events: ReadonlyArray<TeamAutomationEvent> = [
   { _tag: "Enabled", at },
@@ -160,6 +162,6 @@ const states: ReadonlyArray<TeamAutomationState> = [
     resumesAt: nextDay,
     timeZone: "America/Los_Angeles",
     fantasyDay: "2026-10-25",
-    policyVersion: "yahoo-pacific-midnight/1",
+    fantasyDayVersion: "yahoo-pacific-midnight/1",
   },
 ];

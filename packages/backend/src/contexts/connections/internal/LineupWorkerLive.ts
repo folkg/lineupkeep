@@ -4,8 +4,8 @@ import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type {
   LineupImplementation,
-  LineupPolicyProvenance,
-  LineupPolicyRefusalProvenance,
+  LineupPlanProvenance,
+  LineupPlanRefusalProvenance,
   LineupRunDifference,
   LineupRunId,
   LineupRunOutcome,
@@ -20,6 +20,7 @@ import { LineupWorker } from "#contexts/connections/LineupWork.ts";
 import type {
   Provider,
   ProviderLeagueSettings,
+  ProviderLineupAssignment,
   ProviderLineupOutcome,
   ProviderNativeTarget,
   ProviderReadFailure,
@@ -29,6 +30,7 @@ import type {
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
+import { planAssignments } from "./LineupPlanning.ts";
 import type { ClaimedLineupRun, LineupWriteIntentRecord } from "./LineupRunRepository.ts";
 import { LineupRunRepository as LineupRunRepositoryService } from "./LineupRunRepository.ts";
 import type {
@@ -222,12 +224,12 @@ export const LineupWorkerLive = Layer.effect(
       }
       if (planned.kind === "refused") {
         if (planned.refusal === "transient") {
-          yield* block(run, "assignment_refused", planned.detail, policyRecordOf(planned));
+          yield* block(run, "assignment_refused", planned.detail, refusedRecordOf(planned));
           return { kind: "blocked" as const };
         }
         return preparedNative(context, observation, refusalProvenance(planned));
       }
-      yield* Effect.annotateCurrentSpan("lineup.selection_basis", planned.basis);
+      yield* Effect.annotateCurrentSpan("lineup.provenance", planned.provenance);
 
       const revalidated = yield* readRoster(run, provider, context, session, observation.target);
       if (revalidated === undefined) {
@@ -290,8 +292,17 @@ export const LineupWorkerLive = Layer.effect(
           run,
           "lineup_changed_before_write",
           `The fresh roster cannot be planned: ${replanned.detail}`,
-          policyRecordOf(replanned),
+          refusedRecordOf(replanned),
         );
+        return { kind: "blocked" as const };
+      }
+      const placed = planAssignments({
+        league: freshLeague,
+        roster: revalidated,
+        values: replanned.players,
+      });
+      if (placed.kind === "refused") {
+        yield* block(run, "assignment_refused", placed.detail, plannedRecordOf(replanned));
         return { kind: "blocked" as const };
       }
       const freshObservation = observe(revalidated, freshLeague, freshResolution.target);
@@ -300,7 +311,8 @@ export const LineupWorkerLive = Layer.effect(
         plan: explicitPlan(
           context,
           freshObservation,
-          replanned,
+          placed.assignments,
+          replanned.provenance,
           !sameLineup(observation.players, revalidated),
         ),
         before: freshObservation.players,
@@ -934,7 +946,7 @@ export const LineupWorkerLive = Layer.effect(
       const target = intent ?? writeIntentOf(run.record.state);
       const provenance = planRecordOf(intent?.plan);
       const implementation = record.implementation ?? provenance.implementation;
-      const policy = record.policy ?? provenance.policy;
+      const recordedProvenance = record.provenance ?? provenance.provenance;
       yield* repository.recordFailed({
         runId: run.record.id,
         lease: run.lease,
@@ -947,7 +959,7 @@ export const LineupWorkerLive = Layer.effect(
           changes: record.changes ?? [],
           ...(record.differences === undefined ? {} : { differences: record.differences }),
           ...(implementation === undefined ? {} : { implementation }),
-          ...(policy === undefined ? {} : { policy }),
+          ...(recordedProvenance === undefined ? {} : { provenance: recordedProvenance }),
           lockedPlayers: record.lockedPlayers ?? 0,
           editablePlayers: record.editablePlayers ?? 0,
         }),
@@ -1008,7 +1020,7 @@ export const LineupWorkerLive = Layer.effect(
           changes: record.changes ?? [],
           ...(record.differences === undefined ? {} : { differences: record.differences }),
           ...(record.implementation === undefined ? {} : { implementation: record.implementation }),
-          ...(record.policy === undefined ? {} : { policy: record.policy }),
+          ...(record.provenance === undefined ? {} : { provenance: record.provenance }),
           lockedPlayers: record.lockedPlayers ?? 0,
           editablePlayers: record.editablePlayers ?? 0,
         }),
@@ -1043,7 +1055,7 @@ type PreparedPlan =
 
 type AttemptRecord = {
   readonly implementation?: LineupImplementation;
-  readonly policy?: LineupPolicyProvenance;
+  readonly provenance?: LineupPlanProvenance | LineupPlanRefusalProvenance;
   readonly differences?: ReadonlyArray<LineupRunDifference>;
 };
 
@@ -1176,7 +1188,7 @@ function outcome(input: {
   }>;
   readonly differences?: ReadonlyArray<LineupRunDifference>;
   readonly implementation?: LineupImplementation;
-  readonly policy?: LineupPolicyProvenance;
+  readonly provenance?: LineupPlanProvenance;
   readonly lockedPlayers: number;
   readonly editablePlayers: number;
 }): LineupRunOutcome {
@@ -1186,7 +1198,7 @@ function outcome(input: {
 function preparedNative(
   context: OwnedTeam,
   observation: LineupObservation,
-  policy?: LineupPolicyRefusalProvenance,
+  provenance?: LineupPlanRefusalProvenance,
 ): PreparedPlan {
   return {
     kind: "prepared",
@@ -1196,7 +1208,7 @@ function preparedNative(
       connectionGeneration: context.connection.generation,
       lockedPlayers: observation.lockedPlayers,
       editablePlayers: observation.editablePlayers,
-      ...(policy === undefined ? {} : { policy }),
+      ...(provenance === undefined ? {} : { provenance }),
     },
     before: observation.players,
   };
@@ -1205,7 +1217,8 @@ function preparedNative(
 function explicitPlan(
   context: OwnedTeam,
   observation: LineupObservation,
-  planned: Extract<ProviderLineupOutcome, { readonly kind: "planned" }>,
+  assignments: ReadonlyArray<ProviderLineupAssignment>,
+  provenance: string,
   sourceChanged: boolean,
 ): LineupPlan {
   return {
@@ -1214,12 +1227,8 @@ function explicitPlan(
     connectionGeneration: context.connection.generation,
     lockedPlayers: observation.lockedPlayers,
     editablePlayers: observation.editablePlayers,
-    policy: {
-      kind: "planned",
-      version: planned.policyVersion,
-      basis: planned.basis,
-    },
-    assignments: planned.assignments.map((assignment) => ({
+    provenance: { kind: "planned", label: provenance },
+    assignments: assignments.map((assignment) => ({
       playerKey: assignment.providerPlayerKey,
       slot: assignment.slot,
     })),
@@ -1229,31 +1238,25 @@ function explicitPlan(
 
 function refusalProvenance(
   outcome: Extract<ProviderLineupOutcome, { readonly kind: "refused" }>,
-): LineupPolicyRefusalProvenance {
-  return {
-    kind: "refused",
-    version: outcome.policyVersion,
-    code: outcome.code,
-    detail: outcome.detail,
-    ...(outcome.basis === undefined ? {} : { basis: outcome.basis }),
-  };
+): LineupPlanRefusalProvenance {
+  return { kind: "refused", label: outcome.provenance, detail: outcome.detail };
 }
 
 function plannedRecordOf(
-  outcome: Extract<ProviderLineupOutcome, { readonly kind: "planned" }>,
+  outcome: Extract<ProviderLineupOutcome, { readonly kind: "scored" }>,
 ): AttemptRecord {
   return {
     implementation: customLineupImplementation,
-    policy: { kind: "planned", version: outcome.policyVersion, basis: outcome.basis },
+    provenance: { kind: "planned", label: outcome.provenance },
   };
 }
 
-function policyRecordOf(
+function refusedRecordOf(
   outcome: Extract<ProviderLineupOutcome, { readonly kind: "refused" }>,
 ): AttemptRecord {
   return {
     implementation: customLineupImplementation,
-    policy: refusalProvenance(outcome),
+    provenance: refusalProvenance(outcome),
   };
 }
 
@@ -1262,10 +1265,10 @@ function planRecordOf(plan: LineupPlan | undefined): AttemptRecord {
     return {};
   }
   return plan._tag === "explicit_assignments"
-    ? { implementation: customLineupImplementation, policy: plan.policy }
+    ? { implementation: customLineupImplementation, provenance: plan.provenance }
     : {
         implementation: nativeLineupImplementation,
-        ...(plan.policy === undefined ? {} : { policy: plan.policy }),
+        ...(plan.provenance === undefined ? {} : { provenance: plan.provenance }),
       };
 }
 
@@ -1330,8 +1333,8 @@ function nativeSummary(plan: LineupPlan | undefined, changeCount: number): strin
     changeCount > 0
       ? `Verified ${String(changeCount)} native lineup change(s).`
       : "Verified that the native action left the lineup unchanged.";
-  const policy = plan?._tag === "native_action" ? plan.policy : undefined;
-  return policy === undefined ? verified : `${policy.detail} ${verified}`;
+  const refusal = plan?._tag === "native_action" ? plan.provenance : undefined;
+  return refusal === undefined ? verified : `${refusal.detail} ${verified}`;
 }
 
 function blockDetail(

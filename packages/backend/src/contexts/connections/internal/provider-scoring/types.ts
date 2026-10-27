@@ -1,12 +1,50 @@
-import type { Exact, ScoringProfile, StatObservation } from "@lineupkeep/lineup-scoring";
-import type {
-  LineupProblem,
-  PlayerId,
-  PlayerSelection,
-  PositionType,
-  RosterSlot,
-  SlotId,
-} from "@lineupkeep/lineup-solver";
+import type { Exact } from "./Exact.ts";
+
+export type { Exact };
+
+export type StatId = string;
+
+type StatValue = string | number;
+
+export type ScoringCategory = {
+  readonly statId: StatId;
+  readonly label: string;
+};
+
+export type ScoringRule = {
+  readonly statId: StatId;
+  readonly points: Exact;
+};
+
+export type ScoringProfile = {
+  readonly categories: ReadonlyArray<ScoringCategory>;
+  readonly rules: ReadonlyArray<ScoringRule>;
+  readonly scale: number;
+};
+
+export type StatObservation = {
+  readonly statId: StatId;
+  readonly value: StatValue | null;
+};
+
+export type PeriodScore =
+  | { readonly kind: "scored"; readonly points: Exact; readonly coverage: PeriodCoverage }
+  | {
+      readonly kind: "unknown";
+      readonly reasons: ReadonlyArray<PeriodScoreUnknown>;
+      readonly coverage: PeriodCoverage;
+    };
+
+export type PeriodScoreUnknown =
+  | { readonly kind: "no-observations" }
+  | { readonly kind: "value-unknown"; readonly statId: StatId };
+
+export type PeriodCoverage = {
+  readonly scored: ReadonlyArray<StatId>;
+  readonly absent: ReadonlyArray<StatId>;
+  readonly unknown: ReadonlyArray<StatId>;
+  readonly unscored: ReadonlyArray<StatId>;
+};
 
 export type Period =
   | { readonly kind: "week"; readonly week: number }
@@ -35,23 +73,23 @@ export type ValueSource =
       readonly started: ReadonlyArray<PlayerCommunityStartRate>;
     };
 
-export type PlayerProjection = {
-  readonly id: PlayerId;
+type PlayerProjection = {
+  readonly id: string;
   readonly points: Exact;
 };
 
 export type PlayerRealisedPoints = {
-  readonly id: PlayerId;
+  readonly id: string;
   readonly points: Exact;
 };
 
 export type PlayerCommunityStartRate = {
-  readonly id: PlayerId;
+  readonly id: string;
   readonly percent: Exact | undefined;
   readonly cuts: ReadonlyArray<CommunityStartRateCut>;
 };
 
-export type CommunityStartRateCut = {
+type CommunityStartRateCut = {
   readonly cut: string;
   readonly percent: Exact;
 };
@@ -62,7 +100,7 @@ export type PlayerAvailability =
   | { readonly kind: "uncertain"; readonly reason: "day-to-day" }
   | { readonly kind: "unrecognised"; readonly code: string };
 
-export type ExclusionReason = "out" | "injured-reserve" | "suspended" | "not-active";
+type ExclusionReason = "out" | "injured-reserve" | "suspended" | "not-active";
 
 export type AvailabilityAssessment =
   | { readonly tier: "will-play"; readonly fact: "available" }
@@ -72,46 +110,17 @@ export type AvailabilityAssessment =
   | { readonly tier: "will-not-play"; readonly fact: "no-game"; readonly period: Period };
 
 export type PolicyPlayer = {
-  readonly id: PlayerId;
-  readonly eligiblePositions: ReadonlyArray<PositionType>;
+  readonly id: string;
   readonly availability: PlayerAvailability;
-  readonly locked: boolean;
-  readonly currentSlotId: SlotId;
   readonly nonGamePeriods: ReadonlyArray<Period>;
 };
 
-export type PeriodObservation = {
+type PeriodObservation = {
   readonly period: Period;
   readonly players: ReadonlyArray<{
-    readonly id: PlayerId;
+    readonly id: string;
     readonly stats: ReadonlyArray<StatObservation>;
   }>;
-};
-
-export type LineupPolicyInput = {
-  readonly period: Period;
-  readonly source: ValueSource | undefined;
-  readonly slots: ReadonlyArray<RosterSlot>;
-  readonly players: ReadonlyArray<PolicyPlayer>;
-};
-
-export type LineupPolicyResult =
-  | {
-      readonly kind: "problem";
-      readonly problem: LineupProblem;
-      readonly valuations: ReadonlyArray<PlayerValuation>;
-    }
-  | { readonly kind: "refusal"; readonly refusal: LineupPolicyRefusal };
-
-export type LineupPolicyRefusal =
-  | { readonly kind: "no-value-source" }
-  | { readonly kind: "no-observed-periods"; readonly window: ReadonlyArray<Period> };
-
-export type PlayerValuation = {
-  readonly playerId: PlayerId;
-  readonly availability: AvailabilityAssessment;
-  readonly selection: PlayerSelection;
-  readonly value: ValueAssessment;
 };
 
 export type ValueAssessment =

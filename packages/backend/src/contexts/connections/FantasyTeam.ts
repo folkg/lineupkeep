@@ -29,7 +29,7 @@ export const TeamAutomation = Schema.Struct({
   resumesAt: Schema.optional(Schema.DateTimeUtc),
   timeZone: Schema.optional(Schema.NonEmptyString),
   fantasyDay: Schema.optional(Schema.NonEmptyString),
-  policyVersion: Schema.optional(Schema.NonEmptyString),
+  fantasyDayVersion: Schema.optional(Schema.NonEmptyString),
 });
 export type TeamAutomation = typeof TeamAutomation.Type;
 

@@ -1,12 +1,12 @@
 # @lineupkeep/lineup-solver
 
-Provider-neutral, pure lineup optimization for Lineupkeep. Given the league's roster slots, the retained roster, signed selection values for one period, an ordered ladder of availability tiers, and the provider's locks, the solver returns either a legal lineup plan or a named refusal.
+Provider-neutral, pure lineup optimization for Lineupkeep. Given the league's roster slots, the retained roster, signed scores for one period, an ordered ladder of availability tiers, and the provider's locks, the solver returns either a legal lineup plan or a named refusal.
 
-This package contains no IO, provider code, database, worker, HTTP, clock, randomness, or Effect services. The caller owns the provider period, the scoring policy that produces selection values, and the eventual provider write contract.
+This package contains no IO, provider code, database, worker, HTTP, clock, randomness, or Effect services. The caller owns the provider period, the scores it publishes, and the eventual provider write contract.
 
 ## Boundary
 
-The package starts after the policy layer has decided what to compare. It does not read Yahoo, does not fetch projections, does not decide whether a player is injured, does not know which availability tier an injury code deserves, and does not decide how to represent missing evidence. The ladder's rungs and their order arrive with the problem; the meaning of each rung stays in the policy and the provider adapter.
+The package starts after the provider and the generic planner have decided what to compare. It does not read a provider, does not fetch projections, does not decide whether a player is injured, does not know which availability tier an injury code deserves, and does not decide how to represent missing evidence. The ladder's rungs and their order arrive with the problem; the provider selects each player's rung, and the meaning of each rung stays there.
 
 The pure contract is:
 
@@ -16,7 +16,7 @@ The pure contract is:
 
 ## The problem
 
-A problem is the league's slots, the retained roster, one scoring basis, and one ordered availability
+A problem is the league's slots, the retained roster, one selection basis, and one ordered availability
 ladder.
 
 ```ts
@@ -77,7 +77,7 @@ type PlayerSelection =
     };
 ```
 
-Selection values are relative benefits, not projections. They are comparable only within the problem's one `selectionBasis`, such as one scoring policy and one source. The solver rejects a problem whose players carry a different basis. `units` is a safe integer so the optimization stays exact and tie-breaks cannot be overturned by floating-point noise.
+Selection values are relative benefits, not projections. They are comparable only within the problem's one `selectionBasis`, such as the one score set a provider published for one period. The solver rejects a problem whose players carry a different basis. `units` is a safe integer so the optimization stays exact and tie-breaks cannot be overturned by floating-point noise.
 
 The player list is the retained roster. There is no drop or add action in this package. Every player must be assigned to exactly one slot, and a player with no legal destination produces a refusal rather than being omitted.
 
@@ -148,7 +148,7 @@ come back as a game-time decision.
 
 An unusable value is never treated as zero and never treated as a positive or negative number. A player who has one is never assigned to a starting slot; the solver benches them, or parks them in a reserve slot, and the plan is returned.
 
-`solveLineup` refuses with `unusable-selection-value` when benching is not a resolution: the player has no legal bench or reserve slot, or they are the only player who could occupy a required starting slot. The refusal names those players so the policy layer can resolve the value or make an explicit fallback decision.
+`solveLineup` refuses with `unusable-selection-value` when benching is not a resolution: the player has no legal bench or reserve slot, or they are the only player who could occupy a required starting slot. The refusal names those players so the caller can resolve the value or make an explicit fallback decision.
 
 ### Tie-breaks
 
@@ -284,7 +284,7 @@ wr2 takes the flex, because a filled position still beats an empty one.
 
 ## Deliberately outside this package
 
-- The policy layer that produces selection values and availability tiers, including which provider fact becomes which rung, projections, fallbacks, and the choice of scoring basis.
+- The provider that produces final scores and selects availability tiers, including which provider fact becomes which rung, which measurement it trusts, and how it constructs a score.
 - Provider-specific explicit assignment requests, readback, and recovery.
 - Provider period freshness, lock revalidation, and live provider evidence.
 - Database, worker, HTTP, MCP, clock, and persistence.

@@ -732,8 +732,8 @@ export const FantasyQueriesLive = Layer.effect(
         availability: player.availability,
         percentOwned: player.percentOwned,
         percentOwnedDelta: player.percentOwnedDelta,
-        communityStartRate: player.communityStartRate,
-        communityStartRateChange: player.communityStartRateChange,
+        percentStarted: player.percentStarted,
+        percentStartedChange: player.percentStartedChange,
       }));
       const fingerprintValue = yield* queryFingerprint(
         [
@@ -883,7 +883,6 @@ export const FantasyQueriesLive = Layer.effect(
             providerPlayerKeys: valid.map((row) => row.providerPlayerKey),
             sport: context.owned.team.sport,
             period: requestedPeriod,
-            startRateCoverage: undefined,
             currentPeriod: league?.periodWindow?.current,
           }),
         );
@@ -2400,7 +2399,6 @@ function rosterPlayer(
           ? {
               byeWeek: player.byeWeek,
               undroppable: player.undroppable,
-              isFlex: player.isFlex,
             }
           : {}),
       })),

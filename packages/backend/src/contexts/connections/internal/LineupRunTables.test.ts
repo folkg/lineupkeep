@@ -116,10 +116,9 @@ it.effect("round-trips delivery and write-intent rows", () =>
         connectionGeneration: 2,
         lockedPlayers: 0,
         editablePlayers: 1,
-        policy: {
+        provenance: {
           kind: "planned",
-          version: "trailing-mean-points/1",
-          basis: "yahoo:mean-points-per-period:week:2",
+          label: "yahoo/mean-points-per-period:week:2",
         },
         assignments: [{ playerKey: "461.p.10001", slot: "BN" }],
         sourceChanged: false,
@@ -135,10 +134,9 @@ it.effect("round-trips delivery and write-intent rows", () =>
       connectionGeneration: 2,
       lockedPlayers: 0,
       editablePlayers: 1,
-      policy: {
+      provenance: {
         kind: "planned",
-        version: "trailing-mean-points/1",
-        basis: "yahoo:mean-points-per-period:week:2",
+        label: "yahoo/mean-points-per-period:week:2",
       },
       assignments: [{ playerKey: "461.p.10001", slot: "BN" }],
       sourceChanged: false,

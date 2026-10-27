@@ -84,9 +84,9 @@ function toTeamView(summary: TeamSummary["team"]): TeamView {
       ...(summary.automation.fantasyDay === undefined
         ? {}
         : { fantasyDay: summary.automation.fantasyDay }),
-      ...(summary.automation.policyVersion === undefined
+      ...(summary.automation.fantasyDayVersion === undefined
         ? {}
-        : { policyVersion: summary.automation.policyVersion }),
+        : { fantasyDayVersion: summary.automation.fantasyDayVersion }),
     },
     lastSeenAt: DateTime.formatIso(summary.lastSeenAt),
     createdAt: DateTime.formatIso(summary.createdAt),

@@ -12,6 +12,9 @@ const featureInfrastructure = "^infra/features/([^/]+)/";
 const provisioningPackages =
   "(?:^|/node_modules/)(?:alchemy|@alchemy.run|@distilled.cloud|@google-cloud|@aws-sdk|@azure|@pulumi|@neondatabase/api-client|cloudflare)(?:/|$)";
 
+const providerScoring = "^packages/backend/src/contexts/connections/internal/provider-scoring/";
+const providerAdapters = "^packages/backend/src/contexts/connections/internal/yahoo/";
+
 const browserPlatform = [
   "app-shell",
   "brand-ui",
@@ -65,37 +68,28 @@ export default {
       },
     ),
     forbid(
-      "lineup-scoring-is-pure",
-      "League scoring is arithmetic on declared rules; keep provider, persistence, transport, application, clock, and lineup-assignment code out of packages/lineup-scoring.",
-      { path: "^packages/lineup-scoring/src/" },
+      "provider-scoring-stays-in-the-adapter",
+      "How a provider constructs a score is that provider's implementation detail; use ProviderShape for final scores and opaque provenance, and keep scoring modules inside the provider adapters.",
+      { pathNot: [providerAdapters, providerScoring] },
+      { path: providerScoring },
+    ),
+    forbid(
+      "provider-scoring-is-self-contained",
+      "Score construction is arithmetic over the provider's own facts; importing application, persistence, transport, or composition code hides a dependency and breaks provider isolation.",
+      { path: providerScoring },
       {
         path: [
-          "^packages/backend/",
+          "^packages/backend/src/",
+          "^packages/brand/",
           "^packages/hosted-browser/",
           "^packages/lineup-solver/",
-          "^packages/lineup-policy/",
           "^apps/",
           "^infra/",
           "^e2e/",
           "^tools/",
           "(?:^|/node_modules/)(?:effect|@effect|drizzle-orm|drizzle-kit|pg|postgres|better-auth|alchemy|@alchemy\\.run|munkres)(?:/|$)",
         ],
-      },
-    ),
-    forbid(
-      "lineup-policy-is-pure",
-      "The lineup policy decides values from observations; keep provider, persistence, transport, application, and clock code out of packages/lineup-policy.",
-      { path: "^packages/lineup-policy/src/" },
-      {
-        path: [
-          "^packages/backend/",
-          "^packages/hosted-browser/",
-          "^apps/",
-          "^infra/",
-          "^e2e/",
-          "^tools/",
-          "(?:^|/node_modules/)(?:effect|@effect|drizzle-orm|drizzle-kit|pg|postgres|better-auth|alchemy|@alchemy\\.run)(?:/|$)",
-        ],
+        pathNot: [providerScoring],
       },
     ),
     forbid(

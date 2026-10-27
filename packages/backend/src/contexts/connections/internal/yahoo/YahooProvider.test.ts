@@ -1,13 +1,28 @@
 import { assert, it } from "@effect/vitest";
 import type { Tracer } from "effect";
-import { Array, Cause, Effect, Exit, Layer, Redacted, Tracer as EffectTracer } from "effect";
+import {
+  Array,
+  Cause,
+  Effect,
+  Exit,
+  Layer,
+  Redacted,
+  Schema,
+  Tracer as EffectTracer,
+} from "effect";
 
+import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import {
   ProviderPeriodMismatch,
   ProviderRequestFailed,
   ProviderResponseInvalid,
   ProviderReviewLinkInvalid,
   ProviderSessionRejected,
+} from "#contexts/connections/Provider.ts";
+import type {
+  ProviderLeagueSettings,
+  ProviderLineupRequest,
+  ProviderRoster,
 } from "#contexts/connections/Provider.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
@@ -614,7 +629,6 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         proTeamAbbreviation: "SYN",
         eligiblePositions: ["QB", "W/R"],
         slot: "QB",
-        isFlex: false,
         isEditable: true,
         injuryCode: undefined,
         injuryDetail: undefined,
@@ -630,7 +644,6 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         proTeamAbbreviation: "SYN",
         eligiblePositions: ["WR"],
         slot: "BN",
-        isFlex: false,
         isEditable: false,
         injuryCode: "O",
         injuryDetail: "Synthetic injury note",
@@ -891,8 +904,8 @@ it.effect("searches free agents with one exact request and typed availability", 
         availability: "free_agent",
         percentOwned: 42.5,
         percentOwnedDelta: 3,
-        communityStartRate: 31.5,
-        communityStartRateChange: -2,
+        percentStarted: 31.5,
+        percentStartedChange: -2,
       },
       {
         providerPlayerKey: "466.p.20007",
@@ -903,8 +916,8 @@ it.effect("searches free agents with one exact request and typed availability", 
         availability: "waiver",
         percentOwned: null,
         percentOwnedDelta: null,
-        communityStartRate: null,
-        communityStartRateChange: null,
+        percentStarted: null,
+        percentStartedChange: null,
       },
       {
         providerPlayerKey: "466.p.20008",
@@ -915,8 +928,8 @@ it.effect("searches free agents with one exact request and typed availability", 
         availability: "free_agent",
         percentOwned: 0,
         percentOwnedDelta: 0,
-        communityStartRate: null,
-        communityStartRateChange: null,
+        percentStarted: null,
+        percentStartedChange: null,
       },
     ]);
   }).pipe(Effect.provide(yahooLayer(internet)));
@@ -1061,13 +1074,12 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       period: { week: 6 },
-      startRateCoverage: { type: "week", week: 6 },
       currentPeriod: 7,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership,percent_started?format=json&stats.type=week&stats.week=6&percent_started.cut_types=diamond",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=week&stats.week=6",
     );
     assert.deepStrictEqual(details, [
       {
@@ -1086,12 +1098,6 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
           ],
         },
         projected: undefined,
-        communityStartRate: {
-          percent: 38,
-          change: 10,
-          coverage: { type: "week", week: 6 },
-          cuts: [{ cut: "diamond", percent: 0 }],
-        },
       },
     ]);
   }).pipe(Effect.provide(yahooLayer(internet)));
@@ -1108,13 +1114,12 @@ it.effect("reads season statistics on a season basis when no completed week is a
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       period: { week: 6 },
-      startRateCoverage: { type: "week", week: 6 },
       currentPeriod: 6,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership,percent_started?format=json&stats.type=season&percent_started.cut_types=diamond",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=season",
     );
     assert.deepStrictEqual(details[0]?.actual, {
       basis: { type: "season" },
@@ -1167,13 +1172,12 @@ it.effect("uses the season basis when the current week is unknown", () => {
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
       period: { week: 6 },
-      startRateCoverage: { type: "week", week: 6 },
       currentPeriod: undefined,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership,percent_started?format=json&stats.type=season&percent_started.cut_types=diamond",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=season",
     );
     assert.deepStrictEqual(details[0]?.actual, {
       basis: { type: "season" },
@@ -1197,20 +1201,13 @@ it.effect("reads season statistics for hockey instead of requesting a weekly ser
       providerPlayerKeys: ["466.p.30001"],
       sport: "hockey",
       period: undefined,
-      startRateCoverage: { type: "date", date: "2026-10-26" },
       currentPeriod: 7,
     });
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/players;player_keys=466.p.30001;out=stats,ownership,percent_started?format=json&stats.type=season&percent_started.cut_types=diamond",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/players;player_keys=466.p.30001;out=stats,ownership?format=json&stats.type=season",
     );
-    assert.deepStrictEqual(details[0]?.communityStartRate, {
-      percent: 43,
-      change: -3,
-      coverage: { type: "date", date: "2026-10-26" },
-      cuts: [{ cut: "diamond", percent: 0 }],
-    });
     assert.deepStrictEqual(details[0]?.actual, {
       basis: { type: "season" },
       stats: [
@@ -1234,136 +1231,102 @@ it.effect("reports no actual statistics when the provider omits the series", () 
       providerPlayerKeys: ["466.p.30001"],
       sport: "hockey",
       period: undefined,
-      startRateCoverage: undefined,
       currentPeriod: undefined,
     });
 
     assert.strictEqual(details[0]?.actual, undefined);
     assert.strictEqual(details[0]?.name, "Synthetic Skater");
     assert.strictEqual(details[0]?.projected, undefined);
-    assert.deepStrictEqual(details[0]?.communityStartRate, {
-      percent: 43,
-      change: -3,
-      coverage: { type: "date", date: "2026-10-26" },
-      cuts: [{ cut: "diamond", percent: 0 }],
-    });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("decodes a started percentage and its diamond cut in one node", () => {
+it.effect("scores a roster from the published started percentage and its diamond cut", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflPlayerDetailsWithPopulatedCut));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    const details = yield* provider.readPlayerDetails({
-      ...sessionInput,
-      providerLeagueKey: "466.l.4000",
-      providerPlayerKeys: ["466.p.20001", "466.p.20002"],
-      sport: "football",
-      period: { week: 6 },
-      startRateCoverage: { type: "week", week: 6 },
-      currentPeriod: 7,
-    });
-
-    assert.deepStrictEqual(
-      details.map((detail) => detail.communityStartRate),
-      [
-        {
-          percent: 38,
-          change: 10,
-          coverage: { type: "week", week: 6 },
-          cuts: [{ cut: "diamond", percent: 41 }],
-        },
-        {
-          percent: 72,
-          change: -4,
-          coverage: { type: "week", week: 6 },
-          cuts: [{ cut: "diamond", percent: 65 }],
-        },
-      ],
+    const outcome = yield* provider.planLineup(
+      planRequest({
+        league: planLeague({ providerLeagueKey: "466.l.4000", rosterCoverage: "week" }),
+        roster: planRoster({
+          providerLeagueKey: "466.l.4000",
+          coverage: weekSix,
+          members: qbAndWideReceiver,
+        }),
+        target: { coverage: "week", week: 6 },
+      }),
     );
+
+    assert.strictEqual(outcome.kind, "scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    assert.strictEqual(outcome.provenance, "yahoo/community-start-rate:cut-diamond:week:6");
+    assert.deepStrictEqual(outcome.players, [
+      { providerPlayerKey: "466.p.20001", score: 4100, availability: "will-play" },
+      { providerPlayerKey: "466.p.20002", score: 6500, availability: "will-play" },
+    ]);
+    assert.include(internet.calls[0]?.url.href, ";out=percent_started");
+    assert.include(internet.calls[0]?.url.href, "percent_started.cut_types=diamond");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("keeps a zero cut percentage instead of treating it as absent", () => {
+it.effect("uses the overall started percentage when the diamond cut is unpopulated", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflPlayerDetailsWithUnpopulatedCut));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    const details = yield* provider.readPlayerDetails({
-      ...sessionInput,
-      providerLeagueKey: "466.l.4000",
-      providerPlayerKeys: ["466.p.20001", "466.p.20002"],
-      sport: "football",
-      period: { week: 6 },
-      startRateCoverage: { type: "week", week: 6 },
-      currentPeriod: 7,
-    });
+    const outcome = yield* provider.planLineup(
+      planRequest({
+        league: planLeague({ providerLeagueKey: "466.l.4000", rosterCoverage: "week" }),
+        roster: planRoster({
+          providerLeagueKey: "466.l.4000",
+          coverage: weekSix,
+          members: qbAndWideReceiver,
+        }),
+        target: { coverage: "week", week: 6 },
+      }),
+    );
 
+    assert.strictEqual(outcome.kind, "scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    assert.strictEqual(outcome.provenance, "yahoo/community-start-rate:overall:week:6");
     assert.deepStrictEqual(
-      details.map((detail) => detail.communityStartRate?.cuts),
-      [[{ cut: "diamond", percent: 0 }], [{ cut: "diamond", percent: 0 }]],
+      outcome.players.map((player) => player.score),
+      [3800, 7200],
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("reports an absent started percentage as absent", () => {
-  const internet = recordingInternet(() =>
-    jsonResponse(yahooNhlPlayerDetailsWithoutStartedPercentage),
-  );
-  return Effect.gen(function* () {
-    const provider = yield* testProvider;
-
-    const details = yield* provider.readPlayerDetails({
-      ...sessionInput,
-      providerLeagueKey: "466.l.4002",
-      providerPlayerKeys: ["466.p.30001"],
-      sport: "hockey",
-      period: undefined,
-      startRateCoverage: undefined,
-      currentPeriod: undefined,
-    });
-
-    assert.deepStrictEqual(details, [
-      {
-        providerPlayerKey: "466.p.30001",
-        name: "Synthetic Player 1",
-        primaryPosition: "C",
-        displayPosition: "C,LW",
-        eligiblePositions: ["C", "LW"],
-        rosterStatus: "rostered",
-        actual: undefined,
-        projected: undefined,
-        communityStartRate: undefined,
-      },
-    ]);
-  }).pipe(Effect.provide(yahooLayer(internet)));
-});
-
-it.effect("reports a missing started value for one player without failing the read", () => {
+it.effect("leaves a player without a published started percentage unscored", () => {
   const internet = recordingInternet(() =>
     jsonResponse(yahooNhlPlayerDetailsWithMissingStartedValue),
   );
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    const details = yield* provider.readPlayerDetails({
-      ...sessionInput,
-      providerLeagueKey: "466.l.4002",
-      providerPlayerKeys: ["466.p.30001", "466.p.30002"],
-      sport: "hockey",
-      period: undefined,
-      startRateCoverage: { type: "date", date: "2026-10-26" },
-      currentPeriod: undefined,
-    });
+    const outcome = yield* provider.planLineup(
+      planRequest({
+        league: planLeague({ providerLeagueKey: "466.l.4002", rosterCoverage: "date" }),
+        roster: planRoster({
+          providerLeagueKey: "466.l.4002",
+          coverage: { type: "date", date: "2026-10-26" },
+          members: goalieAndCentre,
+        }),
+        target: { coverage: "date", date: "2026-10-26" },
+      }),
+    );
 
-    assert.deepStrictEqual(details[0]?.communityStartRate, {
-      percent: null,
-      change: null,
-      coverage: { type: "date", date: "2026-10-26" },
-      cuts: [{ cut: "diamond", percent: null }],
-    });
-    assert.strictEqual(details[1]?.communityStartRate?.percent, 43);
+    assert.strictEqual(outcome.kind, "scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    assert.deepStrictEqual(outcome.players, [
+      { providerPlayerKey: "466.p.30001", score: null, availability: "will-play" },
+      { providerPlayerKey: "466.p.30002", score: 4300, availability: "will-play" },
+    ]);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -1375,19 +1338,21 @@ it.effect("fails loudly when a started percentage cannot be parsed", () => {
     const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
-      provider.readPlayerDetails({
-        ...sessionInput,
-        providerLeagueKey: "466.l.4002",
-        providerPlayerKeys: ["466.p.30001"],
-        sport: "hockey",
-        period: undefined,
-        startRateCoverage: { type: "date", date: "2026-10-26" },
-        currentPeriod: undefined,
-      }),
+      provider.planLineup(
+        planRequest({
+          league: planLeague({ providerLeagueKey: "466.l.4002", rosterCoverage: "date" }),
+          roster: planRoster({
+            providerLeagueKey: "466.l.4002",
+            coverage: { type: "date", date: "2026-10-26" },
+            members: [skaterMember],
+          }),
+          target: { coverage: "date", date: "2026-10-26" },
+        }),
+      ),
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
-    assert.strictEqual(error.field, "league.players.0.percent_started.value");
+    assert.strictEqual(error.field, "league.players.466.p.30001.percent_started.value");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -1399,15 +1364,17 @@ it.effect("fails loudly when no player carries a started percentage", () => {
     const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
-      provider.readPlayerDetails({
-        ...sessionInput,
-        providerLeagueKey: "466.l.4002",
-        providerPlayerKeys: ["466.p.30001"],
-        sport: "hockey",
-        period: undefined,
-        startRateCoverage: { type: "date", date: "2026-10-26" },
-        currentPeriod: undefined,
-      }),
+      provider.planLineup(
+        planRequest({
+          league: planLeague({ providerLeagueKey: "466.l.4002", rosterCoverage: "date" }),
+          roster: planRoster({
+            providerLeagueKey: "466.l.4002",
+            coverage: { type: "date", date: "2026-10-26" },
+            members: [skaterMember],
+          }),
+          target: { coverage: "date", date: "2026-10-26" },
+        }),
+      ),
     );
 
     assert.instanceOf(error, ProviderResponseInvalid);
@@ -1423,15 +1390,17 @@ it.effect("reports the covered started period when it differs from the request",
     const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
-      provider.readPlayerDetails({
-        ...sessionInput,
-        providerLeagueKey: "466.l.4000",
-        providerPlayerKeys: ["466.p.20001"],
-        sport: "football",
-        period: { week: 6 },
-        startRateCoverage: { type: "week", week: 6 },
-        currentPeriod: 7,
-      }),
+      provider.planLineup(
+        planRequest({
+          league: planLeague({ providerLeagueKey: "466.l.4000", rosterCoverage: "week" }),
+          roster: planRoster({
+            providerLeagueKey: "466.l.4000",
+            coverage: weekSix,
+            members: [quarterbackMember],
+          }),
+          target: { coverage: "week", week: 6 },
+        }),
+      ),
     );
 
     assert.instanceOf(error, ProviderPeriodMismatch);
@@ -1936,3 +1905,111 @@ const sessionInput = {
   provider: decodeProviderKey("yahoo"),
   session: Redacted.make("A1=canary-cookie-value; A3=another-cookie-value"),
 };
+
+const weekSix = { type: "week" as const, week: 6 };
+
+const quarterbackMember = rosterMember("466.p.20001", "QB", "QB", ["QB"]);
+const receiverMember = rosterMember("466.p.20002", "WR", "BN", ["WR"]);
+const goalieMember = rosterMember("466.p.30001", "G", "G", ["G", "IR+"]);
+const centreMember = rosterMember("466.p.30002", "C", "C", ["C"]);
+
+const qbAndWideReceiver = [quarterbackMember, receiverMember];
+const goalieAndCentre = [goalieMember, centreMember];
+const skaterMember = rosterMember("466.p.30001", "C", "C", ["C", "LW"]);
+
+function rosterMember(
+  providerPlayerKey: string,
+  primaryPosition: string,
+  slot: string,
+  eligiblePositions: ReadonlyArray<string>,
+): ProviderRoster["players"][number] {
+  return {
+    providerPlayerKey,
+    name: providerPlayerKey,
+    displayPosition: primaryPosition,
+    primaryPosition,
+    positionType: "O",
+    proTeamAbbreviation: undefined,
+    eligiblePositions,
+    slot,
+    isEditable: true,
+    injuryCode: undefined,
+    injuryDetail: undefined,
+    byeWeek: null,
+    undroppable: false,
+  };
+}
+
+function planLeague(input: {
+  readonly providerLeagueKey: string;
+  readonly rosterCoverage: "week" | "date";
+}): ProviderLeagueSettings {
+  return {
+    providerLeagueKey: input.providerLeagueKey,
+    name: "Synthetic League",
+    webUrl: `https://football.fantasysports.yahoo.com/f1/${input.providerLeagueKey}`,
+    season: 2026,
+    periodWindow: input.rosterCoverage === "week" ? { current: 6, start: 1, end: 17 } : undefined,
+    rosterCoverage: input.rosterCoverage,
+    startDate: "2026-09-03",
+    endDate: "2026-12-28",
+    teamCount: 10,
+    format: "head_to_head_points",
+    scoringType: "head",
+    scoringLabel: "H2H",
+    weeklyDeadline: undefined,
+    waiverType: "FR",
+    waiverRule: "continuous",
+    usesFaab: false,
+    draftStatus: "postdraft",
+    rosterPositions: [
+      {
+        position: input.rosterCoverage === "week" ? "QB" : "G",
+        positionType: "O",
+        count: 1,
+        kind: "starting",
+        eligibility: [input.rosterCoverage === "week" ? "QB" : "G"],
+      },
+      {
+        position: "BN",
+        positionType: "B",
+        count: 2,
+        kind: "bench",
+        eligibility: [],
+      },
+    ],
+    statCategories: [],
+    statModifiers: [],
+  };
+}
+
+function planRoster(input: {
+  readonly providerLeagueKey: string;
+  readonly coverage: ProviderRoster["coverage"];
+  readonly members: ReadonlyArray<ProviderRoster["players"][number]>;
+}): ProviderRoster {
+  return {
+    providerTeamKey: `${input.providerLeagueKey}.t.1`,
+    providerLeagueKey: input.providerLeagueKey,
+    coverage: input.coverage,
+    players: input.members,
+  };
+}
+
+function planRequest(input: {
+  readonly league: ProviderLeagueSettings;
+  readonly roster: ProviderRoster;
+  readonly target:
+    | { readonly coverage: "week"; readonly week: number }
+    | { readonly coverage: "date"; readonly date: string };
+}): ProviderLineupRequest {
+  return {
+    ...sessionInput,
+    providerTeamKey: input.roster.providerTeamKey,
+    providerLeagueKey: input.roster.providerLeagueKey,
+    sport: input.league.rosterCoverage === "week" ? "football" : "hockey",
+    league: input.league,
+    roster: input.roster,
+    target: Schema.decodeSync(LineupTargetPeriod)(input.target),
+  };
+}

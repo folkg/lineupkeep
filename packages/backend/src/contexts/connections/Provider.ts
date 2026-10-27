@@ -52,7 +52,6 @@ const ProviderLimitationSubject = Schema.Literals([
   "player_schedule",
   "probable_starters",
   "projections",
-  "community_start_rate",
   "team_remaining_games",
   "lock_timing",
   "historical_seasons",
@@ -73,8 +72,6 @@ export type ProviderCapabilities = {
     readonly weeklyStatSortSports: ReadonlyArray<FantasySport>;
   };
   readonly publishesProjections: boolean;
-  readonly publishesCommunityStartRate: boolean;
-  readonly statBases: ReadonlyArray<ProviderStatBasis["type"]>;
   readonly limitations: ReadonlyArray<ProviderLimitation>;
 };
 
@@ -213,7 +210,7 @@ export type ProviderShape = {
       readonly providerLeagueKey: string;
       readonly providerPlayerKeys: ReadonlyArray<string>;
       readonly sport: FantasySport;
-      readonly periods: ReadonlyArray<ProviderPeriod>;
+      readonly periods: ReadonlyArray<ProviderScoringWeek>;
       readonly currentPeriod: number | undefined;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderPlayerPeriod>, ProviderReadFailure>;
@@ -225,7 +222,7 @@ export type ProviderShape = {
   readonly readMatchups: (
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
-      readonly period: ProviderPeriod;
+      readonly period: ProviderScoringWeek;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderMatchup>, ProviderReadFailure>;
 
@@ -258,12 +255,11 @@ type ProviderPlayerReadInput = {
   readonly providerLeagueKey: string;
   readonly providerPlayerKeys: ReadonlyArray<string>;
   readonly sport: FantasySport;
-  readonly period: ProviderPeriod | undefined;
-  readonly startRateCoverage: ProviderRosterCoverage | undefined;
+  readonly period: ProviderScoringWeek | undefined;
   readonly currentPeriod: number | undefined;
 };
 
-export type ProviderPeriodKind = ProviderRosterCoverage["type"];
+export type ProviderCoverageKind = ProviderRosterCoverage["type"];
 
 export type ProviderPeriodWindow = {
   readonly current: number;
@@ -313,13 +309,13 @@ export type ProviderLeagueSettings = {
   readonly usesFaab: boolean | undefined;
   readonly draftStatus: string | undefined;
   readonly periodWindow: ProviderPeriodWindow | undefined;
-  readonly rosterCoverage: ProviderPeriodKind;
+  readonly rosterCoverage: ProviderCoverageKind;
   readonly rosterPositions: ReadonlyArray<ProviderRosterPosition>;
   readonly statCategories: ReadonlyArray<ProviderStatCategory>;
   readonly statModifiers: ReadonlyArray<ProviderStatModifier>;
 };
 
-export type ProviderPeriod = {
+export type ProviderScoringWeek = {
   readonly week: number;
 };
 
@@ -348,7 +344,6 @@ export type ProviderRosterPlayer = {
   readonly proTeamAbbreviation: string | undefined;
   readonly eligiblePositions: ReadonlyArray<string>;
   readonly slot: string;
-  readonly isFlex: boolean | null;
   readonly isEditable: boolean | null;
   readonly injuryCode: string | undefined;
   readonly injuryDetail: string | undefined;
@@ -377,18 +372,6 @@ export type ProviderPlayerStatGroup = {
   readonly stats: ReadonlyArray<ProviderStatValue>;
 };
 
-export type ProviderStartRateCut = {
-  readonly cut: string;
-  readonly percent: number | null;
-};
-
-export type ProviderCommunityStartRate = {
-  readonly percent: number | null;
-  readonly change: number | null;
-  readonly coverage: ProviderRosterCoverage | null;
-  readonly cuts: ReadonlyArray<ProviderStartRateCut>;
-};
-
 export type ProviderPlayerDetail = {
   readonly providerPlayerKey: string;
   readonly name: string | undefined;
@@ -398,11 +381,10 @@ export type ProviderPlayerDetail = {
   readonly rosterStatus: "rostered" | "free_agent" | "waiver" | "unknown";
   readonly actual: ProviderPlayerStatGroup | undefined;
   readonly projected: ProviderPlayerStatGroup | undefined;
-  readonly communityStartRate: ProviderCommunityStartRate | undefined;
 };
 
 export type ProviderPlayerPeriod = {
-  readonly period: ProviderPeriod;
+  readonly period: ProviderScoringWeek;
   readonly details: ReadonlyArray<ProviderPlayerDetail>;
 };
 
@@ -434,8 +416,8 @@ export type ProviderPlayerSearchResult = {
     readonly availability: "free_agent" | "waiver" | "rostered" | "unknown";
     readonly percentOwned: number | null;
     readonly percentOwnedDelta: number | null;
-    readonly communityStartRate: number | null;
-    readonly communityStartRateChange: number | null;
+    readonly percentStarted: number | null;
+    readonly percentStartedChange: number | null;
   }>;
 };
 
@@ -491,7 +473,7 @@ export type ProviderCategoryWinner = {
 };
 
 export type ProviderMatchup = {
-  readonly period: ProviderPeriod;
+  readonly period: ProviderScoringWeek;
   readonly home: ProviderTeamScore;
   readonly away: ProviderTeamScore;
   readonly status: string | undefined;
@@ -569,18 +551,28 @@ export type ProviderLineupRequest = ProviderSessionMaterial & {
 
 export type ProviderLineupRefusal = "structural" | "transient";
 
+export const ProviderAvailabilityTier = Schema.Literals([
+  "will-play",
+  "might-play",
+  "will-not-play",
+]);
+export type ProviderAvailabilityTier = typeof ProviderAvailabilityTier.Type;
+
 export type ProviderLineupOutcome =
   | {
-      readonly kind: "planned";
-      readonly policyVersion: string;
-      readonly basis: string;
-      readonly assignments: ReadonlyArray<ProviderLineupAssignment>;
+      readonly kind: "scored";
+      readonly provenance: string;
+      readonly players: ReadonlyArray<ProviderPlayerValue>;
     }
   | {
       readonly kind: "refused";
       readonly refusal: ProviderLineupRefusal;
-      readonly policyVersion: string;
-      readonly code: string;
+      readonly provenance: string;
       readonly detail: string;
-      readonly basis: string | undefined;
     };
+
+export type ProviderPlayerValue = {
+  readonly providerPlayerKey: string;
+  readonly score: number | null;
+  readonly availability: ProviderAvailabilityTier;
+};

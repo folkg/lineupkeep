@@ -24,16 +24,8 @@ export function addExact(left: Exact, right: Exact): Exact {
   return exact(unitsAtScale(left, scale) + unitsAtScale(right, scale), scale);
 }
 
-export function subtractExact(left: Exact, right: Exact): Exact {
-  return addExact(left, negateExact(right));
-}
-
 export function multiplyExact(left: Exact, right: Exact): Exact {
   return exact(left.units * right.units, left.scale + right.scale);
-}
-
-export function negateExact(value: Exact): Exact {
-  return exact(-value.units, value.scale);
 }
 
 export function compareExact(left: Exact, right: Exact): number {
@@ -55,15 +47,6 @@ export function averageExact(values: ReadonlyArray<Exact>, scale: number): Exact
 
 export function exactToUnits(value: Exact, scale: number): bigint {
   return unitsAtScale(value, scale);
-}
-
-export function formatExact(value: Exact): string {
-  const magnitude = value.units < 0n ? -value.units : value.units;
-  const digits = magnitude.toString().padStart(value.scale + 1, "0");
-  const whole = digits.slice(0, digits.length - value.scale);
-  const fraction = digits.slice(digits.length - value.scale);
-  const sign = value.units < 0n ? "-" : "";
-  return fraction.length === 0 ? `${sign}${whole}` : `${sign}${whole}.${fraction}`;
 }
 
 function exact(units: bigint, scale: number): Exact {

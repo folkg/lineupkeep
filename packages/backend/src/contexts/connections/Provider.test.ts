@@ -97,7 +97,6 @@ it.effect("declares its capabilities without a per-test call", () =>
     const provider = yield* testProvider;
 
     assert.strictEqual(provider.capabilities.publishesProjections, false);
-    assert.strictEqual(provider.capabilities.publishesCommunityStartRate, true);
     assert.isAbove(provider.capabilities.limitations.length, 0);
   }).pipe(Effect.provide(ProviderTestLayer)),
 );

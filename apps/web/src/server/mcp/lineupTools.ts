@@ -31,7 +31,7 @@ type SetLineupResult = typeof SetLineupResult.Type;
 export const lineupTools = Toolkit.make(
   Tool.make("set_lineup", {
     description:
-      "Create durable lineup runs for one or more owned teams and validated target periods. Lineupkeep's own policy plans the lineup, and a team whose league the provider cannot value falls back to the provider's native start-active action. Returns a per-team durable reference, current status, implementation, and safe pending/verified explanation. Queue acceptance or an HTTP response is never reported as lineup success; use get_lineup_runs to retrieve later status. This never submits transactions, buys premium actions, or changes another person's team.",
+      "Create durable lineup runs for one or more owned teams and validated target periods. Lineupkeep plans the lineup from the provider's final per-player scores, and a team whose league the provider cannot value at all falls back to the provider's native start-active action. Returns a per-team durable reference, current status, implementation, and safe pending/verified explanation. Queue acceptance or an HTTP response is never reported as lineup success; use get_lineup_runs to retrieve later status. This never submits transactions, buys premium actions, or changes another person's team.",
     parameters: SetLineupInput,
     success: Schema.toCodecJson(SetLineupResult),
     failure: ToolFailure,

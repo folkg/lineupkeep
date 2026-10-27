@@ -38,12 +38,7 @@ import { LineupRequestConflict, LineupRequestInput, LineupRunNotFound } from "./
 import { LineupRuns } from "./LineupRuns.ts";
 import { LineupWorker } from "./LineupWork.ts";
 import { ProviderResponseInvalid } from "./Provider.ts";
-import type {
-  ProviderLeagueSettings,
-  ProviderPlayerDetail,
-  ProviderRoster,
-  ProviderTeam,
-} from "./Provider.ts";
+import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
 
 it.effect(
   "creates one durable run per team, falls back to the native action, and verifies it",
@@ -60,12 +55,12 @@ it.effect(
       assert.strictEqual(submitted.runs.length, 1);
       assert.strictEqual(submitted.runs[0]?.status, "completed");
       assert.strictEqual(submitted.runs[0]?.implementation, "custom_policy");
-      assert.strictEqual(submitted.runs[0]?.implementationVersion, "custom-policy/1");
+      assert.strictEqual(submitted.runs[0]?.implementationVersion, "custom-policy/2");
       assert.strictEqual(submitted.runs[0]?.outcome?.kind, "changed");
       assert.strictEqual(submitted.runs[0]?.outcome?.verified, true);
       assert.strictEqual(submitted.runs[0]?.outcome?.reconciled, false);
       assert.strictEqual(submitted.runs[0]?.outcome?.implementation, "provider_native");
-      assert.strictEqual(submitted.runs[0]?.outcome?.policy?.kind, "refused");
+      assert.strictEqual(submitted.runs[0]?.outcome?.provenance?.kind, "refused");
       assert.strictEqual(submitted.runs[0]?.outcome?.lockedPlayers, 1);
       assert.strictEqual(submitted.runs[0]?.outcome?.editablePlayers, 1);
       assert.strictEqual(yield* fake.nativeCallCount, 1);
@@ -177,7 +172,7 @@ it.effect("applies and verifies changed explicit assignments", () =>
     assert.strictEqual(run.state.outcome.verified, true);
     assert.strictEqual(run.state.outcome.reconciled, false);
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
-    assert.strictEqual(run.state.outcome.policy?.kind, "planned");
+    assert.strictEqual(run.state.outcome.provenance?.kind, "planned");
     assert.strictEqual(run.state.outcome.changes.length, 2);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
@@ -194,7 +189,7 @@ it.effect("plans a league without points rules from the published started percen
     const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
     yield* fake.setLeague(startedLeague);
     yield* fake.setRoster(customRoster);
-    yield* fake.setPlayerDetails(startedDetails);
+    yield* fake.setPlayerScores(startedScores);
     const runId = yield* createQueuedRun(repository, team);
 
     yield* worker.deliver([runId]);
@@ -206,12 +201,12 @@ it.effect("plans a league without points rules from the published started percen
       return;
     }
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
-    const policy = run.state.outcome.policy;
-    assert.strictEqual(policy?.kind, "planned");
-    if (policy?.kind !== "planned") {
+    const provenance = run.state.outcome.provenance;
+    assert.strictEqual(provenance?.kind, "planned");
+    if (provenance?.kind !== "planned") {
       return;
     }
-    assert.strictEqual(policy.basis, "community-start-rate:overall:week:3");
+    assert.strictEqual(provenance.label, "fake/declared-score");
     assert.strictEqual(run.state.outcome.changes.length, 2);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
@@ -327,7 +322,7 @@ it.effect("fails an invalid explicit assignment request without retrying", () =>
     assert.strictEqual(run.state.outcome.kind, "failed");
     assert.strictEqual(run.state.outcome.verified, false);
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
-    assert.strictEqual(run.state.outcome.policy?.kind, "planned");
+    assert.strictEqual(run.state.outcome.provenance?.kind, "planned");
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     yield* worker.deliver([runId]);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
@@ -515,18 +510,15 @@ it.effect("plans a manual run with the custom policy", () =>
     const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
     yield* fake.setLeague(startedLeague);
     yield* fake.setRoster(customRoster);
-    yield* fake.setPlayerDetails(startedDetails);
+    yield* fake.setPlayerScores(startedScores);
 
     const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
 
     assert.strictEqual(submitted.runs[0]?.status, "completed");
     assert.strictEqual(submitted.runs[0]?.implementation, "custom_policy");
     assert.strictEqual(submitted.runs[0]?.outcome?.implementation, "custom_policy");
-    assert.strictEqual(submitted.runs[0]?.outcome?.policy?.kind, "planned");
-    assert.strictEqual(
-      submitted.runs[0]?.outcome?.policy?.basis,
-      "community-start-rate:overall:week:3",
-    );
+    assert.strictEqual(submitted.runs[0]?.outcome?.provenance?.kind, "planned");
+    assert.strictEqual(submitted.runs[0]?.outcome?.provenance?.label, "fake/declared-score");
     assert.strictEqual(submitted.runs[0]?.outcome?.changes.length, 2);
     assert.strictEqual(yield* fake.explicitCallCount, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
@@ -552,12 +544,11 @@ it.effect("falls back to the native action when the planner reports a structural
     }
     assert.strictEqual(run.state.outcome.kind, "changed");
     assert.strictEqual(run.state.outcome.implementation, "provider_native");
-    assert.strictEqual(run.state.outcome.policy?.kind, "refused");
-    if (run.state.outcome.policy?.kind !== "refused") {
+    assert.strictEqual(run.state.outcome.provenance?.kind, "refused");
+    if (run.state.outcome.provenance?.kind !== "refused") {
       return;
     }
-    assert.strictEqual(run.state.outcome.policy.code, "policy:no-value-source");
-    assert.match(run.state.outcome.policy.detail, /publishes no value source/u);
+    assert.match(run.state.outcome.provenance.detail, /publishes no score/u);
     assert.strictEqual(yield* fake.nativeCallCount, 1);
     assert.strictEqual(yield* fake.explicitCallCount, 0);
   }).pipe(Effect.provide(LineupTestLayer)),
@@ -571,9 +562,9 @@ it.effect("blocks a run when the planner reports a transient refusal", () =>
     const team = yield* seedCustom(fake);
     yield* fake.setPlanRefusal({
       refusal: "transient",
-      code: "policy:no-observed-periods",
+      provenance: "fake/no-observed-period",
       detail:
-        "No completed scoring period is available to value the roster, so the custom policy cannot plan a lineup.",
+        "No completed scoring period is available to value the roster, so the custom planner cannot plan a lineup.",
     });
     const runId = yield* createQueuedRun(repository, team);
 
@@ -587,11 +578,11 @@ it.effect("blocks a run when the planner reports a transient refusal", () =>
     }
     assert.strictEqual(run.state.outcome.kind, "blocked");
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
-    assert.strictEqual(run.state.outcome.policy?.kind, "refused");
-    if (run.state.outcome.policy?.kind !== "refused") {
+    assert.strictEqual(run.state.outcome.provenance?.kind, "refused");
+    if (run.state.outcome.provenance?.kind !== "refused") {
       return;
     }
-    assert.strictEqual(run.state.outcome.policy.code, "policy:no-observed-periods");
+    assert.match(run.state.outcome.provenance.detail, /No completed scoring period/u);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
     assert.strictEqual(yield* fake.explicitCallCount, 0);
   }).pipe(Effect.provide(LineupTestLayer)),
@@ -611,7 +602,7 @@ it.effect("runs a queued intent on the active implementation after the cutover",
 
     const run = yield* loadRun(repository, runId);
     assert.strictEqual(run.implementation, "custom_policy");
-    assert.strictEqual(run.implementationVersion, "custom-policy/1");
+    assert.strictEqual(run.implementationVersion, "custom-policy/2");
     assert.strictEqual(run.state._tag, "Completed");
     if (run.state._tag !== "Completed") {
       return;
@@ -705,7 +696,7 @@ it.effect("replans from a fresh read instead of writing a stale explicit plan", 
       return;
     }
     assert.strictEqual(run.state.outcome.implementation, "custom_policy");
-    assert.strictEqual(run.state.outcome.policy?.kind, "planned");
+    assert.strictEqual(run.state.outcome.provenance?.kind, "planned");
     assert.include(run.state.outcome.summary, "roster changed before the write");
     const requests = yield* fake.explicitRequests;
     assert.strictEqual(requests[0]?.length, 4);
@@ -797,7 +788,7 @@ it.effect("lets a manual run bypass pause and enrollment after observation", () 
           resumesAt: DateTime.makeUnsafe("2026-10-26T07:00:00Z"),
           timeZone: "America/Los_Angeles",
           fantasyDay: "2026-10-25",
-          policyVersion: "yahoo-pacific-midnight/1",
+          fantasyDayVersion: "yahoo-pacific-midnight/1",
         }),
         automationStatus: "paused-until-fantasy-day-end",
       })
@@ -969,7 +960,7 @@ function setStoredImplementation(
     }
     const stored = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(LineupRunState))(row.state);
     const implementationVersion =
-      implementation === "custom_policy" ? "custom-policy/1" : "provider-native/1";
+      implementation === "custom_policy" ? "custom-policy/2" : "provider-native/1";
     const state = yield* Schema.encodeEffect(Schema.toCodecJson(LineupRunState))({
       ...stored,
       implementation,
@@ -1035,7 +1026,7 @@ function seedCustom(
     const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
     yield* fake.setLeague(customLeague);
     yield* fake.setRoster(customRoster);
-    yield* fake.setPlayerDetails(customDetails);
+    yield* fake.setPlayerScores(customScores);
     return team;
   });
 }
@@ -1055,55 +1046,11 @@ function customPlayer(
     proTeamAbbreviation: undefined,
     eligiblePositions: [position],
     slot,
-    isFlex: null,
     isEditable: true,
     injuryCode: undefined,
     injuryDetail: undefined,
     byeWeek: null,
     undroppable: false,
-  };
-}
-
-function customDetail(
-  providerPlayerKey: string,
-  name: string,
-  position: string,
-  value: number,
-): import("./Provider.ts").ProviderPlayerDetail {
-  return {
-    providerPlayerKey,
-    name,
-    primaryPosition: position,
-    displayPosition: position,
-    eligiblePositions: undefined,
-    rosterStatus: "rostered",
-    actual: { basis: { type: "week", week: 2 }, stats: [{ statId: 4, value }] },
-    projected: undefined,
-    communityStartRate: undefined,
-  };
-}
-
-function startedDetail(
-  providerPlayerKey: string,
-  name: string,
-  position: string,
-  percent: number,
-): ProviderPlayerDetail {
-  return {
-    providerPlayerKey,
-    name,
-    primaryPosition: position,
-    displayPosition: position,
-    eligiblePositions: undefined,
-    rosterStatus: "rostered",
-    actual: undefined,
-    projected: undefined,
-    communityStartRate: {
-      percent,
-      change: null,
-      coverage: { type: "week", week: 3 },
-      cuts: [{ cut: "diamond", percent: 0 }],
-    },
   };
 }
 
@@ -1156,11 +1103,11 @@ const customRoster: ProviderRoster = {
   ],
 };
 
-const customDetails = [
-  customDetail("461.p.20001", "QB One", "QB", 10),
-  customDetail("461.p.20002", "RB One", "RB", 5),
-  customDetail("461.p.20003", "RB Two", "RB", 15),
-  customDetail("461.p.20004", "QB Two", "QB", 1),
+const customScores = [
+  { providerPlayerKey: "461.p.20001", score: 10, availability: undefined },
+  { providerPlayerKey: "461.p.20002", score: 5, availability: undefined },
+  { providerPlayerKey: "461.p.20003", score: 15, availability: undefined },
+  { providerPlayerKey: "461.p.20004", score: 1, availability: undefined },
 ];
 
 const startedLeague: ProviderLeagueSettings = {
@@ -1188,11 +1135,11 @@ const startedLeague: ProviderLeagueSettings = {
   statModifiers: [],
 };
 
-const startedDetails: ReadonlyArray<ProviderPlayerDetail> = [
-  startedDetail("461.p.20001", "QB One", "QB", 30),
-  startedDetail("461.p.20002", "RB One", "RB", 20),
-  startedDetail("461.p.20003", "RB Two", "RB", 90),
-  startedDetail("461.p.20004", "QB Two", "QB", 5),
+const startedScores = [
+  { providerPlayerKey: "461.p.20001", score: 30, availability: undefined },
+  { providerPlayerKey: "461.p.20002", score: 20, availability: undefined },
+  { providerPlayerKey: "461.p.20003", score: 90, availability: undefined },
+  { providerPlayerKey: "461.p.20004", score: 5, availability: undefined },
 ];
 
 const humanEditedRoster: ProviderRoster = {
@@ -1342,7 +1289,6 @@ const roster: ProviderRoster = {
       proTeamAbbreviation: undefined,
       eligiblePositions: ["QB"],
       slot: "QB",
-      isFlex: false,
       isEditable: false,
       injuryCode: undefined,
       injuryDetail: undefined,
@@ -1358,7 +1304,6 @@ const roster: ProviderRoster = {
       proTeamAbbreviation: undefined,
       eligiblePositions: ["QB"],
       slot: "BN",
-      isFlex: false,
       isEditable: true,
       injuryCode: undefined,
       injuryDetail: undefined,
