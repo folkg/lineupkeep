@@ -567,6 +567,17 @@ export default {
       { path: "/internal/[^/]*Database\\.ts$" },
     ),
     forbid(
+      "provider-adapters-are-injected",
+      "Generic code must not import a provider adapter; use ProviderRegistry and construct each adapter only in runtime/ApplicationLayer.ts.",
+      {
+        pathNot: [
+          "^packages/backend/src/contexts/connections/internal/yahoo/",
+          "^packages/backend/src/runtime/ApplicationLayer\\.ts$",
+        ],
+      },
+      { path: "^packages/backend/src/contexts/connections/internal/yahoo/" },
+    ),
+    forbid(
       "live-layers-only-used-by-composition-roots",
       "Concrete Live Layer imports bypass dependency injection; depend on the service contract and compose its Live Layer in runtime/ApplicationLayer.ts or tests.",
       {
