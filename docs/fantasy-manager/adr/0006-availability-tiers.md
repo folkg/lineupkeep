@@ -80,8 +80,11 @@ rungs by declared order and needs no new rung, weight, or objective term.
 
 ## Deferred
 
-Real-world starting status (for example a backup quarterback) is not on the ladder. The provider
-publishes no depth-chart or snap-share signal today, and the trailing mean of realised points already
-prices the role a player actually had. When such a signal exists it belongs to the value basis, where
-expected opportunity is priced once, not to the availability ladder, which only says whether a player
-appears at all.
+Real-world starting status (for example a backup quarterback) is not on the ladder. The premise first
+recorded here — that the provider publishes no depth-chart or snap-share signal today — is wrong for
+goalies and pitchers: the roster publishes `starting_status` on them. It is a participation
+refinement, not a fourth kind of absence, and it waits until reserve writes are verified and the
+availability read is corrected; [the correctness analysis](../LINEUP-CORRECTNESS-ANALYSIS.md#4-fact-inventory-against-the-seam)
+records it as the next deferred fact. The trailing mean of realised points already prices the role a
+player actually had, so when it does land it belongs to the value basis, where expected opportunity is
+priced once, not to the availability ladder, which only says whether a player appears at all.

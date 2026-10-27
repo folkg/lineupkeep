@@ -51,15 +51,13 @@ export function planAssignments(input: PlanAssignmentsInput): PlanAssignmentsRes
   if (solved.kind === "refusal") {
     return { kind: "refused", detail: solverRefusalDetail(solved.refusal) };
   }
-  return assignments(input.roster, slots, solved.plan.assignments);
+  return assignments(input.roster, solved.plan.assignments);
 }
 
 function assignments(
   roster: ProviderRoster,
-  slots: ReadonlyArray<RosterSlot>,
   planned: ReadonlyArray<LineupAssignment>,
 ): PlanAssignmentsResult {
-  const slotKinds = new Map(slots.map((slot) => [String(slot.id), slot.kind]));
   const plannedSlots = new Map(
     planned.map((assignment) => [String(assignment.playerId), String(assignment.slotId)]),
   );
@@ -68,12 +66,6 @@ function assignments(
     const targetSlot = plannedSlots.get(player.providerPlayerKey);
     if (targetSlot === undefined || targetSlot === player.slot) {
       continue;
-    }
-    if (slotKinds.get(player.slot) === "reserve" || slotKinds.get(targetSlot) === "reserve") {
-      return {
-        kind: "refused",
-        detail: `The plan moves ${player.name} through a reserve slot, which this operation does not write. No lineup change was made. Move the player out of the reserve list on the provider, or leave the lineup unchanged.`,
-      };
     }
     changed.push({ providerPlayerKey: player.providerPlayerKey, slot: targetSlot });
   }
@@ -92,7 +84,10 @@ function rosterPlayer(
     availabilityTier: availabilityTier(value?.availability),
     selection: selection(value?.score ?? null),
     reserveEligible: slots.some(
-      (slot) => slot.kind === "reserve" && slotAccepts(slot.eligibility, eligibility),
+      (slot) =>
+        slot.kind === "reserve" &&
+        String(slot.id) === player.slot &&
+        slotAccepts(slot.eligibility, eligibility),
     ),
     lockedSlotId: player.isEditable === true ? undefined : makeSlotId(player.slot),
     currentSlotId: makeSlotId(player.slot),

@@ -73,8 +73,8 @@ ladder's order is a judgement about evidence quality, not about roster shape.
 That refusal is **structural**: it says the provider cannot value this league, with these settings, at
 all, so no later attempt would find a rung either. Every other refusal is **transient** — it names a
 fact that could change: the observation window has no completed period yet, the provider's published
-values are missing for the roster right now, a locked player blocks a move, the roster admits no legal
-plan, or the plan would move a player through a reserve list this operation does not write. A
+values are missing for the roster right now, a locked player blocks a move, or the roster admits no
+legal plan. A
 transient refusal **blocks** the attempt with its named reason instead of quietly running the native
 action; the next scheduled tick is the retry, and a person can act on the roster, lock, period, or
 provider problem. The split is [ADR 0008](adr/0008-refusal-kinds-and-planner-cutover.md).
@@ -276,6 +276,11 @@ position name means:
   pinned to the slot they already occupy. An unrecognised status does not pin anyone.
 - **Reserve lists stay distinct**: a player eligible for one reserve list is not automatically
   eligible for another.
+- **A reserve slot only accepts the player already in it.** Reserve writes have never been verified on
+  our side, so the plan is kept writable by construction rather than by refusing the team when a
+  reserve move would be best: a player can leave a reserve list for a starting or bench slot, and
+  nobody is moved onto one. The displaced player goes to the bench. `IR` shuffling in both directions
+  waits for one authorised acceptance write that moves a player into a reserve list and back.
 
 Two readings the provider evidence does not settle, stated so they can be corrected:
 

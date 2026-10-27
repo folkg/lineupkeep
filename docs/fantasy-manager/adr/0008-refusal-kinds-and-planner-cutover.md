@@ -53,7 +53,6 @@ The code-to-kind table lives with the codes inside the provider's scoring module
 | `solver:no-legal-assignment`                   | transient  | The facts that produced it can change                              |
 | `assignment:plan-membership`                   | transient  | The plan translation saw facts it does not cover                   |
 | `assignment:locked-player`                     | transient  | The lock clears; the league is still plannable                     |
-| `assignment:reserve-slot`                      | transient  | A person can move the player; the operation currently cannot       |
 
 Every transient code is a statement about the current roster, locks, period, or read, not about the
 league's value source. That is the whole test: only a structural claim survives "and then what?".
@@ -91,6 +90,15 @@ wrote stays as the provider has it, and rotating a lineup back is a separate, or
 not a rollback. A wholesale code revert to a revision that predates custom planning cannot re-stamp
 runs queued as `custom_policy`; that revision did not have the claim-time alignment. Drain or accept
 those runs before reverting to such a revision.
+
+**`assignment:reserve-slot` became unreachable and was deleted.** When it was written, the planner
+translated reserve eligibility from the league's slot definitions, so a plan could move a player onto
+a reserve list; the operation could not write that move, and the whole team was refused instead of
+writing a partial plan. The planner now reads reserve eligibility as "may remain where they are"
+until reserve writes are verified, so a plan cannot propose a reserve destination at all. The code is
+removed from the table deliberately rather than left as a refusal that can never be returned; the
+[CORRECTNESS ANALYSIS](../LINEUP-CORRECTNESS-ANALYSIS.md#7-the-reserve-rule) records the rule and the
+verification that turns the full shuffle back on.
 
 ## Consequences
 

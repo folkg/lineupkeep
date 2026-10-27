@@ -216,30 +216,72 @@ describe("provider-neutral lineup placement", () => {
     expect(second.assignments).toEqual([]);
   });
 
-  it("refuses a plan that moves a player through a reserve slot", () => {
-    const result = planAssignments({
-      league: league([
-        { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
-        { position: "IR", kind: "reserve", count: 1, eligibility: ["QB"] },
-        { position: "BN", kind: "bench", count: 1, eligibility: [] },
-      ]),
-      roster: roster([
-        member("p1", "QB", "QB", ["QB"]),
-        member("p2", "QB", "IR", ["QB"]),
-        member("p3", "QB", "BN", ["QB"]),
-      ]),
-      values: values([
-        ["p1", 200],
-        ["p2", 1900],
-        ["p3", 100],
-      ]),
-    });
+  it("keeps a reserve player where they are instead of refusing the team", () => {
+    const result = planned(
+      planAssignments({
+        league: league([
+          { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["QB"] },
+          { position: "BN", kind: "bench", count: 1, eligibility: [] },
+        ]),
+        roster: roster([
+          member("p1", "QB", "QB", ["QB"]),
+          member("p2", "QB", "IR", ["QB"]),
+          member("p3", "QB", "BN", ["QB"]),
+        ]),
+        values: values([
+          ["p1", 200],
+          ["p2", 1900],
+          ["p3", 100],
+        ]),
+      }),
+    );
 
-    expect(result.kind).toBe("refused");
-    if (result.kind !== "refused") {
-      return;
-    }
-    expect(result.detail).toContain("through a reserve slot");
+    expect(result.assignments).toEqual([]);
+  });
+
+  it("moves a player out of a reserve list they are no longer eligible for", () => {
+    const result = planned(
+      planAssignments({
+        league: league([
+          { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
+          { position: "BN", kind: "bench", count: 1, eligibility: [] },
+        ]),
+        roster: roster([member("p1", "C", "C", ["C"]), member("p2", "C", "IR", ["C"])]),
+        values: values([
+          ["p1", 900],
+          ["p2", 100],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([{ providerPlayerKey: "p2", slot: "BN" }]);
+  });
+
+  it("benches a displaced player rather than moving anyone into a reserve slot", () => {
+    const result = planned(
+      planAssignments({
+        league: league([
+          { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["C", "IR"] },
+          { position: "BN", kind: "bench", count: 1, eligibility: [] },
+        ]),
+        roster: roster([
+          member("hurt", "C", "C", ["C"], "will-not-play"),
+          member("healthy", "C", "BN", ["C"]),
+        ]),
+        values: values([
+          ["hurt", 9000, "will-not-play"],
+          ["healthy", 100, "will-play"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([
+      { providerPlayerKey: "hurt", slot: "BN" },
+      { providerPlayerKey: "healthy", slot: "C" },
+    ]);
   });
 
   it("refuses when a required starting slot has no eligible player", () => {

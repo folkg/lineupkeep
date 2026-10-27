@@ -248,6 +248,50 @@ describe("Yahoo scoring translation", () => {
     }
   });
 
+  it("starts a reserve player who has a game and benches the displaced player", () => {
+    const roster = centerRoster([
+      { key: "hurt", slot: "C", scheduled: true, injuryCode: "O" },
+      { key: "parked", slot: "IR", scheduled: true, eligiblePositions: ["C", "IR"] },
+      { key: "backup", slot: "BN", scheduled: true },
+    ]);
+
+    const { decision } = planCenters(roster, [
+      ["hurt", 50],
+      ["parked", 30],
+      ["backup", 10],
+    ]);
+    const plannedAssignments = planned(decision).assignments;
+
+    expect(plannedAssignments).toEqual([
+      { providerPlayerKey: "hurt", slot: "BN" },
+      { providerPlayerKey: "parked", slot: "C" },
+    ]);
+    expect(plannedAssignments.every((assignment) => assignment.slot !== "IR")).toBe(true);
+  });
+
+  it("places every roster member exactly once", () => {
+    const roster = centerRoster([
+      { key: "idle", slot: "C", scheduled: false },
+      { key: "playing", slot: "BN", scheduled: true },
+      { key: "parked", slot: "IR", scheduled: true, eligiblePositions: ["C", "IR"] },
+    ]);
+
+    const { decision } = planCenters(roster, [
+      ["idle", 47],
+      ["playing", 13],
+      ["parked", 5],
+    ]);
+    const finalSlots = new Map(
+      roster.players.map((player) => [player.providerPlayerKey, player.slot]),
+    );
+    for (const assignment of planned(decision).assignments) {
+      finalSlots.set(assignment.providerPlayerKey, assignment.slot);
+    }
+
+    expect(finalSlots.size).toBe(roster.players.length);
+    expect([...finalSlots.values()]).toEqual(["BN", "C", "IR"]);
+  });
+
   it("changes the plan exactly when a player without a game holds a slot a playing player could fill", () => {
     const percents = [
       ["idle", 47],
