@@ -145,21 +145,37 @@ Two facts about the published value shape matter:
   the only candidate for a required starting slot. The observed absence in this account is an
   injured-reserve goaltender, which the plan parks.
 
-#### The cut, and why the overall percentage wins here
+#### The cut: platinum, one population per plan
 
 The provider can report a started percentage per "cut" — a subset of leagues — as well as the
-overall percentage. The owner's preference is the diamond cut. In this account the diamond cut is
-**published and always zero**: every sampled roster player in all five leagues carried the cut with
-`value: 0` while the overall percentage in the same response had 15–20 distinct non-zero values.
-Yahoo echoes whatever cut literal is requested and validates nothing, so a returned cut is not
-evidence that the cut is populated.
+overall percentage. It validates nothing: a requested literal is echoed whether or not it has data
+behind it, so a returned cut is not evidence that the cut is populated.
 
-The policy therefore prefers the diamond cut only when at least one roster player's cut percentage is
-above zero, and otherwise uses the overall percentage. Both are the same source (percent started) and
-the same scheme; the recorded label names the population it used (`overall` or `cut-diamond`). The
-cost of the rule: if a diamond cohort genuinely exists but every rostered player has zero of it, the
-policy uses the overall percentage and loses the narrower signal. The alternative — trusting an
-all-zero cut — would rank the whole roster at zero and plan a lineup on noise.
+**The diamond cut is dead and was requested anyway.** Measured on 2026-10-27 across all five teams
+in this account, every player in every league carried the diamond cut with `value: 0`, while
+platinum, gold, silver, and bronze were populated and differed from the overall percentage. The old
+guard — prefer a cut when any roster player's cut is above zero — therefore never fired, and every
+plan was priced from the overall percentage while the code appeared to prefer a narrower cohort.
+
+The policy requests **platinum** and uses it only when it is a complete population: every player who
+has an overall started percentage also has a platinum one. Otherwise the whole plan is priced from
+the overall percentage. That keeps one population per plan, and it never benches a player the
+provider did measure just because the cohort omitted them. A cut that comes back present, complete,
+and uniformly zero is not treated as a valid population: it would rank the roster at zero, so the
+policy records `cut-unpopulated` and falls back to the overall percentage. A cut that is missing for
+any measured player records `cut-incomplete`.
+
+The recorded label names the population and, when it fell back, the finding:
+
+- `community-start-rate:cut-platinum:…` — the cut priced the plan.
+- `community-start-rate:overall:platinum-cut-incomplete:…` — at least one measured player was not in
+  the cohort, so the whole plan used the overall percentage.
+- `community-start-rate:overall:platinum-cut-unpopulated:…` — the cut was complete and entirely zero,
+  so the whole plan used the overall percentage.
+
+The cost of the rule: a cohort that genuinely excludes a player cannot price that player, so a
+single omission makes the plan less narrow. The alternative — mixing the cut and the overall
+percentage inside one plan — prices two players from different populations, which is not a comparison.
 
 ## Which leagues are scoreable today
 
@@ -341,8 +357,8 @@ does not contain the key at all, so the ladder skips rungs one and two and lands
 percentage.
 
 The provider published a started percentage for all 21 roster players (4 %–88 %, 18 distinct values,
-`coverage_type: date`). The diamond cut was published too and was `0` for every player, so the policy
-used the overall percentage:
+`coverage_type: date`). This run asked for the diamond cut, which came back `0` for every player, so
+it was priced from the overall percentage:
 
 - recorded label `percent-started:overall:date:2026-10-26`
 - value term 758.00 — the sum of the twelve starting started percentages, in hundredths of a percent
@@ -394,9 +410,9 @@ the two goalies the crowd starts most.
 6. **A crowd signal is hindsight about other people.** Percent started follows what other managers
    did for the period, not what will happen. It is stale by the time a late lineup change is
    announced, it says nothing about matchups, and it cannot tell a starting goalie from a backup.
-7. **A published but empty cut is ignored.** The diamond cut is preferred only when at least one
-   roster player's cut percentage is above zero. Trusting an all-zero cut would rank the roster at
-   zero; using the overall percentage keeps a signal, at the cost of the narrower population.
+7. **The cut is one population, chosen once.** The platinum cut prices a plan only when every
+   measured player carries it; otherwise the whole plan uses the overall percentage. A uniformly zero
+   cut is a recorded finding, not a valid population.
 8. **A missing started percentage benches the player.** It is unknown, not zero, so the plan never
    starts them: it parks them on the bench or a reserve list and values everyone else. The team
    refuses only when that player has nowhere to sit, or is the only candidate for a required starting

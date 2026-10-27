@@ -140,8 +140,8 @@ describe("Yahoo scoring translation", () => {
   it("publishes one final score per player from the started percentage", () => {
     const outcome = runPlan(hockeyRequest(), {
       rates: [
-        startRate("hockey-player-0", 43, [{ cut: "diamond", percent: 51 }]),
-        startRate("hockey-player-1", 12, [{ cut: "diamond", percent: 8 }]),
+        startRate("hockey-player-0", 43, [{ cut: "platinum", percent: 51 }]),
+        startRate("hockey-player-1", 12, [{ cut: "platinum", percent: 8 }]),
       ],
     });
 
@@ -149,7 +149,7 @@ describe("Yahoo scoring translation", () => {
     if (outcome.kind !== "scored") {
       throw new Error("Expected scored values.");
     }
-    expect(outcome.provenance).toBe("yahoo/community-start-rate:cut-diamond:date:2026-10-26");
+    expect(outcome.provenance).toBe("yahoo/community-start-rate:cut-platinum:date:2026-10-26");
     expect(outcome.players).toEqual([
       { providerPlayerKey: "hockey-player-0", score: 5100, availability: "will-play" },
       { providerPlayerKey: "hockey-player-1", score: 800, availability: "will-play" },
@@ -181,7 +181,9 @@ describe("Yahoo scoring translation", () => {
     if (outcome.kind !== "scored") {
       throw new Error("Expected scored values.");
     }
-    expect(outcome.provenance).toBe("yahoo/community-start-rate:overall:week:1");
+    expect(outcome.provenance).toBe(
+      "yahoo/community-start-rate:overall:platinum-cut-incomplete:week:1",
+    );
     expect(outcome.players.map((player) => player.score)).toEqual([
       4400,
       ...recordedRosterRows.slice(1).map(() => null),

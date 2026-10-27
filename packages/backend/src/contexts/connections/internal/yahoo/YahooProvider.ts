@@ -8,6 +8,7 @@ import {
   SchemaTransformation,
 } from "effect";
 
+import { communityStartRateCut } from "#contexts/connections/internal/provider-scoring/ValueSource.ts";
 import {
   ProviderPeriodMismatch,
   ProviderRequestFailed,
@@ -469,7 +470,7 @@ export const yahooProvider = Effect.gen(function* () {
       operation: "read_player_details",
       origin: readOrigin,
       path: `/fantasy/v2/league/${leagueKey}/players;player_keys=${playerKeys.join(",")};out=percent_started`,
-      query: { format: "json", "percent_started.cut_types": "diamond" },
+      query: { format: "json", "percent_started.cut_types": communityStartRateCut },
       cookie,
       normalize: true,
     });

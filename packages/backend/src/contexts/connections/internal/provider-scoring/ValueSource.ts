@@ -20,24 +20,29 @@ export const valueSourceLadder: ReadonlyArray<ValueSourceKind> = [
   "community-start-rate",
 ];
 
-const startCutPreference: ReadonlyArray<string> = ["diamond"];
+export const communityStartRateCut = "platinum";
 
 const valueScale = 2;
 
 function communityStartRatePopulation(
   started: ReadonlyArray<PlayerCommunityStartRate>,
 ): CommunityStartRatePopulation {
-  for (const cut of startCutPreference) {
-    const populated = started.some((player) =>
-      player.cuts.some(
-        (entry) => entry.cut === cut && compareExact(entry.percent, exactFromInteger(0n)) > 0,
-      ),
-    );
-    if (populated) {
-      return { kind: "cut", cut };
-    }
+  const cutValues = started.flatMap((player) =>
+    player.percent === undefined ? [] : [cutPercent(player)],
+  );
+  if (cutValues.some((percent) => percent === undefined)) {
+    return { kind: "overall", cut: communityStartRateCut, finding: "cut-incomplete" };
   }
-  return { kind: "overall" };
+  const populated = cutValues.some(
+    (percent) => percent !== undefined && compareExact(percent, exactFromInteger(0n)) > 0,
+  );
+  return populated
+    ? { kind: "cut", cut: communityStartRateCut }
+    : { kind: "overall", cut: communityStartRateCut, finding: "cut-unpopulated" };
+}
+
+function cutPercent(player: PlayerCommunityStartRate): Exact | undefined {
+  return player.cuts.find((entry) => entry.cut === communityStartRateCut)?.percent;
 }
 
 export function resolveValueSource(input: {
@@ -159,16 +164,16 @@ function percentOf(
     case "overall":
       return started.percent;
     case "cut":
-      return started.cuts.find((entry) => entry.cut === population.cut)?.percent;
+      return cutPercent(started);
   }
 }
 
 function populationKey(population: CommunityStartRatePopulation): string {
   switch (population.kind) {
-    case "overall":
-      return "overall";
     case "cut":
       return `cut-${population.cut}`;
+    case "overall":
+      return `overall:${population.cut}-${population.finding}`;
   }
 }
 

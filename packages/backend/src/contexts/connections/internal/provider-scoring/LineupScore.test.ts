@@ -232,10 +232,29 @@ describe("the value source ladder", () => {
     );
 
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 0]);
-    expect(result.label).toBe("community-start-rate:overall:week:7");
+    expect(result.label).toBe("community-start-rate:overall:platinum-cut-incomplete:week:7");
   });
 
-  it("prefers a populated diamond cut over the overall percentage", () => {
+  it("prices from the populated platinum cut when every measured player carries it", () => {
+    const started = [
+      startRate("p1", "43", [{ cut: "platinum", percent: "51" }]),
+      startRate("p2", "12", [{ cut: "platinum", percent: "8" }]),
+    ];
+
+    const result = scored(
+      scoreLineup(
+        input({
+          sources: [{ kind: "community-start-rate", started }],
+          players: [player("p1"), player("p2")],
+        }),
+      ),
+    );
+
+    expect(result.players.map((entry) => entry.units)).toEqual([5100, 800]);
+    expect(result.label).toBe("community-start-rate:cut-platinum:week:7");
+  });
+
+  it("ignores a cut the request did not ask for", () => {
     const started = [
       startRate("p1", "43", [{ cut: "diamond", percent: "51" }]),
       startRate("p2", "12", [{ cut: "diamond", percent: "8" }]),
@@ -250,14 +269,14 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.players.map((entry) => entry.units)).toEqual([5100, 800]);
-    expect(result.label).toBe("community-start-rate:cut-diamond:week:7");
+    expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200]);
+    expect(result.label).toBe("community-start-rate:overall:platinum-cut-incomplete:week:7");
   });
 
-  it("falls back to the overall percentage when every cut value is zero", () => {
+  it("records a uniformly zero cut as a finding and prices from the overall percentage", () => {
     const started = [
-      startRate("p1", "43", [{ cut: "diamond", percent: "0" }]),
-      startRate("p2", "12", [{ cut: "diamond", percent: "0" }]),
+      startRate("p1", "43", [{ cut: "platinum", percent: "0" }]),
+      startRate("p2", "12", [{ cut: "platinum", percent: "0" }]),
     ];
 
     const result = scored(
@@ -269,8 +288,52 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.label).toBe("community-start-rate:overall:week:7");
+    expect(result.label).toBe("community-start-rate:overall:platinum-cut-unpopulated:week:7");
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200]);
+    expect(result.players[0]?.value).toEqual({
+      kind: "community-start-rate",
+      population: { kind: "overall", cut: "platinum", finding: "cut-unpopulated" },
+      percent: parseExact("43"),
+    });
+  });
+
+  it("uses one population for the whole plan when the cut omits a measured player", () => {
+    const started = [
+      startRate("p1", "43", [{ cut: "platinum", percent: "51" }]),
+      startRate("p2", "12", [{ cut: "platinum", percent: "8" }]),
+      startRate("p3", "40"),
+    ];
+
+    const result = scored(
+      scoreLineup(
+        input({
+          sources: [{ kind: "community-start-rate", started }],
+          players: [player("p1"), player("p2"), player("p3")],
+        }),
+      ),
+    );
+
+    expect(result.label).toBe("community-start-rate:overall:platinum-cut-incomplete:week:7");
+    expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200, 4000]);
+  });
+
+  it("keeps a zero cut value when the cut population is populated", () => {
+    const started = [
+      startRate("p1", "43", [{ cut: "platinum", percent: "51" }]),
+      startRate("p2", "12", [{ cut: "platinum", percent: "0" }]),
+    ];
+
+    const result = scored(
+      scoreLineup(
+        input({
+          sources: [{ kind: "community-start-rate", started }],
+          players: [player("p1"), player("p2")],
+        }),
+      ),
+    );
+
+    expect(result.players.map((entry) => entry.units)).toEqual([5100, 0]);
+    expect(result.label).toBe("community-start-rate:cut-platinum:week:7");
   });
 
   it("leaves a missing started percentage absent rather than zero", () => {
@@ -305,7 +368,7 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.label).toBe("community-start-rate:overall:week:7");
+    expect(result.label).toBe("community-start-rate:overall:platinum-cut-incomplete:week:7");
   });
 
   it("refuses transiently when the only source has no completed period", () => {

@@ -1283,7 +1283,7 @@ it.effect("reports no actual statistics when the provider omits the series", () 
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("scores a roster from the published started percentage and its diamond cut", () => {
+it.effect("scores a roster from the published started percentage and its platinum cut", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflPlayerDetailsWithPopulatedCut));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
@@ -1304,17 +1304,17 @@ it.effect("scores a roster from the published started percentage and its diamond
     if (outcome.kind !== "scored") {
       return;
     }
-    assert.strictEqual(outcome.provenance, "yahoo/community-start-rate:cut-diamond:week:6");
+    assert.strictEqual(outcome.provenance, "yahoo/community-start-rate:cut-platinum:week:6");
     assert.deepStrictEqual(outcome.players, [
       { providerPlayerKey: "466.p.20001", score: 4100, availability: "will-play" },
       { providerPlayerKey: "466.p.20002", score: 6500, availability: "will-play" },
     ]);
     assert.include(internet.calls[0]?.url.href, ";out=percent_started");
-    assert.include(internet.calls[0]?.url.href, "percent_started.cut_types=diamond");
+    assert.include(internet.calls[0]?.url.href, "percent_started.cut_types=platinum");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("uses the overall started percentage when the diamond cut is unpopulated", () => {
+it.effect("uses the overall started percentage and records an unpopulated cut", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflPlayerDetailsWithUnpopulatedCut));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
@@ -1335,7 +1335,10 @@ it.effect("uses the overall started percentage when the diamond cut is unpopulat
     if (outcome.kind !== "scored") {
       return;
     }
-    assert.strictEqual(outcome.provenance, "yahoo/community-start-rate:overall:week:6");
+    assert.strictEqual(
+      outcome.provenance,
+      "yahoo/community-start-rate:overall:platinum-cut-unpopulated:week:6",
+    );
     assert.deepStrictEqual(
       outcome.players.map((player) => player.score),
       [3800, 7200],

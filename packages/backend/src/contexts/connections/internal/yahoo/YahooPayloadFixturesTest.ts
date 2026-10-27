@@ -885,7 +885,7 @@ export const yahooNflWeekPlayerDetails = {
                   coverage: { coverage_type: "week", week: "6" },
                   value: 38,
                   delta: 10,
-                  cuts: [{ cutType: "diamond", value: 0 }],
+                  cuts: [{ cutType: "platinum", value: 0 }],
                 }),
               },
               {
@@ -958,7 +958,7 @@ export const yahooNflSeasonPlayerDetails = {
                   coverage: { coverage_type: "week", week: "6" },
                   value: 38,
                   delta: 10,
-                  cuts: [{ cutType: "diamond", value: 0 }],
+                  cuts: [{ cutType: "platinum", value: 0 }],
                 }),
               },
               {
@@ -1040,7 +1040,7 @@ export const yahooNhlSeasonPlayerDetails = {
                   coverage: { coverage_type: "date", date: "2026-10-26" },
                   value: 43,
                   delta: -3,
-                  cuts: [{ cutType: "diamond", value: 0 }],
+                  cuts: [{ cutType: "platinum", value: 0 }],
                 }),
               },
               {
@@ -1088,7 +1088,7 @@ export const yahooNhlWeekPlayerDetails = {
                   coverage: { coverage_type: "date", date: "2026-10-26" },
                   value: 43,
                   delta: -3,
-                  cuts: [{ cutType: "diamond", value: 0 }],
+                  cuts: [{ cutType: "platinum", value: 0 }],
                 }),
               },
               {
@@ -2223,7 +2223,7 @@ export const yahooNflPlayerDetailsWithPopulatedCut = playerDetailsPayload({
         coverage: { coverage_type: "week", week: "6" },
         value: 38,
         delta: 10,
-        cuts: [{ cutType: "diamond", value: 41 }],
+        cuts: [{ cutType: "platinum", value: 41 }],
       }),
     },
     {
@@ -2234,7 +2234,7 @@ export const yahooNflPlayerDetailsWithPopulatedCut = playerDetailsPayload({
         coverage: { coverage_type: "week", week: "6" },
         value: 72,
         delta: -4,
-        cuts: [{ cutType: "diamond", value: 65 }],
+        cuts: [{ cutType: "platinum", value: 65 }],
       }),
     },
   ],
@@ -2252,7 +2252,7 @@ export const yahooNflPlayerDetailsWithUnpopulatedCut = playerDetailsPayload({
       percentStarted: percentStartedFragments({
         coverage: { coverage_type: "week", week: "6" },
         value: 38,
-        cuts: [{ cutType: "diamond", value: 0 }],
+        cuts: [{ cutType: "platinum", value: 0 }],
       }),
     },
     {
@@ -2262,7 +2262,7 @@ export const yahooNflPlayerDetailsWithUnpopulatedCut = playerDetailsPayload({
       percentStarted: percentStartedFragments({
         coverage: { coverage_type: "week", week: "6" },
         value: 72,
-        cuts: [{ cutType: "diamond", value: 0 }],
+        cuts: [{ cutType: "platinum", value: 0 }],
       }),
     },
   ],
@@ -2293,7 +2293,7 @@ export const yahooNhlPlayerDetailsWithMissingStartedValue = playerDetailsPayload
       eligiblePositions: ["G", "IR+"],
       percentStarted: percentStartedFragments({
         coverage: { coverage_type: "date", date: "2026-10-26" },
-        cuts: [{ cutType: "diamond", value: undefined }],
+        cuts: [{ cutType: "platinum", value: undefined }],
       }),
     },
     {
@@ -2304,7 +2304,7 @@ export const yahooNhlPlayerDetailsWithMissingStartedValue = playerDetailsPayload
         coverage: { coverage_type: "date", date: "2026-10-26" },
         value: 43,
         delta: -3,
-        cuts: [{ cutType: "diamond", value: 0 }],
+        cuts: [{ cutType: "platinum", value: 0 }],
       }),
     },
   ],
@@ -2322,7 +2322,7 @@ export const yahooNhlPlayerDetailsWithUnparseableStartedValue = playerDetailsPay
       percentStarted: percentStartedFragments({
         coverage: { coverage_type: "date", date: "2026-10-26" },
         value: "n/a",
-        cuts: [{ cutType: "diamond", value: 0 }],
+        cuts: [{ cutType: "platinum", value: 0 }],
       }),
     },
   ],
@@ -2340,7 +2340,7 @@ export const yahooNflPlayerDetailsWithMismatchedStartedCoverage = playerDetailsP
       percentStarted: percentStartedFragments({
         coverage: { coverage_type: "week", week: "5" },
         value: 38,
-        cuts: [{ cutType: "diamond", value: 0 }],
+        cuts: [{ cutType: "platinum", value: 0 }],
       }),
     },
   ],

@@ -53,8 +53,12 @@ export type Period =
 export type ValueSourceKind = "projected-points" | "scoring-rules" | "community-start-rate";
 
 export type CommunityStartRatePopulation =
-  | { readonly kind: "overall" }
-  | { readonly kind: "cut"; readonly cut: string };
+  | { readonly kind: "cut"; readonly cut: string }
+  | {
+      readonly kind: "overall";
+      readonly cut: string;
+      readonly finding: "cut-incomplete" | "cut-unpopulated";
+    };
 
 export type ValueSource =
   | {
