@@ -306,6 +306,7 @@ function rosterPlayer(index: number, row: RecordedRow, editable: boolean): Provi
     injuryCode: row.injuryCode,
     injuryDetail: undefined,
     byeWeek: row.byeWeek,
+    scheduled: row.scheduled,
     undroppable: null,
   };
 }
@@ -393,6 +394,7 @@ function hockeyRosterPlayer(providerPlayerKey: string, slot: string): ProviderRo
     injuryCode: undefined,
     injuryDetail: undefined,
     byeWeek: null,
+    scheduled: true,
     undroppable: null,
   };
 }
@@ -435,8 +437,9 @@ function player(
   byeWeek: number,
   isEditable: boolean,
   stats: ReadonlyArray<readonly [number, number]>,
+  scheduled = true,
 ): RecordedRow {
-  return { slot, eligiblePositions, injuryCode, byeWeek, isEditable, stats };
+  return { slot, eligiblePositions, injuryCode, byeWeek, isEditable, stats, scheduled };
 }
 
 type RecordedRow = {
@@ -446,6 +449,7 @@ type RecordedRow = {
   readonly byeWeek: number;
   readonly isEditable: boolean;
   readonly stats: ReadonlyArray<readonly [number, number]>;
+  readonly scheduled: boolean;
 };
 
 const recordedStatModifiers: ReadonlyArray<{ statId: number; points: string }> = [

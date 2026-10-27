@@ -247,6 +247,7 @@ function member(
     injuryCode: undefined,
     injuryDetail: undefined,
     byeWeek: null,
+    scheduled: true,
     undroppable: null,
   };
 }

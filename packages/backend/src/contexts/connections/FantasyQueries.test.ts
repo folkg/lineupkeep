@@ -1745,6 +1745,7 @@ function rosterFixture(input: {
       injuryCode: index === 1 ? "O" : undefined,
       injuryDetail: index === 1 ? "Out" : undefined,
       byeWeek: 7,
+      scheduled: true,
       undroppable: false,
     })),
   };

@@ -236,7 +236,7 @@ export const yahooProvider = Effect.gen(function* () {
     const payload = yield* readJson(internet, {
       operation: "read_roster",
       origin: readOrigin,
-      path: `/fantasy/v2/team/${teamKey}/roster${periodSuffix}`,
+      path: `/fantasy/v2/team/${teamKey}/roster${periodSuffix}/players;out=opponent`,
       query: { format: "json" },
       cookie,
       normalize: true,
@@ -1219,8 +1219,14 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
     injuryCode: optionalNonEmpty(player.status),
     injuryDetail: optionalNonEmpty(player.injury_note) ?? optionalNonEmpty(player.status_full),
     byeWeek: player.bye_weeks?.week ?? null,
+    scheduled: scheduledIn(player.opponent),
     undroppable: player.is_undroppable ?? null,
   };
+}
+
+function scheduledIn(opponent: string | null): boolean {
+  const named = optionalNonEmpty(opponent ?? "");
+  return named !== undefined && named !== "Bye";
 }
 
 function playerDetailQuery(basis: ProviderStatBasis): Record<string, string> {
@@ -2139,6 +2145,7 @@ const RosterPlayerPayload = Schema.Struct({
   position_type: Schema.optional(Schema.String),
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   editorial_team_abbr: Schema.optional(Schema.String),
+  opponent: Schema.NullOr(Schema.String),
   selected_position: Schema.Struct({
     coverage_type: Schema.NonEmptyString,
     week: Schema.optional(IntFromStringOrNumber),

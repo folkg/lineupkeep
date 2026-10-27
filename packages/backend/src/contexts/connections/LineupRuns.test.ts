@@ -1050,6 +1050,7 @@ function customPlayer(
     injuryCode: undefined,
     injuryDetail: undefined,
     byeWeek: null,
+    scheduled: true,
     undroppable: false,
   };
 }
@@ -1293,6 +1294,7 @@ const roster: ProviderRoster = {
       injuryCode: undefined,
       injuryDetail: undefined,
       byeWeek: 7,
+      scheduled: true,
       undroppable: false,
     },
     {
@@ -1308,6 +1310,7 @@ const roster: ProviderRoster = {
       injuryCode: undefined,
       injuryDetail: undefined,
       byeWeek: 7,
+      scheduled: true,
       undroppable: false,
     },
   ],

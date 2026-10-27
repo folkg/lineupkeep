@@ -569,6 +569,7 @@ export const yahooNflRoster = {
                       },
                     },
                     { bye_weeks: { week: "7" } },
+                    { opponent: "SEA" },
                     { is_undroppable: "0" },
                   ],
                   {
@@ -592,6 +593,7 @@ export const yahooNflRoster = {
                     { position_type: "O" },
                     { primary_position: "WR" },
                     { eligible_positions: { "0": { position: "WR" }, count: 1 } },
+                    { opponent: null },
                     { status: "O" },
                     { status_full: "Out" },
                     { injury_note: "Synthetic injury note" },
@@ -657,6 +659,7 @@ export const yahooNhlRoster = {
                         count: 2,
                       },
                     },
+                    { opponent: "TOR" },
                     { is_undroppable: "0" },
                   ],
                   {
@@ -679,6 +682,7 @@ export const yahooNhlRoster = {
                     { position_type: "G" },
                     { primary_position: "G" },
                     { eligible_positions: { "0": { position: "G" }, count: 1 } },
+                    { opponent: null },
                     { is_undroppable: "0" },
                   ],
                   {
@@ -699,6 +703,115 @@ export const yahooNhlRoster = {
           is_prescoring: 0,
           is_editable: 1,
           minimum_games: 3,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooRosterWithOpponentKinds = {
+  fantasy_content: {
+    team: [
+      { team_key: "466.l.4002.t.3" },
+      {
+        roster: {
+          "0": {
+            players: {
+              "0": {
+                player: [
+                  [
+                    { player_key: "466.p.30001" },
+                    { name: { full: "Synthetic At Home" } },
+                    { display_position: "C" },
+                    { primary_position: "C" },
+                    { eligible_positions: [{ position: "C" }] },
+                    { opponent: "TOR" },
+                  ],
+                  {
+                    selected_position: [
+                      { coverage_type: "date", date: "2026-10-25" },
+                      { position: "C" },
+                    ],
+                  },
+                ],
+              },
+              "1": {
+                player: [
+                  [
+                    { player_key: "466.p.30002" },
+                    { name: { full: "Synthetic Off Night" } },
+                    { display_position: "C" },
+                    { primary_position: "C" },
+                    { eligible_positions: [{ position: "C" }] },
+                    { opponent: null },
+                  ],
+                  {
+                    selected_position: [
+                      { coverage_type: "date", date: "2026-10-25" },
+                      { position: "C" },
+                    ],
+                  },
+                ],
+              },
+              "2": {
+                player: [
+                  [
+                    { player_key: "466.p.30003" },
+                    { name: { full: "Synthetic On Bye" } },
+                    { display_position: "C" },
+                    { primary_position: "C" },
+                    { eligible_positions: [{ position: "C" }] },
+                    { opponent: "Bye" },
+                  ],
+                  {
+                    selected_position: [
+                      { coverage_type: "date", date: "2026-10-25" },
+                      { position: "BN" },
+                    ],
+                  },
+                ],
+              },
+              count: 3,
+            },
+          },
+          coverage_type: "date",
+          date: "2026-10-25",
+        },
+      },
+    ],
+  },
+};
+
+export const yahooRosterWithoutOpponent = {
+  fantasy_content: {
+    team: [
+      { team_key: "466.l.4002.t.3" },
+      {
+        roster: {
+          "0": {
+            players: {
+              "0": {
+                player: [
+                  [
+                    { player_key: "466.p.30001" },
+                    { name: { full: "Synthetic At Home" } },
+                    { display_position: "C" },
+                    { primary_position: "C" },
+                    { eligible_positions: [{ position: "C" }] },
+                  ],
+                  {
+                    selected_position: [
+                      { coverage_type: "date", date: "2026-10-25" },
+                      { position: "C" },
+                    ],
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+          coverage_type: "date",
+          date: "2026-10-25",
         },
       },
     ],
@@ -1545,6 +1658,7 @@ export const yahooNflRosterWeekMismatch = {
                     { position_type: "O" },
                     { primary_position: "QB" },
                     { eligible_positions: [{ position: "QB" }] },
+                    { opponent: "SEA" },
                   ],
                   {
                     selected_position: [{ coverage_type: "week", week: "7" }, { position: "QB" }],

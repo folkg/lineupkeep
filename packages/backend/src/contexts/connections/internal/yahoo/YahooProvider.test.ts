@@ -51,6 +51,8 @@ import {
   yahooNflLeagueSettingsWithoutEndWeek,
   yahooNhlLeagueSettings,
   yahooNhlRoster,
+  yahooRosterWithOpponentKinds,
+  yahooRosterWithoutOpponent,
   yahooNhlRotoLeagueSettings,
   yahooNhlWeekPlayerDetails,
   yahooNhlPlayerDetailsWithMissingStartedValue,
@@ -603,6 +605,45 @@ it.effect("rejects a league response for another league and names the identity f
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads the participation member as a scheduled fact", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooRosterWithOpponentKinds));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const roster = yield* provider.readRoster({
+      ...sessionInput,
+      providerTeamKey: "466.l.4002.t.3",
+      period: undefined,
+    });
+
+    assert.deepStrictEqual(
+      roster.players.map((player) => [player.name, player.scheduled]),
+      [
+        ["Synthetic At Home", true],
+        ["Synthetic Off Night", false],
+        ["Synthetic On Bye", false],
+      ],
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("rejects a roster payload that omits the participation member", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooRosterWithoutOpponent));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "466.l.4002.t.3",
+        period: undefined,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("reads an exact selected week roster with whole verified fields", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
   return Effect.gen(function* () {
@@ -616,7 +657,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent?format=json",
     );
     assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
     assert.deepStrictEqual(roster.players, [
@@ -633,6 +674,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         injuryCode: undefined,
         injuryDetail: undefined,
         byeWeek: 7,
+        scheduled: true,
         undroppable: false,
       },
       {
@@ -648,6 +690,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         injuryCode: "O",
         injuryDetail: "Synthetic injury note",
         byeWeek: null,
+        scheduled: false,
         undroppable: true,
       },
     ]);
@@ -737,7 +780,7 @@ it.effect("refuses to relabel a date-scoped roster as a week", () => {
 
 it.effect("treats a rejected week selector as uncovered period coverage", () => {
   const internet = recordingInternet((request) =>
-    request.url.pathname.endsWith("/roster;week=6")
+    request.url.pathname.includes("/roster;week=6/players")
       ? jsonResponse({ error: { description: "Synthetic provider rejection" } }, 400)
       : jsonResponse(yahooNhlRoster),
   );
@@ -795,7 +838,7 @@ it.effect("reads a date target without sending a period selector", () => {
     assert.deepStrictEqual(roster.coverage, { type: "date", date: "2026-10-25" });
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4002.t.3/roster?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4002.t.3/roster/players;out=opponent?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -833,7 +876,7 @@ it.effect("sends a week selector only for a week target", () => {
     assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -1936,6 +1979,7 @@ function rosterMember(
     injuryCode: undefined,
     injuryDetail: undefined,
     byeWeek: null,
+    scheduled: true,
     undroppable: false,
   };
 }

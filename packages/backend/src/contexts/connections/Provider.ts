@@ -348,6 +348,7 @@ export type ProviderRosterPlayer = {
   readonly injuryCode: string | undefined;
   readonly injuryDetail: string | undefined;
   readonly byeWeek: number | null;
+  readonly scheduled: boolean;
   readonly undroppable: boolean | null;
 };
 
