@@ -96,6 +96,27 @@ describe("provider-neutral lineup placement", () => {
     ]);
   });
 
+  it("starts a confirmed starter ahead of an unconfirmed player at an equal value", () => {
+    const result = planned(
+      planAssignments({
+        league: league(),
+        roster: roster([
+          member("unconfirmed", "QB", "QB", ["QB"], "will-play"),
+          member("confirmed", "QB", "BN", ["QB"], "confirmed-start"),
+        ]),
+        values: values([
+          ["unconfirmed", 4400, "will-play"],
+          ["confirmed", 4400, "confirmed-start"],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([
+      { providerPlayerKey: "unconfirmed", slot: "BN" },
+      { providerPlayerKey: "confirmed", slot: "QB" },
+    ]);
+  });
+
   it("starts a player with a game ahead of both lower rungs", () => {
     const result = planned(
       planAssignments({
@@ -433,6 +454,7 @@ function member(
     injuryDetail: undefined,
     byeWeek: null,
     scheduled: availability !== "not-scheduled",
+    confirmedStart: false,
     undroppable: null,
   };
 }

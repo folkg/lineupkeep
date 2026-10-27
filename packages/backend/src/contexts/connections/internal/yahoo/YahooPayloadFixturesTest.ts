@@ -592,6 +592,13 @@ export const yahooNflRoster = {
                     },
                     { bye_weeks: { week: "7" } },
                     { opponent: "SEA" },
+                    {
+                      starting_status: {
+                        "0": { coverage_type: "week", week: "6" },
+                        "1": { is_starting: 1 },
+                        count: 2,
+                      },
+                    },
                     { is_undroppable: "0" },
                   ],
                   {
@@ -748,6 +755,13 @@ export const yahooRosterWithOpponentKinds = {
                     { primary_position: "C" },
                     { eligible_positions: [{ position: "C" }] },
                     { opponent: "TOR" },
+                    {
+                      starting_status: {
+                        "0": { coverage_type: "date", date: "2026-10-25" },
+                        "1": { is_starting: 0 },
+                        count: 2,
+                      },
+                    },
                   ],
                   {
                     selected_position: [
@@ -794,6 +808,50 @@ export const yahooRosterWithOpponentKinds = {
                 ],
               },
               count: 3,
+            },
+          },
+          coverage_type: "date",
+          date: "2026-10-25",
+        },
+      },
+    ],
+  },
+};
+
+export const yahooRosterWithConfirmedStart = {
+  fantasy_content: {
+    team: [
+      { team_key: "466.l.4002.t.3" },
+      {
+        roster: {
+          "0": {
+            players: {
+              "0": {
+                player: [
+                  [
+                    { player_key: "466.p.30001" },
+                    { name: { full: "Synthetic Confirmed Goalie" } },
+                    { display_position: "G" },
+                    { primary_position: "G" },
+                    { eligible_positions: [{ position: "G" }] },
+                    { opponent: "TOR" },
+                    {
+                      starting_status: {
+                        "0": { coverage_type: "date", date: "2026-10-25" },
+                        "1": { is_starting: 1 },
+                        count: 2,
+                      },
+                    },
+                  ],
+                  {
+                    selected_position: [
+                      { coverage_type: "date", date: "2026-10-25" },
+                      { position: "G" },
+                    ],
+                  },
+                ],
+              },
+              count: 1,
             },
           },
           coverage_type: "date",

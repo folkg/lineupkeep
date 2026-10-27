@@ -30,6 +30,7 @@ import type {
 const selectionBasis: SelectionBasis = makeSelectionBasis("provider-score");
 
 const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
+  makeAvailabilityTier("confirmed-start"),
   makeAvailabilityTier("will-play"),
   makeAvailabilityTier("might-play"),
   makeAvailabilityTier("will-not-play"),

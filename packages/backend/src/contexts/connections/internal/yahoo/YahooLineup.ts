@@ -190,6 +190,7 @@ function policyPlayers(roster: ProviderRoster, period: Period): ReadonlyArray<Po
     id: player.providerPlayerKey,
     availability: yahooAvailability(player.injuryCode),
     scheduled: player.scheduled,
+    confirmedStart: player.confirmedStart,
     nonGamePeriods: nonGamePeriods(player, period),
   }));
 }

@@ -228,7 +228,11 @@ it.effect("records whether each player had a game in the run observation", () =>
     yield* fake.setRoster({
       ...customRoster,
       players: customRoster.players.map((player) =>
-        player.providerPlayerKey === "461.p.20003" ? { ...player, scheduled: false } : player,
+        player.providerPlayerKey === "461.p.20003"
+          ? { ...player, scheduled: false }
+          : player.providerPlayerKey === "461.p.20004"
+            ? { ...player, confirmedStart: true }
+            : player,
       ),
     });
     const runId = yield* createQueuedRun(repository, team);
@@ -249,12 +253,12 @@ it.effect("records whether each player had a game in the run observation", () =>
     );
 
     assert.deepStrictEqual(
-      observation.players.map((player) => [player.name, player.scheduled]),
+      observation.players.map((player) => [player.name, player.scheduled, player.confirmedStart]),
       [
-        ["QB One", true],
-        ["RB One", true],
-        ["RB Two", false],
-        ["QB Two", true],
+        ["QB One", true, false],
+        ["RB One", true, false],
+        ["RB Two", false, false],
+        ["QB Two", true, true],
       ],
     );
   }).pipe(Effect.provide(LineupTestLayer)),
@@ -1098,6 +1102,7 @@ function customPlayer(
     injuryDetail: undefined,
     byeWeek: null,
     scheduled: true,
+    confirmedStart: false,
     undroppable: false,
   };
 }
@@ -1342,6 +1347,7 @@ const roster: ProviderRoster = {
       injuryDetail: undefined,
       byeWeek: 7,
       scheduled: true,
+      confirmedStart: false,
       undroppable: false,
     },
     {
@@ -1358,6 +1364,7 @@ const roster: ProviderRoster = {
       injuryDetail: undefined,
       byeWeek: 7,
       scheduled: true,
+      confirmedStart: false,
       undroppable: false,
     },
   ],

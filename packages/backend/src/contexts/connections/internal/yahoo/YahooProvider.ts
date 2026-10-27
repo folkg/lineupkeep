@@ -234,7 +234,7 @@ export const yahooProvider = Effect.gen(function* () {
     const payload = yield* readJson(internet, {
       operation: "read_roster",
       origin: readOrigin,
-      path: `/fantasy/v2/team/${teamKey}/roster${periodSuffix}/players;out=opponent`,
+      path: `/fantasy/v2/team/${teamKey}/roster${periodSuffix}/players;out=opponent,starting_status`,
       query: { format: "json" },
       cookie,
       normalize: true,
@@ -1260,6 +1260,7 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
     injuryDetail: optionalNonEmpty(player.injury_note) ?? optionalNonEmpty(player.status_full),
     byeWeek: player.bye_weeks?.week ?? null,
     scheduled: scheduledIn(player.opponent),
+    confirmedStart: confirmedStartIn(player.starting_status),
     undroppable: player.is_undroppable ?? null,
   };
 }
@@ -1267,6 +1268,10 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
 function scheduledIn(opponent: string | null): boolean {
   const named = optionalNonEmpty(opponent ?? "");
   return named !== undefined && named !== "Bye";
+}
+
+function confirmedStartIn(status: ReadonlyArray<typeof StartingStatus.Type> | undefined): boolean {
+  return status?.some((entry) => entry.is_starting === 1) === true;
 }
 
 function playerDetailQuery(basis: ProviderStatBasis): Record<string, string> {
@@ -2178,6 +2183,13 @@ const LeaguePayload = Schema.Struct({
   }),
 });
 
+const StartingStatus = Schema.Struct({
+  coverage_type: Schema.optional(Schema.String),
+  date: Schema.optional(Schema.String),
+  week: Schema.optional(IntFromStringOrNumber),
+  is_starting: Schema.optional(IntFromStringOrNumber),
+});
+
 const RosterPlayerPayload = Schema.Struct({
   player_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.p\.[0-9]+$/u))),
   name: Schema.Struct({ full: Schema.NonEmptyString }),
@@ -2187,6 +2199,7 @@ const RosterPlayerPayload = Schema.Struct({
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   editorial_team_abbr: Schema.optional(Schema.String),
   opponent: Schema.NullOr(Schema.String),
+  starting_status: Schema.optional(Schema.Array(StartingStatus)),
   selected_position: Schema.Struct({
     coverage_type: Schema.NonEmptyString,
     week: Schema.optional(IntFromStringOrNumber),

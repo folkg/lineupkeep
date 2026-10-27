@@ -349,6 +349,7 @@ export type ProviderRosterPlayer = {
   readonly injuryDetail: string | undefined;
   readonly byeWeek: number | null;
   readonly scheduled: boolean;
+  readonly confirmedStart: boolean;
   readonly undroppable: boolean | null;
 };
 
@@ -553,6 +554,7 @@ export type ProviderLineupRequest = ProviderSessionMaterial & {
 export type ProviderLineupRefusal = "structural" | "transient";
 
 export const ProviderAvailabilityTier = Schema.Literals([
+  "confirmed-start",
   "will-play",
   "might-play",
   "will-not-play",

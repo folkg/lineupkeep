@@ -676,7 +676,7 @@ function fakeAvailabilityOf(player: ProviderRoster["players"][number]): Provider
   }
   switch (player.injuryCode) {
     case undefined:
-      return "will-play";
+      return player.confirmedStart ? "confirmed-start" : "will-play";
     case "DTD":
       return "might-play";
     default:

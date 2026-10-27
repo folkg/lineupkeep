@@ -286,6 +286,78 @@ describe("Yahoo scoring translation", () => {
     }
   });
 
+  it("tiers a confirmed real-world start above an unconfirmed player who will play", () => {
+    const period = { kind: "date" as const, date: "2026-10-26" };
+
+    expect(
+      assessAvailability(
+        { ...policyPlayerWith(yahooAvailability(undefined)), confirmedStart: true },
+        period,
+      ),
+    ).toEqual({ tier: "confirmed-start", fact: "confirmed-start" });
+    expect(
+      assessAvailability(
+        { ...policyPlayerWith(yahooAvailability(undefined)), confirmedStart: false },
+        period,
+      ).tier,
+    ).toBe("will-play");
+  });
+
+  it("keeps an injury status above the confirmed-start refinement", () => {
+    const period = { kind: "date" as const, date: "2026-10-26" };
+
+    expect(
+      assessAvailability(
+        { ...policyPlayerWith(yahooAvailability("O")), confirmedStart: true },
+        period,
+      ).tier,
+    ).toBe("will-not-play");
+    expect(
+      assessAvailability(
+        { ...policyPlayerWith(yahooAvailability("Q")), confirmedStart: true },
+        period,
+      ).tier,
+    ).toBe("might-play");
+  });
+
+  it("starts the confirmed starter ahead of an unconfirmed player of equal score", () => {
+    const roster = centerRoster([
+      { key: "unconfirmed", slot: "C", scheduled: true },
+      { key: "confirmed", slot: "BN", scheduled: true, confirmedStart: true },
+    ]);
+
+    const { outcome, decision } = planCenters(roster, [
+      ["unconfirmed", 40],
+      ["confirmed", 40],
+    ]);
+
+    expect(outcome.players).toEqual([
+      { providerPlayerKey: "unconfirmed", score: 4000, availability: "will-play" },
+      { providerPlayerKey: "confirmed", score: 4000, availability: "confirmed-start" },
+    ]);
+    expect(planned(decision).assignments).toEqual([
+      { providerPlayerKey: "unconfirmed", slot: "BN" },
+      { providerPlayerKey: "confirmed", slot: "C" },
+    ]);
+  });
+
+  it("keeps a confirmed starter who is out below a healthy player", () => {
+    const roster = centerRoster([
+      { key: "confirmed-out", slot: "C", scheduled: true, confirmedStart: true, injuryCode: "O" },
+      { key: "healthy", slot: "BN", scheduled: true },
+    ]);
+
+    const { decision } = planCenters(roster, [
+      ["confirmed-out", 90],
+      ["healthy", 5],
+    ]);
+
+    expect(planned(decision).assignments).toEqual([
+      { providerPlayerKey: "confirmed-out", slot: "BN" },
+      { providerPlayerKey: "healthy", slot: "C" },
+    ]);
+  });
+
   it("starts a reserve player who has a game and benches the displaced player", () => {
     const roster = centerRoster([
       { key: "hurt", slot: "C", scheduled: true, injuryCode: "O" },
@@ -426,6 +498,7 @@ function centerRoster(
     readonly key: string;
     readonly slot: string;
     readonly scheduled: boolean;
+    readonly confirmedStart?: boolean;
     readonly injuryCode?: string;
     readonly eligiblePositions?: ReadonlyArray<string>;
   }>,
@@ -448,6 +521,7 @@ function centerRoster(
       injuryDetail: undefined,
       byeWeek: null,
       scheduled: row.scheduled,
+      confirmedStart: row.confirmedStart === true,
       undroppable: null,
     })),
   };
@@ -485,7 +559,13 @@ function weekTarget(week: number): ProviderLineupRequest["target"] {
 }
 
 function policyPlayerWith(availability: PlayerAvailability): PolicyPlayer {
-  return { id: "recorded-player", availability, scheduled: true, nonGamePeriods: [] };
+  return {
+    id: "recorded-player",
+    availability,
+    scheduled: true,
+    confirmedStart: false,
+    nonGamePeriods: [],
+  };
 }
 
 function recordedLeague(): ProviderLeagueSettings {
@@ -540,6 +620,7 @@ function rosterPlayer(index: number, row: RecordedRow, editable: boolean): Provi
     injuryDetail: undefined,
     byeWeek: row.byeWeek,
     scheduled: row.scheduled,
+    confirmedStart: false,
     undroppable: null,
   };
 }
@@ -628,6 +709,7 @@ function hockeyRosterPlayer(providerPlayerKey: string, slot: string): ProviderRo
     injuryDetail: undefined,
     byeWeek: null,
     scheduled: true,
+    confirmedStart: false,
     undroppable: null,
   };
 }

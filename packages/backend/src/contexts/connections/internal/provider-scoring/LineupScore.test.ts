@@ -499,8 +499,9 @@ function player(
   availability: PlayerAvailability = { kind: "available" },
   nonGamePeriods: ReadonlyArray<Period> = [],
   scheduled = true,
+  confirmedStart = false,
 ): PolicyPlayer {
-  return { id, availability, scheduled, nonGamePeriods };
+  return { id, availability, scheduled, confirmedStart, nonGamePeriods };
 }
 
 function scoringRules(values: ReadonlyArray<number | undefined>): ValueSource {

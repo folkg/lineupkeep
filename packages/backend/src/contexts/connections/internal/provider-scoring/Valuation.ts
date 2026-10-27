@@ -7,7 +7,7 @@ export function assessAvailability(player: PolicyPlayer, period: Period): Availa
   if (!hasGame(player, period)) {
     return { tier: "not-scheduled", fact: "no-game", period };
   }
-  return statusAssessment(player.availability);
+  return statusAssessment(player.availability, player.confirmedStart);
 }
 
 export function selectionUnits(points: Exact, scale: number): number {
@@ -24,10 +24,15 @@ function hasGame(player: PolicyPlayer, period: Period): boolean {
   );
 }
 
-function statusAssessment(availability: PlayerAvailability): AvailabilityAssessment {
+function statusAssessment(
+  availability: PlayerAvailability,
+  confirmedStart: boolean,
+): AvailabilityAssessment {
   switch (availability.kind) {
     case "available":
-      return { tier: "will-play", fact: "available" };
+      return confirmedStart
+        ? { tier: "confirmed-start", fact: "confirmed-start" }
+        : { tier: "will-play", fact: "available" };
     case "uncertain":
       return { tier: "might-play", fact: "uncertain-status", code: availability.code };
     case "unrecognised":

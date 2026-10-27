@@ -205,12 +205,28 @@ use it this period.
 
 Each player carries one availability tier for the target period, drawn from an ordered ladder:
 
-| Tier            | Meaning                    | Provider facts that select it                                               |
-| --------------- | -------------------------- | --------------------------------------------------------------------------- |
-| `will-play`     | expected to appear         | no status code, and the team has a game                                     |
-| `might-play`    | may appear                 | `D`, `DTD`, `Q`, `P`, `GTD`; any status code the adapter does not recognise |
-| `will-not-play` | will not appear, but could | `O`, `IR`, `IR+`, `IR-LT`, `SUSP`, `NA`                                     |
-| `not-scheduled` | no game to appear in       | no game for the player's team in the target period, including a bye         |
+| Tier              | Meaning                              | Provider facts that select it                                               |
+| ----------------- | ------------------------------------ | --------------------------------------------------------------------------- |
+| `confirmed-start` | in their real team's starting lineup | an available status, and `starting_status.is_starting` is `1`               |
+| `will-play`       | expected to appear                   | no status code, and the team has a game                                     |
+| `might-play`      | may appear                           | `D`, `DTD`, `Q`, `P`, `GTD`; any status code the adapter does not recognise |
+| `will-not-play`   | will not appear, but could           | `O`, `IR`, `IR+`, `IR-LT`, `SUSP`, `NA`                                     |
+| `not-scheduled`   | no game to appear in                 | no game for the player's team in the target period, including a bye         |
+
+The ladder is five rungs. Four of them separate the ways a player can fail to contribute; the top
+one is a **participation refinement** inside "will play". The provider publishes `starting_status` for
+goalies, and percent started cannot distinguish a confirmed starter from the backup the crowd leaves
+unstarted. A player the status table calls available and the provider confirms will start is therefore
+on `confirmed-start`, above any unconfirmed player who will play. Three limits keep it honest:
+
+- It applies only where the status table already says `available`. A confirmed starter who is out is
+  `will-not-play`, below every healthy player, so the refinement can never double-count injury.
+- It never touches the score. Two players of equal value are ordered by the rung; the confirmed
+  starter's value is the same number.
+- The provider publishes no starting signal for positions it does not rotate at that grain: a skater
+  or a backup quarterback carries no `starting_status`, stays unconfirmed, and is unaffected. A `0`
+  is not read as "will not play" — it is not read as anything, because Yahoo also emits it for goalies
+  whose game has not started yet.
 
 The ladder is four rungs because the provider distinguishes "may appear" from "will not appear" and
 neither of those is the same fact as "there is no game". A doubtful player takes a contested starting
@@ -412,10 +428,10 @@ and the roster is healthy enough to fill every required slot from available play
 Where it is not obviously right:
 
 - **Goaltenders.** The two starting goalies were started by 17 % and 54 % of leagues. Percent started
-  cannot tell a confirmed starter from a backup, and a backup goalie the crowd leaves unstarted will
-  lose the slot to a slightly more-started one. The provider does publish `starting_status` for a
-  goalie whose team has a game that day — the one fact that would settle this — and this adapter does
-  not read it.
+  cannot tell a confirmed starter from a backup, and a backup goalie the crowd leaves unstarted can
+  win the slot on a slightly higher share. The provider publishes `starting_status` for a goalie whose
+  team has a game that day, and the plan now reads it: the confirmed goalie is on `confirmed-start`,
+  so the comparison no longer depends on the crowd for the one position it cannot measure.
 - **Category and rotisserie formats.** The value term prices the player the crowd likes, not the
   category this team needs. For the rotisserie league in particular, a daily crowd-favourite lineup
   is not a rotisserie strategy: Roto is won on season-relative standing, so churn driven by today's
@@ -495,10 +511,10 @@ the two goalies the crowd starts most.
 ## What the Yahoo scoring scheme does not do
 
 - It does not read a provider endpoint by itself; the adapter supplies the observations and shares.
-- It does not consider opponents, matchups, remaining games, weather, probable starters, or whether a
-  goaltender is confirmed to start. The provider does publish a real-world `starting_status` for a
-  goaltender whose team plays that day, and a has-a-game `opponent` for every player; neither is read
-  yet, and neither is scoring evidence — they are availability facts.
+- It does not consider opponents, matchups, remaining games, weather, or probable starters. The
+  provider does publish a real-world `starting_status` for a goaltender whose team plays that day, and
+  a has-a-game `opponent` for every player; the adapter reads both, and neither is scoring evidence —
+  they are availability facts.
 - It does not use ranks or ownership, and it will not mix a weekly total with a season total in one
   value.
 - It does not optimise category outcomes, rotisserie standing, or playoff leverage. A started

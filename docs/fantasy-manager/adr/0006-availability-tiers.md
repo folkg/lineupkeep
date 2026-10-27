@@ -78,13 +78,29 @@ here. Availability is still a dimension and never a discount: a player with no g
 The rung is declared by policy with the rest of the ladder, so the solver is unchanged — it compares
 rungs by declared order and needs no new rung, weight, or objective term.
 
+## Amended: a top rung for a confirmed real-world start
+
+**2026-10-27.** The ladder gains `confirmed-start` above `will-play`. The premise this ADR first
+recorded in its _Deferred_ note — that the provider publishes no depth-chart or snap-share signal —
+was wrong for goalies and pitchers: the roster publishes `starting_status` on them, and measured on
+the owner's account it carries `is_starting: 1` for the goalie who will start and `0` for the
+backup. Percent started cannot tell those two apart, so a backup the crowd leaves unstarted could
+take a starting slot from the confirmed starter.
+
+It is a participation refinement, not a fourth kind of absence, and it is expressed the only way this
+ADR allows: as a rung. The fact crosses the seam as `ProviderRosterPlayer.confirmedStart`, the adapter
+turns it into a rung, and the solver still compares rungs by declared order. The refinement applies
+**only** to a player the status table already calls available, so it can never lift an injured or
+suspended player above a healthy one, and it never adjusts a value. A confirmed starter who is out
+stays on `will-not-play`, below every player who will play.
+
+The trailing mean of realised points already prices the role a player actually had, and this rung does
+not touch it: expected opportunity stays in the value basis, and the ladder only says who will appear.
+
 ## Deferred
 
-Real-world starting status (for example a backup quarterback) is not on the ladder. The premise first
-recorded here — that the provider publishes no depth-chart or snap-share signal today — is wrong for
-goalies and pitchers: the roster publishes `starting_status` on them. It is a participation
-refinement, not a fourth kind of absence, and it waits until reserve writes are verified and the
-availability read is corrected; [the correctness analysis](../LINEUP-CORRECTNESS-ANALYSIS.md#4-fact-inventory-against-the-seam)
-records it as the next deferred fact. The trailing mean of realised points already prices the role a
-player actually had, so when it does land it belongs to the value basis, where expected opportunity is
-priced once, not to the availability ladder, which only says whether a player appears at all.
+Real-world starting status (for example a backup quarterback) is **implemented for the players the
+provider publishes it for** — see the amendment above. The remaining scope is a provider that
+publishes a starting signal for every position, which Yahoo does not: the roster carries
+`starting_status` only for goalies and pitchers, and its meaning for a player whose game has not been
+announced yet is not established in either direction.

@@ -24,6 +24,7 @@ export const LineupObservedPlayer = Schema.Struct({
   slot: Schema.NonEmptyString,
   editable: Schema.Boolean,
   scheduled: Schema.Boolean,
+  confirmedStart: Schema.optional(Schema.Boolean),
 });
 export type LineupObservedPlayer = typeof LineupObservedPlayer.Type;
 

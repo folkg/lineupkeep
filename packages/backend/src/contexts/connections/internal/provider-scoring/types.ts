@@ -107,6 +107,7 @@ export type PlayerAvailability =
 type ExclusionReason = "out" | "injured-reserve" | "suspended" | "not-active";
 
 export type AvailabilityAssessment =
+  | { readonly tier: "confirmed-start"; readonly fact: "confirmed-start" }
   | { readonly tier: "will-play"; readonly fact: "available" }
   | { readonly tier: "might-play"; readonly fact: "uncertain-status"; readonly code: string }
   | { readonly tier: "might-play"; readonly fact: "unrecognised-status"; readonly code: string }
@@ -117,6 +118,7 @@ export type PolicyPlayer = {
   readonly id: string;
   readonly availability: PlayerAvailability;
   readonly scheduled: boolean;
+  readonly confirmedStart: boolean;
   readonly nonGamePeriods: ReadonlyArray<Period>;
 };
 
