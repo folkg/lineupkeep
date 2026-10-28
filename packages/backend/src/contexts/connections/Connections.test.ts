@@ -398,12 +398,22 @@ it.effect("disconnects a ready connection, deletes its credentials, and is idemp
     const linking = yield* startLinking(connections);
     yield* connections.completeLinking(owner, [completeInput(linking.id)]);
 
+    const before = yield* database
+      .select()
+      .from(providerCredentials)
+      .where(eq(providerCredentials.connectionId, linking.id));
+    assert.strictEqual(before.length, 1);
+
     const disconnected = yield* connections.disconnect(owner, [{ id: linking.id }]);
     const retried = yield* connections.disconnect(owner, [{ id: linking.id }]);
     const credentials = yield* database
       .select()
       .from(providerCredentials)
       .where(eq(providerCredentials.connectionId, linking.id));
+    const remainingConnections = yield* database
+      .select()
+      .from(providerConnections)
+      .where(eq(providerConnections.id, linking.id));
     const reconnectError = yield* Effect.flip(
       connections.reconnect(owner, [reconnectInput(linking.id, 1)]),
     );
@@ -412,6 +422,9 @@ it.effect("disconnects a ready connection, deletes its credentials, and is idemp
     assert.isUndefined(Array.getUnsafe(disconnected, 0).credentialGeneration);
     assert.deepStrictEqual(retried, disconnected);
     assert.deepStrictEqual(credentials, []);
+    assert.strictEqual(remainingConnections.length, 1);
+    assert.strictEqual(remainingConnections[0]?.status, "disconnected");
+    assert.strictEqual(remainingConnections[0]?.credentialGeneration, null);
     assert.instanceOf(reconnectError, ConnectionLinkRejected);
     assert.strictEqual(reconnectError.status, "disconnected");
   }).pipe(Effect.provide(ConnectionsTestLayer)),

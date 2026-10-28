@@ -192,9 +192,9 @@ function invalidArgumentsResponse(invocation: Invocation): Response | undefined 
   if (invocation.tool === undefined || Option.isNone(invocation.call)) {
     return undefined;
   }
-  const validated = Schema.decodeUnknownResult(
-    Schema.toEncoded(invocation.tool.parametersSchema),
-  )(invocation.call.value.params.arguments ?? {});
+  const validated = Schema.decodeUnknownResult(Schema.toEncoded(invocation.tool.parametersSchema))(
+    invocation.call.value.params.arguments ?? {},
+  );
   if (Result.isSuccess(validated)) {
     return undefined;
   }

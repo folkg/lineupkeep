@@ -44,6 +44,7 @@ import type {
   TransactionWindow,
   GetTeamSummaryInput,
   StandingRow,
+  SummaryGroup,
   SummaryScheduleWeek,
   TeamSummaryData,
 } from "#contexts/connections/QueryResults.ts";
@@ -82,6 +83,19 @@ import { QueryTokens } from "./QueryTokens.ts";
 
 const defaultLeagueGroups: ReadonlyArray<LeagueGroup> = ["overview", "scoring", "roster_rules"];
 const defaultPlayerGroups: ReadonlyArray<PlayerGroup> = ["identity", "availability", "eligibility"];
+const summaryGroups: ReadonlyArray<SummaryGroup> = [
+  "league",
+  "standings",
+  "categories",
+  "matchup",
+  "roster",
+];
+const defaultSummaryGroups: ReadonlyArray<SummaryGroup> = [
+  "league",
+  "standings",
+  "matchup",
+  "roster",
+];
 
 type ReadOutcome<A> =
   | { readonly _tag: "ok"; readonly value: A }
@@ -327,6 +341,7 @@ export const FantasyQueriesLive = Layer.effect(
         limit: input.limit ?? 50,
         resource: "teams",
         groups: undefined,
+        remedy: "Request a smaller limit. Every team row is already compact.",
         build: (pageRows, page) => ({
           status: "ok" as const,
           teams: [...pageRows],
@@ -404,6 +419,7 @@ export const FantasyQueriesLive = Layer.effect(
         limit: 30,
         resource: "periods",
         groups: undefined,
+        remedy: "Request a smaller limit.",
         build: (pageRows, page) => ({ ...base, periods: [...pageRows], page }),
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
@@ -492,6 +508,7 @@ export const FantasyQueriesLive = Layer.effect(
           limit: input.limit ?? 20,
           resource: "standings.teams",
           groups,
+          remedy: "Request the `standings` group without the other groups, or a smaller limit.",
           build: (pageRows, page) => ({
             ...base,
             scoring,
@@ -515,6 +532,7 @@ export const FantasyQueriesLive = Layer.effect(
         limit: input.limit ?? 20,
         resource: "scoring",
         groups,
+        remedy: "Request the `scoring` group without the other groups, or a smaller limit.",
         build: (pageRows, page) => ({
           ...base,
           ...(standingsOutcome === undefined
@@ -633,6 +651,7 @@ export const FantasyQueriesLive = Layer.effect(
         limit: input.limit ?? 50,
         resource: "roster.players",
         groups: [detail],
+        remedy: "Use `detail: compact` or request a smaller limit.",
         build: (pageRows, page) => ({ ...base, players: [...pageRows], page }),
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
@@ -780,6 +799,7 @@ export const FantasyQueriesLive = Layer.effect(
         limit: input.limit ?? 25,
         resource: "players",
         groups: undefined,
+        remedy: "Narrow the query, positions, or availability, or request a smaller limit.",
         build: (pageRows, page) => ({ ...base, players: [...pageRows], page }),
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
@@ -1135,6 +1155,7 @@ export const FantasyQueriesLive = Layer.effect(
         limit: input.limit ?? 25,
         resource: "players",
         groups,
+        remedy: "Select fewer player groups or fewer player references.",
         build: (pageRows, page) => ({ ...base, players: [...pageRows], page }),
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
@@ -1283,6 +1304,7 @@ export const FantasyQueriesLive = Layer.effect(
         limit: input.limit ?? 25,
         resource: "matchups",
         groups: undefined,
+        remedy: "Request a smaller limit.",
         build: (pageRows, page) => ({ ...base, matchups: [...pageRows], page }),
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
@@ -1370,7 +1392,21 @@ export const FantasyQueriesLive = Layer.effect(
             transaction.players,
             playerRefs.slice(playerOffset, playerOffset + transaction.players.length),
           ),
-          ([player, ref]) => ({ player: ref, direction: player.direction }),
+          ([player, ref]) => ({
+            player: ref,
+            direction: player.direction,
+            ...(player.name === undefined ? {} : { name: player.name }),
+            ...(player.primaryPosition === undefined
+              ? {}
+              : { primaryPosition: player.primaryPosition }),
+            ...(player.displayPosition === undefined
+              ? {}
+              : { displayPosition: player.displayPosition }),
+            ...(player.eligiblePositions === undefined
+              ? {}
+              : { eligiblePositions: [...player.eligiblePositions] }),
+            ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
+          }),
         );
         playerOffset += transaction.players.length;
         return {
@@ -1410,6 +1446,7 @@ export const FantasyQueriesLive = Layer.effect(
         limit: input.limit ?? 25,
         resource: "transactions",
         groups: undefined,
+        remedy: "Narrow the `since`/`until` range or set `scope` to `team`, then request again.",
         build: (pageRows, page) => ({ ...base, transactions: [...pageRows], page }),
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
@@ -1424,14 +1461,23 @@ export const FantasyQueriesLive = Layer.effect(
       const context = yield* loadContext(userId, input.team);
       const team = queryTeam(context.owned);
       const fetchedAt = yield* DateTime.now;
+      const groups = [...new Set(input.groups ?? defaultSummaryGroups)];
+      if (groups.length === 0) {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "Select at least one summary group: league, standings, categories, matchup, or roster.",
+        });
+      }
+      const includes = (group: SummaryGroup): boolean => groups.includes(group);
       const coverageEntries: QueryCoverage[] = [];
       const failures: QueryFailure[] = [];
       const statRefs = new Map<number, StatRef>();
 
       const leagueOutcome = yield* readLeague(context);
       const league = leagueOutcome._tag === "ok" ? leagueOutcome.value : undefined;
-      const leagueSection: TeamSummaryData["league"] =
-        leagueOutcome._tag === "ok"
+      const leagueSection: TeamSummaryData["league"] = !includes("league")
+        ? undefined
+        : leagueOutcome._tag === "ok"
           ? { status: "available", ...leagueOverview(leagueOutcome.value) }
           : leagueOutcome._tag === "unsupported"
             ? { status: "unsupported", detail: leagueOutcome.detail }
@@ -1452,47 +1498,55 @@ export const FantasyQueriesLive = Layer.effect(
         failures.push(leagueOutcome.failure);
       }
 
-      const standingsOutcome = yield* readOutcome(
-        context,
-        "standings",
-        context.provider.readStandings({
-          ...providerIdentity(context),
-          providerLeagueKey: context.owned.team.providerLeagueKey,
-        }),
-      );
+      const standingsNeeded = includes("standings") || includes("categories");
+      const standingsOutcome = standingsNeeded
+        ? yield* readOutcome(
+            context,
+            "standings",
+            context.provider.readStandings({
+              ...providerIdentity(context),
+              providerLeagueKey: context.owned.team.providerLeagueKey,
+            }),
+          )
+        : undefined;
       const scoringStatIds =
         league === undefined
           ? undefined
           : new Set(league.statCategories.map((category) => category.statId));
       const standingTable =
-        standingsOutcome._tag === "ok"
+        standingsOutcome?._tag === "ok"
           ? yield* standingRows(context, tokens, standingsOutcome.value, scoringStatIds)
           : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
       const rows = standingTable.rows;
       const current = rows.find((row) => row.current);
-      coverageEntries.push(
-        standingsOutcome._tag === "ok"
-          ? coverage("standings", "standings", fetchedAt)
-          : standingsOutcome._tag === "unsupported"
-            ? unsupportedCoverage("standings", "standings", fetchedAt, standingsOutcome.detail)
-            : degradedCoverage(
-                "standings",
-                "standings",
-                fetchedAt,
-                standingsOutcome.failure.message,
-              ),
-      );
-      if (standingsOutcome._tag === "failed") {
-        failures.push(standingsOutcome.failure);
+      if (standingsOutcome !== undefined) {
+        coverageEntries.push(
+          standingsOutcome._tag === "ok"
+            ? coverage("standings", "standings", fetchedAt)
+            : standingsOutcome._tag === "unsupported"
+              ? unsupportedCoverage("standings", "standings", fetchedAt, standingsOutcome.detail)
+              : degradedCoverage(
+                  "standings",
+                  "standings",
+                  fetchedAt,
+                  standingsOutcome.failure.message,
+                ),
+        );
+        if (standingsOutcome._tag === "failed") {
+          failures.push(standingsOutcome.failure);
+        }
       }
       const standingsDetail =
-        standingsOutcome._tag === "ok"
-          ? "The provider standings did not include this team."
-          : standingsOutcome._tag === "failed"
-            ? standingsOutcome.failure.message
-            : standingsOutcome.detail;
-      const standingSection: TeamSummaryData["standing"] =
-        current === undefined
+        standingsOutcome === undefined
+          ? "The standings group was not requested."
+          : standingsOutcome._tag === "ok"
+            ? "The provider standings did not include this team."
+            : standingsOutcome._tag === "failed"
+              ? standingsOutcome.failure.message
+              : standingsOutcome.detail;
+      const standingSection: TeamSummaryData["standing"] = !includes("standings")
+        ? undefined
+        : current === undefined
           ? { status: "unsupported", detail: standingsDetail }
           : {
               status: "available",
@@ -1505,8 +1559,9 @@ export const FantasyQueriesLive = Layer.effect(
               pointsAgainst: current.pointsAgainst,
               ...(current.streak === undefined ? {} : { streak: current.streak }),
             };
-      const recordSection: TeamSummaryData["record"] =
-        current?.record === undefined
+      const recordSection: TeamSummaryData["record"] = !includes("standings")
+        ? undefined
+        : current?.record === undefined
           ? {
               status: "unsupported",
               detail:
@@ -1517,8 +1572,9 @@ export const FantasyQueriesLive = Layer.effect(
           : { status: "available", ...current.record };
       const unlabelledDetail =
         "The league scoring categories could not be read, so standings categories cannot be labelled.";
-      const categoryTotals: TeamSummaryData["categoryTotals"] =
-        current === undefined || !hasPublishedCategoryValue(current.categories)
+      const categoryTotals: TeamSummaryData["categoryTotals"] = !includes("categories")
+        ? undefined
+        : current === undefined || !hasPublishedCategoryValue(current.categories)
           ? {
               status: "unsupported",
               detail:
@@ -1533,8 +1589,9 @@ export const FantasyQueriesLive = Layer.effect(
               values: [...current.categories],
               omittedCategories: omittedCategories(standingTable.omittedCategoryCount),
             };
-      const categoryPoints: TeamSummaryData["categoryPoints"] =
-        current === undefined || !hasPublishedCategoryValue(current.categoryPoints)
+      const categoryPoints: TeamSummaryData["categoryPoints"] = !includes("categories")
+        ? undefined
+        : current === undefined || !hasPublishedCategoryValue(current.categoryPoints)
           ? {
               status: "unsupported",
               detail:
@@ -1551,8 +1608,9 @@ export const FantasyQueriesLive = Layer.effect(
               values: [...current.categoryPoints],
               omittedCategories: omittedCategories(standingTable.omittedCategoryCount),
             };
-      const standingsSection: TeamSummaryData["standings"] =
-        standingsOutcome._tag === "ok"
+      const standingsSection: TeamSummaryData["standings"] = !includes("standings")
+        ? undefined
+        : standingsOutcome?._tag === "ok"
           ? {
               status: "available",
               format: league === undefined ? "unknown" : league.format,
@@ -1590,42 +1648,48 @@ export const FantasyQueriesLive = Layer.effect(
             period: providerRosterPeriod(requested),
           }),
         );
-      let rosterOutcome = yield* readRoster(period);
-      if (rosterOutcome._tag === "failed" && rosterOutcome.failure.code === "period_unavailable") {
-        rosterOutcome = yield* readRoster(undefined);
-      }
-      if (rosterOutcome._tag === "ok") {
-        coverageEntries.push(
-          rosterOutcome.value.coverage.type === "week"
-            ? coverage("roster", "roster", fetchedAt, {
-                week: rosterOutcome.value.coverage.week,
-              })
-            : coverage(
-                "roster",
-                "roster",
-                fetchedAt,
-                undefined,
-                `Date-scoped roster for ${rosterOutcome.value.coverage.date}`,
-              ),
-        );
-      } else {
-        coverageEntries.push(
-          rosterOutcome._tag === "unsupported"
-            ? unsupportedCoverage("roster", "roster", fetchedAt, rosterOutcome.detail)
-            : degradedCoverage("roster", "roster", fetchedAt, rosterOutcome.failure.message),
-        );
-        if (rosterOutcome._tag === "failed") {
-          failures.push(rosterOutcome.failure);
+      let rosterOutcome: ReadOutcome<ProviderRoster> | undefined;
+      if (includes("roster")) {
+        rosterOutcome = yield* readRoster(period);
+        if (
+          rosterOutcome._tag === "failed" &&
+          rosterOutcome.failure.code === "period_unavailable"
+        ) {
+          rosterOutcome = yield* readRoster(undefined);
+        }
+        if (rosterOutcome._tag === "ok") {
+          coverageEntries.push(
+            rosterOutcome.value.coverage.type === "week"
+              ? coverage("roster", "roster", fetchedAt, {
+                  week: rosterOutcome.value.coverage.week,
+                })
+              : coverage(
+                  "roster",
+                  "roster",
+                  fetchedAt,
+                  undefined,
+                  `Date-scoped roster for ${rosterOutcome.value.coverage.date}`,
+                ),
+          );
+        } else {
+          coverageEntries.push(
+            rosterOutcome._tag === "unsupported"
+              ? unsupportedCoverage("roster", "roster", fetchedAt, rosterOutcome.detail)
+              : degradedCoverage("roster", "roster", fetchedAt, rosterOutcome.failure.message),
+          );
+          if (rosterOutcome._tag === "failed") {
+            failures.push(rosterOutcome.failure);
+          }
         }
       }
-      const rosterPlayers = rosterOutcome._tag === "ok" ? rosterOutcome.value.players : [];
+      const rosterPlayers = rosterOutcome?._tag === "ok" ? rosterOutcome.value.players : [];
       const rosterRefs = yield* tokens.sealPlayerRefs({
         userId,
         leagueKey: context.owned.team.providerLeagueKey,
         playerKeys: rosterPlayers.map((player) => player.providerPlayerKey),
       });
       const rosterRows: ReadonlyArray<TeamSummaryData["roster"][number]> =
-        rosterOutcome._tag !== "ok"
+        rosterOutcome?._tag !== "ok"
           ? []
           : EffectArray.map(EffectArray.zip(rosterPlayers, rosterRefs), ([player, ref]) => ({
               player: ref,
@@ -1639,12 +1703,12 @@ export const FantasyQueriesLive = Layer.effect(
               },
             }));
       const rosterPeriod =
-        rosterOutcome._tag === "ok" && rosterOutcome.value.coverage.type === "week"
+        rosterOutcome?._tag === "ok" && rosterOutcome.value.coverage.type === "week"
           ? { week: rosterOutcome.value.coverage.week }
           : undefined;
 
       const matchupOutcome =
-        period === undefined
+        !includes("matchup") || period === undefined
           ? undefined
           : yield* readOutcome(
               context,
@@ -1674,7 +1738,9 @@ export const FantasyQueriesLive = Layer.effect(
       const currentMatchup =
         matchupOutcome?._tag === "ok" ? findOwnMatchup(matchupOutcome.value) : undefined;
       let matchupSection: TeamSummaryData["matchup"];
-      if (period === undefined) {
+      if (!includes("matchup")) {
+        matchupSection = undefined;
+      } else if (period === undefined) {
         matchupSection = {
           status: "unsupported",
           detail:
@@ -1716,9 +1782,8 @@ export const FantasyQueriesLive = Layer.effect(
           ...(opponent.remainingGames === undefined
             ? {}
             : { opponentRemainingGames: opponent.remainingGames }),
-          ...(own.categoryTotals.length === 0
-            ? {}
-            : {
+          ...(includes("categories") && own.categoryTotals.length > 0
+            ? {
                 categories: yield* categoryValueRows(
                   context,
                   tokens,
@@ -1726,10 +1791,10 @@ export const FantasyQueriesLive = Layer.effect(
                   own.categoryTotals,
                   matchupValueMissing,
                 ),
-              }),
-          ...(opponent.categoryTotals.length === 0
-            ? {}
-            : {
+              }
+            : {}),
+          ...(includes("categories") && opponent.categoryTotals.length > 0
+            ? {
                 opponentCategories: yield* categoryValueRows(
                   context,
                   tokens,
@@ -1737,18 +1802,21 @@ export const FantasyQueriesLive = Layer.effect(
                   opponent.categoryTotals,
                   matchupValueMissing,
                 ),
-              }),
+              }
+            : {}),
           ...(currentMatchup.status === undefined ? {} : { statusLabel: currentMatchup.status }),
           ...(currentMatchup.isPlayoffs === undefined
             ? {}
             : { isPlayoffs: currentMatchup.isPlayoffs }),
         };
       }
-      coverageEntries.push(
-        matchupSection.status === "available"
-          ? coverage("matchups", "matchups", fetchedAt, period)
-          : unsupportedCoverage("matchups", "matchups", fetchedAt, matchupSection.detail),
-      );
+      if (matchupSection !== undefined) {
+        coverageEntries.push(
+          matchupSection.status === "available"
+            ? coverage("matchups", "matchups", fetchedAt, period)
+            : unsupportedCoverage("matchups", "matchups", fetchedAt, matchupSection.detail),
+        );
+      }
 
       const scheduleWeek = (
         period: QueryPeriod,
@@ -1764,7 +1832,9 @@ export const FantasyQueriesLive = Layer.effect(
       const currentRemaining =
         currentMatchup === undefined ? undefined : ownSide(currentMatchup).remainingGames;
       let scheduleSection: TeamSummaryData["schedule"];
-      if (period === undefined) {
+      if (!includes("matchup")) {
+        scheduleSection = undefined;
+      } else if (period === undefined) {
         scheduleSection = {
           status: "unsupported",
           detail: "This league format publishes no scoring-week schedule.",
@@ -1810,20 +1880,28 @@ export const FantasyQueriesLive = Layer.effect(
               : {}),
         };
       }
-      coverageEntries.push(
-        scheduleSection.status === "available"
-          ? coverage("schedule", "matchups", fetchedAt, period)
-          : unsupportedCoverage("schedule", "matchups", fetchedAt, scheduleSection.detail),
-      );
+      if (scheduleSection !== undefined) {
+        coverageEntries.push(
+          scheduleSection.status === "available"
+            ? coverage("schedule", "matchups", fetchedAt, period)
+            : unsupportedCoverage("schedule", "matchups", fetchedAt, scheduleSection.detail),
+        );
+      }
 
       const available =
-        leagueOutcome._tag === "ok" ||
-        standingsOutcome._tag === "ok" ||
-        rosterOutcome._tag === "ok" ||
-        matchupSection.status === "available";
+        (includes("league") && leagueOutcome._tag === "ok") ||
+        (standingsNeeded && standingsOutcome?._tag === "ok") ||
+        (includes("roster") && rosterOutcome?._tag === "ok") ||
+        (includes("matchup") && matchupSection?.status === "available");
       const status: QueryStatus = available ? "ok" : failures.length > 0 ? "failed" : "unsupported";
       const fingerprintValue = yield* queryFingerprint(
-        `team_summary|team=${input.team}|period=${rosterPeriod === undefined ? "date" : String(rosterPeriod.week)}|order=slot,player,rank`,
+        [
+          "team_summary",
+          `team=${input.team}`,
+          `groups=${[...groups].sort().join(",")}`,
+          `period=${rosterPeriod === undefined ? "date" : String(rosterPeriod.week)}`,
+          "order=slot,player,rank",
+        ].join("|"),
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
@@ -1831,33 +1909,39 @@ export const FantasyQueriesLive = Layer.effect(
         status,
         team,
         ...(rosterPeriod === undefined ? {} : { period: rosterPeriod }),
-        league: leagueSection,
-        standing: standingSection,
-        record: recordSection,
-        categoryTotals,
-        categoryPoints,
-        standings: standingsSection,
-        matchup: matchupSection,
-        schedule: scheduleSection,
-        probableStarters: {
-          status: "unsupported",
-          detail: limitation(context.provider, "probable_starters"),
-        },
+        ...(leagueSection === undefined ? {} : { league: leagueSection }),
+        ...(standingSection === undefined ? {} : { standing: standingSection }),
+        ...(recordSection === undefined ? {} : { record: recordSection }),
+        ...(categoryTotals === undefined ? {} : { categoryTotals }),
+        ...(categoryPoints === undefined ? {} : { categoryPoints }),
+        ...(standingsSection === undefined ? {} : { standings: standingsSection }),
+        ...(matchupSection === undefined ? {} : { matchup: matchupSection }),
+        ...(scheduleSection === undefined ? {} : { schedule: scheduleSection }),
+        ...(includes("roster")
+          ? {
+              probableStarters: {
+                status: "unsupported" as const,
+                detail: limitation(context.provider, "probable_starters"),
+              },
+            }
+          : {}),
         coverage: coverageEntries,
         failures,
         budget: queryBudget,
       };
       return yield* fitPage({
         schema: TeamSummarySchema,
-        rows: rosterRows,
+        rows: includes("roster") ? rosterRows : [],
         offset,
         limit: input.limit ?? 50,
         resource: "team_summary.roster",
-        groups: undefined,
+        groups: summaryGroups,
+        remedy:
+          "Request fewer summary groups so the roster page fits. The roster pages with the returned cursor; available groups are league, standings, categories, matchup, and roster.",
         build: (pageRows, page) => ({ ...base, roster: [...pageRows], page }),
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
-        recordLabel: (row) => row.player,
+        recordLabel: () => undefined,
       });
     });
 

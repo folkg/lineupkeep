@@ -51,7 +51,20 @@ it("sends a report and lists it with its status", async () => {
         kind: input.kind,
         title: input.title,
         body: input.body,
-        context: input.context ?? {},
+        context: {
+          ...(input.context?.tool === null || input.context?.tool === undefined
+            ? {}
+            : { tool: input.context.tool }),
+          ...(input.context?.team === null || input.context?.team === undefined
+            ? {}
+            : { team: input.context.team }),
+          ...(input.context?.client === null || input.context?.client === undefined
+            ? {}
+            : { client: input.context.client }),
+          ...(input.context?.surface === null || input.context?.surface === undefined
+            ? {}
+            : { surface: input.context.surface }),
+        },
       };
       return Promise.resolve(
         requireFeedbackSuccess({ type: "success", data: { report, reports: [report] } } satisfies {

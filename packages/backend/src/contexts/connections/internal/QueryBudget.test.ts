@@ -20,6 +20,7 @@ it.effect("refuses a record whose escaped text copy cannot fit the hard byte lim
       limit: 50,
       resource: "roster",
       groups: undefined,
+      remedy: "Request a smaller limit.",
       build: (selected, page) => ({ names: selected.map((row) => row.name), page }),
       makeNext: () => Effect.succeed("continuation"),
       recordLabel: () => "quoted name",

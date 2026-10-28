@@ -510,6 +510,7 @@ type ProviderTransactionPlayer = {
   readonly primaryPosition: string | undefined;
   readonly displayPosition: string | undefined;
   readonly eligiblePositions: ReadonlyArray<string> | undefined;
+  readonly proTeam: string | undefined;
 };
 
 type ProviderTransactionTeam = {

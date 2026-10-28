@@ -205,6 +205,14 @@ test("reports, retrieves, and closes feedback for the acting account only", asyn
   expect(report.status).toBe("open");
   const feedback = report.id;
 
+  const nullContext = await client.callTool("submit_feedback", {
+    kind: "friction",
+    title: "Null context field",
+    body: "The published schema allows a null optional context field.",
+    context: { tool: null, surface: "mcp", client: "e2e" },
+  });
+  expect(nullContext.isError).toBe(false);
+
   const listed = await client.callTool("list_feedback", { statuses: ["open"], limit: 5 });
   expect(JSON.stringify(listed.structuredContent)).toContain(feedback);
 

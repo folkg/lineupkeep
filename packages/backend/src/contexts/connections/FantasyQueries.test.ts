@@ -570,6 +570,7 @@ it.effect("refuses a period the provider cannot honour instead of ignoring it", 
       assert.include(noWeeklySeries.detail, "Omit `period`");
     }
 
+    yield* fake.setLeague(leagueFixture);
     const search = yield* queries.searchPlayers(owner, {
       team: footballId,
       availability: "free_agent",
@@ -600,7 +601,9 @@ it.effect("never pairs an unsupported stat group with a period failure", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: { ...leagueFixture, periodWindow: { current: 4, start: 1, end: 17 } },
+    });
     const teamId = Array.getUnsafe(seeded, 0).id;
     const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
     assert.strictEqual(roster.status, "ok");
@@ -1222,20 +1225,23 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
       );
     }
 
-    const summary = yield* queries.getTeamSummary(owner, { team: teamId });
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["league", "standings", "categories", "matchup", "roster"],
+    });
     assert.strictEqual(summary.status, "ok");
     if (summary.status !== "ok") {
       return;
     }
-    assert.strictEqual(summary.league.status, "available");
-    assert.strictEqual(summary.standing.status, "available");
-    assert.strictEqual(summary.record.status, "unsupported");
-    assert.strictEqual(summary.categoryPoints.status, "available");
-    if (summary.categoryPoints.status === "available") {
+    assert.strictEqual(summary.league?.status, "available");
+    assert.strictEqual(summary.standing?.status, "available");
+    assert.strictEqual(summary.record?.status, "unsupported");
+    assert.strictEqual(summary.categoryPoints?.status, "available");
+    if (summary.categoryPoints?.status === "available") {
       assert.strictEqual(summary.categoryPoints.values.length, 13);
       assert.strictEqual(summary.categoryPoints.omittedCategories.count, 2);
     }
-    assert.strictEqual(summary.matchup.status, "unsupported");
+    assert.strictEqual(summary.matchup?.status, "unsupported");
     assert.isTrue(summary.roster.length > 0);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
@@ -1256,10 +1262,10 @@ it.effect("degrades one team summary section without failing the snapshot", () =
     if (summary.status !== "ok") {
       return;
     }
-    assert.strictEqual(summary.league.status, "available");
-    assert.strictEqual(summary.standings.status, "unsupported");
-    assert.strictEqual(summary.standing.status, "unsupported");
-    assert.strictEqual(summary.matchup.status, "available");
+    assert.strictEqual(summary.league?.status, "available");
+    assert.strictEqual(summary.standings?.status, "unsupported");
+    assert.strictEqual(summary.standing?.status, "unsupported");
+    assert.strictEqual(summary.matchup?.status, "available");
     assert.strictEqual(summary.roster.length, 2);
     assert.isTrue(
       summary.coverage.some(
@@ -1267,12 +1273,14 @@ it.effect("degrades one team summary section without failing the snapshot", () =
       ),
     );
     assert.isTrue(summary.failures.some((failure) => failure.code === "provider_invalid_response"));
-    assert.strictEqual(summary.schedule.status, "unsupported");
-    if (summary.schedule.status === "unsupported") {
+    assert.strictEqual(summary.schedule?.status, "unsupported");
+    if (summary.schedule?.status === "unsupported") {
       assert.include(summary.schedule.detail, "bye week");
     }
-    assert.strictEqual(summary.probableStarters.status, "unsupported");
-    assert.include(summary.probableStarters.detail, "probable-starter");
+    assert.strictEqual(summary.probableStarters?.status, "unsupported");
+    if (summary.probableStarters?.status === "unsupported") {
+      assert.include(summary.probableStarters.detail, "probable-starter");
+    }
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -1314,6 +1322,11 @@ it.effect("filters transactions by scope and date inside the bounded provider wi
     assert.strictEqual(own.transactions.length, 2);
     assert.strictEqual(own.window.fetched, 2);
     assert.isFalse(own.window.truncated);
+    const firstMove = Array.getUnsafe(Array.getUnsafe(own.transactions, 0).players, 0);
+    assert.strictEqual(firstMove.name, "Synthetic Addition");
+    assert.strictEqual(firstMove.primaryPosition, undefined);
+    assert.strictEqual(firstMove.displayPosition, "WR");
+    assert.strictEqual(firstMove.proTeam, "SYN");
 
     const ranged = yield* queries.getTransactions(owner, {
       team: teamId,
@@ -1593,20 +1606,21 @@ it.effect("reports this week's and next week's remaining player-games for hockey
     if (summary.status !== "ok") {
       return;
     }
-    assert.strictEqual(summary.schedule.status, "available");
-    if (summary.schedule.status !== "available") {
+    const schedule = summary.schedule;
+    assert.strictEqual(schedule?.status, "available");
+    if (schedule?.status !== "available") {
       return;
     }
-    assert.strictEqual(summary.schedule.unit, "fantasy_team_player_games");
-    assert.strictEqual(summary.schedule.weeks.length, 2);
-    assert.deepStrictEqual(Array.getUnsafe(summary.schedule.weeks, 0), {
+    assert.strictEqual(schedule.unit, "fantasy_team_player_games");
+    assert.strictEqual(schedule.weeks.length, 2);
+    assert.deepStrictEqual(Array.getUnsafe(schedule.weeks, 0), {
       period: { week: 3 },
       current: true,
       completed: 51,
       live: 3,
       remaining: 0,
     });
-    assert.deepStrictEqual(Array.getUnsafe(summary.schedule.weeks, 1), {
+    assert.deepStrictEqual(Array.getUnsafe(schedule.weeks, 1), {
       period: { week: 4 },
       current: false,
       completed: 0,
@@ -1656,14 +1670,75 @@ it.effect("fits a multi-section team summary inside the result budget", () =>
     if (summary.status !== "ok") {
       return;
     }
+    assert.isDefined(summary.league);
+    assert.isDefined(summary.standing);
+    assert.isDefined(summary.record);
+    assert.isDefined(summary.matchup);
+    assert.isDefined(summary.probableStarters);
+    assert.isUndefined(summary.categoryTotals);
+    assert.isUndefined(summary.categoryPoints);
     assert.isFalse(summary.page.complete);
     assert.isString(summary.page.next);
     assert.isTrue(summary.page.returned < 40);
-    assert.isTrue(summarySectionBytes(summary) <= 16_384);
-    assert.strictEqual(summary.standings.status, "available");
-    if (summary.standings.status === "available") {
+    assert.isAtMost(summarySectionBytes(summary), summary.budget.hardLimitBytes);
+    assert.strictEqual(summary.standings?.status, "available");
+    if (summary.standings?.status === "available") {
       assert.strictEqual(summary.standings.teams.length, 14);
     }
+
+    const names = new Set(summary.roster.map((player) => player.name));
+    let next = summary.page.next;
+    while (next !== undefined) {
+      const page = yield* queries.getTeamSummary(owner, { team: teamId, cursor: next });
+      assert.strictEqual(page.status, "ok");
+      if (page.status !== "ok") {
+        return;
+      }
+      assert.isAtMost(summarySectionBytes(page), page.budget.hardLimitBytes);
+      for (const player of page.roster) {
+        names.add(player.name);
+      }
+      next = page.page.next;
+    }
+    assert.strictEqual(names.size, 40);
+
+    const allGroups = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["league", "standings", "categories", "matchup", "roster"],
+    });
+    assert.strictEqual(allGroups.status, "ok");
+    if (allGroups.status === "ok") {
+      assert.isDefined(allGroups.categoryTotals);
+      assert.isAtLeast(allGroups.page.returned, 1);
+      assert.isAtMost(summarySectionBytes(allGroups), allGroups.budget.hardLimitBytes);
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("documents how to narrow a summary that cannot fit a single record", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      roster: rosterFixture({ count: 1, name: "A".repeat(20_000) }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId });
+
+    assert.strictEqual(summary.status, "narrowing_required");
+    if (summary.status !== "narrowing_required") {
+      return;
+    }
+    assert.deepStrictEqual(summary.groups, [
+      "league",
+      "standings",
+      "categories",
+      "matchup",
+      "roster",
+    ]);
+    assert.include(summary.detail, "Request fewer summary groups");
+    assert.isUndefined(summary.record);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -1679,6 +1754,7 @@ function transactionPlayer(
     primaryPosition: undefined,
     displayPosition: "WR",
     eligiblePositions: undefined,
+    proTeam: "SYN",
   };
 }
 

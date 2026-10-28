@@ -631,6 +631,11 @@ const Transaction = Schema.Struct({
     Schema.Struct({
       player: PlayerRef,
       direction: Schema.Literals(["add", "drop", "incoming", "outgoing"]),
+      name: Schema.optional(Schema.NonEmptyString),
+      primaryPosition: Schema.optional(Schema.NonEmptyString),
+      displayPosition: Schema.optional(Schema.NonEmptyString),
+      eligiblePositions: Schema.optional(Schema.Array(Schema.NonEmptyString)),
+      proTeam: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
     }),
   ),
 });
@@ -649,8 +654,26 @@ export type TransactionsData = typeof TransactionsData.Type;
 export const TransactionsResult = Schema.Union([TransactionsData, NarrowingResult]);
 export type TransactionsResult = typeof TransactionsResult.Type;
 
+export const SummaryGroup = Schema.Literals([
+  "league",
+  "standings",
+  "categories",
+  "matchup",
+  "roster",
+]);
+export type SummaryGroup = typeof SummaryGroup.Type;
+
 export const GetTeamSummaryInput = Schema.Struct({
   team: TeamId,
+  groups: Schema.optional(
+    Schema.Array(SummaryGroup).pipe(
+      Schema.check(Schema.isMaxLength(5)),
+      Schema.annotate({
+        description:
+          "Sections to include. Defaults to `league`, `standings`, `matchup`, and `roster`. `categories` adds the season category totals and points plus the matchup's per-category values. The roster section pages with the returned cursor.",
+      }),
+    ),
+  ),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
 });
@@ -781,18 +804,20 @@ export const TeamSummaryData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
   period: Schema.optional(QueryPeriod),
-  league: SummaryLeague,
-  standing: SummaryStanding,
-  record: SummaryRecord,
-  categoryTotals: SummaryCategories,
-  categoryPoints: SummaryCategories,
-  standings: SummaryStandings,
-  matchup: SummaryMatchup,
-  schedule: SummarySchedule,
-  probableStarters: Schema.Struct({
-    status: Schema.Literal("unsupported"),
-    detail: Schema.String,
-  }),
+  league: Schema.optional(SummaryLeague),
+  standing: Schema.optional(SummaryStanding),
+  record: Schema.optional(SummaryRecord),
+  categoryTotals: Schema.optional(SummaryCategories),
+  categoryPoints: Schema.optional(SummaryCategories),
+  standings: Schema.optional(SummaryStandings),
+  matchup: Schema.optional(SummaryMatchup),
+  schedule: Schema.optional(SummarySchedule),
+  probableStarters: Schema.optional(
+    Schema.Struct({
+      status: Schema.Literal("unsupported"),
+      detail: Schema.String,
+    }),
+  ),
   roster: Schema.Array(SummaryRosterPlayer),
   coverage: Schema.Array(QueryCoverage),
   failures: Schema.Array(QueryFailure),

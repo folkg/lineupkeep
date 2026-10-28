@@ -236,6 +236,7 @@ export const TransactionReviewsLive = Layer.effect(
         limit: 5,
         resource: "review_links",
         groups: input.intents.map((intent) => intent.kind),
+        remedy: "Request fewer review intents.",
         build: (pageRows, page) => ({ ...base, links: [...pageRows], page }),
         makeNext: () =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: 5, now }),

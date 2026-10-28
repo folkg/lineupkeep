@@ -1,5 +1,6 @@
 import type {
   FeedbackContext,
+  FeedbackContextInput,
   FeedbackSubmission,
   FeedbackTriageInput,
 } from "#contexts/feedback/Feedback.ts";
@@ -26,7 +27,7 @@ export function normalizedTriage(input: FeedbackTriageInput): FeedbackTriageInpu
 }
 
 function normalizedContext(
-  context: FeedbackContext | null | undefined,
+  context: FeedbackContextInput | null | undefined,
 ): FeedbackContext | undefined {
   if (context === null || context === undefined) {
     return undefined;

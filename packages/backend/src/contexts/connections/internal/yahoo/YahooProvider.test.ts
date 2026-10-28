@@ -2115,6 +2115,7 @@ it.effect("reads bounded league transaction history with dropped-player identity
             primaryPosition: undefined,
             displayPosition: "WR",
             eligiblePositions: undefined,
+            proTeam: "SYN",
           },
           {
             providerPlayerKey: "466.p.20004",
@@ -2123,6 +2124,7 @@ it.effect("reads bounded league transaction history with dropped-player identity
             primaryPosition: undefined,
             displayPosition: "RB",
             eligiblePositions: undefined,
+            proTeam: "SYN",
           },
         ],
       },
@@ -2139,6 +2141,7 @@ it.effect("reads bounded league transaction history with dropped-player identity
             primaryPosition: undefined,
             displayPosition: "TE",
             eligiblePositions: undefined,
+            proTeam: "SYN",
           },
         ],
       },

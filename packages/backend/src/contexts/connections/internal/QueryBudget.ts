@@ -27,9 +27,10 @@ export type FitPageInput<Row, Result> = {
   readonly limit: number;
   readonly resource: string;
   readonly groups: ReadonlyArray<string> | undefined;
+  readonly remedy: string;
   readonly build: (rows: ReadonlyArray<Row>, page: QueryPage) => Result;
   readonly makeNext: (offset: number) => Effect.Effect<string, QueryError>;
-  readonly recordLabel: (row: Row) => string;
+  readonly recordLabel: (row: Row) => string | undefined;
 };
 
 export function fitPage<Row, Result>(
@@ -115,13 +116,13 @@ function narrowing<Row, Result>(
   input: FitPageInput<Row, Result>,
   record: Row | undefined,
 ): NarrowingResult {
+  const recordLabel = record === undefined ? undefined : input.recordLabel(record);
   return {
     status: "narrowing_required",
     resource: input.resource,
-    ...(record === undefined ? {} : { record: input.recordLabel(record) }),
+    ...(recordLabel === undefined ? {} : { record: recordLabel }),
     ...(input.groups === undefined ? {} : { groups: [...input.groups] }),
-    detail:
-      "A complete record cannot fit inside the response budget. Request fewer groups or a narrower selection.",
+    detail: input.remedy,
     budget: queryBudget,
   };
 }

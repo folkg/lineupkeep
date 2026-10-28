@@ -60,12 +60,20 @@ export const TeamReference = Schema.String.pipe(
 export type TeamReference = typeof TeamReference.Type;
 
 export const FeedbackContext = Schema.Struct({
+  tool: Schema.optional(FeedbackLabel),
+  team: Schema.optional(TeamReference),
+  client: Schema.optional(FeedbackLabel),
+  surface: Schema.optional(FeedbackSurface),
+});
+export type FeedbackContext = typeof FeedbackContext.Type;
+
+const FeedbackContextInput = Schema.Struct({
   tool: Schema.optional(Schema.NullOr(FeedbackLabel)),
   team: Schema.optional(Schema.NullOr(TeamReference)),
   client: Schema.optional(Schema.NullOr(FeedbackLabel)),
   surface: Schema.optional(Schema.NullOr(FeedbackSurface)),
 });
-export type FeedbackContext = typeof FeedbackContext.Type;
+export type FeedbackContextInput = typeof FeedbackContextInput.Type;
 
 export const FeedbackSubmitter = Schema.Struct({
   kind: FeedbackSubmitterKind,
@@ -77,7 +85,7 @@ export const FeedbackSubmission = Schema.Struct({
   kind: FeedbackKind,
   title: FeedbackTitle,
   body: FeedbackBody,
-  context: Schema.optional(Schema.NullOr(FeedbackContext)),
+  context: Schema.optional(Schema.NullOr(FeedbackContextInput)),
 });
 export type FeedbackSubmission = typeof FeedbackSubmission.Type;
 

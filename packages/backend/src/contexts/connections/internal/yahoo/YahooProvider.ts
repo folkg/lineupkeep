@@ -1952,6 +1952,7 @@ function decodeTransactions(
             player.eligible_positions === undefined
               ? undefined
               : player.eligible_positions.map(({ position }) => position),
+          proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
         })),
       });
     }
@@ -2690,6 +2691,7 @@ const MatchupsPayload = Schema.Struct({
 const TransactionPlayerPayload = Schema.Struct({
   player_key: PlayerKey,
   name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
+  editorial_team_abbr: Schema.optional(Schema.String),
   display_position: Schema.optional(Schema.String),
   primary_position: Schema.optional(Schema.String),
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
