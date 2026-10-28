@@ -169,6 +169,7 @@ function expectAgreement(problem: LineupProblem): void {
 
   expect(isLegalPlan(problem, result.plan)).toBe(true);
   expect(oracleLineupViolations(problem, result.plan.assignments)).toEqual([]);
+  expect(result.plan.assignments).toEqual(oracle.assignments);
   expect(result.plan.totalSelectionValue).toBe(oracle.value);
   expect(startingTierCounts(problem, result.plan.assignments)).toEqual(oracle.tierCounts);
   expect(zeroStartingPlayers(problem, result.plan.assignments)).toBe(oracle.zeroStarters);

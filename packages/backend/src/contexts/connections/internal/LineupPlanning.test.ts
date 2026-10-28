@@ -351,7 +351,7 @@ describe("provider-neutral lineup placement", () => {
     ]);
   });
 
-  it("never refuses a plan because a change transits a reserve slot", () => {
+  it("plans reserve moves in both directions without refusing", () => {
     const pool = league([
       { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
       { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
@@ -396,9 +396,6 @@ describe("provider-neutral lineup placement", () => {
       });
 
       expect(result.kind).toBe("planned");
-      if (result.kind === "refused") {
-        expect(result.detail).not.toMatch(/reserve/u);
-      }
     }
   });
 
