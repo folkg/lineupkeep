@@ -1,6 +1,7 @@
 import {
   addExact,
   averageExact,
+  clampExact,
   compareExact,
   divideByInteger,
   exactFromInteger,
@@ -25,13 +26,13 @@ import type {
 import { selectionUnits } from "./Valuation.ts";
 
 export const valueSourceLadder: ReadonlyArray<ValueSourceKind> = [
-  "projected-points",
   "scoring-rules",
   "ownership-composite",
   "community-start-rate",
 ];
 
 const ownershipDeltaBound = parseExact("4");
+const negativeOwnershipDeltaBound = parseExact("-4");
 const rankRatioScale = 6;
 const rankScoreScale = parseExact("5");
 const compositeScale = 4;
@@ -51,8 +52,6 @@ export function resolveValueSource(input: {
   readonly period: Period;
 }): ResolvedValueSource {
   switch (input.source.kind) {
-    case "projected-points":
-      return projectedPointsSource(input.source, input.period);
     case "scoring-rules":
       return scoringRulesSource(input.source);
     case "community-start-rate":
@@ -70,20 +69,6 @@ export type ResolvedValueSource = {
 type ScoringRulesSource = Extract<ValueSource, { readonly kind: "scoring-rules" }>;
 type CommunityStartRateSource = Extract<ValueSource, { readonly kind: "community-start-rate" }>;
 type OwnershipCompositeSource = Extract<ValueSource, { readonly kind: "ownership-composite" }>;
-
-function projectedPointsSource(
-  source: Extract<ValueSource, { readonly kind: "projected-points" }>,
-  period: Period,
-): ResolvedValueSource {
-  const projections = new Map(source.projections.map((entry) => [entry.id, entry.points] as const));
-  return {
-    label: `projected-points:${periodKey(period)}`,
-    unitsOf: (player) => {
-      const projection = projections.get(player.id);
-      return projection === undefined ? undefined : selectionUnits(projection, valueScale);
-    },
-  };
-}
 
 function scoringRulesSource(source: ScoringRulesSource): ResolvedValueSource {
   const observations = observationsByKey(source.observations);
@@ -146,7 +131,7 @@ function ownershipCompositeSource(
       const deltaAdjustment =
         facts.delta === undefined
           ? exactFromInteger(0n)
-          : minExact(facts.delta, ownershipDeltaBound);
+          : clampExact(facts.delta, negativeOwnershipDeltaBound, ownershipDeltaBound);
       const rankScore = rankScoreOf(facts.ranks, source.sport, playersInLeague);
       const composite = addExact(
         addExact(multiplyExact(percentOwned, half), multiplyExact(rankScore, half)),

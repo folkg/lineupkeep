@@ -1,7 +1,6 @@
 import { Effect, Redacted, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
-import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import { planAssignments } from "#contexts/connections/internal/LineupPlanning.ts";
 import type { PlanAssignmentsResult } from "#contexts/connections/internal/LineupPlanning.ts";
 import type {
@@ -25,15 +24,9 @@ import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import {
   scoreYahooRoster,
   yahooAvailability,
-  yahooCapabilities,
-  yahooDefaultStartingLineupRole,
   yahooInjuryStatusCodes,
   yahooObservationWindow,
   yahooScoringProfile,
-  yahooStartingLineupRole,
-  yahooStartingLineupRoleBySport,
-  yahooStartingLineupRule,
-  yahooStartingLineupRuleByRole,
   yahooTargetPeriod,
 } from "./YahooLineup.ts";
 import type { YahooLineupReader, YahooPeriodHistory, YahooPlayerFacts } from "./YahooLineup.ts";
@@ -124,12 +117,6 @@ describe("Yahoo scoring translation", () => {
       { kind: "date", date: "2026-10-24" },
       { kind: "date", date: "2026-10-25" },
     ]);
-  });
-
-  it("declares the search capability it can honour without a scoring declaration", () => {
-    expect(yahooCapabilities.publishesProjections).toBe(false);
-    expect(yahooCapabilities.playerSearch.weeklyStatSortSports).toEqual(["football"]);
-    expect(yahooCapabilities.sports).toEqual(["football", "hockey"]);
   });
 
   it("publishes one final score per player from the league's own rules", () => {
@@ -373,39 +360,6 @@ describe("Yahoo scoring translation", () => {
     ]);
   });
 
-  it("declares how a confirmed non-start is read for every sport and position class", () => {
-    const sports: ReadonlyArray<FantasySport> = ["football", "hockey", "baseball", "basketball"];
-
-    expect(Object.keys(yahooStartingLineupRoleBySport).sort()).toEqual([...sports].sort());
-    expect(yahooCapabilities.sports).toEqual(["football", "hockey"]);
-
-    for (const sport of sports) {
-      const roles = yahooStartingLineupRoleBySport[sport];
-      expect(Object.keys(roles).length).toBeGreaterThan(0);
-      for (const [position, role] of Object.entries(roles)) {
-        expect(yahooStartingLineupRole(sport, position)).toBe(role);
-        expect(yahooStartingLineupRule(sport, position)).toBe(yahooStartingLineupRuleByRole[role]);
-      }
-    }
-
-    expect(yahooStartingLineupRuleByRole).toEqual({
-      goalie: "unlikely-to-play",
-      "starting-pitcher": "unlikely-to-play",
-      "relief-pitcher": "not-an-availability-fact",
-      "position-player": "not-an-availability-fact",
-    });
-    expect(yahooStartingLineupRole("hockey", "G")).toBe("goalie");
-    expect(yahooStartingLineupRole("baseball", "SP")).toBe("starting-pitcher");
-    expect(yahooStartingLineupRole("baseball", "RP")).toBe("relief-pitcher");
-    expect(yahooStartingLineupRole("baseball", "P")).toBe("relief-pitcher");
-    expect(yahooStartingLineupRole("baseball", "OF")).toBe("position-player");
-    expect(yahooStartingLineupRole("football", "QB")).toBe("position-player");
-    expect(yahooStartingLineupRole("basketball", "PG")).toBe("position-player");
-    expect(yahooDefaultStartingLineupRole).toBe("position-player");
-    expect(yahooStartingLineupRole("hockey", "undeclared")).toBe(yahooDefaultStartingLineupRole);
-    expect(yahooStartingLineupRule("hockey", "undeclared")).toBe("not-an-availability-fact");
-  });
-
   it("refuses to plan a sport the adapter does not publish", () => {
     const outcome = runPlan({ ...hockeyRequest(), sport: "baseball" }, { rates: [] });
 
@@ -458,23 +412,25 @@ describe("Yahoo scoring translation", () => {
     ]);
   });
 
-  it("bounds the ownership delta adjustment", () => {
+  it("bounds the ownership delta adjustment in both directions", () => {
     const league = gamesLimitedLeague();
-    const roster = centerRoster([{ key: "rising", slot: "C", scheduled: true }]);
+    const roster = centerRoster([{ key: "changed", slot: "C", scheduled: true }]);
+    const score = (delta: number): number | null | undefined => {
+      const outcome = runPlan(
+        { ...hockeyRequest(), league, roster },
+        {
+          rates: [ownedFacts("changed", 10, [], delta)],
+          gamesPlayed: [{ position: "C", played: 20, max: 82, projected: 20 }],
+        },
+      );
+      if (outcome.kind !== "scored") {
+        throw new Error("Expected scored values.");
+      }
+      return outcome.players[0]?.score;
+    };
 
-    const outcome = runPlan(
-      { ...hockeyRequest(), league, roster },
-      {
-        rates: [ownedFacts("rising", 10, [], 9)],
-        gamesPlayed: [{ position: "C", played: 20, max: 82, projected: 20 }],
-      },
-    );
-
-    expect(outcome.kind).toBe("scored");
-    if (outcome.kind !== "scored") {
-      return;
-    }
-    expect(outcome.players[0]?.score).toBe(90000);
+    expect(score(9)).toBe(90000);
+    expect(score(-9)).toBe(10000);
   });
 
   it("ignores participation only when the position's projection exceeds its allowance", () => {
@@ -598,29 +554,6 @@ describe("Yahoo scoring translation", () => {
     expect(plannedAssignments.every((assignment) => assignment.slot !== "IR")).toBe(true);
   });
 
-  it("places every roster member exactly once", () => {
-    const roster = centerRoster([
-      { key: "idle", slot: "C", scheduled: false },
-      { key: "playing", slot: "BN", scheduled: true },
-      { key: "parked", slot: "IR", scheduled: true, eligiblePositions: ["C", "IR"] },
-    ]);
-
-    const { decision } = planCenters(roster, [
-      ["idle", 47],
-      ["playing", 13],
-      ["parked", 5],
-    ]);
-    const finalSlots = new Map(
-      roster.players.map((player) => [player.providerPlayerKey, player.slot]),
-    );
-    for (const assignment of planned(decision).assignments) {
-      finalSlots.set(assignment.providerPlayerKey, assignment.slot);
-    }
-
-    expect(finalSlots.size).toBe(roster.players.length);
-    expect([...finalSlots.values()]).toEqual(["BN", "C", "IR"]);
-  });
-
   it("changes the plan exactly when a player without a game holds a slot a playing player could fill", () => {
     const percents = [
       ["idle", 47],
@@ -706,8 +639,6 @@ function startRate(
   return {
     providerPlayerKey,
     percent,
-    change: null,
-    coverage: { type: "date", date: "2026-10-26" },
     cuts,
     percentOwned: null,
     percentOwnedDelta: null,
@@ -728,8 +659,6 @@ function ownedFacts(
   return {
     providerPlayerKey,
     percent: null,
-    change: null,
-    coverage: { type: "date", date: "2026-10-26" },
     cuts: [],
     percentOwned,
     percentOwnedDelta: delta,

@@ -39,11 +39,7 @@ export type AvailabilityTier =
   | "will-not-play"
   | "not-scheduled";
 
-export type ValueSourceKind =
-  | "projected-points"
-  | "scoring-rules"
-  | "community-start-rate"
-  | "ownership-composite";
+export type ValueSourceKind = "scoring-rules" | "community-start-rate" | "ownership-composite";
 
 export type CommunityStartRatePopulation =
   | { readonly kind: "cut"; readonly cut: string }
@@ -54,10 +50,6 @@ export type CommunityStartRatePopulation =
     };
 
 export type ValueSource =
-  | {
-      readonly kind: "projected-points";
-      readonly projections: ReadonlyArray<PlayerProjection>;
-    }
   | {
       readonly kind: "scoring-rules";
       readonly window: ReadonlyArray<Period>;
@@ -75,11 +67,6 @@ export type ValueSource =
       readonly standardRosterSpots: number;
       readonly players: ReadonlyArray<PlayerOwnership>;
     };
-
-type PlayerProjection = {
-  readonly id: string;
-  readonly points: Exact;
-};
 
 export type PlayerOwnership = {
   readonly id: string;

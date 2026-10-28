@@ -13,14 +13,10 @@ const noObservedPeriodsRefusalDetail =
 
 export function scoreLineup(input: LineupScoreInput): LineupScoreResult {
   requireConsistentInput(input);
-  const refusals: Array<LineupScoreRefusal> = [];
+  let sawEmptyWindow = false;
   for (const source of orderedSources(input.sources)) {
     if (source.kind === "scoring-rules" && source.window.length === 0) {
-      refusals.push({
-        refusal: "transient",
-        code: noObservedPeriodsRefusalCode,
-        detail: noObservedPeriodsRefusalDetail,
-      });
+      sawEmptyWindow = true;
       continue;
     }
     const resolved = resolveValueSource({ source, period: input.period });
@@ -34,14 +30,19 @@ export function scoreLineup(input: LineupScoreInput): LineupScoreResult {
       })),
     };
   }
-  return {
-    kind: "refused",
-    ...(refusals.at(-1) ?? {
-      refusal: "structural" as const,
-      code: noValueSourceRefusalCode,
-      detail: noValueSourceRefusalDetail,
-    }),
-  };
+  return sawEmptyWindow
+    ? {
+        kind: "refused",
+        refusal: "transient",
+        code: noObservedPeriodsRefusalCode,
+        detail: noObservedPeriodsRefusalDetail,
+      }
+    : {
+        kind: "refused",
+        refusal: "structural",
+        code: noValueSourceRefusalCode,
+        detail: noValueSourceRefusalDetail,
+      };
 }
 
 function orderedSources(sources: ReadonlyArray<ValueSource>): ReadonlyArray<ValueSource> {
@@ -93,13 +94,6 @@ function requireConsistentSource(
           );
         }
       }
-      return;
-    }
-    case "projected-points": {
-      requireUniqueIds(
-        source.projections.map((entry) => entry.id),
-        "projection",
-      );
       return;
     }
     case "community-start-rate": {
@@ -160,13 +154,7 @@ export type LineupScoreResult =
     }
   | {
       readonly kind: "refused";
-      readonly refusal: LineupScoreRefusal["refusal"];
+      readonly refusal: "structural" | "transient";
       readonly code: string;
       readonly detail: string;
     };
-
-type LineupScoreRefusal = {
-  readonly refusal: "structural" | "transient";
-  readonly code: string;
-  readonly detail: string;
-};

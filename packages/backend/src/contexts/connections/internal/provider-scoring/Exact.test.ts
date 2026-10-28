@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addExact,
   averageExact,
+  clampExact,
   compareExact,
   exactFromInteger,
   exactToUnits,
@@ -44,6 +45,14 @@ describe("exact decimals", () => {
     expect(exactToUnits(parseExact("17.5"), 0)).toBe(18n);
     expect(exactToUnits(parseExact("-17.5"), 0)).toBe(-18n);
     expect(exactToUnits(parseExact("7"), 3)).toBe(7000n);
+  });
+
+  it("clamps to an inclusive interval", () => {
+    expect(clampExact(parseExact("5"), parseExact("-4"), parseExact("4"))).toEqual(parseExact("4"));
+    expect(clampExact(parseExact("-5"), parseExact("-4"), parseExact("4"))).toEqual(
+      parseExact("-4"),
+    );
+    expect(clampExact(parseExact("2"), parseExact("-4"), parseExact("4"))).toEqual(parseExact("2"));
   });
 
   it("rejects text that is not a plain decimal", () => {

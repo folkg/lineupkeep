@@ -4,7 +4,6 @@ import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import { parseExact } from "#contexts/connections/internal/provider-scoring/Exact.ts";
 import { scoreLineup } from "#contexts/connections/internal/provider-scoring/LineupScore.ts";
 import type { ScoredPlayer } from "#contexts/connections/internal/provider-scoring/LineupScore.ts";
-import { trailingPeriodCount } from "#contexts/connections/internal/provider-scoring/ObservationWindow.ts";
 import { periodKey } from "#contexts/connections/internal/provider-scoring/Period.ts";
 import { scoringProfile } from "#contexts/connections/internal/provider-scoring/ScoringProfile.ts";
 import type {
@@ -29,13 +28,13 @@ import type {
   ProviderPlayerDetail,
   ProviderPlayerScore,
   ProviderRoster,
-  ProviderRosterCoverage,
   ProviderRosterPlayer,
   ProviderScoringWeek,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderReadFailure } from "#contexts/connections/Provider.ts";
 
 const supportedSports = ["football", "hockey"] as const;
+const observationWindowPeriods = 4;
 
 type SupportedSport = (typeof supportedSports)[number];
 
@@ -192,14 +191,10 @@ const yahooStatusTable: Readonly<Record<string, PlayerAvailability>> = {
   GTD: { kind: "uncertain", code: "GTD" },
 };
 
-export type StartingLineupRole =
-  | "goalie"
-  | "starting-pitcher"
-  | "relief-pitcher"
-  | "position-player";
+type StartingLineupRole = "goalie" | "position-player";
 
-export const yahooStartingLineupRoleBySport: Readonly<
-  Record<FantasySport, Readonly<Record<string, StartingLineupRole>>>
+const yahooStartingLineupRoleBySport: Readonly<
+  Partial<Record<FantasySport, Readonly<Record<string, StartingLineupRole>>>>
 > = {
   football: {
     DEF: "position-player",
@@ -220,56 +215,20 @@ export const yahooStartingLineupRoleBySport: Readonly<
     LW: "position-player",
     RW: "position-player",
   },
-  baseball: {
-    "1B": "position-player",
-    "2B": "position-player",
-    "3B": "position-player",
-    C: "position-player",
-    CF: "position-player",
-    CI: "position-player",
-    DH: "position-player",
-    IF: "position-player",
-    LF: "position-player",
-    MI: "position-player",
-    OF: "position-player",
-    P: "relief-pitcher",
-    RF: "position-player",
-    RP: "relief-pitcher",
-    SP: "starting-pitcher",
-    SS: "position-player",
-    Util: "position-player",
-  },
-  basketball: {
-    C: "position-player",
-    F: "position-player",
-    G: "position-player",
-    PF: "position-player",
-    PG: "position-player",
-    SF: "position-player",
-    SG: "position-player",
-    Util: "position-player",
-  },
 };
 
-export const yahooStartingLineupRuleByRole: Readonly<
-  Record<StartingLineupRole, StartingLineupRule>
-> = {
+const yahooStartingLineupRuleByRole: Readonly<Record<StartingLineupRole, StartingLineupRule>> = {
   goalie: "unlikely-to-play",
-  "starting-pitcher": "unlikely-to-play",
-  "relief-pitcher": "not-an-availability-fact",
   "position-player": "not-an-availability-fact",
 };
 
-export const yahooDefaultStartingLineupRole: StartingLineupRole = "position-player";
+const yahooDefaultStartingLineupRole: StartingLineupRole = "position-player";
 
-export function yahooStartingLineupRole(sport: FantasySport, position: string): StartingLineupRole {
-  const roles = Object.hasOwn(yahooStartingLineupRoleBySport, sport)
-    ? yahooStartingLineupRoleBySport[sport]
-    : undefined;
-  return roles?.[position] ?? yahooDefaultStartingLineupRole;
+function yahooStartingLineupRole(sport: FantasySport, position: string): StartingLineupRole {
+  return yahooStartingLineupRoleBySport[sport]?.[position] ?? yahooDefaultStartingLineupRole;
 }
 
-export function yahooStartingLineupRule(sport: FantasySport, position: string): StartingLineupRule {
+function yahooStartingLineupRule(sport: FantasySport, position: string): StartingLineupRule {
   return yahooStartingLineupRuleByRole[yahooStartingLineupRole(sport, position)];
 }
 
@@ -439,7 +398,7 @@ function observationsOf(detail: ProviderPlayerDetail): ReadonlyArray<StatObserva
 function completedWeeks(league: ProviderLeagueSettings, targetWeek: number): ReadonlyArray<Period> {
   const firstWeek = league.periodWindow?.start ?? 1;
   const periods: Array<Period> = [];
-  for (let week = targetWeek - trailingPeriodCount; week < targetWeek; week += 1) {
+  for (let week = targetWeek - observationWindowPeriods; week < targetWeek; week += 1) {
     if (week >= firstWeek) {
       periods.push({ kind: "week", week });
     }
@@ -450,7 +409,7 @@ function completedWeeks(league: ProviderLeagueSettings, targetWeek: number): Rea
 function completedDates(league: ProviderLeagueSettings, targetDate: string): ReadonlyArray<Period> {
   const target = DateTime.makeUnsafe(`${targetDate}T00:00:00.000Z`);
   const periods: Array<Period> = [];
-  for (let offset = trailingPeriodCount; offset >= 1; offset -= 1) {
+  for (let offset = observationWindowPeriods; offset >= 1; offset -= 1) {
     const date = DateTime.formatIsoDate(DateTime.add(target, { days: -offset }));
     if (league.startDate === undefined || date >= league.startDate) {
       periods.push({ kind: "date", date });
@@ -479,8 +438,6 @@ export type YahooPlayerFacts = YahooStartRateSummary & {
 
 export type YahooStartRateSummary = {
   readonly percent: number | null;
-  readonly change: number | null;
-  readonly coverage: ProviderRosterCoverage | null;
   readonly cuts: ReadonlyArray<YahooStartRateCut>;
 };
 

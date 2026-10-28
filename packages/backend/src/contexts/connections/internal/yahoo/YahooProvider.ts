@@ -1542,8 +1542,6 @@ function communityStartRateOf(
     }
     return {
       percent: yield* percentageOf(payload.value, `${field}.value`),
-      change: yield* percentDeltaOf(payload.delta, `${field}.delta`),
-      coverage,
       cuts,
     };
   });

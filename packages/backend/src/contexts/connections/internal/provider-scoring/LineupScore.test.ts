@@ -161,44 +161,15 @@ describe("the value source ladder", () => {
         input({
           sources: [
             { kind: "community-start-rate", started: [startRate("p1", "43")] },
-            projected("p1", "12.5"),
+            scoringRules([1000, 1000, 1000, 1000]),
           ],
           players: [player("p1")],
         }),
       ),
     );
 
-    expect(result.players[0]?.units).toBe(1250);
-    expect(result.label).toBe("projected-points:week:7");
-  });
-
-  it("publishes a projection for every player in hundredths of a point", () => {
-    const result = scored(
-      scoreLineup(
-        input({
-          sources: [
-            {
-              kind: "projected-points",
-              projections: [
-                { id: "p1", points: parseExact("12.5") },
-                { id: "p2", points: parseExact("1.5") },
-              ],
-            },
-          ],
-          players: [player("p1"), player("p2")],
-        }),
-      ),
-    );
-
-    expect(result.players.map((entry) => entry.units)).toEqual([1250, 150]);
-  });
-
-  it("leaves a player without a projection without a score", () => {
-    const result = scored(
-      scoreLineup(input({ sources: [projected("p2", "12.5")], players: [player("p1")] })),
-    );
-
-    expect(result.players[0]?.units).toBeUndefined();
+    expect(result.players[0]?.units).toBe(1000);
+    expect(result.label).toBe("mean-points-per-period:week:3,week:4,week:5,week:6");
   });
 
   it("values a started percentage in hundredths and keeps a zero", () => {
@@ -445,25 +416,6 @@ describe("input consistency", () => {
       ),
     ).toThrow("Observation for player p9 is not on the policy roster.");
   });
-
-  it("rejects a duplicated projection", () => {
-    expect(() =>
-      scoreLineup(
-        input({
-          sources: [
-            {
-              kind: "projected-points",
-              projections: [
-                { id: "p1", points: parseExact("1") },
-                { id: "p1", points: parseExact("2") },
-              ],
-            },
-          ],
-          players: [player("p1")],
-        }),
-      ),
-    ).toThrow("Duplicate projection for player p1.");
-  });
 });
 
 function input(facts: {
@@ -531,13 +483,6 @@ function observation(
     players: [
       { id: playerId, stats: stats.map(([statId, value]) => ({ statId: String(statId), value })) },
     ],
-  };
-}
-
-function projected(playerId: string, points: string): ValueSource {
-  return {
-    kind: "projected-points",
-    projections: [{ id: playerId, points: parseExact(points) }],
   };
 }
 

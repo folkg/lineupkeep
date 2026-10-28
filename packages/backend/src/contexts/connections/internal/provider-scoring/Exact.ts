@@ -40,6 +40,14 @@ export function minExact(left: Exact, right: Exact): Exact {
   return compareExact(left, right) <= 0 ? left : right;
 }
 
+export function clampExact(value: Exact, minimum: Exact, maximum: Exact): Exact {
+  return compareExact(value, minimum) < 0
+    ? minimum
+    : compareExact(value, maximum) > 0
+      ? maximum
+      : value;
+}
+
 export function compareExact(left: Exact, right: Exact): number {
   const scale = Math.max(left.scale, right.scale);
   const leftUnits = unitsAtScale(left, scale);
