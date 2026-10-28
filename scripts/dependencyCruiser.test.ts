@@ -1452,6 +1452,28 @@ it.each([
   expect(result.status, result.output).toBe(0);
 });
 
+it("rejects a provider action name in generic code", async () => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/connections/LineupScopes.ts":
+      'export const action = "start-active";',
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("repository(provider-action-vocabulary)");
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+    "keep provider action names inside the adapter",
+  );
+});
+
+it.each([
+  "packages/backend/src/contexts/connections/internal/yahoo/YahooLineup.ts",
+  "packages/backend/src/contexts/connections/internal/yahoo/YahooProvider.ts",
+])("accepts a provider action name in %s", async (path) => {
+  const result = await checkLint({ [path]: 'export const action = "start_active_players";' });
+
+  expect(result.status, result.output).toBe(0);
+});
+
 it("rejects a provider identity in generic code", async () => {
   const result = await checkLint({
     "packages/backend/src/contexts/connections/internal/LineupPlanning.ts":

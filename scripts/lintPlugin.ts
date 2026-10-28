@@ -163,13 +163,33 @@ const plugin = {
           if (!isGenericSourceModule(context.filename)) {
             return;
           }
-          for (const [term, offset] of providerScoringVocabularyOccurrences(
+          for (const [term, offset] of occurrencesOf(
             context.sourceCode.text,
+            providerScoringVocabulary,
           )) {
             sourceReport(
               context,
               offset,
               `\`${term}\` names how one provider constructs a score; keep scoring vocabulary inside the provider adapter and expose only a final score and opaque provenance.`,
+            );
+          }
+        },
+      }),
+    },
+    "provider-action-vocabulary": {
+      create: (context: CommentsRuleContext) => ({
+        Program: () => {
+          if (!isGenericSourceModule(context.filename)) {
+            return;
+          }
+          for (const [term, offset] of occurrencesOf(
+            context.sourceCode.text,
+            providerActionVocabulary,
+          )) {
+            sourceReport(
+              context,
+              offset,
+              `\`${term}\` names one provider's native action; keep provider action names inside the adapter and describe the capability as a native lineup action.`,
             );
           }
         },
@@ -186,7 +206,7 @@ const plugin = {
           ) {
             return;
           }
-          for (const [term, offset] of providerIdentityOccurrences(context.sourceCode.text)) {
+          for (const [term, offset] of occurrencesOf(context.sourceCode.text, ["Yahoo", "yahoo"])) {
             sourceReport(
               context,
               offset,
@@ -959,6 +979,7 @@ function serverFunctionResolve(
 const providerScoringVocabulary: ReadonlyArray<string> = [
   "communityStartRate",
   "community_start_rate",
+  "community-start-rate",
   "publishesCommunityStartRate",
   "valueSourceLadder",
   "valueSource",
@@ -974,6 +995,15 @@ const providerScoringVocabulary: ReadonlyArray<string> = [
   "observationWindow",
   "statBases",
   "isFlex",
+  "ownershipComposite",
+  "ownership-composite",
+  "platinum",
+];
+
+const providerActionVocabulary: ReadonlyArray<string> = [
+  "start-active",
+  "start_active",
+  "start active",
 ];
 
 const providerScoringOwners = [
@@ -1005,23 +1035,12 @@ function normalizedPath(filename: string): string {
   return filename.replaceAll("\\", "/");
 }
 
-function providerIdentityOccurrences(source: string): ReadonlyArray<readonly [string, number]> {
-  const occurrences: Array<readonly [string, number]> = [];
-  for (const term of ["Yahoo", "yahoo"]) {
-    let offset = source.indexOf(term);
-    while (offset >= 0) {
-      occurrences.push([term, offset]);
-      offset = source.indexOf(term, offset + term.length);
-    }
-  }
-  return occurrences;
-}
-
-function providerScoringVocabularyOccurrences(
+function occurrencesOf(
   source: string,
+  terms: ReadonlyArray<string>,
 ): ReadonlyArray<readonly [string, number]> {
   const occurrences: Array<readonly [string, number]> = [];
-  for (const term of providerScoringVocabulary) {
+  for (const term of terms) {
     let offset = source.indexOf(term);
     while (offset >= 0) {
       occurrences.push([term, offset]);

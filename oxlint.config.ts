@@ -634,6 +634,7 @@ export default defineConfig({
     "repository/workflow-tests": "error",
     "repository/codec-tests": "error",
     "repository/provider-scoring-vocabulary": "error",
+    "repository/provider-action-vocabulary": "error",
     "repository/provider-identity": "error",
   },
   overrides: [
