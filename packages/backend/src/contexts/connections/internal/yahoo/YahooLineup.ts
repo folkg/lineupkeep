@@ -52,7 +52,6 @@ export const yahooCapabilities: ProviderCapabilities = {
   playerSearch: {
     sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
     providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
-    weeklyStatSortSports: ["football"],
   },
   publishesProjections: false,
   limitations: [

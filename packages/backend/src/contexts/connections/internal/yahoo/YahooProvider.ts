@@ -41,6 +41,7 @@ import type {
   ProviderPlayerSearchInput,
   ProviderPlayerSearchResult,
   ProviderPlayerSearchSort,
+  ProviderReadFailure,
   ProviderRemainingGames,
   ProviderRoster,
   ProviderRosterCoverage,
@@ -539,12 +540,16 @@ export const yahooProvider = Effect.gen(function* () {
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "search_players");
     const limit = yield* ValidSearchLimit(input.limit);
     const query = yield* ValidSearchQuery(input.query);
-    const statId = yield* ValidSearchStat(input.sort, input.statId);
+    const statId = yield* ValidSearchStat(input.sort, input.statId, input.statType);
     const search = query === undefined ? "" : `;search=${encodeURIComponent(query)}`;
     const status =
       input.availability === "all" ? "" : `;status=${searchStatus[input.availability]}`;
     const sortValue = searchSortValue(input.sort, statId);
     const sortType = rankedSearchSorts.has(input.sort) ? `;sort_type=${input.statType}` : "";
+    const out =
+      input.sort === "stat"
+        ? "ownership,percent_owned,percent_started,ranks,stats"
+        : "ownership,percent_owned,percent_started,ranks";
     const payload = yield* readJson(internet, {
       operation: "search_players",
       origin: readOrigin,
@@ -553,7 +558,7 @@ export const yahooProvider = Effect.gen(function* () {
         status +
         `;sort=${sortValue}${sortType}` +
         `;count=${String(limit)}${search}` +
-        ";out=ownership,percent_owned,percent_started",
+        `;out=${out}`,
       query: { format: "json" },
       cookie,
       normalize: true,
@@ -562,7 +567,9 @@ export const yahooProvider = Effect.gen(function* () {
     if (decoded.league.league_key !== leagueKey) {
       return yield* responseMismatch({ operation: "search_players", field: "league.league_key" });
     }
-    const players = decoded.league.players.map(toSearchPlayer);
+    const players = decoded.league.players.map((player) =>
+      toSearchPlayer(player, input.season, statId),
+    );
     yield* Effect.annotateCurrentSpan("provider.player_count", players.length);
     return { players };
   });
@@ -1675,6 +1682,8 @@ function statSeries(
 
 function toSearchPlayer(
   player: typeof SearchPlayerPayload.Type,
+  season: number,
+  statId: number | undefined,
 ): ProviderPlayerSearchResult["players"][number] {
   return {
     providerPlayerKey: player.player_key,
@@ -1691,7 +1700,43 @@ function toSearchPlayer(
       player.percent_started === undefined ? null : providerNumber(player.percent_started.value),
     percentStartedChange:
       player.percent_started === undefined ? null : providerNumber(player.percent_started.delta),
+    actualRank: searchRank(player.player_ranks, "S", season),
+    overallRank: searchRank(player.player_ranks, "OR", season),
+    statValue: statId === undefined ? null : searchStatValue(player.player_stats, statId),
   };
+}
+
+function searchRank(
+  ranks: ReadonlyArray<typeof PlayerRankPayload.Type> | undefined,
+  type: "OR" | "S",
+  season: number,
+): number | null {
+  for (const entry of ranks ?? []) {
+    const rank = entry.player_rank;
+    if (rank.rank_type !== type) {
+      continue;
+    }
+    if (type === "S" && rank.rank_season !== season) {
+      continue;
+    }
+    const value = providerNumber(rank.rank_value);
+    if (value !== null && Number.isInteger(value) && value >= 1) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function searchStatValue(
+  stats: typeof PlayerStats.Type | undefined,
+  statId: number,
+): number | null {
+  for (const entry of stats?.stats ?? []) {
+    if (entry.stat.stat_id === statId) {
+      return providerNumber(entry.stat.value);
+    }
+  }
+  return null;
 }
 
 function standingsFromPayload(
@@ -2166,7 +2211,15 @@ function ValidSearchQuery(
 function ValidSearchStat(
   sort: ProviderPlayerSearchInput["sort"],
   statId: number | undefined,
-): Effect.Effect<number | undefined, ProviderResponseInvalid> {
+  statType: ProviderStatBasis["type"],
+): Effect.Effect<number | undefined, ProviderReadFailure> {
+  if (statType !== "season") {
+    return ProviderOperationUnsupported.make({
+      operation: "search_players",
+      reason:
+        "The player collection publishes season ranks and season stat values only, so it cannot show a weekly ordering in the rows.",
+    });
+  }
   if (sort !== "stat") {
     return Effect.as(Effect.void, undefined);
   }
@@ -2480,6 +2533,7 @@ const PlayerRankPayload = Schema.Struct({
   player_rank: Schema.Struct({
     rank_type: Schema.NonEmptyString,
     rank_value: Schema.Union([Schema.String, Schema.Finite]),
+    rank_season: Schema.optional(IntFromStringOrNumber),
   }),
 });
 
@@ -2512,6 +2566,8 @@ const SearchPlayerPayload = Schema.Struct({
   ownership: Schema.optional(PlayerOwnership),
   percent_owned: Schema.optional(PercentOwned),
   percent_started: Schema.optional(PercentOwned),
+  player_ranks: Schema.optional(Schema.Array(PlayerRankPayload)),
+  player_stats: Schema.optional(PlayerStats),
 });
 
 const PlayerSearchPayload = Schema.Struct({

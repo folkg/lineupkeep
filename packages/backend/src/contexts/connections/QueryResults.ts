@@ -336,7 +336,7 @@ export const SearchPlayersInput = Schema.Struct({
     Schema.Literals(["season", "week"]).pipe(
       Schema.annotate({
         description:
-          "Period for a `stat` sort. `season` is the default; `week` uses the league's current scoring week.",
+          "Period for a `stat` sort. Only `season` is offered: the provider publishes no weekly rank or stat value in its search payload, so a weekly order cannot be shown in the rows. A `week` value answers with the remedy.",
       }),
     ),
   ),
@@ -352,10 +352,48 @@ const SearchPlayer = Schema.Struct({
   displayPosition: Schema.NonEmptyString,
   eligiblePositions: Schema.Array(Schema.NonEmptyString),
   availability: Schema.Literals(["free_agent", "waiver", "rostered", "unknown"]),
-  percentOwned: Schema.NullOr(Schema.Finite),
-  percentOwnedDelta: Schema.NullOr(Schema.Finite),
-  percentStarted: Schema.NullOr(Schema.Finite),
-  percentStartedChange: Schema.NullOr(Schema.Finite),
+  percentOwned: Schema.NullOr(Schema.Finite).pipe(
+    Schema.annotate({
+      description:
+        "Provider-published percent owned. Null means the provider published no value for this row.",
+    }),
+  ),
+  percentOwnedDelta: Schema.NullOr(Schema.Finite).pipe(
+    Schema.annotate({
+      description:
+        "Change in percent owned over the provider's reporting window. Null means the provider published no change for this row.",
+    }),
+  ),
+  percentStarted: Schema.NullOr(Schema.Finite).pipe(
+    Schema.annotate({
+      description:
+        "Provider-published percent started. Null means the provider published no value for this row.",
+    }),
+  ),
+  percentStartedChange: Schema.NullOr(Schema.Finite).pipe(
+    Schema.annotate({
+      description:
+        "Change in percent started over the provider's reporting window. Null means the provider published no change for this row.",
+    }),
+  ),
+  actualRank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).pipe(
+    Schema.annotate({
+      description:
+        "The provider's current-season rank for this player, the value that orders sort `actual_rank`.",
+    }),
+  ),
+  overallRank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).pipe(
+    Schema.annotate({
+      description:
+        "The provider's overall rank for this player, the value that orders sort `overall_rank`.",
+    }),
+  ),
+  statValue: Schema.optional(Schema.NullOr(Schema.Finite)).pipe(
+    Schema.annotate({
+      description:
+        "The provider's season value for the requested `stat` category. Present only with sort `stat`; null means the provider published no value for this player.",
+    }),
+  ),
 });
 
 export const SearchPlayersData = Schema.Struct({

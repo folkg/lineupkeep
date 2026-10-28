@@ -1651,6 +1651,23 @@ export const yahooNflFreeAgents = {
                   { delta: -2 },
                 ],
               },
+              {
+                player_ranks: {
+                  "0": { player_rank: { rank_type: "OR", rank_value: "22" } },
+                  "1": { player_rank: { rank_type: "S", rank_value: "14", rank_season: "2026" } },
+                  "2": { player_rank: { rank_type: "S", rank_value: "88", rank_season: "2025" } },
+                  count: 3,
+                },
+              },
+              {
+                player_stats: {
+                  "0": { coverage_type: "season", season: "2026" },
+                  stats: [
+                    { stat: { stat_id: 4, value: "1989" } },
+                    { stat: { stat_id: 9, value: "14" } },
+                  ],
+                },
+              },
             ],
           },
           "2": {
@@ -1677,6 +1694,19 @@ export const yahooNflFreeAgents = {
               {
                 percent_owned: [{ coverage_type: "week", week: "6" }, { value: 0 }, { delta: "0" }],
               },
+              {
+                player_ranks: {
+                  "0": { player_rank: { rank_type: "OR", rank_value: "3" } },
+                  "1": { player_rank: { rank_type: "S", rank_value: "7", rank_season: "2026" } },
+                  count: 2,
+                },
+              },
+              {
+                player_stats: {
+                  "0": { coverage_type: "season", season: "2026" },
+                  stats: [{ stat: { stat_id: 4, value: 0 } }],
+                },
+              },
             ],
           },
           "1": {
@@ -1700,6 +1730,13 @@ export const yahooNflFreeAgents = {
                 [],
               ],
               { ownership: [{ ownership_type: "waivers" }] },
+              {
+                player_ranks: {
+                  "0": { player_rank: { rank_type: "OR", rank_value: "41" } },
+                  "1": { player_rank: { rank_type: "S", rank_value: "63", rank_season: "2026" } },
+                  count: 2,
+                },
+              },
             ],
           },
           count: 3,

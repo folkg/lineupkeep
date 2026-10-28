@@ -33,7 +33,7 @@ receiving the full-set 401 on ordinary reads.
 - [x] A 403 names the missing scope for _that tool_, not the whole advertised set
 - [x] The 401 challenge no longer instructs clients to request scopes the call does not need
 - [x] Test: a five-scope grant reads successfully and is refused only on the manage tools
-- [ ] Verify with a real restricted-scope grant against the deployed server
+- [x] Verify with a real restricted-scope grant against the deployed server
 
 ### R2-5 — review links use the wrong provider path (high)
 
@@ -83,9 +83,9 @@ stat ids that appear in no scoring dictionary. A client cannot distinguish "not 
 Rows sorted by `actual_rank` do not surface a rank value, and `percentOwnedChange` was null everywhere
 tested, so a client cannot explain the ordering it was given.
 
-- [ ] Align row field names with the sort names
-- [ ] Surface the rank value that the sort orders by
-- [ ] Confirm whether `percentOwnedChange` is genuinely absent or dropped in decoding
+- [x] Align row field names with the sort names
+- [x] Surface the rank value that the sort orders by
+- [x] Confirm whether `percentOwnedChange` is genuinely absent or dropped in decoding
 
 ## 2. Operational gaps
 

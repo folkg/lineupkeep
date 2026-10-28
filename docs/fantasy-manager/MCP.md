@@ -108,6 +108,15 @@ returns a `playerSchedule` declaration saying so and reports `proTeam`, injury, 
 where published; `search_players` reports provider ownership/started percentages without inventing
 either.
 
+`search_players` rows carry the value each provider-ordered sort uses: `actualRank` (the provider's
+current-season rank, which orders `actual_rank`), `overallRank` (which orders `overall_rank`), and
+`statValue` (the season value of the requested `stat`, present only for a `stat` sort). A client can
+therefore check the order it received without a second read. Provider ownership and started
+percentages and their changes are null only when the provider published no value for that row, and
+the field descriptions say so. Weekly rank and stat sorts are refused with the remedy because the
+provider's search payload publishes only season values for them; offering the sort would return an
+order the rows cannot explain.
+
 `get_transactions` maps `scope: team` onto the provider's team filter. The provider has no date
 filter: `since`/`until` filter the bounded window the provider returns, `window` reports how many
 events were fetched, the oldest and newest timestamps, and whether the window was exhausted, and a

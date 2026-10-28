@@ -24,6 +24,7 @@ import type {
   ProviderOperation,
   ProviderPlayerDetail,
   ProviderPlayerScore,
+  ProviderPlayerSearchResult,
   ProviderReviewLinkInput,
   ProviderRoster,
   ProviderRosterCoverage,
@@ -69,6 +70,7 @@ type FakeProviderState = {
   readonly rosterAfterNextRead: ProviderRoster | undefined;
   readonly rosterPeriods: ReadonlyArray<ProviderRosterCoverage | undefined>;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
+  readonly searchPlayers: ReadonlyArray<ProviderPlayerSearchResult["players"][number]> | undefined;
   readonly playerScores: ReadonlyArray<FakePlayerScore>;
   readonly gamesPlayed: ReadonlyArray<ProviderGamesPlayed>;
   readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
@@ -106,6 +108,9 @@ export type FakeProviderWorldShape = {
   readonly setRosterAfterNextRead: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly rosterPeriods: Effect.Effect<ReadonlyArray<ProviderRosterCoverage | undefined>>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
+  readonly setSearchPlayers: (
+    players: ReadonlyArray<ProviderPlayerSearchResult["players"][number]>,
+  ) => Effect.Effect<void>;
   readonly setPlayerScores: (scores: ReadonlyArray<FakePlayerScore>) => Effect.Effect<void>;
   readonly setGamesPlayed: (gamesPlayed: ReadonlyArray<ProviderGamesPlayed>) => Effect.Effect<void>;
   readonly failPlayerDetails: (failure: ProviderPeriodMismatch | undefined) => Effect.Effect<void>;
@@ -158,6 +163,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         rosterAfterNextRead: undefined,
         rosterPeriods: [],
         playerDetails: [],
+        searchPlayers: undefined,
         playerScores: [],
         gamesPlayed: [],
         playerDetailsFailure: undefined,
@@ -214,6 +220,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           modify((current) => ({ ...current, rosterAfterNextRead })),
         rosterPeriods: Effect.map(Ref.get(state), (current) => current.rosterPeriods),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
+        setSearchPlayers: (players) =>
+          modify((current) => ({ ...current, searchPlayers: players })),
         setPlayerScores: (playerScores) => modify((current) => ({ ...current, playerScores })),
         setGamesPlayed: (gamesPlayed) => modify((current) => ({ ...current, gamesPlayed })),
         failPlayerDetails: (playerDetailsFailure) =>
@@ -480,41 +488,47 @@ const providerFake = Effect.gen(function* () {
     searchPlayers: Effect.fn("FakeProvider.searchPlayers")(function* (input) {
       const current = yield* prepare(input, "search_players");
       const query = input.query?.toLocaleLowerCase();
-      const filtered = current.playerDetails.flatMap((player) => {
-        if (
-          player.rosterStatus === "unknown" ||
-          player.name === undefined ||
-          player.primaryPosition === undefined ||
-          player.displayPosition === undefined ||
-          player.eligiblePositions === undefined
-        ) {
-          return [];
-        }
-        if (input.availability !== "all" && player.rosterStatus !== input.availability) {
-          return [];
-        }
-        if (
-          query !== undefined &&
-          query !== "" &&
-          !player.name.toLocaleLowerCase().includes(query)
-        ) {
-          return [];
-        }
-        return [
-          {
-            providerPlayerKey: player.providerPlayerKey,
-            name: player.name,
-            primaryPosition: player.primaryPosition,
-            displayPosition: player.displayPosition,
-            eligiblePositions: player.eligiblePositions,
-            availability: player.rosterStatus,
-            percentOwned: null,
-            percentOwnedDelta: null,
-            percentStarted: null,
-            percentStartedChange: null,
+      const rows: ReadonlyArray<ProviderPlayerSearchResult["players"][number]> =
+        current.searchPlayers ??
+        current.playerDetails.flatMap(
+          (player): ReadonlyArray<ProviderPlayerSearchResult["players"][number]> => {
+            if (
+              player.rosterStatus === "unknown" ||
+              player.name === undefined ||
+              player.primaryPosition === undefined ||
+              player.displayPosition === undefined ||
+              player.eligiblePositions === undefined
+            ) {
+              return [];
+            }
+            return [
+              {
+                providerPlayerKey: player.providerPlayerKey,
+                name: player.name,
+                primaryPosition: player.primaryPosition,
+                displayPosition: player.displayPosition,
+                eligiblePositions: player.eligiblePositions,
+                availability: player.rosterStatus,
+                percentOwned: null,
+                percentOwnedDelta: null,
+                percentStarted: null,
+                percentStartedChange: null,
+                actualRank: null,
+                overallRank: null,
+                statValue: null,
+              },
+            ];
           },
-        ];
-      });
+        );
+      const filtered = rows.filter(
+        (player) =>
+          (input.availability === "all" || player.availability === input.availability) &&
+          (query === undefined || query === "" || player.name.toLocaleLowerCase().includes(query)),
+      );
+      const ascending = (left: number | null, right: number | null): number =>
+        (left ?? Number.POSITIVE_INFINITY) - (right ?? Number.POSITIVE_INFINITY);
+      const descending = (left: number | null, right: number | null): number =>
+        (right ?? Number.NEGATIVE_INFINITY) - (left ?? Number.NEGATIVE_INFINITY);
       const sorted = [...filtered].sort((left, right) => {
         switch (input.sort) {
           case "name":
@@ -522,10 +536,13 @@ const providerFake = Effect.gen(function* () {
           case "position":
             return left.primaryPosition.localeCompare(right.primaryPosition);
           case "ownership":
+            return descending(left.percentOwned, right.percentOwned);
           case "actual_rank":
+            return ascending(left.actualRank, right.actualRank);
           case "overall_rank":
+            return ascending(left.overallRank, right.overallRank);
           case "stat":
-            return 0;
+            return descending(left.statValue, right.statValue);
         }
       });
       return { players: sorted.slice(0, input.limit) };
@@ -613,7 +630,6 @@ const fakeCapabilities: ProviderCapabilities = {
   playerSearch: {
     sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
     providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
-    weeklyStatSortSports: ["football"],
   },
   publishesProjections: false,
   limitations: [

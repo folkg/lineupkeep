@@ -663,13 +663,10 @@ export const FantasyQueriesLive = Layer.effect(
           detail: `This provider does not accept the \`${sort}\` player sort. Choose one of: ${playerSearch.sorts.join(", ")}.`,
         });
       }
-      if (
-        statPeriod === "week" &&
-        providerOrdered(context.provider, sort) &&
-        !playerSearch.weeklyStatSortSports.includes(context.owned.team.sport)
-      ) {
+      if (statPeriod === "week") {
         return yield* QuerySelectionInvalid.make({
-          detail: `This provider does not accept weekly player sorts for ${context.owned.team.sport}. Use statPeriod \`season\`, or sort by name, position, or ownership.`,
+          detail:
+            "The provider's player search publishes only season rank and stat values, so a weekly ordering cannot be shown in the rows. Use statPeriod `season`, or sort by name, position, or ownership.",
         });
       }
       if (sort === "stat" && input.stat === undefined) {
@@ -710,6 +707,7 @@ export const FantasyQueriesLive = Layer.effect(
         context.provider.searchPlayers({
           ...providerIdentity(context),
           providerLeagueKey: context.owned.team.providerLeagueKey,
+          season: context.owned.team.season,
           query,
           availability,
           sort,
@@ -749,6 +747,9 @@ export const FantasyQueriesLive = Layer.effect(
         percentOwnedDelta: player.percentOwnedDelta,
         percentStarted: player.percentStarted,
         percentStartedChange: player.percentStartedChange,
+        actualRank: player.actualRank,
+        overallRank: player.overallRank,
+        ...(sort === "stat" ? { statValue: player.statValue } : {}),
       }));
       const fingerprintValue = yield* queryFingerprint(
         [

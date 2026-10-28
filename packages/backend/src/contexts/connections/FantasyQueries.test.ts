@@ -23,6 +23,7 @@ import type {
   ProviderLeagueSettings,
   ProviderTransaction,
   ProviderPlayerDetail,
+  ProviderPlayerSearchResult,
   ProviderRoster,
   ProviderStandings,
   ProviderTeam,
@@ -1340,19 +1341,11 @@ it.effect("resolves a league stat reference for a stat-ordered player search", (
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("refuses a weekly player sort for hockey instead of forwarding a rejected request", () =>
+it.effect("refuses a weekly player sort the rows cannot explain", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
-      league: hockeyLeagueFixture,
-      roster: rosterFixture({
-        count: 2,
-        providerTeamKey: "465.l.2000.t.1",
-        providerLeagueKey: "465.l.2000",
-        coverage: { type: "date", date: "2026-10-20" },
-      }),
-    });
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
     const teamId = Array.getUnsafe(seeded, 0).id;
 
     const rejected = yield* Effect.flip(
@@ -1365,7 +1358,7 @@ it.effect("refuses a weekly player sort for hockey instead of forwarding a rejec
     );
     assert.strictEqual(rejected._tag, "query.selection_invalid");
     if (rejected._tag === "query.selection_invalid") {
-      assert.include(rejected.detail, "weekly player sorts for hockey");
+      assert.include(rejected.detail, "weekly ordering cannot be shown");
     }
 
     const season = yield* queries.searchPlayers(owner, {
@@ -1375,6 +1368,95 @@ it.effect("refuses a weekly player sort for hockey instead of forwarding a rejec
       statPeriod: "season",
     });
     assert.strictEqual(season.status, "ok");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("surfaces the rank and stat values that each provider-ordered sort uses", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setSearchPlayers([
+      searchFixture({
+        providerPlayerKey: "461.p.10021",
+        name: "Higher Rank",
+        availability: "free_agent",
+        actualRank: 4,
+        overallRank: 9,
+        statValue: 120,
+        percentOwned: 61,
+        percentOwnedDelta: 2,
+        percentStarted: 40,
+        percentStartedChange: null,
+      }),
+      searchFixture({
+        providerPlayerKey: "461.p.10022",
+        name: "Lower Rank",
+        availability: "free_agent",
+        actualRank: 11,
+        overallRank: 3,
+        statValue: 240,
+        percentOwned: 22,
+        percentOwnedDelta: 0,
+        percentStarted: 12,
+        percentStartedChange: 1,
+      }),
+    ]);
+
+    const byActualRank = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      availability: "free_agent",
+      sort: "actual_rank",
+    });
+    assert.strictEqual(byActualRank.status, "ok");
+    if (byActualRank.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      byActualRank.players.map((player) => player.actualRank),
+      [4, 11],
+    );
+    assert.deepStrictEqual(
+      byActualRank.players.map((player) => player.percentOwnedDelta),
+      [2, 0],
+    );
+    assert.isTrue(byActualRank.players.every((player) => player.statValue === undefined));
+
+    const byOverallRank = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      availability: "free_agent",
+      sort: "overall_rank",
+    });
+    assert.strictEqual(byOverallRank.status, "ok");
+    if (byOverallRank.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      byOverallRank.players.map((player) => player.overallRank),
+      [3, 9],
+    );
+
+    const league = yield* queries.getLeague(owner, { team: teamId, groups: ["scoring"] });
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok") {
+      return;
+    }
+    const stat = Array.getUnsafe(league.scoring, 0).stat;
+    const byStat = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      availability: "free_agent",
+      sort: "stat",
+      stat,
+    });
+    assert.strictEqual(byStat.status, "ok");
+    if (byStat.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      byStat.players.map((player) => player.statValue),
+      [240, 120],
+    );
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -1857,6 +1939,26 @@ const leagueFixture: ProviderLeagueSettings = {
   ],
   statModifiers: [{ statId: 4, points: "0.04" }],
 };
+
+function searchFixture(input: {
+  readonly providerPlayerKey: string;
+  readonly name: string;
+  readonly availability: "free_agent" | "waiver" | "rostered";
+  readonly actualRank: number | null;
+  readonly overallRank: number | null;
+  readonly statValue: number | null;
+  readonly percentOwned: number | null;
+  readonly percentOwnedDelta: number | null;
+  readonly percentStarted: number | null;
+  readonly percentStartedChange: number | null;
+}): ProviderPlayerSearchResult["players"][number] {
+  return {
+    ...input,
+    primaryPosition: "QB",
+    displayPosition: "QB",
+    eligiblePositions: ["QB"],
+  };
+}
 
 function rosterFixture(input: {
   readonly count: number;

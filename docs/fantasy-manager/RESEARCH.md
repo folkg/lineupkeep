@@ -1071,6 +1071,30 @@ change.
 The conservative default is unchanged: a sport or position absent from the table is `no availability
 fact`, so a new signal can never bench a player it does not understand.
 
+## Live player-search ordering evidence (2026-10-28)
+
+Read-only probes of the players collection, recorded as stat ids, rank types, presence counts, and
+order only:
+
+- `out=ranks` answers on the players collection and adds `player_ranks` with `rank_type` `OR`
+  (overall) and one `S` entry per season (`rank_season` 2026, 2025, 2024). A `ranks=` selector is
+  rejected on this collection (HTTP 400); the defaults are the only shape available.
+- Sorting with `sort=AR` orders rows by the **current season's** `S` rank: the returned order was
+  exactly 1..N for `S` with `rank_season` equal to the league season. Sorting with `sort=OR` orders
+  by `OR`. Neither requires a separate read, and no `AR` rank type is ever published.
+- `sort=<stat_id>` orders by that league category. Adding `out=stats` returns each player's season
+  stat series, including the ordered stat id. The collection accepts no weekly stat selector:
+  `stats.type=week`, `stat_type=week`, and `week=` on `stats` all answer 400, and `out=stats` always
+  reports `coverage_type: season` even when `sort_type=week`. The weekly sort itself is accepted for
+  football, but the weekly rank or stat value it orders by is published nowhere in the response, so
+  the adapter refuses the weekly basis instead of returning an unexplainable order.
+- `percent_owned.delta` was present on **every** sampled row: 25/25 in each of the five leagues for
+  the unfiltered, `status=FA`, and `status=W` requests (0 rows for one league's waiver filter).
+  `percent_started.delta` was present on fewer rows (14/25 and 20/25 in two football samples,
+  18/25–25/25 in hockey), so a missing started change is the provider's absence, not a decoder gap.
+  The search payload's `percent_owned`/`percent_started` nodes carry
+  `coverage_type`, `value`, `delta`, and a `week`/`date`; all four are decoded where present.
+
 ## Live rotisserie standings shape (2026-10-28)
 
 The same read-only pass read the owner's rotisserie hockey league standings (`GET .../standings`)

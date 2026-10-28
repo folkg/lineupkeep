@@ -1042,6 +1042,7 @@ it.effect("searches free agents with one exact request and typed availability", 
     const result = yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      season: 2026,
       query: "Synthetic Free",
       availability: "free_agent",
       sort: "ownership",
@@ -1052,7 +1053,7 @@ it.effect("searches free agents with one exact request and typed availability", 
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Free;out=ownership,percent_owned,percent_started?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Free;out=ownership,percent_owned,percent_started,ranks?format=json",
     );
     assert.deepStrictEqual(result.players, [
       {
@@ -1066,6 +1067,9 @@ it.effect("searches free agents with one exact request and typed availability", 
         percentOwnedDelta: 3,
         percentStarted: 31.5,
         percentStartedChange: -2,
+        actualRank: 14,
+        overallRank: 22,
+        statValue: null,
       },
       {
         providerPlayerKey: "466.p.20007",
@@ -1078,6 +1082,9 @@ it.effect("searches free agents with one exact request and typed availability", 
         percentOwnedDelta: null,
         percentStarted: null,
         percentStartedChange: null,
+        actualRank: 63,
+        overallRank: 41,
+        statValue: null,
       },
       {
         providerPlayerKey: "466.p.20008",
@@ -1090,6 +1097,9 @@ it.effect("searches free agents with one exact request and typed availability", 
         percentOwnedDelta: 0,
         percentStarted: null,
         percentStartedChange: null,
+        actualRank: 7,
+        overallRank: 3,
+        statValue: null,
       },
     ]);
   }).pipe(Effect.provide(yahooLayer(internet)));
@@ -1103,6 +1113,7 @@ it.effect("searches waiver players without a query", () => {
     yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      season: 2026,
       query: undefined,
       availability: "waiver",
       sort: "name",
@@ -1113,7 +1124,7 @@ it.effect("searches waiver players without a query", () => {
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned,percent_started?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -1126,6 +1137,7 @@ it.effect("searches the whole player pool without an availability filter", () =>
     yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      season: 2026,
       query: undefined,
       availability: "all",
       sort: "position",
@@ -1136,19 +1148,20 @@ it.effect("searches the whole player pool without an availability filter", () =>
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned,percent_started?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("sorts by a league stat and by provider ranks with explicit sort types", () => {
+it.effect("requests the rank and stat values that each provider-ordered sort publishes", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    yield* provider.searchPlayers({
+    const statSort = yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      season: 2026,
       query: undefined,
       availability: "all",
       sort: "stat",
@@ -1159,21 +1172,54 @@ it.effect("sorts by a league stat and by provider ranks with explicit sort types
     yield* provider.searchPlayers({
       ...sessionInput,
       providerLeagueKey: "466.l.4000",
+      season: 2026,
       query: undefined,
       availability: "all",
       sort: "actual_rank",
       statId: undefined,
-      statType: "week",
+      statType: "season",
       limit: 10,
     });
 
     assert.deepStrictEqual(
       internet.calls.map((call) => call.url.href),
       [
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=4;sort_type=season;count=10;out=ownership,percent_owned,percent_started?format=json",
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=AR;sort_type=week;count=10;out=ownership,percent_owned,percent_started?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=4;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,stats?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=AR;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks?format=json",
       ],
     );
+    assert.deepStrictEqual(
+      statSort.players.map((player) => [player.actualRank, player.overallRank, player.statValue]),
+      [
+        [14, 22, 1989],
+        [63, 41, null],
+        [7, 3, 0],
+      ],
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses a weekly player sort the rows cannot explain", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.searchPlayers({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        season: 2026,
+        query: undefined,
+        availability: "all",
+        sort: "actual_rank",
+        statId: undefined,
+        statType: "week",
+        limit: 10,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderOperationUnsupported);
+    assert.deepStrictEqual(internet.calls, []);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -1186,6 +1232,7 @@ it.effect("refuses a stat sort without a stat id", () => {
       provider.searchPlayers({
         ...sessionInput,
         providerLeagueKey: "466.l.4000",
+        season: 2026,
         query: undefined,
         availability: "all",
         sort: "stat",
@@ -1209,6 +1256,7 @@ it.effect("rejects an unbounded player search without a request", () => {
       provider.searchPlayers({
         ...sessionInput,
         providerLeagueKey: "461.l.1000",
+        season: 2026,
         query: undefined,
         availability: "all",
         sort: "name",

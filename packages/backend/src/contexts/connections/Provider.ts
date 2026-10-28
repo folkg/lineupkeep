@@ -69,7 +69,6 @@ export type ProviderCapabilities = {
   readonly playerSearch: {
     readonly sorts: ReadonlyArray<ProviderPlayerSearchSort>;
     readonly providerOrderedSorts: ReadonlyArray<ProviderPlayerSearchSort>;
-    readonly weeklyStatSortSports: ReadonlyArray<FantasySport>;
   };
   readonly publishesProjections: boolean;
   readonly limitations: ReadonlyArray<ProviderLimitation>;
@@ -412,6 +411,7 @@ export type ProviderPlayerSearchSort =
 
 export type ProviderPlayerSearchInput = ProviderSessionMaterial & {
   readonly providerLeagueKey: string;
+  readonly season: number;
   readonly query: string | undefined;
   readonly availability: "all" | "free_agent" | "waiver";
   readonly sort: ProviderPlayerSearchSort;
@@ -432,6 +432,9 @@ export type ProviderPlayerSearchResult = {
     readonly percentOwnedDelta: number | null;
     readonly percentStarted: number | null;
     readonly percentStartedChange: number | null;
+    readonly actualRank: number | null;
+    readonly overallRank: number | null;
+    readonly statValue: number | null;
   }>;
 };
 
