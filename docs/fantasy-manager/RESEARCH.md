@@ -1157,3 +1157,202 @@ route, independent of any one league.
 Baseball's `/b1/{league}/addplayer` is also a protected route, but baseball and basketball are not
 supported league types, so no review link is generated for them. Both use the same path templates,
 keyed by the league URL the provider supplies.
+
+## Yahoo sign-in routing for a Google-identity account (2026-10-28)
+
+The owner's Yahoo account uses a Google identity: its Yahoo ID is a Gmail address. In the deployed hosted
+browser, Yahoo sends that account to Google, and Google refuses the browser. This investigation asked
+whether any Yahoo password sign-in is reachable for such an address, because that would let the hosted
+browser link the account without Google.
+
+Method and limits: a fresh Playwright Chromium (headless shell build 156, no stored profile, no signed-in
+state) on the developer's own machine, not the deployed Cloud Run browser. Only Gmail-shaped addresses
+were entered. No password, one-time code, recovery link or Google credential was submitted, and no
+account recovery was completed. Everything below is page behaviour for an address nobody owns. The
+harness and screenshots are gitignored under `.artifacts/linking-research/`.
+
+### The sign-in page refuses a Gmail-shaped identifier before any account lookup
+
+`https://login.yahoo.com/` renders a username field, a **Next** button, "Sign in with Google" and "Create
+account". As soon as the typed value ends in `gmail.com` or `googlemail.com`, the page removes **Next**,
+adds an inline notice, and leaves Google as the only way forward:
+
+| Entered value                                            | Next button | Inline notice                                  | Google button |
+| -------------------------------------------------------- | ----------- | ---------------------------------------------- | ------------- |
+| `…@gmail.com`                                            | removed     | "To use a Gmail address, sign in with Google." | present       |
+| `…@googlemail.com`                                       | removed     | same                                           | present       |
+| `…@GMAIL.COM` (uppercase)                                | removed     | same                                           | present       |
+| `…@mail.gmail.com` (subdomain)                           | present     | none                                           | present       |
+| `…@example.com`, `…@outlook.com`, `…@yahoo.com`, bare ID | present     | none                                           | present       |
+
+The rule is a static client-side domain test shipped by Yahoo, not an account lookup. The login page's
+own bundle (`s.yimg.com/wm/afe/…/_next/static/chunks/534-…js`, module 5401) is:
+
+```js
+let a = (e) => {
+  let t = e.indexOf("@");
+  return t < 0 ? "" : e.slice(t + 1);
+};
+let l = (e) => {
+  let t = e.indexOf("@");
+  return t <= 0 ? "" : e.slice(0, t);
+};
+let n = ["gmail.com", "googlemail.com"];
+let s = (e) => {
+  let t = e.trim();
+  if (!l(t)) return false;
+  let r = a(t).toLowerCase();
+  return !!n.includes(r) || (r.startsWith("gmail") && "gmail.com".startsWith(r));
+};
+let i = (e) => {
+  let t = e.trim();
+  return !!l(t) && n.includes(a(t).toLowerCase());
+};
+```
+
+(the names are the bundle's own minified identifiers; the domain array, the case-insensitive comparison
+and the partial-typing prefix branch are literal). The page component
+(`_next/static/chunks/app/page-…js`) consumes it with a server-supplied flag:
+
+```js
+D = useMemo(() => e.forceGoogleForGmailAddress && !e.hideCTA
+  && e.socialLogins.includes("google") && S.CI(v), …)
+```
+
+and the same page data carries `"forceGoogleForGmailAddress":true`, `"socialLogins":["google"]` and
+`"recommendedDomains":["yahoo.com","gmail.com","outlook.com","aol.com"]`. The notice is rendered with
+`data-testid="gmail-detected-notice"`. Nothing in that branch reads account state: the decision is made
+from the text of the field.
+
+Consequences observed:
+
+- Pressing Enter after typing a Gmail address goes straight to Google's connector, with the address
+  pre-filled as `login_hint`; the address is never sent to Yahoo's own challenge endpoint. A programmatic
+  `form.requestSubmit()` does nothing and no request leaves the page. Either way there is no path from
+  this page to a Yahoo password challenge.
+- The block is identical on an iPhone user agent at 390×844, with `?src=ym`,
+  `?src=fantasysports&.done=https://football.fantasysports.yahoo.com/`, and `?.lang=en-US&.intl=us`.
+- The legacy entry `https://login.yahoo.com/config/login?login=…@gmail.com&.src=ym&.done=…` answers 301 to
+  `https://login.yahoo.com/?login=…&.src=ym&.done=…`, which renders the same page and the same notice.
+  There is no legacy password form behind it.
+- "Forgot username" and the Sign-in Helper are separate flows (below) and do not add a password option to
+  this page.
+
+### The server's own challenge choice never sees a Gmail address from the UI
+
+The page submits through `POST https://login.yahoo.com/validate` and follows the `redirect` it returns. A
+control submission for a non-Gmail address returned
+`{"redirect":"/account/challenge/email-verify?authMechanism=primary&…"}`. Posting the same form directly
+with a Gmail-shaped username, from a freshly loaded page, returned the same generic challenge:
+
+| Username                       | `/validate` response                              |
+| ------------------------------ | ------------------------------------------------- |
+| `…@gmail.com`                  | `email-verify` challenge, `authMechanism=primary` |
+| `…@googlemail.com`             | `email-verify` challenge                          |
+| `…@GMAIL.COM`                  | `email-verify` challenge                          |
+| `…@outlook.com`                | `email-verify` challenge                          |
+| `…@yahoo.com` (nonexistent ID) | `{"error":{"message":"INVALID_IDENTIFIER"}}`      |
+
+So, for an address nobody owns, the server does not answer "Google"; it answers the same
+anti-enumeration verification challenge it gives any unrecognised email. The Gmail-to-Google routing is
+the client rule above, not a server decision about the address. What a real federated account's
+server-side challenge would be was not observable.
+
+Note the asymmetry: the page accepts a Gmail address in its "Create account → Use existing email" form
+with no notice at all, so Yahoo's own surfaces disagree about whether a Gmail address may be a Yahoo ID.
+That submission was not completed (Yahoo's device-risk check answered `eid=3692`), so whether the signup
+backend accepts a Gmail ID is not established. It does show the sign-in rule is a blanket domain rule,
+not a fact about the account.
+
+### A password challenge URL is not directly reachable
+
+`https://login.yahoo.com/account/challenge/password` redirects to the generic failure page, with or
+without query parameters:
+
+| Request                                                                    | Result                                                 |
+| -------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `/account/challenge/password`                                              | 307 → `/account/challenge/fail` "Something went wrong" |
+| `/account/challenge/password?sessionIndex=…&acrumb=…&done=…`               | 307 → `/account/challenge/fail`                        |
+| `/account/challenge/password?username=…@gmail.com&sessionIndex=…&acrumb=…` | 307 → `/account/challenge/fail`                        |
+| `/account/challenge/username?authMechanism=primary&…`                      | 307 → `/account/challenge/fail`                        |
+
+The challenge URL is not self-contained: the server keeps challenge state per session, so a URL cannot
+force a password form. A URL-shaped folklore workaround (`/config/login?login=…`, a `password` query
+parameter, "use password instead") does not exist on the current page.
+
+### The Google connector, and Google's refusal on an ordinary machine
+
+The page's only other control navigates to Google's OAuth client for Yahoo:
+
+```
+https://accounts.google.com/v3/signin/identifier
+  ?client_id=860033281504.apps.googleusercontent.com
+  &redirect_uri=https%3A%2F%2Flogin.yahoo.com%2Faccount%2Fchallenge%2Ftpa%2Fredirect
+  &response_type=code&scope=openid+email+profile&service=lso&prompt=select_account
+  &state=acrumb%3D…%7CsessionIndex%3D…%7CauthMechanism%3Dprimary…
+  &app_domain=https%3A%2F%2Flogin.yahoo.com
+```
+
+Google renders "Sign in with Google — to continue to Yahoo" with an email field. Submitting a
+Gmail-shaped address in that same unmodified Chromium, on the developer's own network, produced
+`/v3/signin/rejected` and the page "Couldn't sign you in — This browser or app may not be secure", before
+any account lookup. The owner's deployed-browser refusal is therefore a property of the automation-driven
+browser, not of the Cloud Run egress: the same refusal happens from an ordinary network outside GCP with
+a stock Playwright build.
+
+### The Sign-in Helper accepts a Gmail address, but is a recovery flow
+
+`https://login.yahoo.com/forgot` answers 307 to
+`/account/challenge/username?authMechanism=secondary&done=…&sessionIndex=Qg--`, titled "Let's find your
+account", whose only field is labelled **Recovery email address** (with "Use recovery phone number"
+alongside). Entering a Gmail-shaped address there is accepted without the Gmail notice and advances to
+"Let's verify your account — You'll get a verification code if this email is linked to an account. Get
+code / Try signing in another way". No code was requested and nothing was verified.
+
+So a Gmail address is an accepted _starting point_ for recovery, which is what Yahoo's
+[SLN6178](https://help.yahoo.com/kb/SLN6178.html) describes for accounts created with a Google or
+Facebook ID, and it confirms that the recovery flow is not subject to the sign-in page's Gmail rule. It
+does not confirm that the owner's account can be recovered this way, what the flow asks for next, or that
+it ends in a signed-in Yahoo session rather than only a password reset. Those steps require the owner's
+own account and were deliberately not attempted. The current helper asks for a **recovery email**, while
+SLN6178 says to enter the Google/Facebook ID "in the Yahoo ID field"; the page text and the article do not
+match, and the field's behaviour for a federated ID cannot be distinguished from the outside.
+
+### Facebook-ID accounts
+
+The login page's page data lists `"socialLogins":["google"]` and contains no Facebook control at all;
+the only third-party buttons are Google's. SLN6178 still documents a Facebook-ID restore through the
+Sign-in Helper, so a Facebook-ID account's remaining route is the recovery flow, not a connector. A
+Facebook-ID Yahoo account whose ID is a Gmail address would hit the same Gmail rule on the sign-in page,
+which is a wrong recommendation for that account, not a route; that combination was not observed and is
+inferred from the rule and the page data.
+
+### What this does and does not establish
+
+Established by observation: the sign-in page will not submit a `gmail.com`/`googlemail.com` identifier,
+on desktop or an iPhone user-agent viewport, on default, mail, fantasy and language entry URLs, or through
+the legacy `config/login` path; its only forward control is Google's connector; the password challenge cannot be
+entered by URL; the recovery flow does accept a Gmail-shaped address; Google refuses an automation-driven
+Chromium for Yahoo's connector on an ordinary network.
+
+Not established, and not claimed: whether a Yahoo password already set on a Google-ID account changes
+anything (the block is a static domain rule evaluated before any account state is read, so the expected
+answer is no, but this is inference from code, not a test); whether the Sign-in Helper can complete for
+the owner's account and leave a signed-in session; whether the server would offer a password challenge to
+a real federated account if it ever received the address.
+
+### The five-minute test the owner can run
+
+Only the owner's own account can settle the residual question, and only after adding a Yahoo password:
+
+1. In a normal browser, sign in to Yahoo with Google, open `https://login.yahoo.com/account/security`,
+   and under "Ways of signing in" open **Password** and set one. If that option is absent or refuses a
+   Google-ID account, the question is settled: there is no password to use.
+2. In a private window, open `https://login.yahoo.com/` and type the Gmail address.
+3. Record whether a **Next** button and a password field appear, or whether the "To use a Gmail address"
+   notice and the Google button are the only options.
+
+A password field (or a working "use password instead" affordance) would mean the hosted browser can link
+this account class without Google, and the whole password path should be revisited. The notice, as
+observed on every surface tested here, means the account cannot use a Yahoo password at the sign-in page
+at all, regardless of whether one is set.
