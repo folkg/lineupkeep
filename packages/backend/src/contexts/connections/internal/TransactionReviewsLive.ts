@@ -136,10 +136,14 @@ export const TransactionReviewsLive = Layer.effect(
     ) {
       const context = yield* loadTeamContext(repository, encryption, registry, userId, input.team);
       const team = queryTeam(context.owned);
+      const linkTemplate = {
+        provider: context.owned.team.provider,
+        version: context.provider.reviewLinkTemplate.version,
+      };
       const fetchedAt = yield* DateTime.now;
       const leagueOutcome = yield* readLeague(context);
       if (leagueOutcome._tag !== "ok") {
-        return reviewWithoutData(team, fetchedAt, leagueOutcome);
+        return reviewWithoutData(team, linkTemplate, fetchedAt, leagueOutcome);
       }
       const league = leagueOutcome.value;
       const rosterOutcome = yield* readOutcome(
@@ -219,6 +223,7 @@ export const TransactionReviewsLive = Layer.effect(
       const base: Omit<ReviewLinksData, "links" | "page"> = {
         status,
         team,
+        linkTemplate,
         instruction: humanReviewInstruction,
         coverage: coverageEntries,
         failures,
@@ -278,6 +283,7 @@ function reviewLink(
         return yield* buildLink(
           provider,
           league,
+          context.owned.team.providerTeamKey,
           sport,
           intent.kind,
           { kind: "add", add: add.value },
@@ -296,6 +302,7 @@ function reviewLink(
         return yield* buildLink(
           provider,
           league,
+          context.owned.team.providerTeamKey,
           sport,
           intent.kind,
           { kind: "drop", drop: drop.value },
@@ -321,6 +328,7 @@ function reviewLink(
         return yield* buildLink(
           provider,
           league,
+          context.owned.team.providerTeamKey,
           sport,
           intent.kind,
           { kind: "add_drop", add: add.value, drop: drop.value },
@@ -396,6 +404,7 @@ function reviewLink(
         return yield* buildLink(
           provider,
           league,
+          context.owned.team.providerTeamKey,
           sport,
           intent.kind,
           { kind: "trade", send: sendKeys, receive: receiveKeys },
@@ -411,6 +420,7 @@ function reviewLink(
 function buildLink(
   provider: Provider,
   league: ProviderLeagueSettings,
+  providerTeamKey: string,
   sport: FantasySport,
   kind: ReviewIntent["kind"],
   providerIntent: ProviderReviewIntent,
@@ -421,6 +431,7 @@ function buildLink(
   return provider
     .buildReviewLink({
       providerLeagueKey: league.providerLeagueKey,
+      providerTeamKey,
       leagueWebUrl: league.webUrl,
       sport,
       intent: providerIntent,
@@ -457,9 +468,13 @@ function buildLink(
           detail:
             error.reason === "unsupported-player-key"
               ? "A player key in this intent cannot be mapped to a provider review link."
-              : error.reason === "unsupported-league-url"
-                ? "The provider league page cannot be used for a review link."
-                : "The provider review surface is not supported for this intent.",
+              : error.reason === "unsupported-team-key"
+                ? "The selected team cannot be mapped to a provider review link."
+                : error.reason === "unsupported-league-url"
+                  ? "The provider league page cannot be used for a review link."
+                  : kind === "trade"
+                    ? "This provider publishes no parameterized trade proposal page, so a prefilled trade review link is not available. Propose the trade in the provider's own interface."
+                    : "The provider review surface is not supported for this intent.",
         }),
       ),
     );
@@ -518,12 +533,14 @@ function queryTeam(owned: OwnedTeam): QueryTeam {
 
 function reviewWithoutData(
   team: QueryTeam,
+  linkTemplate: ReviewLinksData["linkTemplate"],
   fetchedAt: DateTime.Utc,
   outcome: ReadOutcome<ProviderLeagueSettings>,
 ): ReviewLinksData {
   return {
     status: outcome._tag === "unsupported" ? "unsupported" : "failed",
     team,
+    linkTemplate,
     links: [],
     instruction: humanReviewInstruction,
     coverage: [

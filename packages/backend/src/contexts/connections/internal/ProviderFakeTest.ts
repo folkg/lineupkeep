@@ -273,6 +273,7 @@ const providerFake = Effect.gen(function* () {
   return {
     key: decodeProviderKey("yahoo"),
     capabilities: fakeCapabilities,
+    reviewLinkTemplate: { version: "fake-review-links-v1" },
     validateSession: Effect.fn("FakeProvider.validateSession")(function* (input) {
       yield* validate(input, "validate_session");
       const current = yield* Ref.get(world.state);
@@ -561,8 +562,7 @@ const providerFake = Effect.gen(function* () {
           reason: current.reviewLinkFailure.reason,
         });
       }
-      const page = input.intent.kind === "trade" ? "trade" : "add";
-      const url = new URL(`https://review.example.test/league/${input.providerLeagueKey}/${page}`);
+      const url = new URL(`https://review.example.test/league/${input.providerLeagueKey}/add`);
       const append = (name: "apid" | "dpid", key: string): void => {
         url.searchParams.append(name, key.slice(key.lastIndexOf(".p.") + 3));
       };
@@ -578,13 +578,9 @@ const providerFake = Effect.gen(function* () {
           append("dpid", input.intent.drop);
           break;
         case "trade":
-          for (const key of input.intent.send) {
-            append("apid", key);
-          }
-          for (const key of input.intent.receive) {
-            append("dpid", key);
-          }
-          break;
+          return yield* ProviderReviewLinkInvalid.make({
+            reason: "unsupported-review-surface",
+          });
       }
       return url.href;
     }),

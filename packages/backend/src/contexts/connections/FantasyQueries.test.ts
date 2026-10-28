@@ -799,6 +799,10 @@ it.effect("builds review-only links for add, add/drop, and drop without provider
       }
     }
     assert.include(links.instruction, "cannot submit");
+    assert.deepStrictEqual(links.linkTemplate, {
+      provider: "yahoo",
+      version: "fake-review-links-v1",
+    });
     assert.isFalse(includesText(links, "461.p.10003"));
     assert.isFalse(includesText(links, "test-session-cookie"));
   }).pipe(Effect.provide(QueriesTestLayer)),
@@ -840,15 +844,15 @@ it.effect("builds a trade review link only for a league member counterparty", ()
       intents: [{ kind: "trade", send: [send], receive: [receive], counterparty }],
     });
 
-    assert.strictEqual(links.status, "ok");
-    if (links.status !== "ok") {
+    assert.strictEqual(links.status, "unsupported");
+    if (links.status !== "ok" && links.status !== "unsupported") {
       return;
     }
     const link = Array.getUnsafe(links.links, 0);
-    assert.strictEqual(link.status, "review_only");
-    if (link.status === "review_only") {
+    assert.strictEqual(link.status, "unsupported");
+    if (link.status === "unsupported") {
       assert.strictEqual(link.counterparty, counterparty);
-      assert.include(link.url, "/trade");
+      assert.include(link.detail, "trade proposal page");
       assert.strictEqual(link.players.length, 2);
     }
 
@@ -859,7 +863,11 @@ it.effect("builds a trade review link only for a league member counterparty", ()
     });
     assert.strictEqual(notMember.status, "unsupported");
     if (notMember.status === "unsupported") {
-      assert.strictEqual(Array.getUnsafe(notMember.links, 0).status, "unsupported");
+      const foreign = Array.getUnsafe(notMember.links, 0);
+      assert.strictEqual(foreign.status, "unsupported");
+      if (foreign.status === "unsupported") {
+        assert.include(foreign.detail, "not a member of the selected league");
+      }
     }
   }).pipe(Effect.provide(QueriesTestLayer)),
 );

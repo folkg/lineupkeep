@@ -45,6 +45,7 @@ import type {
   ProviderRoster,
   ProviderRosterCoverage,
   ProviderRosterPlayer,
+  ProviderReviewIntent,
   ProviderReviewLinkInput,
   ProviderStanding,
   ProviderStandings,
@@ -83,6 +84,11 @@ const reviewHosts: Readonly<Record<FantasySport, string>> = {
   football: "football.fantasysports.yahoo.com",
   hockey: "hockey.fantasysports.yahoo.com",
 };
+const reviewLinkTemplate = { version: "yahoo-review-links-v2" } as const;
+const reviewPaths = {
+  add: "addplayer",
+  drop: "dropplayer",
+} as const;
 const searchStatus = {
   free_agent: "FA",
   waiver: "W",
@@ -653,22 +659,29 @@ export const yahooProvider = Effect.gen(function* () {
     input: ProviderReviewLinkInput,
   ) {
     yield* Effect.annotateCurrentSpan("provider.operation", "build_review_link");
+    const intent = input.intent;
+    if (intent.kind === "trade") {
+      return yield* ProviderReviewLinkInvalid.make({ reason: "unsupported-review-surface" });
+    }
     const base = yield* Effect.try({
       try: () =>
         reviewBase(input.leagueWebUrl, input.sport, leagueIdFromKey(input.providerLeagueKey)),
       catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-league-url" }),
     });
-    const url = yield* Effect.try({
-      try: () => reviewUrl(base, input.intent),
-      catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-player-key" }),
-    });
+    const url = yield* intent.kind === "drop"
+      ? dropReviewUrl(base, input.providerTeamKey, intent.drop)
+      : addReviewUrl(base, intent);
     if (
       url.origin !== base.origin ||
       url.username !== "" ||
       url.password !== "" ||
       url.hash !== "" ||
       !url.pathname.startsWith(`${base.pathname}/`) ||
-      [...url.searchParams.keys()].some((name) => name !== "apid" && name !== "dpid")
+      [...url.searchParams.keys()].some(
+        (name) =>
+          (intent.kind === "drop" && name !== "pid") ||
+          (intent.kind !== "drop" && name !== "apid" && name !== "dpid"),
+      )
     ) {
       return yield* ProviderReviewLinkInvalid.make({ reason: "unsupported-review-surface" });
     }
@@ -678,6 +691,7 @@ export const yahooProvider = Effect.gen(function* () {
   return {
     key,
     capabilities: yahooCapabilities,
+    reviewLinkTemplate,
     validateSession,
     discoverTeams,
     readLeague,
@@ -1975,32 +1989,43 @@ function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is ReadonlyArray
   return Array.isArray(value);
 }
 
-function reviewUrl(base: URL, intent: ProviderReviewLinkInput["intent"]): URL {
-  const target = new URL(intent.kind === "trade" ? "trade" : "add", withTrailingSlash(base));
-  const append = (name: "apid" | "dpid", key: string): void => {
-    target.searchParams.append(name, numericPlayerId(key));
-  };
-  switch (intent.kind) {
-    case "add":
-      append("apid", intent.add);
-      break;
-    case "add_drop":
-      append("apid", intent.add);
-      append("dpid", intent.drop);
-      break;
-    case "drop":
-      append("dpid", intent.drop);
-      break;
-    case "trade":
-      for (const key of intent.send) {
-        append("apid", key);
+function addReviewUrl(
+  base: URL,
+  intent: Extract<ProviderReviewIntent, { readonly kind: "add" | "add_drop" }>,
+): Effect.Effect<URL, ProviderReviewLinkInvalid> {
+  return Effect.try({
+    try: () => {
+      const target = new URL(base.href);
+      target.pathname = `${base.pathname}/${reviewPaths.add}`;
+      target.searchParams.append("apid", numericPlayerId(intent.add));
+      if (intent.kind === "add_drop") {
+        target.searchParams.append("dpid", numericPlayerId(intent.drop));
       }
-      for (const key of intent.receive) {
-        append("dpid", key);
-      }
-      break;
-  }
-  return target;
+      return target;
+    },
+    catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-player-key" }),
+  });
+}
+
+function dropReviewUrl(
+  base: URL,
+  providerTeamKey: string,
+  playerKey: string,
+): Effect.Effect<URL, ProviderReviewLinkInvalid> {
+  return Effect.gen(function* () {
+    const teamNumber = yield* Effect.try({
+      try: () => numericTeamNumber(providerTeamKey),
+      catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-team-key" }),
+    });
+    const playerId = yield* Effect.try({
+      try: () => numericPlayerId(playerKey),
+      catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-player-key" }),
+    });
+    const target = new URL(base.href);
+    target.pathname = `${base.pathname}/${teamNumber}/${reviewPaths.drop}`;
+    target.searchParams.append("pid", playerId);
+    return target;
+  });
 }
 
 function reviewBase(url: string, sport: FantasySport, leagueId: string): URL {
@@ -2026,18 +2051,18 @@ function reviewBase(url: string, sport: FantasySport, leagueId: string): URL {
   return parsed;
 }
 
-function withTrailingSlash(url: URL): URL {
-  const copy = new URL(url.href);
-  if (!copy.pathname.endsWith("/")) {
-    copy.pathname = `${copy.pathname}/`;
-  }
-  return copy;
-}
-
 function numericPlayerId(playerKey: string): string {
   const match = /^[0-9]+\.p\.([0-9]+)$/u.exec(playerKey);
   if (match?.[1] === undefined) {
     throw new Error("Yahoo player key is not numeric");
+  }
+  return match[1];
+}
+
+function numericTeamNumber(teamKey: string): string {
+  const match = /\.t\.([0-9]+)$/u.exec(teamKey);
+  if (match?.[1] === undefined) {
+    throw new Error("Yahoo team key has no team number");
   }
   return match[1];
 }

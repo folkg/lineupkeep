@@ -40,10 +40,12 @@ receiving the full-set 401 on ordinary reads.
 `generate_transaction_review_links` emits `/add?apid=…&dpid=…`; the working form is
 `/addplayer?apid=…&dpid=…`. Every link from rounds 1 and 2 lands wrong while the tool reports `ok`.
 
-- [ ] Correct the path template
-- [ ] Fixture test asserting the exact URL per sport, so a template change cannot ship silently
-- [ ] Report the template version in the tool result so clients can detect staleness
-- [ ] Verify one generated link opens the intended review page
+- [x] Correct the path template: `addplayer` for add and add/drop, team-scoped `dropplayer` for drop,
+      and an explicit unsupported result for trade, whose page has no verified parameterized prefill
+- [x] Fixture test asserting the exact URL per supported sport, so a template change cannot ship silently
+- [x] Report the template version in the tool result so clients can detect staleness
+- [x] Verify each intent's generated link opens the intended review page for the intended player
+      against all five linked leagues (see RESEARCH.md)
 
 ### R2-2 — feedback cannot be submitted from restricted clients
 

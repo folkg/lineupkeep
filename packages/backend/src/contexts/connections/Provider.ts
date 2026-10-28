@@ -135,6 +135,7 @@ export class ProviderReviewLinkInvalid extends Schema.TaggedError<
 >()("provider.review_link_invalid", {
   reason: Schema.Literals([
     "unsupported-player-key",
+    "unsupported-team-key",
     "unsupported-league-url",
     "unsupported-review-surface",
   ]),
@@ -241,6 +242,8 @@ export type ProviderShape = {
   readonly readLeagueTeams: (
     input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
   ) => Effect.Effect<ReadonlyArray<ProviderLeagueTeam>, ProviderReadFailure>;
+
+  readonly reviewLinkTemplate: { readonly version: string };
 
   readonly buildReviewLink: (
     input: ProviderReviewLinkInput,
@@ -546,6 +549,7 @@ export type ProviderReviewIntent =
 
 export type ProviderReviewLinkInput = {
   readonly providerLeagueKey: string;
+  readonly providerTeamKey: string;
   readonly leagueWebUrl: string;
   readonly sport: FantasySport;
   readonly intent: ProviderReviewIntent;

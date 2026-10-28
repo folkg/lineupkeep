@@ -1070,3 +1070,38 @@ change.
 
 The conservative default is unchanged: a sport or position absent from the table is `no availability
 fact`, so a new signal can never bench a player it does not understand.
+
+## Live review-link verification (2026-10-28)
+
+The owner's existing read-only session was reused for a second gitignored harness under
+`.artifacts/phase3-evidence/`. It called the committed `YahooProvider.buildReviewLink` for each
+intent on all five linked leagues, then fetched each returned URL through the same transport with the
+owner's session. No name, team key, league id, or cookie was printed, written, or committed; the
+retained evidence holds the URL template with identifiers replaced, the page title, whether the
+intended player's name occurs in the response, and the review form's action path.
+
+| Sport    | Intent     | Verified URL template                                                               | Page result                                     |
+| -------- | ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------- |
+| football | `add`      | `https://football.fantasysports.yahoo.com/f1/{league}/addplayer?apid={id}`          | 200, names the added player                     |
+| football | `add/drop` | same path with `&dpid={id}`                                                         | 200, names both players                         |
+| football | `drop`     | `https://football.fantasysports.yahoo.com/f1/{league}/{team}/dropplayer?pid={id}`   | 200, names the dropped player and not the other |
+| hockey   | `add`      | `https://hockey.fantasysports.yahoo.com/hockey/{league}/addplayer?apid={id}`        | 200, names the added player                     |
+| hockey   | `add/drop` | same path with `&dpid={id}`                                                         | 200, names both players                         |
+| hockey   | `drop`     | `https://hockey.fantasysports.yahoo.com/hockey/{league}/{team}/dropplayer?pid={id}` | 200, names the dropped player and not the other |
+
+Each page carries a POST form to the same path with an explicit confirmation control, so the link is a
+review page rather than a submission stage. Two negative controls: the former `/add` path answers 200
+with `The document you requested was not found`, and a `dpid`-only request to `addplayer` answers 200
+with `There was a problem` instead of a prefilled page.
+
+`proposetrade` exists and requires a session, but `apid`, `dpid`, and `pid` on it leave both player
+names out of the response: the trade proposal page is a client-rendered flow with no verified
+parameterized prefill. The adapter therefore refuses a trade review link with
+`unsupported-review-surface` and the tool reports it as unsupported. An unauthenticated probe of the
+`/add` and `/trade` paths on the football, hockey, and baseball hosts answers the same "not found"
+page, while `/addplayer` and `/dropplayer` redirect to sign-in: the path exists check is a protected
+route, independent of any one league.
+
+Baseball's `/b1/{league}/addplayer` is also a protected route, but baseball and basketball are not
+supported league types, so no review link is generated for them. Both use the same path templates,
+keyed by the league URL the provider supplies.

@@ -443,12 +443,13 @@ it("requires transaction review scope and returns human-review-only links", asyn
       sport: "football",
       season: 2026,
     },
+    linkTemplate: { provider: decodeProviderKey("yahoo"), version: "yahoo-review-links-v2" },
     links: [
       {
         status: "review_only",
         index: 0,
         kind: "add",
-        url: "https://football.fantasysports.yahoo.com/f1/1000/add?apid=10001",
+        url: "https://football.fantasysports.yahoo.com/f1/1000/addplayer?apid=10001",
         players: [Schema.decodeSync(PlayerRef)("r1.test")],
         humanReview: "Review this proposal in the provider interface.",
       },

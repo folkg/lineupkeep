@@ -17,7 +17,7 @@ const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String 
 export const transactionTools = Toolkit.make(
   Tool.make("generate_transaction_review_links", {
     description:
-      "Generate human-review-only provider links for proposed add, add/drop, drop, or trade intents. Links open the provider's review page in a browser; this tool never submits a transaction, never returns submission-stage URLs, and never guarantees that the provider will accept a proposal.",
+      "Generate human-review-only provider links for proposed add, add/drop, drop, or trade intents. Links open the provider's review page in a browser; this tool never submits a transaction, never returns submission-stage URLs, and never guarantees that the provider will accept a proposal. Each result reports the `linkTemplate` version so a client can detect a stale template. An intent the provider cannot prefill, such as a trade proposal, returns an unsupported result with the reason instead of a link that opens an empty form.",
     parameters: TransactionReviewInput,
     success: Schema.toCodecJson(ReviewLinksResult),
     failure: ToolFailure,

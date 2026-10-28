@@ -4,6 +4,7 @@ import { Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 
+import { ProviderKey } from "./Connection.ts";
 import { TeamId } from "./FantasyTeam.ts";
 import {
   CounterpartyRef,
@@ -83,6 +84,10 @@ export type ReviewLink = typeof ReviewLink.Type;
 export const ReviewLinksData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
+  linkTemplate: Schema.Struct({
+    provider: ProviderKey,
+    version: Schema.NonEmptyString,
+  }),
   links: Schema.Array(ReviewLink),
   instruction: Schema.String,
   coverage: Schema.Array(QueryCoverage),

@@ -135,6 +135,15 @@ Generate links from typed domain intents and verified relationships. Users may c
 
 Return a clear human-review instruction and no guarantee of add/drop/trade eligibility. No POST/PUT execution, final confirmation automation, waivers/bid submission, or multi-add/drop behavior not validated by the adapter.
 
+Every result carries `linkTemplate: { provider, version }`, so a client can detect a stale link
+template after an upgrade without guessing from URL shape. The Yahoo template
+(`yahoo-review-links-v2`) emits an `addplayer` review page for `add` and `add/drop`, and a
+team-scoped `dropplayer` page for `drop`; each was verified against the provider as the intended
+review page for the named player. The provider publishes no parameterized trade proposal page, so a
+`trade` intent returns `unsupported` with that reason instead of a link that opens an empty form.
+Review links are season-independent; a provider template change requires a version change and a new
+per-sport URL fixture test.
+
 ## Client onboarding and scopes
 
 ### Per-tool scopes
