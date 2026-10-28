@@ -547,9 +547,6 @@ it.effect("refuses a period the provider cannot honour instead of ignoring it", 
     const footballId = listed.teams.find((entry) => entry.name === "Alpha")?.team;
     assert.isDefined(hockeyId);
     assert.isDefined(footballId);
-    if (hockeyId === undefined || footballId === undefined) {
-      return;
-    }
     const roster = yield* queries.getRosters(owner, { team: hockeyId });
     assert.strictEqual(roster.status, "ok");
     if (roster.status !== "ok") {
