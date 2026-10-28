@@ -195,8 +195,11 @@ transport reported `Refused` for `169.254.169.254` with reason
 `hosted_browser.session outcome=cancelled refused=[{host: 169.254.169.254,
 reason: non_public_address}]`. The temporary `roles/run.invoker` binding used for
 these probes was removed; the policy was read back with only the web runtime
-account. A human-owned Google-identity Yahoo sign-in through the deployed
-browser is still required before accepting the path.
+account. On 2026-10-28 the owner attempted the Google-identity Yahoo sign-in
+through the deployed browser. Google loaded its identity page and then refused
+with "This browser or app may not be secure", its supported-browser gate against
+software-controlled and embedded browsers. The Google-identity path is not
+accepted; the local helper remains the fallback pending an owner decision.
 
 **Hosted browser smoke (2026-10-25):** the browser service reached `Ready` with
 its `/healthz` startup probe, invoker IAM refused unauthenticated requests (403
@@ -216,9 +219,10 @@ monitoring at the web service instead. Invoker IAM remains the boundary for the
 browser service's `/` and `/session` paths.
 
 Deployed product acceptance still needs the owner to sign in, link Yahoo through
-the hosted browser (or the helper) against the deployed origin, and perform one
-live read/write run; hosted MCP-client acceptance and a verified sending domain
-remain open. See [the Phase 1 acceptance record](phase-1-acceptance-2026-10-25.md).
+the hosted browser or the helper against the deployed origin, and perform one
+live read/write run. The hosted browser's Google-identity path is blocked by
+Google's supported-browser gate; the helper remains the fallback. Hosted
+MCP-client acceptance and a verified sending domain remain open. See [the Phase 1 acceptance record](phase-1-acceptance-2026-10-25.md).
 
 ## Select a stage and lifecycle
 

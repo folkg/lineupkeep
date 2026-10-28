@@ -85,7 +85,10 @@ Remaining gates before full Phase 1 acceptance:
   browser (or the helper) against that origin, confirm the temporary browser and
   profile are destroyed, then prove one live read and one native write with
   verified readback. The agent did not read the inbox or complete the owner's
-  sign-in. The hosted path is deployed and stream-verified but not live-signed-in.
+  sign-in. The hosted path is deployed and stream-verified. The owner's
+  2026-10-28 Google-identity sign-in attempt was refused by Google with "This
+  browser or app may not be secure", so hosted Google-identity linking is not
+  accepted; the helper remains the fallback pending an owner decision.
 - **Hosted MCP client acceptance.** Local JSON-RPC calls are blocked by the
   deliberate public-HTTPS client-metadata requirement; publish a CIMD metadata
   document and verify consent, scopes and bounded results with the hosted client.

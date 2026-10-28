@@ -134,6 +134,11 @@ instance, with Cloud Run concurrency 1 and a maximum of two instances.
 - **No network isolation.** The policy does not prove that a public address is not routed to an internal
   service through unusual cloud routing. The refused ranges cover the documented metadata, loopback,
   private, link-local, and CGNAT destinations.
+- **Google's supported-browser gate.** Google refuses sign-ins from browsers it classifies as
+  software-controlled or embedded, even when a person is operating them. The hosted browser is a
+  remote-controlled Chromium, so a Google-identity Yahoo sign-in can be refused after Google's page
+  loads. This is an external policy boundary, not an egress defect. Do not work around it by spoofing
+  browser signals without an explicit owner decision and a policy review.
 
 ## Revisit when
 

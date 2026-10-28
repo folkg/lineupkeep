@@ -201,7 +201,12 @@ Proven during the first deployment and operator probes:
 Remaining acceptance and hardening:
 
 - A human-owned live Yahoo sign-in through the deployed web app, including team
-  discovery and the no-manual-refresh transition, is still required.
+  discovery and the no-manual-refresh transition, is still required. The
+  Google-identity variant is blocked: on 2026-10-28 Google refused the owner's
+  sign-in with "This browser or app may not be secure", its supported-browser
+  policy against software-controlled and embedded browsers. Hosted linking is
+  not accepted for Google-identity accounts; the local helper remains the
+  fallback pending an owner decision.
 - Cold and warm start timings are recorded in
   [the deployment runbook](../deployment.md#cold-starts-and-cost): 9.4 s to the
   first frame cold versus 0.8 s warm. Actual per-session billing is still an

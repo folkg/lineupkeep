@@ -98,11 +98,13 @@ recording, popup streaming, popup return, capture, and profile cleanup are
 covered by local Node and Chromium tests. The deployed browser revision
 `lineupkeep-hb-00010-6db` completed a descriptor handshake, loaded the real Yahoo
 login page, streamed frames with no refusals, and refused the GCP metadata
-endpoint with a recorded `non_public_address` refusal. A real owner sign-in
-through the deployed hosted browser, ending in a captured session and team
-discovery, remains the only proof that the Google-identity path works in
-production; that live sign-in is required before treating the widening as
-accepted.
+endpoint with a recorded `non_public_address` refusal. On 2026-10-28 the owner
+attempted a real Google-identity Yahoo sign-in through the deployed browser.
+Google loaded its identity page and then refused the sign-in with "This browser
+or app may not be secure", its supported-browser gate against software-controlled
+and embedded browsers. The hosted Google-identity path is therefore **not
+accepted**. The local helper remains the fallback for that account pending the
+owner's decision; no evasion of Google's browser check is claimed or accepted.
 
 ## Accepted v1 version hold and retained limitations
 
