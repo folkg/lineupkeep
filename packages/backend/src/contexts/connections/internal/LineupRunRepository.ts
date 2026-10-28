@@ -450,19 +450,6 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         return grouped;
       });
 
-      const runsForRequest = Effect.fn("LineupRunRepository.runsForRequest")(function* (
-        userId: UserId,
-        requestId: LineupRequestId,
-      ) {
-        const rows = yield* database
-          .select({ id: lineupRuns.id })
-          .from(lineupRuns)
-          .where(and(eq(lineupRuns.userId, userId), eq(lineupRuns.requestId, requestId)))
-          .orderBy(asc(lineupRuns.createdAt), asc(lineupRuns.id))
-          .pipe(Effect.mapError(mapPersistenceFailure));
-        return yield* Effect.forEach(rows, (row) => Schema.decodeEffect(LineupRunId)(row.id));
-      });
-
       const claim = Effect.fn("LineupRunRepository.claim")(function* (
         runId: LineupRunId,
         now: DateTime.Utc,
@@ -877,9 +864,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
       });
 
       const recordBlocked = terminal("Blocked");
-      const recordSkipped = terminal("Skipped");
       const recordFailed = terminal("Failed");
-      const recordSuperseded = terminal("Superseded");
 
       const recordRetry = Effect.fn("LineupRunRepository.recordRetry")(function* (input: {
         readonly runId: LineupRunId;
@@ -1263,7 +1248,6 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         createScheduledRunsForOwners,
         scheduledTeamIds,
         loadRuns,
-        runsForRequest,
         loadTeamActivity,
         claim,
         loadWriteIntent,
@@ -1275,9 +1259,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         recordVerified,
         recordUncertain,
         recordBlocked,
-        recordSkipped,
         recordFailed,
-        recordSuperseded,
         recordRetry,
         claimDeliveries,
         finishDeliveries,

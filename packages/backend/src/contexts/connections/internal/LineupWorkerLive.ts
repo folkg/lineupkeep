@@ -140,7 +140,7 @@ export const LineupWorkerLive = Layer.effect(
       if (roster.players.length === 0) {
         return yield* block(run, "empty_roster", "The provider returned no roster members.");
       }
-      const observation = observe(roster, league, target);
+      const observation = observe(roster, target);
       yield* repository.recordObservation({
         runId: run.record.id,
         lease: run.lease,
@@ -275,7 +275,7 @@ export const LineupWorkerLive = Layer.effect(
         );
         return { kind: "blocked" as const };
       }
-      const freshObservation = observe(revalidated, freshLeague, freshResolution.target);
+      const freshObservation = observe(revalidated, freshResolution.target);
       const replanned = yield* planWith(
         run,
         provider,
@@ -1063,11 +1063,7 @@ function describeCoverage(coverage: ProviderRosterCoverage | null): string {
   return coverage.type === "week" ? `week ${String(coverage.week)}` : `date ${coverage.date}`;
 }
 
-function observe(
-  roster: ProviderRoster,
-  league: ProviderLeagueSettings,
-  target: LineupTargetPeriod,
-): LineupObservation {
+function observe(roster: ProviderRoster, target: LineupTargetPeriod): LineupObservation {
   const players = roster.players.map((player) => ({
     key: player.providerPlayerKey,
     name: player.name,
@@ -1076,19 +1072,8 @@ function observe(
     scheduled: player.scheduled,
     startingLineup: player.startingLineup,
   }));
-  const window = league.periodWindow;
   return {
     target,
-    ...(window === undefined
-      ? {}
-      : {
-          leagueCurrentPeriod: window.current,
-          leagueStartPeriod: window.start,
-          leagueEndPeriod: window.end,
-        }),
-    starterSlots: league.rosterPositions
-      .filter((position) => position.kind === "starting")
-      .map((position) => position.position),
     players,
     lockedPlayers: players.filter((player) => !player.editable).length,
     editablePlayers: players.filter((player) => player.editable).length,

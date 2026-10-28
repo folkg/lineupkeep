@@ -5,7 +5,6 @@ import type { Effect } from "effect";
 import type {
   GetLineupRunsInput,
   LineupError,
-  LineupRequestId,
   LineupRunId,
   LineupRunsData,
   LineupSubmitData,
@@ -32,9 +31,4 @@ export type LineupRunsShape = {
     runs: ReadonlyArray<LineupRunId>,
     timeoutMs: number,
   ) => Effect.Effect<LineupRunsData, LineupError>;
-
-  readonly runsForRequest: (
-    userId: UserId,
-    request: LineupRequestId,
-  ) => Effect.Effect<ReadonlyArray<LineupRunId>, LineupError>;
 };

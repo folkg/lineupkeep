@@ -7,6 +7,7 @@ import {
   LineupPlanProvenance,
   LineupPlanRefusalProvenance,
   LineupRunOutcome,
+  LineupRunStatus,
   LineupTargetPeriod,
   LineupTrigger,
   LineupUuid,
@@ -31,10 +32,6 @@ export type LineupObservedPlayer = typeof LineupObservedPlayer.Type;
 
 export const LineupObservation = Schema.Struct({
   target: LineupTargetPeriod,
-  leagueCurrentPeriod: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  leagueStartPeriod: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
-  leagueEndPeriod: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
-  starterSlots: Schema.Array(Schema.NonEmptyString),
   players: Schema.Array(LineupObservedPlayer),
   lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -451,9 +448,7 @@ export const LineupRunWorkflow = Machine.make({
   },
 });
 
-export function lineupRunStatus(
-  state: LineupRunState,
-): import("#contexts/connections/LineupRun.ts").LineupRunStatus {
+export function lineupRunStatus(state: LineupRunState): LineupRunStatus {
   switch (state._tag) {
     case "Queued":
       return "queued";

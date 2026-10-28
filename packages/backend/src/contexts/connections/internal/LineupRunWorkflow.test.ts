@@ -206,10 +206,6 @@ const observation = {
   at,
   observation: {
     target,
-    leagueCurrentPeriod: 3,
-    leagueStartWeek: 1,
-    leagueEndWeek: 17,
-    starterSlots: ["QB"],
     players: [
       {
         key: "461.p.10001",

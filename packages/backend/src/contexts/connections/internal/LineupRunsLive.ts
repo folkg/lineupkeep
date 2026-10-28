@@ -62,9 +62,7 @@ export const LineupRunsLive = Layer.effect(
         .pipe(
           Effect.catchTag("lineup.persistence_failed", () => Effect.succeed("pending" as const)),
         );
-      const runIds = yield* repository
-        .runsForRequest(userId, input.requestId)
-        .pipe(mapRepositoryError);
+      const runIds = created.runs.map((run) => run.id);
       const loaded = yield* repository
         .loadRuns(userId, { runs: runIds, limit: runIds.length })
         .pipe(mapRepositoryError);
@@ -124,14 +122,7 @@ export const LineupRunsLive = Layer.effect(
       }
     });
 
-    const runsForRequest = Effect.fn("LineupRuns.runsForRequest")(function* (
-      userId: UserId,
-      request: LineupRequestInput["requestId"],
-    ) {
-      return yield* repository.runsForRequest(userId, request).pipe(mapRepositoryError);
-    });
-
-    const shape: LineupRunsShape = { submit, get, wait, runsForRequest };
+    const shape: LineupRunsShape = { submit, get, wait };
     return LineupRuns.of(shape);
   }),
 );

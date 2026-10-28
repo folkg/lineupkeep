@@ -886,7 +886,6 @@ const unavailableLineups: LineupRunsShape = {
   submit: () => Effect.die(new Error("lineups unavailable")),
   get: () => Effect.die(new Error("lineups unavailable")),
   wait: () => Effect.die(new Error("lineups unavailable")),
-  runsForRequest: () => Effect.die(new Error("lineups unavailable")),
 };
 const unavailableTeams: TeamsShape = {
   list: () => Effect.die(new Error("teams unavailable")),

@@ -248,38 +248,6 @@ it.effect("benches a player once a games-limited position's projection fills it"
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-it.effect("plans a league without points rules from the published started percentage", () =>
-  Effect.gen(function* () {
-    const repository = yield* LineupRunRepository;
-    const worker = yield* LineupWorker;
-    const fake = yield* FakeProviderWorld;
-    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
-    yield* fake.setLeague(startedLeague);
-    yield* fake.setRoster(customRoster);
-    yield* fake.setPlayerScores(startedScores);
-    const runId = yield* createQueuedRun(repository, team);
-
-    yield* worker.deliver([runId]);
-
-    const run = yield* loadRun(repository, runId);
-    assert.strictEqual(run.status, "completed");
-    assert.strictEqual(run.state._tag, "Completed");
-    if (run.state._tag !== "Completed") {
-      return;
-    }
-    assert.strictEqual(run.state.outcome.implementation, "custom_policy");
-    const provenance = run.state.outcome.provenance;
-    assert.strictEqual(provenance?.kind, "planned");
-    if (provenance?.kind !== "planned") {
-      return;
-    }
-    assert.strictEqual(provenance.label, "fake/declared-score");
-    assert.strictEqual(run.state.outcome.changes.length, 2);
-    assert.strictEqual(yield* fake.explicitCallCount, 1);
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
-  }).pipe(Effect.provide(LineupTestLayer)),
-);
-
 it.effect("records each player's scheduled and starting-lineup facts in the run observation", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;
@@ -616,14 +584,11 @@ it.effect("retries a lost explicit response only when the readback is unchanged"
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-it.effect("plans a manual run with the custom policy", () =>
+it.effect("plans a manual run from the provider's declared scores", () =>
   Effect.gen(function* () {
     const runs = yield* LineupRuns;
     const fake = yield* FakeProviderWorld;
-    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
-    yield* fake.setLeague(startedLeague);
-    yield* fake.setRoster(customRoster);
-    yield* fake.setPlayerScores(startedScores);
+    const team = yield* seedCustom(fake);
 
     const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
 
@@ -1287,38 +1252,6 @@ const capacityScores: ReadonlyArray<TestScore> = [
   { providerPlayerKey: "461.p.20002", score: 5, availability: "will-play" },
   { providerPlayerKey: "461.p.20003", score: 3, availability: "will-play" },
   { providerPlayerKey: "461.p.20004", score: 1, availability: "will-play" },
-];
-
-const startedLeague: ProviderLeagueSettings = {
-  ...customLeague,
-  statCategories: [
-    {
-      statId: 4,
-      name: "Yards",
-      displayName: "Yards",
-      abbreviation: "Yds",
-      group: "",
-      enabled: true,
-      positionTypes: [],
-    },
-    {
-      statId: 9,
-      name: "Touchdowns",
-      displayName: "TD",
-      abbreviation: "TD",
-      group: "",
-      enabled: true,
-      positionTypes: [],
-    },
-  ],
-  statModifiers: [],
-};
-
-const startedScores: ReadonlyArray<TestScore> = [
-  { providerPlayerKey: "461.p.20001", score: 30, availability: "will-play" },
-  { providerPlayerKey: "461.p.20002", score: 20, availability: "will-play" },
-  { providerPlayerKey: "461.p.20003", score: 90, availability: "will-play" },
-  { providerPlayerKey: "461.p.20004", score: 5, availability: "will-play" },
 ];
 
 const humanEditedRoster: ProviderRoster = {
