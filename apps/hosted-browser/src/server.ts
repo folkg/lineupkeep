@@ -6,6 +6,7 @@ import {
   verifyHostedBrowserDescriptor,
   type HostedBrowserDescriptor,
 } from "@lineupkeep/hosted-browser/descriptor";
+import type { EgressRefusal } from "@lineupkeep/hosted-browser/egress";
 import {
   encodeTransportMessage,
   parseHostedBrowserInput,
@@ -24,7 +25,7 @@ const sessionPath = "/session";
 
 export type HostedBrowserServiceOptions = {
   readonly descriptorKey: string;
-  readonly allowedOrigins: ReadonlyArray<string>;
+  readonly fixtureOrigin?: string;
   readonly profileRoot?: string;
   readonly chromiumSandbox?: boolean;
   readonly log?: (event: HostedBrowserSessionEvent) => void;
@@ -49,6 +50,7 @@ export type HostedBrowserSessionEvent = {
   readonly durationMillis: number;
   readonly sessionId?: string;
   readonly failure?: HostedBrowserFailure;
+  readonly refused?: ReadonlyArray<EgressRefusal>;
 };
 
 export function createHostedBrowserService(
@@ -59,7 +61,6 @@ export function createHostedBrowserService(
     chromiumSandbox: options.chromiumSandbox,
   });
   const log = options.log ?? writeLog;
-  const allowedOrigins = new Set(options.allowedOrigins);
   const seenSessions = new Set<string>();
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1_024 });
   let live: LiveSession | undefined;
@@ -106,11 +107,7 @@ export function createHostedBrowserService(
         text === undefined
           ? undefined
           : verifyHostedBrowserDescriptor(options.descriptorKey, text, Date.now());
-      if (
-        descriptor === undefined ||
-        !descriptor.allowedOrigins.every((origin) => allowedOrigins.has(origin)) ||
-        !descriptor.allowedOrigins.includes(new URL(descriptor.loginUrl).origin)
-      ) {
+      if (descriptor === undefined) {
         reject("rejected", 1008, "Invalid session descriptor");
         return;
       }
@@ -142,6 +139,7 @@ export function createHostedBrowserService(
     let inputCount = 0;
     let terminal: HostedBrowserSessionOutcome | undefined;
     let handle: HostedBrowserHandle | undefined;
+    const refused: EgressRefusal[] = [];
     const pendingInputs: HostedBrowserInput[] = [];
     const handleReady = Promise.withResolvers<void>();
     const liveSession: LiveSession = {
@@ -169,6 +167,7 @@ export function createHostedBrowserService(
         durationMillis: Date.now() - startedAt,
         sessionId: descriptor.sessionId,
         ...(failure === undefined ? {} : { failure }),
+        ...(refused.length === 0 ? {} : { refused: [...refused] }),
       });
       peer.removeAllListeners("message");
     };
@@ -218,7 +217,7 @@ export function createHostedBrowserService(
           id: descriptor.sessionId,
           expiresAt: descriptor.expiresAt,
           loginUrl: descriptor.loginUrl,
-          allowedOrigins: descriptor.allowedOrigins,
+          ...(options.fixtureOrigin === undefined ? {} : { fixtureOrigin: options.fixtureOrigin }),
         },
         {
           onFrame: (frame) => {
@@ -227,6 +226,10 @@ export function createHostedBrowserService(
             }
           },
           onStatus: (status) => send({ _tag: "Status", status }),
+          onRefused: (refusal) => {
+            refused.push(refusal);
+            send({ _tag: "Refused", host: refusal.host, reason: refusal.reason });
+          },
           onCaptured: (cookieHeader) => {
             send({ _tag: "Captured", session: cookieHeader });
             settle("captured");

@@ -5,6 +5,7 @@
   "exports": {
     "./protocol": "./src/protocol.ts",
     "./provider": "./src/provider.ts",
+    "./egress": "./src/egress.ts",
     "./descriptor": "./src/descriptor.ts",
     "./browser": "./src/browser.ts"
   },

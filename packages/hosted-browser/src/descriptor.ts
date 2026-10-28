@@ -4,7 +4,6 @@ export type HostedBrowserDescriptor = {
   readonly sessionId: string;
   readonly expiresAt: number;
   readonly loginUrl: string;
-  readonly allowedOrigins: ReadonlyArray<string>;
 };
 
 const maximumDescriptorLifetimeMillis = 15 * 60 * 1_000;
@@ -53,7 +52,6 @@ function decodeDescriptor(payload: string): HostedBrowserDescriptor | undefined 
   const sessionId = decoded["sessionId"];
   const expiresAt = decoded["expiresAt"];
   const loginUrl = decoded["loginUrl"];
-  const allowedOrigins = decoded["allowedOrigins"];
   if (typeof sessionId !== "string" || sessionId.length < 1 || sessionId.length > 100) {
     return undefined;
   }
@@ -63,31 +61,12 @@ function decodeDescriptor(payload: string): HostedBrowserDescriptor | undefined 
   if (typeof loginUrl !== "string" || !isHttpUrl(loginUrl)) {
     return undefined;
   }
-  if (!Array.isArray(allowedOrigins) || allowedOrigins.length < 1 || allowedOrigins.length > 32) {
-    return undefined;
-  }
-  const origins: string[] = [];
-  for (const entry of allowedOrigins) {
-    if (typeof entry !== "string" || !isOrigin(entry)) {
-      return undefined;
-    }
-    origins.push(entry);
-  }
-  return { sessionId, expiresAt, loginUrl, allowedOrigins: origins };
+  return { sessionId, expiresAt, loginUrl };
 }
 
 function isHttpUrl(value: string): boolean {
   const url = parseUrl(value);
   return url !== undefined && (url.protocol === "https:" || url.protocol === "http:");
-}
-
-function isOrigin(value: string): boolean {
-  const url = parseUrl(value);
-  return (
-    url !== undefined &&
-    (url.protocol === "https:" || url.protocol === "http:") &&
-    url.origin === value
-  );
 }
 
 function parseUrl(value: string): URL | undefined {

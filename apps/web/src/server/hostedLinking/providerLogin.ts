@@ -1,8 +1,8 @@
-import { hostedBrowserOrigins, hostedBrowserProvider } from "@lineupkeep/hosted-browser/provider";
+import { hostedBrowserProvider } from "@lineupkeep/hosted-browser/provider";
 
 export type ProviderLoginConfig = {
   readonly loginUrl: URL;
-  readonly allowedOrigins: ReadonlyArray<string>;
+  readonly fixtureOrigin?: string;
 };
 
 export function providerLoginConfig(
@@ -17,12 +17,11 @@ export function providerLoginConfig(
     }
     return {
       loginUrl: new URL(provider.loginUrl),
-      allowedOrigins: provider.allowedOrigins,
     };
   }
   const origin = new URL(requestUrl).origin;
   return {
     loginUrl: new URL("/api/dev/provider-login", origin),
-    allowedOrigins: [origin, ...hostedBrowserOrigins],
+    fixtureOrigin: origin,
   };
 }

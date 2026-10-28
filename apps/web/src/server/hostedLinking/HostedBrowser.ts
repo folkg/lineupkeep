@@ -15,7 +15,7 @@ export type HostedBrowserSession = {
   readonly connectionId: ConnectionId;
   readonly expiresAt: DateTime.Utc;
   readonly loginUrl: URL;
-  readonly allowedOrigins: ReadonlyArray<string>;
+  readonly fixtureOrigin?: string;
 };
 
 export type HostedBrowserCompletion =

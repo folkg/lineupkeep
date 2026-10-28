@@ -37,7 +37,6 @@ export function createRemoteHostedBrowser(
         sessionId: session.id,
         expiresAt: DateTime.toEpochMillis(session.expiresAt),
         loginUrl: session.loginUrl.href,
-        allowedOrigins: session.allowedOrigins,
       });
       const socket = new WebSocket(streamUrl, {
         headers: { authorization: `Bearer ${token}` },
@@ -107,6 +106,13 @@ function streamHandle(
     switch (message._tag) {
       case "Status":
         callbacks.onMessage({ _tag: "Status", status: message.status });
+        return;
+      case "Refused":
+        callbacks.onMessage({
+          _tag: "Refused",
+          host: message.host,
+          reason: message.reason,
+        });
         return;
       case "Captured":
         terminal = true;

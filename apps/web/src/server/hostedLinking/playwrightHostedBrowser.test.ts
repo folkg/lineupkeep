@@ -76,6 +76,130 @@ it.live(
 );
 
 it.live(
+  "streams an identity-provider popup and relays input to the active target",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* popupProviderServer();
+        const profileRoot = yield* temporaryDirectory();
+        const factory = createPlaywrightHostedBrowser({ profileRoot });
+        const ready = yield* Deferred.make<void>();
+        const twoFactor = yield* Deferred.make<void>();
+        const completed = yield* Deferred.make<HostedBrowserMessage>();
+        let captured: string | undefined;
+        let frames = 0;
+
+        const handle = yield* Effect.promise(() =>
+          factory.open(sessionFor(server.url), {
+            onFrame: () => {
+              frames++;
+            },
+            onMessage: (message) => {
+              if (message._tag === "Status" && message.status === "waiting") {
+                Deferred.doneUnsafe(ready, Effect.void);
+              }
+              if (message._tag === "Status" && message.status === "two-factor") {
+                Deferred.doneUnsafe(twoFactor, Effect.void);
+              }
+              if (message._tag === "Ready" || message._tag === "Failed") {
+                Deferred.doneUnsafe(completed, Effect.succeed(message));
+              }
+            },
+            complete: (session) => {
+              captured = Redacted.value(session);
+              return Promise.resolve({ status: "ready", teamsDiscovered: 2 });
+            },
+            fault: () => Promise.resolve(),
+            expire: () => Promise.resolve(),
+          }),
+        );
+
+        yield* Deferred.await(ready);
+        yield* Effect.sleep("500 millis");
+        handle.input({ _tag: "Key", key: "Enter" });
+        yield* Deferred.await(twoFactor);
+        yield* Effect.sleep("500 millis");
+        handle.input({ _tag: "Text", text: "person@example.test" });
+        handle.input({ _tag: "Key", key: "Enter" });
+
+        const message = yield* Deferred.await(completed);
+        assert.deepStrictEqual(message, {
+          _tag: "Ready",
+          connectionId: sessionFor(server.url).connectionId,
+          teamsDiscovered: 2,
+        });
+        assert.strictEqual(captured, "T=temporary-session-token; Y=temporary-user-token");
+        assert.isAbove(frames, 0);
+        yield* waitForEmptyDirectory(profileRoot);
+      }),
+    ),
+  60_000,
+);
+
+it.live(
+  "returns to the provider page when its identity popup closes",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* popupProviderServer();
+        const profileRoot = yield* temporaryDirectory();
+        const factory = createPlaywrightHostedBrowser({ profileRoot });
+        const ready = yield* Deferred.make<void>();
+        const twoFactor = yield* Deferred.make<void>();
+        const returned = yield* Deferred.make<void>();
+        const completed = yield* Deferred.make<HostedBrowserMessage>();
+        let sawTwoFactor = false;
+        let captured: string | undefined;
+
+        const handle = yield* Effect.promise(() =>
+          factory.open(sessionFor(server.url, "/login-close"), {
+            onFrame: () => undefined,
+            onMessage: (message) => {
+              if (message._tag !== "Status") {
+                if (message._tag === "Ready" || message._tag === "Failed") {
+                  Deferred.doneUnsafe(completed, Effect.succeed(message));
+                }
+                return;
+              }
+              if (message.status === "waiting") {
+                Deferred.doneUnsafe(ready, Effect.void);
+              }
+              if (message.status === "two-factor") {
+                sawTwoFactor = true;
+                Deferred.doneUnsafe(twoFactor, Effect.void);
+              }
+              if (message.status === "waiting" && sawTwoFactor) {
+                Deferred.doneUnsafe(returned, Effect.void);
+              }
+            },
+            complete: (session) => {
+              captured = Redacted.value(session);
+              return Promise.resolve({ status: "ready", teamsDiscovered: 1 });
+            },
+            fault: () => Promise.resolve(),
+            expire: () => Promise.resolve(),
+          }),
+        );
+
+        yield* Deferred.await(ready);
+        yield* Effect.sleep("500 millis");
+        handle.input({ _tag: "Key", key: "Enter" });
+        yield* Deferred.await(twoFactor);
+        yield* Deferred.await(returned);
+        yield* Effect.sleep("500 millis");
+        handle.input({ _tag: "Text", text: "person@example.test" });
+        handle.input({ _tag: "Key", key: "Enter" });
+
+        const message = yield* Deferred.await(completed);
+        assert.strictEqual(message._tag, "Ready");
+        assert.strictEqual(captured, "T=temporary-session-token; Y=temporary-user-token");
+        yield* waitForEmptyDirectory(profileRoot);
+      }),
+    ),
+  60_000,
+);
+
+it.live(
   "expires the browser and removes the profile when the session runs out",
   () =>
     Effect.scoped(
@@ -113,16 +237,88 @@ it.live(
   60_000,
 );
 
-function sessionFor(origin: URL): HostedBrowserSession {
+function sessionFor(origin: URL, path = "/login"): HostedBrowserSession {
   return {
     id: Schema.decodeSync(HostedLinkingSessionId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
     userId: decodeUserId("owner"),
     connectionId: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3"),
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),
-    loginUrl: new URL("/login", origin),
-    allowedOrigins: [origin.origin],
+    loginUrl: new URL(path, origin),
+    fixtureOrigin: origin.origin,
   };
 }
+
+function popupProviderServer(): Effect.Effect<TestServer, never, Scope.Scope> {
+  return Effect.acquireRelease(
+    startServer((request: IncomingMessage, response: ServerResponse) => {
+      if (request.method === "POST") {
+        response.writeHead(200, {
+          "content-type": "text/html",
+          "set-cookie": [
+            "T=temporary-session-token; Path=/; HttpOnly; SameSite=Lax",
+            "Y=temporary-user-token; Path=/; HttpOnly; SameSite=Lax",
+          ],
+        });
+        response.end("<html><body>Signed in</body></html>");
+        return;
+      }
+      response.writeHead(200, { "content-type": "text/html" });
+      if (request.url?.startsWith("/verify/identity") === true) {
+        response.end(identityPopupPage);
+        return;
+      }
+      if (request.url?.startsWith("/verify/close") === true) {
+        response.end(closingPopupPage);
+        return;
+      }
+      response.end(
+        request.url?.startsWith("/login-close") === true ? closingProviderPage : popupProviderPage,
+      );
+    }),
+    closeServer,
+  );
+}
+
+const popupProviderPage = `<!doctype html>
+<html>
+  <body>
+    <form method="POST" action="/signed-in" onsubmit="if (!window.identityOpened) { window.identityOpened = true; window.open('/verify/identity','identity','width=900,height=700'); return false; }">
+      <label>Email <input name="email" autofocus autocomplete="off"></label>
+      <button>Sign in with Google</button>
+      <script>document.querySelector('input[name=email]').focus();</script>
+    </form>
+  </body>
+</html>`;
+
+const closingProviderPage = `<!doctype html>
+<html>
+  <body>
+    <form method="POST" action="/signed-in" onsubmit="if (!window.identityOpened) { window.identityOpened = true; window.open('/verify/close','identity','width=900,height=700'); return false; }">
+      <label>Email <input name="email" autofocus autocomplete="off"></label>
+      <button>Verify identity</button>
+      <script>document.querySelector('input[name=email]').focus();</script>
+    </form>
+  </body>
+</html>`;
+
+const identityPopupPage = `<!doctype html>
+<html>
+  <body>
+    <form method="POST" action="/signed-in">
+      <label>Google email <input name="email" autofocus autocomplete="off"></label>
+      <button>Continue</button>
+      <script>document.querySelector('input[name=email]').focus();</script>
+    </form>
+  </body>
+</html>`;
+
+const closingPopupPage = `<!doctype html>
+<html>
+  <body>
+    <p>Verifying the sign-in</p>
+    <script>setTimeout(function () { window.close(); }, 800);</script>
+  </body>
+</html>`;
 
 type TestServer = {
   readonly server: Server;

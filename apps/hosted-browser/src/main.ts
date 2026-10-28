@@ -1,5 +1,3 @@
-import { hostedBrowserOrigins } from "@lineupkeep/hosted-browser/provider";
-
 import { createHostedBrowserService } from "./server.ts";
 
 const descriptorKey = process.env["HOSTED_BROWSER_DESCRIPTOR_KEY"];
@@ -13,7 +11,6 @@ if (!Number.isInteger(port) || port <= 0) {
 
 const service = createHostedBrowserService({
   descriptorKey,
-  allowedOrigins: hostedBrowserOrigins,
   chromiumSandbox: false,
 });
 const bound = await service.listen(port);

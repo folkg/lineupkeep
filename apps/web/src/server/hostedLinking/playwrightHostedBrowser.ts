@@ -31,11 +31,17 @@ export function createPlaywrightHostedBrowser(
           id: session.id,
           expiresAt: DateTime.toEpochMillis(session.expiresAt),
           loginUrl: session.loginUrl.href,
-          allowedOrigins: session.allowedOrigins,
+          ...(session.fixtureOrigin === undefined ? {} : { fixtureOrigin: session.fixtureOrigin }),
         },
         {
           onFrame: callbacks.onFrame,
           onStatus: (status) => callbacks.onMessage({ _tag: "Status", status }),
+          onRefused: (refusal) =>
+            callbacks.onMessage({
+              _tag: "Refused",
+              host: refusal.host,
+              reason: refusal.reason,
+            }),
           onCaptured: (cookieHeader) => {
             void completeSession(session, callbacks, cookieHeader);
           },

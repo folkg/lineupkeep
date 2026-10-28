@@ -23,6 +23,16 @@ export type HostedBrowserKey =
 
 export type HostedBrowserStatus = "starting" | "loading" | "waiting" | "two-factor" | "blocked";
 
+export type HostedBrowserRefusalReason =
+  | "non_public_address"
+  | "unresolvable"
+  | "invalid_destination";
+
+export type HostedBrowserRefusal = {
+  readonly host: string;
+  readonly reason: HostedBrowserRefusalReason;
+};
+
 export type HostedBrowserFailure =
   | "browser_unavailable"
   | "page_unavailable"
@@ -33,12 +43,14 @@ export type HostedBrowserFailure =
 
 export type HostedBrowserMessage =
   | { readonly _tag: "Status"; readonly status: HostedBrowserStatus }
+  | { readonly _tag: "Refused"; readonly host: string; readonly reason: HostedBrowserRefusalReason }
   | { readonly _tag: "Ready"; readonly connectionId: string; readonly teamsDiscovered: number }
   | { readonly _tag: "Failed"; readonly reason: HostedBrowserFailure }
   | { readonly _tag: "Expired" };
 
 export type HostedBrowserTransportMessage =
   | { readonly _tag: "Status"; readonly status: HostedBrowserStatus }
+  | { readonly _tag: "Refused"; readonly host: string; readonly reason: HostedBrowserRefusalReason }
   | { readonly _tag: "Captured"; readonly session: string }
   | { readonly _tag: "Failed"; readonly reason: HostedBrowserFailure }
   | { readonly _tag: "Expired" };
@@ -93,6 +105,16 @@ export function parseHostedBrowserMessage(value: string): HostedBrowserMessage |
       return isHostedBrowserStatus(decoded["status"])
         ? { _tag: "Status", status: decoded["status"] }
         : undefined;
+    case "Refused": {
+      const host = decoded["host"];
+      const reason = decoded["reason"];
+      return typeof host === "string" &&
+        host.length >= 1 &&
+        host.length <= 253 &&
+        isHostedBrowserRefusalReason(reason)
+        ? { _tag: "Refused", host, reason }
+        : undefined;
+    }
     case "Ready": {
       const connectionId = decoded["connectionId"];
       const teamsDiscovered = decoded["teamsDiscovered"];
@@ -128,6 +150,16 @@ export function parseTransportMessage(value: string): HostedBrowserTransportMess
       return isHostedBrowserStatus(decoded["status"])
         ? { _tag: "Status", status: decoded["status"] }
         : undefined;
+    case "Refused": {
+      const host = decoded["host"];
+      const reason = decoded["reason"];
+      return typeof host === "string" &&
+        host.length >= 1 &&
+        host.length <= 253 &&
+        isHostedBrowserRefusalReason(reason)
+        ? { _tag: "Refused", host, reason }
+        : undefined;
+    }
     case "Captured": {
       const session = decoded["session"];
       return typeof session === "string" && session.length >= 1 && session.length <= 8_192
@@ -172,6 +204,12 @@ function isHostedBrowserKey(value: unknown): value is HostedBrowserKey {
     value === "End" ||
     value === "PageUp" ||
     value === "PageDown"
+  );
+}
+
+function isHostedBrowserRefusalReason(value: unknown): value is HostedBrowserRefusalReason {
+  return (
+    value === "non_public_address" || value === "unresolvable" || value === "invalid_destination"
   );
 }
 

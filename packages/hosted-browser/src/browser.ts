@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 import type { BrowserContext, Page } from "playwright";
 
+import { createEgressProxy, type EgressProxy, type EgressRefusal } from "./egress.ts";
 import {
   browserViewport,
   type HostedBrowserFailure,
@@ -20,12 +21,13 @@ export type HostedBrowserSession = {
   readonly id: string;
   readonly expiresAt: number;
   readonly loginUrl: string;
-  readonly allowedOrigins: ReadonlyArray<string>;
+  readonly fixtureOrigin?: string;
 };
 
 export type HostedBrowserEvents = {
   readonly onFrame: (frame: Uint8Array) => void;
   readonly onStatus: (status: HostedBrowserStatus) => void;
+  readonly onRefused: (refusal: EgressRefusal) => void;
   readonly onCaptured: (cookieHeader: string) => void;
   readonly onFailure: (reason: HostedBrowserFailure) => void;
   readonly onExpired: () => void;
@@ -88,8 +90,26 @@ async function openBrowser(
   let capturePoll: NodeJS.Timeout | undefined;
   let expiryTimer: NodeJS.Timeout | undefined;
   let inputQueue = Promise.resolve();
+  let switchQueue = Promise.resolve();
   let context: BrowserContext | undefined;
-  let page: Page | undefined;
+  let active: Page | undefined;
+  const targets = new Map<Page, Target>();
+  const activationOrder: Page[] = [];
+
+  let egress: EgressProxy;
+  try {
+    egress = await createEgressProxy({
+      fixtureOrigins: session.fixtureOrigin === undefined ? [] : [session.fixtureOrigin],
+      onRefused: (refusal) => {
+        if (!closed) {
+          events.onRefused(refusal);
+        }
+      },
+    });
+  } catch (error) {
+    await removeProfile(profileDirectory);
+    throw error;
+  }
 
   const close = async (): Promise<void> => {
     if (closed) {
@@ -102,8 +122,8 @@ async function openBrowser(
     if (expiryTimer !== undefined) {
       clearTimeout(expiryTimer);
     }
-    await page?.screencast.stop().catch(() => undefined);
     await context?.close().catch(() => undefined);
+    await egress.close().catch(() => undefined);
     await removeProfile(profileDirectory);
     onClosed();
   };
@@ -130,61 +150,24 @@ async function openBrowser(
       deviceScaleFactor: 1,
       serviceWorkers: "block",
       locale: "en-US",
-      args: chromiumArguments(session.allowedOrigins, options.chromiumSandbox ?? true),
+      args: chromiumArguments(egress.url, options.chromiumSandbox ?? true),
     });
   } catch {
     await fail("browser_unavailable");
     throw new Error("The hosted browser could not start");
   }
 
-  const allowedOrigins = new Set(session.allowedOrigins);
-  await installEgressPolicy(context, allowedOrigins);
-
-  page = context.pages()[0] ?? (await context.newPage());
   context.on("page", (opened) => {
-    if (opened !== page) {
-      void opened.close();
-    }
-  });
-  page.on("dialog", (dialog) => {
-    void dialog.dismiss();
-  });
-  page.on("download", (download) => {
-    void download.cancel();
-  });
-  page.on("popup", (popup) => {
-    void popup.close();
-  });
-  page.on("framenavigated", (frame) => {
-    if (frame === page.mainFrame()) {
-      report(challengeStatus(new URL(frame.url())) ?? "waiting");
-    }
-  });
-  page.on("close", () => {
-    if (!settled) {
-      void fail("page_unavailable");
-    }
+    registerTarget(opened);
   });
 
-  try {
-    await page.screencast.start({
-      onFrame: ({ data }) => {
-        if (!closed && data.length <= maximumFrameBytes) {
-          events.onFrame(new Uint8Array(data));
-        }
-      },
-      size: browserViewport,
-      quality: 55,
-      fps: 5,
-    });
-  } catch {
-    await fail("browser_unavailable");
-    throw new Error("The hosted browser could not stream its view");
-  }
+  const initial = context.pages()[0] ?? (await context.newPage());
+  registerTarget(initial);
+  await switchQueue;
 
   report("loading");
   try {
-    await page.goto(session.loginUrl, {
+    await initial.goto(session.loginUrl, {
       waitUntil: "domcontentloaded",
       timeout: navigationTimeoutMillis,
     });
@@ -192,7 +175,7 @@ async function openBrowser(
     await fail("provider_unavailable");
     throw new Error("The provider login page did not load");
   }
-  report("waiting");
+  report(currentStatus(initial));
 
   const remaining = session.expiresAt - Date.now();
   expiryTimer = setTimeout(
@@ -211,7 +194,7 @@ async function openBrowser(
     if (closed || settled) {
       return;
     }
-    const cookies = await context.cookies();
+    const cookies = await context.cookies([session.loginUrl]);
     const token = cookies.find((cookie) => cookie.name === "T" && cookie.value !== "");
     const user = cookies.find((cookie) => cookie.name === "Y" && cookie.value !== "");
     if (token === undefined || user === undefined) {
@@ -227,39 +210,115 @@ async function openBrowser(
     void captureWhenSignedIn().catch(() => undefined);
   }, capturePollMillis);
 
+  function registerTarget(page: Page): void {
+    if (closed) {
+      void page.close().catch(() => undefined);
+      return;
+    }
+    if (targets.has(page)) {
+      return;
+    }
+    const target: Target = { generation: 0, streaming: false };
+    targets.set(page, target);
+    activationOrder.push(page);
+    page.on("dialog", (dialog) => {
+      void dialog.dismiss();
+    });
+    page.on("download", (download) => {
+      void download.cancel();
+    });
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame() && active === page) {
+        report(currentStatus(page));
+      }
+    });
+    page.on("close", () => {
+      forgetTarget(page);
+    });
+    void page.setViewportSize(browserViewport).catch(() => undefined);
+    activate(page);
+  }
+
+  function activate(page: Page): void {
+    if (closed || active === page) {
+      return;
+    }
+    active = page;
+    switchQueue = switchQueue.then(() => streamTarget(page)).catch(() => undefined);
+  }
+
+  async function streamTarget(page: Page): Promise<void> {
+    for (const [other, target] of targets) {
+      if (other !== page && target.streaming) {
+        target.streaming = false;
+        target.generation++;
+        await other.screencast.stop().catch(() => undefined);
+      }
+    }
+    const target = targets.get(page);
+    if (target === undefined || target.streaming || closed) {
+      return;
+    }
+    const generation = ++target.generation;
+    try {
+      await page.screencast.start({
+        onFrame: ({ data }) => {
+          if (
+            !closed &&
+            active === page &&
+            target.generation === generation &&
+            data.length <= maximumFrameBytes
+          ) {
+            events.onFrame(new Uint8Array(data));
+          }
+        },
+        size: browserViewport,
+        quality: 55,
+        fps: 5,
+      });
+      target.streaming = true;
+    } catch {
+      target.streaming = false;
+    }
+    if (active === page) {
+      report(currentStatus(page));
+    }
+  }
+
+  function forgetTarget(page: Page): void {
+    const target = targets.get(page);
+    if (target?.streaming === true) {
+      target.generation++;
+      void page.screencast.stop().catch(() => undefined);
+    }
+    targets.delete(page);
+    const index = activationOrder.lastIndexOf(page);
+    if (index >= 0) {
+      activationOrder.splice(index, 1);
+    }
+    if (active !== page) {
+      return;
+    }
+    active = undefined;
+    const fallback = [...activationOrder].reverse().find((candidate) => targets.has(candidate));
+    if (fallback !== undefined) {
+      activate(fallback);
+    } else if (!settled) {
+      void fail("page_unavailable");
+    }
+  }
+
   return {
     input: (input) => {
-      inputQueue = inputQueue.then(() => applyInput(page, input)).catch(() => undefined);
+      inputQueue = inputQueue
+        .then(() => {
+          const page = active;
+          return page === undefined ? Promise.resolve() : applyInput(page, input);
+        })
+        .catch(() => undefined);
     },
     close,
   };
-}
-
-async function installEgressPolicy(
-  context: BrowserContext,
-  allowedOrigins: ReadonlySet<string>,
-): Promise<void> {
-  await context.route("**/*", (route) => {
-    const url = new URL(route.request().url());
-    if (url.protocol === "data:" || url.protocol === "blob:" || url.protocol === "about:") {
-      return route.continue();
-    }
-    if ((url.protocol === "http:" || url.protocol === "https:") && allowedOrigins.has(url.origin)) {
-      return route.continue();
-    }
-    return route.abort("blockedbyclient");
-  });
-  await context.routeWebSocket(
-    () => true,
-    (socket) => {
-      const url = new URL(socket.url());
-      if (allowedOrigins.has(url.origin)) {
-        socket.connectToServer();
-      } else {
-        void socket.close({ code: 1008, reason: "Blocked by the linking egress policy" });
-      }
-    },
-  );
 }
 
 async function applyInput(page: Page, input: HostedBrowserInput): Promise<void> {
@@ -282,6 +341,18 @@ async function applyInput(page: Page, input: HostedBrowserInput): Promise<void> 
   }
 }
 
+function currentStatus(page: Page): HostedBrowserStatus {
+  const value = page.url();
+  if (value === "" || value === "about:blank") {
+    return "loading";
+  }
+  try {
+    return challengeStatus(new URL(value)) ?? "waiting";
+  } catch {
+    return "waiting";
+  }
+}
+
 function challengeStatus(url: URL): HostedBrowserStatus | undefined {
   const mode = url.searchParams.get("mode");
   if (mode === "blocked") {
@@ -296,26 +367,25 @@ function challengeStatus(url: URL): HostedBrowserStatus | undefined {
   return undefined;
 }
 
-function chromiumArguments(
-  allowedOrigins: ReadonlyArray<string>,
-  chromiumSandbox: boolean,
-): string[] {
-  const hosts = allowedOrigins
-    .map((origin) => new URL(origin).hostname)
-    .filter((host) => host !== "");
+function chromiumArguments(proxyUrl: string, chromiumSandbox: boolean): string[] {
   return [
     ...(chromiumSandbox ? [] : ["--no-sandbox"]),
     "--disable-background-networking",
     "--disable-component-update",
     "--disable-default-apps",
     "--disable-dev-shm-usage",
-    "--disable-features=NetworkPrediction,OptimizationHints,MediaRouter",
+    "--disable-features=NetworkPrediction,OptimizationHints,MediaRouter,WebRtcHideLocalIpsWithMdns",
+    "--disable-quic",
     "--disable-sync",
+    "--dns-prefetch-disable",
+    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+    "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1",
     "--metrics-recording-only",
     "--no-first-run",
     "--no-pings",
     "--password-store=basic",
-    `--host-resolver-rules=MAP * ~NOTFOUND${hosts.map((host) => `, EXCLUDE ${host}`).join("")}`,
+    `--proxy-bypass-list=<-loopback>`,
+    `--proxy-server=${proxyUrl}`,
   ];
 }
 
@@ -331,3 +401,8 @@ async function removeProfile(directory: string): Promise<void> {
   }
   throw new Error("The temporary browser profile could not be removed");
 }
+
+type Target = {
+  generation: number;
+  streaming: boolean;
+};

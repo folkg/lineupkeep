@@ -51,17 +51,15 @@ describe("hosted browser session descriptors", () => {
     expect(verifyHostedBrowserDescriptor(key, overlong, now)).toBeUndefined();
   });
 
-  it("rejects descriptor fields the browser cannot enforce", () => {
+  it("rejects a login URL that is not an absolute HTTP destination", () => {
     const relativeLogin = signHostedBrowserDescriptor(key, descriptor({ loginUrl: "/login" }));
-    const pathOrigin = signHostedBrowserDescriptor(
+    const scriptLogin = signHostedBrowserDescriptor(
       key,
-      descriptor({ allowedOrigins: ["https://login.yahoo.com/login"] }),
+      descriptor({ loginUrl: "javascript:alert(1)" }),
     );
-    const emptyOrigins = signHostedBrowserDescriptor(key, descriptor({ allowedOrigins: [] }));
 
     expect(verifyHostedBrowserDescriptor(key, relativeLogin, now)).toBeUndefined();
-    expect(verifyHostedBrowserDescriptor(key, pathOrigin, now)).toBeUndefined();
-    expect(verifyHostedBrowserDescriptor(key, emptyOrigins, now)).toBeUndefined();
+    expect(verifyHostedBrowserDescriptor(key, scriptLogin, now)).toBeUndefined();
   });
 
   it("rejects something that is not a signed envelope", () => {
@@ -77,7 +75,6 @@ function descriptor(overrides: Partial<HostedBrowserDescriptor> = {}): HostedBro
     sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
     expiresAt: now + 10 * 60 * 1_000,
     loginUrl: "https://login.yahoo.com/",
-    allowedOrigins: ["https://login.yahoo.com"],
     ...overrides,
   };
 }

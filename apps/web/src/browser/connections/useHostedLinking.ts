@@ -12,6 +12,7 @@ import type {
   HostedBrowserInput,
   HostedBrowserKey,
   HostedBrowserMessage,
+  HostedBrowserRefusalReason,
   HostedBrowserStatus,
 } from "#contracts/connections/hostedBrowserProtocol.ts";
 import { defaultProviderKey, defaultProviderName } from "#contracts/connections/providerLabels.ts";
@@ -91,6 +92,12 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
     switch (message._tag) {
       case "Status":
         setStatus(message.status);
+        return;
+      case "Refused":
+        setFailure({
+          type: "attention",
+          message: refusalMessage(message.host, message.reason),
+        });
         return;
       case "Ready": {
         setReady(true);
@@ -223,6 +230,17 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
     sendKey: (key: HostedBrowserKey) => sendInput({ _tag: "Key", key }),
     scroll: (deltaY) => sendInput({ _tag: "Scroll", deltaY }),
   };
+}
+
+function refusalMessage(host: string, reason: HostedBrowserRefusalReason): string {
+  switch (reason) {
+    case "non_public_address":
+      return `The secure browser refused to connect to ${host} because it does not resolve to a public internet address.`;
+    case "unresolvable":
+      return `The secure browser refused to connect to ${host} because the name could not be resolved.`;
+    case "invalid_destination":
+      return `The secure browser refused to connect to ${host} because it is not a valid destination.`;
+  }
 }
 
 function failureMessage(reason: HostedBrowserMessageFailure): string {

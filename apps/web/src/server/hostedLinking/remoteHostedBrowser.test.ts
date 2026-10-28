@@ -131,7 +131,6 @@ function session(): HostedBrowserSession {
     connectionId: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3"),
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),
     loginUrl: new URL("https://login.yahoo.com/"),
-    allowedOrigins: ["https://login.yahoo.com"],
   };
 }
 

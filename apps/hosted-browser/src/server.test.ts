@@ -24,7 +24,7 @@ it("streams provider sign-in, captures the session, and removes the profile", as
   const events: HostedBrowserSessionEvent[] = [];
   const service = createHostedBrowserService({
     descriptorKey,
-    allowedOrigins: [provider.url.origin],
+    fixtureOrigin: provider.url.origin,
     profileRoot,
     log: (event) => events.push(event),
   });
@@ -38,7 +38,6 @@ it("streams provider sign-in, captures the session, and removes the profile", as
       sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
       expiresAt: Date.now() + 60_000,
       loginUrl: provider.url.href,
-      allowedOrigins: [provider.url.origin],
     };
     const client = new WebSocket(`ws://127.0.0.1:${port}/session`);
     const clientClosed = closed(client);
@@ -87,12 +86,105 @@ it("streams provider sign-in, captures the session, and removes the profile", as
   }
 }, 60_000);
 
+it("refuses non-public destinations, names them, and records them in the outcome", async () => {
+  let blockedRequests = 0;
+  const blocked = await startServer((_request, response) => {
+    blockedRequests++;
+    response.writeHead(200, { "content-type": "image/gif" });
+    response.end();
+  });
+  const provider = await startServer((_request, response) => {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end(`<!doctype html>
+<html>
+  <body>
+    <img src="http://169.254.169.254/latest/meta-data/" alt="">
+    <img src="http://${blocked.url.host}/pixel" alt="">
+    <img src="http://localhost:${blocked.url.port}/pixel" alt="">
+  </body>
+</html>`);
+  });
+  const profileRoot = await mkdtemp(join(tmpdir(), "lineupkeep-service-test-"));
+  const events: HostedBrowserSessionEvent[] = [];
+  const settled = Promise.withResolvers<HostedBrowserSessionEvent>();
+  const service = createHostedBrowserService({
+    descriptorKey,
+    fixtureOrigin: provider.url.origin,
+    profileRoot,
+    log: (event) => {
+      events.push(event);
+      if (event.outcome === "cancelled") {
+        settled.resolve(event);
+      }
+    },
+  });
+  const port = await service.listen(0);
+  try {
+    const client = new WebSocket(`ws://127.0.0.1:${port}/session`);
+    const clientClosed = closed(client);
+    const waiting = Promise.withResolvers<void>();
+    const refusals = Promise.withResolvers<Array<{ host: string; reason: string }>>();
+    const seen: Array<{ host: string; reason: string }> = [];
+    client.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      const message = parseTransportMessage(rawDataText(data) ?? "");
+      if (message?._tag === "Status" && message.status === "waiting") {
+        waiting.resolve();
+      }
+      if (message?._tag === "Refused") {
+        seen.push({ host: message.host, reason: message.reason });
+        if (seen.length === 3) {
+          refusals.resolve(seen);
+        }
+      }
+    });
+
+    await opened(client);
+    client.send(
+      signHostedBrowserDescriptor(descriptorKey, {
+        sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a6",
+        expiresAt: Date.now() + 60_000,
+        loginUrl: provider.url.href,
+      }),
+    );
+    await waiting.promise;
+    const refused = await refusals.promise;
+
+    expect(refused).toEqual(
+      expect.arrayContaining([
+        { host: "169.254.169.254", reason: "non_public_address" },
+        { host: "127.0.0.1", reason: "non_public_address" },
+        { host: "localhost", reason: "non_public_address" },
+      ]),
+    );
+    expect(blockedRequests).toBe(0);
+
+    client.close(1000, "Test finished");
+    expect(await clientClosed).toBe(1000);
+    const outcome = await settled.promise;
+    expect(outcome.outcome).toBe("cancelled");
+    expect(outcome.refused?.map((refusal) => refusal.host).sort()).toEqual([
+      "127.0.0.1",
+      "169.254.169.254",
+      "localhost",
+    ]);
+    expect(outcome.refused?.every((refusal) => refusal.reason === "non_public_address")).toBe(true);
+  } finally {
+    await service.close();
+    await closeServer(blocked.server);
+    await closeServer(provider.server);
+    await rm(profileRoot, { recursive: true, force: true });
+  }
+}, 60_000);
+
 it("refuses forged descriptors, replayed sessions, and a second browser", async () => {
   const provider = await startServer(providerHandler);
   const profileRoot = await mkdtemp(join(tmpdir(), "lineupkeep-service-test-"));
   const service = createHostedBrowserService({
     descriptorKey,
-    allowedOrigins: [provider.url.origin],
+    fixtureOrigin: provider.url.origin,
     profileRoot,
     log: () => undefined,
   });
@@ -107,7 +199,6 @@ it("refuses forged descriptors, replayed sessions, and a second browser", async 
       sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",
       expiresAt: Date.now() + 60_000,
       loginUrl: provider.url.href,
-      allowedOrigins: [provider.url.origin],
     };
     const envelope = signHostedBrowserDescriptor(descriptorKey, session);
     const first = new WebSocket(`ws://127.0.0.1:${port}/session`);
@@ -157,7 +248,7 @@ it("destroys the browser and profile when the service stops", async () => {
   const events: HostedBrowserSessionEvent[] = [];
   const service = createHostedBrowserService({
     descriptorKey,
-    allowedOrigins: [provider.url.origin],
+    fixtureOrigin: provider.url.origin,
     profileRoot,
     log: (event) => events.push(event),
   });
@@ -167,7 +258,6 @@ it("destroys the browser and profile when the service stops", async () => {
       sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a5",
       expiresAt: Date.now() + 60_000,
       loginUrl: provider.url.href,
-      allowedOrigins: [provider.url.origin],
     };
     const client = new WebSocket(`ws://127.0.0.1:${port}/session`);
     const clientClosed = closed(client);

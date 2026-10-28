@@ -90,7 +90,9 @@ async function authorizeStream(
     connectionId: linking.connectionId,
     expiresAt: linking.expiresAt,
     loginUrl: providerLogin.loginUrl,
-    allowedOrigins: providerLogin.allowedOrigins,
+    ...(providerLogin.fixtureOrigin === undefined
+      ? {}
+      : { fixtureOrigin: providerLogin.fixtureOrigin }),
   };
 
   let browser: HostedBrowserHandle | undefined;
