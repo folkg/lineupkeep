@@ -160,7 +160,7 @@ function authentication(
         AuthService.of({
           signInMethods: { google: false },
           oauthResource: "https://example.test/mcp",
-          advertisedScopes: [{ name: "connections:read", description: "Read connections." }],
+          onboardingScopes: [{ name: "connections:read", description: "Read connections." }],
           resolveAccessToken: () => Effect.succeed({ status: "invalid" as const }),
           getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
           consent: () => Effect.succeed("https://client.test/callback"),

@@ -3,7 +3,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { betterAuth } from "better-auth/minimal";
 import { jwt } from "better-auth/plugins/jwt";
-import { isNotNull } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import {
   Clock,
   ConfigProvider,
@@ -17,7 +17,12 @@ import {
 } from "effect";
 import { vi } from "vitest";
 
-import { AuthorizationScopes, offlineAccess } from "#contexts/auth/AuthorizationScopes.ts";
+import {
+  AuthorizationScopes,
+  linkingHelperClient,
+  linkingHelperScope,
+  offlineAccess,
+} from "#contexts/auth/AuthorizationScopes.ts";
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
@@ -31,6 +36,7 @@ import { AuthDatabaseStatements, AuthDatabaseTest } from "./AuthDatabaseTest.ts"
 import { user } from "./AuthTables.ts";
 import * as authSchema from "./AuthTables.ts";
 import { BetterAuthAdapter } from "./BetterAuthAdapter.ts";
+import { OAuthClientRepository } from "./OAuthClientRepository.ts";
 import * as oauthSchema from "./OAuthTables.ts";
 import { oauthClient, oauthRefreshToken, jwks } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
@@ -692,6 +698,69 @@ it.effect(
 );
 
 it.effect(
+  "lets a dynamic registration step up to a scope advertised after it registered",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const database = yield* AuthDatabase;
+      const registration = yield* adapter.handle(
+        new Request("http://localhost:5173/api/auth/oauth2/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+            client_name: "Early registration",
+            redirect_uris: ["http://127.0.0.1:19999/callback"],
+            grant_types: ["authorization_code"],
+            response_types: ["code"],
+            token_endpoint_auth_method: "none",
+            application_type: "native",
+          }),
+        }),
+      );
+      const registered = yield* jsonOf(registration, Schema.Struct({ client_id: Schema.String }));
+      const advertised = [...testScopeDefinitions.map((scope) => scope.name), offlineAccess.name];
+      yield* Effect.promise(() =>
+        database
+          .update(oauthClient)
+          .set({ scopes: ["connections:read"] })
+          .where(eq(oauthClient.clientId, registered.client_id)),
+      );
+
+      const restarted = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
+      const query = new URLSearchParams({
+        response_type: "code",
+        client_id: registered.client_id,
+        redirect_uri: "http://127.0.0.1:19999/callback",
+        scope: advertised.join(" "),
+        resource: "http://localhost:5173/mcp",
+        code_challenge: "a".repeat(43),
+        code_challenge_method: "S256",
+      });
+      const authorization = yield* restarted.handle(
+        new Request(`http://localhost:5173/api/auth/oauth2/authorize?${query}`),
+      );
+      const clients = yield* Effect.promise(() =>
+        database.select().from(oauthClient).orderBy(oauthClient.clientId),
+      );
+
+      assert.strictEqual(registration.status, 201);
+      assert.strictEqual(
+        new URL(authorization.headers.get("location") ?? "", baseConfig.BETTER_AUTH_URL).pathname,
+        "/auth",
+      );
+      assert.deepStrictEqual(
+        clients.find((client) => client.clientId === registered.client_id)?.scopes,
+        advertised,
+      );
+      assert.deepStrictEqual(
+        clients.find((client) => client.clientId === linkingHelperClient.clientId)?.scopes,
+        [linkingHelperScope.name],
+      );
+    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+  databaseTestTimeout,
+);
+
+it.effect(
   "approves a signed authorization query and exchanges its code with PKCE",
   () =>
     Effect.gen(function* () {
@@ -1097,6 +1166,7 @@ function adapterLayer(
 > {
   return BetterAuthAdapter.layer.pipe(
     Layer.provideMerge(SignInCodeQuotaRepository.layer),
+    Layer.provide(OAuthClientRepository.layer),
     Layer.provide(scopes),
     Layer.provideMerge(
       Layer.mergeAll(
@@ -1113,6 +1183,7 @@ function adapterLayer(
 
 const instanceLayer = Layer.fresh(BetterAuthAdapter.layer).pipe(
   Layer.provide(SignInCodeQuotaRepository.layer),
+  Layer.provide(OAuthClientRepository.layer),
   Layer.provide(testScopes),
   Layer.provide(NodeCrypto.layer),
   Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(baseConfig))),

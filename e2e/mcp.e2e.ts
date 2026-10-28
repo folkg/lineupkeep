@@ -25,7 +25,14 @@ test("discovers and authorizes a stateless client through email sign-in, consent
   expect(anonymous.headers.get("www-authenticate")).toContain(
     `${origin}/.well-known/oauth-protected-resource/mcp`,
   );
-  expect(anonymous.headers.get("www-authenticate")).toContain(`scope="${documentedScopes}"`);
+  expect(anonymous.headers.get("www-authenticate")).toContain(`scope="${onboardingScopes}"`);
+  const toolChallenge = await mcpClient(mcpEndpoint(origin)).request("tools/call", {
+    name: "set_team_automation",
+    arguments: {},
+  });
+  expect(toolChallenge.status).toBe(401);
+  expect(toolChallenge.headers.get("www-authenticate")).toContain('scope="teams:manage"');
+  expect(toolChallenge.headers.get("www-authenticate")).not.toContain("feedback:manage");
 
   const { credentials } = await authorize(
     page,
@@ -267,7 +274,8 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   )(await readDenied.json());
   expect(denial.scope).toBe("fantasy:read");
   expect(denial.error).toBe("insufficient_scope");
-  expect(denial.error_description).toContain(documentedScopes);
+  expect(denial.error_description).toContain("fantasy:read");
+  expect(denial.error_description).not.toContain("teams:manage");
 
   const reviewDenied = await client.request("tools/call", {
     name: "generate_transaction_review_links",
@@ -320,6 +328,73 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   });
   expect(missingTeam.isError).toBe(true);
   expect(JSON.stringify(missingTeam)).not.toContain("completed");
+});
+
+test("reads on a restricted grant and refuses only the manage tools", async ({ page, baseURL }) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+  const { credentials } = await authorize(
+    page,
+    origin,
+    "connections:read fantasy:read transactions:review lineups:write offline_access",
+  );
+  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
+
+  const read = await client.request("tools/call", {
+    name: "list_connections",
+    arguments: {},
+  });
+  expect(read.status).toBe(200);
+
+  const automation = await client.request("tools/call", {
+    name: "set_team_automation",
+    arguments: { teams: [{ team: randomUUID(), action: "enable" }] },
+  });
+  expect(automation.status).toBe(403);
+  expect(automation.headers.get("www-authenticate")).toContain('scope="teams:manage"');
+
+  const listed = await client.request("tools/call", { name: "list_feedback", arguments: {} });
+  expect(listed.status).toBe(403);
+  expect(listed.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+
+  const submitted = await client.callTool("submit_feedback", {
+    kind: "friction",
+    title: "Restricted grant",
+    body: "A read-only client can still report a problem.",
+  });
+  expect(submitted.isError).toBe(false);
+  expect(JSON.stringify(submitted.structuredContent)).toContain('"status":"open"');
+});
+
+test("lists tools and submits feedback on the onboarding grant", async ({ page, baseURL }) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+  const { credentials } = await authorize(page, origin, onboardingScopes);
+  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
+
+  const tools = await client.request("tools/list");
+  const read = await client.request("tools/call", {
+    name: "list_connections",
+    arguments: {},
+  });
+  const submitted = await client.callTool("submit_feedback", {
+    kind: "data-issue",
+    title: "Onboarding grant",
+    body: "The minimal first authorization can submit this report.",
+  });
+  const listed = await client.request("tools/call", { name: "list_feedback", arguments: {} });
+  const triaged = await client.request("tools/call", {
+    name: "triage_feedback",
+    arguments: { feedback: [{ feedback: randomUUID(), action: "acknowledge" }] },
+  });
+
+  expect(tools.status).toBe(200);
+  expect(read.status).toBe(200);
+  expect(submitted.isError).toBe(false);
+  expect(listed.status).toBe(403);
+  expect(listed.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+  expect(triaged.status).toBe(403);
+  expect(triaged.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
 });
 
 test("changes automation over MCP and reports it through list_teams", async ({
@@ -725,6 +800,7 @@ function documentedHeaders(method: string): Record<string, string> {
 }
 
 const protocolVersion = "2026-07-28";
+const onboardingScopes = "connections:read fantasy:read offline_access";
 const documentedScopes =
   "connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access";
 

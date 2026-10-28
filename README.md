@@ -73,10 +73,21 @@ Connect a stateless **MCP 2026-07-28** client to `https://<host>/mcp`; earlier s
 ### Request this scope set on the first authorization
 
 ```text
-connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access
+connections:read fantasy:read offline_access
 ```
 
-One consent with every scope above covers all shipped tools and renewable access. A narrower request still authorizes, then fails the tools whose scopes it omitted: the `401` challenge and the `403` body both name scopes so a client that surfaces only a response body can still see what is missing. Authorization-server metadata publishes this list; protected-resource metadata publishes the six resource scopes, because `offline_access` buys a refresh token from the authorization server rather than access to the resource.
+Every tool enforces one scope and only that scope. This baseline reads connections and fantasy
+data, submits feedback, and buys a refresh token. A tool that needs `transactions:review`,
+`lineups:write`, `teams:manage`, or `feedback:manage` answers `403 insufficient_scope` with the
+one scope it needs, so add that scope in a new authorization instead of requesting everything up
+front. The `401` challenge names the same baseline, or the called tool's scope; the `403` body
+names the missing scope, so a client that surfaces only a response body can still see what is
+missing. Authorization-server metadata publishes the complete set—
+`connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access`—while
+protected-resource metadata publishes the six resource scopes, because `offline_access` buys a
+refresh token from the authorization server rather than access to the resource. The full
+per-tool table and the incremental-authorization behaviour are in the
+[MCP contract](docs/fantasy-manager/MCP.md#per-tool-scopes).
 
 ### First requests
 

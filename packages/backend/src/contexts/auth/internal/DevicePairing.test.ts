@@ -16,6 +16,7 @@ import { PublicInternet } from "#runtime/PublicInternet.ts";
 import { AuthDatabase } from "./AuthDatabase.ts";
 import { AuthDatabaseTest } from "./AuthDatabaseTest.ts";
 import { BetterAuthAdapter } from "./BetterAuthAdapter.ts";
+import { OAuthClientRepository } from "./OAuthClientRepository.ts";
 import { deviceCode } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
 
@@ -121,6 +122,7 @@ const adapterLayer = (): Layer.Layer<
 > =>
   BetterAuthAdapter.layer.pipe(
     Layer.provideMerge(SignInCodeQuotaRepository.layer),
+    Layer.provide(OAuthClientRepository.layer),
     Layer.provide(
       Layer.succeed(AuthorizationScopes)([
         { name: "connections:read", description: "Read connection metadata." },

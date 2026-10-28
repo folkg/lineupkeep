@@ -1,15 +1,20 @@
 import { readFileSync } from "node:fs";
 
-import { advertisedScopes } from "@lineupkeep/backend/runtime/ApplicationScopes";
+import { advertisedScopes, onboardingScopes } from "@lineupkeep/backend/runtime/ApplicationScopes";
 import { expect, it } from "vitest";
 
-it("documents the advertised scope set a client must request first", () => {
+const read = (name: string): string => readFileSync(new URL(`../${name}`, import.meta.url), "utf8");
+
+it("documents the minimal scope set a client requests on its first authorization", () => {
+  const documented = onboardingScopes.map((scope) => scope.name).join(" ");
+
+  for (const name of ["README.md", "docs/fantasy-manager/MCP.md"]) {
+    expect(read(name), name).toContain(documented);
+  }
+});
+
+it("documents the full authorization-server scope set in the MCP contract", () => {
   const documented = advertisedScopes.map((scope) => scope.name).join(" ");
 
-  for (const path of [
-    new URL("../README.md", import.meta.url),
-    new URL("../docs/fantasy-manager/MCP.md", import.meta.url),
-  ]) {
-    expect(readFileSync(path, "utf8")).toContain(documented);
-  }
+  expect(read("docs/fantasy-manager/MCP.md")).toContain(documented);
 });

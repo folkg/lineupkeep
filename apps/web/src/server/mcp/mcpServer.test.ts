@@ -146,30 +146,123 @@ it("serves composed feature toolkits without requiring connection services", asy
   expect(rejected.headers.get("www-authenticate")).toContain('scope="example:write"');
 });
 
-it("challenges an unauthenticated client with protected-resource discovery and the whole scope set", async () => {
+it("challenges an unauthenticated client with protected-resource discovery and a minimal onboarding grant", async () => {
   const response = await handle(request("tools/list"));
   const body = await json(response);
 
   expect(response.status).toBe(401);
   expect(response.headers.get("www-authenticate")).toBe(
-    'Bearer resource_metadata="https://connections.example/.well-known/oauth-protected-resource/mcp", scope="connections:read fantasy:read example:write"',
+    'Bearer resource_metadata="https://connections.example/.well-known/oauth-protected-resource/mcp", scope="connections:read fantasy:read offline_access"',
   );
   expect(body).toMatchObject({
     error: "unauthorized",
-    scope: "connections:read fantasy:read example:write",
+    scope: "connections:read fantasy:read offline_access",
     resource_metadata: "https://connections.example/.well-known/oauth-protected-resource/mcp",
   });
+  expect(JSON.stringify(body)).not.toContain("teams:manage");
 });
 
-it("names the required scope in a 403 body and points at the full advertised set", async () => {
+it("names only the calling tool's missing scope in a 403 body", async () => {
   const response = await handle(
-    request("tools/call", { name: "set_lineup", arguments: {} }, "read"),
+    request("tools/call", { name: "list_feedback", arguments: {} }, "restricted"),
   );
   const body = await json(response);
 
   expect(response.status).toBe(403);
-  expect(body).toMatchObject({ error: "insufficient_scope", scope: "lineups:write" });
-  expect(JSON.stringify(body)).toContain("connections:read fantasy:read example:write");
+  expect(response.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+  expect(body).toMatchObject({ error: "insufficient_scope", scope: "feedback:manage" });
+  expect(JSON.stringify(body)).not.toContain("teams:manage");
+  expect(JSON.stringify(body)).not.toContain("connections:read");
+});
+
+it("reads on a five-scope grant and refuses only the tools that need a manage scope", async () => {
+  const listing = await handle(request("tools/list", {}, "restricted"));
+  const read = await handle(
+    request("tools/call", { name: "list_connections", arguments: {} }, "restricted"),
+  );
+  const automation = await handle(
+    request(
+      "tools/call",
+      {
+        name: "set_team_automation",
+        arguments: { teams: [{ team: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "enable" }] },
+      },
+      "restricted",
+    ),
+  );
+  const feedback = await handle(
+    request("tools/call", { name: "list_feedback", arguments: {} }, "restricted"),
+  );
+
+  expect(listing.status).toBe(200);
+  expect(read.status).toBe(200);
+  expect(automation.status).toBe(403);
+  expect(automation.headers.get("www-authenticate")).toContain('scope="teams:manage"');
+  expect(feedback.status).toBe(403);
+  expect(feedback.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+});
+
+it("asks the auth service only for the calling tool's scope", async () => {
+  const requested: Array<ReadonlyArray<string>> = [];
+  const tools = Toolkit.make(
+    Tool.make("echo", { success: Schema.String }).annotate(RequiredScope, {
+      name: "example:read",
+      description: "Read examples.",
+    }),
+    Tool.make("change", { success: Schema.String }).annotate(RequiredScope, {
+      name: "example:write",
+      description: "Change examples.",
+    }),
+  );
+  const run = (invocation: Request): Promise<Response> =>
+    Effect.runPromise(
+      mcpRequest(
+        invocation,
+        tools,
+        () =>
+          tools.toLayer({
+            echo: () => Effect.succeed("read"),
+            change: () => Effect.succeed("changed"),
+          }),
+        { name: "Example", version: "1" },
+      ).pipe(
+        Effect.provide(
+          Layer.succeed(AuthService)({
+            signInMethods: { google: false },
+            oauthResource: "https://connections.example/mcp",
+            onboardingScopes: [{ name: "example:read", description: "Read examples." }],
+            getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
+            consent: () => Effect.succeed("https://client.test/callback"),
+            handle: () => Effect.succeed(new Response()),
+            claimDeviceAuthorization: () => Effect.succeed({ clientId: "helper", scope: "" }),
+            approveDeviceAuthorization: () => Effect.void,
+            denyDeviceAuthorization: () => Effect.void,
+            getSession: () => Effect.void.pipe(Effect.as(undefined)),
+            resolveAccessToken: (_token, scopes) => {
+              requested.push(scopes);
+              return Effect.succeed({
+                status: "authenticated" as const,
+                userId: decodeUserId("reader"),
+              });
+            },
+          }),
+        ),
+      ),
+    );
+
+  await run(request("tools/call", { name: "echo", arguments: {} }, "granted"));
+  await run(request("tools/call", { name: "change", arguments: {} }, "granted"));
+
+  expect(requested).toEqual([["example:read"], ["example:write"]]);
+});
+
+it("refuses a token that grants no scopes", async () => {
+  const response = await handle(
+    request("tools/call", { name: "list_connections", arguments: {} }, "none"),
+  );
+
+  expect(response.status).toBe(403);
+  expect(response.headers.get("www-authenticate")).toContain('scope="connections:read"');
 });
 
 it.each(["2025-03-26", "2025-06-18", "2025-11-25"])(
@@ -560,7 +653,7 @@ it("requires teams:manage and changes automation through the shared team service
   expect(enabled).toBe(true);
 });
 
-it("requires feedback:manage and records agent feedback for the authenticated account", async () => {
+it("records agent feedback for the authenticated account on a read grant", async () => {
   const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
   const submitted: Array<{ readonly userId: string; readonly submitter: unknown }> = [];
   const feedback: FeedbackShape = {
@@ -603,15 +696,15 @@ it("requires feedback:manage and records agent feedback for the authenticated ac
   };
 
   const denied = await call(
-    request("tools/call", { name: "submit_feedback", arguments: arguments_ }, "read"),
+    request("tools/call", { name: "submit_feedback", arguments: arguments_ }, "fantasy"),
   );
 
   expect(denied.status).toBe(403);
-  expect(denied.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+  expect(denied.headers.get("www-authenticate")).toContain('scope="connections:read"');
   expect(submitted).toEqual([]);
 
   const allowed = await call(
-    request("tools/call", { name: "submit_feedback", arguments: arguments_ }, "feedback"),
+    request("tools/call", { name: "submit_feedback", arguments: arguments_ }, "read"),
   );
   const body = await json(allowed);
 
@@ -630,6 +723,13 @@ it("requires feedback:manage and records agent feedback for the authenticated ac
   });
   expect(submitted).toEqual([{ userId: "reader", submitter: { kind: "agent", reference: "mcp" } }]);
   expect(JSON.stringify(body)).not.toContain("cause");
+
+  const listed = await call(
+    request("tools/call", { name: "list_feedback", arguments: {} }, "read"),
+  );
+
+  expect(listed.status).toBe(403);
+  expect(listed.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
 });
 
 it("returns an actionable failure for refused feedback instead of leaking persistence details", async () => {
@@ -653,9 +753,10 @@ it("returns an actionable failure for refused feedback instead of leaking persis
     service: FeedbackShape,
     name: string,
     arguments_: Record<string, unknown>,
+    token: string,
   ): Promise<Response> =>
     handleMcpRequest(
-      request("tools/call", { name, arguments: arguments_ }, "feedback"),
+      request("tools/call", { name, arguments: arguments_ }, token),
       (_request, _operation, program) =>
         Effect.runPromise(
           Effect.provide(
@@ -674,10 +775,10 @@ it("returns an actionable failure for refused feedback instead of leaking persis
     );
   const submission = { kind: "bug", title: "Title", body: "Body" };
 
-  const throttled = await run(limited, "submit_feedback", submission);
-  const invalid = await run(rejected, "submit_feedback", submission);
-  const failed = await run(broken, "list_feedback", {});
-  const invalidLimit = await run(broken, "list_feedback", { limit: 0 });
+  const throttled = await run(limited, "submit_feedback", submission, "read");
+  const invalid = await run(rejected, "submit_feedback", submission, "read");
+  const failed = await run(broken, "list_feedback", {}, "feedback");
+  const invalidLimit = await run(broken, "list_feedback", { limit: 0 }, "feedback");
 
   const throttledBody = await json(throttled);
   const invalidBody = await json(invalid);
@@ -807,10 +908,10 @@ it("triages owned feedback through the shared service and reports each outcome",
 const authentication = Layer.succeed(AuthService)({
   signInMethods: { google: false },
   oauthResource: "https://connections.example/mcp",
-  advertisedScopes: [
+  onboardingScopes: [
     { name: "connections:read", description: "Read connections." },
     { name: "fantasy:read", description: "Read fantasy data." },
-    { name: "example:write", description: "Change examples." },
+    { name: "offline_access", description: "Stay connected." },
   ],
   getSession: () => Effect.void.pipe(Effect.as(undefined)),
   handle: () => Effect.succeed(new Response()),
@@ -829,7 +930,17 @@ const authentication = Layer.succeed(AuthService)({
             ? ["transactions:review"]
             : token === "feedback"
               ? ["feedback:manage"]
-              : scopes;
+              : token === "restricted"
+                ? [
+                    "connections:read",
+                    "fantasy:read",
+                    "transactions:review",
+                    "lineups:write",
+                    "offline_access",
+                  ]
+                : token === "none"
+                  ? []
+                  : scopes;
     return Effect.succeed(
       scopes.every((scope) => granted.includes(scope))
         ? { status: "authenticated" as const, userId: decodeUserId("reader") }

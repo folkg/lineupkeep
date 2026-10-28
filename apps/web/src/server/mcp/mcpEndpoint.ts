@@ -29,7 +29,11 @@ export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<stri
       ? { status: "invalid" as const }
       : yield* auth.resolveAccessToken(bearer, scopes);
   if (identity.status !== "authenticated") {
-    return yield* challengeResponse(resource, identity.status, scopes, auth.advertisedScopes);
+    return yield* challengeResponse(
+      resource,
+      identity.status,
+      challengeScope(invocation, auth.onboardingScopes),
+    );
   }
   yield* Effect.annotateCurrentSpan({
     "auth.state": "authenticated",
@@ -69,7 +73,21 @@ function readInvocation<Tools extends Record<string, Tool.Any>>(
 }
 
 function requiredScopes(tool: Tool.Any | undefined): ReadonlyArray<string> {
-  return tool === undefined ? [] : [Context.getUnsafe(tool.annotations, RequiredScope).name];
+  return tool === undefined ? [] : [requiredScope(tool)];
+}
+
+function requiredScope(tool: Tool.Any): string {
+  return Context.getUnsafe(tool.annotations, RequiredScope).name;
+}
+
+function challengeScope(
+  invocation: Invocation,
+  onboardingScopes: ReadonlyArray<AuthorizationScope>,
+): string {
+  if (invocation.tool !== undefined) {
+    return requiredScope(invocation.tool);
+  }
+  return onboardingScopes.map((scope) => scope.name).join(" ");
 }
 
 function bearerToken(headers: Headers): string | undefined {
@@ -133,15 +151,12 @@ function requestedProtocolVersion(params: unknown): string | undefined {
 function challengeResponse(
   resource: URL,
   status: "invalid" | "insufficient_scope",
-  requiredScopes: ReadonlyArray<string>,
-  advertisedScopes: ReadonlyArray<AuthorizationScope>,
+  scope: string,
 ): Effect.Effect<Response, never, never> {
   return Effect.gen(function* () {
     const insufficient = status === "insufficient_scope";
     const metadata = new URL(`/.well-known/oauth-protected-resource${resource.pathname}`, resource)
       .href;
-    const advertised = advertisedScopes.map((scope) => scope.name).join(" ");
-    const scope = insufficient ? requiredScopes.join(" ") : advertised;
     const challenge = [
       `Bearer resource_metadata="${metadata}"`,
       ...(insufficient ? ['error="insufficient_scope"'] : []),
@@ -157,13 +172,13 @@ function challengeResponse(
         ? {
             error: "insufficient_scope",
             scope,
-            error_description: `This access token does not grant the ${scope} scope. Authorize again and request every advertised scope (${advertised}).`,
+            error_description: `This access token does not grant the ${scope} scope. Authorize again and request ${scope} in addition to the scopes this client already holds.`,
           }
         : {
             error: "unauthorized",
             scope,
             resource_metadata: metadata,
-            error_description: `Authorize against the resource metadata, request every advertised scope (${advertised}), and send the access token as a bearer token.`,
+            error_description: `Authorize against the resource metadata, then send the access token as a bearer token. A first authorization can request ${scope}; each tool names the scope it needs in a 403 when the current grant lacks it.`,
           },
       {
         status: insufficient ? 403 : 401,

@@ -46,11 +46,13 @@ import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import { UserId } from "#contexts/auth/User.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
 import type { EmailDeliveryFailed, EmailMessage } from "#email/EmailDelivery.ts";
+import { onboardingScopes } from "#runtime/ApplicationScopes.ts";
 import { BackgroundWork } from "#runtime/BackgroundWork.ts";
 import { PublicInternet, PublicInternetUnavailable } from "#runtime/PublicInternet.ts";
 
 import { AuthDatabase } from "./AuthDatabase.ts";
 import * as authSchema from "./AuthTables.ts";
+import { OAuthClientRepository } from "./OAuthClientRepository.ts";
 import * as oauthSchema from "./OAuthTables.ts";
 import { oauthClient, oauthClientResource } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
@@ -64,6 +66,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       const internet = yield* PublicInternet;
       const emailDelivery = yield* EmailDelivery;
       const quota = yield* SignInCodeQuotaRepository;
+      const oauthClients = yield* OAuthClientRepository;
       const baseUrl = yield* authBaseUrlConfig;
       const secret = yield* authSecretConfig;
       const environment = yield* appEnvironmentConfig;
@@ -103,6 +106,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         Effect.gen(function* () {
           const auth = yield* initializeAuth(authOptions);
           yield* seedLinkingHelperClient(database, oauthResource);
+          yield* oauthClients.widenDynamicRegistrations(scopes);
           return auth;
         }),
       );
@@ -396,7 +400,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       return {
         signInMethods: { google: Option.isSome(google) },
         oauthResource,
-        advertisedScopes: scopes,
+        onboardingScopes,
         handle,
         getSession,
         resolveAccessToken,
@@ -539,6 +543,7 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
         resource: options.oauthResource,
         resourceSeedMode: "insertOnly",
         scopes: options.scopes.map((scope) => scope.name),
+        clientRegistrationDefaultScopes: options.scopes.map((scope) => scope.name),
         grantTypes: ["authorization_code", "refresh_token"],
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,

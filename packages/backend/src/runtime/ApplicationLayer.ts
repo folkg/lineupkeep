@@ -7,6 +7,7 @@ import { AuthorizationScopes } from "#contexts/auth/AuthorizationScopes.ts";
 import { AuthDatabase } from "#contexts/auth/internal/AuthDatabase.ts";
 import { AuthLive } from "#contexts/auth/internal/AuthLive.ts";
 import { BetterAuthAdapter } from "#contexts/auth/internal/BetterAuthAdapter.ts";
+import { OAuthClientRepository } from "#contexts/auth/internal/OAuthClientRepository.ts";
 import { SignInCodeQuotaRepository } from "#contexts/auth/internal/SignInCodeQuotaRepository.ts";
 import { UserDirectoryLive } from "#contexts/auth/internal/UserDirectoryRepository.ts";
 import type { Automation } from "#contexts/connections/Automation.ts";
@@ -57,6 +58,7 @@ const AuthLayer = AuthLive.pipe(
   Layer.provide(BetterAuthAdapter.layer),
   Layer.provide(Layer.succeed(AuthorizationScopes)(advertisedScopes)),
   Layer.provide(SignInCodeQuotaRepository.layer),
+  Layer.provide(OAuthClientRepository.layer),
   Layer.provide(AuthDatabase.layer),
   Layer.provide(EmailDeliveryLayer),
 );

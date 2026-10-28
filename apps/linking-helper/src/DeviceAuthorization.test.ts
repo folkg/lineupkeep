@@ -11,6 +11,7 @@ import { AuthDatabase } from "@lineupkeep/backend/auth/internal/AuthDatabase";
 import { AuthDatabaseTest } from "@lineupkeep/backend/auth/internal/AuthDatabaseTest";
 import { AuthLive } from "@lineupkeep/backend/auth/internal/AuthLive";
 import { BetterAuthAdapter } from "@lineupkeep/backend/auth/internal/BetterAuthAdapter";
+import { OAuthClientRepository } from "@lineupkeep/backend/auth/internal/OAuthClientRepository";
 import { deviceCode } from "@lineupkeep/backend/auth/internal/OAuthTables";
 import { SignInCodeQuotaRepository } from "@lineupkeep/backend/auth/internal/SignInCodeQuotaRepository";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
@@ -209,6 +210,7 @@ const AuthLayer = AuthLive.pipe(
   Layer.provide(BetterAuthAdapter.layer),
   Layer.provide(Layer.succeed(AuthorizationScopes)(Object.values(connectionScopes))),
   Layer.provide(SignInCodeQuotaRepository.layer),
+  Layer.provide(OAuthClientRepository.layer),
   Layer.provideMerge(AuthDatabaseTest),
   Layer.provideMerge(EmailDeliveryTest),
   Layer.provide(BackgroundWork.processLifetime),

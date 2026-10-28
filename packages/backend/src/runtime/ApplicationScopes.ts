@@ -19,3 +19,9 @@ export const advertisedScopes: ReadonlyArray<AuthorizationScope> = [
   ...resourceScopes,
   offlineAccess,
 ];
+
+export const onboardingScopes: ReadonlyArray<AuthorizationScope> = [
+  connectionScopes.read,
+  fantasyQueryScopes.read,
+  offlineAccess,
+];

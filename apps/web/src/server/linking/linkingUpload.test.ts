@@ -10,6 +10,7 @@ import { AuthorizationScopes } from "@lineupkeep/backend/auth/AuthorizationScope
 import { AuthDatabaseTest } from "@lineupkeep/backend/auth/internal/AuthDatabaseTest";
 import { AuthLive } from "@lineupkeep/backend/auth/internal/AuthLive";
 import { BetterAuthAdapter } from "@lineupkeep/backend/auth/internal/BetterAuthAdapter";
+import { OAuthClientRepository } from "@lineupkeep/backend/auth/internal/OAuthClientRepository";
 import { SignInCodeQuotaRepository } from "@lineupkeep/backend/auth/internal/SignInCodeQuotaRepository";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import type { ProviderConnection } from "@lineupkeep/backend/connections/Connection";
@@ -365,6 +366,7 @@ const AuthLayer = AuthLive.pipe(
   Layer.provide(BetterAuthAdapter.layer),
   Layer.provide(Layer.succeed(AuthorizationScopes)(Object.values(connectionScopes))),
   Layer.provide(SignInCodeQuotaRepository.layer),
+  Layer.provide(OAuthClientRepository.layer),
   Layer.provide(AuthDatabaseTest),
   Layer.provideMerge(EmailDeliveryTest),
   Layer.provide(BackgroundWork.processLifetime),
@@ -389,7 +391,7 @@ const TestLayer = ConnectionsLayer.pipe(
 const authServiceFake: AuthServiceShape = {
   signInMethods: { google: false },
   oauthResource: "http://localhost:5173/mcp",
-  advertisedScopes: [linkingHelperScope],
+  onboardingScopes: [linkingHelperScope],
   resolveAccessToken: () => Effect.succeed({ status: "invalid" as const }),
   getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
   consent: () => Effect.succeed("http://localhost:5173/connections"),

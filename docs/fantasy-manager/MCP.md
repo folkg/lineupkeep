@@ -59,7 +59,7 @@ This tool changes only durable Lineupkeep automation state; it never contacts th
 
 Feedback is one owner-scoped record for a bug, data issue, friction report, or wishlist item. `submit_feedback` records the acting account's report and returns its id and `open` status; `list_feedback` returns that account's reports in newest-first order with optional status, kind, and start-time filters; `triage_feedback` acknowledges, resolves with a note, or closes as not planned.
 
-An agent acting for a person may read and close that person's reports, because the account granted `feedback:manage` and every query is filtered to its owner. There is no agent-wide, operator, or support queue, and no tool widens access to another account's reports: a foreign report id is `not_found`, not a forbidden-with-details response. The owner's intent is that the person's own agent can file, follow up, and close without the product owner relaying messages by hand.
+An agent acting for a person may read and close that person's reports, because the account granted `feedback:manage` and every query is filtered to its owner. Filing a report needs only `connections:read`, so the person's agent can always report a problem; reading and closing existing reports needs the manage scope. There is no agent-wide, operator, or support queue, and no tool widens access to another account's reports: a foreign report id is `not_found`, not a forbidden-with-details response. The owner's intent is that the person's own agent can file, follow up, and close without the product owner relaying messages by hand.
 
 Status is `open`, `acknowledged`, `resolved`, or `wontfix`. `resolve` requires a resolution note and sets the closure time; `wontfix` accepts an optional note. Repeating the current action is an `unchanged` no-op with the resulting record, and an action that contradicts a closed report is `rejected`: closure is final, so report the problem again if it returns. Results echo each requested action in order with its outcome, status, note, and a safe explanation.
 
@@ -135,21 +135,103 @@ Generate links from typed domain intents and verified relationships. Users may c
 
 Return a clear human-review instruction and no guarantee of add/drop/trade eligibility. No POST/PUT execution, final confirmation automation, waivers/bid submission, or multi-add/drop behavior not validated by the adapter.
 
-## Client onboarding
+## Client onboarding and scopes
 
-The documented set a client requests on its first authorization:
+### Per-tool scopes
+
+Every tool enforces one scope, and only that scope. Holding a scope no tool needs, or
+lacking a scope a different tool needs, does not change whether a call succeeds.
+
+| Tool                                | Required scope        |
+| ----------------------------------- | --------------------- |
+| `list_connections`                  | `connections:read`    |
+| `list_teams`                        | `fantasy:read`        |
+| `get_calendar`                      | `fantasy:read`        |
+| `get_league`                        | `fantasy:read`        |
+| `get_rosters`                       | `fantasy:read`        |
+| `search_players`                    | `fantasy:read`        |
+| `get_players`                       | `fantasy:read`        |
+| `get_matchups`                      | `fantasy:read`        |
+| `get_team_summary`                  | `fantasy:read`        |
+| `get_transactions`                  | `fantasy:read`        |
+| `generate_transaction_review_links` | `transactions:review` |
+| `set_lineup`                        | `lineups:write`       |
+| `get_lineup_runs`                   | `lineups:write`       |
+| `set_team_automation`               | `teams:manage`        |
+| `submit_feedback`                   | `connections:read`    |
+| `list_feedback`                     | `feedback:manage`     |
+| `triage_feedback`                   | `feedback:manage`     |
+
+A scope-coverage test derives this table from the tool declarations, so a tool that omits a
+scope fails the test suite instead of becoming an open endpoint.
+
+`submit_feedback` requires `connections:read` rather than `feedback:manage`. Submission creates
+only the acting account's own report under the same rate limits and owner scoping as before, and
+it is the channel for reporting the scope problem itself, so it cannot sit behind a manage grant.
+Listing and triage remain `feedback:manage`: a client with only read scopes can file a report and
+can neither read nor change one.
+
+### First authorization
+
+Request this minimal baseline first:
 
 ```text
-connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access
+connections:read fantasy:read offline_access
 ```
 
-`connections:read` reads connection status; `fantasy:read`, `transactions:review`, `lineups:write`, `teams:manage`, and `feedback:manage` cover the query, review-link, lineup, automation-control, and feedback tools; `offline_access` buys a refresh token. Requesting a subset authorizes and then fails the tools whose scope it omitted, so the whole set is the supported request.
+It reads connections and fantasy data, submits feedback, and buys a refresh token. Every other
+tool answers `403 insufficient_scope` naming the one scope it needs; authorize again for that
+scope and keep the existing grant. The complete authorization-server set is
+`connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access`.
+A client platform that refuses `teams:manage` or `feedback:manage` still reads, submits feedback,
+and runs the tools it was granted.
 
-Access tokens last five minutes; refresh tokens last 30 days from issue or last rotation. The refresh grant rotates on every use. A client must request `offline_access` on the first authorization and persist each returned `refresh_token`; a rotated-out token is accepted for 30 seconds so a retried refresh can recover, then reuse is treated as replay and revokes the whole grant for that client and person. A client that keeps reusing an already-rotated token therefore loses the connection at its next renewal and must authorize again. The full request and response shape, including the public-client refresh with no secret, is in the [client setup](../../README.md#token-lifetime-and-renewal).
+An unauthenticated request gets `401` with the protected-resource metadata link and a `scope`
+naming only what the request needs: the called tool's scope for `tools/call`, and the baseline
+above for a request that names no tool (`initialize`, `tools/list`). The body repeats the
+plain-language remedy and never asks for the whole advertised set. A `403` names the called tool's
+missing scope in both the `WWW-Authenticate` challenge and the body. `server/discover` answers
+without a token and publishes only the product name, supported protocol versions, and
+capabilities.
 
-The unauthenticated `401` advertises the whole set in its `scope` parameter and body, and a `403` names the missing scope in the body as well as the challenge header. `server/discover` answers without a token and publishes only the product name, supported protocol versions, and capabilities. Authorization-server metadata publishes all seven scopes; protected-resource metadata publishes the six resource scopes, because `offline_access` addresses the authorization server rather than the resource. A scope-coverage test asserts the documented set against the required scope of every shipped tool.
+### Adding a scope
 
-Dynamic registration records the advertised set as the client's allowed scope, while an authorization grant is exactly the scope an authorize request asks for. Both are needed: registration allows the grant, the request narrows it. Complete first-request examples, header and `_meta` requirements, and the registration fallback are in the [client setup](../../README.md#connecting-an-mcp-client).
+Scope enforcement is per tool, so a token issued before a new scope existed keeps working for
+every tool whose scope it already holds; only a tool that declares the new scope answers `403`.
+Adding a scope is an additive change to the advertised set, not a grant reset. Dynamic
+registration records the whole advertised set as a client's capability ceiling, and the
+application widens a stored dynamic registration that predates a newly advertised scope, so an
+existing client can step up without re-registering. An authorization grant remains exactly the
+scope the authorize request asks for.
+
+A client that requests a newly advertised scope and receives `invalid_scope` is hitting a stored
+registration ceiling, not a metadata cache: the authorization server validates the request
+against the scopes persisted when the client registered, and Client ID Metadata Document clients
+refresh that record from their own document on every authorization. The step-up failure reported
+against the seven-scope request was this ceiling, amplified by the old `401` telling the client
+to request the whole set in one authorization.
+
+### Discovery documents
+
+Authorization-server metadata publishes all seven scopes above. Protected-resource metadata
+publishes the six resource scopes and omits `offline_access`. That difference is deliberate:
+[RFC 9728 §2](https://www.rfc-editor.org/rfc/rfc9728#section-2) defines protected-resource
+`scopes_supported` as the scope values used to request access to that resource, while
+[OpenID Connect Core §11](https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess)
+defines `offline_access` as a request to the authorization server for a refresh token, not an
+access right on the resource. A test pins both lists and this single difference.
+
+Access tokens last five minutes; refresh tokens last 30 days from issue or last rotation. The
+refresh grant rotates on every use. A client must request `offline_access` on the first
+authorization and persist each returned `refresh_token`; a rotated-out token is accepted for 30
+seconds so a retried refresh can recover, then reuse is treated as replay and revokes the whole
+grant for that client and person. A client that keeps reusing an already-rotated token therefore
+loses the connection at its next renewal and must authorize again. The full request and response
+shape, including the public-client refresh with no secret, is in the
+[client setup](../../README.md#token-lifetime-and-renewal).
+
+Complete first-request examples, header and `_meta` requirements, and the registration fallback
+are in the [client setup](../../README.md#connecting-an-mcp-client).
 
 ## Client acceptance
 

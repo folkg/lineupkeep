@@ -2,6 +2,6 @@ export const feedbackScopes = {
   manage: {
     name: "feedback:manage",
     description:
-      "Report a bug, data problem, friction, or wishlist item for your own account, and read, acknowledge, resolve, or close the reports that account owns. It never exposes another person's reports.",
+      "Read, acknowledge, resolve, or close the feedback reports your account owns. Submission needs only connections:read. This never exposes another person's reports.",
   },
 } as const;

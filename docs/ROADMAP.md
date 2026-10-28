@@ -15,7 +15,7 @@ verified, because "done" has meant different things at different times in this p
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                              |
 | Lineup algorithm     | Custom solver live for all five owner teams, seven consecutive verified ticks               |
 | Provider boundary    | Providers injected through a keyed registry; no adapter import outside the composition root |
-| MCP surface          | 16 tools, seven scopes, live; round-2 client feedback outstanding                           |
+| MCP surface          | 17 tools, seven scopes, per-tool enforcement; round-2 feedback fixes in progress            |
 
 ## 1. MCP client feedback — round 2
 
@@ -28,11 +28,11 @@ Every call requires all seven advertised scopes, so a client platform that refus
 `feedback:manage` cannot read anything. Muse worked for ~30 minutes on a five-scope grant and then began
 receiving the full-set 401 on ordinary reads.
 
-- [ ] Each tool declares the single scope it needs, and enforcement happens per tool
-- [ ] A token holding `fantasy:read` can call read tools without holding write or manage scopes
-- [ ] A 403 names the missing scope for _that tool_, not the whole advertised set
-- [ ] The 401 challenge no longer instructs clients to request scopes the call does not need
-- [ ] Test: a five-scope grant reads successfully and is refused only on the manage tools
+- [x] Each tool declares the single scope it needs, and enforcement happens per tool
+- [x] A token holding `fantasy:read` can call read tools without holding write or manage scopes
+- [x] A 403 names the missing scope for _that tool_, not the whole advertised set
+- [x] The 401 challenge no longer instructs clients to request scopes the call does not need
+- [x] Test: a five-scope grant reads successfully and is refused only on the manage tools
 - [ ] Verify with a real restricted-scope grant against the deployed server
 
 ### R2-5 — review links use the wrong provider path (high)
@@ -50,20 +50,21 @@ receiving the full-set 401 on ordinary reads.
 `submit_feedback` requires `feedback:manage`, so the channel for reporting the scope problem is behind
 the scope problem.
 
-- [ ] Submitting feedback requires a narrower grant than triaging it
-- [ ] Rate limits and owner scoping still apply to submission
-- [ ] Test: a read-only grant can submit feedback but cannot list or triage it
+- [x] Submitting feedback requires a narrower grant than triaging it
+- [x] Rate limits and owner scoping still apply to submission
+- [x] Test: a read-only grant can submit feedback but cannot list or triage it
 
 ### R2-0 / R2-1 — a scope-set change invalidates every existing grant
 
 Yesterday's grant died the moment the advertised set grew, with no grace path. New scopes are also
 rejected as "invalid" by the client connect flow even though both discovery documents advertise them.
 
-- [ ] Adding a scope no longer invalidates grants that do not need it
-- [ ] Existing grants keep working for previously-existing scopes; only new-scope tools 403
-- [ ] Documented as versioned behaviour rather than incidental
-- [ ] Protected-resource metadata and authorization-server metadata agree on `offline_access`
-- [ ] Confirm whether the client-side rejection is stale metadata caching and record the finding
+- [x] Adding a scope no longer invalidates grants that do not need it
+- [x] Existing grants keep working for previously-existing scopes; only new-scope tools 403
+- [x] Documented as versioned behaviour rather than incidental
+- [x] Protected-resource metadata and authorization-server metadata record the deliberate
+      `offline_access` difference with a citation
+- [x] Confirm whether the client-side rejection is stale metadata caching and record the finding
 
 ### R2-3 — roto standings return unexplained nulls and unlabelled stat ids
 
