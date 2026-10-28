@@ -100,8 +100,8 @@ tested, so a client cannot explain the ordering it was given.
       `munkres` and no other runtime dependency.
 - [ ] **Muse acceptance on the hosted deployment.** OAuth, paging, and pending-outcome behaviour against
       the deployed origin rather than a local one.
-- [ ] **Deploy the ownership-delta clamp.** Committed but not deployed; affects only leagues declaring a
-      games limit, of which the owner has none.
+- [x] **Deploy the ownership-delta clamp.** Deployed with the round-2 MCP rollout (web `00026-nss`,
+      worker `00027-knr`); affects only leagues declaring a games limit, of which the owner has none.
 
 ## 3. Lineup algorithm follow-ups
 
