@@ -262,7 +262,7 @@ test("reports, retrieves, and closes feedback for the acting account only", asyn
 
   await page.goto("/feedback");
   await expect(page.getByText("Roster totals disagree")).toBeVisible();
-  await expect(page.getByText("Data issue · Resolved")).toBeVisible();
+  await expect(page.getByText("Wrong data · Resolved")).toBeVisible();
 });
 
 test("enforces fantasy read and transaction review scopes over MCP", async ({ page, baseURL }) => {
@@ -607,7 +607,7 @@ test("authorizes a dynamically registered client through consent", async ({ page
   );
   await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
   await expect(
-    page.getByText("Calls itself “Muse probe” — names are not verified.", { exact: true }),
+    page.getByText("Calls itself “Muse probe”. Names are not verified.", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Allow access", exact: true }).click();
   await expect(page).toHaveURL(callbackPattern);
@@ -843,7 +843,7 @@ async function authorize(
     page.getByText("Connecting to connections-client.test", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Calls itself “Lineupkeep test client” — names are not verified.", {
+    page.getByText("Calls itself “Lineupkeep test client”. Names are not verified.", {
       exact: true,
     }),
   ).toBeVisible();

@@ -17,15 +17,15 @@ test("submits feedback from the app and keeps it listed with its status", async 
   await page.getByLabel("Details").fill("Refreshing teams took a long time after linking Yahoo.");
   await page.getByRole("button", { name: "Send feedback" }).click();
 
-  await expect(page.getByText("Thanks — your report is recorded.")).toBeVisible();
+  await expect(page.getByText("Thanks, your report is recorded.")).toBeVisible();
   await expect(page.getByText("Refresh is slow")).toBeVisible();
-  await expect(page.getByText("Friction · Open")).toBeVisible();
+  await expect(page.getByText("Difficult to use · Open")).toBeVisible();
   await captureCheckpoint(page, info, "feedback-submitted");
 
   await page.reload();
 
   await expect(page.getByText("Refresh is slow")).toBeVisible();
-  await expect(page.getByText("Friction · Open")).toBeVisible();
+  await expect(page.getByText("Difficult to use · Open")).toBeVisible();
   await expect(page.getByText("Received. Nobody has reviewed it yet.")).toBeVisible();
 });
 
@@ -52,7 +52,7 @@ test("carries a team's context into the feedback form from the team page", async
   await page.getByLabel("Details").fill("The category totals do not match the provider page.");
   await page.getByRole("button", { name: "Send feedback" }).click();
 
-  await expect(page.getByText("Thanks — your report is recorded.")).toBeVisible();
-  await expect(page.getByText("Data issue · Open")).toBeVisible();
+  await expect(page.getByText("Thanks, your report is recorded.")).toBeVisible();
+  await expect(page.getByText("Wrong data · Open")).toBeVisible();
   await expect(page.getByRole("listitem").getByText("About this team")).toBeVisible();
 });

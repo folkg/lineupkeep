@@ -20,8 +20,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
         {defaultProviderName()} sign-in
       </Heading>
       <Text size="body" tone="muted">
-        Sign in through a temporary browser. Your password is entered on {defaultProviderName()}'s
-        page; Lineupkeep keeps only the encrypted session.
+        Sign in as you normally would. The private browser closes when you finish or cancel.
       </Text>
       <Show
         fallback={
@@ -34,7 +33,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
               Connect {defaultProviderName()}
             </Button>
             <Text size="caption" tone="muted">
-              No helper to install.
+              Nothing to install.
             </Text>
           </Inline>
         }
@@ -58,13 +57,13 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
                 : statusMessage(props.controller.status())}
             </Text>
             <Text size="caption" tone="muted">
-              Keystrokes are typed into {defaultProviderName()}'s page through the temporary browser
-              and are never stored or logged.
+              Keystrokes go to {defaultProviderName()}'s page through the private browser.
+              Lineupkeep does not store or log them.
             </Text>
             <Text size="caption" tone="muted">
               This sign-in expires at{" "}
               {new Date(session().session.expiresAt).toISOString().slice(11, 16)} UTC. Closing or
-              cancelling destroys the temporary browser profile.
+              cancelling discards the private browser profile.
             </Text>
           </Stack>
         )}

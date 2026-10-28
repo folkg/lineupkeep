@@ -81,7 +81,7 @@ it("sends a report and lists it with its status", async () => {
   await page.getByLabelText("Details").fill("The roster view says week 3 but the run used week 4.");
   await page.getByRole("button", { name: "Send feedback" }).click();
 
-  await expect.element(page.getByText("Thanks — your report is recorded.")).toBeVisible();
+  await expect.element(page.getByText("Thanks, your report is recorded.")).toBeVisible();
   await expect.element(page.getByText("Week is wrong")).toBeVisible();
   await expect.element(page.getByText("Bug · Open")).toBeVisible();
   expect(submissions).toEqual([
@@ -153,7 +153,7 @@ it("shows the report's context and sends the linked team reference", async () =>
   await page.getByLabelText("Details").fill("The category totals do not add up.");
   await page.getByRole("button", { name: "Send feedback" }).click();
 
-  await expect.element(page.getByText("Thanks — your report is recorded.")).toBeVisible();
+  await expect.element(page.getByText("Thanks, your report is recorded.")).toBeVisible();
   expect(submissions).toEqual([
     {
       kind: "data-issue",
@@ -201,7 +201,7 @@ it("shows a resolved report with its note and a not-planned report", async () =>
 
   await expect.element(page.getByText("Bug · Resolved")).toBeVisible();
   await expect.element(page.getByText("Resolved: Fixed the week mapping.")).toBeVisible();
-  await expect.element(page.getByText("Wishlist · Not planned")).toBeVisible();
+  await expect.element(page.getByText("Idea · Not planned")).toBeVisible();
   await expect.element(page.getByText("Closed as not planned.")).toBeVisible();
 });
 

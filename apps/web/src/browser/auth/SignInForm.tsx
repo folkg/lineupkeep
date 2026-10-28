@@ -41,7 +41,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
             <Heading level={2} size="title">
               Sign in or start fresh.
             </Heading>
-            <Text tone="muted">No password needed. The first sign-in creates your account.</Text>
+            <Text tone="muted">The first sign-in creates your account.</Text>
           </Stack>
           <Stack gap="lg">
             <Errored fallback={() => undefined}>

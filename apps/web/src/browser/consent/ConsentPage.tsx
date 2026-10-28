@@ -38,7 +38,7 @@ export function ConsentPage(props: {
               <Text>Connecting to {request().client.host}</Text>
               <Show when={request().client.name}>
                 {(name) => (
-                  <Text tone="muted">Calls itself “{name()}” — names are not verified.</Text>
+                  <Text tone="muted">Calls itself “{name()}”. Names are not verified.</Text>
                 )}
               </Show>
               <Text tone="muted">Client identifier</Text>

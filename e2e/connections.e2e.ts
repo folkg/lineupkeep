@@ -25,7 +25,9 @@ test("pairs a helper through its device code, approves it once, and blocks redem
   const paired = await requests.during(async () => {
     await page.getByRole("textbox", { name: "Pairing code" }).fill(grant.user_code);
     await page.getByRole("button", { name: "Pair helper" }).click();
-    await expect(page.getByText("Helper pairing started.", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Pairing started. The request is waiting for your approval.", { exact: true }),
+    ).toBeVisible();
   });
 
   expect(paired).toEqual(singleFlightWrite);
@@ -35,11 +37,15 @@ test("pairs a helper through its device code, approves it once, and blocks redem
 
   const approved = await requests.during(async () => {
     await page.getByRole("button", { name: "Approve helper" }).click();
-    await expect(page.getByText("Helper approved.", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Helper approved. Lineupkeep is uploading the session.", { exact: true }),
+    ).toBeVisible();
   });
 
   expect(approved).toEqual(singleFlightWrite);
-  await expect(page.getByText("Helper approved.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Helper approved. Lineupkeep is uploading the session.", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("article")).toHaveCount(1);
   await captureCheckpoint(page, info, "helper-approved");
 
@@ -67,12 +73,16 @@ test("cancels a pairing request before approval and refuses the helper", async (
   await openLocalHelper(page);
   await page.getByRole("textbox", { name: "Pairing code" }).fill(grant.user_code);
   await page.getByRole("button", { name: "Pair helper" }).click();
-  await expect(page.getByText("Helper pairing started.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Pairing started. The request is waiting for your approval.", { exact: true }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(page.getByText("Pairing cancelled.", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("This connection is disconnected and no longer provides access.", {
+    page.getByText("Pairing cancelled. The helper cannot finish this request.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Lineupkeep cannot read or change teams through this connection.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -122,7 +132,9 @@ test("renders a persisted pairing before client scripts and hydrates cancellatio
   const requests = recordServerRequests(page);
   const cancelled = await requests.during(async () => {
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(page.getByText("Pairing cancelled.", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Pairing cancelled. The helper cannot finish this request.", { exact: true }),
+    ).toBeVisible();
   });
 
   expect(cancelled).toEqual(singleFlightWrite);
@@ -130,7 +142,7 @@ test("renders a persisted pairing before client scripts and hydrates cancellatio
   await captureCheckpoint(page, info, "pairing-cancelled");
   await page.reload();
   await expect(
-    page.getByText("This connection is disconnected and no longer provides access.", {
+    page.getByText("Lineupkeep cannot read or change teams through this connection.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -172,7 +184,7 @@ test("refuses an unauthenticated helper upload with a safe error", async ({ requ
 
 async function openLocalHelper(page: Page): Promise<void> {
   const trigger = page.getByRole("button", {
-    name: "Having trouble? Use the local helper",
+    name: "Use the local helper instead",
     exact: true,
   });
   await expect(trigger).toHaveAttribute("aria-expanded", "false");

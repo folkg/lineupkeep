@@ -40,7 +40,7 @@ export function useFeedbackPage(options: FeedbackPageOptions): FeedbackPageContr
       storeFeedbackSubmission(data, variables, onMutateResult, context);
       setDraft(emptyFeedbackDraft(options.initialContext()));
       setErrors({});
-      setFeedback({ type: "success", message: "Thanks — your report is recorded." });
+      setFeedback({ type: "success", message: "Thanks, your report is recorded." });
     },
     onError: reportFailure,
   }));

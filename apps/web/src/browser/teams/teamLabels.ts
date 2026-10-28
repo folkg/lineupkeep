@@ -4,16 +4,29 @@ import type { LineupRunView, TeamSummaryView } from "#contracts/connections/team
 export function automationLabel(team: TeamSummaryView): string {
   switch (team.team.automation.status) {
     case "disabled":
-      return "Automation off";
+      return "Lineup checks off";
     case "enabled":
-      return "Automation on";
+      return "Lineup checks on";
     case "paused-until-fantasy-day-end":
-      return "Paused for the rest of this fantasy day";
+      return "Paused until the end of the fantasy day";
+  }
+}
+
+export function automationStateLabel(team: TeamSummaryView): string {
+  switch (team.team.automation.status) {
+    case "disabled":
+      return "Off";
+    case "enabled":
+      return "On";
+    case "paused-until-fantasy-day-end":
+      return "Paused";
   }
 }
 
 export function availabilityLabel(team: TeamSummaryView): string {
-  return team.team.availability === "available" ? "Team available" : "Team unavailable";
+  return team.team.availability === "available"
+    ? `${providerDisplayName(team.team.provider)} lists this team`
+    : `${providerDisplayName(team.team.provider)} no longer lists this team`;
 }
 
 export function connectionLabel(team: TeamSummaryView): string {
@@ -23,9 +36,22 @@ export function connectionLabel(team: TeamSummaryView): string {
     case "reconnect-required":
       return `Reconnect ${providerDisplayName(team.team.provider)}`;
     case "linking":
-      return `${providerDisplayName(team.team.provider)} pairing in progress`;
+      return `${providerDisplayName(team.team.provider)} sign-in in progress`;
     case "disconnected":
       return `${providerDisplayName(team.team.provider)} disconnected`;
+  }
+}
+
+export function connectionStateLabel(team: TeamSummaryView): string {
+  switch (team.connectionStatus) {
+    case "ready":
+      return "Connected";
+    case "reconnect-required":
+      return "Reconnect needed";
+    case "linking":
+      return "Sign-in in progress";
+    case "disconnected":
+      return "Disconnected";
   }
 }
 
@@ -34,19 +60,19 @@ export function pauseResumeLabel(team: TeamSummaryView): string | undefined {
     return undefined;
   }
   if (team.team.automation.resumesAt === undefined) {
-    return "Resumes at the next fantasy day.";
+    return "Lineup checks resume at the start of the next fantasy day.";
   }
   const resumes = new Date(team.team.automation.resumesAt);
   const zone = team.team.automation.timeZone;
   if (zone === undefined) {
-    return `Resumes ${formatDateTime(resumes)}.`;
+    return `Lineup checks resume at ${formatDateTime(resumes)}.`;
   }
   const formatted = new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: zone,
   }).format(resumes);
-  return `Resumes ${formatted} ${zone}.`;
+  return `Lineup checks resume at ${formatted} ${zone}.`;
 }
 
 export function runStatusLabel(status: LineupRunView["status"]): string {
@@ -56,13 +82,13 @@ export function runStatusLabel(status: LineupRunView["status"]): string {
     case "reading":
       return "Reading lineup";
     case "planning":
-      return "Planning";
+      return "Choosing players";
     case "validating":
-      return "Validating";
+      return "Checking the lineup";
     case "applying":
-      return "Applying";
+      return "Setting the lineup";
     case "verifying":
-      return "Verifying";
+      return "Confirming the result";
     case "completed":
       return "Completed";
     case "skipped":
@@ -74,9 +100,9 @@ export function runStatusLabel(status: LineupRunView["status"]): string {
     case "failed":
       return "Failed";
     case "uncertain":
-      return "Needs reconciliation";
+      return "Not confirmed";
     case "superseded":
-      return "Superseded";
+      return "Replaced by a later run";
   }
 }
 
@@ -89,22 +115,24 @@ export function runExplanation(run: LineupRunView): string {
   }
   switch (run.status) {
     case "queued":
-      return "Accepted into the queue. The lineup has not been checked yet.";
+      return "This run is waiting to start. The lineup has not been checked yet.";
     case "reading":
     case "planning":
     case "validating":
     case "applying":
     case "verifying":
       return "The run is in progress. Its result is not confirmed yet.";
+    case "uncertain":
+      return "Lineupkeep could not confirm the result. A later run will check it again.";
+    case "superseded":
+      return "A later run replaced this one.";
     case "completed":
     case "skipped":
     case "blocked":
     case "failed":
-    case "uncertain":
-    case "superseded":
       return "No outcome explanation is available.";
     case "retry-wait":
-      return "Waiting for a safe retry window.";
+      return "Waiting to try again.";
   }
 }
 
@@ -120,7 +148,7 @@ export function targetLabel(target: LineupRunView["target"]): string {
 }
 
 export function triggerLabel(run: LineupRunView): string {
-  return run.trigger === "scheduled" ? "Hourly automation" : "Manual run";
+  return run.trigger === "scheduled" ? "Scheduled check" : "Manual run";
 }
 
 export function formatDateTime(value: string | Date): string {

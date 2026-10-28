@@ -22,12 +22,11 @@ export function LandingPage(): JSX.Element {
           <Stack gap="2xl">
             <Stack gap="lg">
               <Heading level={1} size="display">
-                Your lineup. Looked after.
+                Lineupkeep sets your fantasy lineup.
               </Heading>
               <Text size="lede" tone="muted">
-                Lineupkeep connects to your {defaultProviderName()} fantasy leagues once, then
-                checks each enabled team's current scoring period every hour and keeps its active
-                lineup set while the team and connection are available.
+                As long as your {defaultProviderName()} connection works, it checks each enabled
+                team every hour and starts the players your league allows.
               </Text>
             </Stack>
             <Stack align="start" gap="sm">
@@ -52,25 +51,24 @@ export function LandingPage(): JSX.Element {
               </Heading>
               <Stack gap="md">
                 <Stack gap="xs">
-                  <Text weight="semibold">Connects once</Text>
+                  <Text weight="semibold">Scoring periods</Text>
                   <Text size="caption" tone="muted">
-                    Sign in to {defaultProviderName()} in a temporary browser. Lineupkeep keeps the
-                    encrypted session, not your password.
+                    The scoring period is a week in football and a day in hockey. Lineupkeep sets
+                    the lineup for whichever is current.
                   </Text>
                 </Stack>
                 <Stack gap="xs">
-                  <Text weight="semibold">Checks every hour</Text>
+                  <Text weight="semibold">{defaultProviderName()}'s lineup rules</Text>
                   <Text size="caption" tone="muted">
-                    While a team is enabled, connected, and available, its league's current scoring
-                    period is checked every hour and the active players {defaultProviderName()}{" "}
-                    allows are started.
+                    Lineupkeep works inside your league's rules. It cannot add, drop, or trade a
+                    player.
                   </Text>
                 </Stack>
                 <Stack gap="xs">
-                  <Text weight="semibold">Available to agents</Text>
+                  <Text weight="semibold">Agents use the same teams</Text>
                   <Text size="caption" tone="muted">
-                    An MCP client authorized for your account can read the same teams and use the
-                    same lineup and automation controls.
+                    An MCP client you authorize can read your teams and turn the same lineup checks
+                    on and off.
                   </Text>
                 </Stack>
               </Stack>

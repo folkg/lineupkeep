@@ -3,6 +3,7 @@ import type {
   ConnectionMutationError,
   ConnectionRequestResult,
 } from "#contracts/connections/connectionContract.ts";
+import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 export function requireConnectionSuccess<TData>(result: ConnectionRequestResult<TData>): TData {
   switch (result.type) {
@@ -57,7 +58,7 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
       case "connection.provider_rejected":
         return {
           kind: "rejected",
-          message: "The provider rejected this helper session. Reconnect to continue.",
+          message: `${defaultProviderName()} rejected this helper session. Reconnect to continue.`,
         };
       case "connection.create_failed":
       case "connection.persistence_failed":
@@ -66,7 +67,7 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
       case "hosted_browser.unsupported":
         return {
           kind: "rejected",
-          message: "Hosted sign-in is unavailable here. Use the local helper option below.",
+          message: "The in-page browser is not available here. Use the local helper instead.",
         };
       case "hosted_linking.session_active":
         return {
@@ -90,7 +91,7 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
       case "hosted_linking.persistence_failed":
         return {
           kind: "unconfirmed",
-          message: "We could not start the secure browser. Try again or use the local helper.",
+          message: "We could not start the private browser. Try again or use the local helper.",
         };
     }
   }

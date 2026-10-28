@@ -5,7 +5,6 @@ import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
-import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { TeamList } from "./TeamList";
 import type { TeamListQueryOptions } from "./teamQueries";
@@ -22,7 +21,7 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede={`Choose which teams Lineupkeep manages. While a team is enabled, connected, and available, Lineupkeep checks its league's current scoring period every hour — the scoring week in football, the fantasy day in hockey — and starts the active players ${defaultProviderName()} allows.`}
+        lede="Choose which teams Lineupkeep manages. You can turn lineup checks on or off for each team, and pause one when you want to take over."
         title="Teams"
       >
         <Stack gap="lg">

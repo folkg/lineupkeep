@@ -16,7 +16,7 @@ export function FeedbackForm(props: FeedbackFormProps): JSX.Element {
   return (
     <Form gap="md" onSubmit={props.onSubmit}>
       <SelectField
-        description="Pick the closest match; choose Other when none fit."
+        description="Pick the closest match, or choose Other."
         error={props.errors.kind}
         label="Kind"
         onChange={(event) => props.onKind(event.currentTarget.value)}
@@ -40,7 +40,7 @@ export function FeedbackForm(props: FeedbackFormProps): JSX.Element {
         value={props.draft.body}
       />
       <Text size="caption" tone="faint">
-        Never include passwords, provider cookies, or account identifiers. Reports are stored as
+        Never include passwords, sign-in cookies, or account identifiers. Reports are stored as
         plain text and read back only by this account.
       </Text>
       <Inline gap="sm">

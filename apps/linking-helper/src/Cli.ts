@@ -130,7 +130,7 @@ const LiveLayer = Layer.mergeAll(
 
 const defaultAppUrl = "http://localhost:5173";
 
-const helpText = `lineupkeep — local provider linking helper
+const helpText = `lineupkeep local provider linking helper
 
 Usage:
   lineupkeep link [--provider <key>] [--app-url <url>]

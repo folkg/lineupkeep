@@ -62,7 +62,7 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
               variant="link"
               onClick={page.toggleHelper}
             >
-              Having trouble? Use the local helper
+              Use the local helper instead
             </Button>
             <Stack id="local-helper" hidden={!page.helperOpen()} gap="sm">
               <Heading id="local-helper-title" level={2} size="section">
@@ -70,7 +70,7 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
               </Heading>
               <Text size="body" tone="muted">
                 Run the Lineupkeep helper on your computer and enter the code it shows. The code
-                expires after ten minutes; the helper signs in to {defaultProviderName()} itself.
+                expires after ten minutes. The helper signs in to {defaultProviderName()} itself.
               </Text>
               <Form gap="sm" onSubmit={page.startLinking}>
                 <Stack gap="sm" measure="control">

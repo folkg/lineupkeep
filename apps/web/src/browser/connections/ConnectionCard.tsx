@@ -84,8 +84,8 @@ function ReconnectForm(props: {
     <Form gap="sm" onSubmit={props.onStart}>
       <Text size="caption" tone="muted">
         Run the Lineupkeep helper again, enter the new pairing code here, and finish the{" "}
-        {providerDisplayName(props.provider)} sign-in. The helper uploads the new session; your team
-        automation settings stay unchanged.
+        {providerDisplayName(props.provider)} sign-in. The helper uploads the new session. Your team
+        settings stay unchanged.
       </Text>
       <TextField
         autocomplete="off"
@@ -111,14 +111,14 @@ function ConnectionMeta(props: { readonly connection: ConnectionView }): JSX.Ele
             <Show
               fallback={
                 <Text size="caption" tone="muted">
-                  Connected. The provider session is ready for this account.
+                  Lineupkeep can read and set lineups for the teams on this account.
                 </Text>
               }
               when={props.connection.status === "reconnect-required"}
             >
               <Text size="caption" tone="muted">
-                This connection needs a new provider session. Use the local helper below to
-                reconnect.
+                {providerDisplayName(props.connection.provider)} needs a new sign-in. Use the form
+                below to reconnect.
               </Text>
             </Show>
           }
@@ -142,7 +142,7 @@ function ConnectionMeta(props: { readonly connection: ConnectionView }): JSX.Ele
       when={props.connection.status === "disconnected"}
     >
       <Text size="caption" tone="muted">
-        This connection is disconnected and no longer provides access.
+        Lineupkeep cannot read or change teams through this connection.
       </Text>
     </Show>
   );

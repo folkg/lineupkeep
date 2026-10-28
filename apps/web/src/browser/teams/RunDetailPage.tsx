@@ -12,6 +12,7 @@ import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
+import { defaultProviderName, providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { LineupRunView } from "#contracts/connections/teamContract.ts";
 
 import { describeRunFailure } from "./teamFailure";
@@ -32,10 +33,14 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
     teamsQuery: () => props.teamsQuery(),
     onRefresh: () => props.onRefresh(),
   });
+  const providerName = (): string => {
+    const team = page.team();
+    return team === undefined ? defaultProviderName() : providerDisplayName(team.team.provider);
+  };
 
   return (
     <AppShell>
-      <Page lede="What this lineup run checked and what it observed." title="Lineup run">
+      <Page lede="What this run checked and what it found." title="Lineup run">
         <Stack gap="lg">
           <Show
             fallback={<LoadingState label="Loading run">Loading this run…</LoadingState>}
@@ -54,6 +59,7 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
               {(run) => (
                 <RunDetail
                   run={run()}
+                  providerName={providerName()}
                   teamName={page.team()?.team.name ?? "Unknown team"}
                   teamId={run().team}
                 />
@@ -69,6 +75,7 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
 
 function RunDetail(props: {
   readonly run: LineupRunView;
+  readonly providerName: string;
   readonly teamName: string;
   readonly teamId: string;
 }): JSX.Element {
@@ -107,16 +114,16 @@ function RunDetail(props: {
         {(outcome) => (
           <Stack gap="sm">
             <Heading level={2} size="section">
-              Observed result
+              What the run found
             </Heading>
             <Text size="caption" tone="muted">
-              {outcome().verified ? "Verified against the provider." : "Not yet verified."}
-              {outcome().reconciled ? " Reconciled after an uncertain write." : ""}
+              {outcome().verified ? `Confirmed on ${props.providerName}.` : "Not yet confirmed."}
+              {outcome().reconciled ? " Checked again after an unconfirmed write." : ""}
             </Text>
             <Show
               fallback={
                 <Text size="caption" tone="muted">
-                  No player assignments needed to change.
+                  No player changes were needed.
                 </Text>
               }
               when={outcome().changes.length > 0}

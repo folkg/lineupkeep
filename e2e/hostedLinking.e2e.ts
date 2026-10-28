@@ -16,7 +16,7 @@ test("signs in through the hosted browser or reports why it is unavailable", asy
 
   if (!hostedBrowserAvailable) {
     await expect(
-      page.getByText("Hosted sign-in is unavailable here. Use the local helper option below.", {
+      page.getByText("The in-page browser is not available here. Use the local helper instead.", {
         exact: true,
       }),
     ).toBeVisible();

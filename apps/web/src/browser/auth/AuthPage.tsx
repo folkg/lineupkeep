@@ -19,15 +19,15 @@ export function AuthPage(props: AuthPageProps): JSX.Element {
         variant="form"
         start={
           <IntroPanel
-            cue="Your lineup. Looked after."
+            cue={`For ${defaultProviderName()} football and hockey leagues.`}
             title={
               <Heading level={1} size="statement">
-                Sign in. Then connect {defaultProviderName()}.
+                Sign in to Lineupkeep.
               </Heading>
             }
           >
             <Text size="lede" tone="muted">
-              Sign in by email code. Then one {defaultProviderName()} sign-in finds your teams.
+              We will email you a six-digit code. There is no password to remember.
             </Text>
           </IntroPanel>
         }

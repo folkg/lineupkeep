@@ -10,10 +10,8 @@ test("renders the empty teams surface and links back to provider linking", async
   await page.goto("/teams");
 
   await expect(page.getByRole("heading", { name: "Teams", exact: true })).toBeVisible();
-  await expect(page.getByText("current scoring period", { exact: false })).toBeVisible();
-  await expect(
-    page.getByText("the scoring week in football, the fantasy day in hockey"),
-  ).toBeVisible();
+  await expect(page.getByText("Choose which teams Lineupkeep manages.")).toBeVisible();
+  await expect(page.getByText("You can turn lineup checks on or off for each team")).toBeVisible();
   await expect(page.getByText("No teams yet.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Connect Yahoo" })).toHaveAttribute(
     "href",
@@ -37,15 +35,15 @@ test("enables, pauses, resumes, and disables a team through the automation contr
   await page.goto("/teams");
   const row = page.getByRole("listitem").filter({ hasText: "Embedded Browser Team" });
 
-  await expect(row.getByText("Automation off")).toBeVisible();
-  await row.getByRole("button", { name: "Enable automation" }).click();
-  await expect(row.getByText("Automation on")).toBeVisible();
-  await row.getByRole("button", { name: "Pause for rest of fantasy day" }).click();
-  await expect(row.getByText("Paused for the rest of this fantasy day")).toBeVisible();
-  await row.getByRole("button", { name: "Resume automation" }).click();
-  await expect(row.getByText("Automation on")).toBeVisible();
-  await row.getByRole("button", { name: "Disable" }).click();
-  await expect(row.getByText("Automation off")).toBeVisible();
+  await expect(row.getByText("Lineup checks off")).toBeVisible();
+  await row.getByRole("button", { name: "Turn on lineup checks" }).click();
+  await expect(row.getByText("Lineup checks on")).toBeVisible();
+  await row.getByRole("button", { name: "Pause for the rest of the fantasy day" }).click();
+  await expect(row.getByText("Paused until the end of the fantasy day")).toBeVisible();
+  await row.getByRole("button", { name: "Resume lineup checks" }).click();
+  await expect(row.getByText("Lineup checks on")).toBeVisible();
+  await row.getByRole("button", { name: "Turn off lineup checks" }).click();
+  await expect(row.getByText("Lineup checks off")).toBeVisible();
 });
 
 test("renders the teams surface before client scripts and hydrates its navigation", async ({

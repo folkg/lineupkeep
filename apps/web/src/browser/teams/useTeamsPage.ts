@@ -100,25 +100,25 @@ type TeamsPageOptions = {
 function pendingMessage(action: TeamControlData["action"]): string {
   switch (action) {
     case "enable":
-      return "Enabling automation…";
+      return "Turning on lineup checks…";
     case "disable":
-      return "Disabling automation…";
+      return "Turning off lineup checks…";
     case "pause-today":
-      return "Pausing for the rest of this fantasy day…";
+      return "Pausing for the rest of the fantasy day…";
     case "resume":
-      return "Resuming automation…";
+      return "Resuming lineup checks…";
   }
 }
 
 function successMessage(action: TeamControlData["action"]): string {
   switch (action) {
     case "enable":
-      return "Automation enabled.";
+      return "Lineup checks are on.";
     case "disable":
-      return "Automation disabled.";
+      return "Lineup checks are off.";
     case "pause-today":
-      return "Paused for the rest of this fantasy day.";
+      return "Paused for the rest of the fantasy day.";
     case "resume":
-      return "Automation resumed.";
+      return "Lineup checks are back on.";
   }
 }

@@ -79,10 +79,10 @@ it("enables a disabled team and shows the confirmed state", async () => {
     },
   });
 
-  await expect.element(page.getByText("Automation off")).toBeVisible();
-  await page.getByRole("button", { name: "Enable automation" }).click();
+  await expect.element(page.getByText("Lineup checks off")).toBeVisible();
+  await page.getByRole("button", { name: "Turn on lineup checks" }).click();
 
-  await expect.element(page.getByText("Automation on")).toBeVisible();
+  await expect.element(page.getByText("Lineup checks on")).toBeVisible();
   expect(changes).toEqual([{ team: baseTeam.team.id, action: "enable" }]);
 });
 
@@ -95,11 +95,13 @@ it("labels a pause as the rest of the fantasy day and resumes through the contro
     },
   });
 
-  await expect.element(page.getByText("Paused for the rest of this fantasy day")).toBeVisible();
-  await expect.element(page.getByText(/Resumes .*America\/Los_Angeles/)).toBeVisible();
-  await page.getByRole("button", { name: "Resume automation" }).click();
+  await expect.element(page.getByText("Paused until the end of the fantasy day")).toBeVisible();
+  await expect
+    .element(page.getByText(/Lineup checks resume at .*America\/Los_Angeles/))
+    .toBeVisible();
+  await page.getByRole("button", { name: "Resume lineup checks" }).click();
 
-  await expect.element(page.getByText("Automation on")).toBeVisible();
+  await expect.element(page.getByText("Lineup checks on")).toBeVisible();
   expect(changes).toEqual([{ team: pausedTeam.team.id, action: "resume" }]);
 });
 
@@ -112,9 +114,9 @@ it("pauses an enabled team for the rest of the fantasy day", async () => {
     },
   });
 
-  await page.getByRole("button", { name: "Pause for rest of fantasy day" }).click();
+  await page.getByRole("button", { name: "Pause for the rest of the fantasy day" }).click();
 
-  await expect.element(page.getByText("Paused for the rest of this fantasy day")).toBeVisible();
+  await expect.element(page.getByText("Paused until the end of the fantasy day")).toBeVisible();
   expect(changes).toEqual([{ team: enabledTeam.team.id, action: "pause-today" }]);
 });
 
@@ -131,9 +133,9 @@ it("shows a reconnect action without flattening it into disabled", async () => {
   ]);
 
   await expect.element(page.getByRole("link", { name: "Reconnect Yahoo" })).toBeVisible();
-  await expect.element(page.getByText("Automation on")).toBeVisible();
+  await expect.element(page.getByText("Lineup checks on")).toBeVisible();
   await expect
-    .element(page.getByRole("button", { name: "Enable automation" }))
+    .element(page.getByRole("button", { name: "Turn on lineup checks" }))
     .not.toBeInTheDocument();
 });
 

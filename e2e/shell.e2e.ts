@@ -3,15 +3,15 @@ import { expect, signUp, test } from "./support";
 test("shares product identity across document metadata and home navigation", async ({ page }) => {
   await page.goto("/auth");
 
-  await expect(page).toHaveTitle("Lineupkeep — Your lineup. Looked after.");
+  await expect(page).toHaveTitle("Lineupkeep: fantasy lineups for Yahoo leagues");
   const home = page.getByRole("link", { name: "Lineupkeep home", exact: true });
   await expect(home.getByText("Lineupkeep", { exact: true })).toBeVisible();
   await home.click();
 
   await expect(page).toHaveURL("/");
-  await expect(page).toHaveTitle("Lineupkeep — Your lineup. Looked after.");
+  await expect(page).toHaveTitle("Lineupkeep: fantasy lineups for Yahoo leagues");
   await expect(
-    page.getByRole("heading", { name: "Your lineup. Looked after.", exact: true }),
+    page.getByRole("heading", { name: "Lineupkeep sets your fantasy lineup.", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "What Lineupkeep does" })).toBeVisible();
   await expect(

@@ -124,8 +124,8 @@ function TeamRow(props: TeamRowProps): JSX.Element {
         <Show
           when={enabled()}
           fallback={
-            <Button pending={props.pending} pendingLabel="Enabling…" onClick={props.onEnable}>
-              Enable automation
+            <Button pending={props.pending} pendingLabel="Turning on…" onClick={props.onEnable}>
+              Turn on lineup checks
             </Button>
           }
         >
@@ -138,21 +138,21 @@ function TeamRow(props: TeamRowProps): JSX.Element {
                 variant="secondary"
                 onClick={props.onPause}
               >
-                Pause for rest of fantasy day
+                Pause for the rest of the fantasy day
               </Button>
             }
           >
             <Button pending={props.pending} pendingLabel="Resuming…" onClick={props.onResume}>
-              Resume automation
+              Resume lineup checks
             </Button>
           </Show>
           <Button
             pending={props.pending}
-            pendingLabel="Saving…"
+            pendingLabel="Turning off…"
             variant="quiet"
             onClick={props.onDisable}
           >
-            Disable
+            Turn off lineup checks
           </Button>
         </Show>
         <Show when={props.team.connectionStatus === "reconnect-required"}>

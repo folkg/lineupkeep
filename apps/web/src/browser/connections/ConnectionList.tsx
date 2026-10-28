@@ -53,7 +53,7 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No connections yet.">
-                Connect {defaultProviderName()} above to find the teams this account can manage.
+                Connect {defaultProviderName()} above to see the teams this account can manage.
               </EmptyState>
             }
             when={visibleConnections().length > 0}

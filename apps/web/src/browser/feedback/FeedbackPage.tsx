@@ -30,7 +30,7 @@ export function FeedbackPage(props: FeedbackPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Report a bug, a data problem, friction, or something you wish Lineupkeep did. Agents acting for this account can report and follow up the same way."
+        lede="Report a bug, wrong data, or something that got in your way. Agents acting for this account can send reports too."
         title="Feedback"
       >
         <Stack gap="xl">

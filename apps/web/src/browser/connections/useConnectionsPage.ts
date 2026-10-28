@@ -44,7 +44,10 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
       storeRefreshedConnections(change, variables, onMutateResult, context);
       pendingRequestId = undefined;
       setPairingCode("");
-      setFeedback({ type: "success", message: "Helper pairing started." });
+      setFeedback({
+        type: "success",
+        message: "Pairing started. The request is waiting for your approval.",
+      });
     },
     onError: reportFailure,
   }));
@@ -52,7 +55,10 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     ...connectionMutations.approve(props.remote()),
     onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
       storeRefreshedConnections(change, variables, onMutateResult, context);
-      setFeedback({ type: "success", message: "Helper approved." });
+      setFeedback({
+        type: "success",
+        message: "Helper approved. Lineupkeep is uploading the session.",
+      });
     },
     onError: reportFailure,
     onSettled: () => setApprovingId(undefined),
@@ -78,7 +84,7 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     ...connectionMutations.disconnect(props.remote()),
     onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
       storeRefreshedConnections(change, variables, onMutateResult, context);
-      setFeedback({ type: "success", message: "Connection disconnected." });
+      setFeedback({ type: "success", message: "Disconnected. You can connect again at any time." });
     },
     onError: reportFailure,
     onSettled: () => setDisconnectingId(undefined),
@@ -87,7 +93,10 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
     ...connectionMutations.cancel(props.remote()),
     onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
       storeRefreshedConnections(change, variables, onMutateResult, context);
-      setFeedback({ type: "success", message: "Pairing cancelled." });
+      setFeedback({
+        type: "success",
+        message: "Pairing cancelled. The helper cannot finish this request.",
+      });
     },
     onError: reportFailure,
     onSettled: () => setCancelingId(undefined),

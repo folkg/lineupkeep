@@ -15,10 +15,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: `${productName} — Your lineup. Looked after.` },
+      { title: `${productName}: fantasy lineups for ${defaultProviderName()} leagues` },
       {
         name: "description",
-        content: `Connect ${defaultProviderName()} once. Lineupkeep checks each enabled team's current scoring period every hour and makes the same teams available to an authorized MCP client.`,
+        content: `Lineupkeep sets fantasy lineups for ${defaultProviderName()} football and hockey teams and shows what changed after each check.`,
       },
     ],
     links: [{ rel: "icon", type: "image/svg+xml", href: "/brand/lineupkeep-mark.svg" }],

@@ -72,7 +72,7 @@ export function useConsent(props: {
         ? {
             type: "attention",
             message:
-              "We couldn't confirm your decision. Return to your client and start connecting again; no access is confirmed here.",
+              "We couldn't confirm your decision. Return to your client and start connecting again. No access is confirmed here.",
           }
         : undefined,
     approve: () => decision.mutate({ query: props.query, accept: true }),

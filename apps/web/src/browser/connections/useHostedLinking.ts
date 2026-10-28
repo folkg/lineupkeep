@@ -157,7 +157,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
       if (!ready() && session() !== undefined) {
         setFailure({
           type: "attention",
-          message: `The secure browser disconnected. Start again to reconnect ${defaultProviderName()}.`,
+          message: `The private browser disconnected. Start again to reconnect ${defaultProviderName()}.`,
         });
         finish("failed");
       }
@@ -166,7 +166,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
       if (socket === opened) {
         setFailure({
           type: "attention",
-          message: "The secure browser could not connect. Try again or use the local helper.",
+          message: "The private browser could not connect. Try again or use the local helper.",
         });
         cancel();
       }
@@ -235,11 +235,11 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
 function refusalMessage(host: string, reason: HostedBrowserRefusalReason): string {
   switch (reason) {
     case "non_public_address":
-      return `The secure browser refused to connect to ${host} because it does not resolve to a public internet address.`;
+      return `The private browser refused to connect to ${host} because it does not resolve to a public internet address.`;
     case "unresolvable":
-      return `The secure browser refused to connect to ${host} because the name could not be resolved.`;
+      return `The private browser refused to connect to ${host} because the name could not be resolved.`;
     case "invalid_destination":
-      return `The secure browser refused to connect to ${host} because it is not a valid destination.`;
+      return `The private browser refused to connect to ${host} because it is not a valid destination.`;
   }
 }
 
@@ -251,7 +251,7 @@ function failureMessage(reason: HostedBrowserMessageFailure): string {
       return `${defaultProviderName()} could not be reached. Try again in a moment.`;
     case "browser_unavailable":
     case "page_unavailable":
-      return "The secure browser could not start. Try again or use the local helper.";
+      return "The private browser could not start. Try again or use the local helper.";
     case "expired":
       return `This sign-in session expired. Start again to reconnect ${defaultProviderName()}.`;
     case "completion_failed":

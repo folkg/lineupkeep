@@ -10,11 +10,11 @@ export function feedbackKindLabel(kind: FeedbackKind): string {
     case "bug":
       return "Bug";
     case "data-issue":
-      return "Data issue";
+      return "Wrong data";
     case "friction":
-      return "Friction";
+      return "Difficult to use";
     case "wishlist":
-      return "Wishlist";
+      return "Idea";
     case "other":
       return "Other";
   }

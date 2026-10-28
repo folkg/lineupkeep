@@ -17,9 +17,9 @@ import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import {
-  automationLabel,
+  automationStateLabel,
   availabilityLabel,
-  connectionLabel,
+  connectionStateLabel,
   formatDateTime,
   pauseResumeLabel,
   runExplanation,
@@ -42,7 +42,7 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Automation settings and recent lineup activity for this team."
+        lede="Lineup settings and recent activity for this team."
         title={team()?.team.name ?? "Team"}
       >
         <Stack gap="lg">
@@ -86,11 +86,11 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
     <Stack gap="lg">
       <Stack gap="md">
         <Inline gap="md">
-          <StateLine label="Availability" value={availabilityLabel(props.team)} />
-          <StateLine label="Automation" value={automationLabel(props.team)} />
+          <StateLine label="Team" value={availabilityLabel(props.team)} />
+          <StateLine label="Lineup checks" value={automationStateLabel(props.team)} />
           <StateLine
             label={providerDisplayName(props.team.team.provider)}
-            value={connectionLabel(props.team)}
+            value={connectionStateLabel(props.team)}
           />
         </Inline>
         <Show when={pauseResumeLabel(props.team)}>
@@ -104,8 +104,8 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           <Show
             when={enabled()}
             fallback={
-              <Button pending={props.pending} pendingLabel="Enabling…" onClick={props.onEnable}>
-                Enable automation
+              <Button pending={props.pending} pendingLabel="Turning on…" onClick={props.onEnable}>
+                Turn on lineup checks
               </Button>
             }
           >
@@ -118,21 +118,21 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
                   variant="secondary"
                   onClick={props.onPause}
                 >
-                  Pause for rest of fantasy day
+                  Pause for the rest of the fantasy day
                 </Button>
               }
             >
               <Button pending={props.pending} pendingLabel="Resuming…" onClick={props.onResume}>
-                Resume automation
+                Resume lineup checks
               </Button>
             </Show>
             <Button
               pending={props.pending}
-              pendingLabel="Saving…"
+              pendingLabel="Turning off…"
               variant="quiet"
               onClick={props.onDisable}
             >
-              Disable
+              Turn off lineup checks
             </Button>
           </Show>
           <Show when={props.team.connectionStatus === "reconnect-required"}>
@@ -153,7 +153,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
         <Show
           fallback={
             <EmptyState title="No activity yet.">
-              Lineup runs will appear here after the first scheduled or manual check.
+              Runs will appear here after the first scheduled or manual check.
             </EmptyState>
           }
           when={props.team.recentRuns.length > 0}
