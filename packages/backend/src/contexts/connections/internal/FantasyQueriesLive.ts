@@ -855,6 +855,9 @@ export const FantasyQueriesLive = Layer.effect(
           }
         }
       }
+      if (input.period !== undefined && groups.includes("actual_stats")) {
+        yield* validateActualStatsPeriod(context, league, input.period);
+      }
       const rosterOutcome = yield* readOutcome(
         context,
         "roster",
@@ -2357,6 +2360,38 @@ function currentPeriod(window: ProviderPeriodWindow | undefined): QueryPeriod | 
 
 function providerRosterPeriod(period: QueryPeriod | undefined): ProviderRosterCoverage | undefined {
   return period === undefined ? undefined : { type: "week", week: period.week };
+}
+
+function validateActualStatsPeriod(
+  context: TeamContext,
+  league: ProviderLeagueSettings | undefined,
+  period: QueryPeriod,
+): Effect.Effect<void, QuerySelectionInvalid> {
+  const sport = context.owned.team.sport;
+  if (!context.provider.capabilities.playerSearch.weeklyStatSeriesSports.includes(sport)) {
+    return Effect.fail(
+      QuerySelectionInvalid.make({
+        detail: `The provider publishes no weekly player statistics for ${sport}, so \`period\` cannot select a weekly \`actual_stats\` basis. Omit \`period\` to read season totals, or use get_matchups for scoring-week team totals.`,
+      }),
+    );
+  }
+  const currentWeek = league?.periodWindow?.current;
+  if (currentWeek === undefined) {
+    return Effect.fail(
+      QuerySelectionInvalid.make({
+        detail:
+          "The current scoring week could not be resolved, so a weekly actual-stat basis cannot be verified for this request. Omit `period` to read season totals.",
+      }),
+    );
+  }
+  if (period.week >= currentWeek) {
+    return Effect.fail(
+      QuerySelectionInvalid.make({
+        detail: `The provider publishes actual weekly statistics only for completed weeks; week ${period.week} is the current or upcoming week (current week ${currentWeek}). Omit \`period\` to read season totals, or request a completed week.`,
+      }),
+    );
+  }
+  return Effect.void;
 }
 
 function leagueOverview(league: ProviderLeagueSettings): NonNullable<LeagueData["overview"]> {

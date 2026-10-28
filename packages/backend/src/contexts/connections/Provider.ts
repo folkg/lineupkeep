@@ -69,6 +69,7 @@ export type ProviderCapabilities = {
   readonly playerSearch: {
     readonly sorts: ReadonlyArray<ProviderPlayerSearchSort>;
     readonly providerOrderedSorts: ReadonlyArray<ProviderPlayerSearchSort>;
+    readonly weeklyStatSeriesSports: ReadonlyArray<FantasySport>;
   };
   readonly publishesProjections: boolean;
   readonly limitations: ReadonlyArray<ProviderLimitation>;

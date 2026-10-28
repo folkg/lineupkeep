@@ -25,15 +25,23 @@ export function normalizedTriage(input: FeedbackTriageInput): FeedbackTriageInpu
   }
 }
 
-function normalizedContext(context: FeedbackContext | undefined): FeedbackContext | undefined {
-  if (context === undefined) {
+function normalizedContext(
+  context: FeedbackContext | null | undefined,
+): FeedbackContext | undefined {
+  if (context === null || context === undefined) {
     return undefined;
   }
   return {
-    ...(context.tool === undefined ? {} : { tool: singleLine(context.tool) }),
-    ...(context.team === undefined ? {} : { team: context.team }),
-    ...(context.client === undefined ? {} : { client: singleLine(context.client) }),
-    ...(context.surface === undefined ? {} : { surface: context.surface }),
+    ...(context.tool === null || context.tool === undefined
+      ? {}
+      : { tool: singleLine(context.tool) }),
+    ...(context.team === null || context.team === undefined ? {} : { team: context.team }),
+    ...(context.client === null || context.client === undefined
+      ? {}
+      : { client: singleLine(context.client) }),
+    ...(context.surface === null || context.surface === undefined
+      ? {}
+      : { surface: context.surface }),
   };
 }
 

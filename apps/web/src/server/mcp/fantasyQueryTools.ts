@@ -98,7 +98,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_players", {
     description:
-      "Hydrate a bounded selection of up to 25 private player references for one linked team. Choose identity, availability, eligibility, actual stats, or scoring context groups. Identity also resolves for players no longer on the roster, from transaction history. Actual statistics declare a week or season basis; a provider that publishes no projected player statistics reports the projections group as unsupported with the reason. Missing stats remain null rather than zero.",
+      "Hydrate a bounded selection of up to 25 private player references for one linked team. Choose identity, availability, eligibility, actual stats, or scoring context groups. Identity also resolves for players no longer on the roster, from transaction history. Actual statistics declare a week or season basis. A supplied `period` is honoured only for a completed week where the provider publishes a weekly player series; otherwise the request is refused with the reason and the remedy rather than silently returning season totals. A provider that publishes no projected player statistics reports the projections group as unsupported with the reason. Missing stats remain null rather than zero.",
     parameters: GetPlayersInput,
     success: Schema.toCodecJson(PlayersResult),
     failure: ToolFailure,

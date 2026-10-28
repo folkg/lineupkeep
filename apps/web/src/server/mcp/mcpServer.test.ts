@@ -308,12 +308,20 @@ it("lists only the read-only connection tool without exposing account identity",
   ]);
 });
 
-it("rejects unexpected connection arguments as JSON-RPC invalid-params", async () => {
+it("rejects unexpected connection arguments as JSON-RPC invalid-params and names the field", async () => {
   const response = await handle(
     request("tools/call", { name: "list_connections", arguments: { limit: 1 } }, "read"),
   );
+  const body = await json(response);
 
-  expect(await json(response)).toMatchObject({ id: 1, error: { code: -32602 } });
+  expect(body).toMatchObject({
+    id: 1,
+    error: {
+      code: -32602,
+      message: 'Invalid tool arguments: Expected never at ["limit"]',
+      data: { field: '["limit"]' },
+    },
+  });
   expect(response.status).toBe(400);
 });
 
@@ -693,7 +701,7 @@ it("records agent feedback for the authenticated account on a read grant", async
     kind: "bug",
     title: "Week is wrong",
     body: "The run used the next week.",
-    context: { tool: "get_rosters", surface: "mcp" },
+    context: { tool: null, surface: "mcp", client: "Muse" },
   };
 
   const denied = await call(

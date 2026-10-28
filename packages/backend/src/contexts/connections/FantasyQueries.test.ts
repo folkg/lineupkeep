@@ -525,6 +525,77 @@ it.effect(
     }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("refuses a period the provider cannot honour instead of ignoring it", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl"), team("461.l.1000.t.1", "Alpha")], {
+      league: { ...hockeyLeagueFixture, providerLeagueKey: "465.l.2000" },
+      roster: rosterFixture({
+        count: 1,
+        coverage: { type: "date", date: "2026-10-25" },
+        providerTeamKey: "465.l.2000.t.9",
+        providerLeagueKey: "465.l.2000",
+      }),
+    });
+    const listed = yield* queries.listTeams(owner, {});
+    assert.strictEqual(listed.status, "ok");
+    if (listed.status !== "ok") {
+      return;
+    }
+    const hockeyId = listed.teams.find((entry) => entry.name === "Gamma")?.team;
+    const footballId = listed.teams.find((entry) => entry.name === "Alpha")?.team;
+    assert.isDefined(hockeyId);
+    assert.isDefined(footballId);
+    if (hockeyId === undefined || footballId === undefined) {
+      return;
+    }
+    const roster = yield* queries.getRosters(owner, { team: hockeyId });
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok") {
+      return;
+    }
+
+    const noWeeklySeries = yield* Effect.flip(
+      queries.getPlayers(owner, {
+        team: hockeyId,
+        players: [Array.getUnsafe(roster.players, 0).player],
+        period: { week: 2 },
+        groups: ["actual_stats"],
+      }),
+    );
+    assert.strictEqual(noWeeklySeries._tag, "query.selection_invalid");
+    if (noWeeklySeries._tag === "query.selection_invalid") {
+      assert.include(noWeeklySeries.detail, "no weekly player statistics for hockey");
+      assert.include(noWeeklySeries.detail, "Omit `period`");
+    }
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: footballId,
+      availability: "free_agent",
+      sort: "name",
+    });
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+
+    const currentWeek = yield* Effect.flip(
+      queries.getPlayers(owner, {
+        team: footballId,
+        players: [Array.getUnsafe(search.players, 0).player],
+        period: { week: 3 },
+        groups: ["actual_stats"],
+      }),
+    );
+    assert.strictEqual(currentWeek._tag, "query.selection_invalid");
+    if (currentWeek._tag === "query.selection_invalid") {
+      assert.include(currentWeek.detail, "week 3 is the current or upcoming week");
+      assert.include(currentWeek.detail, "completed week");
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("never pairs an unsupported stat group with a period failure", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;

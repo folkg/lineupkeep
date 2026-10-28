@@ -1,7 +1,7 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import type { AuthorizationScope } from "@lineupkeep/backend/auth/AuthorizationScopes";
 import type { UserId } from "@lineupkeep/backend/auth/User";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { McpProtocol, McpServer } from "effect/ai";
 import type { Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -189,23 +189,40 @@ function challengeResponse(
 }
 
 function invalidArgumentsResponse(invocation: Invocation): Response | undefined {
-  if (
-    invocation.tool === undefined ||
-    Option.isNone(invocation.call) ||
-    Schema.is(Schema.toEncoded(invocation.tool.parametersSchema))(
-      invocation.call.value.params.arguments ?? {},
-    )
-  ) {
+  if (invocation.tool === undefined || Option.isNone(invocation.call)) {
     return undefined;
   }
+  const validated = Schema.decodeUnknownResult(
+    Schema.toEncoded(invocation.tool.parametersSchema),
+  )(invocation.call.value.params.arguments ?? {});
+  if (Result.isSuccess(validated)) {
+    return undefined;
+  }
+  const detail = invalidArgumentsDetail(validated.failure.message);
   return Response.json(
     {
       jsonrpc: "2.0",
       id: invocation.call.value.id ?? null,
-      error: { code: -32602, message: "Invalid tool arguments" },
+      error: {
+        code: -32602,
+        message: `Invalid tool arguments: ${detail.message}`,
+        data: { field: detail.field },
+      },
     },
     { status: 400 },
   );
+}
+
+function invalidArgumentsDetail(message: string): {
+  readonly message: string;
+  readonly field: string | undefined;
+} {
+  const [reason = message, location] = message.split("\n  at ");
+  const field = location?.trim();
+  return {
+    message: field === undefined ? reason : `${reason} at ${field}`,
+    field,
+  };
 }
 
 const serveToolkit = Effect.fnUntraced(function* <Tools extends Record<string, Tool.Any>, R>(

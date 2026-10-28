@@ -414,7 +414,14 @@ export const GetPlayersInput = Schema.Struct({
   players: Schema.Array(PlayerRef).pipe(
     Schema.check(Schema.isMinLength(1), Schema.isMaxLength(25)),
   ),
-  period: Schema.optional(QueryPeriod),
+  period: Schema.optional(
+    QueryPeriod.pipe(
+      Schema.annotate({
+        description:
+          "Selects a completed scoring week for `actual_stats` where the provider publishes a weekly player series (football). A provider without a weekly series refuses a supplied period with the remedy instead of returning season totals; omit it for season totals.",
+      }),
+    ),
+  ),
   groups: Schema.optional(
     Schema.Array(PlayerGroup).pipe(
       Schema.annotate({

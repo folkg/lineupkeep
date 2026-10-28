@@ -54,7 +54,9 @@ export const FeedbackLive = Layer.effect(
       );
       const client = accepted[0]?.context?.client;
       const clientReference =
-        client === undefined ? submitter.reference : `${submitter.reference}:${client}`;
+        client === null || client === undefined
+          ? submitter.reference
+          : `${submitter.reference}:${client}`;
       const window = String(DateTime.toEpochMillis(windowStartedAt));
       const reserved = yield* repository.reserve([
         {

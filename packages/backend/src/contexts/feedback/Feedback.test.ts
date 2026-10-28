@@ -53,6 +53,34 @@ it.effect("records an owner's submission with normalized text and an open status
   }).pipe(Effect.provide(FeedbackTestLayer)),
 );
 
+it.effect("accepts null context fields and stores only the provided context", () =>
+  Effect.gen(function* () {
+    const feedback = yield* Feedback;
+
+    const [withNullFields, withNullContext] = yield* feedback.submit(
+      user,
+      { kind: "agent", reference: "mcp" },
+      [
+        {
+          kind: "bug",
+          title: "Null context fields",
+          body: "The published schema allows null optional fields.",
+          context: { tool: null, team: null, client: null, surface: null },
+        },
+        {
+          kind: "bug",
+          title: "Null context",
+          body: "The published schema allows a null context object.",
+          context: null,
+        },
+      ],
+    );
+
+    assert.deepStrictEqual(withNullFields?.context, {});
+    assert.deepStrictEqual(withNullContext?.context, {});
+  }).pipe(Effect.provide(FeedbackTestLayer)),
+);
+
 it.effect("returns only the owner's reports, newest first", () =>
   Effect.gen(function* () {
     const feedback = yield* Feedback;
