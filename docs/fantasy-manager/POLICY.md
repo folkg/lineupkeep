@@ -11,7 +11,7 @@ This document records two things that were once the same document and are now de
 
 Everything below is a decision, not a discovery. The arithmetic underneath it is exact; the choices
 are not. Read [the glossary](GLOSSARY.md) for _final score_, _availability tier_, _lineup optimization_,
-and _native start-active action_, and [the research
+and _native lineup action_, and [the research
 record](RESEARCH.md#live-yahoo-league-scoring-evidence-2026-10-26) for the provider evidence these
 decisions rest on.
 
@@ -49,26 +49,20 @@ own way and this document does not bind it.
 
 Every league gets exactly one scoring scheme, chosen in this order:
 
-1. **Projected points** the provider publishes for that player and period. This is the primary the
-   owner asked for. It is also the one Yahoo does not publish: an exhaustive probe of the player
-   detail surface returns no projected points for any of the five leagues, only ordinal ranks
-   (`PW`, `PS7`, `PSR`, `PN4W`) and fantasy-_team_ projected points on the scoreboard. Rung one is
-   implemented, tested, and never selected by this adapter.
-2. **League scoring rules applied to realised statistics** — the arithmetic that reproduces a points
+1. **League scoring rules applied to realised statistics** — the arithmetic that reproduces a points
    league's own totals exactly. This is what the football league uses.
-3. **The ownership composite** for a league that declares a per-position games limit, described under
-   [rung 2b](#rung-2b-the-ownership-composite-for-a-league-with-a-games-limit). It is a stable,
+2. **The ownership composite** for a league that declares a per-position games limit, described under
+   [rung 2](#rung-2-the-ownership-composite-for-a-league-with-a-games-limit). It is a stable,
    slowly moving basis for a league whose starts are a fixed budget.
-4. **Percent started**, the provider's published started percentage for the period. This is the
+3. **Percent started**, the provider's published started percentage for the period. This is the
    owner's "crowdsourcing the decision": the share of leagues that started this player.
 
 A league uses one rung. The adapter evaluates one scheme at a time, so a plan cannot contain two
 measurement kinds and a score from one scheme cannot be compared with a score from another. There is no
-fallback per player: a league on rung 2 does not score one player by rung 3, and a league on rung 3 does
-not mix in points.
+fallback per player: a plan priced from one rung never prices an individual player from another.
 
 When no rung can be computed at all, the adapter returns a structural refusal with a label naming the
-reason, and the worker keeps the provider's own start-active action for that team. Refusing is the
+reason, and the worker keeps the provider's own native lineup action for that team. Refusing is the
 deliberate answer, not a gap. When a rung can be computed but the roster cannot be legally placed, the
 generic planner refuses transiently and the attempt blocks; it does not silently switch schemes,
 because the ladder's order is a judgement about evidence quality, not about roster shape.
@@ -90,20 +84,10 @@ roster players in all five leagues — is why all five teams plan custom. The ge
 (no legal assignment, an unscored player who cannot be parked, a roster that exceeds its slots) are
 always transient: they describe this roster now, not the league.
 
-### Rung 1: projected points
-
-A projection is used only as the provider publishes it, for the target period. Its unit is points at
-the provider's own scale. A realised total is not read into the same score: a forward-looking
-decision takes the projection alone. A player the provider publishes no projection for is `unusable`
-with reason `missing`: the solver never treats a missing projection as zero and never starts that
-player. It benches them while it can, and refuses only when the player has no bench or reserve slot
-or is the only candidate for a required starting slot.
-
-### Rung 2: league scoring rules
+### Rung 1: league scoring rules
 
 One league, one target period, one window, one scoring scheme. For a target week, the window is the
-last four completed weeks. For a target date, it is the last four completed dates, once the adapter
-reads dated history.
+last four completed weeks. For a target date, it is the last four completed dates.
 
 A player's value is the **mean realised points per counted period**, at the league's own scoring
 scale. A period is _counted_ when the player had a game scheduled in it and the provider published a
@@ -121,6 +105,47 @@ value stays absent. The skipped periods are not persisted; only the final score 
 Why a trailing mean and not a season total: a season total mixes weeks already played with different
 opponents, roles, and byes. A four-week mean is responsive to a role change and stable enough not to
 chase one big game. It is still backward-looking, and it is the main thing to argue with.
+
+### Rung 2: the ownership composite, for a league with a games limit
+
+A league that declares `max_games_played` or `max_innings_pitched` starts every start against a fixed
+per-position budget, so a daily crowd signal would spend the budget on whoever the crowd liked that day.
+Those leagues are priced from the ownership composite, even when the league also publishes points rules,
+because a budget-start league needs a basis that moves slowly:
+
+```
+0.5 × (percent_owned − 0) + 0.5 × rankScore + bounded(percent_owned_delta)
+```
+
+- **Percent owned** is the season-long share of leagues that roster the player. It moves slowly, which
+  is the point: the ordering does not churn with the crowd.
+- **`rankScore`** is the provider's trailing and projected ranks, weighted per sport — football keeps
+  last 4 weeks 40, projected week 35, next 4 weeks 25; hockey keeps last 30 days 40, last 14 days 30,
+  next 7 days 10, rest of season 20. Each rank becomes `min(playersInLeague / rank, weight / 5) × 5`,
+  where `playersInLeague` is `teamCount × standardRosterSpots` with reserve slots excluded. A rank
+  better than the league's starter pool cannot run away with the plan.
+- **The delta** is the week's change in percent owned, bounded to ±4 percentile points.
+- **The positional offset is zero**, and the provenance label says so:
+  `yahoo/ownership-composite:no-positional-scarcity:<sport>:<period>`. Percent owned is not comparable
+  across positions without a replacement-level offset, so the composite is a cross-position ranking
+  weighted by the positions this league declares, and a player competes only for slots they are eligible
+  for. The offset is its own provider-neutral concept — replacement level by position, useful for adds,
+  drops, and trades — and it is not built here.
+
+The constraint is **capacity, not a multiplier**. A position whose `played` has reached `max` loses a
+starting unit. A position whose `projected` exceeds `max` by more than 1.5% loses one unit, marked
+optional when a required unit would otherwise over-constrain the problem. Slots are reduced; scores are
+never scaled. A locked player keeps their unit, so the reduction cannot make the plan infeasible. A
+closed slot is absent from the problem and a player sitting there is planned out of it.
+
+Participation is suppressed only at a position whose projection already exceeds its allowance. There the
+cap forces rotation anyway, and benching a player for one off-day spends a game the league will not
+refund. Below the allowance the actual scheduled fact stands.
+
+**No league in this account declares either limit**, so no live plan has taken this path. The shape is
+covered by synthetic fixtures adapted from the provider's published example: position rows under
+`games_played_by_position_type`, and an `innings_pitched` row for a league whose starting slots include
+a pitcher.
 
 ### Rung 3: percent started, and what it does not mean
 
@@ -179,47 +204,6 @@ The cost of the rule: a cohort that genuinely excludes a player cannot price tha
 single omission makes the plan less narrow. The alternative — mixing the cut and the overall
 percentage inside one plan — prices two players from different populations, which is not a comparison.
 
-### Rung 2b: the ownership composite, for a league with a games limit
-
-A league that declares `max_games_played` or `max_innings_pitched` starts every start against a fixed
-per-position budget, so a daily crowd signal would spend the budget on whoever the crowd liked that day.
-Those leagues are priced from the ownership composite, even when the league also publishes points rules,
-because a budget-start league needs a basis that moves slowly:
-
-```
-0.5 × (percent_owned − 0) + 0.5 × rankScore + bounded(percent_owned_delta)
-```
-
-- **Percent owned** is the season-long share of leagues that roster the player. It moves slowly, which
-  is the point: the ordering does not churn with the crowd.
-- **`rankScore`** is the provider's trailing and projected ranks, weighted per sport — football keeps
-  last 4 weeks 40, projected week 35, next 4 weeks 25; hockey keeps last 30 days 40, last 14 days 30,
-  next 7 days 10, rest of season 20. Each rank becomes `min(playersInLeague / rank, weight / 5) × 5`,
-  where `playersInLeague` is `teamCount × standardRosterSpots` with reserve slots excluded. A rank
-  better than the league's starter pool cannot run away with the plan.
-- **The delta** is the week's change in percent owned, bounded to ±4 percentile points.
-- **The positional offset is zero**, and the provenance label says so:
-  `yahoo/ownership-composite:no-positional-scarcity:<sport>:<period>`. Percent owned is not comparable
-  across positions without a replacement-level offset, so the composite is a cross-position ranking
-  weighted by the positions this league declares, and a player competes only for slots they are eligible
-  for. The offset is its own provider-neutral concept — replacement level by position, useful for adds,
-  drops, and trades — and it is not built here.
-
-The constraint is **capacity, not a multiplier**. A position whose `played` has reached `max` loses a
-starting unit. A position whose `projected` exceeds `max` by more than 1.5% loses one unit, marked
-optional when a required unit would otherwise over-constrain the problem. Slots are reduced; scores are
-never scaled. A locked player keeps their unit, so the reduction cannot make the plan infeasible. A
-closed slot is absent from the problem and a player sitting there is planned out of it.
-
-Participation is suppressed only at a position whose projection already exceeds its allowance. There the
-cap forces rotation anyway, and benching a player for one off-day spends a game the league will not
-refund. Below the allowance the actual scheduled fact stands.
-
-**No league in this account declares either limit**, so no live plan has taken this path. The shape is
-covered by synthetic fixtures adapted from the provider's published example: position rows under
-`games_played_by_position_type`, and an `innings_pitched` row for a league whose starting slots include
-a pitcher.
-
 ## Which leagues are scoreable today
 
 | Sport    | Leagues available        | Points rules | Started percentage | Scoring scheme  |
@@ -229,8 +213,8 @@ a pitcher.
 
 Every hockey league in the linked account publishes categories with no `stat_modifiers` at all, which
 is what a category or rotisserie league looks like in the provider's own settings. Their realised
-statistics are dense but there is no league rule that turns them into points, so they take rung 3.
-All four plan. One roster in the account holds an injured-reserve goaltender with no published started
+statistics are dense but there is no league rule that turns them into points and no games limit, so
+the adapter prices them from the published started percentage. All four plan. One roster in the account holds an injured-reserve goaltender with no published started
 percentage; that player is parked on the reserve list and the league's fifteen starting slots are
 filled from the players the crowd does start.
 
@@ -493,8 +477,8 @@ because the defence slot is required and they are the only defence.
 The same policy, pointed at one of the four hockey leagues — 21 rostered players, twelve categories,
 `C 2, LW 2, RW 2, D 4, G 2, BN 7, IR 2, IR+ 1, NA 2`, every player editable and no player on a
 reserve list with a game to play. The league publishes no `stat_modifiers`, and the raw settings body
-does not contain the key at all, so the ladder skips rungs one and two and lands on the started
-percentage.
+does not contain the key at all and the league declares no games limit, so the adapter prices the
+plan from the published started percentage.
 
 The provider published a started percentage for all 21 roster players (4 %–88 %, 18 distinct values,
 `coverage_type: date`). This is the pre-correction run: it asked for the diamond cut, which came back
@@ -538,15 +522,15 @@ the two goalies the crowd starts most.
 1. **One source, in its own unit.** A league is valued by points or by a started percentage, never by
    both and never by a converted mixture. A category league valued by the crowd is not priced in
    categories, and it is not pretending to be: the recorded label says what the number is.
-2. **Rung two before rung three.** A league that publishes points rules uses them even though the
-   crowd signal is also available. Points are what the league scores; the crowd is a proxy. The cost
-   is that football never benefits from the crowd signal, even when the crowd disagrees with the
-   trailing mean.
+2. **Points rules before the crowd signal.** A league that publishes points rules uses them even
+   though the crowd signal is also available. Points are what the league scores; the crowd is a proxy.
+   The cost is that football never benefits from the crowd signal, even when the crowd disagrees with
+   the trailing mean.
 3. **Four completed periods.** Shorter is more responsive to role changes and noisier; longer is
    steadier and staler. Four weeks is a judgement.
-4. **A trailing mean, not a forecast.** For rung two there are no projections. A player's first big
-   game is invisible until it is behind them, and a returning starter keeps a depressed value while
-   missed weeks are still inside the window.
+4. **A trailing mean, not a forecast.** The points rung is built from realised statistics. A
+   player's first big game is invisible until it is behind them, and a returning starter keeps a
+   depressed value while missed weeks are still inside the window.
 5. **Byes excluded, injuries counted.** A published bye is a known absence of opportunity, so it is
    excluded from the mean and the player is `not-scheduled` for that period. A week a player was
    injured looks like a zero performance, because the provider's dense series cannot distinguish the
@@ -581,9 +565,9 @@ the two goalies the crowd starts most.
     not do this: there, absent stays absent and the player is parked without a price.
 13. **The reported total is availability-blind, and in the scheme's own unit.** It sums the starting
     values and is the objective's value term, so it is not an expected score. Under the points scheme
-    it is centi-points; under the projections scheme it is hundredths of a point; under the started
-    scheme it is hundredths of a percent; under the ownership composite it is ten-thousandths of the
-    composite. It does not shrink when an injured player is only filling a vacant position.
+    it is centi-points; under the started scheme it is hundredths of a percent; under the ownership
+    composite it is ten-thousandths of the composite. It does not shrink when an injured player is
+    only filling a vacant position.
 14. **Starting positions are required.** Conservative against an unverified rule, at the cost of
     starting a negative player when every candidate is negative.
 15. **No per-game rate.** The provider publishes no games-played count, so a season total cannot

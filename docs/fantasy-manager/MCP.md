@@ -39,7 +39,7 @@ A league/opponent read requires verified access through the user's connection; i
 
 Inputs: explicit owned team references and validated target periods, plus stable request identity. MCP's protocol request ID is not assumed to be a durable retry identity. Decide one stable client request field with clear same-key/different-intent rejection.
 
-Phase 1 uses the provider's native start-active action; Phase 2 uses the custom optimizer after direct cutover. No transaction execution or provider-premium optimization.
+Phase 1 uses the provider's native lineup action; Phase 2 uses the custom optimizer after direct cutover. No transaction execution or provider-premium optimization.
 
 Response includes per-team run reference, status, implementation, target period, observation time, and safe change/no-op/blocked/pending explanations. A bounded wait may return pending work; `get_lineup_runs` retrieves the result later. Do not report success merely because work was queued or a provider returned HTTP 200 with invalid coverage.
 

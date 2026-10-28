@@ -67,8 +67,8 @@ objective ranks above value — therefore carries **injury only**. A player with
 `will-play` and competes on crowd share alone. That is exactly the reported behaviour, and it is the
 whole of it.
 
-`AvailabilityAssessment` already has a `{ fact: "no-game" }` branch. It is unreachable for date coverage;
-nothing else had to be wrong.
+The availability mapping already has a no-game branch. It is unreachable for date coverage; nothing
+else had to be wrong.
 
 ### R3. Nothing in the run record could reveal it
 
@@ -148,11 +148,11 @@ disposition. "Seam" means `Provider*` contracts in
 | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | injury code (`status`)                                                                                                     | `ProviderRosterPlayer.injuryCode` → `yahooAvailability` → `PolicyPlayer.availability` | selects `available` / `uncertain` / `excluded`                                                         |
 | confirmed real-world start (`starting_status.is_starting`)                                                                 | `ProviderRosterPlayer.startingLineup` → `PolicyPlayer.startingLineup`                 | lifts a confirmed starter to `confirmed-start`, places a confirmed backup goalie on `unlikely-to-play` |
-| bye week (`bye_weeks.week`)                                                                                                | `ProviderRosterPlayer.byeWeek` → `nonGamePeriods`                                     | bye is `will-not-play` for **weekly** coverage only (R2)                                               |
+| bye week (`bye_weeks.week`)                                                                                                | `ProviderRosterPlayer.byeWeek` → `nonGamePeriods`                                     | a bye is `not-scheduled` for weekly coverage; dated coverage uses the day’s scheduled fact             |
 | eligible positions                                                                                                         | `ProviderRosterPlayer.eligiblePositions` → slot eligibility and `reserveEligible`     | which slots a player may occupy; reserve legality                                                      |
 | selected slot                                                                                                              | `ProviderRosterPlayer.slot` → `currentSlotId`                                         | minimum-change tie-break, comparison, write delta                                                      |
 | editable                                                                                                                   | `ProviderRosterPlayer.isEditable` → `lockedSlotId`                                    | locks                                                                                                  |
-| percent started (overall, and a cut)                                                                                       | separate `readStartRates` → `ValueSource`                                             | final score for every hockey league                                                                    |
+| percent started (overall, and a cut)                                                                                       | `readPlayerFacts` → `provider-scoring/ValueSource`                                    | final score for a crowd-priced league; not used when a games limit selects the ownership composite     |
 | league scoring rules                                                                                                       | `ProviderLeagueSettings.statModifiers`                                                | final score for football                                                                               |
 | roster positions, counts, `is_starting_position`                                                                           | `ProviderLeagueSettings.rosterPositions`                                              | slot model, capacities, starting/bench/reserve classification                                          |
 | league period window, coverage                                                                                             | `ProviderLeagueSettings`, `ProviderRoster.coverage`                                   | target resolution, period scoping                                                                      |
@@ -292,8 +292,8 @@ ordering is worth keeping, and it needs a fourth rung `not-scheduled` below `wil
 | `will-play`        | expected to appear                                            | no status code, scheduled, and no starting status or an unread `0` |
 | `might-play`       | may appear                                                    | `D`, `DTD`, `Q`, `P`, `GTD`, any unrecognised code                 |
 | `unlikely-to-play` | confirmed outside the starting lineup where one player starts | an available status, a published `0`, and a goalie position        |
-| `will-not-play`    | will not appear, but could                                    | `O`, `IR`, `IR+`, `IR-LT`, `SUSP`, `NA`; a bye                     |
-| `not-scheduled`    | no game to appear in                                          | no game in the target period                                       |
+| `will-not-play`    | will not appear, but could                                    | `O`, `IR`, `IR+`, `IR-LT`, `SUSP`, `NA`                            |
+| `not-scheduled`    | no game to appear in                                          | no game in the target period, including a published bye            |
 
 **Decided:** on 2026-10-27 the owner approved adding the fourth rung, `not-scheduled`, below
 `will-not-play`. That amends [ADR 0006](../adr/0006-availability-tiers.md)'s three-rung decision, so the
@@ -572,9 +572,9 @@ All seven are complete; the hockey teams were re-enabled only after the live rea
 - **Layer:** seam (`ProviderRosterPlayer`), adapter policy (`YahooLineup`, provider-scoring
   `Valuation`), planner ladder (`LineupPlanning`).
 - **Change:** add `scheduled: boolean` to the seam and the fake; add the `not-scheduled` rung to
-  `ProviderAvailabilityTier` and the declared ladder; extend `AvailabilityAssessment` to be produced
-  for it (`fact: "no-game"` already exists); map `scheduled === false` to that rung in `YahooLineup`
-  rather than through `nonGamePeriods`, which stays for football byes.
+  `ProviderAvailabilityTier` and the declared ladder; produce the no-game fact in the adapter mapping;
+  map `scheduled === false` to that rung in `YahooLineup`, while `nonGamePeriods` keeps handling
+  published byes.
 - **Tests:** 1, 2, 3, 4, 5, 6, 7, 8, 16. An integration test through `scoreYahooRoster` +
   `planAssignments` on a synthetic hockey roster with two eligible players, one with a game and a lower
   score, is the regression.
@@ -593,7 +593,7 @@ All seven are complete; the hockey teams were re-enabled only after the live rea
 
 ### Step 4 — price from the populated population
 
-- **Layer:** Yahoo adapter (`readStartRates` request literal; the cut-preference rule in the provider's
+- **Layer:** Yahoo adapter (the player-facts request literal; the cut-preference rule in the provider's
   scoring modules).
 - **Change:** request `percent_started.cut_types=platinum` instead of `diamond`; keep the roster-level
   completeness guard, corrected to "every player with an overall value also has a cut value"; record

@@ -4,7 +4,7 @@ These records preserve the answers and corrections from all recorded rounds thro
 
 ## Round 1 decisions
 
-1. Accepted: Phase 1 includes minimal frontend and scheduled native start-active automation, with the MCP slice delivered first.
+1. Accepted: Phase 1 includes minimal frontend and scheduled native lineup automation, with the MCP slice delivered first.
 2. Accepted: Yahoo NFL/NHL first; other integrations deferred.
 3. Corrected: keep shared interfaces minimal and generic. Diamond cohorts and source-specific projection variants are private implementation details. No speculative capability framework is approved.
 4. Accepted: state machines coordinate; pure functions calculate and solve.
@@ -15,7 +15,7 @@ These records preserve the answers and corrections from all recorded rounds thro
 
 1. Accepted: default-off team automation; distinct disabled, enabled, and paused states; team-level controls initially.
 2. Accepted: scheduled work targets the currently actionable provider period, not proactive multi-period editing.
-3. Accepted: use comparable scoring evidence; consistent fallback for incomplete projections; preserve affected choices when evidence is insufficient. Zero and missing remain distinct.
+3. Accepted: use comparable scoring evidence; consistent fallback for incomplete scoring evidence; preserve affected choices when evidence is insufficient. Zero and missing remain distinct.
 4. Accepted: documented scalar heuristic for category leagues; true category-outcome optimization deferred.
 5. Accepted: include legal reserve-list moves within the existing roster. Do not execute transactions to resolve blocked moves.
 6. Accepted: minimize assignment changes among equal-value legal lineups, then deterministic tie-breaking.
@@ -63,7 +63,7 @@ These records preserve the answers and corrections from all recorded rounds thro
 
 ## Round 8 decisions
 
-1. Accepted: one generic public `set_lineup` operation across phases. Phase 1 uses provider-native start-active behavior; Phase 2 uses the custom optimizer. Results identify the implementation used without promising perfect real-world outcomes.
+1. Accepted: one generic public `set_lineup` operation across phases. Phase 1 uses provider-native lineup behavior; Phase 2 uses the custom optimizer. Results identify the implementation used without promising perfect real-world outcomes.
 2. Accepted: manual requests normally return verified results, but return a durable run reference after a bounded wait. Clients can query status; disconnecting a request does not lose an accepted job. MCP remains stateless.
 3. Accepted: retain configuration for teams that become inaccessible, mark them unavailable, and suppress writes rather than deleting configuration or repeatedly attempting writes. Newly discovered teams remain disabled.
 4. Accepted: retain concise run outcomes/explanations for 30 days, minimal normalized diagnostic inputs for 7 days, and no raw provider-response dumps by default. No credentials in history, logs, or email.

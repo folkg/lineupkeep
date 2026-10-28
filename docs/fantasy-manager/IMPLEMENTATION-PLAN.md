@@ -5,7 +5,7 @@ Status: product grilling and independent Lineupkeep repository/brand preparation
 ## Read this first
 
 - **Product:** independent provider-neutral fantasy management, not a Yahoo wrapper or migration of AutoCoach.
-- **Phase 1:** query-first stateless MCP, one generic `set_lineup` mutation backed by native start-active, human transaction-review links, minimal rewritten frontend, hourly queued automation, and action-required email.
+- **Phase 1:** query-first stateless MCP, one generic `set_lineup` mutation backed by the native lineup action, human transaction-review links, minimal rewritten frontend, hourly queued automation, and action-required email.
 - **Phase 2:** a ground-up pure lineup optimizer, legal same-roster reserve movement, provider-specific explicit writes, and direct cutover when ready. No shadow product stage or new team opt-in.
 - **Hosting:** Alchemy-managed Cloud Run + fresh Neon Free PostgreSQL. Public web/MCP and private IAM-protected worker both scale to zero. Expected launch: one user, five teams; 100 teams is a sizing/test scenario.
 - **Initial integration:** Yahoo NFL/NHL. Other providers and sports are deferred, not built behind speculative interfaces.
@@ -42,9 +42,9 @@ Provider adapters own request batching and period/day semantics. Minimize upstre
 
 ### Opinionated optimization
 
-Policies belong in provider/sport/league-appropriate layers. Prefer comparable projected points when usable; Yahoo's private fallback is its published percent-started evidence, using the platinum cohort when it is populated and the overall percentage otherwise. Do not mix raw percentages and points or invent missing scores. If useful evidence is absent, preserve affected choices and explain why. Zero is not missing.
+Policies belong in provider/sport/league-appropriate layers. Prefer the provider's score from the league's own rules when usable; a games-limited league uses the ownership composite, and a crowd-priced league uses its published percent-started evidence, choosing the platinum cohort when it is populated and the overall percentage otherwise. Do not mix raw percentages and points or invent missing scores. If useful evidence is absent, preserve affected choices and explain why. Zero is not missing.
 
-Hard constraints describe legal destinations, roster capacity, reserve eligibility, and locks. Availability/real-world starting status is soft selection evidence, not an automatic exclusion. An injured/unconfirmed player can fill an otherwise empty slot; avoid double adjustments when projections already account for participation.
+Hard constraints describe legal destinations, roster capacity, reserve eligibility, and locks. Availability/real-world starting status is soft selection evidence, not an automatic exclusion. An injured/unconfirmed player can fill an otherwise empty slot; avoid double adjustments when the provider's score already accounts for participation.
 
 Objective order:
 

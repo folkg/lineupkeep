@@ -125,4 +125,5 @@ verification.
   ordered by a crowd signal, not by category contribution; the cutover does not pretend otherwise.
 - Reading a provider's confirmed-starter or has-a-game facts into availability. They would refine
   selection, not the value basis, and are not part of this cutover.
-- A provider that publishes usable projections. Its rung is implemented and unselected by Yahoo.
+- A provider that publishes usable projections, combined into its own final score before it crosses
+  the seam.

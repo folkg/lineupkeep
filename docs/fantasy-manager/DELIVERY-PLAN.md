@@ -103,7 +103,7 @@ Vertical slices:
 
 - User-owned run creation, stable request identity, run-status reads, and atomic run/outbox persistence.
 - Authenticated delivery, duplicate handling, per-team coordination, provider-aware bounded batching, and repair of undispatched/stale work.
-- Native start-active preparation, pre-write ownership/control/period/lock validation, provider invocation, and roster readback.
+- Native lineup action preparation, pre-write ownership/control/period/lock validation, provider invocation, and roster readback.
 - Verified changed/no-op results versus pending, blocked, retryable, failed, and uncertain outcomes.
 - Bounded manual MCP waiting that returns durable run references without canceling accepted work on disconnect.
 

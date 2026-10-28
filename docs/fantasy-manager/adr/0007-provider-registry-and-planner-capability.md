@@ -60,11 +60,11 @@ rules, roster shapes, or provider vocabulary.
 
 **A fallback ladder, not a fatal branch.**
 
-The value-source ladder lives inside the provider's scoring modules: projections, then the league's
-rules, then the ownership composite for a games-limited league, then the published crowd share, then a
-named refusal. Providers supply the candidate inputs they can compute. Choosing a source is a
-fallback chain over data conditions inside the adapter, not an Effect defect. A refusal is returned as
-data with an opaque label and a human-readable detail.
+The value-source ladder lives inside the provider's scoring modules: the league's rules, then the
+ownership composite for a games-limited league, then the published crowd share, then a named refusal.
+Providers supply the candidate inputs they can compute. Choosing a source is a fallback chain over
+data conditions inside the adapter, not an Effect defect. A refusal is returned as data with an opaque
+label and a human-readable detail.
 
 **The boundary is enforced, not documented.**
 
@@ -96,15 +96,15 @@ a deliberate generic-to-Yahoo import in the architecture test suite.
   providers may serve one sport.
 - **Keeping presentation prose in generic contracts.** Prose is a capability statement; it belongs to
   the provider that can vouch for it.
-- **Treating an unselectable value source as a defect.** Normal data conditions — no projections, no
-  scoring rules, no community rate — are refusals with remedies, not crashes.
+- **Treating an unselectable value source as a defect.** Normal data conditions — no scoring rules,
+  no games limit, no community rate — are refusals with remedies, not crashes.
 
 ## Deferred
 
 - Widening the product's sport and league-code vocabulary beyond football and hockey. The seam now takes
   provider-declared sports and free-form league codes at the persistence edge, but the public contracts
   and UI still name the two live sports; widening waits for a provider that publishes another sport.
-- A provider-authored planner that uses provider-owned projections for a provider that publishes them.
-  Yahoo publishes none, so its projections rung is declared unavailable and the ladder falls through.
+- A provider that publishes usable projections decides how to use them inside its own scoring module;
+  the seam carries only the final score. Yahoo publishes none, so its scoring never uses them.
 - Runtime plugin loading, provider capability negotiation over a network, and third-party adapters. The
   registry is static composition, not a plugin system.

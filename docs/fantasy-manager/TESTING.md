@@ -56,18 +56,18 @@ Persist seed and minimized counterexample on failure. A generated failure become
 
 Use worked expected comparisons and generated boundary cases:
 
-- Complete projections, partially missing projections, zero projections, negative projections, and no usable fallback.
+- Complete realised values, partially missing values, zeros, negatives, and no usable fallback.
 - Consistent comparison basis; no raw percentage-versus-points comparisons and no silent switch to a different scoring scheme. The one cut-population fallback is recorded in the provenance label.
 - Missing injury/start status versus explicit healthy/out; confirmed/unconfirmed participation; no injury double-counting.
 - An uncertain positive player can fill an empty position; comparable confirmed participants are preferred according to the explicit policy, not a hidden hard tier.
 - Category heuristic is labeled as such and does not claim expected points/category-win probability.
-- Same facts plus the same implementation version produce the same result, independent of provider payload ordering.
+- Same facts and the same provider score produce the same result, independent of provider payload ordering.
 
-NFL cases: bye/no scheduled game, questionable/out changes before lock, already locked players, period-correct projections, and league scoring context.
+NFL cases: bye/no scheduled game, questionable/out changes before lock, already locked players, period-correct realised statistics, and league scoring context.
 
 NHL cases: announced/unannounced/backup goalie, a non-starting goalie who might appear, injured skater, negative goalie value, no scheduled game, and all-zero versus missing fallback evidence. Whether a feed actually contains meaningful free data is a contract/acceptance question, not something a synthetic generator can prove.
 
-Future MLB policy checklist (not initial implementation): SP-only, RP-only, SP/RP eligibility, announced starter versus possible relief appearance, opener/bulk roles, schedule changes/doubleheaders, and source-projection participation assumptions. Do not encode these cases in the generic solver.
+Future MLB policy checklist (not initial implementation): SP-only, RP-only, SP/RP eligibility, announced starter versus possible relief appearance, opener/bulk roles, schedule changes/doubleheaders, and provider-score participation assumptions. Do not encode these cases in the generic solver.
 
 ## 5. State-machine exploration and model-based sequences
 
@@ -129,7 +129,7 @@ Detected races are limited to observations the provider publishes in its roster 
 
 ## 7. Provider contracts and privacy
 
-Use a small set of sanitized, hand-minimized fixtures covering structurally distinct Yahoo responses: current/historical discovery, multiple teams in one league, nested league/player projections, date/week/season coverage, missing stats, zeros, locks, and error bodies. Add a synthetic provider with different keys, week identifiers, rollover, and batch behavior.
+Use a small set of sanitized, hand-minimized fixtures covering structurally distinct Yahoo responses: current/historical discovery, multiple teams in one league, nested league/player statistics, date/week/season coverage, missing stats, zeros, locks, and error bodies. Add a synthetic provider with different keys, week identifiers, rollover, and batch behavior.
 
 Provider payload fixtures come from captured structure, not from assumptions about it. Each fixture is a live read with every value replaced by synthetic data of the same JSON type, kept as data in one module so a newly observed shape is a new fixture rather than a branch in an existing one. Cover the structural properties that actually vary: nested attribute fragment lists padded with empty placeholders, repeated single-field entries such as roster positions and stat categories, one league variant per sport plus one per scoring type that omits fields the others publish, rosters with week and date coverage, weekly and season stat availability, and a transaction naming a dropped player. Tests that require a named invalid-response failure assert against captured unexpected shapes too, so the failure path is never written against an invented payload. Boundary tests for a published schema must exercise the boundary the handler sees, including an empty string where the schema accepts it.
 

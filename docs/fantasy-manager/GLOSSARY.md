@@ -146,8 +146,9 @@ The bounded number of feedback reports one account, and one acting client label,
 
 ## Actions
 
-**Native start-active action**:
-A provider's own action to select active starters without using this application's lineup optimizer. It is not a guarantee of an optimal projected score.
+**Native lineup action**:
+A provider's own action to select active starters without using this application's lineup optimizer. It is not a guarantee of an optimal score.
+_Avoid_: Start-active, provider action name
 
 **Explicit assignment request**:
 A provider write that sets named roster players to named slots for one lineup period. It is incapable of adding, dropping, or trading a player, and sends only assignments that differ from the provider's observed lineup and that the provider reports as editable.

@@ -31,10 +31,10 @@ and policy. One rung per league, in the ladder's order:
 | hockey-3   | rotisserie              |     22 |         0 | community start rate | `community-start-rate:overall:date:2026-10-27`       |
 | hockey-4   | head-to-head categories |     22 |         0 | community start rate | `community-start-rate:overall:date:2026-10-27`       |
 
-Why: the football league publishes 33 scoring modifiers, so rung 2 values it in the league's own
+Why: the football league publishes 33 scoring modifiers, so rung 1 values it in the league's own
 points. All four hockey leagues publish categories with no modifiers at all, so they fall to rung 3.
 The diamond cut was published and `0` for every roster player again, so rung 3 used the overall
-percentage. Yahoo declares no projections, so rung 1 stays unselected.
+percentage. Yahoo publishes no player projections, so its scoring has no projection rung.
 
 All five plans were `planned`; none refused. Every required starting slot was filled (9 for
 football, 12/15/15/15 for hockey), and no started player had a missing value except where noted below.

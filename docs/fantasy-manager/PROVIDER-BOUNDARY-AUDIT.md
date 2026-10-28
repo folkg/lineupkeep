@@ -12,23 +12,21 @@ below marked _second pass_ were changed by it. The responsible-module map stays 
 
 ## Result
 
-After the second pass, no production module outside the provider adapters, their scoring modules, the
-composition root, and the keyed presentation/helper declarations contains the string `Yahoo` or
-`yahoo`, and no generic module imports a provider adapter or a provider scoring module. The
-repository-wide check that produced that statement:
+No production module outside the provider adapters, their scoring modules, the composition root, and
+the keyed presentation/helper declarations contains the string `Yahoo` or `yahoo`, and no generic
+module imports a provider adapter or a provider scoring module. The repository-wide check:
 
 ```sh
 rg -n 'Yahoo|yahoo' packages apps \
-  --glob '!*.test.*' --glob '!*Test.ts' --glob '!*.md' \
-  --glob '!**/internal/yahoo/**' --glob '!packages/backend/migrations/**'
+  --glob '!*.test.*' --glob '!**/internal/yahoo/**'
 ```
 
-Test support and the helper README are excluded because they are not runtime modules; the historical
-`20261025113924_cool_ted_forrester` migration is excluded because it is an immutable applied record,
-not code that runs. The remaining hits are the declarations listed under
-[provider-specific by nature](#provider-specific-by-nature), each of which is a lookup table keyed by
-provider rather than a branch on provider identity. The `repository/provider-identity` lint rule now
-makes that statement enforceable in source: it rejects a provider name in any `src/` module outside the
+The remaining hits are deliberate: the composition root imports the adapter to build the registry;
+`providerLabels`, the hosted-browser declaration, and the helper declaration are keyed lookup tables;
+the `20261025113924_cool_ted_forrester` migration is an immutable applied record; and
+`ProviderFakeTest.ts` is test support that simulates the first provider through the public seam. The
+helper README is prose for the provider-specific helper. The `repository/provider-identity` lint rule
+makes the source statement enforceable: it rejects a provider name in any `src/` module outside the
 adapter, the composition root, and those declarations.
 
 ## The seam
@@ -91,7 +89,7 @@ Generic query code renders and enforces those facts. It never infers them from a
 | `connections/Connection.ts`, `connections/HostedLinking.ts`           | Provider schema was `Literals(["yahoo"])`                                             | Replaced by `ProviderKey`; the contract exports only the key                                                          |
 | `internal/ConnectionTables.ts`, `internal/HostedLinkingTables.ts`     | Columns were `text("provider", { enum: ["yahoo"] })`                                  | Plain `text`, decoded through `ProviderKey`                                                                           |
 | `internal/LineupRunTables.ts`                                         | Write-intent action and plan tag `start_active_players`                               | Renamed to `native_action`; a migration rewrites stored run state and write-intent plans                              |
-| `internal/LineupRunWorkflow.ts`                                       | Observation fields `leagueCurrentWeek`, `leagueStartWeek`, `leagueEndWeek`            | Renamed to `leagueCurrentPeriod`, `leagueStartPeriod`, `leagueEndPeriod`; the same migration rewrites in-flight state |
+| `internal/LineupRunWorkflow.ts`                                       | Observation fields `leagueCurrentWeek`, `leagueStartWeek`, `leagueEndWeek`            | Renamed to periods, then removed in the final review when no reader remained; the migration remains an applied record |
 | `contexts/connections/Provider.ts`                                    | `ProviderPeriodWindow.currentWeek/startWeek/endWeek`                                  | Renamed to `current/start/end`                                                                                        |
 | `contexts/connections/LineupRun.ts`                                   | `LineupPolicyProvenance { version, basis, code }` (_second pass_)                     | `LineupPlanProvenance { kind, label, detail? }`: one opaque provider label, never parsed                              |
 | `internal/LineupRunWorkflow.ts`, `internal/LineupRunTables.ts`        | Plan fields `policy` (_second pass_)                                                  | Renamed to `provenance`; a migration rewrites run state and write intents and keeps the recorded label                |
@@ -126,10 +124,12 @@ Generic query code renders and enforces those facts. It never infers them from a
 | `yahoo/YahooLineup.ts`                   | Yahoo planning was imported by the worker                                                                                                                                                  | Now Yahoo's own scoring modules and the provider's `scoreRoster` capability                                                                                                                                                              |
 
 The projections defect deserves its own line. Selecting a scoring scheme is a total order over the
-provider's own evidence: projections first, then scoring rules, then the published crowd share, then a
-named refusal with a remedy. A provider that publishes no projections simply contributes no candidate.
-An unusable candidate is a refusal in the result, not an Effect defect. The worker records the
-refusal, falls back to the native action when the refusal allows it, and reports the provider's label.
+provider's own evidence: the league's rules, then the ownership composite for a games-limited league,
+then the published crowd share, then a named refusal with a remedy. A provider that publishes
+projections combines them into its own final score before the seam; an unused projections rung was
+removed from the scoring modules in the final review. An unusable candidate is a refusal in the
+result, not an Effect defect. The worker records the refusal, falls back to the native action when the
+refusal allows it, and reports the provider's label.
 
 ### Planning, scores, and provenance — second pass
 
@@ -208,13 +208,15 @@ They are declared in the same keyed style, in the only modules allowed to know t
 - **Rejected:** any import from a scoring module into the application, Effect, persistence, transport,
   the solver, or the brand — `provider-scoring-is-self-contained`.
 
-The `repository` lint plugin adds two rules:
+The `repository` lint plugin adds three rules:
 
 - `provider-scoring-vocabulary` rejects a fixed list of scoring identifiers (`communityStartRate`,
   `valueSource`, `startCutPreference`, `scoringProfile`, `scorePeriod`, `mean-points-per-period`,
-  `observationWindow`, `statBases`, `isFlex`, and their siblings) in any `src/` module outside the
-  provider's own directories, so a scoring concept cannot reappear as a field name, a string, or a
-  helper.
+  `observationWindow`, `ownershipComposite`, `community-start-rate`, `platinum`, `statBases`, `isFlex`,
+  and their siblings) in any `src/` module outside the provider's own directories, so a scoring
+  concept cannot reappear as a field name, a string, or a helper.
+- `provider-action-vocabulary` rejects `start-active`, `start_active`, and `start active` in the same
+  generic source, so one provider's native action name cannot become product vocabulary.
 - `provider-identity` rejects `Yahoo` or `yahoo` in generic source outside the adapter, the
   composition root, and the keyed presentation/helper declarations, so a provider-name branch cannot
   reappear as a string comparison.
@@ -247,6 +249,12 @@ and a scoring term added to a generic contract module:
 
 ```text
 packages/backend/src/contexts/connections/QueryResultsViolation.ts:1:29: error repository(provider-scoring-vocabulary): `communityStartRate` names how one provider constructs a score; keep scoring vocabulary inside the provider adapter and expose only a final score and opaque provenance.
+```
+
+and a native action name added to a generic scopes module:
+
+```text
+packages/backend/src/contexts/connections/LineupScopes.ts:15:9: error repository(provider-action-vocabulary): `start-active` names one provider's native action; keep it inside the provider adapter and expose only the generic run outcome.
 ```
 
 ## AutoCoach breadth review
