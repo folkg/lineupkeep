@@ -27,28 +27,17 @@ export type StatObservation = {
   readonly value: StatValue | null;
 };
 
-export type PeriodScore =
-  | { readonly kind: "scored"; readonly points: Exact; readonly coverage: PeriodCoverage }
-  | {
-      readonly kind: "unknown";
-      readonly reasons: ReadonlyArray<PeriodScoreUnknown>;
-      readonly coverage: PeriodCoverage;
-    };
-
-export type PeriodScoreUnknown =
-  | { readonly kind: "no-observations" }
-  | { readonly kind: "value-unknown"; readonly statId: StatId };
-
-export type PeriodCoverage = {
-  readonly scored: ReadonlyArray<StatId>;
-  readonly absent: ReadonlyArray<StatId>;
-  readonly unknown: ReadonlyArray<StatId>;
-  readonly unscored: ReadonlyArray<StatId>;
-};
-
 export type Period =
   | { readonly kind: "week"; readonly week: number }
   | { readonly kind: "date"; readonly date: string };
+
+export type AvailabilityTier =
+  | "confirmed-start"
+  | "will-play"
+  | "might-play"
+  | "unlikely-to-play"
+  | "will-not-play"
+  | "not-scheduled";
 
 export type ValueSourceKind =
   | "projected-points"
@@ -68,7 +57,6 @@ export type ValueSource =
   | {
       readonly kind: "projected-points";
       readonly projections: ReadonlyArray<PlayerProjection>;
-      readonly realised: ReadonlyArray<PlayerRealisedPoints>;
     }
   | {
       readonly kind: "scoring-rules";
@@ -89,11 +77,6 @@ export type ValueSource =
     };
 
 type PlayerProjection = {
-  readonly id: string;
-  readonly points: Exact;
-};
-
-export type PlayerRealisedPoints = {
   readonly id: string;
   readonly points: Exact;
 };
@@ -133,18 +116,6 @@ export type PlayerAvailability =
 
 type ExclusionReason = "out" | "injured-reserve" | "suspended" | "not-active";
 
-export type AvailabilityAssessment =
-  | { readonly tier: "confirmed-start"; readonly fact: "confirmed-start" }
-  | { readonly tier: "will-play"; readonly fact: "available" }
-  | { readonly tier: "might-play"; readonly fact: "uncertain-status"; readonly code: string }
-  | { readonly tier: "might-play"; readonly fact: "unrecognised-status"; readonly code: string }
-  | {
-      readonly tier: "unlikely-to-play";
-      readonly fact: "confirmed-not-starting";
-    }
-  | { readonly tier: "will-not-play"; readonly fact: "excluded"; readonly reason: ExclusionReason }
-  | { readonly tier: "not-scheduled"; readonly fact: "no-game"; readonly period: Period };
-
 export type StartingLineup = "confirmed-starting" | "confirmed-not-starting" | "unconfirmed";
 
 export type StartingLineupRule = "unlikely-to-play" | "not-an-availability-fact";
@@ -165,29 +136,3 @@ type PeriodObservation = {
     readonly stats: ReadonlyArray<StatObservation>;
   }>;
 };
-
-export type ValueAssessment =
-  | {
-      readonly kind: "realised-points";
-      readonly countedPeriods: ReadonlyArray<Period>;
-      readonly skippedPeriods: ReadonlyArray<Period>;
-      readonly periodPoints: ReadonlyArray<Exact>;
-      readonly average: Exact | undefined;
-    }
-  | {
-      readonly kind: "projected-points";
-      readonly projection: Exact | undefined;
-      readonly realised: Exact | undefined;
-    }
-  | {
-      readonly kind: "community-start-rate";
-      readonly population: CommunityStartRatePopulation;
-      readonly percent: Exact | undefined;
-    }
-  | {
-      readonly kind: "ownership-composite";
-      readonly percentOwned: Exact | undefined;
-      readonly rankScore: Exact;
-      readonly deltaAdjustment: Exact;
-      readonly composite: Exact | undefined;
-    };

@@ -380,7 +380,7 @@ function observations(
 
 describe("league scoring", () => {
   it("adds each scored stat's modifier and ignores stats the league does not score", () => {
-    const score = scorePeriod(recordedProfile, [
+    const points = scorePeriod(recordedProfile, [
       { statId: "4", value: 253 },
       { statId: "5", value: 2 },
       { statId: "6", value: 1 },
@@ -390,53 +390,42 @@ describe("league scoring", () => {
       { statId: "78", value: 4 },
     ]);
 
-    expect(score.kind).toBe("scored");
-    expect(score.kind === "scored" ? score.points : undefined).toEqual(parseExact("17.02"));
-    expect(score.coverage.unscored).toEqual(["8", "31", "78"]);
-    expect(score.coverage.scored).toEqual(["4", "5", "6", "9"]);
+    expect(points).toEqual(parseExact("17.02"));
   });
 
   it("leaves an absent scored stat contributing nothing", () => {
-    const score = scorePeriod(recordedProfile, [{ statId: "5", value: 1 }]);
+    const points = scorePeriod(recordedProfile, [{ statId: "5", value: 1 }]);
 
-    expect(score.kind === "scored" ? score.points : undefined).toEqual(parseExact("4"));
-    expect(score.coverage.absent).toContain("4");
-    expect(score.coverage.unknown).toEqual([]);
+    expect(points).toEqual(parseExact("4"));
   });
 
   it("keeps a zero stat value as a known zero", () => {
-    const score = scorePeriod(recordedProfile, [
+    const points = scorePeriod(recordedProfile, [
       { statId: "4", value: 0 },
       { statId: "5", value: 0 },
     ]);
 
-    expect(score.kind === "scored" ? score.points : undefined).toEqual(parseExact("0"));
+    expect(points).toEqual(parseExact("0"));
   });
 
   it("refuses to total a period whose scored stat value is unknown", () => {
-    const score = scorePeriod(recordedProfile, [
+    const points = scorePeriod(recordedProfile, [
       { statId: "4", value: 253 },
       { statId: "5", value: null },
     ]);
 
-    expect(score.kind).toBe("unknown");
-    expect(score.kind === "unknown" ? score.reasons : []).toEqual([
-      { kind: "value-unknown", statId: "5" },
-    ]);
+    expect(points).toBeUndefined();
   });
 
   it("treats a period with no statistics as unknown rather than zero", () => {
-    const score = scorePeriod(recordedProfile, []);
-
-    expect(score.kind).toBe("unknown");
-    expect(score.kind === "unknown" ? score.reasons : []).toEqual([{ kind: "no-observations" }]);
+    expect(scorePeriod(recordedProfile, [])).toBeUndefined();
   });
 
   it("accepts decimal stat values exactly", () => {
     const profile = scoringProfile({ categories: [], rules: [{ statId: 23, points: "0.5" }] });
-    const score = scorePeriod(profile, [{ statId: "23", value: "2.35" }]);
+    const points = scorePeriod(profile, [{ statId: "23", value: "2.35" }]);
 
-    expect(score.kind === "scored" ? score.points : undefined).toEqual(parseExact("1.175"));
+    expect(points).toEqual(parseExact("1.175"));
   });
 
   it("rejects two observations of one stat in one period", () => {
@@ -451,10 +440,10 @@ describe("league scoring", () => {
 
 describe("recorded league", () => {
   it("reproduces the provider's own weekly team total", () => {
-    const points = recordedWeekStats.map((row) => {
-      const score = scorePeriod(recordedProfile, observations(row.stats));
-      return { slot: row.slot, points: score.kind === "scored" ? score.points : undefined };
-    });
+    const points = recordedWeekStats.map((row) => ({
+      slot: row.slot,
+      points: scorePeriod(recordedProfile, observations(row.stats)),
+    }));
     const totalFor = (starting: boolean): Exact =>
       points
         .filter((row) => startingSlots.has(row.slot) === starting)

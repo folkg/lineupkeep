@@ -43,7 +43,12 @@ import { LineupRequestConflict, LineupRequestInput, LineupRunNotFound } from "./
 import { LineupRuns } from "./LineupRuns.ts";
 import { LineupWorker } from "./LineupWork.ts";
 import { ProviderResponseInvalid } from "./Provider.ts";
-import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
+import type {
+  ProviderAvailabilityTier,
+  ProviderLeagueSettings,
+  ProviderRoster,
+  ProviderTeam,
+} from "./Provider.ts";
 
 it.effect(
   "creates one durable run per team, falls back to the native action, and verifies it",
@@ -1215,11 +1220,17 @@ const customRoster: ProviderRoster = {
   ],
 };
 
-const customScores = [
-  { providerPlayerKey: "461.p.20001", score: 10, availability: undefined },
-  { providerPlayerKey: "461.p.20002", score: 5, availability: undefined },
-  { providerPlayerKey: "461.p.20003", score: 15, availability: undefined },
-  { providerPlayerKey: "461.p.20004", score: 1, availability: undefined },
+type TestScore = {
+  readonly providerPlayerKey: string;
+  readonly score: number | null;
+  readonly availability: ProviderAvailabilityTier;
+};
+
+const customScores: ReadonlyArray<TestScore> = [
+  { providerPlayerKey: "461.p.20001", score: 10, availability: "will-play" },
+  { providerPlayerKey: "461.p.20002", score: 5, availability: "will-play" },
+  { providerPlayerKey: "461.p.20003", score: 15, availability: "will-play" },
+  { providerPlayerKey: "461.p.20004", score: 1, availability: "will-play" },
 ];
 
 const reserveLeague: ProviderLeagueSettings = {
@@ -1247,10 +1258,10 @@ const reserveRoster: ProviderRoster = {
   ],
 };
 
-const reserveScores = [
-  { providerPlayerKey: "461.p.20001", score: 20, availability: undefined },
-  { providerPlayerKey: "461.p.20002", score: 30, availability: undefined },
-  { providerPlayerKey: "461.p.20003", score: 5, availability: undefined },
+const reserveScores: ReadonlyArray<TestScore> = [
+  { providerPlayerKey: "461.p.20001", score: 20, availability: "will-not-play" },
+  { providerPlayerKey: "461.p.20002", score: 30, availability: "will-play" },
+  { providerPlayerKey: "461.p.20003", score: 5, availability: "will-play" },
 ];
 
 const capacityLeague: ProviderLeagueSettings = {
@@ -1271,11 +1282,11 @@ const capacityRoster: ProviderRoster = {
   ],
 };
 
-const capacityScores = [
-  { providerPlayerKey: "461.p.20001", score: 10, availability: undefined },
-  { providerPlayerKey: "461.p.20002", score: 5, availability: undefined },
-  { providerPlayerKey: "461.p.20003", score: 3, availability: undefined },
-  { providerPlayerKey: "461.p.20004", score: 1, availability: undefined },
+const capacityScores: ReadonlyArray<TestScore> = [
+  { providerPlayerKey: "461.p.20001", score: 10, availability: "will-play" },
+  { providerPlayerKey: "461.p.20002", score: 5, availability: "will-play" },
+  { providerPlayerKey: "461.p.20003", score: 3, availability: "will-play" },
+  { providerPlayerKey: "461.p.20004", score: 1, availability: "will-play" },
 ];
 
 const startedLeague: ProviderLeagueSettings = {
@@ -1303,11 +1314,11 @@ const startedLeague: ProviderLeagueSettings = {
   statModifiers: [],
 };
 
-const startedScores = [
-  { providerPlayerKey: "461.p.20001", score: 30, availability: undefined },
-  { providerPlayerKey: "461.p.20002", score: 20, availability: undefined },
-  { providerPlayerKey: "461.p.20003", score: 90, availability: undefined },
-  { providerPlayerKey: "461.p.20004", score: 5, availability: undefined },
+const startedScores: ReadonlyArray<TestScore> = [
+  { providerPlayerKey: "461.p.20001", score: 30, availability: "will-play" },
+  { providerPlayerKey: "461.p.20002", score: 20, availability: "will-play" },
+  { providerPlayerKey: "461.p.20003", score: 90, availability: "will-play" },
+  { providerPlayerKey: "461.p.20004", score: 5, availability: "will-play" },
 ];
 
 const humanEditedRoster: ProviderRoster = {

@@ -70,7 +70,7 @@ Opaque application references resolve provider keys internally. Stat references 
 
 An immutable problem contains only player references, starter/reserve slot capacities and meaningful identities, pooled standard-roster limits, legal bench accommodation, current assignments, legal destination edges, fixed assignments, a common signed-value basis, and deterministic tie metadata. The shell supplies time-dependent facts before invoking the pure core.
 
-Reserve eligibility is a legal constraint. Participation/injury/real-world starting status is policy evidence, not automatically a prohibition on starting. Scoring evidence is never exposed as Yahoo-specific methods in the shared interface.
+Reserve eligibility is a legal constraint. Participation/injury/real-world starting status is policy evidence, not automatically a prohibition on starting. Scoring evidence is never exposed as provider-specific methods in the shared interface.
 
 Preserve every roster member. An empty starter is allowed; dropping a player or fabricating bench/reserve capacity is not. If no complete legal same-roster assignment exists, return a blocked explanation rather than quietly removing players or submitting a knowingly invalid roster.
 
@@ -78,28 +78,28 @@ Preserve every roster member. An empty starter is allowed; dropping a player or 
 
 Resolve the owner and connection from stored team identity, then its provider implementation from an injected registry keyed by provider key ([ADR 0007](adr/0007-provider-registry-and-planner-capability.md)). `runtime/ApplicationLayer.ts` is the only module that imports an adapter; a dependency-cruiser rule rejects any other import of a provider directory. Select policy using sport, league format/rules, target period, and available evidence—not provider name alone. The [provider boundary audit](PROVIDER-BOUNDARY-AUDIT.md) records every provider-specific fact that was found and where it now lives.
 
-Yahoo is the only initial live adapter, for NFL/NHL. Different providers may batch differently and define different periods/day boundaries. The generic operation remains the same; no public methods for Yahoo entitlement checks or diamond cohorts.
+Yahoo is the only initial live adapter, for NFL/NHL. Different providers may batch differently and define different periods/day boundaries. The generic operation remains the same; no public methods for provider entitlement checks or scoring cohorts.
 
-Phase 1 `set_lineup` invoked native start-active. Phase 2 requests `custom_policy` for scheduled and manual generic runs ([ADR 0008](adr/0008-refusal-kinds-and-planner-cutover.md)). The provider's planner decides per team whether it can value that league: a structural refusal falls back to the provider's native action with the reason recorded, and a transient refusal blocks with a named reason. Report `provider_native` versus `custom_policy` behavior and relevant policy version in safe results. A native invocation is not a projection-optimal guarantee and does not enforce the custom optimizer's signed-value objective.
+Phase 1 `set_lineup` invoked native start-active. Phase 2 requests `custom_policy` for scheduled and manual generic runs ([ADR 0008](adr/0008-refusal-kinds-and-planner-cutover.md)). The provider decides per team whether it can score that league: a structural refusal falls back to the provider's native action with the reason recorded, and a transient refusal blocks with a named reason. Report `provider_native` versus `custom_policy` behavior and the implementation version in safe results. A native invocation is not a projection-optimal guarantee and does not enforce the custom optimizer's signed-value objective.
 
-Planning is a provider capability: `provider.planLineup` receives neutral facts and returns a plan of explicit assignments or a named refusal whose kind is `structural` (this league can never be valued here, so fall back) or `transient` (not from the facts available now, so block). The generic worker owns the durable run machine, per-team serialization, observation, write intents, sending and readback, reconciliation, outcomes, retries, and the native fallback. It knows no value sources, scoring periods, sports, or provider vocabulary.
+Scoring is a provider capability: `provider.scoreRoster` receives neutral facts and returns one final score and availability tier per roster player, or a named refusal whose kind is `structural` (this league can never be valued here, so fall back) or `transient` (not from the facts available now, so block). The generic planner turns those scores into explicit assignments. The generic worker owns the durable run machine, per-team serialization, observation, write intents, sending and readback, reconciliation, outcomes, retries, and the native fallback. It knows no value sources, scoring periods, sports, or provider vocabulary.
 
-Queued requests express intent, not a permanently selected algorithm. Resolve the active implementation when claiming fresh work; re-stamp runs that have written nothing, and resume readback for a run with a write in flight instead of re-planning it. Persist the selected version for that attempt. Do not reinterpret an already-sent write after a deployment. Never overlap a replacement optimizer write with an unresolved prior write. The run records the requested implementation and its version; each attempt's write intent stores the plan that actually ran, including whether it used the provider-native action or explicit assignments and the policy provenance or refusal. Rollback changes future execution only; it does not restore historical assignments.
+Queued requests express intent, not a permanently selected algorithm. Resolve the active implementation when claiming fresh work; re-stamp runs that have written nothing, and resume readback for a run with a write in flight instead of re-planning it. Persist the selected version for that attempt. Do not reinterpret an already-sent write after a deployment. Never overlap a replacement optimizer write with an unresolved prior write. The run records the requested implementation and its version; each attempt's write intent stores the plan that actually ran, including whether it used the provider-native action or explicit assignments and the provenance or refusal. Rollback changes future execution only; it does not restore historical assignments.
 
 ### Selection values
 
-- The value source is a fallback ladder: comparable projected points when the provider publishes usable projections, otherwise scoring-rule observations, otherwise the provider's published community start rate, otherwise a named refusal with a remedy. A provider contributes only the candidates it can support.
+- Score construction belongs to the provider. Its ladder prefers comparable projected points when it publishes usable projections, otherwise the league's rules applied to realised statistics, otherwise the ownership composite for a games-limited league, otherwise the published community start rate, otherwise a named refusal with a remedy. A provider contributes only the candidates it can support; generic code receives one final score per player and an opaque provenance label.
 - Never compare raw projected points with raw percentages. Use one consistent basis for the relevant decision.
-- Zero is valid; missing is not zero. Do not synthesize an overall-ownership fallback or a positive sentinel without an explicit policy decision.
+- Zero is valid; missing is not zero. Do not synthesize an ownership fallback or a positive sentinel without an explicit policy decision.
 - If evidence is incomplete, use the agreed fallback consistently. Where no comparison is possible, preserve affected assignments and report incomplete evidence; do not claim a globally optimal full-team result. An unselectable value source is a refusal, never an Effect defect.
 - Avoid double injury penalties when source projections already include participation assumptions.
 - Participation is an availability tier the objective orders above value, never a multiplier: a confirmed starter outranks an unconfirmed player, an unconfirmed player outranks a confirmed backup goalie, and a player with a game outranks one whose team is not playing. A lower-tier player still fills an otherwise empty position.
 - Category leagues initially use a scalar heuristic, not category-win optimization. No user-facing scoring controls. League format arrives as a provider-declared fact, so rotisserie and points-only leagues do not need a new branch in generic code.
 - The starting-lineup interpretation is declared data for all four reference sports. Baseball's starting-pitcher rule is provisional and never extended to relievers or batters; football and basketball never demote on a non-start. Only a position the table marks as single-starter is read that way, and an undeclared one is never demoted. Full baseball and basketball request, scoring, and limits support remains deferred.
 
-The exact opinionated formulas require worked sport-policy examples and tests before implementation. They are not inherited from the old app's multipliers. Meaningful free NHL scoring evidence remains an explicit Phase 2 gate: earlier probes did not establish useful diamond values or equivalent NHL projections. Do not hide this by treating all sampled zeros as proven useful data.
+The opinionated formulas and their worked sport examples are recorded in [POLICY.md](POLICY.md); they are not inherited from the old app's multipliers. The observed NHL evidence is a published crowd share plus a three-state real-world starting fact for goalies. Do not treat a sampled zero cut as proven useful data.
 
-## 5. Recommended solver: weighted assignment first
+## 5. Solver: exact weighted assignment
 
 Use a weighted bipartite assignment formulation, not a procedural sequence of player swaps:
 
@@ -107,8 +107,8 @@ Use a weighted bipartite assignment formulation, not a procedural sequence of pl
 - Destinations: actual starter positions, legal bench accommodation, and reserve positions.
 - Edges: legal assignments only, with locks fixed.
 - All players remain assigned exactly once; starter/reserve counts and any pooled standard-roster limits are respected.
-- Empty starting slots are permitted. Unmatched players are not a substitute for legal bench accommodation.
-- Do not blindly model the advertised BN count as a hard maximum. The old app excludes BN from overfilled-position checks and counts total standard-roster capacity separately. Verify actual provider semantics. Where starter+bench share a capacity, encode that pool explicitly so a negative-valued goalie can legally remain benched without inventing roster space.
+- An optional starting slot may be empty; a required one may not. Unmatched players are not a substitute for legal bench accommodation.
+- The provider's shared standard-roster semantics are still unverified. The implemented policy treats every declared slot count as a hard maximum, so it cannot invent roster space; where a provider shares one starter+bench allowance, model that pool as bench capacity. [POLICY.md](POLICY.md#slots-eligibility-and-locks) records the decision and its cost.
 
 Optimize lexicographically:
 
@@ -127,17 +127,19 @@ Equivalent repeated slots must not create fake changes: exchanging two identical
 
 Use explicitly specified fixed-precision values/exact integer objectives where practical. Never let a small floating-point epsilon silently overturn a better primary score. Lexicographic priorities require a proved bounded encoding or staged optimization, not arbitrary large constants.
 
-### Algorithm/library recommendation
+### Implemented algorithm
 
-Recommend min-cost flow if the verified model includes pooled standard-roster capacity alongside reserve positions. Player-to-position edges feed a bounded starter/bench pool, while reserve destinations obey their own capacities; all roster members must be routed. This directly represents constraints a simple one-player/one-slot matrix may not express.
+`@lineupkeep/lineup-solver` uses the exact Hungarian assignment (`munkres` 2.1.1) over a square matrix:
+one column per slot capacity unit, one row per player plus dummy rows for unused capacity. Pooled
+standard-roster capacity is not a separate constraint: when a provider shares one allowance between
+starters and bench, the league's declared bench capacity is modeled so total slot capacity equals the
+shared pool. Lexicographic priorities are encoded as proved bounded `bigint` weights, and forbidden
+edges use a finite bound above every legal assignment, so infeasibility is proved rather than guessed.
+Every result is re-checked by the shared invariant predicates.
 
-Hungarian assignment remains a simpler candidate only if the actual rules reduce to independent slot capacities. Neither requires a general MILP/CP-SAT runtime for this network-representable problem. Do not force pooled constraints into a lossy matrix merely to use a convenient library.
-
-The inspected `havelessbemore/munkres` implementation advertises TypeScript, no runtime dependencies, rectangular matrices, and number/bigint paths. It is a candidate, not an approved dependency: inspect the current published package/license/source and test exact objectives and infeasibility before choosing it. Its documented Infinity entries are 'avoid if possible', not absolute forbiddance; any wrapper must reject forbidden returned edges and prove infeasibility independently. Do not confuse it with similarly named older packages.
-
-The inspected `Vages/min-cost-flow` repository and OR-Tools WASM binding are additional comparison candidates, not endorsed dependencies. Check negative costs, exact lexicographic priorities, infeasibility, published maintenance/license, runtime footprint, and tests; a search result alone is not a library-selection proof.
-
-Do not write a Hungarian/min-cost-flow engine from scratch by default, add Python/OR-Tools services, or import a large WASM solver without demonstrated need. Use a bounded solver spike to settle the smallest implementation satisfying the actual constraint contract; if no suitable library exists, obtain approval before undertaking a custom solver.
+The package README records the exact encoding, the library audit, measured timings, and the exhaustive
+oracle. Min-cost flow was considered and is not needed: the actual provider rules reduce to independent
+slot capacities, and declared capacity is a hard maximum.
 
 Escalate to integer/constraint programming only when accepted coupled constraints cannot be represented by assignment/flow. Multi-period planning, season-long pace limits, transactions, and true category objectives are not silently included.
 
@@ -217,7 +219,7 @@ Minimal persistent responsibilities:
 - Provider connection metadata and separately encrypted credential records.
 - Stable owned team identity/configuration and last-seen availability.
 - Team automation state/codec.
-- Run state/version, request identity, attempts, implementation/policy version, concise result.
+- Run state/version, request identity, attempts, implementation version, concise result.
 - Minimal diagnostic inputs, expiring after seven days.
 - Delivery/notification intents and their stable identities.
 - Feedback reports owned by one application user, with a bounded submission quota per owner and acting client.

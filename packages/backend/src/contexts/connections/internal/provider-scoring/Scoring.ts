@@ -1,60 +1,33 @@
 import { addExact, exactFromInteger, multiplyExact, parseExact } from "./Exact.ts";
 import type { Exact } from "./Exact.ts";
-import type {
-  PeriodCoverage,
-  PeriodScore,
-  PeriodScoreUnknown,
-  ScoringProfile,
-  StatId,
-  StatObservation,
-} from "./types.ts";
+import type { ScoringProfile, StatObservation } from "./types.ts";
 
 export function scorePeriod(
   profile: ScoringProfile,
   observations: ReadonlyArray<StatObservation>,
-): PeriodScore {
+): Exact | undefined {
   requireUniqueObservations(observations);
+  if (observations.length === 0) {
+    return undefined;
+  }
+
   const values = new Map(
     observations.map((observation) => [String(observation.statId), observation.value]),
   );
-  const ruleIds = new Set(profile.rules.map((rule) => rule.statId));
-  const scored: Array<StatId> = [];
-  const absent: Array<StatId> = [];
-  const unknown: Array<StatId> = [];
-  const reasons: Array<PeriodScoreUnknown> = [];
   let total = exactFromInteger(0n);
 
   for (const rule of profile.rules) {
     const value = values.get(rule.statId);
     if (value === undefined) {
-      absent.push(rule.statId);
       continue;
     }
     if (value === null) {
-      unknown.push(rule.statId);
-      reasons.push({ kind: "value-unknown", statId: rule.statId });
-      continue;
+      return undefined;
     }
-    scored.push(rule.statId);
     total = addExact(total, multiplyExact(exactStatValue(value), rule.points));
   }
 
-  const coverage: PeriodCoverage = {
-    scored,
-    absent,
-    unknown,
-    unscored: observations
-      .map((observation) => String(observation.statId))
-      .filter((statId) => !ruleIds.has(statId)),
-  };
-
-  if (observations.length === 0) {
-    return { kind: "unknown", reasons: [{ kind: "no-observations" }], coverage };
-  }
-  if (reasons.length > 0) {
-    return { kind: "unknown", reasons, coverage };
-  }
-  return { kind: "scored", points: total, coverage };
+  return total;
 }
 
 function exactStatValue(value: string | number): Exact {

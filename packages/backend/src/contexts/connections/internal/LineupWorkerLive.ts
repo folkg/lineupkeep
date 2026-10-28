@@ -1,4 +1,5 @@
 import { DateTime, Effect, Layer, Option } from "effect";
+import type { Redacted } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -8,7 +9,6 @@ import type {
   LineupPlanRefusalProvenance,
   LineupRunDifference,
   LineupRunId,
-  LineupRunOutcome,
   LineupTargetPeriod,
 } from "#contexts/connections/LineupRun.ts";
 import {
@@ -21,11 +21,14 @@ import type {
   Provider,
   ProviderLeagueSettings,
   ProviderLineupAssignment,
-  ProviderLineupOutcome,
   ProviderNativeTarget,
   ProviderReadFailure,
+  ProviderResponseInvalid,
   ProviderRoster,
   ProviderRosterCoverage,
+  ProviderScoreOutcome,
+  ProviderSessionRejected,
+  ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 
@@ -205,7 +208,7 @@ export const LineupWorkerLive = Layer.effect(
       run: ClaimedLineupRun,
       provider: Provider,
       context: OwnedTeam,
-      session: import("effect").Redacted.Redacted<string>,
+      session: Redacted.Redacted<string>,
       league: ProviderLeagueSettings,
       roster: ProviderRoster,
       observation: LineupObservation,
@@ -272,6 +275,7 @@ export const LineupWorkerLive = Layer.effect(
         );
         return { kind: "blocked" as const };
       }
+      const freshObservation = observe(revalidated, freshLeague, freshResolution.target);
       const replanned = yield* planWith(
         run,
         provider,
@@ -286,7 +290,7 @@ export const LineupWorkerLive = Layer.effect(
       }
       if (replanned.kind === "refused") {
         if (replanned.refusal === "structural") {
-          return preparedNative(context, observation, refusalProvenance(replanned));
+          return preparedNative(context, freshObservation, refusalProvenance(replanned));
         }
         yield* block(
           run,
@@ -306,7 +310,6 @@ export const LineupWorkerLive = Layer.effect(
         yield* block(run, "assignment_refused", placed.detail, plannedRecordOf(replanned));
         return { kind: "blocked" as const };
       }
-      const freshObservation = observe(revalidated, freshLeague, freshResolution.target);
       return {
         kind: "prepared" as const,
         plan: explicitPlan(
@@ -324,13 +327,13 @@ export const LineupWorkerLive = Layer.effect(
       run: ClaimedLineupRun,
       provider: Provider,
       context: OwnedTeam,
-      session: import("effect").Redacted.Redacted<string>,
+      session: Redacted.Redacted<string>,
       league: ProviderLeagueSettings,
       roster: ProviderRoster,
       target: LineupTargetPeriod,
     ) {
       const result = yield* Effect.result(
-        provider.planLineup({
+        provider.scoreRoster({
           provider: context.connection.provider,
           session,
           providerTeamKey: context.team.providerTeamKey,
@@ -342,7 +345,7 @@ export const LineupWorkerLive = Layer.effect(
         }),
       );
       if (result._tag === "Failure") {
-        yield* handleReadFailure(run, context, result.failure, "lineup plan");
+        yield* handleReadFailure(run, context, result.failure, "lineup scores");
         return undefined;
       }
       return result.success;
@@ -352,75 +355,34 @@ export const LineupWorkerLive = Layer.effect(
       run: ClaimedLineupRun,
       provider: Provider,
       context: OwnedTeam,
-      session: import("effect").Redacted.Redacted<string>,
+      session: Redacted.Redacted<string>,
       intent: LineupWriteIntentRecord,
     ) {
-      const applied = yield* Effect.result(
+      return yield* applyWrite(
+        run,
+        provider,
+        context,
+        intent,
         provider.applyNativeAction({
           provider: context.connection.provider,
           session,
           providerTeamKey: context.team.providerTeamKey,
           target: providerTarget(intent.target),
         }),
+        {
+          invalid:
+            "The native action request was invalid before it was sent. No lineup change was made. Refresh the team and run again.",
+          notSent: "The native action was not sent. The run will retry after a short delay.",
+          rejected: "The provider definitively rejected the native action.",
+        },
       );
-      if (applied._tag === "Failure") {
-        switch (applied.failure._tag) {
-          case "provider.session_rejected":
-            yield* rejectSession(run.record.userId, context);
-            return yield* fail(
-              run,
-              intent,
-              "provider_session_rejected",
-              "The provider rejected the stored session; reconnect the connection.",
-            );
-          case "provider.response_invalid":
-            return yield* fail(
-              run,
-              intent,
-              "provider_invalid_response",
-              "The native action request was invalid before it was sent. No lineup change was made. Refresh the team and run again.",
-              "rejected",
-            );
-        }
-      }
-      const result = applied.success;
-      switch (result.status) {
-        case "not_sent":
-          return yield* retry(
-            run,
-            intent,
-            result.reason === "session_incomplete"
-              ? "provider_session_incomplete"
-              : "provider_unavailable",
-            "The native action was not sent. The run will retry after a short delay.",
-            false,
-          );
-        case "rejected":
-          return yield* fail(
-            run,
-            intent,
-            "provider_rejected",
-            "The provider definitively rejected the native action.",
-            "rejected",
-          );
-        case "accepted":
-        case "unknown":
-          yield* repository.recordApplyResponse({
-            runId: run.record.id,
-            lease: run.lease,
-            intentId: intent.id,
-            response: result.status,
-            at: yield* DateTime.now,
-          });
-          return yield* verify(run, provider, intent, result.status);
-      }
     });
 
     const applyExplicit = Effect.fnUntraced(function* (
       run: ClaimedLineupRun,
       provider: Provider,
       context: OwnedTeam,
-      session: import("effect").Redacted.Redacted<string>,
+      session: Redacted.Redacted<string>,
       intent: LineupWriteIntentRecord,
     ) {
       const plan = intent.plan;
@@ -431,7 +393,11 @@ export const LineupWorkerLive = Layer.effect(
           "The run expected a durable explicit assignment plan but none was found.",
         );
       }
-      const applied = yield* Effect.result(
+      return yield* applyWrite(
+        run,
+        provider,
+        context,
+        intent,
         provider.applyExplicitAssignments({
           provider: context.connection.provider,
           session,
@@ -442,7 +408,26 @@ export const LineupWorkerLive = Layer.effect(
             slot: assignment.slot,
           })),
         }),
+        {
+          invalid:
+            "The explicit assignment request was invalid before it was sent. No lineup change was made. Refresh the team and run again.",
+          notSent:
+            "The explicit assignment request was not sent. The run will retry after a short delay.",
+          rejected:
+            "The provider rejected the explicit assignments and made no lineup change. Refresh the team and try again.",
+        },
       );
+    });
+
+    const applyWrite = Effect.fnUntraced(function* (
+      run: ClaimedLineupRun,
+      provider: Provider,
+      context: OwnedTeam,
+      intent: LineupWriteIntentRecord,
+      write: Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>,
+      wording: WriteWording,
+    ) {
+      const applied = yield* Effect.result(write);
       if (applied._tag === "Failure") {
         switch (applied.failure._tag) {
           case "provider.session_rejected":
@@ -458,7 +443,7 @@ export const LineupWorkerLive = Layer.effect(
               run,
               intent,
               "provider_invalid_response",
-              "The explicit assignment request was invalid before it was sent. No lineup change was made. Refresh the team and run again.",
+              wording.invalid,
               "rejected",
             );
         }
@@ -472,17 +457,11 @@ export const LineupWorkerLive = Layer.effect(
             result.reason === "session_incomplete"
               ? "provider_session_incomplete"
               : "provider_unavailable",
-            "The explicit assignment request was not sent. The run will retry after a short delay.",
+            wording.notSent,
             false,
           );
         case "rejected":
-          return yield* fail(
-            run,
-            intent,
-            "provider_rejected",
-            "The provider rejected the explicit assignments and made no lineup change. Refresh the team and try again.",
-            "rejected",
-          );
+          return yield* fail(run, intent, "provider_rejected", wording.rejected, "rejected");
         case "accepted":
         case "unknown":
           yield* repository.recordApplyResponse({
@@ -507,7 +486,7 @@ export const LineupWorkerLive = Layer.effect(
         runId: run.record.id,
         lease: run.lease,
         intentId: intent.id,
-        outcome: outcome({
+        outcome: {
           kind: "no_op",
           verified: true,
           reconciled: false,
@@ -520,7 +499,7 @@ export const LineupWorkerLive = Layer.effect(
           ...provenance,
           lockedPlayers: intent.before.filter((player) => !player.editable).length,
           editablePlayers: intent.before.filter((player) => player.editable).length,
-        }),
+        },
         at,
       });
       yield* repository.markAttemptFinished(run.record.id, run.attempt, at, "completed");
@@ -647,7 +626,7 @@ export const LineupWorkerLive = Layer.effect(
             runId: run.record.id,
             lease: run.lease,
             intentId: intent.id,
-            outcome: outcome({
+            outcome: {
               kind: comparison.changes.length > 0 ? "changed" : "no_op",
               verified: true,
               reconciled: false,
@@ -664,7 +643,7 @@ export const LineupWorkerLive = Layer.effect(
               ...provenance,
               lockedPlayers: comparison.lockedPlayers,
               editablePlayers: comparison.editablePlayers,
-            }),
+            },
             at: now,
           });
           yield* repository.markAttemptFinished(run.record.id, run.attempt, now, "completed");
@@ -675,7 +654,7 @@ export const LineupWorkerLive = Layer.effect(
             runId: run.record.id,
             lease: run.lease,
             intentId: intent.id,
-            outcome: outcome({
+            outcome: {
               kind: comparison.changes.length > 0 ? "changed" : "no_op",
               verified: true,
               reconciled: true,
@@ -689,7 +668,7 @@ export const LineupWorkerLive = Layer.effect(
               ...provenance,
               lockedPlayers: comparison.lockedPlayers,
               editablePlayers: comparison.editablePlayers,
-            }),
+            },
             at: now,
           });
           yield* repository.markAttemptFinished(run.record.id, run.attempt, now, "completed");
@@ -723,7 +702,7 @@ export const LineupWorkerLive = Layer.effect(
           runId: run.record.id,
           lease: run.lease,
           intentId: intent.id,
-          outcome: outcome({
+          outcome: {
             kind: comparison.changes.length > 0 ? "changed" : "no_op",
             verified: true,
             reconciled: false,
@@ -733,7 +712,7 @@ export const LineupWorkerLive = Layer.effect(
             ...provenance,
             lockedPlayers: comparison.lockedPlayers,
             editablePlayers: comparison.editablePlayers,
-          }),
+          },
           at: now,
         });
         yield* repository.markAttemptFinished(run.record.id, run.attempt, now, "completed");
@@ -752,7 +731,7 @@ export const LineupWorkerLive = Layer.effect(
         runId: run.record.id,
         lease: run.lease,
         intentId: intent.id,
-        outcome: outcome({
+        outcome: {
           kind: "changed",
           verified: true,
           reconciled: true,
@@ -762,7 +741,7 @@ export const LineupWorkerLive = Layer.effect(
           ...provenance,
           lockedPlayers: comparison.lockedPlayers,
           editablePlayers: comparison.editablePlayers,
-        }),
+        },
         at: now,
       });
       yield* repository.markAttemptFinished(run.record.id, run.attempt, now, "completed");
@@ -807,7 +786,7 @@ export const LineupWorkerLive = Layer.effect(
       run: ClaimedLineupRun,
       provider: Provider,
       owned: OwnedTeam,
-      session: import("effect").Redacted.Redacted<string>,
+      session: Redacted.Redacted<string>,
     ) {
       const result = yield* Effect.result(
         provider.readLeague({
@@ -828,7 +807,7 @@ export const LineupWorkerLive = Layer.effect(
       run: ClaimedLineupRun,
       provider: Provider,
       owned: OwnedTeam,
-      session: import("effect").Redacted.Redacted<string>,
+      session: Redacted.Redacted<string>,
       target: LineupTargetPeriod,
     ) {
       const result = yield* Effect.result(
@@ -919,7 +898,7 @@ export const LineupWorkerLive = Layer.effect(
       yield* repository.recordBlocked({
         runId: run.record.id,
         lease: run.lease,
-        outcome: outcome({
+        outcome: {
           kind: "blocked",
           verified: false,
           reconciled: false,
@@ -929,7 +908,7 @@ export const LineupWorkerLive = Layer.effect(
           ...record,
           lockedPlayers: 0,
           editablePlayers: 0,
-        }),
+        },
         at,
       });
       yield* Effect.annotateCurrentSpan({ "lineup.blocked_reason": reason });
@@ -951,7 +930,7 @@ export const LineupWorkerLive = Layer.effect(
       yield* repository.recordFailed({
         runId: run.record.id,
         lease: run.lease,
-        outcome: outcome({
+        outcome: {
           kind: "failed",
           verified: record.verified ?? false,
           reconciled: false,
@@ -963,7 +942,7 @@ export const LineupWorkerLive = Layer.effect(
           ...(recordedProvenance === undefined ? {} : { provenance: recordedProvenance }),
           lockedPlayers: record.lockedPlayers ?? 0,
           editablePlayers: record.editablePlayers ?? 0,
-        }),
+        },
         at,
         ...(target === undefined ? {} : { intent: { id: target.id, status: intentStatus } }),
       });
@@ -1012,7 +991,7 @@ export const LineupWorkerLive = Layer.effect(
         runId: run.record.id,
         lease: run.lease,
         intentId,
-        outcome: outcome({
+        outcome: {
           kind: "uncertain",
           verified: false,
           reconciled: false,
@@ -1024,7 +1003,7 @@ export const LineupWorkerLive = Layer.effect(
           ...(record.provenance === undefined ? {} : { provenance: record.provenance }),
           lockedPlayers: record.lockedPlayers ?? 0,
           editablePlayers: record.editablePlayers ?? 0,
-        }),
+        },
         at,
       });
       yield* repository.markAttemptFinished(run.record.id, run.attempt, at, "uncertain");
@@ -1069,6 +1048,12 @@ type FailureRecord = AttemptRecord & {
   }>;
   readonly lockedPlayers?: number;
   readonly editablePlayers?: number;
+};
+
+type WriteWording = {
+  readonly invalid: string;
+  readonly notSent: string;
+  readonly rejected: string;
 };
 
 function describeCoverage(coverage: ProviderRosterCoverage | null): string {
@@ -1179,26 +1164,6 @@ function writeIntentOf(state: LineupRunState): LineupWriteIntentRef | undefined 
     : undefined;
 }
 
-function outcome(input: {
-  readonly kind: LineupRunOutcome["kind"];
-  readonly verified: boolean;
-  readonly reconciled: boolean;
-  readonly summary: string;
-  readonly observedAt: DateTime.Utc;
-  readonly changes: ReadonlyArray<{
-    readonly name: string;
-    readonly from: string;
-    readonly to: string;
-  }>;
-  readonly differences?: ReadonlyArray<LineupRunDifference>;
-  readonly implementation?: LineupImplementation;
-  readonly provenance?: LineupPlanProvenance;
-  readonly lockedPlayers: number;
-  readonly editablePlayers: number;
-}): LineupRunOutcome {
-  return input;
-}
-
 function preparedNative(
   context: OwnedTeam,
   observation: LineupObservation,
@@ -1241,13 +1206,13 @@ function explicitPlan(
 }
 
 function refusalProvenance(
-  outcome: Extract<ProviderLineupOutcome, { readonly kind: "refused" }>,
+  outcome: Extract<ProviderScoreOutcome, { readonly kind: "refused" }>,
 ): LineupPlanRefusalProvenance {
   return { kind: "refused", label: outcome.provenance, detail: outcome.detail };
 }
 
 function plannedRecordOf(
-  outcome: Extract<ProviderLineupOutcome, { readonly kind: "scored" }>,
+  outcome: Extract<ProviderScoreOutcome, { readonly kind: "scored" }>,
 ): AttemptRecord {
   return {
     implementation: customLineupImplementation,
@@ -1256,7 +1221,7 @@ function plannedRecordOf(
 }
 
 function refusedRecordOf(
-  outcome: Extract<ProviderLineupOutcome, { readonly kind: "refused" }>,
+  outcome: Extract<ProviderScoreOutcome, { readonly kind: "refused" }>,
 ): AttemptRecord {
   return {
     implementation: customLineupImplementation,

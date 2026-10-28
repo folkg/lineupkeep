@@ -634,6 +634,7 @@ export default defineConfig({
     "repository/workflow-tests": "error",
     "repository/codec-tests": "error",
     "repository/provider-scoring-vocabulary": "error",
+    "repository/provider-identity": "error",
   },
   overrides: [
     { files: ["**/*.{js,cjs,mjs}"], rules: { "no-redeclare": "error" } },

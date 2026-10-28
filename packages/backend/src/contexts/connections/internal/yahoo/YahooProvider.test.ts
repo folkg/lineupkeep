@@ -22,7 +22,7 @@ import {
 } from "#contexts/connections/Provider.ts";
 import type {
   ProviderLeagueSettings,
-  ProviderLineupRequest,
+  ProviderScoreRequest,
   ProviderRoster,
 } from "#contexts/connections/Provider.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -1418,7 +1418,7 @@ it.effect("reads a declared games limit and the team's per-position allowance", 
       providerLeagueKey: "466.l.4000",
       sport: "football",
     });
-    const outcome = yield* provider.planLineup(
+    const outcome = yield* provider.scoreRoster(
       planRequest({
         league,
         roster: planRoster({
@@ -1464,7 +1464,7 @@ it.effect("maps the published innings allowance to the league's pitcher slot", (
       providerLeagueKey: "466.l.4000",
       sport: "football",
     });
-    const outcome = yield* provider.planLineup(
+    const outcome = yield* provider.scoreRoster(
       planRequest({
         league,
         roster: planRoster({
@@ -1505,7 +1505,7 @@ it.effect("prices a games-limited league from the ownership composite, not the c
       providerLeagueKey: "466.l.4000",
       sport: "football",
     });
-    const outcome = yield* provider.planLineup(
+    const outcome = yield* provider.scoreRoster(
       planRequest({
         league,
         roster: planRoster({
@@ -1543,7 +1543,7 @@ it.effect("scores a roster from the published started percentage and its platinu
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    const outcome = yield* provider.planLineup(
+    const outcome = yield* provider.scoreRoster(
       planRequest({
         league: planLeague({ providerLeagueKey: "466.l.4000", rosterCoverage: "week" }),
         roster: planRoster({
@@ -1574,7 +1574,7 @@ it.effect("uses the overall started percentage and records an unpopulated cut", 
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    const outcome = yield* provider.planLineup(
+    const outcome = yield* provider.scoreRoster(
       planRequest({
         league: planLeague({ providerLeagueKey: "466.l.4000", rosterCoverage: "week" }),
         roster: planRoster({
@@ -1608,7 +1608,7 @@ it.effect("leaves a player without a published started percentage unscored", () 
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    const outcome = yield* provider.planLineup(
+    const outcome = yield* provider.scoreRoster(
       planRequest({
         league: planLeague({ providerLeagueKey: "466.l.4002", rosterCoverage: "date" }),
         roster: planRoster({
@@ -1639,7 +1639,7 @@ it.effect("fails loudly when a started percentage cannot be parsed", () => {
     const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
-      provider.planLineup(
+      provider.scoreRoster(
         planRequest({
           league: planLeague({ providerLeagueKey: "466.l.4002", rosterCoverage: "date" }),
           roster: planRoster({
@@ -1665,7 +1665,7 @@ it.effect("fails loudly when no player carries a started percentage", () => {
     const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
-      provider.planLineup(
+      provider.scoreRoster(
         planRequest({
           league: planLeague({ providerLeagueKey: "466.l.4002", rosterCoverage: "date" }),
           roster: planRoster({
@@ -1691,7 +1691,7 @@ it.effect("reports the covered started period when it differs from the request",
     const provider = yield* testProvider;
 
     const error = yield* Effect.flip(
-      provider.planLineup(
+      provider.scoreRoster(
         planRequest({
           league: planLeague({ providerLeagueKey: "466.l.4000", rosterCoverage: "week" }),
           roster: planRoster({
@@ -2307,7 +2307,7 @@ function planRequest(input: {
   readonly target:
     | { readonly coverage: "week"; readonly week: number }
     | { readonly coverage: "date"; readonly date: string };
-}): ProviderLineupRequest {
+}): ProviderScoreRequest {
   return {
     ...sessionInput,
     providerTeamKey: input.roster.providerTeamKey,

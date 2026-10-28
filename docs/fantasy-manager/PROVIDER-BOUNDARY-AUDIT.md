@@ -13,17 +13,23 @@ below marked _second pass_ were changed by it. The responsible-module map stays 
 ## Result
 
 After the second pass, no production module outside the provider adapters, their scoring modules, the
-composition root, and three presentation declaration modules contains the string `Yahoo` or `yahoo`,
-and no generic module imports a provider adapter or a provider scoring module. The repository-wide
-check that produced that statement:
+composition root, and the keyed presentation/helper declarations contains the string `Yahoo` or
+`yahoo`, and no generic module imports a provider adapter or a provider scoring module. The
+repository-wide check that produced that statement:
 
 ```sh
-rg -n 'Yahoo|yahoo' packages apps --glob '!*.test.*' --glob '!**/internal/yahoo/**'
+rg -n 'Yahoo|yahoo' packages apps \
+  --glob '!*.test.*' --glob '!*Test.ts' --glob '!*.md' \
+  --glob '!**/internal/yahoo/**' --glob '!packages/backend/migrations/**'
 ```
 
-The remaining hits are the declarations listed under
+Test support and the helper README are excluded because they are not runtime modules; the historical
+`20261025113924_cool_ted_forrester` migration is excluded because it is an immutable applied record,
+not code that runs. The remaining hits are the declarations listed under
 [provider-specific by nature](#provider-specific-by-nature), each of which is a lookup table keyed by
-provider rather than a branch on provider identity.
+provider rather than a branch on provider identity. The `repository/provider-identity` lint rule now
+makes that statement enforceable in source: it rejects a provider name in any `src/` module outside the
+adapter, the composition root, and those declarations.
 
 ## The seam
 
@@ -36,10 +42,11 @@ provider rather than a branch on provider identity.
 | Lineup planning   | `contexts/connections/internal/LineupPlanning.ts` | Builds the solver's neutral problem from a provider's declarations and final scores and returns changed assignments |
 | Provider scoring  | `contexts/connections/internal/provider-scoring/` | How one provider constructs scores: exact arithmetic, league-rule scoring, crowd shares, windows                    |
 
-`ProviderShape.planLineup` returns **a result, not a method** (_second pass_):
+`ProviderShape.scoreRoster` returns **a result, not a method** (_second pass_):
 
 - `scored` — an opaque `provenance` label and, per player, a final signed `score` in the provider's own
-  unit (`null` when the provider publishes none) plus an `availability` tier;
+  unit (`null` when the provider publishes none) plus an `availability` tier, together with the
+  per-position games-played facts;
 - `refused` — `structural` or `transient`, the same opaque label, and a human-readable `detail`.
 
 Nothing about projections, realised statistics, crowd shares, cuts, ranks, period windows, or which
@@ -110,13 +117,13 @@ Generic query code renders and enforces those facts. It never infers them from a
 
 ### Planning and values, first pass
 
-| Where                                    | Provider-specific fact                                                                                                                                                                     | Disposition                                                                                                                                                                                                        |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `internal/LineupWorkerLive.ts`           | Eleven imports from `yahoo/YahooLineup.ts`: planner, value sources, policy inputs, assignment request, target period, observation window, refusal codes and descriptions, preferred source | Replaced by `provider.planLineup`, neutral outcomes, and `applyNativeAction` / `applyExplicitAssignments`; the worker keeps the run machine, serialization, intents, readback, reconciliation, and native fallback |
-| `internal/LineupWorkerLive.ts`           | Sport-specific refusal for leagues with dated rosters                                                                                                                                      | Removed; a provider that cannot plan a target says so through its own refusal or declared capability                                                                                                               |
-| `internal/LineupWorkerLive.ts`           | `Effect.die("The Yahoo value-source ladder cannot select projections.")`                                                                                                                   | Replaced by a fallback ladder over data conditions; see below                                                                                                                                                      |
-| `lineup-policy/src/plan.ts`, `source.ts` | None; the ladder lived here                                                                                                                                                                | Moved behind the provider in the second pass; see below                                                                                                                                                            |
-| `yahoo/YahooLineup.ts`                   | Yahoo planning was imported by the worker                                                                                                                                                  | Now Yahoo's own scoring modules and the provider's `planLineup` capability                                                                                                                                         |
+| Where                                    | Provider-specific fact                                                                                                                                                                     | Disposition                                                                                                                                                                                                                              |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/LineupWorkerLive.ts`           | Eleven imports from `yahoo/YahooLineup.ts`: planner, value sources, policy inputs, assignment request, target period, observation window, refusal codes and descriptions, preferred source | Replaced by `provider.scoreRoster`, the generic planner, neutral outcomes, and `applyNativeAction` / `applyExplicitAssignments`; the worker keeps the run machine, serialization, intents, readback, reconciliation, and native fallback |
+| `internal/LineupWorkerLive.ts`           | Sport-specific refusal for leagues with dated rosters                                                                                                                                      | Removed; a provider that cannot plan a target says so through its own refusal or declared capability                                                                                                                                     |
+| `internal/LineupWorkerLive.ts`           | `Effect.die("The Yahoo value-source ladder cannot select projections.")`                                                                                                                   | Replaced by a fallback ladder over data conditions; see below                                                                                                                                                                            |
+| `lineup-policy/src/plan.ts`, `source.ts` | None; the ladder lived here                                                                                                                                                                | Moved behind the provider in the second pass; see below                                                                                                                                                                                  |
+| `yahoo/YahooLineup.ts`                   | Yahoo planning was imported by the worker                                                                                                                                                  | Now Yahoo's own scoring modules and the provider's `scoreRoster` capability                                                                                                                                                              |
 
 The projections defect deserves its own line. Selecting a scoring scheme is a total order over the
 provider's own evidence: projections first, then scoring rules, then the published crowd share, then a
@@ -126,21 +133,21 @@ refusal, falls back to the native action when the refusal allows it, and reports
 
 ### Planning, scores, and provenance — second pass
 
-| Where                                                      | Provider-specific fact                                                                                   | Disposition                                                                                                                 |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `Provider.ts` `ProviderLineupOutcome`                      | A plan crossed as `{ assignments, policyVersion, basis }`, where `basis` was provider scoring vocabulary | One final score per player plus an availability tier, or a refusal; `basis` and `policyVersion` no longer exist             |
-| `Provider.ts` `ProviderCapabilities`                       | `publishesCommunityStartRate` and `statBases`: scoring declarations with no generic reader               | Deleted; the adapter keeps the fact, the seam does not                                                                      |
-| `Provider.ts` `ProviderPlayerReadInput`                    | `startRateCoverage` asked the generic read for one provider's crowd measurement                          | Deleted; the crowd read is internal to the adapter (`YahooProvider.readStartRates`)                                         |
-| `Provider.ts` `ProviderPlayerDetail`                       | `communityStartRate` with `cuts` and `coverage` on the shared detail payload                             | Deleted from the seam; the provider reads it only for its own scoring                                                       |
-| `Provider.ts` `ProviderPlayerSearchResult`                 | `communityStartRate` / `communityStartRateChange`                                                        | Renamed to `percentStarted` / `percentStartedChange`: a published share the search surface reports, not a scoring policy    |
-| `Provider.ts` `ProviderRosterPlayer`                       | `isFlex`, a provider flag with no generic reader                                                         | Deleted; slot name plus eligibility already describe the slot                                                               |
-| `Provider.ts` `ProviderPeriod`                             | A week-only period next to roster coverage, easy to confuse                                              | Renamed `ProviderScoringWeek`, with `ProviderCoverageKind` for the week-or-date coverage type                               |
-| `lineup-scoring`, `lineup-policy` (top-level packages)     | Read as product concepts: "value source", "scoring basis", "community start rate", "observation window"  | Relocated to `contexts/connections/internal/provider-scoring/`; the packages no longer exist                                |
-| `lineup-policy` `buildLineupProblem`, `lineupAssignments`  | Built the solver problem and translated a plan, mixing scoring with placement                            | Split: placement is generic (`internal/LineupPlanning.ts`), scoring stays in the provider module                            |
-| `lineup-policy` `availabilityLadder`, `assessAvailability` | The ladder is a product decision; the status mapping is provider judgement                               | Ladder order now in the generic planner; status-to-tier mapping in the provider module                                      |
-| `lineup-policy` `lineupRefusalKind`                        | Mapped scoring and solver codes to structural or transient in one table                                  | Provider scoring refusals are classified by the adapter; solver and placement refusals are transient in the generic planner |
-| `internal/ProviderFakeTest.ts`                             | Reproduced a provider's scoring arithmetic in the generic test fake                                      | Declares scores directly (`setPlayerScores`); it imports no scoring module                                                  |
-| `internal/LineupWorkerLive.ts`                             | Annotated spans and recorded `lineup.selection_basis` / `policy.basis`                                   | Annotates and records `lineup.provenance` / `provenance.label`                                                              |
+| Where                                                      | Provider-specific fact                                                                                   | Disposition                                                                                                                     |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `Provider.ts` `ProviderScoreOutcome`                       | A plan crossed as `{ assignments, policyVersion, basis }`, where `basis` was provider scoring vocabulary | One final score per player plus an availability tier and games facts, or a refusal; `basis` and `policyVersion` no longer exist |
+| `Provider.ts` `ProviderCapabilities`                       | `publishesCommunityStartRate` and `statBases`: scoring declarations with no generic reader               | Deleted; the adapter keeps the fact, the seam does not                                                                          |
+| `Provider.ts` `ProviderPlayerReadInput`                    | `startRateCoverage` asked the generic read for one provider's crowd measurement                          | Deleted; the crowd read is internal to the adapter (`YahooProvider.readPlayerFacts`)                                            |
+| `Provider.ts` `ProviderPlayerDetail`                       | `communityStartRate` with `cuts` and `coverage` on the shared detail payload                             | Deleted from the seam; the provider reads it only for its own scoring                                                           |
+| `Provider.ts` `ProviderPlayerSearchResult`                 | `communityStartRate` / `communityStartRateChange`                                                        | Renamed to `percentStarted` / `percentStartedChange`: a published share the search surface reports, not a scoring policy        |
+| `Provider.ts` `ProviderRosterPlayer`                       | `isFlex`, a provider flag with no generic reader                                                         | Deleted; slot name plus eligibility already describe the slot                                                                   |
+| `Provider.ts` `ProviderPeriod`                             | A week-only period next to roster coverage, easy to confuse                                              | Renamed `ProviderScoringWeek`, with `ProviderCoverageKind` for the week-or-date coverage type                                   |
+| `lineup-scoring`, `lineup-policy` (top-level packages)     | Read as product concepts: "value source", "scoring basis", "community start rate", "observation window"  | Relocated to `contexts/connections/internal/provider-scoring/`; the packages no longer exist                                    |
+| `lineup-policy` `buildLineupProblem`, `lineupAssignments`  | Built the solver problem and translated a plan, mixing scoring with placement                            | Split: placement is generic (`internal/LineupPlanning.ts`), scoring stays in the provider module                                |
+| `lineup-policy` `availabilityLadder`, `assessAvailability` | The ladder is a product decision; the status mapping is provider judgement                               | Ladder order now in the generic planner; status-to-tier mapping in the provider module                                          |
+| `lineup-policy` `lineupRefusalKind`                        | Mapped scoring and solver codes to structural or transient in one table                                  | Provider scoring refusals are classified by the adapter; solver and placement refusals are transient in the generic planner     |
+| `internal/ProviderFakeTest.ts`                             | Reproduced a provider's scoring arithmetic in the generic test fake                                      | Declares a final score and availability tier per player (`setPlayerScores`); it imports no scoring module                       |
+| `internal/LineupWorkerLive.ts`                             | Annotated spans and recorded `lineup.selection_basis` / `policy.basis`                                   | Annotates and records `lineup.provenance` / `provenance.label`                                                                  |
 
 The one deliberate behaviour change in the split: the ladder still falls through when a scheme cannot be
 computed at all (no completed period, no published value), but a scheme whose scores cannot be legally
@@ -181,7 +188,7 @@ so another provider adds an entry without touching behavior.
 | Hosted browser sign-in URL and allowlisted origins           | `packages/hosted-browser/src/provider.ts`                                                        | The hosted browser must navigate to the provider's own sign-in page and nowhere else; the allowlist is a security boundary, and it is one entry per provider                                                   |
 | Helper sign-in URL, session cookie names, and provider label | `apps/linking-helper/src/providers.ts`                                                           | The local helper drives the provider's real web sign-in. Cookie names are that provider's session format; the helper never sees the password, and `ProviderBrowser` itself is provider-neutral                 |
 | Provider-labelled sign-in page                               | The provider's own page, opened by the helper or hosted browser                                  | We do not restyle or proxy provider authentication. The person sees the provider's page, so provider identity is the honest label                                                                              |
-| Yahoo wire details and scoring                               | `packages/backend/src/contexts/connections/internal/yahoo/**` and `internal/provider-scoring/**` | Endpoints, XML actions, crumb, game codes, diamond cuts, review-link parameters, and the arithmetic that turns league rules or crowd shares into scores are the adapter's job                                  |
+| Yahoo wire details and scoring                               | `packages/backend/src/contexts/connections/internal/yahoo/**` and `internal/provider-scoring/**` | Endpoints, XML actions, crumb, game codes, scoring cohorts, review-link parameters, and the arithmetic that turns league rules or crowd shares into scores are the adapter's job                               |
 
 Cookie names and the sign-in URL are the two facts that could not be moved behind the server-side
 `ProviderShape`, because they belong to the browser-driving surfaces rather than the backend adapter.
@@ -201,11 +208,16 @@ They are declared in the same keyed style, in the only modules allowed to know t
 - **Rejected:** any import from a scoring module into the application, Effect, persistence, transport,
   the solver, or the brand — `provider-scoring-is-self-contained`.
 
-The `repository` lint plugin adds `provider-scoring-vocabulary`: a fixed list of scoring identifiers
-(`communityStartRate`, `valueSource`, `startCutPreference`, `scoringProfile`, `scorePeriod`,
-`mean-points-per-period`, `observationWindow`, `statBases`, `isFlex`, and their siblings) is rejected
-in any `src/` module outside the provider's own directories, so a scoring concept cannot reappear as a
-field name, a string, or a helper.
+The `repository` lint plugin adds two rules:
+
+- `provider-scoring-vocabulary` rejects a fixed list of scoring identifiers (`communityStartRate`,
+  `valueSource`, `startCutPreference`, `scoringProfile`, `scorePeriod`, `mean-points-per-period`,
+  `observationWindow`, `statBases`, `isFlex`, and their siblings) in any `src/` module outside the
+  provider's own directories, so a scoring concept cannot reappear as a field name, a string, or a
+  helper.
+- `provider-identity` rejects `Yahoo` or `yahoo` in generic source outside the adapter, the
+  composition root, and the keyed presentation/helper declarations, so a provider-name branch cannot
+  reappear as a string comparison.
 
 Each rule is covered by acceptance and rejection fixtures in `scripts/dependencyCruiser.test.ts`. A
 deliberate violation was added to the real tree — a single import of `YahooProvider.ts` from

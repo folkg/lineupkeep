@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { parseExact } from "./Exact.ts";
 import { scoreLineup } from "./LineupScore.ts";
 import type { LineupScoreInput, LineupScoreResult } from "./LineupScore.ts";
-import { periodKey } from "./Period.ts";
 import { scoringProfile } from "./ScoringProfile.ts";
 import type {
   Period,
@@ -30,13 +29,6 @@ describe("scoring from completed periods", () => {
     );
 
     expect(result.players[0]?.units).toBe(2000);
-    expect(realised(result, "p1").countedPeriods.map(periodKey)).toEqual([
-      "week:3",
-      "week:4",
-      "week:5",
-      "week:6",
-    ]);
-    expect(realised(result, "p1").average).toEqual(parseExact("20"));
     expect(result.label).toBe("mean-points-per-period:week:3,week:4,week:5,week:6");
   });
 
@@ -50,7 +42,6 @@ describe("scoring from completed periods", () => {
       ),
     );
 
-    expect(realised(result, "p1").skippedPeriods.map(periodKey)).toEqual(["week:5"]);
     expect(result.players[0]?.units).toBe(2000);
   });
 
@@ -64,7 +55,6 @@ describe("scoring from completed periods", () => {
       ),
     );
 
-    expect(realised(result, "p1").skippedPeriods.map(periodKey)).toEqual(["week:4"]);
     expect(result.players[0]?.units).toBe(2000);
   });
 
@@ -90,11 +80,10 @@ describe("scoring from completed periods", () => {
       ),
     );
 
-    expect(realised(result, "p1").skippedPeriods.map(periodKey)).toEqual(["week:4"]);
     expect(result.players[0]?.units).toBe(200);
   });
 
-  it("values a player with no counted period at zero and records the missing mean", () => {
+  it("values a player with no counted period at zero", () => {
     const result = scored(
       scoreLineup(
         input({
@@ -105,8 +94,6 @@ describe("scoring from completed periods", () => {
     );
 
     expect(result.players[0]?.units).toBe(0);
-    expect(realised(result, "p1").average).toBeUndefined();
-    expect(realised(result, "p1").countedPeriods).toEqual([]);
   });
 });
 
@@ -131,7 +118,7 @@ describe("availability", () => {
       ),
     );
 
-    expect(result.players[0]?.availability.tier).toBe(tier);
+    expect(result.players[0]?.availability).toBe(tier);
   });
 
   it("places a player with no game in the target period on the lowest tier", () => {
@@ -144,11 +131,7 @@ describe("availability", () => {
       ),
     );
 
-    expect(result.players[0]?.availability).toEqual({
-      tier: "not-scheduled",
-      fact: "no-game",
-      period: target,
-    });
+    expect(result.players[0]?.availability).toBe("not-scheduled");
   });
 
   it("keeps the same score whatever the availability tier", () => {
@@ -167,9 +150,7 @@ describe("availability", () => {
     );
 
     expect(available.players[0]?.units).toBe(excluded.players[0]?.units);
-    expect(available.players[0]?.availability.tier).not.toBe(
-      excluded.players[0]?.availability.tier,
-    );
+    expect(available.players[0]?.availability).not.toBe(excluded.players[0]?.availability);
   });
 });
 
@@ -191,28 +172,25 @@ describe("the value source ladder", () => {
     expect(result.label).toBe("projected-points:week:7");
   });
 
-  it("records a realised total alongside a projection without adding it", () => {
+  it("publishes a projection for every player in hundredths of a point", () => {
     const result = scored(
       scoreLineup(
         input({
           sources: [
             {
               kind: "projected-points",
-              projections: [{ id: "p1", points: parseExact("12.5") }],
-              realised: [{ id: "p1", points: parseExact("30") }],
+              projections: [
+                { id: "p1", points: parseExact("12.5") },
+                { id: "p2", points: parseExact("1.5") },
+              ],
             },
           ],
-          players: [player("p1")],
+          players: [player("p1"), player("p2")],
         }),
       ),
     );
 
-    expect(result.players[0]?.units).toBe(1250);
-    expect(result.players[0]?.value).toEqual({
-      kind: "projected-points",
-      projection: parseExact("12.5"),
-      realised: parseExact("30"),
-    });
+    expect(result.players.map((entry) => entry.units)).toEqual([1250, 150]);
   });
 
   it("leaves a player without a projection without a score", () => {
@@ -297,11 +275,6 @@ describe("the value source ladder", () => {
 
     expect(result.label).toBe("community-start-rate:overall:platinum-cut-unpopulated:week:7");
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200]);
-    expect(result.players[0]?.value).toEqual({
-      kind: "community-start-rate",
-      population: { kind: "overall", cut: "platinum", finding: "cut-unpopulated" },
-      percent: parseExact("43"),
-    });
   });
 
   it("uses one population for the whole plan when the cut omits a measured player", () => {
@@ -484,7 +457,6 @@ describe("input consistency", () => {
                 { id: "p1", points: parseExact("1") },
                 { id: "p1", points: parseExact("2") },
               ],
-              realised: [],
             },
           ],
           players: [player("p1")],
@@ -566,7 +538,6 @@ function projected(playerId: string, points: string): ValueSource {
   return {
     kind: "projected-points",
     projections: [{ id: playerId, points: parseExact(points) }],
-    realised: [],
   };
 }
 
@@ -595,19 +566,3 @@ function scored(result: LineupScoreResult): Extract<LineupScoreResult, { kind: "
   }
   return result;
 }
-
-function realised(
-  result: Extract<LineupScoreResult, { kind: "scored" }>,
-  playerId: string,
-): Extract<ValueAssessment, { readonly kind: "realised-points" }> {
-  const value = result.players.find((entry) => entry.id === playerId)?.value;
-  if (value === undefined || value.kind !== "realised-points") {
-    throw new Error(`Expected a realised-points value for ${playerId}.`);
-  }
-  return value;
-}
-
-type ValueAssessment = Extract<
-  Extract<LineupScoreResult, { kind: "scored" }>["players"][number]["value"],
-  { readonly kind: "realised-points" }
->;

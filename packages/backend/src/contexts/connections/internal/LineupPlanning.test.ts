@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   ProviderAvailabilityTier,
   ProviderLeagueSettings,
-  ProviderPlayerValue,
+  ProviderPlayerScore,
   ProviderRoster,
   ProviderRosterPosition,
 } from "#contexts/connections/Provider.ts";
@@ -15,6 +15,7 @@ describe("provider-neutral lineup placement", () => {
   it("moves the highest scoring eligible player into a starting slot", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league(),
         roster: roster([member("p1", "QB", "QB", ["QB"]), member("p2", "QB", "BN", ["QB"])]),
         values: values([
@@ -33,6 +34,7 @@ describe("provider-neutral lineup placement", () => {
   it("sends only the changed assignments and covers every roster member", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league([
           { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
           { position: "RB", kind: "starting", count: 1, eligibility: ["RB"] },
@@ -60,6 +62,7 @@ describe("provider-neutral lineup placement", () => {
   it("keeps the recorded lineup when every player is locked", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league(),
         roster: roster([
           { ...member("p1", "QB", "QB", ["QB"]), isEditable: false },
@@ -75,116 +78,50 @@ describe("provider-neutral lineup placement", () => {
     expect(result.assignments).toEqual([]);
   });
 
-  it("starts a player who cannot play ahead of one with no game to play in", () => {
-    const result = planned(
-      planAssignments({
-        league: league(),
-        roster: roster([
-          member("out", "QB", "BN", ["QB"], "will-not-play"),
-          member("idle", "QB", "QB", ["QB"], "not-scheduled"),
-        ]),
-        values: values([
-          ["out", 100, "will-not-play"],
-          ["idle", 9900, "not-scheduled"],
-        ]),
-      }),
-    );
+  it("orders every adjacent pair of availability rungs, whatever the values", () => {
+    const ladder: ReadonlyArray<ProviderAvailabilityTier> = [
+      "confirmed-start",
+      "will-play",
+      "might-play",
+      "unlikely-to-play",
+      "will-not-play",
+      "not-scheduled",
+    ];
 
-    expect(result.assignments).toEqual([
-      { providerPlayerKey: "out", slot: "QB" },
-      { providerPlayerKey: "idle", slot: "BN" },
-    ]);
-  });
+    for (const [index, above] of ladder.entries()) {
+      const below = ladder[index + 1];
+      if (below === undefined) {
+        continue;
+      }
+      const result = planned(
+        planAssignments({
+          gamesPlayed: [],
+          league: league(),
+          roster: roster([
+            member("above", "QB", "BN", ["QB"], above),
+            member("below", "QB", "QB", ["QB"], below),
+          ]),
+          values: values([
+            ["above", 1, above],
+            ["below", 9000, below],
+          ]),
+        }),
+      );
 
-  it("starts a confirmed starter ahead of an unconfirmed player at an equal value", () => {
-    const result = planned(
-      planAssignments({
-        league: league(),
-        roster: roster([
-          member("unconfirmed", "QB", "QB", ["QB"], "will-play"),
-          member("confirmed", "QB", "BN", ["QB"], "confirmed-start"),
-        ]),
-        values: values([
-          ["unconfirmed", 4400, "will-play"],
-          ["confirmed", 4400, "confirmed-start"],
-        ]),
-      }),
-    );
-
-    expect(result.assignments).toEqual([
-      { providerPlayerKey: "unconfirmed", slot: "BN" },
-      { providerPlayerKey: "confirmed", slot: "QB" },
-    ]);
-  });
-
-  it("starts a player with a game ahead of both lower rungs", () => {
-    const result = planned(
-      planAssignments({
-        league: league(),
-        roster: roster([
-          member("playing", "QB", "BN", ["QB"], "will-play"),
-          member("out", "QB", "QB", ["QB"], "will-not-play"),
-          member("idle", "QB", "BN", ["QB"], "not-scheduled"),
-        ]),
-        values: values([
-          ["playing", 1, "will-play"],
-          ["out", 9000, "will-not-play"],
-          ["idle", 8000, "not-scheduled"],
-        ]),
-      }),
-    );
-
-    expect(result.assignments).toContainEqual({ providerPlayerKey: "playing", slot: "QB" });
-  });
-
-  it("orders a doubtful player above one confirmed outside the starting lineup", () => {
-    const result = planned(
-      planAssignments({
-        league: league(),
-        roster: roster([
-          member("doubtful", "QB", "BN", ["QB"], "might-play"),
-          member("backup", "QB", "QB", ["QB"], "unlikely-to-play"),
-        ]),
-        values: values([
-          ["doubtful", 1, "might-play"],
-          ["backup", 9000, "unlikely-to-play"],
-        ]),
-      }),
-    );
-
-    expect(result.assignments).toEqual([
-      { providerPlayerKey: "doubtful", slot: "QB" },
-      { providerPlayerKey: "backup", slot: "BN" },
-    ]);
-  });
-
-  it("orders a player confirmed outside the starting lineup above an injured-out player", () => {
-    const result = planned(
-      planAssignments({
-        league: league(),
-        roster: roster([
-          member("backup", "QB", "BN", ["QB"], "unlikely-to-play"),
-          member("out", "QB", "QB", ["QB"], "will-not-play"),
-        ]),
-        values: values([
-          ["backup", 1, "unlikely-to-play"],
-          ["out", 9000, "will-not-play"],
-        ]),
-      }),
-    );
-
-    expect(result.assignments).toEqual([
-      { providerPlayerKey: "backup", slot: "QB" },
-      { providerPlayerKey: "out", slot: "BN" },
-    ]);
+      expect(result.assignments).toEqual([
+        { providerPlayerKey: "above", slot: "QB" },
+        { providerPlayerKey: "below", slot: "BN" },
+      ]);
+    }
   });
 
   it("fills a required starting slot with a player who cannot play when nobody else can", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league(),
         roster: roster([member("p1", "QB", "QB", ["QB"], "not-scheduled")]),
-        values: values([["p1", 900]]),
+        values: values([["p1", 900, "not-scheduled"]]),
       }),
     );
 
@@ -194,6 +131,7 @@ describe("provider-neutral lineup placement", () => {
   it("keeps a bye player on the bench while an active player can start in a weekly league", () => {
     const active = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league(),
         roster: roster([
           member("bye", "QB", "QB", ["QB"], "not-scheduled"),
@@ -213,6 +151,7 @@ describe("provider-neutral lineup placement", () => {
 
     const allOnBye = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league(),
         roster: roster([
           member("bye-one", "QB", "QB", ["QB"], "not-scheduled"),
@@ -231,6 +170,7 @@ describe("provider-neutral lineup placement", () => {
   it("produces the same plan on a second run over its own output", () => {
     const first = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league([
           { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
           { position: "RB", kind: "starting", count: 1, eligibility: ["RB"] },
@@ -260,6 +200,7 @@ describe("provider-neutral lineup placement", () => {
 
     const second = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league([
           { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
           { position: "RB", kind: "starting", count: 1, eligibility: ["RB"] },
@@ -282,6 +223,7 @@ describe("provider-neutral lineup placement", () => {
   it("moves a reserve player out and the player who cannot play in", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league([
           { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
           { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
@@ -309,6 +251,7 @@ describe("provider-neutral lineup placement", () => {
   it("lets published eligibility, not the injury code, decide reserve occupancy", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league([
           { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
           { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
@@ -336,6 +279,7 @@ describe("provider-neutral lineup placement", () => {
   it("never places a player in a reserve list they are not published as eligible for", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league([
           { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
           { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
@@ -364,6 +308,7 @@ describe("provider-neutral lineup placement", () => {
   it("moves a player out of a reserve list they are no longer eligible for", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league([
           { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
           { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
@@ -383,6 +328,7 @@ describe("provider-neutral lineup placement", () => {
   it("benches a displaced player the reserve list does not accept", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league([
           { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
           { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
@@ -437,6 +383,7 @@ describe("provider-neutral lineup placement", () => {
 
     for (const players of candidates) {
       const result = planAssignments({
+        gamesPlayed: [],
         league: pool,
         roster: roster(players),
         values: values(
@@ -474,7 +421,14 @@ describe("provider-neutral lineup placement", () => {
     ]);
 
     expect(
-      planned(planAssignments({ league: games, roster: members, values: scores })).assignments,
+      planned(
+        planAssignments({
+          gamesPlayed: [],
+          league: games,
+          roster: members,
+          values: scores,
+        }),
+      ).assignments,
     ).toEqual([]);
     expect(
       planned(
@@ -515,6 +469,7 @@ describe("provider-neutral lineup placement", () => {
 
   it("refuses when a required starting slot has no eligible player", () => {
     const result = planAssignments({
+      gamesPlayed: [],
       league: league([
         { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
         { position: "BN", kind: "bench", count: 1, eligibility: [] },
@@ -534,6 +489,7 @@ describe("provider-neutral lineup placement", () => {
 
   it("refuses when a player without a score has nowhere to sit", () => {
     const result = planAssignments({
+      gamesPlayed: [],
       league: league([
         { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
         { position: "RB", kind: "starting", count: 1, eligibility: ["RB"] },
@@ -555,6 +511,7 @@ describe("provider-neutral lineup placement", () => {
   it("treats a player the provider reports no score for as unusable rather than zero", () => {
     const result = planned(
       planAssignments({
+        gamesPlayed: [],
         league: league(),
         roster: roster([member("p1", "QB", "QB", ["QB"]), member("p2", "QB", "BN", ["QB"])]),
         values: values([
@@ -569,6 +526,7 @@ describe("provider-neutral lineup placement", () => {
 
   it("refuses when the roster has more members than the declared slots", () => {
     const result = planAssignments({
+      gamesPlayed: [],
       league: league([
         { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
         { position: "BN", kind: "bench", count: 1, eligibility: [] },
@@ -671,7 +629,7 @@ function member(
 
 function values(
   scores: ReadonlyArray<readonly [string, number | null, ProviderAvailabilityTier?]>,
-): ReadonlyArray<ProviderPlayerValue> {
+): ReadonlyArray<ProviderPlayerScore> {
   return scores.map(([providerPlayerKey, score, availability]) => ({
     providerPlayerKey,
     score,

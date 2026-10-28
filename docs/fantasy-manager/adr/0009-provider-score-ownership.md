@@ -20,11 +20,11 @@ provider constructs that score is its own implementation detail.
 
 **The seam carries a result, not a method.**
 
-`ProviderShape.planLineup` returns one of two things:
+`ProviderShape.scoreRoster` returns one of two things:
 
 - `scored` — an opaque provenance label plus, per roster player, one final signed score in the
   provider's own unit (`null` when the provider publishes none) and the availability tier that
-  player sits on;
+  player sits on, together with the per-position games-played facts a games-limited league needs;
 - `refused` — the structural-or-transient kind, the same opaque label, and a human-readable detail.
 
 Nothing else crosses. No projections, realised statistics, crowd shares, cuts, ranks, legend strings,
@@ -38,8 +38,9 @@ neutral problem — starting, bench, and reserve slots from declared positions, 
 provider's own lists, locks from the provider's editability flag, the availability ladder, and each
 player's final score — then runs `@lineupkeep/lineup-solver` and translates the plan into changed
 assignments. It reads no period, no sport, and no scoring rule. A player with no published score is
-`unusable` (`missing`), never zero, and a plan that would move a player through a reserve list is a
-transient refusal rather than a provider write.
+`unusable` (`missing`), never zero. Reserve eligibility is the provider's published eligibility, and a
+reserve transit is written like any other changed assignment; the provider accepted both directions on
+2026-10-27.
 
 **Scoring construction moves inside the provider.**
 
@@ -73,17 +74,21 @@ status facts, and the solver knows only the order. Nothing in this correction we
 import the scoring module) and `provider-scoring-is-self-contained` (the scoring module may import
 neither the application nor Effect, persistence, transport, or the solver). The `repository` lint
 plugin adds `provider-scoring-vocabulary`, which rejects a fixed list of scoring identifiers anywhere
-outside the provider's own modules. Both have acceptance and rejection fixtures, and the lint rule was
-proved against a deliberate violation in the real tree.
+outside the provider's own modules, and `provider-identity`, which rejects a provider name in generic
+source outside the adapter, composition root, and keyed presentation/helper declarations. Each has
+acceptance and rejection fixtures, and the rules were proved against deliberate violations in the real
+tree.
 
 ## Consequences
 
 - A second provider supplies scores its own way and the worker, contracts, UI, and run records need no
   change. Adding scoring knowledge to generic code is now a visible rule violation, not a habit.
-- The value-source ladder survives as the Yahoo adapter's preference order over scoring schemes, with
-  one deliberate difference: a scheme whose scores cannot be legally placed now blocks the attempt
-  (transient) instead of silently falling through to a weaker scheme. The ladder still falls through
-  when a scheme cannot be computed at all, which is the early-season case.
+- The value-source ladder survives as the Yahoo adapter's preference order over scoring schemes. The
+  ladder chooses a scheme once per plan; it never falls through per player, so a published score that
+  is absent stays absent instead of being re-priced by a weaker scheme. When a present scheme's scores
+  cannot be legally placed, the generic planner refuses and the worker blocks the attempt; it does not
+  switch schemes. The ladder falls through only when a scheme cannot be computed at all, which is the
+  early-season case.
 - A run record no longer names a measurement in generic columns, so changing a provider's scoring
   arithmetic is not a schema event. The trade is that a reader sees a provider label rather than a
   product term; the label is still specific enough to identify the scheme and its period.

@@ -30,7 +30,7 @@ named reason.
 
 1. `ProviderShape` is the whole provider contract: session validation, discovery, league/roster/player/
    matchup/transaction/standings reads, native and explicit writes, review links, declared capabilities,
-   and a lineup planner. It is a plain object of Effect-returning methods.
+   and a roster scoring capability. It is a plain object of Effect-returning methods.
 2. `ProviderKey` is a branded, provider-neutral identifier. Stored teams, connections, and requests carry
    the key, never a closed provider literal.
 3. `ProviderRegistry` maps keys to provider shapes. Generic code resolves the provider from the team's
@@ -41,16 +41,17 @@ named reason.
 **Capabilities are declared facts, not inferred brand behavior.**
 
 Each provider reports its fantasy-day policy, supported sports, player-search sorts, which sorts it
-orders itself, which sports publish weekly statistic series, whether it publishes projections or a
-community start rate, its statistic bases, and named limitations (for example a sport without a
-point-total sort, lock timing, or historical seasons). Generic layers render and enforce those facts.
-They do not contain provider prose, provider names, or per-provider branches.
+orders itself, which sports publish weekly statistic series, whether it publishes projections, and
+named limitations (for example a sport without a point-total sort, lock timing, or historical
+seasons). Generic layers render and enforce those facts. They do not contain provider prose, provider
+names, or per-provider branches. How a provider constructs a score is not a declared capability.
 
 **Planning is a provider capability; the worker stays generic.**
 
-`provider.planLineup(request)` receives neutral inputs — session material, provider team and league
-keys, sport, league settings, roster, and target — and returns either a plan of explicit assignments
-with its basis and policy version, or a named refusal with `action: "native"` or `action: "block"`.
+`provider.scoreRoster(request)` receives neutral inputs — session material, provider team and league
+keys, sport, league settings, roster, and target — and returns one final score and availability tier
+per roster player with an opaque provenance label, or a named refusal whose kind is `structural` or
+`transient`. The generic planner turns those scores into explicit assignments.
 
 The worker keeps everything that is not provider judgement: the durable run machine, per-team
 serialization, observation, write intents, sending and readback, reconciliation, outcomes, retries, and
@@ -59,10 +60,11 @@ rules, roster shapes, or provider vocabulary.
 
 **A fallback ladder, not a fatal branch.**
 
-The value-source ladder lives in `@lineupkeep/lineup-policy`: projections, then scoring rules, then
-community start rate, then a named refusal. Providers supply candidate inputs in that order; the first
-usable candidate plans the lineup. Choosing a source is a fallback chain over data conditions, not an
-Effect defect. A refusal is returned as data with a stable code and a human-readable detail.
+The value-source ladder lives inside the provider's scoring modules: projections, then the league's
+rules, then the ownership composite for a games-limited league, then the published crowd share, then a
+named refusal. Providers supply the candidate inputs they can compute. Choosing a source is a
+fallback chain over data conditions inside the adapter, not an Effect defect. A refusal is returned as
+data with an opaque label and a human-readable detail.
 
 **The boundary is enforced, not documented.**
 
@@ -79,7 +81,7 @@ a deliberate generic-to-Yahoo import in the architecture test suite.
   and the few provider-specific facts that legitimately remain outside the adapter.
 - Generic layers can no longer be tempted to special-case a provider: a closed provider literal or a
   provider name in a generic schema is now a visible regression rather than a habit.
-- A provider now owns the decision of what its lineup planner can do, so a provider without usable
+- A provider now owns the decision of what scores it can publish, so a provider without usable
   scoring evidence refuses with its own named reason instead of the worker guessing.
 - The worker test double must implement the planner capability, which keeps the test seam as wide as
   the production seam.

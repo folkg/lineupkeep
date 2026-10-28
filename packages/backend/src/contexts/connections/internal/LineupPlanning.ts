@@ -19,11 +19,10 @@ import type {
 } from "@lineupkeep/lineup-solver";
 
 import type {
-  ProviderAvailabilityTier,
   ProviderGamesPlayed,
   ProviderLeagueSettings,
   ProviderLineupAssignment,
-  ProviderPlayerValue,
+  ProviderPlayerScore,
   ProviderRoster,
   ProviderRosterPosition,
 } from "#contexts/connections/Provider.ts";
@@ -42,7 +41,7 @@ const availabilityLadder: ReadonlyArray<AvailabilityTier> = [
 ];
 
 export function planAssignments(input: PlanAssignmentsInput): PlanAssignmentsResult {
-  const limits = new Map((input.gamesPlayed ?? []).map((entry) => [entry.position, entry]));
+  const limits = new Map(input.gamesPlayed.map((entry) => [entry.position, entry]));
   const lockedBySlot = lockedCounts(input.roster);
   const slots = input.league.rosterPositions.flatMap((position) =>
     rosterSlots(position, limits, lockedBySlot.get(position.position) ?? 0),
@@ -83,15 +82,18 @@ function assignments(
 
 function rosterPlayer(
   player: ProviderRoster["players"][number],
-  value: ProviderPlayerValue | undefined,
+  value: ProviderPlayerScore | undefined,
   slots: ReadonlyArray<RosterSlot>,
 ): RosterPlayer {
+  if (value === undefined) {
+    throw new Error("A provider lineup score must cover every roster player.");
+  }
   const eligibility = player.eligiblePositions;
   return {
     id: makePlayerId(player.providerPlayerKey),
     eligiblePositions: eligibility,
-    availabilityTier: availabilityTier(value?.availability),
-    selection: selection(value?.score ?? null),
+    availabilityTier: makeAvailabilityTier(value.availability),
+    selection: selection(value.score),
     reserveEligible: slots.some(
       (slot) => slot.kind === "reserve" && slotAccepts(slot.eligibility, eligibility),
     ),
@@ -100,13 +102,6 @@ function rosterPlayer(
       ? makeSlotId(player.slot)
       : undefined,
   };
-}
-
-function availabilityTier(tier: ProviderAvailabilityTier | undefined): AvailabilityTier {
-  if (tier === undefined) {
-    throw new Error("A provider lineup score must declare an availability tier for every player.");
-  }
-  return makeAvailabilityTier(tier);
 }
 
 function selection(score: number | null): PlayerSelection {
@@ -200,8 +195,8 @@ function solverRefusalDetail(refusal: LineupRefusal): string {
 export type PlanAssignmentsInput = {
   readonly league: ProviderLeagueSettings;
   readonly roster: ProviderRoster;
-  readonly values: ReadonlyArray<ProviderPlayerValue>;
-  readonly gamesPlayed?: ReadonlyArray<ProviderGamesPlayed>;
+  readonly values: ReadonlyArray<ProviderPlayerScore>;
+  readonly gamesPlayed: ReadonlyArray<ProviderGamesPlayed>;
 };
 
 export type PlanAssignmentsResult =

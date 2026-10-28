@@ -24,10 +24,10 @@ import type {
   ProviderCapabilities,
   ProviderGamesPlayed,
   ProviderLeagueSettings,
-  ProviderLineupOutcome,
-  ProviderLineupRequest,
+  ProviderScoreOutcome,
+  ProviderScoreRequest,
   ProviderPlayerDetail,
-  ProviderPlayerValue,
+  ProviderPlayerScore,
   ProviderRoster,
   ProviderRosterCoverage,
   ProviderRosterPlayer,
@@ -88,10 +88,10 @@ export const yahooCapabilities: ProviderCapabilities = {
   ],
 };
 
-export function planYahooLineup(
-  input: ProviderLineupRequest,
+export function scoreYahooRoster(
+  input: ProviderScoreRequest,
   read: YahooLineupReader,
-): Effect.Effect<ProviderLineupOutcome, ProviderReadFailure> {
+): Effect.Effect<ProviderScoreOutcome, ProviderReadFailure> {
   return Effect.gen(function* () {
     if (!isSupportedSport(input.sport)) {
       return {
@@ -175,21 +175,21 @@ export function yahooObservationWindow(
     : completedDates(league, target.date);
 }
 
-const healthyStatus: YahooStatus = { availability: { kind: "available" }, reserveListed: false };
+const healthyAvailability: PlayerAvailability = { kind: "available" };
 
-const yahooStatusTable: Readonly<Record<string, YahooStatus>> = {
-  healthy: healthyStatus,
-  O: { availability: { kind: "excluded", reason: "out" }, reserveListed: true },
-  IR: { availability: { kind: "excluded", reason: "injured-reserve" }, reserveListed: true },
-  "IR+": { availability: { kind: "excluded", reason: "injured-reserve" }, reserveListed: true },
-  "IR-LT": { availability: { kind: "excluded", reason: "injured-reserve" }, reserveListed: true },
-  NA: { availability: { kind: "excluded", reason: "not-active" }, reserveListed: true },
-  SUSP: { availability: { kind: "excluded", reason: "suspended" }, reserveListed: true },
-  D: { availability: { kind: "uncertain", code: "D" }, reserveListed: false },
-  DTD: { availability: { kind: "uncertain", code: "DTD" }, reserveListed: false },
-  Q: { availability: { kind: "uncertain", code: "Q" }, reserveListed: false },
-  P: { availability: { kind: "uncertain", code: "P" }, reserveListed: false },
-  GTD: { availability: { kind: "uncertain", code: "GTD" }, reserveListed: false },
+const yahooStatusTable: Readonly<Record<string, PlayerAvailability>> = {
+  healthy: healthyAvailability,
+  O: { kind: "excluded", reason: "out" },
+  IR: { kind: "excluded", reason: "injured-reserve" },
+  "IR+": { kind: "excluded", reason: "injured-reserve" },
+  "IR-LT": { kind: "excluded", reason: "injured-reserve" },
+  NA: { kind: "excluded", reason: "not-active" },
+  SUSP: { kind: "excluded", reason: "suspended" },
+  D: { kind: "uncertain", code: "D" },
+  DTD: { kind: "uncertain", code: "DTD" },
+  Q: { kind: "uncertain", code: "Q" },
+  P: { kind: "uncertain", code: "P" },
+  GTD: { kind: "uncertain", code: "GTD" },
 };
 
 export type StartingLineupRole =
@@ -275,18 +275,12 @@ export function yahooStartingLineupRule(sport: FantasySport, position: string): 
 
 export function yahooAvailability(injuryCode: string | undefined): PlayerAvailability {
   if (injuryCode === undefined) {
-    return healthyStatus.availability;
+    return healthyAvailability;
   }
-  return yahooStatusTable[injuryCode]?.availability ?? { kind: "unrecognised", code: injuryCode };
+  return yahooStatusTable[injuryCode] ?? { kind: "unrecognised", code: injuryCode };
 }
 
 export const yahooInjuryStatusCodes: ReadonlyArray<string> = Object.keys(yahooStatusTable);
-
-export function yahooStatusReserveListed(injuryCode: string | undefined): boolean {
-  return injuryCode === undefined
-    ? healthyStatus.reserveListed
-    : (yahooStatusTable[injuryCode]?.reserveListed ?? false);
-}
 
 export function yahooTargetPeriod(roster: ProviderRoster): Period {
   return roster.coverage.type === "week"
@@ -294,16 +288,16 @@ export function yahooTargetPeriod(roster: ProviderRoster): Period {
     : { kind: "date", date: roster.coverage.date };
 }
 
-function providerValue(player: ScoredPlayer): ProviderPlayerValue {
+function providerValue(player: ScoredPlayer): ProviderPlayerScore {
   return {
     providerPlayerKey: player.id,
     score: player.units ?? null,
-    availability: player.availability.tier,
+    availability: player.availability,
   };
 }
 
 function policyPlayers(
-  input: ProviderLineupRequest,
+  input: ProviderScoreRequest,
   period: Period,
   gamesPlayed: ReadonlyArray<ProviderGamesPlayed>,
 ): ReadonlyArray<PolicyPlayer> {
@@ -465,7 +459,7 @@ function completedDates(league: ProviderLeagueSettings, targetDate: string): Rea
   return periods;
 }
 
-function targetPeriod(target: ProviderLineupRequest["target"]): Period {
+function targetPeriod(target: ProviderScoreRequest["target"]): Period {
   switch (target.coverage) {
     case "week":
       return { kind: "week", week: target.week };
@@ -512,9 +506,4 @@ export type YahooLineupReader = {
 export type YahooPeriodHistory = {
   readonly period: Period;
   readonly details: ReadonlyArray<ProviderPlayerDetail>;
-};
-
-type YahooStatus = {
-  readonly availability: PlayerAvailability;
-  readonly reserveListed: boolean;
 };

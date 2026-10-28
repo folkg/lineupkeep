@@ -25,6 +25,10 @@ policy rather than the provider-agnostic solver.
 
 **Availability is a separate dimension that the objective orders against value.**
 
+The current ladder is six rungs, ordered `confirmed-start`, `will-play`, `might-play`,
+`unlikely-to-play`, `will-not-play`, `not-scheduled`. The original decision below had three; the
+amendments record how the other three were added and why.
+
 1. A player carries one availability tier per period, from a ladder declared by the policy:
    `will-play`, `might-play`, `will-not-play`. Three rungs match the provider's own grain (`DTD` is
    distinct from `O`/`IR`/`IR-LT`/`SUSP`/`NA`); a two-rung ladder would either treat day to day as
@@ -42,8 +46,8 @@ policy rather than the provider-agnostic solver.
    unavailable player worth something can.
 6. A provider status code the adapter does not recognise becomes a recorded `unrecognised` fact on the
    `might-play` rung. It never refuses a run and never displaces a player the provider calls healthy.
-7. A player with no counted period is valued at zero, with the absent mean and skipped periods
-   recorded, instead of refusing the run.
+7. A player with no counted period is valued at zero instead of refusing the run. The absent periods
+   stay inside the provider adapter; only the final score crosses the seam.
 
 ## Consequences
 
@@ -55,7 +59,8 @@ policy rather than the provider-agnostic solver.
   journeyman, and the reported plan total is availability-blind: it is the objective's value term, not
   an expected score.
 - An unrecognised code can under-rank a healthy player, and can over-rank an absent one, until the
-  adapter's table is extended; the code is kept on the valuation so the plan's evidence names it.
+  adapter's table is extended. The code stays inside the adapter; the run observation records the
+  scheduled and starting-lineup facts, not the code.
 - A productive player whose statistics the provider omitted is priced at zero rather than blocking the
   team, so a data gap can silently bench a player instead of falling back to the native action.
 - The exact assignment encoding grows one weight per rung, each larger than everything below it plus a

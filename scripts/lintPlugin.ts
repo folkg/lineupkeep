@@ -175,6 +175,27 @@ const plugin = {
         },
       }),
     },
+    "provider-identity": {
+      create: (context: CommentsRuleContext) => ({
+        Program: () => {
+          if (!isGenericSourceModule(context.filename)) {
+            return;
+          }
+          if (
+            providerIdentityOwners.some((owner) => normalizedPath(context.filename).includes(owner))
+          ) {
+            return;
+          }
+          for (const [term, offset] of providerIdentityOccurrences(context.sourceCode.text)) {
+            sourceReport(
+              context,
+              offset,
+              `\`${term}\` names one provider; keep provider identity in its adapter, the composition root, or a keyed presentation declaration, and branch on ProviderKey instead.`,
+            );
+          }
+        },
+      }),
+    },
     "no-intrinsic-elements": {
       create: (context: DesignSystemRuleContext) => ({
         JSXOpeningElement: (node: DesignSystemJSXOpeningElement) => {
@@ -960,12 +981,40 @@ const providerScoringOwners = [
   "/contexts/connections/internal/provider-scoring/",
 ];
 
+const providerIdentityOwners = [
+  ...providerScoringOwners,
+  "/runtime/ApplicationLayer.ts",
+  "/contracts/connections/providerLabels.ts",
+  "/hosted-browser/src/provider.ts",
+  "/linking-helper/src/providers.ts",
+];
+
 function isGenericSourceModule(filename: string): boolean {
-  const normalized = filename.replaceAll("\\", "/");
-  if (!normalized.includes("/src/") || normalized.endsWith(".test.ts")) {
+  const normalized = normalizedPath(filename);
+  if (
+    !normalized.includes("/src/") ||
+    /\.test\.[cm]?[jt]sx?$/u.test(normalized) ||
+    normalized.endsWith("Test.ts")
+  ) {
     return false;
   }
   return !providerScoringOwners.some((owner) => normalized.includes(owner));
+}
+
+function normalizedPath(filename: string): string {
+  return filename.replaceAll("\\", "/");
+}
+
+function providerIdentityOccurrences(source: string): ReadonlyArray<readonly [string, number]> {
+  const occurrences: Array<readonly [string, number]> = [];
+  for (const term of ["Yahoo", "yahoo"]) {
+    let offset = source.indexOf(term);
+    while (offset >= 0) {
+      occurrences.push([term, offset]);
+      offset = source.indexOf(term, offset + term.length);
+    }
+  }
+  return occurrences;
 }
 
 function providerScoringVocabularyOccurrences(

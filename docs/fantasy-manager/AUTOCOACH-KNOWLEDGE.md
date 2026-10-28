@@ -66,11 +66,11 @@ Reference terms, mapped to the vocabulary Lineupkeep already uses:
 | starting player                                | selected position is not `BN` and not an inactive list                               | player in a starting position                                     |
 | reserve player                                 | selected position is `BN` **or** an inactive list (a single predicate covering both) | player on the bench or on a reserve list                          |
 | inactive list (`IR`, `IR+`, `IL`, `IL+`, `NA`) | restricted roster areas                                                              | reserve list                                                      |
-| `is_playing`                                   | the player's real-world team has a game in the period                                | has a game (today an availability fact we do not read)            |
+| `is_playing`                                   | the player's real-world team has a game in the period                                | has a game (an availability fact)                                 |
 | start score                                    | the one number compared inside a roster                                              | **not** a Lineupkeep concept: availability is a tier, not a score |
 | ownership score                                | the number compared between a roster and the free-agent pool                         | transaction valuation, out of scope                               |
 | coverage period                                | the provider period a roster read was scoped to                                      | target period                                                     |
-| edit key                                       | provider identifier of the current editable period                                   | not read by Lineupkeep                                            |
+| edit key                                       | provider identifier of the current editable period                                   | roster-cadence evidence when the deadline is ambiguous            |
 
 The reference's conflation of bench and reserve lists into one "reserve player" predicate is
 deliberate: both are non-contributing areas, and every search that promotes someone aims at a starting

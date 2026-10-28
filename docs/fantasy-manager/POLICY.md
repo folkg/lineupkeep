@@ -56,7 +56,10 @@ Every league gets exactly one scoring scheme, chosen in this order:
    implemented, tested, and never selected by this adapter.
 2. **League scoring rules applied to realised statistics** — the arithmetic that reproduces a points
    league's own totals exactly. This is what the football league uses.
-3. **Percent started**, the provider's published started percentage for the period. This is the
+3. **The ownership composite** for a league that declares a per-position games limit, described under
+   [rung 2b](#rung-2b-the-ownership-composite-for-a-league-with-a-games-limit). It is a stable,
+   slowly moving basis for a league whose starts are a fixed budget.
+4. **Percent started**, the provider's published started percentage for the period. This is the
    owner's "crowdsourcing the decision": the share of leagues that started this player.
 
 A league uses one rung. The adapter evaluates one scheme at a time, so a plan cannot contain two
@@ -64,11 +67,11 @@ measurement kinds and a score from one scheme cannot be compared with a score fr
 fallback per player: a league on rung 2 does not score one player by rung 3, and a league on rung 3 does
 not mix in points.
 
-When no rung yields scores the adapter returns a structural refusal with a label naming the reason, and
-the worker keeps the provider's own start-active action for that team. Refusing is the deliberate
-answer, not a gap. When a rung yields scores but the roster cannot be legally placed, the generic
-planner refuses transiently and the attempt blocks; it does not silently switch schemes, because the
-ladder's order is a judgement about evidence quality, not about roster shape.
+When no rung can be computed at all, the adapter returns a structural refusal with a label naming the
+reason, and the worker keeps the provider's own start-active action for that team. Refusing is the
+deliberate answer, not a gap. When a rung can be computed but the roster cannot be legally placed, the
+generic planner refuses transiently and the attempt blocks; it does not silently switch schemes,
+because the ladder's order is a judgement about evidence quality, not about roster shape.
 
 That refusal is **structural**: it says the provider cannot value this league, with these settings, at
 all, so no later attempt would find a rung either. Every other refusal is **transient** — it names a
@@ -90,12 +93,11 @@ always transient: they describe this roster now, not the league.
 ### Rung 1: projected points
 
 A projection is used only as the provider publishes it, for the target period. Its unit is points at
-the provider's own scale. A realised total published alongside it is recorded as context and is
-**never summed** with it: a forward-looking decision takes the projection, and the realised total
-stays evidence. A player the provider publishes no projection for is `unusable` with reason
-`missing`: the solver never treats a missing projection as zero and never starts that player. It
-benches them while it can, and refuses only when the player has no bench or reserve slot or is the
-only candidate for a required starting slot.
+the provider's own scale. A realised total is not read into the same score: a forward-looking
+decision takes the projection alone. A player the provider publishes no projection for is `unusable`
+with reason `missing`: the solver never treats a missing projection as zero and never starts that
+player. It benches them while it can, and refuses only when the player has no bench or reserve slot
+or is the only candidate for a required starting slot.
 
 ### Rung 2: league scoring rules
 
@@ -111,10 +113,10 @@ complete total for it. A period is _skipped_ when:
 - the provider published no statistics for that player, or
 - a statistic the league scores had no value, so the period's total is unknown.
 
-A player with no counted period has no measured value. They are valued at zero, and the valuation
-records the missing mean and every skipped period. Valuing them at zero keeps the roster placeable;
-refusing would let one unmeasured player disable custom optimisation for the whole team. That is a
-points-basis decision only: under rung 3 an absent value stays absent.
+A player with no counted period has no measured value. They are valued at zero. Valuing them at zero
+keeps the roster placeable; refusing would let one unmeasured player disable custom optimisation for
+the whole team. That is a points-basis decision only: under the crowd and ownership rungs an absent
+value stays absent. The skipped periods are not persisted; only the final score crosses the seam.
 
 Why a trailing mean and not a season total: a season total mixes weeks already played with different
 opponents, roles, and byes. A four-week mean is responsive to a role change and stable enough not to
@@ -255,10 +257,10 @@ Each player carries one availability tier for the target period, drawn from an o
 | `will-not-play`    | will not appear, but could                                   | `O`, `IR`, `IR+`, `IR-LT`, `SUSP`, `NA`                                                 |
 | `not-scheduled`    | no game to appear in                                         | no game for the player's team in the target period, including a bye                     |
 
-The ladder is six rungs. Five of them separate the ways a player can fail to contribute; the top two
+The ladder is six rungs. Four of them separate the ways a player can fail to contribute; the top two
 are **participation refinements** inside "will play". The provider publishes `starting_status` for a
-goatender, and percent started cannot distinguish a confirmed starter from the backup the crowd leaves
-unstarted. The provider expresses three states, and the policy keeps all three:
+goaltender, and percent started cannot distinguish a confirmed starter from the backup the crowd
+leaves unstarted. The provider expresses three states, and the policy keeps all three:
 
 - `is_starting: 1` is a confirmed start. A player the status table calls available is on
   `confirmed-start`, above any unconfirmed player who will play.
@@ -344,21 +346,21 @@ normally park a player on an inactive list. It is evidence, not a rule: reserve 
 from the provider's published `eligible_positions` and is **never** inferred from a status code
 ([RR1](#slots-eligibility-and-locks)).
 
-| Status         | Tier            | Reserve list | Note                                                                 |
-| -------------- | --------------- | ------------ | -------------------------------------------------------------------- |
-| healthy (none) | `will-play`     | no           | the provider emits no code for a healthy player                      |
-| `O`            | `will-not-play` | yes          | out                                                                  |
-| `IR`           | `will-not-play` | yes          | injured reserve                                                      |
-| `IR+`          | `will-not-play` | yes          | short-term injured reserve                                           |
-| `IR-LT`        | `will-not-play` | yes          | long-term injured reserve                                            |
-| `NA`           | `will-not-play` | yes          | not active                                                           |
-| `SUSP`         | `will-not-play` | yes          | suspended                                                            |
-| `D`            | `might-play`    | no           | doubtful                                                             |
-| `DTD`          | `might-play`    | no           | day to day                                                           |
-| `Q`            | `might-play`    | no           | questionable                                                         |
-| `P`            | `might-play`    | no           | probable                                                             |
-| `GTD`          | `might-play`    | no           | game-time decision                                                   |
-| anything else  | `might-play`    | no           | recorded as an unrecognised code with the code kept on the valuation |
+| Status         | Tier            | Reserve list | Note                                                       |
+| -------------- | --------------- | ------------ | ---------------------------------------------------------- |
+| healthy (none) | `will-play`     | no           | the provider emits no code for a healthy player            |
+| `O`            | `will-not-play` | yes          | out                                                        |
+| `IR`           | `will-not-play` | yes          | injured reserve                                            |
+| `IR+`          | `will-not-play` | yes          | short-term injured reserve                                 |
+| `IR-LT`        | `will-not-play` | yes          | long-term injured reserve                                  |
+| `NA`           | `will-not-play` | yes          | not active                                                 |
+| `SUSP`         | `will-not-play` | yes          | suspended                                                  |
+| `D`            | `might-play`    | no           | doubtful                                                   |
+| `DTD`          | `might-play`    | no           | day to day                                                 |
+| `Q`            | `might-play`    | no           | questionable                                               |
+| `P`            | `might-play`    | no           | probable                                                   |
+| `GTD`          | `might-play`    | no           | game-time decision                                         |
+| anything else  | `might-play`    | no           | recorded as an unrecognised code while the adapter maps it |
 
 The reference lists `Questionable`, `Probable`, and `Game Time Decision` as _healthy_, so its value
 penalty does not touch them. This policy places them on `might-play` instead: "may appear" is what
@@ -379,10 +381,11 @@ player the provider calls healthy. The cost, in both directions:
 - A player who is actually out but carries a new code is preferred to a known-out player for a
   position that would otherwise stay empty, and can start in a required position nobody else can fill.
 
-The code is kept on the valuation, so the evidence produced with the plan names why a player was
-treated as doubtful, and the adapter's table can be extended deliberately. Treating an unknown code as
-healthy would let an unreadable code displace a healthy player; treating it as out would bench a
-healthy player behind anyone the provider calls healthy. `might-play` is the middle that costs least.
+The adapter keeps the code while it maps the status, so extending the table is a local change. The
+run observation records the scheduled and starting-lineup facts, not the injury code; the plan
+provenance names the scoring scheme, not the status decision. Treating an unknown code as healthy
+would let an unreadable code displace a healthy player; treating it as out would bench a healthy
+player behind anyone the provider calls healthy. `might-play` is the middle that costs least.
 
 ### A negative value is not an availability fact either
 
@@ -414,9 +417,11 @@ position name means:
 
 Two readings the provider evidence does not settle, stated so they can be corrected:
 
-- **Starting positions are treated as required.** Filling every starting slot is legal under either
-  reading of whether an empty starting slot is accepted, so the plan never depends on an unverified
-  rule. The cost is that a negative-valued player can be forced into a starting slot.
+- **Starting positions are treated as required**, except where a declared games limit reduces a
+  position's capacity: a reduced or exhausted starting slot is marked optional, and a fully closed slot
+  is absent from the problem. Filling every remaining starting slot is legal under either reading of
+  whether an empty starting slot is accepted, so the plan never depends on an unverified rule. The
+  cost is that a negative-valued player can be forced into a starting slot.
 - **Declared capacity is a hard maximum.** Whether the provider shares one standard-roster allowance
   between starters and bench instead of enforcing the advertised bench count is unverified. Treating
   the declared counts as maxima cannot invent roster space; if the retained roster does not fit, the
@@ -492,10 +497,12 @@ does not contain the key at all, so the ladder skips rungs one and two and lands
 percentage.
 
 The provider published a started percentage for all 21 roster players (4 %–88 %, 18 distinct values,
-`coverage_type: date`). This run asked for the diamond cut, which came back `0` for every player, so
-it was priced from the overall percentage:
+`coverage_type: date`). This is the pre-correction run: it asked for the diamond cut, which came back
+`0` for every player, so it was priced from the overall percentage and recorded the older label
+`percent-started:overall:date:2026-10-26`. Today the same inputs request platinum and record
+`community-start-rate:cut-platinum:date:2026-10-26` when the cut is complete, or
+`community-start-rate:overall:platinum-cut-incomplete:date:2026-10-26` otherwise.
 
-- recorded label `percent-started:overall:date:2026-10-26`
 - value term 758.00 — the sum of the twelve starting started percentages, in hundredths of a percent
 - six slot changes, twelve of twelve required starting slots filled
 
@@ -568,14 +575,15 @@ the two goalies the crowd starts most.
     carrying that code and over-rank an absent one. The code is recorded so the mapping can be
     extended in one place.
 12. **An unmeasured points player is valued at zero.** Under the scoring-rules basis a player with no
-    counted period does not block the run; they are priced as worthless and the gap is recorded as
-    skipped periods. The cost is that a productive player whose statistics the provider omitted can
-    be benched without a refusal. The started-percentage basis does not do this: there, absent stays
-    absent and the player is parked without a price.
+    counted period does not block the run; they are priced as worthless. The skipped periods stay
+    inside the adapter and are not recorded on the run. The cost is that a productive player whose
+    statistics the provider omitted can be benched without a refusal. The crowd and ownership bases do
+    not do this: there, absent stays absent and the player is parked without a price.
 13. **The reported total is availability-blind, and in the scheme's own unit.** It sums the starting
     values and is the objective's value term, so it is not an expected score. Under the points scheme
-    it is centi-points; under the started scheme it is hundredths of a percent. It does not shrink when
-    an injured player is only filling a vacant position.
+    it is centi-points; under the projections scheme it is hundredths of a point; under the started
+    scheme it is hundredths of a percent; under the ownership composite it is ten-thousandths of the
+    composite. It does not shrink when an injured player is only filling a vacant position.
 14. **Starting positions are required.** Conservative against an unverified rule, at the cost of
     starting a negative player when every candidate is negative.
 15. **No per-game rate.** The provider publishes no games-played count, so a season total cannot
@@ -599,7 +607,7 @@ the two goalies the crowd starts most.
   has-a-game `opponent` for every player; the adapter reads both, and neither is scoring evidence —
   they are availability facts. A skater's starting status is not published and would not matter if it
   were.
-- It does not use ranks or ownership, and it will not mix a weekly total with a season total in one
-  value.
+- It uses ranks and ownership only for a games-limited league's ownership composite. A points or
+  crowd-priced league never mixes them in, and no value mixes a weekly total with a season total.
 - It does not optimise category outcomes, rotisserie standing, or playoff leverage. A started
   percentage is a popularity ordering, not a category projection.

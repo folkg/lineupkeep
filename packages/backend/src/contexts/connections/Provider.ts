@@ -246,9 +246,9 @@ export type ProviderShape = {
     input: ProviderReviewLinkInput,
   ) => Effect.Effect<string, ProviderReviewLinkInvalid>;
 
-  readonly planLineup: (
-    input: ProviderLineupRequest,
-  ) => Effect.Effect<ProviderLineupOutcome, ProviderReadFailure>;
+  readonly scoreRoster: (
+    input: ProviderScoreRequest,
+  ) => Effect.Effect<ProviderScoreOutcome, ProviderReadFailure>;
 };
 
 type ProviderPlayerReadInput = {
@@ -551,7 +551,7 @@ export type ProviderReviewLinkInput = {
   readonly intent: ProviderReviewIntent;
 };
 
-export type ProviderLineupRequest = ProviderSessionMaterial & {
+export type ProviderScoreRequest = ProviderSessionMaterial & {
   readonly providerTeamKey: string;
   readonly providerLeagueKey: string;
   readonly sport: FantasySport;
@@ -560,7 +560,7 @@ export type ProviderLineupRequest = ProviderSessionMaterial & {
   readonly target: LineupTargetPeriod;
 };
 
-export type ProviderLineupRefusal = "structural" | "transient";
+export type ProviderScoreRefusal = "structural" | "transient";
 
 export const ProviderAvailabilityTier = Schema.Literals([
   "confirmed-start",
@@ -572,21 +572,21 @@ export const ProviderAvailabilityTier = Schema.Literals([
 ]);
 export type ProviderAvailabilityTier = typeof ProviderAvailabilityTier.Type;
 
-export type ProviderLineupOutcome =
+export type ProviderScoreOutcome =
   | {
       readonly kind: "scored";
       readonly provenance: string;
-      readonly players: ReadonlyArray<ProviderPlayerValue>;
+      readonly players: ReadonlyArray<ProviderPlayerScore>;
       readonly gamesPlayed: ReadonlyArray<ProviderGamesPlayed>;
     }
   | {
       readonly kind: "refused";
-      readonly refusal: ProviderLineupRefusal;
+      readonly refusal: ProviderScoreRefusal;
       readonly provenance: string;
       readonly detail: string;
     };
 
-export type ProviderPlayerValue = {
+export type ProviderPlayerScore = {
   readonly providerPlayerKey: string;
   readonly score: number | null;
   readonly availability: ProviderAvailabilityTier;

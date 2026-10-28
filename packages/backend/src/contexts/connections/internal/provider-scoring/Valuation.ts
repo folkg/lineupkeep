@@ -2,18 +2,18 @@ import { exactToUnits } from "./Exact.ts";
 import type { Exact } from "./Exact.ts";
 import { periodsEqual } from "./Period.ts";
 import type {
-  AvailabilityAssessment,
+  AvailabilityTier,
   Period,
   PolicyPlayer,
   StartingLineup,
   StartingLineupRule,
 } from "./types.ts";
 
-export function assessAvailability(player: PolicyPlayer, period: Period): AvailabilityAssessment {
+export function assessAvailability(player: PolicyPlayer, period: Period): AvailabilityTier {
   if (!hasGame(player, period)) {
-    return { tier: "not-scheduled", fact: "no-game", period };
+    return "not-scheduled";
   }
-  return statusAssessment(player);
+  return statusTier(player);
 }
 
 export function selectionUnits(points: Exact, scale: number): number {
@@ -30,31 +30,25 @@ function hasGame(player: PolicyPlayer, period: Period): boolean {
   );
 }
 
-function statusAssessment(player: PolicyPlayer): AvailabilityAssessment {
+function statusTier(player: PolicyPlayer): AvailabilityTier {
   switch (player.availability.kind) {
     case "available":
-      return startingAssessment(player.startingLineup, player.startingLineupRule);
+      return startingTier(player.startingLineup, player.startingLineupRule);
     case "uncertain":
-      return { tier: "might-play", fact: "uncertain-status", code: player.availability.code };
     case "unrecognised":
-      return { tier: "might-play", fact: "unrecognised-status", code: player.availability.code };
+      return "might-play";
     case "excluded":
-      return { tier: "will-not-play", fact: "excluded", reason: player.availability.reason };
+      return "will-not-play";
   }
 }
 
-function startingAssessment(
-  lineup: StartingLineup,
-  rule: StartingLineupRule,
-): AvailabilityAssessment {
+function startingTier(lineup: StartingLineup, rule: StartingLineupRule): AvailabilityTier {
   switch (lineup) {
     case "confirmed-starting":
-      return { tier: "confirmed-start", fact: "confirmed-start" };
+      return "confirmed-start";
     case "confirmed-not-starting":
-      return rule === "unlikely-to-play"
-        ? { tier: "unlikely-to-play", fact: "confirmed-not-starting" }
-        : { tier: "will-play", fact: "available" };
+      return rule === "unlikely-to-play" ? "unlikely-to-play" : "will-play";
     case "unconfirmed":
-      return { tier: "will-play", fact: "available" };
+      return "will-play";
   }
 }

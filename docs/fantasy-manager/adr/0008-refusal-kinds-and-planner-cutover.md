@@ -19,9 +19,9 @@ response.
 
 **A refusal names its own kind.**
 
-`ProviderLineupOutcome` returns either a plan or a refusal carrying `refusal: "structural" | "transient"`
-with a stable code, a human-readable detail, the policy version, and the selection basis when one was
-resolved. The worker no longer inspects codes or decides actions per league. It acts on the kind:
+`ProviderScoreOutcome` returns either final scores or a refusal carrying
+`refusal: "structural" | "transient"`, an opaque provenance label, and a human-readable detail. The
+worker no longer inspects labels or decides actions per league. It acts on the kind:
 
 - **Structural**: no amount of waiting or retrying makes the provider able to value this league. The
   worker falls back to the provider's own action, and records that the attempt ran the native action
@@ -37,32 +37,23 @@ example no value source on the ladder, or a declared capability that rules the l
 whose published values are missing is transient: blocking is honest, silently switching to a different
 action is not.
 
-The code-to-kind table lives with the codes inside the provider's scoring modules:
+The provider's scoring modules classify their own refusals. The only structural claim is that no
+value source exists for this league at this provider (`policy:no-value-source`). A scheme that is not
+computable yet (`policy:no-observed-periods`) is transient, because completed periods will exist
+later. The generic planner's refusals — an unscored player who cannot be parked, a lock that cannot be
+honoured, a roster that exceeds its slots, a required position that cannot be filled, or no complete
+legal assignment — are always transient: they describe this roster, these locks, or this read, and the
+facts can change. The provider's label names the reason for a person; the worker acts only on the kind.
 
-| Code                                           | Kind       | Why                                                                |
-| ---------------------------------------------- | ---------- | ------------------------------------------------------------------ |
-| `policy:no-value-source`                       | structural | No measurement exists for this league at this provider             |
-| `policy:no-observed-periods`                   | transient  | History is not there yet; completed periods will exist later       |
-| `solver:unusable-selection-value`              | transient  | Published evidence is missing for players on this roster right now |
-| `solver:lock-references-unknown-slot`          | transient  | The roster can change; the league's value source is unchanged      |
-| `solver:locked-player-ineligible-for-slot`     | transient  | The roster can change; the league's value source is unchanged      |
-| `solver:lock-capacity-exceeded`                | transient  | The roster can change; the league's value source is unchanged      |
-| `solver:roster-exceeds-slot-capacity`          | transient  | The current roster and declared slots make no legal plan now       |
-| `solver:player-has-no-legal-slot`              | transient  | The roster can change; the league's value source is unchanged      |
-| `solver:required-starting-position-unfillable` | transient  | A roster change fills the position                                 |
-| `solver:no-legal-assignment`                   | transient  | The facts that produced it can change                              |
-| `assignment:plan-membership`                   | transient  | The plan translation saw facts it does not cover                   |
-| `assignment:locked-player`                     | transient  | The lock clears; the league is still plannable                     |
-
-Every transient code is a statement about the current roster, locks, period, or read, not about the
-league's value source. That is the whole test: only a structural claim survives "and then what?".
+That is the whole test: only a structural claim survives "and then what?".
 
 **Runs ask for the custom planner, and the planner decides per team.**
 
 Scheduled and manual runs are stamped with the deployment's active implementation
-(`custom_policy`). The worker dispatches on that stamp and calls `provider.planLineup`. Nothing offers
-a per-team opt-in, and the worker never reads league settings to guess. The per-team answer comes back
-as a plan or a refusal whose kind decides the response.
+(`custom_policy`). The worker dispatches on that stamp and calls `provider.scoreRoster`, then places
+the returned scores with the generic planner. Nothing offers a per-team opt-in, and the worker never
+reads league settings to guess. The per-team answer comes back as scores or a refusal whose kind
+decides the response.
 
 **Queued intents cross the cutover at claim time.**
 
@@ -71,15 +62,15 @@ a lapsed lease — is re-stamped with the active implementation as part of the c
 it. A run with a write in flight (applying, verifying, or uncertain with an intent) is never re-planned
 under a replacement implementation: it resumes readback and reconciliation against the plan it already
 recorded. This is the durable shell's existing rule, now applied to the implementation as well as the
-policy version.
+plan that actually ran.
 
 **The run records what ran.**
 
 The run's own `implementation` and `implementationVersion` name what was requested. The outcome names
 what produced the result: `provider_native` with a refusal provenance when a structural refusal fell
-back, `custom_policy` with the planned basis when the planner planned, and `custom_policy` with the
-refusal provenance when a transient refusal blocked. A later reader can tell the three cases apart
-from the run alone, including the code, detail, and basis.
+back, `custom_policy` with the planned provenance when the planner planned, and `custom_policy` with
+the refusal provenance when a transient refusal blocked. A later reader can tell the three cases apart
+from the run alone, including the provider label and detail.
 
 **Rollback changes future execution only.**
 
@@ -91,14 +82,14 @@ not a rollback. A wholesale code revert to a revision that predates custom plann
 runs queued as `custom_policy`; that revision did not have the claim-time alignment. Drain or accept
 those runs before reverting to such a revision.
 
-**`assignment:reserve-slot` became unreachable and was deleted.** When it was written, the planner
-translated reserve eligibility from the league's slot definitions, so a plan could move a player onto
-a reserve list; the operation could not write that move, and the whole team was refused instead of
-writing a partial plan. The planner now reads reserve eligibility as "may remain where they are"
-until reserve writes are verified, so a plan cannot propose a reserve destination at all. The code is
-removed from the table deliberately rather than left as a refusal that can never be returned; the
-[CORRECTNESS ANALYSIS](../LINEUP-CORRECTNESS-ANALYSIS.md#7-the-reserve-rule) records the rule and the
-verification that turns the full shuffle back on.
+**`assignment:reserve-slot` was deleted.** When it was written, the operation could not write a
+reserve move, and the whole team was refused instead of writing a partial plan. The conservative
+intermediate rule let a player remain on a reserve list but refused a transit. On 2026-10-27 the
+provider accepted one reserve transit in and one out with a clean readback, so reserve eligibility is
+again the provider's published `eligible_positions` in both directions and a reserve move is written
+like any other changed assignment. The code is gone rather than left as a refusal that can never be
+returned; [the correctness analysis](../LINEUP-CORRECTNESS-ANALYSIS.md#7-the-reserve-rule) records the
+verification.
 
 ## Consequences
 

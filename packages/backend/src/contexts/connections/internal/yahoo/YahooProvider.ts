@@ -35,7 +35,7 @@ import type {
   ProviderScoringWeek,
   ProviderCoverageKind,
   ProviderPeriodWindow,
-  ProviderLineupRequest,
+  ProviderScoreRequest,
   ProviderPlayerDetail,
   ProviderPlayerPeriod,
   ProviderPlayerSearchInput,
@@ -66,7 +66,7 @@ import {
   yahooWriteDeadlineMillis,
   yahooWriteResponseLimitBytes,
 } from "./YahooLimits.ts";
-import { planYahooLineup, yahooCapabilities } from "./YahooLineup.ts";
+import { scoreYahooRoster, yahooCapabilities } from "./YahooLineup.ts";
 import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
@@ -692,8 +692,8 @@ export const yahooProvider = Effect.gen(function* () {
     readTransactions,
     readLeagueTeams,
     buildReviewLink,
-    planLineup: (input: ProviderLineupRequest) =>
-      planYahooLineup(input, {
+    scoreRoster: (input: ProviderScoreRequest) =>
+      scoreYahooRoster(input, {
         readPlayerFacts: () =>
           readPlayerFacts({
             provider: input.provider,

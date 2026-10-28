@@ -16,14 +16,14 @@ import type {
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderLineupAssignment,
-  ProviderLineupOutcome,
-  ProviderLineupRefusal,
-  ProviderLineupRequest,
+  ProviderScoreOutcome,
+  ProviderScoreRefusal,
+  ProviderScoreRequest,
   ProviderMatchup,
   ProviderNativeTarget,
   ProviderOperation,
   ProviderPlayerDetail,
-  ProviderPlayerValue,
+  ProviderPlayerScore,
   ProviderReviewLinkInput,
   ProviderRoster,
   ProviderRosterCoverage,
@@ -41,11 +41,11 @@ type FakeWriteAction = "accept" | "reject" | "lost_response" | "unavailable" | "
 type FakePlayerScore = {
   readonly providerPlayerKey: string;
   readonly score: number | null;
-  readonly availability: ProviderAvailabilityTier | undefined;
+  readonly availability: ProviderAvailabilityTier;
 };
 
 type FakePlanRefusal = {
-  readonly refusal: ProviderLineupRefusal;
+  readonly refusal: ProviderScoreRefusal;
   readonly provenance: string;
   readonly detail: string;
 };
@@ -588,7 +588,7 @@ const providerFake = Effect.gen(function* () {
       }
       return url.href;
     }),
-    planLineup: Effect.fn("FakeProvider.planLineup")(function* (input: ProviderLineupRequest) {
+    scoreRoster: Effect.fn("FakeProvider.scoreRoster")(function* (input: ProviderScoreRequest) {
       const current = yield* prepare(input, "read_player_details");
       if (current.planRefusal !== undefined) {
         return {
@@ -653,48 +653,31 @@ const fakeCapabilities: ProviderCapabilities = {
 };
 
 function planFakeLineup(
-  input: ProviderLineupRequest,
+  input: ProviderScoreRequest,
   scores: ReadonlyArray<FakePlayerScore>,
   gamesPlayed: ReadonlyArray<ProviderGamesPlayed>,
-): ProviderLineupOutcome {
+): ProviderScoreOutcome {
+  if (scores.length === 0) {
+    return {
+      kind: "refused",
+      refusal: "structural",
+      provenance: "fake/no-score",
+      detail: "This league publishes no score the custom planner can use.",
+    };
+  }
   const byKey = new Map(scores.map((score) => [score.providerPlayerKey, score]));
-  const values = input.roster.players.map((player): ProviderPlayerValue => {
+  const values = input.roster.players.map((player): ProviderPlayerScore => {
     const declared = byKey.get(player.providerPlayerKey);
+    if (declared === undefined) {
+      throw new Error("The fake provider must declare a score for every roster player.");
+    }
     return {
       providerPlayerKey: player.providerPlayerKey,
-      score: declared?.score ?? null,
-      availability: declared?.availability ?? fakeAvailabilityOf(player),
+      score: declared.score,
+      availability: declared.availability,
     };
   });
-  return values.some((value) => value.score !== null)
-    ? { kind: "scored", provenance: "fake/declared-score", players: values, gamesPlayed }
-    : {
-        kind: "refused",
-        refusal: "structural",
-        provenance: "fake/no-score",
-        detail: "This league publishes no score the custom planner can use.",
-      };
-}
-
-function fakeAvailabilityOf(player: ProviderRoster["players"][number]): ProviderAvailabilityTier {
-  if (!player.scheduled) {
-    return "not-scheduled";
-  }
-  switch (player.injuryCode) {
-    case undefined:
-      switch (player.startingLineup) {
-        case "confirmed-starting":
-          return "confirmed-start";
-        case "confirmed-not-starting":
-        case "unconfirmed":
-          return "will-play";
-      }
-      break;
-    case "DTD":
-      return "might-play";
-    default:
-      return "will-not-play";
-  }
+  return { kind: "scored", provenance: "fake/declared-score", players: values, gamesPlayed };
 }
 
 function validate(

@@ -42,7 +42,7 @@ Provider adapters own request batching and period/day semantics. Minimize upstre
 
 ### Opinionated optimization
 
-Policies belong in provider/sport/league-appropriate layers. Prefer comparable projected points when usable; Yahoo's private fallback is diamond-manager started evidence. Do not mix raw percentages and points or invent missing scores. If useful evidence is absent, preserve affected choices and explain why. Zero is not missing.
+Policies belong in provider/sport/league-appropriate layers. Prefer comparable projected points when usable; Yahoo's private fallback is its published percent-started evidence, using the platinum cohort when it is populated and the overall percentage otherwise. Do not mix raw percentages and points or invent missing scores. If useful evidence is absent, preserve affected choices and explain why. Zero is not missing.
 
 Hard constraints describe legal destinations, roster capacity, reserve eligibility, and locks. Availability/real-world starting status is soft selection evidence, not an automatic exclusion. An injured/unconfirmed player can fill an otherwise empty slot; avoid double adjustments when projections already account for participation.
 
@@ -107,7 +107,7 @@ See DELIVERY-PLAN.md for each stage's tasks and acceptance evidence.
 ## Outstanding facts and approval gates
 
 1. **Starter publication blocker:** the inspected local `docs/release-readiness.md` explicitly reports a critical Solid Start RPC vulnerability and forbids publication of the installed closure. This is a local tracker observation, not an independent fresh advisory audit. The owner permits local implementation on the validated pinned baseline while awaiting a coherent fix; adopt and accept it before publication. Keep the vulnerable transport loopback-only, without public tunnels; no unauthorized workaround.
-2. **Provider contracts:** confirm Yahoo fantasy-day rollover, bench/pool/reserve rules, meaningful NFL/NHL scoring evidence, and live explicit-assignment write/readback before the relevant stages. Earlier all-zero diamond samples do not prove usable fallback quality.
+2. **Provider contracts:** confirm Yahoo fantasy-day rollover, bench/pool/reserve rules, meaningful NFL/NHL scoring evidence, and live explicit-assignment write/readback before the relevant stages. An all-zero cut is a recorded finding, not proof of usable fallback quality.
 3. **Client/browser/helper/cloud:** verify hosted Muse OAuth/paging/pending-run behavior, hosted browser streaming and local-helper pairing feasibility, cloud egress/session compatibility, IAM, cold starts, and actual free-allowance availability. No new live Yahoo probes were performed in consolidation.
 4. **Identity — complete:** the owner selected Lineupkeep, its independent directory, and the royal violet and gold visual direction. No domain purchase, trademark clearance, or production origin is implied.
 5. **Authority:** the [autonomous handoff](../PHASE-1-HANDOFF.md) records the owner's subsequent whole-Phase-1 assignment and GCP CLI setup permission. Review technical seams as implementation work, not a repeated owner-approval ritual. Resolve the remaining billing/security/access/live-provider gates before the affected external action; earlier research authorization does not carry forward.

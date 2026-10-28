@@ -1,12 +1,5 @@
 import { periodKey, periodsEqual } from "./Period.ts";
-import type {
-  AvailabilityAssessment,
-  Period,
-  PolicyPlayer,
-  ValueAssessment,
-  ValueSource,
-  ValueSourceKind,
-} from "./types.ts";
+import type { AvailabilityTier, Period, PolicyPlayer, ValueSource } from "./types.ts";
 import { assessAvailability } from "./Valuation.ts";
 import { resolveValueSource, valueSourceLadder } from "./ValueSource.ts";
 
@@ -34,15 +27,11 @@ export function scoreLineup(input: LineupScoreInput): LineupScoreResult {
     return {
       kind: "scored",
       label: resolved.label,
-      players: input.players.map((player) => {
-        const { assessment, units } = resolved.valueOf(player);
-        return {
-          id: player.id,
-          availability: assessAvailability(player, input.period),
-          units,
-          value: assessment,
-        };
-      }),
+      players: input.players.map((player) => ({
+        id: player.id,
+        availability: assessAvailability(player, input.period),
+        units: resolved.unitsOf(player),
+      })),
     };
   }
   return {
@@ -57,13 +46,8 @@ export function scoreLineup(input: LineupScoreInput): LineupScoreResult {
 
 function orderedSources(sources: ReadonlyArray<ValueSource>): ReadonlyArray<ValueSource> {
   return [...sources].sort(
-    (left, right) =>
-      valueSourceLadder.indexOf(sourceKind(left)) - valueSourceLadder.indexOf(sourceKind(right)),
+    (left, right) => valueSourceLadder.indexOf(left.kind) - valueSourceLadder.indexOf(right.kind),
   );
-}
-
-function sourceKind(source: ValueSource): ValueSourceKind {
-  return source.kind;
 }
 
 function requireConsistentInput(input: LineupScoreInput): void {
@@ -116,10 +100,6 @@ function requireConsistentSource(
         source.projections.map((entry) => entry.id),
         "projection",
       );
-      requireUniqueIds(
-        source.realised.map((entry) => entry.id),
-        "realised total",
-      );
       return;
     }
     case "community-start-rate": {
@@ -168,9 +148,8 @@ export type LineupScoreInput = {
 
 export type ScoredPlayer = {
   readonly id: string;
-  readonly availability: AvailabilityAssessment;
+  readonly availability: AvailabilityTier;
   readonly units: number | undefined;
-  readonly value: ValueAssessment;
 };
 
 export type LineupScoreResult =

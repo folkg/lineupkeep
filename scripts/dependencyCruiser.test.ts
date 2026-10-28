@@ -1451,3 +1451,26 @@ it.each([
 
   expect(result.status, result.output).toBe(0);
 });
+
+it("rejects a provider identity in generic code", async () => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/connections/internal/LineupPlanning.ts":
+      'export const providerKey = "yahoo";',
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("repository(provider-identity)");
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain("keep provider identity in its adapter");
+});
+
+it.each([
+  "packages/backend/src/contexts/connections/internal/yahoo/YahooLineup.ts",
+  "packages/backend/src/runtime/ApplicationLayer.ts",
+  "apps/web/src/contracts/connections/providerLabels.ts",
+  "packages/hosted-browser/src/provider.ts",
+  "apps/linking-helper/src/providers.ts",
+])("accepts a provider identity declaration in %s", async (path) => {
+  const result = await checkLint({ [path]: 'export const providerKey = "yahoo";' });
+
+  expect(result.status, result.output).toBe(0);
+});

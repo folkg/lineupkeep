@@ -57,11 +57,11 @@ Persist seed and minimized counterexample on failure. A generated failure become
 Use worked expected comparisons and generated boundary cases:
 
 - Complete projections, partially missing projections, zero projections, negative projections, and no usable fallback.
-- Consistent comparison basis; no raw percentage-versus-points comparisons or silent switch to overall ownership.
+- Consistent comparison basis; no raw percentage-versus-points comparisons and no silent switch to a different scoring scheme. The one cut-population fallback is recorded in the provenance label.
 - Missing injury/start status versus explicit healthy/out; confirmed/unconfirmed participation; no injury double-counting.
 - An uncertain positive player can fill an empty position; comparable confirmed participants are preferred according to the explicit policy, not a hidden hard tier.
 - Category heuristic is labeled as such and does not claim expected points/category-win probability.
-- Same facts plus same policy version produce the same result, independent of provider payload ordering.
+- Same facts plus the same implementation version produce the same result, independent of provider payload ordering.
 
 NFL cases: bye/no scheduled game, questionable/out changes before lock, already locked players, period-correct projections, and league scoring context.
 

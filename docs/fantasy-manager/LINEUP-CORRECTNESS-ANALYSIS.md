@@ -2,7 +2,14 @@
 
 The reported failure, the diagnosis, the gap against
 [the reference knowledge record](AUTOCOACH-KNOWLEDGE.md), and the ordered correction. Architecture is
-not in question. This document changes no production code; it is the design the correction follows.
+not in question. This document changes no production code; it is the design the correction followed.
+
+**Status: shipped, 2026-10-27.** Sections 1–8 record the diagnosis and the evidence that drove it.
+The current implementation carries the participation fact, the `not-scheduled` rung, the platinum cut,
+the three-state starting-lineup fact, reserve transits in both directions, and the games-limited
+ownership composite. The ordered correction in §10 is retained as the delivery record; its
+intermediate reserve rule (a reserve slot accepting only its current occupant) is no longer current.
+The test-status paragraph in §9 describes the state at diagnosis, not the suite today.
 
 ## 1. The report, restated as testable claims
 
@@ -78,7 +85,7 @@ wrong.
 stored provider credential with the application's own credential service, then, for each of the four
 hockey teams: read the league settings, read the roster for the current date, made **one** additional
 read-only request (`roster/players;out=opponent`) for the game fact, called the committed
-`provider.planLineup` for the committed scores, and called the committed `planAssignments` to obtain the
+`provider.scoreRoster` for the committed scores, and called the committed `planAssignments` to obtain the
 plan the worker would write. No write was issued. Retained evidence holds slot labels, counts, injury
 codes and scores only: no player names, no team or league identifiers, no session material.
 
@@ -333,8 +340,8 @@ only that list.
 the availability ladder decides contested slots, then value. Being on a reserve list is not a reason to
 be skipped, and never adds or removes value.
 **RR4.** When a reserve player takes a starting slot, the displaced player must go to a slot that
-accepts them. If that destination is a reserve list, the move requires the ability to write reserve
-assignments (see the writability constraint below).
+accepts them. A reserve destination is written like any other changed assignment; the provider accepted
+both directions on 2026-10-27 (see the writability record below).
 **RR5.** A player currently in a reserve slot who is no longer eligible for it must be moved out: the
 solver's reserve edge is derived from current published eligibility, so it disappears.
 **RR6.** Which of several eligible players sits in reserve is **not** a lineup decision: it changes no
@@ -539,16 +546,17 @@ where the test belongs.
     never from percent started; its games limit is expressed as starting-slot capacity, and no
     availability or value factor is multiplied by a pace threshold.
 
-Tests 1, 2, 18, and 19 fail today by construction. Tests 4–8 and 12–17 fail today because the
-participation fact never arrives; test 20 fails today because the diamond guard always falls through to
-the overall value. Tests 3, 9, 10, and 11 pass today and must keep passing. Test 21 is a design
-condition for a sport we do not yet support.
+At diagnosis, tests 1, 2, 18, and 19 failed by construction; tests 4–8 and 12–17 failed because the
+participation fact never arrived; test 20 failed because the diamond guard always fell through to the
+overall value. Tests 3, 9, 10, and 11 passed and had to keep passing. All of them now pass. Test 21 is
+implemented as the games-limited ownership composite; no linked league declares a limit yet, so it is
+covered synthetically rather than by a live plan.
 
 ## 10. The ordered correction
 
-Seven steps. Each is independently testable, and steps 1–2 are the whole fix for the reported bug. No
-step changes the solver, the architecture, or the provider boundary. **Re-enable the four hockey teams'
-automation after step 2 is verified against a live read, not before.**
+Seven steps, retained as the delivery record. Each was independently testable, and steps 1–2 were the
+whole fix for the reported bug. No step changed the solver, the architecture, or the provider boundary.
+All seven are complete; the hockey teams were re-enabled only after the live read confirmed the fact.
 
 ### Step 1 — read the fact
 
@@ -567,7 +575,7 @@ automation after step 2 is verified against a live read, not before.**
   `ProviderAvailabilityTier` and the declared ladder; extend `AvailabilityAssessment` to be produced
   for it (`fact: "no-game"` already exists); map `scheduled === false` to that rung in `YahooLineup`
   rather than through `nonGamePeriods`, which stays for football byes.
-- **Tests:** 1, 2, 3, 4, 5, 6, 7, 8, 16. An integration test through `planYahooLineup` +
+- **Tests:** 1, 2, 3, 4, 5, 6, 7, 8, 16. An integration test through `scoreYahooRoster` +
   `planAssignments` on a synthetic hockey roster with two eligible players, one with a game and a lower
   score, is the regression.
 - **Behaviour:** the reported failure stops. A no-game player can still fill a required slot nobody else
@@ -599,9 +607,9 @@ automation after step 2 is verified against a live read, not before.**
 ### Step 5 — make the plan writable, then unblock the fourth team
 
 - **Layer:** planner (`LineupPlanning.rosterPlayer` reserve eligibility; the `assignments` refusal).
-- **Change:** reserve occupancy is "may remain where they are" until reserve writes are verified; the
-  reserve-transit refusal is removed because the plan can no longer propose one. Keep the refusal
-  mapped in the provider's code table until it is unreachable, then delete it deliberately.
+- **Change (historical intermediate step):** reserve occupancy was "may remain where they are" until
+  reserve writes were verified; the reserve-transit refusal was removed because the plan could no
+  longer propose one. Step 6 restored the full two-way rule.
 - **Tests:** 13 (partially: leaving reserve works), 14, 12.
 - **Behaviour:** the team currently refused on `assignment:reserve-slot` produces a plan again. The
   full two-way shuffle waits for step 6.
@@ -654,8 +662,8 @@ automation after step 2 is verified against a live read, not before.**
   accepts.
 - The provider boundary: the new field is neutral, the adapter still owns every provider-specific
   interpretation, and no Yahoo vocabulary enters generic code.
-- The refusal model of ADR 0008, except that `assignment:reserve-slot` becomes unreachable by
-  construction.
+- The refusal model of ADR 0008. `assignment:reserve-slot` was deleted once reserve transits were
+  verified; reserve moves are ordinary assignments now.
 - [ADR 0006](adr/0006-availability-tiers.md)'s decision, except its _Deferred_ note about real-world
   starting status, whose premise ("the provider publishes no depth-chart or snap-share signal today")
   was contradicted by `starting_status` on goalies. That note is corrected, the fact now crosses the

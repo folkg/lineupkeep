@@ -1,6 +1,10 @@
 # Phase 2 provider score ownership (2026-10-27)
 
-A provider now exposes the result of its own scoring: one final signed score per player and the
+This is the delivery record for the score-ownership cut. The current capability name and outcome shape
+are recorded below; later amendments added the games-played facts and the six-rung availability ladder,
+and reserve transits are now written rather than refused.
+
+A provider exposes the result of its own scoring: one final signed score per player and the
 availability tier the solver needs, or a refusal. How that score is constructed — which value source
 wins, which periods it reads, how a missing player is treated — stays inside the provider. The
 decision and its rejected alternatives are
@@ -17,22 +21,33 @@ Before, planning returned a plan, the scoring basis that produced it, and per-pl
 generic layer read back:
 
 ```ts
-type ProviderLineupOutcome =
-  | { kind: "planned"; plan; provenance; basis?; players? }
+type ProviderScoreOutcome =
+  | { kind: "scored"; provenance; players; gamesPlayed }
   | { kind: "refused"; refusal; provenance; detail };
 ```
 
 Now it returns a result:
 
 ```ts
-type ProviderLineupOutcome =
-  | { kind: "scored"; provenance: string; players: ReadonlyArray<ProviderPlayerValue> }
+type ProviderScoreOutcome =
+  | {
+      kind: "scored";
+      provenance: string;
+      players: ReadonlyArray<ProviderPlayerScore>;
+      gamesPlayed: ReadonlyArray<ProviderGamesPlayed>;
+    }
   | { kind: "refused"; refusal: "structural" | "transient"; provenance: string; detail: string };
 
-type ProviderPlayerValue = {
+type ProviderPlayerScore = {
   readonly providerPlayerKey: string;
   readonly score: number | null;
-  readonly availability: "will-play" | "might-play" | "will-not-play";
+  readonly availability:
+    | "confirmed-start"
+    | "will-play"
+    | "might-play"
+    | "unlikely-to-play"
+    | "will-not-play"
+    | "not-scheduled";
 };
 ```
 
@@ -62,8 +77,9 @@ solver needs and the shape every provider's roster read must produce.
 eligibility, and availability tiers, with no provider knowledge and no provider imports.
 
 The `planAssignments` step that remains generic takes the provider's slots and final scores and
-translates the solver's plan into changed assignments; it refuses a plan that moves a player through a
-reserve slot, because that operation does not write reserve moves.
+translates the solver's plan into changed assignments. Reserve eligibility is the provider's published
+eligibility, and a reserve transit is written like any other changed assignment; the provider accepted
+both directions on 2026-10-27.
 
 Team automation stores `fantasyDayVersion` where it stored `policyVersion`. Between the ordinary
 "unfinished workbench" rules and a paid lineup policy there is no shared version concept, so the

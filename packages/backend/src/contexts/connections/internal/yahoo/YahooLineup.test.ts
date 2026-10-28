@@ -13,8 +13,8 @@ import { assessAvailability } from "#contexts/connections/internal/provider-scor
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import type {
   ProviderLeagueSettings,
-  ProviderLineupOutcome,
-  ProviderLineupRequest,
+  ProviderScoreOutcome,
+  ProviderScoreRequest,
   ProviderRoster,
   ProviderRosterPlayer,
   ProviderStartingLineup,
@@ -23,7 +23,7 @@ import type { ProviderPlayerDetail } from "#contexts/connections/Provider.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
 import {
-  planYahooLineup,
+  scoreYahooRoster,
   yahooAvailability,
   yahooCapabilities,
   yahooDefaultStartingLineupRole,
@@ -34,7 +34,6 @@ import {
   yahooStartingLineupRoleBySport,
   yahooStartingLineupRule,
   yahooStartingLineupRuleByRole,
-  yahooStatusReserveListed,
   yahooTargetPeriod,
 } from "./YahooLineup.ts";
 import type { YahooLineupReader, YahooPeriodHistory, YahooPlayerFacts } from "./YahooLineup.ts";
@@ -51,80 +50,55 @@ describe("Yahoo scoring translation", () => {
     expect(profile.categories).toHaveLength(36);
   });
 
-  it("maps every provider status code to exactly one availability tier", () => {
-    const tiers = yahooInjuryStatusCodes.map(
-      (code) =>
+  it("maps every provider status code to one availability tier", () => {
+    const tiers = Object.fromEntries(
+      yahooInjuryStatusCodes.map((code) => [
+        code,
         assessAvailability(policyPlayerWith(yahooAvailability(code)), {
           kind: "week",
           week: targetWeek,
-        }).tier,
+        }),
+      ]),
     );
 
-    expect(tiers).toHaveLength(yahooInjuryStatusCodes.length);
-    expect(new Set(yahooInjuryStatusCodes)).toEqual(
-      new Set(["healthy", "O", "IR", "IR+", "IR-LT", "NA", "SUSP", "D", "DTD", "Q", "P", "GTD"]),
-    );
+    expect(tiers).toEqual({
+      healthy: "will-play",
+      O: "will-not-play",
+      IR: "will-not-play",
+      "IR+": "will-not-play",
+      "IR-LT": "will-not-play",
+      NA: "will-not-play",
+      SUSP: "will-not-play",
+      D: "might-play",
+      DTD: "might-play",
+      Q: "might-play",
+      P: "might-play",
+      GTD: "might-play",
+    });
     expect(
       assessAvailability(policyPlayerWith(yahooAvailability(undefined)), {
         kind: "week",
         week: targetWeek,
-      }).tier,
+      }),
     ).toBe("will-play");
     expect(
       assessAvailability(policyPlayerWith(yahooAvailability("PUP-2027")), {
         kind: "week",
         week: targetWeek,
       }),
-    ).toEqual({ tier: "might-play", fact: "unrecognised-status", code: "PUP-2027" });
-  });
-
-  it("reads the status table as two facts per code", () => {
-    const table = yahooInjuryStatusCodes.map((code) => [
-      code,
-      assessAvailability(policyPlayerWith(yahooAvailability(code)), {
-        kind: "week",
-        week: targetWeek,
-      }).tier,
-      yahooStatusReserveListed(code),
-    ]);
-
-    expect(table).toEqual([
-      ["healthy", "will-play", false],
-      ["O", "will-not-play", true],
-      ["IR", "will-not-play", true],
-      ["IR+", "will-not-play", true],
-      ["IR-LT", "will-not-play", true],
-      ["NA", "will-not-play", true],
-      ["SUSP", "will-not-play", true],
-      ["D", "might-play", false],
-      ["DTD", "might-play", false],
-      ["Q", "might-play", false],
-      ["P", "might-play", false],
-      ["GTD", "might-play", false],
-    ]);
-  });
-
-  it("records which uncertain code produced the doubtful tier", () => {
-    const assessment = assessAvailability(policyPlayerWith(yahooAvailability("Q")), {
-      kind: "week",
-      week: targetWeek,
-    });
-
-    expect(assessment).toEqual({ tier: "might-play", fact: "uncertain-status", code: "Q" });
+    ).toBe("might-play");
   });
 
   it("treats a bye in the target period as an absence, not a low score", () => {
-    const onBye = yahooAvailability(undefined);
     const assessment = assessAvailability(
-      { ...policyPlayerWith(onBye), nonGamePeriods: [{ kind: "week", week: targetWeek }] },
+      {
+        ...policyPlayerWith(yahooAvailability(undefined)),
+        nonGamePeriods: [{ kind: "week", week: targetWeek }],
+      },
       { kind: "week", week: targetWeek },
     );
 
-    expect(assessment).toEqual({
-      tier: "not-scheduled",
-      fact: "no-game",
-      period: { kind: "week", week: targetWeek },
-    });
+    expect(assessment).toBe("not-scheduled");
   });
 
   it("reads the lineup period from the roster's own coverage", () => {
@@ -236,41 +210,6 @@ describe("Yahoo scoring translation", () => {
     ]);
   });
 
-  it("tiers a player whose team is not playing at the bottom rung with the no-game fact", () => {
-    const period = { kind: "date" as const, date: "2026-10-26" };
-
-    expect(
-      assessAvailability({ ...policyPlayerWith(yahooAvailability("O")), scheduled: false }, period),
-    ).toEqual({ tier: "not-scheduled", fact: "no-game", period });
-    expect(
-      assessAvailability(
-        { ...policyPlayerWith(yahooAvailability(undefined)), scheduled: false },
-        period,
-      ).tier,
-    ).toBe("not-scheduled");
-  });
-
-  it("starts the player who has a game ahead of a higher-scoring player who does not", () => {
-    const roster = centerRoster([
-      { key: "idle", slot: "C", scheduled: false },
-      { key: "playing", slot: "BN", scheduled: true },
-    ]);
-
-    const { outcome, decision } = planCenters(roster, [
-      ["idle", 47],
-      ["playing", 13],
-    ]);
-
-    expect(outcome.players).toEqual([
-      { providerPlayerKey: "idle", score: 4700, availability: "not-scheduled" },
-      { providerPlayerKey: "playing", score: 1300, availability: "will-play" },
-    ]);
-    expect(planned(decision).assignments).toEqual([
-      { providerPlayerKey: "idle", slot: "BN" },
-      { providerPlayerKey: "playing", slot: "C" },
-    ]);
-  });
-
   it("never starts a player without a game over one who has a game, whatever their scores", () => {
     const roster = centerRoster([
       { key: "idle", slot: "C", scheduled: false },
@@ -302,12 +241,12 @@ describe("Yahoo scoring translation", () => {
         { ...policyPlayerWith(yahooAvailability(undefined)), startingLineup: "confirmed-starting" },
         period,
       ),
-    ).toEqual({ tier: "confirmed-start", fact: "confirmed-start" });
+    ).toBe("confirmed-start");
     expect(
       assessAvailability(
         { ...policyPlayerWith(yahooAvailability(undefined)), startingLineup: "unconfirmed" },
         period,
-      ).tier,
+      ),
     ).toBe("will-play");
   });
 
@@ -323,7 +262,7 @@ describe("Yahoo scoring translation", () => {
         },
         period,
       ),
-    ).toEqual({ tier: "unlikely-to-play", fact: "confirmed-not-starting" });
+    ).toBe("unlikely-to-play");
     expect(
       assessAvailability(
         {
@@ -332,7 +271,7 @@ describe("Yahoo scoring translation", () => {
           startingLineupRule: "not-an-availability-fact",
         },
         period,
-      ).tier,
+      ),
     ).toBe("will-play");
   });
 
@@ -343,13 +282,13 @@ describe("Yahoo scoring translation", () => {
       assessAvailability(
         { ...policyPlayerWith(yahooAvailability("O")), startingLineup: "confirmed-starting" },
         period,
-      ).tier,
+      ),
     ).toBe("will-not-play");
     expect(
       assessAvailability(
         { ...policyPlayerWith(yahooAvailability("Q")), startingLineup: "confirmed-starting" },
         period,
-      ).tier,
+      ),
     ).toBe("might-play");
     expect(
       assessAvailability(
@@ -359,52 +298,8 @@ describe("Yahoo scoring translation", () => {
           startingLineupRule: "unlikely-to-play",
         },
         period,
-      ).tier,
+      ),
     ).toBe("will-not-play");
-  });
-
-  it("starts the confirmed starter ahead of an unconfirmed player of equal score", () => {
-    const roster = centerRoster([
-      { key: "unconfirmed", slot: "C", scheduled: true },
-      { key: "confirmed", slot: "BN", scheduled: true, startingLineup: "confirmed-starting" },
-    ]);
-
-    const { outcome, decision } = planCenters(roster, [
-      ["unconfirmed", 40],
-      ["confirmed", 40],
-    ]);
-
-    expect(outcome.players).toEqual([
-      { providerPlayerKey: "unconfirmed", score: 4000, availability: "will-play" },
-      { providerPlayerKey: "confirmed", score: 4000, availability: "confirmed-start" },
-    ]);
-    expect(planned(decision).assignments).toEqual([
-      { providerPlayerKey: "unconfirmed", slot: "BN" },
-      { providerPlayerKey: "confirmed", slot: "C" },
-    ]);
-  });
-
-  it("keeps a confirmed starter who is out below a healthy player", () => {
-    const roster = centerRoster([
-      {
-        key: "confirmed-out",
-        slot: "C",
-        scheduled: true,
-        startingLineup: "confirmed-starting",
-        injuryCode: "O",
-      },
-      { key: "healthy", slot: "BN", scheduled: true },
-    ]);
-
-    const { decision } = planCenters(roster, [
-      ["confirmed-out", 90],
-      ["healthy", 5],
-    ]);
-
-    expect(planned(decision).assignments).toEqual([
-      { providerPlayerKey: "confirmed-out", slot: "BN" },
-      { providerPlayerKey: "healthy", slot: "C" },
-    ]);
   });
 
   it("starts an unconfirmed goalie ahead of a confirmed backup whatever the scores", () => {
@@ -431,23 +326,6 @@ describe("Yahoo scoring translation", () => {
     ]);
   });
 
-  it("keeps a goalie's score when only their starting-lineup fact changes", () => {
-    const facts = (startingLineup: ProviderStartingLineup): ProviderRoster =>
-      goalieRoster([
-        { key: "goalie", slot: "G", scheduled: true, startingLineup },
-        { key: "other", slot: "G", scheduled: true },
-      ]);
-
-    const percents = [
-      ["goalie", 55],
-      ["other", 45],
-    ] as const;
-
-    expect(planGoalies(facts("confirmed-not-starting"), percents).outcome.players[0]?.score).toBe(
-      planGoalies(facts("confirmed-starting"), percents).outcome.players[0]?.score,
-    );
-  });
-
   it("fills a required goalie slot from a confirmed backup when every other goalie has no game", () => {
     const roster = goalieRoster([
       { key: "backup", slot: "BN", scheduled: true, startingLineup: "confirmed-not-starting" },
@@ -467,45 +345,6 @@ describe("Yahoo scoring translation", () => {
       { providerPlayerKey: "backup", slot: "G" },
       { providerPlayerKey: "idle", slot: "BN" },
     ]);
-  });
-
-  it("keeps an injured-out player below a confirmed backup goalie", () => {
-    const roster = goalieRoster([
-      { key: "out", slot: "G", scheduled: true, injuryCode: "O" },
-      { key: "backup", slot: "BN", scheduled: true, startingLineup: "confirmed-not-starting" },
-    ]);
-
-    const { decision } = planGoalies(
-      roster,
-      [
-        ["out", 99],
-        ["backup", 1],
-      ],
-      1,
-    );
-
-    expect(planned(decision).assignments).toEqual([
-      { providerPlayerKey: "out", slot: "BN" },
-      { providerPlayerKey: "backup", slot: "G" },
-    ]);
-  });
-
-  it("keeps a doubtful goalie above one who is confirmed not starting", () => {
-    const roster = goalieRoster([
-      { key: "doubtful", slot: "G", scheduled: true, injuryCode: "DTD" },
-      { key: "backup", slot: "BN", scheduled: true, startingLineup: "confirmed-not-starting" },
-    ]);
-
-    const { decision } = planGoalies(
-      roster,
-      [
-        ["doubtful", 1],
-        ["backup", 99],
-      ],
-      1,
-    );
-
-    expect(planned(decision).assignments).toEqual([]);
   });
 
   it("does not demote a skater who is outside their real team's starting lineup", () => {
@@ -578,34 +417,6 @@ describe("Yahoo scoring translation", () => {
     });
   });
 
-  it("does not demote a football player who is outside the starting lineup", () => {
-    const roster = recordedRoster(true);
-    const rotated = {
-      ...roster,
-      players: roster.players.map((player, index) =>
-        index === 3 ? { ...player, startingLineup: "confirmed-not-starting" as const } : player,
-      ),
-    };
-    const outcome = runPlan(
-      { ...recordedRequest(), roster: rotated },
-      {
-        rates: [],
-        history: [
-          {
-            period: { kind: "week", week: recordedWeek },
-            details: recordedRosterRows.map((row, index) => playerDetail(index, row.stats)),
-          },
-        ],
-      },
-    );
-
-    expect(outcome.kind).toBe("scored");
-    if (outcome.kind !== "scored") {
-      throw new Error("Expected scored values.");
-    }
-    expect(outcome.players[3]?.availability).toBe("will-play");
-  });
-
   it("prices a games-limited league from percent owned and ranks, not the crowd", () => {
     const league = gamesLimitedLeague();
     const roster = centerRoster([
@@ -633,7 +444,14 @@ describe("Yahoo scoring translation", () => {
       { providerPlayerKey: "owned", score: 450000, availability: "will-play" },
     ]);
     expect(
-      planned(planAssignments({ league, roster, values: outcome.players })).assignments,
+      planned(
+        planAssignments({
+          gamesPlayed: outcome.gamesPlayed,
+          league,
+          roster,
+          values: outcome.players,
+        }),
+      ).assignments,
     ).toEqual([
       { providerPlayerKey: "crowd", slot: "BN" },
       { providerPlayerKey: "owned", slot: "C" },
@@ -682,9 +500,16 @@ describe("Yahoo scoring translation", () => {
       { providerPlayerKey: "idle", score: 500000, availability: "will-play" },
       { providerPlayerKey: "playing", score: 80000, availability: "will-play" },
     ]);
-    expect(planned(planAssignments({ league, roster, values: over.players })).assignments).toEqual(
-      [],
-    );
+    expect(
+      planned(
+        planAssignments({
+          gamesPlayed: [],
+          league,
+          roster,
+          values: over.players,
+        }),
+      ).assignments,
+    ).toEqual([]);
 
     const under = runPlan(
       { ...hockeyRequest(), league, roster },
@@ -699,12 +524,19 @@ describe("Yahoo scoring translation", () => {
       "not-scheduled",
       "will-play",
     ]);
-    expect(planned(planAssignments({ league, roster, values: under.players })).assignments).toEqual(
-      [
-        { providerPlayerKey: "idle", slot: "BN" },
-        { providerPlayerKey: "playing", slot: "C" },
-      ],
-    );
+    expect(
+      planned(
+        planAssignments({
+          gamesPlayed: [],
+          league,
+          roster,
+          values: under.players,
+        }),
+      ).assignments,
+    ).toEqual([
+      { providerPlayerKey: "idle", slot: "BN" },
+      { providerPlayerKey: "playing", slot: "C" },
+    ]);
   });
 
   it("reads the allowance from an eligible position when the player's slot has none", () => {
@@ -818,7 +650,7 @@ const hockeyTarget = Schema.decodeSync(LineupTargetPeriod)({
   date: "2026-10-26",
 });
 
-function hockeyRequest(): ProviderLineupRequest {
+function hockeyRequest(): ProviderScoreRequest {
   return {
     provider: decodeProviderKey("yahoo"),
     session: Redacted.make("recorded-session"),
@@ -831,7 +663,7 @@ function hockeyRequest(): ProviderLineupRequest {
   };
 }
 
-function recordedRequest(): ProviderLineupRequest {
+function recordedRequest(): ProviderScoreRequest {
   return {
     provider: decodeProviderKey("yahoo"),
     session: Redacted.make("recorded-session"),
@@ -845,7 +677,7 @@ function recordedRequest(): ProviderLineupRequest {
 }
 
 function runPlan(
-  request: ProviderLineupRequest,
+  request: ProviderScoreRequest,
   facts: {
     readonly rates: ReadonlyArray<YahooPlayerFacts>;
     readonly history?: ReadonlyArray<YahooPeriodHistory>;
@@ -856,14 +688,14 @@ function runPlan(
       readonly projected: number;
     }>;
   },
-): ProviderLineupOutcome {
+): ProviderScoreOutcome {
   const history = facts.history ?? [];
   const reader: YahooLineupReader = {
     readPlayerFacts: () => Effect.succeed(facts.rates),
     readGamesPlayed: () => Effect.succeed(facts.gamesPlayed ?? []),
     readHistory: () => Effect.succeed(history),
   };
-  return Effect.runSync(planYahooLineup(request, reader));
+  return Effect.runSync(scoreYahooRoster(request, reader));
 }
 
 function startRate(
@@ -984,7 +816,7 @@ function planCenters(
   roster: ProviderRoster,
   percents: ReadonlyArray<readonly [string, number]>,
 ): {
-  readonly outcome: Extract<ProviderLineupOutcome, { kind: "scored" }>;
+  readonly outcome: Extract<ProviderScoreOutcome, { kind: "scored" }>;
   readonly decision: PlanAssignmentsResult;
 } {
   return planWithLeague(centerLeague(), roster, percents);
@@ -995,7 +827,7 @@ function planGoalies(
   percents: ReadonlyArray<readonly [string, number]>,
   goalieSlots = 2,
 ): {
-  readonly outcome: Extract<ProviderLineupOutcome, { kind: "scored" }>;
+  readonly outcome: Extract<ProviderScoreOutcome, { kind: "scored" }>;
   readonly decision: PlanAssignmentsResult;
 } {
   return planWithLeague(goalieLeague(goalieSlots), roster, percents);
@@ -1006,7 +838,7 @@ function planWithLeague(
   roster: ProviderRoster,
   percents: ReadonlyArray<readonly [string, number]>,
 ): {
-  readonly outcome: Extract<ProviderLineupOutcome, { kind: "scored" }>;
+  readonly outcome: Extract<ProviderScoreOutcome, { kind: "scored" }>;
   readonly decision: PlanAssignmentsResult;
 } {
   const outcome = runPlan(
@@ -1016,7 +848,15 @@ function planWithLeague(
   if (outcome.kind !== "scored") {
     throw new Error("Expected scored values.");
   }
-  return { outcome, decision: planAssignments({ league, roster, values: outcome.players }) };
+  return {
+    outcome,
+    decision: planAssignments({
+      gamesPlayed: outcome.gamesPlayed,
+      league,
+      roster,
+      values: outcome.players,
+    }),
+  };
 }
 
 function planned(
@@ -1028,7 +868,7 @@ function planned(
   return result;
 }
 
-function weekTarget(week: number): ProviderLineupRequest["target"] {
+function weekTarget(week: number): ProviderScoreRequest["target"] {
   return Schema.decodeSync(LineupTargetPeriod)({ coverage: "week", week });
 }
 
