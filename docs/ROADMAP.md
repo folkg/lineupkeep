@@ -15,7 +15,7 @@ verified, because "done" has meant different things at different times in this p
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                              |
 | Lineup algorithm     | Custom solver live for all five owner teams, seven consecutive verified ticks               |
 | Provider boundary    | Providers injected through a keyed registry; no adapter import outside the composition root |
-| MCP surface          | 17 tools, seven scopes, per-tool enforcement; round-2 feedback fixes in progress            |
+| MCP surface          | 17 tools, seven scopes, per-tool enforcement; round-2 and round-3 fixes deployed            |
 
 ## 1. MCP client feedback — round 2
 
@@ -87,7 +87,97 @@ tested, so a client cannot explain the ordering it was given.
 - [x] Surface the rank value that the sort orders by
 - [x] Confirm whether `percentOwnedChange` is genuinely absent or dropped in decoding
 
-## 2. Operational gaps
+## 2. MCP client feedback — round 3
+
+Source: Muse round-3 report, filed through `submit_feedback` on Oct 28 2026. These are the first
+reports filed through the product's own feedback channel. Ordered by severity.
+
+### R3-3 — `get_team_summary` was unreachable for every hockey team
+
+The summary asked for narrowing on `team_summary.roster` but exposed no `groups` or selection input,
+and the returned record token was not a cursor. A 22-player hockey roster never fit, so the one-call
+snapshot could not be used for four of the owner's five teams.
+
+- [x] Add a `groups` input (`league`, `standings`, `categories`, `matchup`, `roster`) with league,
+      standings, matchup, and roster as the default, and make category arrays opt-in
+- [x] Page the roster with a cursor the tool issues and accepts; keep every fixed section on each page
+- [x] Name the selectable groups and the remedy in every summary narrowing result, and omit the
+      misleading record token from a paged summary
+- [x] Test: a multi-section summary pages a 40-player roster to completion, accepts each cursor, and
+      fits every page inside the hard budget; a one-record overflow names the groups
+- [x] Verify live: the 21-player hockey roster returned league, standing, record, 10-team standings,
+      matchup, and schedule, then paged 10 + 11 through the returned cursor
+
+### R3-7 — `submit_feedback` rejected a null optional context field its schema allowed
+
+Three of five calls failed with an opaque `400 Invalid tool arguments`; the published JSON schema
+marked the optional context fields nullable, while the validator rejected `null`.
+
+- [x] Accept `null` for optional feedback context fields and a null context object, normalizing them
+      away before storage; keep the response context non-null
+- [x] Return the offending field path from every invalid-arguments 400, in the message and in
+      `error.data.field`
+- [x] Test: the published schema and validator agree for `context.tool: null`; an invalid limit names
+      `["limit"]`
+- [x] Verify live: `submit_feedback` accepted `{tool: null, ...}` and stored only `client` and
+      `surface`; an invalid summary limit returned 400 naming `["limit"]`
+
+### R3-8 — `get_players` silently ignored `period`
+
+`actual_stats` returned identical season totals for a supplied week, so a client could not tell
+whether the argument was honoured.
+
+- [x] Declare which sports publish weekly player series on the provider capability, and check it in
+      the generic query layer rather than by provider name
+- [x] Honour `period` for a completed week where the sport declares a weekly series
+- [x] Refuse a period the provider cannot honour with the reason and the remedy; never fall back to
+      season totals silently
+- [x] Test: hockey refuses a period, football refuses the current week, and the declared capability
+      gates the decision
+- [x] Verify live: hockey week 4 was refused with the remedy; football week 7 returned basis `week`
+      with week-7 values
+- [ ] **Date-scoped recent-window splits.** Yahoo publishes date-scoped player statistics for
+      hockey (`stats.type=date`, verified 2026-10-28) but no weekly series. Last-14/30-day waiver
+      splits need a neutral date basis, date-window reads, and aggregation that does not sum rate
+      statistics. Deferred until a date-window contract is designed; verify against the live
+      hockey read and a captured fixture before exposing it.
+
+### R3-5 — transaction rows omitted inline identity
+
+`get_transactions` returned only references plus direction, so naming who moved cost a
+`get_players` join per transaction.
+
+- [x] Add the provider's inline identity to transaction player rows, consistent with
+      `search_players`, while keeping the private reference and dictionaries canonical
+- [x] Carry the professional team through the adapter
+- [x] Test: a transaction row carries name, display position, and professional team with its
+      reference
+- [x] Verify live: the hockey transaction window returned name, display position, and `proTeam`
+      inline
+
+### R3-4 — do deploys invalidate grants?
+
+The reporter saw reauthorization after three deploys and suggested a key grace window or a
+changelog warning. Production evidence showed one signing key and long-lived refresh tokens.
+
+- [x] Record the pre-deploy access token and refresh token, deploy, and test both
+- [x] Confirm the `jwks` table and grant records were not rotated by the deploy
+- [x] Document the result plainly in the MCP contract and changelog: deploys do not require
+      reconnection; access tokens expire in five minutes by design; clients must persist each
+      rotated refresh token, and replay after the 30-second window revokes the grant
+- [x] Evidence: the round-3 deploy (web `00027-kwq`, worker `00028-29h`) accepted a pre-deploy
+      access token and a pre-deploy refresh token; the single 2026-10-25 EdDSA key was unchanged
+
+### R3-6 — the stray connection was not a lifecycle leak
+
+A second Yahoo connection appeared on Oct 27 and disconnected two minutes later. It has no
+`provider_credentials` row, so the disconnect path cleaned up the stored session.
+
+- [x] Strengthen the disconnect test: prove the credential exists before disconnect, is deleted
+      after, and the disconnected connection row remains without a credential generation
+- [x] Record the answer in the feedback entry's resolution note
+
+## 3. Operational gaps
 
 - [ ] **Database restore drill.** Back up, restore into a scratch database, prove the application reads
       it. Never rehearsed; the largest unverified operational claim.
@@ -103,7 +193,7 @@ tested, so a client cannot explain the ordering it was given.
 - [x] **Deploy the ownership-delta clamp.** Deployed with the round-2 MCP rollout (web `00026-nss`,
       worker `00027-knr`); affects only leagues declaring a games limit, of which the owner has none.
 
-## 3. Lineup algorithm follow-ups
+## 4. Lineup algorithm follow-ups
 
 - [ ] **Positional scarcity.** A league-wide measure of how thin each position is, computed periodically
       rather than per run. Provider-neutral and portable beyond Yahoo. The natural foundation for add/drop
@@ -118,7 +208,7 @@ tested, so a client cannot explain the ordering it was given.
       Stat categories, games-played and innings-pitched limits, and provider request shapes for those sports
       are not built.
 
-## 4. Product work needing a decision
+## 5. Product work needing a decision
 
 - [ ] **Transactions.** Review links exist; execution and add/drop recommendations do not, by design.
       Scarcity (section 3) is the prerequisite.
@@ -128,7 +218,7 @@ tested, so a client cannot explain the ordering it was given.
 - [ ] **Domain and production email.** The Resend test sender delivers only to the owner address. A
       domain makes this a non-issue and is otherwise cheap.
 
-## 5. Known non-goals
+## 6. Known non-goals
 
 Recorded so they are not rediscovered as gaps: no server-side LLM in the solver, no scoring controls, no
 premium provider actions, no arbitrary URL or SQL escape hatches, no multi-period planning, no

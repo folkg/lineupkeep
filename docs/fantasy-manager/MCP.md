@@ -71,7 +71,7 @@ Initial service policy: aim for about 12 KiB and enforce a 16 KiB model-facing a
 
 - Bound both row counts and encoded UTF-8 bytes, including metadata and continuation information.
 - Return complete records. Do not truncate strings midway, silently drop requested fields, or mark omitted values zero.
-- If a requested record cannot fit, return an actionable narrowing-required result listing the requested group/record causing the issue.
+- If a requested record cannot fit, return an actionable narrowing-required result naming the groups or filters that can narrow it. `get_team_summary` lists its selectable groups and pages the roster with a cursor it issues and accepts; a paged resource never presents a record token as a cursor.
 - Continuations bind the owner, query, selection, period, stable ordering, and expiry; they are not arbitrary database offsets or raw provider URLs.
 - Distinguish an internally paged upstream collection from a stable application snapshot. If the provider cannot provide snapshot consistency, disclose that concurrent upstream changes may affect traversal.
 - No silent subset success for exact requested teams/player keys. Return explicit per-resource failures/omissions with reasons and meaningful completion metadata.
@@ -121,16 +121,28 @@ order the rows cannot explain.
 filter: `since`/`until` filter the bounded window the provider returns, `window` reports how many
 events were fetched, the oldest and newest timestamps, and whether the window was exhausted, and a
 range older than the window is reported as `transaction_window_truncated` with degraded coverage
-instead of a silently incomplete success.
+instead of a silently incomplete success. Every transaction player row carries the provider's
+inline identity where published — name, primary and display position, eligible positions, and
+professional team — beside the private player reference and direction, so identifying who moved
+needs no second `get_players` call. The references and dictionaries remain the canonical form for
+detail.
 
-`get_team_summary` composes the league overview, the linked team's standing, record, category
-totals, league standings, current matchup, this week's and next week's remaining player-games, and
-a compact roster. Each section states its own availability, so a failed standings read leaves the
-roster and matchup intact. The schedule section names its unit (`fantasy_team_player_games`),
-because that is the only granularity Yahoo publishes; football declares the section unsupported
-with the bye-week alternative, and probable starters are always declared unsupported because no
-read shape exposes them. The roster section pages inside the same 12 KiB target and 16 KiB ceiling
-as every other read.
+`get_team_summary` composes the league overview, the linked team's standing and record, league
+standings, the current matchup, this week's and next week's remaining player-games, and a compact
+roster. `groups` selects `league`, `standings`, `categories`, `matchup`, and `roster`; the default
+is league, standings, matchup, and roster, and `categories` adds season category totals and points
+plus the matchup's per-category values. Each section states its own availability, so a failed
+standings read leaves the roster and matchup intact. The schedule section names its unit
+(`fantasy_team_player_games`), because that is the only granularity Yahoo publishes; football
+declares the section unsupported with the bye-week alternative, and probable starters are always
+declared unsupported because no read shape exposes them.
+
+The roster is the summary's only paged section. Each call returns every requested fixed section, a
+page of the roster, and `page.next`; the tool accepts that cursor on the next call. The default
+snapshot fits a 22-player hockey roster in two pages (10 + 11 verified live on 2026-10-28) without
+dropping league, standing, record, standings, or matchup. When even one roster record cannot fit,
+the narrowing result lists the selectable groups and the remedy; it never emits a record token as
+a substitute cursor.
 
 ## Coverage correctness
 
@@ -140,7 +152,7 @@ Do not advertise multi-week aggregation, advanced-stat availability, diamond dat
 
 Separate roster membership reads from bounded player hydration. Live verification found no projected-statistics series in the provider's read surface: completed weeks report actual values, while the current and future weeks report zero rather than projections. Projections therefore stay typed unsupported unless a future verified read proves otherwise. See [live read endpoints](RESEARCH.md#live-yahoo-read-endpoints-2026-10-25).
 
-Actual statistics state their basis: `week` with the covered period when the provider publishes weekly series, otherwise `season`. A client must not compare a season total against a weekly value, and the read reports the basis it used rather than relabelling one as the other. Player identity resolves from the roster, then selected-player hydration, then transaction history, so a player who is no longer rostered anywhere is still named by the drop side of an add/drop; the transaction payload carries the name, display position, and editorial team, but no primary position, so identity there may omit it.
+Actual statistics state their basis: `week` with the covered period when the provider declares a weekly player series for the sport, otherwise `season`. A client must not compare a season total against a weekly value, and the read reports the basis it used rather than relabelling one as the other. A supplied `period` is honoured only for a completed week in a sport with a declared weekly series; a provider without one refuses the argument with the reason and the remedy instead of returning season totals. Yahoo declares football weekly series; weekly hockey series are absent, although Yahoo publishes date-scoped hockey statistics (verified 2026-10-28). Player identity resolves from the roster, then selected-player hydration, then transaction history, so a player who is no longer rostered anywhere is still named by the drop side of an add/drop; a transaction player row carries its inline identity beside the reference, and its primary position is omitted where the provider does not publish one.
 
 A coverage entry has one of three states. `available` means the resource was read and verified. `unsupported` means the provider or league does not establish it, and the entry, or a typed group result beside it, carries the reason. `degraded` means a dependency could not be verified while the read still returned what does not depend on it: the entry names the failed field, the affected resource lists a bounded failure, and roster and matchup reads are not erased because league settings failed. A calendar that needs the scoring-week window reports the degraded dependency instead of inventing periods. A group that declares itself unsupported never also reports a period failure; the two statements would contradict each other.
 
@@ -253,6 +265,20 @@ grant for that client and person. A client that keeps reusing an already-rotated
 loses the connection at its next renewal and must authorize again. The full request and response
 shape, including the public-client refresh with no secret, is in the
 [client setup](../../README.md#token-lifetime-and-renewal).
+
+A deployment or restart does not invalidate an access token, rotate the signing key, or revoke a
+grant. Signing keys and grants are persisted in the service database, and access tokens are
+verified against the persisted key. The round-3 deploy on 2026-10-28 accepted a pre-deploy access
+token and then a pre-deploy refresh token, which rotated normally; the `jwks` table still held its
+single 2026-10-25 EdDSA key. A client that appears to need reauthorization after a deploy is
+discarding or replaying its rotated refresh token, not observing server-side invalidation. Persist
+the rotated token before using the new access token. Access tokens expiring after five minutes is
+by design.
+
+Invalid `tools/call` arguments return HTTP 400 with JSON-RPC `-32602` and name the offending field
+path, for example `Invalid tool arguments: Expected a value greater than or equal to 1 at
+["limit"]`; `error.data.field` repeats the path. Optional feedback context fields that the published JSON
+schema marks nullable accept `null`, which is normalized to absent before the service sees it.
 
 Complete first-request examples, header and `_meta` requirements, and the registration fallback
 are in the [client setup](../../README.md#connecting-an-mcp-client).

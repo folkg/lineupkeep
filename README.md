@@ -150,7 +150,7 @@ curl -sS -X POST https://<host>/api/auth/oauth2/token \
   --data-urlencode 'resource=https://<host>/mcp'
 ```
 
-The response carries a new `access_token`, `expires_in`, `scope`, and `refresh_token`. Access tokens are signed by a key persisted in the service database, so a deployment or restart does not invalidate a live token or grant.
+The response carries a new `access_token`, `expires_in`, `scope`, and `refresh_token`. Access tokens are signed by a key persisted in the service database, so a deployment or restart does not invalidate a live token or grant. Reauthorization after a deploy therefore indicates that the client did not persist or replayed its rotated refresh token; it is not server-side invalidation. The 2026-10-28 deploy experiment is recorded in [the MCP contract](docs/fantasy-manager/MCP.md#discovery-documents).
 
 ### After connecting
 
