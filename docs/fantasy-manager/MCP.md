@@ -87,10 +87,16 @@ Upstream response caps are separate from agent-output caps. The adapter may fetc
 provider's scoring type and modifiers, and the record the provider actually publishes. A
 rotisserie league publishes rank, season points, points back, and per-category rotisserie points
 but no win-loss record; the row simply omits `record`, and `record` in `get_team_summary` says so
-with a reason. Season category totals appear in `categories` only where the provider publishes
-them, and the section-level `categoryTotals`/`categoryPoints` coverage states availability so an
-empty array is never read as zero. When standings are requested, that response pages teams;
-otherwise it pages scoring categories.
+with a reason. Every category entry is `{ stat, status: "published", value }` or
+`{ stat, status: "not_published", detail }`: a category the provider tracks but publishes no value
+for is stated, never returned as a silent null and never flattened to zero. A provider stat id
+with no league scoring definition cannot be labelled, so it is omitted from both category arrays
+and counted in the section-level `omittedCategories` declaration. The
+`categoryTotals`/`categoryPoints` coverage states whether any value was published, so an empty
+array is never read as zero. When standings are requested, that response pages teams; otherwise it
+pages scoring categories. `get_matchups` and the summary's matchup section use the same
+`{ stat, status, value }` category entry, so a scoring-week category with no published value is
+stated the same way.
 
 `get_matchups` carries per-category values and the category winner (or a tie) for category
 leagues, plus `remainingGames` for the scoring week where the provider publishes it. Its `schedule`

@@ -2261,68 +2261,183 @@ export const yahooNhlCategoryStandings = standingsPayload(
   ],
 );
 
-export const yahooNhlRotoStandings = standingsPayload("466.l.4003", "Synthetic NHL Roto", [
-  standingsTeam("466.l.4003.t.1", "Synthetic Roto Team", [
+const nhlRotoCategoryIds = [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26] as const;
+const nhlRotoUnscoredIds = [29, 30] as const;
+
+type RotoTeamFixture = {
+  readonly key: string;
+  readonly name: string;
+  readonly rank: number;
+  readonly pointsBack: string;
+  readonly pointsFor: string;
+  readonly points: Readonly<Record<number, string>>;
+  readonly totals: Readonly<Record<number, string>>;
+};
+
+function rotoStandingsTeam(team: RotoTeamFixture): unknown[] {
+  const entries = (values: Readonly<Record<number, string>>): Record<string, unknown> => {
+    const stats: Record<string, unknown> = {};
+    [...nhlRotoCategoryIds, ...nhlRotoUnscoredIds].forEach((statId, index) => {
+      stats[String(index)] = {
+        stat: { stat_id: String(statId), value: values[statId] ?? "" },
+      };
+    });
+    stats["count"] = nhlRotoCategoryIds.length + nhlRotoUnscoredIds.length;
+    return stats;
+  };
+  return standingsTeam(team.key, team.name, [
     {
       team_points: {
         coverage_type: "season",
         season: "2026",
-        total: "86.5",
-        stats: {
-          "0": { stat: { stat_id: "1", value: "12" } },
-          "1": { stat: { stat_id: "2", value: "" } },
-          count: 2,
-        },
+        total: String(
+          nhlRotoCategoryIds.reduce((sum, statId) => sum + (Number(team.points[statId]) || 0), 0),
+        ),
+        stats: entries(team.points),
       },
     },
     {
       team_standings: {
-        rank: "1",
-        points_back: "0",
+        rank: String(team.rank),
+        points_back: team.pointsBack,
         points_change: "1.5",
-        points_for: "86.5",
+        points_for: team.pointsFor,
       },
     },
     {
       team_stats: {
         coverage_type: "season",
         season: "2026",
-        stats: {
-          "0": { stat: { stat_id: "1", value: "37" } },
-          "1": { stat: { stat_id: "2", value: "54" } },
-          count: 2,
-        },
+        stats: entries(team.totals),
       },
     },
-  ]),
-  standingsTeam("466.l.4003.t.2", "Synthetic Roto Rival", [
-    {
-      team_points: {
-        coverage_type: "season",
-        season: "2026",
-        total: "83",
-        stats: {
-          "0": { stat: { stat_id: "1", value: "9" } },
-          "1": { stat: { stat_id: "2", value: "11" } },
-          count: 2,
-        },
-      },
+  ]);
+}
+
+export const yahooNhlRotoStandings = standingsPayload("466.l.4003", "Synthetic NHL Roto", [
+  rotoStandingsTeam({
+    key: "466.l.4003.t.1",
+    name: "Synthetic Roto Team",
+    rank: 1,
+    pointsBack: "0",
+    pointsFor: "86.5",
+    points: {
+      1: "12",
+      2: "8.5",
+      3: "10",
+      8: "11",
+      14: "9",
+      31: "13",
+      32: "6.5",
+      19: "4",
+      22: "",
+      23: "7",
+      24: "",
+      25: "",
+      26: "11",
+      29: "162",
+      30: "15",
     },
-    {
-      team_standings: { rank: "2", points_back: "3.5", points_change: "-1", points_for: "83" },
+    totals: {
+      1: "37",
+      2: "54",
+      3: "91",
+      8: "22",
+      14: "120",
+      31: "88",
+      32: "64",
+      19: "5",
+      22: "51",
+      23: "2.63",
+      24: "437",
+      25: "386",
+      26: "0.883",
+      29: "162",
+      30: "15",
     },
-    {
-      team_stats: {
-        coverage_type: "season",
-        season: "2026",
-        stats: {
-          "0": { stat: { stat_id: "1", value: "29" } },
-          "1": { stat: { stat_id: "2", value: "47" } },
-          count: 2,
-        },
-      },
+  }),
+  rotoStandingsTeam({
+    key: "466.l.4003.t.2",
+    name: "Synthetic Roto Rival",
+    rank: 2,
+    pointsBack: "3.5",
+    pointsFor: "83",
+    points: {
+      1: "9",
+      2: "11",
+      3: "8",
+      8: "7",
+      14: "12",
+      31: "10",
+      32: "9",
+      19: "6",
+      22: "",
+      23: "5",
+      24: "",
+      25: "",
+      26: "9",
+      29: "141",
+      30: "22",
     },
-  ]),
+    totals: {
+      1: "29",
+      2: "61",
+      3: "90",
+      8: "18",
+      14: "131",
+      31: "77",
+      32: "70",
+      19: "6",
+      22: "63",
+      23: "3.11",
+      24: "498",
+      25: "435",
+      26: "0.874",
+      29: "141",
+      30: "22",
+    },
+  }),
+  rotoStandingsTeam({
+    key: "466.l.4003.t.3",
+    name: "Synthetic Roto Third",
+    rank: 3,
+    pointsBack: "11",
+    pointsFor: "75.5",
+    points: {
+      1: "6",
+      2: "4",
+      3: "5",
+      8: "3",
+      14: "7",
+      31: "8",
+      32: "4",
+      19: "2",
+      22: "",
+      23: "3",
+      24: "",
+      25: "",
+      26: "4",
+      29: "118",
+      30: "9",
+    },
+    totals: {
+      1: "21",
+      2: "40",
+      3: "61",
+      8: "11",
+      14: "96",
+      31: "59",
+      32: "44",
+      19: "2",
+      22: "70",
+      23: "3.92",
+      24: "705",
+      25: "635",
+      26: "0.901",
+      29: "118",
+      30: "9",
+    },
+  }),
 ]);
 
 function nhlMatchupTeam(

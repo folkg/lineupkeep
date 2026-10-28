@@ -37,6 +37,7 @@ import type {
   RosterData,
   RosterPlayer as RosterPlayerView,
   RosterDetail,
+  CategoryValue,
   SearchPlayersData,
   SearchPlayersInput,
   TransactionsData,
@@ -439,10 +440,12 @@ export const FantasyQueriesLive = Layer.effect(
             }),
           )
         : undefined;
-      const standingsRows =
+      const scoringStatIds = new Set(league.statCategories.map((category) => category.statId));
+      const standingsTable =
         standingsOutcome?._tag === "ok"
-          ? yield* standingRows(context, tokens, standingsOutcome.value)
-          : [];
+          ? yield* standingRows(context, tokens, standingsOutcome.value, scoringStatIds)
+          : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
+      const standingsRows = standingsTable.rows;
       const standingsFormat = league.format;
       const pagedStandings = groups.includes("standings");
       const fingerprintValue = yield* queryFingerprint(
@@ -492,7 +495,12 @@ export const FantasyQueriesLive = Layer.effect(
           build: (pageRows, page) => ({
             ...base,
             scoring,
-            standings: standingsData(standingsOutcome, [...pageRows], standingsFormat),
+            standings: standingsData(
+              standingsOutcome,
+              [...pageRows],
+              standingsTable.omittedCategoryCount,
+              standingsFormat,
+            ),
             page,
           }),
           makeNext: (nextOffset) =>
@@ -511,7 +519,14 @@ export const FantasyQueriesLive = Layer.effect(
           ...base,
           ...(standingsOutcome === undefined
             ? {}
-            : { standings: standingsData(standingsOutcome, standingsRows, standingsFormat) }),
+            : {
+                standings: standingsData(
+                  standingsOutcome,
+                  standingsRows,
+                  standingsTable.omittedCategoryCount,
+                  standingsFormat,
+                ),
+              }),
           scoring: [...pageRows],
           page,
         }),
@@ -1197,11 +1212,12 @@ export const FantasyQueriesLive = Layer.effect(
                 ...(matchup.home.categoryTotals.length === 0
                   ? {}
                   : {
-                      categories: yield* statValueRows(
+                      categories: yield* categoryValueRows(
                         context,
                         tokens,
                         statRefs,
                         matchup.home.categoryTotals,
+                        matchupValueMissing,
                       ),
                     }),
               },
@@ -1217,11 +1233,12 @@ export const FantasyQueriesLive = Layer.effect(
                 ...(matchup.away.categoryTotals.length === 0
                   ? {}
                   : {
-                      categories: yield* statValueRows(
+                      categories: yield* categoryValueRows(
                         context,
                         tokens,
                         statRefs,
                         matchup.away.categoryTotals,
+                        matchupValueMissing,
                       ),
                     }),
               },
@@ -1439,10 +1456,15 @@ export const FantasyQueriesLive = Layer.effect(
           providerLeagueKey: context.owned.team.providerLeagueKey,
         }),
       );
-      const rows =
+      const scoringStatIds =
+        league === undefined
+          ? undefined
+          : new Set(league.statCategories.map((category) => category.statId));
+      const standingTable =
         standingsOutcome._tag === "ok"
-          ? yield* standingRows(context, tokens, standingsOutcome.value)
-          : [];
+          ? yield* standingRows(context, tokens, standingsOutcome.value, scoringStatIds)
+          : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
+      const rows = standingTable.rows;
       const current = rows.find((row) => row.current);
       coverageEntries.push(
         standingsOutcome._tag === "ok"
@@ -1489,26 +1511,42 @@ export const FantasyQueriesLive = Layer.effect(
                   : "This league format publishes a rank and season points but no win–loss record.",
             }
           : { status: "available", ...current.record };
+      const unlabelledDetail =
+        "The league scoring categories could not be read, so standings categories cannot be labelled.";
       const categoryTotals: TeamSummaryData["categoryTotals"] =
-        current === undefined || current.categories.length === 0
+        current === undefined || !hasPublishedCategoryValue(current.categories)
           ? {
               status: "unsupported",
               detail:
                 current === undefined
                   ? standingsDetail
-                  : "The provider published no season category totals for this league format.",
+                  : league === undefined
+                    ? unlabelledDetail
+                    : "The provider published no season category totals for this league format.",
             }
-          : { status: "available", values: [...current.categories] };
+          : {
+              status: "available",
+              values: [...current.categories],
+              omittedCategories: omittedCategories(standingTable.omittedCategoryCount),
+            };
       const categoryPoints: TeamSummaryData["categoryPoints"] =
-        current === undefined || current.categoryPoints.length === 0
+        current === undefined || !hasPublishedCategoryValue(current.categoryPoints)
           ? {
               status: "unsupported",
               detail:
                 current === undefined
                   ? standingsDetail
-                  : "The provider publishes rotisserie category points only for rotisserie leagues.",
+                  : league === undefined
+                    ? unlabelledDetail
+                    : league.format === "rotisserie"
+                      ? rotisseriePointsMissing
+                      : "The provider publishes rotisserie category points only for rotisserie leagues.",
             }
-          : { status: "available", values: [...current.categoryPoints] };
+          : {
+              status: "available",
+              values: [...current.categoryPoints],
+              omittedCategories: omittedCategories(standingTable.omittedCategoryCount),
+            };
       const standingsSection: TeamSummaryData["standings"] =
         standingsOutcome._tag === "ok"
           ? {
@@ -1676,15 +1714,24 @@ export const FantasyQueriesLive = Layer.effect(
             : { opponentRemainingGames: opponent.remainingGames }),
           ...(own.categoryTotals.length === 0
             ? {}
-            : { categories: yield* statValueRows(context, tokens, statRefs, own.categoryTotals) }),
+            : {
+                categories: yield* categoryValueRows(
+                  context,
+                  tokens,
+                  statRefs,
+                  own.categoryTotals,
+                  matchupValueMissing,
+                ),
+              }),
           ...(opponent.categoryTotals.length === 0
             ? {}
             : {
-                opponentCategories: yield* statValueRows(
+                opponentCategories: yield* categoryValueRows(
                   context,
                   tokens,
                   statRefs,
                   opponent.categoryTotals,
+                  matchupValueMissing,
                 ),
               }),
           ...(currentMatchup.status === undefined ? {} : { statusLabel: currentMatchup.status }),
@@ -1844,17 +1891,27 @@ function statRefFor(
   });
 }
 
-function statValueRows(
+const seasonTotalMissing = "The provider published no season total for this category.";
+const rotisseriePointsMissing = "The provider published no rotisserie points for this category.";
+const matchupValueMissing =
+  "The provider published no value for this category in the scoring week.";
+
+function categoryValueRows(
   context: TeamContext,
   tokens: QueryTokens["Service"],
   cache: Map<number, StatRef>,
   stats: ReadonlyArray<ProviderStatValue>,
-): Effect.Effect<ReadonlyArray<{ readonly stat: StatRef; readonly value: number | null }>> {
+  missingDetail: string,
+): Effect.Effect<ReadonlyArray<CategoryValue>> {
   return Effect.forEach(
     stats,
     (entry) =>
       statRefFor(context, tokens, cache, entry.statId).pipe(
-        Effect.map((stat) => ({ stat, value: entry.value })),
+        Effect.map((stat): CategoryValue =>
+          entry.value === null
+            ? { stat, status: "not_published", detail: missingDetail }
+            : { stat, status: "published", value: entry.value },
+        ),
       ),
     { concurrency: 1 },
   );
@@ -1862,17 +1919,32 @@ function statValueRows(
 
 function categoryAvailability(
   rows: ReadonlyArray<StandingRow>,
-  select: (row: StandingRow) => ReadonlyArray<unknown>,
+  select: (row: StandingRow) => ReadonlyArray<CategoryValue>,
   detail: string,
 ): { readonly status: "available" } | { readonly status: "unsupported"; readonly detail: string } {
-  return rows.some((row) => select(row).length > 0)
+  return rows.some((row) => select(row).some((entry) => entry.status === "published"))
     ? { status: "available" }
     : { status: "unsupported", detail };
+}
+
+function hasPublishedCategoryValue(values: ReadonlyArray<CategoryValue>): boolean {
+  return values.some((entry) => entry.status === "published");
+}
+
+function omittedCategories(count: number): { readonly count: number; readonly detail: string } {
+  return {
+    count,
+    detail:
+      count === 0
+        ? "Every category the provider published has a league scoring definition."
+        : `${String(count)} provider stat ids in the standings have no league scoring definition and are omitted because they cannot be named.`,
+  };
 }
 
 function standingsData(
   outcome: ReadOutcome<ProviderStandings>,
   rows: ReadonlyArray<StandingRow>,
+  omittedCategoryCount: number,
   format: ProviderLeagueSettings["format"],
 ): NonNullable<LeagueData["standings"]> {
   if (outcome._tag !== "ok") {
@@ -1892,8 +1964,11 @@ function standingsData(
     categoryPoints: categoryAvailability(
       rows,
       (row) => row.categoryPoints,
-      "The provider publishes rotisserie category points only for rotisserie leagues.",
+      format === "rotisserie"
+        ? rotisseriePointsMissing
+        : "The provider publishes rotisserie category points only for rotisserie leagues.",
     ),
+    omittedCategories: omittedCategories(omittedCategoryCount),
     teams: [...rows],
   };
 }
@@ -1902,7 +1977,11 @@ function standingRows(
   context: TeamContext,
   tokens: QueryTokens["Service"],
   standings: ProviderStandings,
-): Effect.Effect<ReadonlyArray<StandingRow>> {
+  scoringStatIds: ReadonlySet<number> | undefined,
+): Effect.Effect<{
+  readonly rows: ReadonlyArray<StandingRow>;
+  readonly omittedCategoryCount: number;
+}> {
   return Effect.gen(function* () {
     const refs = yield* tokens.sealCounterpartyRefs({
       userId: context.userId,
@@ -1910,7 +1989,8 @@ function standingRows(
       teamKeys: standings.teams.map((standing) => standing.providerTeamKey),
     });
     const statRefs = new Map<number, StatRef>();
-    return yield* Effect.forEach(
+    const omitted = new Set<number>();
+    const rows = yield* Effect.forEach(
       EffectArray.zip(standings.teams, refs),
       ([standing, team]) =>
         Effect.gen(function* () {
@@ -1927,17 +2007,39 @@ function standingRows(
             pointsFor: standing.pointsFor,
             pointsAgainst: standing.pointsAgainst,
             ...(standing.streak === undefined ? {} : { streak: standing.streak }),
-            categories: yield* statValueRows(context, tokens, statRefs, standing.categoryTotals),
-            categoryPoints: yield* statValueRows(
+            categories: yield* categoryValueRows(
               context,
               tokens,
               statRefs,
-              standing.categoryPoints,
+              labelledCategories(standing.categoryTotals, scoringStatIds, omitted),
+              seasonTotalMissing,
+            ),
+            categoryPoints: yield* categoryValueRows(
+              context,
+              tokens,
+              statRefs,
+              labelledCategories(standing.categoryPoints, scoringStatIds, omitted),
+              rotisseriePointsMissing,
             ),
           };
         }),
       { concurrency: 1 },
     );
+    return { rows, omittedCategoryCount: omitted.size };
+  });
+}
+
+function labelledCategories(
+  stats: ReadonlyArray<ProviderStatValue>,
+  scoringStatIds: ReadonlySet<number> | undefined,
+  omitted: Set<number>,
+): ReadonlyArray<ProviderStatValue> {
+  return stats.filter((entry) => {
+    if (scoringStatIds?.has(entry.statId) === true) {
+      return true;
+    }
+    omitted.add(entry.statId);
+    return false;
   });
 }
 

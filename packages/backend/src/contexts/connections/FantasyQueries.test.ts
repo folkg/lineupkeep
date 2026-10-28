@@ -24,6 +24,7 @@ import type {
   ProviderTransaction,
   ProviderPlayerDetail,
   ProviderRoster,
+  ProviderStandings,
   ProviderTeam,
 } from "./Provider.ts";
 import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
@@ -1045,21 +1046,42 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     yield* fake.setStandings({
       providerLeagueKey: "465.l.2000",
       teams: [
-        {
+        rotoStanding({
           providerTeamKey: "465.l.2000.t.1",
           name: "Roto",
           rank: 1,
-          playoffSeed: null,
-          record: undefined,
-          gamesBack: null,
-          pointsBack: 0,
-          points: 86.5,
-          pointsFor: 86.5,
-          pointsAgainst: null,
-          streak: undefined,
-          categoryTotals: [{ statId: 1, value: 37 }],
-          categoryPoints: [{ statId: 1, value: 12 }],
-        },
+          points: {
+            1: 12,
+            2: 8.5,
+            3: 10,
+            8: 11,
+            14: 9,
+            31: 13,
+            32: 6.5,
+            19: 4,
+            23: 7,
+            26: 11,
+            29: 162,
+            30: 15,
+          },
+          totals: {
+            1: 37,
+            2: 54,
+            3: 91,
+            8: 22,
+            14: 120,
+            31: 88,
+            32: 64,
+            19: 5,
+            22: 51,
+            23: 2.63,
+            24: 437,
+            25: 386,
+            26: 0.883,
+            29: 162,
+            30: 15,
+          },
+        }),
       ],
     });
 
@@ -1070,9 +1092,53 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
       return;
     }
     assert.strictEqual(league.standings.format, "rotisserie");
-    assert.isUndefined(Array.getUnsafe(league.standings.teams, 0).record);
-    assert.strictEqual(Array.getUnsafe(league.standings.teams, 0).pointsBack, 0);
-    assert.strictEqual(Array.getUnsafe(league.standings.teams, 0).categoryPoints.length, 1);
+    const row = Array.getUnsafe(league.standings.teams, 0);
+    assert.isUndefined(row.record);
+    assert.strictEqual(row.pointsBack, 0);
+    assert.strictEqual(row.categoryPoints.length, 13);
+    assert.strictEqual(row.categories.length, 13);
+    assert.strictEqual(league.standings.categoryPoints.status, "available");
+    assert.strictEqual(league.standings.omittedCategories.count, 2);
+
+    const scoringRefs = new Set(league.scoring.map((category) => category.stat));
+    const named = [...row.categories, ...row.categoryPoints];
+    assert.isTrue(named.every((entry) => scoringRefs.has(entry.stat)));
+
+    const pointStats = new Map(row.categoryPoints.map((entry) => [entry.stat, entry]));
+    const totalStats = new Map(row.categories.map((entry) => [entry.stat, entry]));
+    const gaaRef = Array.getUnsafe(
+      league.scoring.filter((category) => category.abbreviation === "GAA"),
+      0,
+    ).stat;
+    const gaRef = Array.getUnsafe(
+      league.scoring.filter((category) => category.abbreviation === "GA"),
+      0,
+    ).stat;
+    const savesRef = Array.getUnsafe(
+      league.scoring.filter((category) => category.abbreviation === "SV"),
+      0,
+    ).stat;
+    assert.deepStrictEqual(pointStats.get(gaaRef), {
+      stat: gaaRef,
+      status: "published",
+      value: 7,
+    });
+    for (const stat of [gaRef, savesRef]) {
+      const entry = pointStats.get(stat);
+      assert.strictEqual(entry?.status, "not_published");
+      if (entry?.status === "not_published") {
+        assert.include(entry.detail, "no rotisserie points");
+      }
+    }
+    assert.deepStrictEqual(totalStats.get(gaRef), {
+      stat: gaRef,
+      status: "published",
+      value: 51,
+    });
+    assert.strictEqual(
+      row.categoryPoints.filter((entry) => entry.status === "published").length,
+      10,
+    );
 
     const matchups = yield* queries.getMatchups(owner, { team: teamId, period: { week: 4 } });
     assert.strictEqual(matchups.status, "unsupported");
@@ -1093,6 +1159,10 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     assert.strictEqual(summary.standing.status, "available");
     assert.strictEqual(summary.record.status, "unsupported");
     assert.strictEqual(summary.categoryPoints.status, "available");
+    if (summary.categoryPoints.status === "available") {
+      assert.strictEqual(summary.categoryPoints.values.length, 13);
+      assert.strictEqual(summary.categoryPoints.omittedCategories.count, 2);
+    }
     assert.strictEqual(summary.matchup.status, "unsupported");
     assert.isTrue(summary.roster.length > 0);
   }).pipe(Effect.provide(QueriesTestLayer)),
@@ -1676,18 +1746,70 @@ const rotoLeagueFixture: ProviderLeagueSettings = {
     },
   ],
   statCategories: [
+    { statId: 1, name: "Goals", displayName: "Goals", abbreviation: "G" },
+    { statId: 2, name: "Assists", displayName: "Assists", abbreviation: "A" },
+    { statId: 3, name: "Points", displayName: "Points", abbreviation: "P" },
     {
-      statId: 1,
-      name: "Goals",
-      displayName: "G",
-      abbreviation: "G",
-      group: "offense",
-      enabled: true,
-      positionTypes: ["P"],
+      statId: 8,
+      name: "Powerplay Points",
+      displayName: "Powerplay Points",
+      abbreviation: "PPP",
     },
-  ],
+    { statId: 14, name: "Shots on Goal", displayName: "Shots on Goal", abbreviation: "SOG" },
+    { statId: 31, name: "Hits", displayName: "Hits", abbreviation: "HIT" },
+    { statId: 32, name: "Blocks", displayName: "Blocks", abbreviation: "BLK" },
+    { statId: 19, name: "Wins", displayName: "Wins", abbreviation: "W" },
+    { statId: 22, name: "Goals Against", displayName: "Goals Against", abbreviation: "GA" },
+    {
+      statId: 23,
+      name: "Goals Against Average",
+      displayName: "Goals Against Average",
+      abbreviation: "GAA",
+    },
+    { statId: 25, name: "Saves", displayName: "Saves", abbreviation: "SV" },
+    { statId: 24, name: "Shots Against", displayName: "Shots Against", abbreviation: "SA" },
+    {
+      statId: 26,
+      name: "Save Percentage",
+      displayName: "Save Percentage",
+      abbreviation: "SV%",
+    },
+  ].map((category) => ({
+    ...category,
+    group: "offense",
+    enabled: true,
+    positionTypes: ["P"],
+  })),
   statModifiers: [],
 };
+
+const rotoStanding = (values: {
+  readonly providerTeamKey: string;
+  readonly name: string;
+  readonly rank: number;
+  readonly points: Readonly<Record<number, number>>;
+  readonly totals: Readonly<Record<number, number>>;
+}): ProviderStandings["teams"][number] => ({
+  providerTeamKey: values.providerTeamKey,
+  name: values.name,
+  rank: values.rank,
+  playoffSeed: null,
+  record: undefined,
+  gamesBack: null,
+  pointsBack: 0,
+  points: 92,
+  pointsFor: 92,
+  pointsAgainst: null,
+  streak: undefined,
+  categoryTotals: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26, 29, 30].map((statId) => ({
+    statId,
+    value: values.totals[statId] ?? null,
+  })),
+  categoryPoints: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26, 29, 30].map((statId) => ({
+    statId,
+    value: values.points[statId] ?? null,
+  })),
+});
 
 const leagueFixture: ProviderLeagueSettings = {
   providerLeagueKey: "461.l.1000",

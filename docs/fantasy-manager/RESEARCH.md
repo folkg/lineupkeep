@@ -1071,6 +1071,34 @@ change.
 The conservative default is unchanged: a sport or position absent from the table is `no availability
 fact`, so a new signal can never bench a player it does not understand.
 
+## Live rotisserie standings shape (2026-10-28)
+
+The same read-only pass read the owner's rotisserie hockey league standings (`GET .../standings`)
+and the league settings side by side, then compared every `team_points` and `team_stats` stat id
+with the league's declared `stat_categories`. Retained evidence holds stat ids, value kinds,
+per-team counts, and ranges only.
+
+- The league declares 13 categories. Its `team_points.stats` carries 15 entries for every team:
+  the 13 categories plus two ids with no declared category.
+- **GA, SA, and SV publish no rotisserie points.** Every one of the 13 teams carries an empty-string
+  value for those three category ids in `team_points`, while `team_stats` carries numeric totals for
+  the same ids (for example GA 51, SA 437, SV 386). The other ten categories, including the ratio
+  stats GAA and SV%, carry numeric roto points in the range 1–13. This is a provider publication
+  gap for these three categories, not a decoding loss; an empty string is the only value Yahoo
+  sends.
+- The two extra ids (29 and 30) appear in both arrays with numeric totals and empty points, and
+  appear in no `stat_categories` entry, so the provider publishes no name for them. A client cannot
+  label that number; the adapter omits such ids and reports a count.
+- The service now maps a numeric value to `{status: "published", value}` and a missing value to
+  `{status: "not_published", detail}`, so "not published" is distinguishable from zero in both
+  season totals and roto points. It filters ids outside the league scoring dictionary and reports
+  the distinct omitted count in `omittedCategories`.
+
+The fixtures now reproduce this shape: 13 declared categories, empty roto points for GA/SA/SV, and
+two scored-but-undeclared ids with numeric values. A provider fixture test asserts the exact set of
+stat ids and the empty-value set; a query test asserts every emitted stat reference resolves to a
+league scoring category and that the omitted count matches the undeclared ids.
+
 ## Live review-link verification (2026-10-28)
 
 The owner's existing read-only session was reused for a second gitignored harness under

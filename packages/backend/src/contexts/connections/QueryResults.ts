@@ -140,9 +140,23 @@ const ScoringCategory = Schema.Struct({
   points: Schema.NullOr(Schema.String),
 });
 
-const StandingCategory = Schema.Struct({
-  stat: StatRef,
-  value: Schema.NullOr(Schema.Finite),
+export const CategoryValue = Schema.Union([
+  Schema.Struct({
+    stat: StatRef,
+    status: Schema.Literal("published"),
+    value: Schema.Finite,
+  }),
+  Schema.Struct({
+    stat: StatRef,
+    status: Schema.Literal("not_published"),
+    detail: Schema.String,
+  }),
+]);
+export type CategoryValue = typeof CategoryValue.Type;
+
+const OmittedCategories = Schema.Struct({
+  count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  detail: Schema.String,
 });
 
 const StandingsCoverage = Schema.Union([
@@ -175,8 +189,8 @@ export const StandingRow = Schema.Struct({
       value: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     }),
   ),
-  categories: Schema.Array(StandingCategory),
-  categoryPoints: Schema.Array(StandingCategory),
+  categories: Schema.Array(CategoryValue),
+  categoryPoints: Schema.Array(CategoryValue),
 });
 export type StandingRow = typeof StandingRow.Type;
 
@@ -185,6 +199,7 @@ const StandingsData = Schema.Struct({
   format: LeagueFormat,
   categoryTotals: StandingsCoverage,
   categoryPoints: StandingsCoverage,
+  omittedCategories: OmittedCategories,
   teams: Schema.Array(StandingRow),
 });
 
@@ -471,11 +486,6 @@ const RemainingGames = Schema.Struct({
   remaining: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
-const MatchupCategoryValue = Schema.Struct({
-  stat: StatRef,
-  value: Schema.NullOr(Schema.Finite),
-});
-
 const MatchupTeam = Schema.Struct({
   team: CounterpartyRef,
   name: Schema.NonEmptyString,
@@ -483,7 +493,7 @@ const MatchupTeam = Schema.Struct({
   projectedPoints: Schema.NullOr(Schema.Finite),
   winProbability: Schema.NullOr(Schema.Finite),
   remainingGames: Schema.optional(RemainingGames),
-  categories: Schema.optional(Schema.Array(MatchupCategoryValue)),
+  categories: Schema.optional(Schema.Array(CategoryValue)),
 });
 
 const MatchupCategoryWinner = Schema.Struct({
@@ -639,7 +649,11 @@ const SummaryRecord = Schema.Union([
 ]);
 
 const SummaryCategories = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("available"), values: Schema.Array(StandingCategory) }),
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    values: Schema.Array(CategoryValue),
+    omittedCategories: OmittedCategories,
+  }),
   Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
 ]);
 
@@ -680,8 +694,8 @@ const SummaryMatchup = Schema.Union([
     opponentProjectedPoints: Schema.NullOr(Schema.Finite),
     remainingGames: Schema.optional(RemainingGames),
     opponentRemainingGames: Schema.optional(RemainingGames),
-    categories: Schema.optional(Schema.Array(StandingCategory)),
-    opponentCategories: Schema.optional(Schema.Array(StandingCategory)),
+    categories: Schema.optional(Schema.Array(CategoryValue)),
+    opponentCategories: Schema.optional(Schema.Array(CategoryValue)),
     statusLabel: Schema.optional(Schema.String),
     isPlayoffs: Schema.optional(Schema.Boolean),
   }),

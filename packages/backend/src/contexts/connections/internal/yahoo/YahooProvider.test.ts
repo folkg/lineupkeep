@@ -1846,16 +1846,79 @@ it.effect("reads rotisserie standings without inventing a win-loss record", () =
     const first = standings.teams[0];
     assert.isUndefined(first?.record);
     assert.strictEqual(first?.rank, 1);
-    assert.strictEqual(first?.points, 86.5);
+    assert.strictEqual(first?.points, 92);
     assert.strictEqual(first?.pointsBack, 0);
-    assert.deepStrictEqual(first?.categoryPoints, [
+    assert.deepStrictEqual(
+      first?.categoryPoints.filter((entry) => entry.value === null),
+      [
+        { statId: 22, value: null },
+        { statId: 25, value: null },
+        { statId: 24, value: null },
+      ],
+    );
+    assert.deepStrictEqual(first?.categoryPoints.slice(0, 4), [
       { statId: 1, value: 12 },
-      { statId: 2, value: null },
+      { statId: 2, value: 8.5 },
+      { statId: 3, value: 10 },
+      { statId: 8, value: 11 },
     ]);
-    assert.deepStrictEqual(first?.categoryTotals, [
+    assert.deepStrictEqual(first?.categoryPoints.slice(-2), [
+      { statId: 29, value: 162 },
+      { statId: 30, value: 15 },
+    ]);
+    assert.deepStrictEqual(first?.categoryTotals.slice(0, 3), [
       { statId: 1, value: 37 },
       { statId: 2, value: 54 },
+      { statId: 3, value: 91 },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("keeps the rotisserie fixture's published, empty, and unscored stat ids distinct", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlRotoStandings));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const standings = yield* provider.readStandings({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4003",
+    });
+
+    const categories = [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26];
+    const unscored = [29, 30];
+    const statIds = (team: (typeof standings.teams)[number]): ReadonlyArray<number> =>
+      [
+        ...new Set([
+          ...team.categoryTotals.map((entry) => entry.statId),
+          ...team.categoryPoints.map((entry) => entry.statId),
+        ]),
+      ].toSorted((left, right) => left - right);
+    assert.deepStrictEqual(
+      statIds(Array.getUnsafe(standings.teams, 0)),
+      [...categories, ...unscored].toSorted((left, right) => left - right),
+    );
+    assert.deepStrictEqual(
+      standings.teams.flatMap((team) =>
+        team.categoryPoints.filter((entry) => entry.value === null).map((entry) => entry.statId),
+      ),
+      [22, 25, 24, 22, 25, 24, 22, 25, 24],
+    );
+    assert.isTrue(
+      standings.teams.every(
+        (team) =>
+          team.categoryTotals.filter((entry) => [22, 24, 25].includes(entry.statId)).length === 3 &&
+          team.categoryTotals
+            .filter((entry) => [22, 24, 25].includes(entry.statId))
+            .every((entry) => entry.value !== null),
+      ),
+    );
+    assert.isTrue(
+      standings.teams.every((team) =>
+        team.categoryPoints
+          .filter((entry) => unscored.includes(entry.statId))
+          .every((entry) => entry.value !== null),
+      ),
+    );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

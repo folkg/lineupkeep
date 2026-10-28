@@ -73,10 +73,10 @@ rejected as "invalid" by the client connect flow even though both discovery docu
 `categoryPoints` is null for GA, SA and SV while their totals are present, and the category arrays carry
 stat ids that appear in no scoring dictionary. A client cannot distinguish "not published" from zero.
 
-- [ ] Populate category points where the provider publishes them
-- [ ] Where it does not, say so explicitly instead of returning null
-- [ ] Name or omit stat ids that appear in no scoring dictionary
-- [ ] Build realistic captured fixtures so this class of gap is caught by tests rather than by a client
+- [x] Populate category points where the provider publishes them
+- [x] Where it does not, say so explicitly instead of returning null
+- [x] Name or omit stat ids that appear in no scoring dictionary
+- [x] Build realistic captured fixtures so this class of gap is caught by tests rather than by a client
 
 ### R2-4 — search rows omit the field the sort advertises
 
