@@ -142,10 +142,13 @@ are unchanged.
   relayed as bounded click, text, key, and scroll messages. Passwords are
   relayed transiently to the provider page and are never stored, logged, traced,
   or written to disk by this application.
-- Chromium egress is restricted to the exact provider login and asset origins.
-  Redirects, downloads, popups, service workers, private/link-local/metadata
-  addresses, and arbitrary proxying are blocked. The browser cannot reach
-  application-private services.
+- Chromium egress is decided by resolved address through a local forward proxy.
+  Public internet destinations are reachable so a provider identity chain works;
+  metadata, loopback, private, link-local, CGNAT, multicast, and reserved
+  addresses are refused. Dialogs, downloads, and service workers remain blocked.
+  Popups are streamed as active targets and close with the session. The browser
+  cannot reach application-private services. See
+  [ADR 0010](adr/0010-address-based-egress.md).
 - The browser is killed and its profile removed as soon as the required `T` and
   `Y` cookies are captured and validated, and on cancel, expiry, disconnect, or
   fault. The web process completes the connection, discovers teams, and the
@@ -226,16 +229,19 @@ owner-bound, one-use session, hashed-ticket, or egress contracts from Round 10.
    `/tmp`, a read-only image, and no attached volumes. Chromium's namespace
    sandbox is unavailable in the Cloud Run sandbox, so it runs with
    `--no-sandbox`; the compensating controls are the single-tenant container,
-   non-root process, immutable image, ephemeral profile, exact-origin egress
-   allowlist, signed one-use session descriptor, and IAM-only invocation.
+   non-root process, immutable image, ephemeral profile, address-based egress
+   policy, signed one-use session descriptor, and IAM-only invocation.
 6. **Egress without a VPC connector.** A VPC connector plus Cloud NAT would add
    a recurring charge above the owner's CAD 5/month budget, so network-level
-   defense in depth is not deployed. Egress is enforced inside Chromium: exact
-   provider/asset origin allowlist on requests and WebSockets, a resolver rule
-   that fails every non-allowlisted hostname, and the absence of any generic
-   proxy. Metadata, link-local, private, and arbitrary public destinations are
-   refused by that policy. This gap is recorded in the infrastructure plan and
-   deployment runbook rather than presented as network isolation.
+   defense in depth is not deployed. Egress is enforced inside Chromium: a local
+   forward proxy resolves every destination, refuses metadata, loopback, private,
+   link-local, CGNAT, multicast, and reserved addresses, and dials the verified
+   public address directly. Chromium's resolver is blackholed and its proxy
+   bypass, QUIC, and non-proxied WebRTC UDP are disabled. Public internet
+   destinations are allowed so provider identity chains work. This gap is
+   recorded in the infrastructure plan and deployment runbook rather than
+   presented as network isolation; the decision and residual risk are in
+   [ADR 0010](adr/0010-address-based-egress.md).
 
 ## Round 12 — MCP grant lifetime and renewal
 

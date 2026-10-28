@@ -52,6 +52,58 @@ Only the published ESM entries are patched for the two `start-*-core` packages b
 
 **Removal condition:** adopt a published Solid 2 parent whose closure contains the complete #8573 fix across `router-core` and the `start-*-core` response boundaries, with the same acceptance (installed-source inspection after a clean install, the built-app `e2e/serverFunctionTransport.e2e.ts` regression, `bun checks`, all three E2E targets, and SSR/hydration/single-flight/redirect/write behavior). Remove it by deleting the three patch files, deleting the three `patchedDependencies` entries from `package.json` **and** `bun.lock`, reinstalling, and re-running that acceptance; leaving a stale entry or file fails the install.
 
+## Hosted-browser egress widening (2026-10-28)
+
+The hosted browser no longer uses a static provider-origin allowlist. The
+allowlist could not complete a Yahoo sign-in through a Google identity and made
+every provider login change a silent breakage risk. The owner directed its
+removal.
+
+**Replacement.** Each browser session starts a local HTTP forward proxy. Chromium
+uses it for HTTP, HTTPS, WebSocket, and secure WebSocket traffic, with its own
+resolver blackholed, the implicit loopback proxy bypass disabled, and QUIC,
+non-proxied WebRTC UDP, and DNS prefetching off. The proxy resolves every
+destination, refuses it when any answer is a metadata, loopback, private,
+link-local, CGNAT, multicast, reserved, or other non-public address, and dials
+the verified address directly. Resolution, validation, and connection are one
+decision, so a public name that later resolves privately is refused on the next
+request and a name with mixed public and private answers is refused outright.
+Refusals name the host, reach the client as a control message, and are recorded
+in the browser session outcome. The local development fixture origin is the only
+loopback allowance and is not available in the deployed browser service.
+
+**Retained protections.** One-use owner-bound ticket, HMAC-signed short-lived
+descriptor, one active hosted session per owner, five starts per owner per ten
+minutes, one browser per instance, ephemeral profile destroyed on capture,
+cancel, expiry, fault, or shutdown, dialog dismissal, download cancellation,
+bounded frames and input, and provider-scoped `T`/`Y` capture followed by
+provider validation. Popups are now streamed as active targets and close with
+the session.
+
+**What this costs.** The browser can reach any public internet destination,
+including any public service that a page or popup can address. The service can
+therefore be used as a short-lived public browser within the per-owner limits.
+The egress check is application code inside the same process as Chromium, not a
+network boundary: a Chromium compromise or a proxy defect could bypass it, and
+no VPC connector, Cloud NAT, or managed egress proxy is deployed because of the
+CAD 5/month budget. The policy does not prove that an unusual public route cannot
+reach an internal service; it covers the documented metadata, loopback, private,
+link-local, and CGNAT ranges. These are accepted residual risks, not a claim of
+network isolation. The full decision and revisit conditions are in
+[ADR 0010](fantasy-manager/adr/0010-address-based-egress.md).
+
+**Acceptance.** Address-class refusal, public-address permission, public-name
+private-answer refusal, re-resolution, loud refusal transport and outcome
+recording, popup streaming, popup return, capture, and profile cleanup are
+covered by local Node and Chromium tests. The deployed browser revision
+`lineupkeep-hb-00010-6db` completed a descriptor handshake, loaded the real Yahoo
+login page, streamed frames with no refusals, and refused the GCP metadata
+endpoint with a recorded `non_public_address` refusal. A real owner sign-in
+through the deployed hosted browser, ending in a captured session and team
+discovery, remains the only proof that the Google-identity path works in
+production; that live sign-in is required before treating the widening as
+accepted.
+
 ## Accepted v1 version hold and retained limitations
 
 **Owner decision: keep the aligned Solid 2.0.0-rc.13 family for v1 and document limitations.** No framework version change or further adoption trial is authorized by this tracker; the temporary response-validation backport above is a security change, not a framework adoption. This is not blanket security-risk acceptance and does not waive the remaining acceptance items below.

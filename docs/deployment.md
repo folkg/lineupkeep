@@ -37,14 +37,14 @@ are the same URL; the provisioned environment file now owns that value.
 | Public origin / `BETTER_AUTH_URL` | `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-hcfc7y3kha-ue.a.run.app`                                                                                                                                                                                                                            |
 | Web service                       | `lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc` — public ingress, min 0 / max 3, concurrency 20, 1 vCPU / 512 MiB, request-based billing (`cpu-throttling=true`), startup CPU boost                                                                                                                        |
 | Worker service                    | `lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y` — min 0 / max 2, concurrency 2, timeout 900 s, request-based billing, invoker IAM enforced (unauthenticated requests return 403)                                                                                                                        |
-| Hosted browser service            | `lineupkeep-hb` — `https://lineupkeep-hb-hcfc7y3kha-ue.a.run.app`, current revision `lineupkeep-hb-00005-vh7`, min 0 / max 2, concurrency 1, 1 vCPU / 2 GiB, timeout 780 s, `/healthz` startup probe, request-based billing, invoker IAM enforced; only the web runtime account holds `roles/run.invoker` |
+| Hosted browser service            | `lineupkeep-hb` — `https://lineupkeep-hb-hcfc7y3kha-ue.a.run.app`, current revision `lineupkeep-hb-00010-6db`, min 0 / max 2, concurrency 1, 1 vCPU / 2 GiB, timeout 780 s, `/healthz` startup probe, request-based billing, invoker IAM enforced; only the web runtime account holds `roles/run.invoker` |
 | Runtime accounts                  | Web: `alchemefdt2v24ebek3kk5bbglblvc@lineupkeep-prod.iam.gserviceaccount.com`; worker: `alchems6msjzkhxxseuglypqfudf7b@…`; queue/scheduler invoker: `alchem2r7pyg3ia7ujwxdkdpon7d5z@…`; hosted browser: `alchemgx4kg3sc7lv6v6t2vmqz6g6v@…`                                                                |
 | Queue                             | `projects/lineupkeep-prod/locations/us-east1/queues/lineupkeepweb-lineupworkerqueue-cloud-run-vhxrepebzd4sojv4` — running, 5 dispatches/s, 4 concurrent, 5 attempts with 10–300 s backoff                                                                                                                 |
 | Scheduler                         | `lineupkeepweb-lineuptick-cloud-run-ctseuiblv2wtwlwu` — `0 * * * *` UTC, OIDC to `POST /api/internal/lineup-worker` with `{action:"tick",limit:50}`, 300 s attempt deadline, 2 retries                                                                                                                    |
 | Registry                          | `us-east1-docker.pkg.dev/lineupkeep-prod/lineupkeepweb-registry-cloud-run-u4rplfecdzi27v3w` — `web:*` and `browser:*` images; the browser image is about 853 MB expanded and replaces the Chromium headless deployment on every content change                                                            |
 | Application database              | Alchemy-managed `LineupkeepDatabase` / `production` Neon Free project, independent of protected state                                                                                                                                                                                                     |
 | Secret Manager                    | `lineupkeepweb-secret-better-auth-secret-cloud-run-zz7b4zbcg2rfo5fb`, `…-connection-encryption-key-cloud-run-ec7zelts3e7mtrtt`, `…-resend-api-key-cloud-run-6daiaqee2uvf6llx`, `…-database-url-cloud-run-2zpqgtvdba7gierc`, `…-hosted-browser-descriptor-key-cloud-run-ifx5uoc5omsxeu74`                  |
-| Secret versions                   | The web and browser revisions pin immutable versions; the descriptor key currently has three enabled versions and the live revisions pin version 3 on 2026-10-25. Keep only pinned versions after a rollback window.                                                                                      |
+| Secret versions                   | The web and browser revisions pin immutable versions; the descriptor key has six enabled versions and the live revisions pin version 6 on 2026-10-28. Keep only pinned versions after a rollback window.                                                                                                  |
 
 **First plan review (2026-10-25):** the `cloud-run` plan proposed 26 resources,
 all creates — four secrets with their access bindings and immutable versions,
@@ -71,6 +71,15 @@ rebuilds/publishes, service revisions, and one secret version); none created or
 deleted a resource. The final state was verified with `gcloud`, an authenticated
 WebSocket probe, and revision readback (`lineupkeep-hb-00004-tb2`, web
 `lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-00016-fzl`).
+
+Current revisions after the address-based egress deploy (2026-10-28): web
+`lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-00029-m7g` on web digest
+`sha256:788bf0f6721a90b06579855a946b154518748af7d02636c6c7ad41e9ca4166ca`,
+worker `lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y-00030-4rz` on the same
+web digest, and hosted browser `lineupkeep-hb-00010-6db` on browser digest
+`sha256:41c92d69c8d498e6fd00ad0e7ddd4f4dbc574d5868883fc1522d0ad13e77edfe`.
+The plan for that deploy reported 12 updates and no creates or deletions. The
+web and browser revisions pin descriptor key version 6.
 
 The deterministic alias
 `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-602042678335.us-east1.run.app`
@@ -176,22 +185,35 @@ to run on the older build's dispatch path. See
 - Both revisions were Ready with clean startup logs (only the HTTP listener and
   graceful shutdown messages).
 
+**Address-based egress smoke (2026-10-28):** an operator probe through
+`gcloud run services proxy` completed the descriptor handshake against revision
+`lineupkeep-hb-00010-6db`, reported `starting`, `loading`, and `waiting`, and
+streamed 3 JPEG frames from the real Yahoo login page with no refusals. A second
+probe used `http://169.254.169.254/latest/meta-data/` as the login URL: the
+transport reported `Refused` for `169.254.169.254` with reason
+`non_public_address`, the refusal page was streamed, and Cloud Logging recorded
+`hosted_browser.session outcome=cancelled refused=[{host: 169.254.169.254,
+reason: non_public_address}]`. The temporary `roles/run.invoker` binding used for
+these probes was removed; the policy was read back with only the web runtime
+account. A human-owned Google-identity Yahoo sign-in through the deployed
+browser is still required before accepting the path.
+
 **Hosted browser smoke (2026-10-25):** the browser service reached `Ready` with
 its `/healthz` startup probe, invoker IAM refused unauthenticated requests (403
 for ordinary paths, 401 for a token without `run.invoker`), and an operator
-WebSocket through `gcloud run services proxy` completed
-The frontend answers `GET /healthz` with a Google 404 page for every caller, so
-that path is usable only by the internal startup probe; point external
-monitoring at the web service instead. Invoker IAM remains the boundary for
-`/` and `/session`.
-the signed-descriptor handshake, streamed seven JPEG frames (first frame 4,941
-bytes) with `starting`, `loading`, and `waiting` statuses, and loaded the real
-Yahoo login page through the service's egress. The operator closed the session;
-the log recorded `hosted_browser.session cancelled` with only session id,
-outcome, and duration. The temporary `run.invoker` binding used for the probe
-was removed immediately and the policy was re-read to confirm only the web
-runtime account remains. The descriptor key and IAM ID tokens were never printed
-or written to disk.
+WebSocket through `gcloud run services proxy` completed the signed-descriptor
+handshake, streamed seven JPEG frames (first frame 4,941 bytes) with `starting`,
+`loading`, and `waiting` statuses, and loaded the real Yahoo login page through
+the service's egress. The operator closed the session; the log recorded
+`hosted_browser.session cancelled` with only session id, outcome, and duration.
+The temporary `run.invoker` binding used for the probe was removed immediately
+and the policy was re-read to confirm only the web runtime account remains. The
+descriptor key and IAM ID tokens were never printed or written to disk.
+
+The web frontend answers `GET /healthz` with a Google 404 page for every caller,
+so that path is usable only by the internal startup probe; point external
+monitoring at the web service instead. Invoker IAM remains the boundary for the
+browser service's `/` and `/session` paths.
 
 Deployed product acceptance still needs the owner to sign in, link Yahoo through
 the hosted browser (or the helper) against the deployed origin, and perform one
@@ -257,28 +279,42 @@ every target.
 
 The web mints a Cloud Run ID token for the exact service URL from the metadata
 server and opens WSS with an HMAC-signed descriptor (session id, expiry of at
-most 15 minutes, login URL, allowed origins). The browser service verifies the
-signature and the provider-origin subset, refuses reused session ids and a
-second browser, and accepts nothing else. `HOSTED_BROWSER_URL` and
-`HOSTED_BROWSER_DESCRIPTOR_KEY` are the only hosted-browser settings on the web;
-the browser service receives only the descriptor key and `NODE_ENV`. Do not put
-the database URL, connection encryption key, auth secret, or provider session
-material in its environment.
+most 15 minutes, login URL). The browser service verifies the signature and the
+bounded lifetime, refuses reused session ids and a second browser, and accepts
+nothing else. `HOSTED_BROWSER_URL` and `HOSTED_BROWSER_DESCRIPTOR_KEY` are the
+only hosted-browser settings on the web; the browser service receives only the
+descriptor key and `NODE_ENV`. Do not put the database URL, connection
+encryption key, auth secret, or provider session material in its environment.
 
 Privacy contract: keystrokes transit the web process into the ephemeral
 Chromium, but nothing is logged, traced, recorded, or written outside the
 temporary profile. Provider cookies are sent once over the authenticated
 internal stream after Chromium is killed and the profile removed. Cloud Logging
 contains `hosted_browser.session` records with session id, outcome, duration,
-and failure class only.
+failure class, and any refused host and reason only.
 
-Egress is enforced inside Chromium: an exact provider/asset origin allowlist on
-requests and WebSockets, and a resolver rule that fails every other hostname.
-Metadata, link-local, private, and arbitrary public destinations are refused by
-that policy. No VPC connector or Cloud NAT is provisioned because it would add a
-recurring charge above the owner's budget; this is a recorded limitation, not
-network isolation. Do not add a generic URL proxy, arbitrary CDP endpoint, or
-public tunnel.
+Egress is decided by resolved address. Each session starts a local HTTP forward
+proxy and Chromium uses it for HTTP, HTTPS, WebSocket, and secure WebSocket
+traffic. The proxy resolves every destination, refuses it if any answer is a
+metadata, loopback, private, link-local, CGNAT, multicast, reserved, or other
+non-public address, and otherwise dials the verified address directly. Chromium's
+own resolver is blackholed, its implicit loopback proxy bypass is disabled, and
+QUIC, non-proxied WebRTC UDP, and DNS prefetching are off. A refusal returns a
+403 naming the host, sends a `Refused` control message to the client, and is
+recorded in the `hosted_browser.session` outcome.
+
+The browser can reach the public internet, including a provider's identity
+provider. It is not a general proxy: the one-use owner-bound ticket, ten-minute
+expiry, one active session per owner, five starts per owner per ten minutes, and
+one browser per instance bound the cost. Network-level egress isolation is not
+deployed. A VPC connector or Cloud NAT would add a recurring charge above the
+owner's budget; the address policy is the enforced boundary, not network
+isolation. Do not add a generic URL proxy, arbitrary CDP endpoint, or public
+tunnel. See [ADR 0010](fantasy-manager/adr/0010-address-based-egress.md).
+
+New pages are browsing targets. A provider popup becomes the active stream and
+receives input; closing it returns to the provider page; closing the session
+closes every target.
 
 #### Start, stop, and rollback
 

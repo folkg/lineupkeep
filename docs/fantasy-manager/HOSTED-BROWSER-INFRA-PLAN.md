@@ -19,9 +19,9 @@ web service (public, authenticated)
   │  WSS: Cloud Run ID token + HMAC-signed one-use session descriptor
   ▼
 hosted browser service (IAM-only, Cloud Run)
-  │  HTTPS/WSS: exact provider and asset origins only
+  │  HTTPS/WSS: address-filtered public internet through a local forward proxy
   ▼
-provider login and assets
+provider login, identity provider, and assets
 ```
 
 The web service stays the authority for application sessions, connection
@@ -40,7 +40,7 @@ place.
 | Property        | Value                                                                                                                                                             |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Service         | `lineupkeep-hb` — `https://lineupkeep-hb-hcfc7y3kha-ue.a.run.app`                                                                                                 |
-| Revision        | `lineupkeep-hb-00004-tb2` (fourth revision; earlier revisions were the first deployment and reviewed code follow-ups)                                             |
+| Revision        | `lineupkeep-hb-00010-6db` (address-based egress and popup streaming; image digest `sha256:41c92d69c8d498e6fd00ad0e7ddd4f4dbc574d5868883fc1522d0ad13e77edfe`)      |
 | Runtime account | `alchemgx4kg3sc7lv6v6t2vmqz6g6v@lineupkeep-prod.iam.gserviceaccount.com`                                                                                          |
 | Access          | `run.googleapis.com/ingress=all` plus IAM required; only the web runtime account holds `roles/run.invoker`. Unauthenticated callers are refused by Cloud Run IAM. |
 | Scaling         | min 0, max 2, `containerConcurrency: 1`, request timeout 780 s, startup CPU boost, request-based billing with CPU throttling                                      |
@@ -68,10 +68,8 @@ the temporary profile lives there and no volume is attached.
 4. The web opens WSS to the browser service with a Cloud Run ID token minted
    from the metadata server for exactly the service URL audience, plus a signed
    descriptor. The descriptor is an HMAC-SHA-256 envelope over a payload that
-   carries only the session id, expiry (at most 15 minutes out), login URL, and
-   allowed origins. The service verifies the signature, the bounded lifetime,
-   that every origin is a known provider origin, and that the login URL origin
-   is one of them.
+   carries only the session id, expiry (at most 15 minutes out), and login URL.
+   The service verifies the signature and the bounded lifetime.
 5. The service remembers used session ids for its lifetime and allows at most
    one open browser per instance. It launches a fresh temporary profile,
    streams bounded JPEG frames and status messages, and relays bounded input.
@@ -81,41 +79,67 @@ the temporary profile lives there and no volume is attached.
    authenticated stream. The web validates it, completes the connection,
    discovers teams, and returns `Ready`.
 7. Cancel, disconnect, expiry, or a browser fault terminates the stream, kills
-   Chromium, removes the profile, and cancels or expires the session. The web
-   remains the source of truth and all operations are idempotent.
+   Chromium, removes the profile, closes every browsing target including
+   popups, and cancels or expires the session. The web remains the source of
+   truth and all operations are idempotent.
 
-The service sends only `Status`, `Captured`, `Failed`, and `Expired` control
-messages plus binary frames. Session material is sent once, after the browser is
+The service sends `Status`, `Refused`, `Captured`, `Failed`, and `Expired`
+control messages plus binary frames. Session material is sent once, after the browser is
 gone, and is never logged. The web proxy maps the transport onto the existing
 hosted-linking callbacks, so the stream, UI, and completion behavior are
 unchanged.
 
 ## Egress policy
 
-The service is not a general proxy and cannot reach application-private
-services, link-local addresses, the metadata server, or arbitrary public hosts.
+The browser is not a general proxy and cannot reach application-private
+services, link-local addresses, the metadata server, loopback, CGNAT, or
+private networks. It can reach the public internet, including identity
+providers that a provider's login chain uses.
 
-- Every request passes an exact origin allowlist for the provider login and
-  asset origins (`login.yahoo.com`, `www.yahoo.com`, `guce.yahoo.com`,
-  `s.yimg.com`, `geo.yahoo.com`, `api.login.yahoo.com`, and the football and
-  hockey fantasy origins). Redirects, downloads, popups, and service workers are
-  closed; `data:`, `blob:`, and `about:` are allowed for page assets only.
-  WebSockets are subject to the same origin set.
-- Chromium's resolver rule maps every other hostname to `~NOTFOUND`, so a
-  non-allowlisted host cannot be resolved at all. IP-literal destinations
-  (including `169.254.169.254`, loopback, and private ranges) fail the origin
-  check.
-- No VPC connector, Cloud NAT, or generic HTTP proxy is provisioned. That
+- Each session starts a local HTTP forward proxy. Chromium uses it for HTTP,
+  HTTPS, WebSocket, and secure WebSocket traffic. Chromium's own resolver is
+  blackholed, the implicit loopback proxy bypass is disabled, and QUIC,
+  non-proxied WebRTC UDP, and DNS prefetching are disabled.
+- For every `CONNECT` and HTTP request the proxy resolves the destination and
+  validates every answer against the public-address policy. If any answer is
+  non-public it refuses the destination. Otherwise it dials the verified
+  address directly and never resolves the name again for that connection.
+- This is robust to DNS rebinding because resolution, validation, and the
+  connection are one decision. A name that resolves to a private address is
+  refused; a name with both public and private answers is refused; a later
+  request with a different answer is checked again.
+- `data:`, `blob:`, and `about:` remain usable for page content. Dialogs and
+  downloads are dismissed on every target. Service workers remain blocked.
+- A refusal returns a 403 naming the host and reason, sends a `Refused` control
+  message to the client, and is recorded in the `hosted_browser.session`
+  outcome. It is not a blank page.
+- Local development and tests may pass one explicit loopback fixture origin to
+  the in-process browser. The fixture must use a loopback host and is matched
+  by host and port. The deployed browser service receives no fixture origin.
+- No VPC connector, Cloud NAT, or generic network proxy is provisioned. That
   network-level defense in depth would add a recurring charge above the owner's
-  CAD 5/month budget; the application-level allowlist is the enforced boundary
-  and this limitation is recorded rather than presented as network isolation.
-- The browser tests prove a non-allowlisted origin is never contacted, that the
-  profile is removed on capture, expiry, cancel, and shutdown, and that no
-  frames or session material are logged.
+  CAD 5/month budget; the address policy is the enforced boundary and this
+  limitation is recorded rather than presented as network isolation.
+
+New pages are browsing targets, not errors. A popup opened by a provider's
+identity flow becomes the active target, its frames and input are streamed, and
+closing it returns the stream and input to the provider page. Closing the
+session closes the context and every target.
+
+The browser tests prove the metadata endpoint, loopback, RFC1918, link-local,
+and CGNAT addresses are refused; a public destination is allowed; a public name
+resolving to a private address is refused; a changed DNS answer is rechecked; a
+refused request names the host in the transport and the session outcome; popups
+stream and receive input; and the profile is removed on capture, expiry, cancel,
+and shutdown. The address policy and proxy behavior are covered in
+`packages/hosted-browser/src/egress.test.ts`; the browser and service behavior
+are covered in the hosted-browser Chromium tests.
 
 ## Limits and abuse controls
 
-- Five starts per user per ten minutes; one active hosted session per user.
+- Five starts per user per ten minutes; one active hosted session per user. The
+  limit is enforced in the backend `HostedLinking.start` path, not in the
+  browser service.
 - `containerConcurrency: 1` and `maxInstanceCount: 2` bound global capacity; a
   second browser on an instance is refused with a retryable busy signal rather
   than queued.
@@ -123,7 +147,8 @@ services, link-local addresses, the metadata server, or arbitrary public hosts.
   the descriptor is one-use and short-lived.
 - Five frames per second, JPEG quality 55, 1.5 MB per frame, 500 client control
   messages with 4 KB each, 2,000 service input messages, and a ten-minute
-  session wall clock.
+  session wall clock. New pages are not closed, but every target ends with the
+  session. The egress policy rejects only non-public destinations.
 - The web caps upstream reconnects and tears down the upstream stream when the
   client disconnects.
 
@@ -148,7 +173,7 @@ republished on every deploy like the other runtime secrets.
 
 ## Deployment and operating gates
 
-Proven during the first deployment and operator probe:
+Proven during the first deployment and operator probes:
 
 - The service deploys scale-to-zero, reaches `Ready`, and its startup probe
   succeeds against `/healthz`.
@@ -159,9 +184,19 @@ Proven during the first deployment and operator probe:
   streamed 7 JPEG frames (first frame 4,941 bytes), reported `starting`,
   `loading`, and `waiting`, and loaded the real Yahoo login page through the
   service's egress before the operator closed it.
+- After the address-based egress deployment (`lineupkeep-hb-00010-6db`), an
+  operator probe through the gcloud proxy completed the descriptor handshake,
+  reported `starting`, `loading`, and `waiting`, streamed 3 JPEG frames from the
+  real Yahoo login page, recorded no refusals, and ended `cancelled`.
+- A second probe used the metadata endpoint as its login URL. The transport
+  reported `Refused` for `169.254.169.254` with reason `non_public_address`,
+  streamed the refusal page, and the session outcome recorded the same refusal.
+  The temporary `roles/run.invoker` binding used for the probes was removed and
+  the policy was read back to confirm only the web runtime account remains.
 - Cloud Logging contains only the service's lifecycle record
-  (`hosted_browser.session`, outcome, duration, session id) plus Cloud Run's
-  platform lines. No frames, cookies, keystrokes, page text, or passwords.
+  (`hosted_browser.session`, outcome, duration, session id, and any refused
+  host/reason) plus Cloud Run's platform lines. No frames, cookies, keystrokes,
+  page text, or passwords.
 
 Remaining acceptance and hardening:
 
@@ -172,11 +207,12 @@ Remaining acceptance and hardening:
   first frame cold versus 0.8 s warm. Actual per-session billing is still an
   estimate until the first invoice or billing export.
 - Network-level egress isolation (VPC connector plus NAT or an egress proxy) is
-  deferred for budget reasons; the application allowlist is the current
-  boundary.
+  deferred for budget reasons; the address policy is the current boundary.
 - Chromium's sandbox is unavailable in the Cloud Run runtime; the accepted
   `--no-sandbox` posture and compensating controls are recorded in
   [DECISIONS.md](DECISIONS.md#round-11--transient-keystroke-relay-in-the-hosted-browser).
+- The egress decision, residual risk, and revisit conditions are recorded in
+  [ADR 0010](adr/0010-address-based-egress.md).
 
 ## Rollback
 
