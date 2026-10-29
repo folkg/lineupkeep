@@ -602,6 +602,7 @@ const hostedBrowserShellTests = [
   "apps/web/src/server/hostedLinking/playwrightHostedBrowser.test.ts",
   "apps/web/src/server/hostedLinking/remoteHostedBrowser.test.ts",
 ];
+const migrationTests = ["packages/backend/src/database/MigrationOrdering.test.ts"];
 const isolateTransport = ["packages/backend/src/runtime/public-internet/transport/isolate/**/*.ts"];
 const transportTests = ["packages/backend/src/runtime/public-internet/transport/**/*.test.ts"];
 const timing = ["apps/web/src/browser/timing/**"];
@@ -818,6 +819,12 @@ export default defineConfig({
       ],
       excludeFiles: tests,
       rules: { "repository/no-per-item-service-calls": "error" },
+    },
+    {
+      files: migrationTests,
+      rules: {
+        "effecttsgo/node-builtin-import": "off",
+      },
     },
     {
       files: nodeTransport,

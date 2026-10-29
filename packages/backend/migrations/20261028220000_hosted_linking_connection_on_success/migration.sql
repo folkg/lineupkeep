@@ -12,8 +12,8 @@ AND "id" NOT IN (
     AND "connection_id" IS NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "hosted_linking_sessions" ALTER COLUMN "connection_id" DROP NOT NULL;
+--> statement-breakpoint
 UPDATE "hosted_linking_sessions"
 SET "connection_id" = NULL
 WHERE "status" <> 'completed';
---> statement-breakpoint
-ALTER TABLE "hosted_linking_sessions" ALTER COLUMN "connection_id" DROP NOT NULL;
