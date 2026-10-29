@@ -36,6 +36,7 @@ export function createRemoteHostedBrowser(
         sessionId: session.id,
         expiresAt: DateTime.toEpochMillis(session.expiresAt),
         loginUrl: session.loginUrl.href,
+        viewport: session.viewport,
       });
       const socket = new WebSocket(streamUrl, {
         headers: { authorization: `Bearer ${token}` },

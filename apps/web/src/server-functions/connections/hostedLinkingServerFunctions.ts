@@ -1,8 +1,5 @@
 import { HostedLinking } from "@lineupkeep/backend/connections/HostedLinking";
-import {
-  HostedLinkingSessionInput,
-  StartHostedLinkingInput,
-} from "@lineupkeep/backend/connections/HostedLinking";
+import { HostedLinkingSessionInput } from "@lineupkeep/backend/connections/HostedLinking";
 import { createServerFn } from "@tanstack/solid-start";
 import {
   deleteCookie,
@@ -22,14 +19,15 @@ import {
   HostedBrowserUnsupported,
   HostedLinkingInputInvalid,
   mapHostedLinkingError,
+  StartHostedLinkingRequest,
   toHostedLinkingSessionView,
 } from "#server/connections/hostedLinkingPresentation.ts";
 
 const hostedLinkingCookieName = "lineupkeep_hosted_link";
 
 export const startHostedLinkingServerFn = createServerFn({ method: "POST" })
-  .validator((raw: typeof StartHostedLinkingInput.Encoded) =>
-    Schema.decodeResult(StartHostedLinkingInput)(raw),
+  .validator((raw: typeof StartHostedLinkingRequest.Encoded) =>
+    Schema.decodeResult(StartHostedLinkingRequest)(raw),
   )
   .handler(({ data }) => {
     const request = getRequest();
@@ -44,7 +42,12 @@ export const startHostedLinkingServerFn = createServerFn({ method: "POST" })
           if (deploymentTarget.hostedBrowser === undefined) {
             return yield* HostedBrowserUnsupported.make({});
           }
-          const started = yield* HostedLinking.use((service) => service.start(userId, input));
+          const started = yield* HostedLinking.use((service) =>
+            service.start(userId, {
+              provider: input.provider,
+              ...(input.connectionId === undefined ? {} : { connectionId: input.connectionId }),
+            }),
+          );
           setResponseHeader("cache-control", "no-store");
           const session = toHostedLinkingSessionView(started.session);
           const streamPath = `/api/linking/session/${session.id}/stream`;
@@ -62,7 +65,11 @@ export const startHostedLinkingServerFn = createServerFn({ method: "POST" })
             sameSite: "strict",
             secure,
           });
-          return { session, streamPath } satisfies StartHostedLinkingView;
+          return {
+            session,
+            streamPath: `${streamPath}?viewport=${input.viewport}`,
+            viewport: input.viewport,
+          } satisfies StartHostedLinkingView;
         }),
       mapHostedLinkingError,
     );

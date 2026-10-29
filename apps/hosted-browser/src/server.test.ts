@@ -38,6 +38,7 @@ it("streams provider sign-in, captures the session, and removes the profile", as
       sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
       expiresAt: Date.now() + 60_000,
       loginUrl: provider.url.href,
+      viewport: "desktop" as const,
     };
     const client = new WebSocket(`ws://127.0.0.1:${port}/session`);
     const clientClosed = closed(client);
@@ -147,6 +148,7 @@ it("refuses non-public destinations, names them, and records them in the outcome
         sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a6",
         expiresAt: Date.now() + 60_000,
         loginUrl: provider.url.href,
+        viewport: "desktop" as const,
       }),
     );
     await waiting.promise;
@@ -199,6 +201,7 @@ it("refuses forged descriptors, replayed sessions, and a second browser", async 
       sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",
       expiresAt: Date.now() + 60_000,
       loginUrl: provider.url.href,
+      viewport: "desktop" as const,
     };
     const envelope = signHostedBrowserDescriptor(descriptorKey, session);
     const first = new WebSocket(`ws://127.0.0.1:${port}/session`);
@@ -258,6 +261,7 @@ it("destroys the browser and profile when the service stops", async () => {
       sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a5",
       expiresAt: Date.now() + 60_000,
       loginUrl: provider.url.href,
+      viewport: "desktop" as const,
     };
     const client = new WebSocket(`ws://127.0.0.1:${port}/session`);
     const clientClosed = closed(client);

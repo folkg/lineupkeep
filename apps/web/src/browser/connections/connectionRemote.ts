@@ -5,6 +5,7 @@ import type {
   ConnectionChangeView,
   ConnectionIdData,
   ConnectionView,
+  StartHostedLinkingData,
   StartHostedLinkingView,
 } from "#contracts/connections/connectionContract.ts";
 import {
@@ -35,11 +36,6 @@ export type ConnectionRemote = {
   readonly cancelHosted: (
     input: typeof HostedLinkingSessionInput.Encoded,
   ) => Promise<CancelHostedLinkingView>;
-};
-
-type StartHostedLinkingData = {
-  readonly provider: string;
-  readonly connectionId?: string;
 };
 
 type ConnectionListRequestOptions = {

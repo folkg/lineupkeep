@@ -1,4 +1,5 @@
 import type { ConnectionError } from "@lineupkeep/backend/connections/Connection";
+import { StartHostedLinkingInput } from "@lineupkeep/backend/connections/HostedLinking";
 import type {
   HostedLinkingError,
   HostedLinkingSession,
@@ -10,6 +11,11 @@ import type {
   HostedLinkingSessionView,
 } from "#contracts/connections/connectionContract.ts";
 import type { ExpectedFailure } from "#server/backendEntry.ts";
+
+export const StartHostedLinkingRequest = Schema.Struct({
+  ...StartHostedLinkingInput.fields,
+  viewport: Schema.Literals(["desktop", "phone"]),
+});
 
 export function toHostedLinkingSessionView(
   session: HostedLinkingSession,

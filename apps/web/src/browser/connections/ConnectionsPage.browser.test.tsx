@@ -90,6 +90,7 @@ it("keeps the Google sign-in hint collapsed until the reader opens it by keyboar
 });
 
 it("starts a hosted sign-in for a connection that needs to reconnect", async () => {
+  await page.viewport(1440, 900);
   const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
   using _app = setupConnectionsPage([connected, reconnectable], {
     startHosted: (input) => {
@@ -102,8 +103,38 @@ it("starts a hosted sign-in for a connection that needs to reconnect", async () 
 
   await expect
     .poll(() => hostedInputs)
-    .toEqual([{ provider: "yahoo", connectionId: reconnectable.id }]);
+    .toEqual([{ provider: "yahoo", connectionId: reconnectable.id, viewport: "desktop" }]);
   await expect.element(page.getByRole("button", { name: "Opening sign-in…" })).toBeVisible();
+});
+
+it("starts a phone viewport profile from a phone-sized client", async () => {
+  await page.viewport(390, 844);
+  const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
+  using _app = setupConnectionsPage([connected], {
+    startHosted: (input) => {
+      hostedInputs.push(input);
+      return new Promise(() => undefined);
+    },
+  });
+
+  await page.getByRole("button", { name: "Connect Yahoo" }).click();
+
+  await expect.poll(() => hostedInputs).toEqual([{ provider: "yahoo", viewport: "phone" }]);
+});
+
+it("starts a desktop viewport profile from a wide client", async () => {
+  await page.viewport(1440, 900);
+  const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
+  using _app = setupConnectionsPage([connected], {
+    startHosted: (input) => {
+      hostedInputs.push(input);
+      return new Promise(() => undefined);
+    },
+  });
+
+  await page.getByRole("button", { name: "Connect Yahoo" }).click();
+
+  await expect.poll(() => hostedInputs).toEqual([{ provider: "yahoo", viewport: "desktop" }]);
 });
 
 it("offers no local helper affordances", async () => {

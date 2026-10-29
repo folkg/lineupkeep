@@ -237,14 +237,187 @@ it.live(
   60_000,
 );
 
-function sessionFor(origin: URL, path = "/login"): HostedBrowserSession {
+it.live(
+  "applies the session viewport profile to the provider page",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const reports: Array<URL> = [];
+        const typed: Array<string> = [];
+        const submissions: Array<string> = [];
+        const server = yield* viewportProviderServer(reports, typed, submissions);
+        const profileRoot = yield* temporaryDirectory();
+        const factory = createPlaywrightHostedBrowser({ profileRoot });
+
+        yield* Effect.promise(() => observeViewport(server.url, factory, reports, typed));
+        assert.strictEqual(reports.length, 2);
+        assert.deepStrictEqual(metricsOf(reports[0]), { width: 390, height: 844 });
+        assert.deepStrictEqual(metricsOf(reports[1]), { width: 1100, height: 720 });
+        assert.deepStrictEqual(typed, ["phone-user"]);
+        assert.deepStrictEqual(submissions, ["email=phone-user"]);
+      }),
+    ),
+  120_000,
+);
+
+function sessionFor(
+  origin: URL,
+  path = "/login",
+  id = "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
+): HostedBrowserSession {
   return {
-    id: Schema.decodeSync(HostedLinkingSessionId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
+    id: Schema.decodeSync(HostedLinkingSessionId)(id),
     userId: decodeUserId("owner"),
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),
     loginUrl: new URL(path, origin),
+    viewport: "desktop",
     fixtureOrigin: origin.origin,
   };
+}
+
+async function observeViewport(
+  origin: URL,
+  factory: ReturnType<typeof createPlaywrightHostedBrowser>,
+  reports: Array<URL>,
+  typed: Array<string>,
+): Promise<void> {
+  for (const viewport of ["phone", "desktop"] as const) {
+    const reported = reports.length;
+    const ready = Promise.withResolvers<void>();
+    const completed = Promise.withResolvers<void>();
+    const sessionId =
+      viewport === "phone"
+        ? "018f79ea-7d86-7c18-9b4a-8b4d0c9164a7"
+        : "018f79ea-7d86-7c18-9b4a-8b4d0c9164a8";
+    const handle = await factory.open(
+      { ...sessionFor(origin, "/login", sessionId), viewport },
+      {
+        onFrame: () => undefined,
+        onMessage: (message) => {
+          if (message._tag === "Status" && message.status === "waiting") {
+            ready.resolve();
+          }
+          if (message._tag === "Ready") {
+            completed.resolve();
+          }
+        },
+        complete: () => Promise.resolve({ status: "ready", connectionId, teamsDiscovered: 1 }),
+        fault: () => Promise.resolve(),
+        expire: () => Promise.resolve(),
+      },
+    );
+    try {
+      await settled(ready.promise, `${viewport} page to finish loading`);
+      for (let attempt = 0; attempt < 100 && reports.length === reported; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (reports.length === reported) {
+        throw new Error(`The ${viewport} provider page did not report its viewport`);
+      }
+      if (viewport === "phone") {
+        handle.input({ _tag: "Text", text: "phone-user" });
+        await settled(waitForLength(typed, 1), "the provider field to receive typed text");
+        handle.input({ _tag: "Key", key: "Enter" });
+        await settled(completed.promise, "the phone sign-in to complete");
+      }
+    } finally {
+      await settled(handle.close(), `${viewport} browser to close`);
+    }
+  }
+}
+
+function waitForLength(values: ReadonlyArray<unknown>, length: number): Promise<void> {
+  return new Promise((resolve) => {
+    const poll = setInterval(() => {
+      if (values.length >= length) {
+        clearInterval(poll);
+        resolve();
+      }
+    }, 20);
+  });
+}
+
+function settled<T>(work: Promise<T>, label: string, millis = 30_000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), millis);
+    work.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
+
+function metricsOf(report: URL | undefined): { width: number; height: number } {
+  if (report === undefined) {
+    throw new Error("The provider page did not report its viewport");
+  }
+  return {
+    width: Number(report.searchParams.get("width")),
+    height: Number(report.searchParams.get("height")),
+  };
+}
+
+function viewportProviderServer(
+  reports: Array<URL>,
+  typed: Array<string>,
+  submissions: Array<string>,
+): Effect.Effect<TestServer, never, Scope.Scope> {
+  return Effect.acquireRelease(
+    startServer((request: IncomingMessage, response: ServerResponse) => {
+      if (request.url?.startsWith("/metrics") === true) {
+        reports.push(new URL(request.url, "http://127.0.0.1"));
+        response.writeHead(200, { "content-type": "image/gif" });
+        response.end();
+        return;
+      }
+      if (request.url?.startsWith("/typed") === true) {
+        typed.push(new URL(request.url, "http://127.0.0.1").searchParams.get("value") ?? "");
+        response.writeHead(200, { "content-type": "image/gif" });
+        response.end();
+        return;
+      }
+      if (request.method === "POST") {
+        const chunks: Array<Buffer> = [];
+        request.on("data", (chunk: Buffer) => chunks.push(chunk));
+        request.on("end", () => {
+          submissions.push(Buffer.concat(chunks).toString("utf8"));
+          response.writeHead(200, {
+            "content-type": "text/html",
+            "set-cookie": [
+              "T=temporary-session-token; Path=/; HttpOnly; SameSite=Lax",
+              "Y=temporary-user-token; Path=/; HttpOnly; SameSite=Lax",
+            ],
+          });
+          response.end("<html><body>Signed in</body></html>");
+        });
+        return;
+      }
+      response.writeHead(200, { "content-type": "text/html" });
+      response.end(`<!doctype html>
+<html>
+  <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  <body>
+    <form method="POST" action="/signed-in">
+      <label>Email <input name="email" autofocus autocomplete="off"></label>
+      <button type="submit">Sign in</button>
+    </form>
+    <script>
+      new Image().src = "/metrics?width=" + window.innerWidth + "&height=" + window.innerHeight;
+      document.querySelector("input").addEventListener("input", (event) => {
+        new Image().src = "/typed?value=" + encodeURIComponent(event.target.value);
+      });
+    </script>
+  </body>
+</html>`);
+    }),
+    closeServer,
+  );
 }
 
 const connectionId = decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3");

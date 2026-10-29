@@ -5,6 +5,7 @@ import type {
 } from "@lineupkeep/backend/connections/Connection";
 
 import type { AuthenticationFailure } from "#contracts/auth/authContract.ts";
+import type { HostedBrowserViewportProfile } from "#contracts/connections/hostedBrowserProtocol.ts";
 import type { UseCaseResult } from "#contracts/useCaseContract.ts";
 
 export type ConnectionView = {
@@ -52,9 +53,16 @@ export type HostedLinkingSessionView = {
   readonly failureReason?: string;
 };
 
+export type StartHostedLinkingData = {
+  readonly provider: string;
+  readonly connectionId?: string;
+  readonly viewport: HostedBrowserViewportProfile;
+};
+
 export type StartHostedLinkingView = {
   readonly session: HostedLinkingSessionView;
   readonly streamPath: string;
+  readonly viewport: HostedBrowserViewportProfile;
 };
 
 export type CancelHostedLinkingView = {

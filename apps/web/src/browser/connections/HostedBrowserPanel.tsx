@@ -10,9 +10,10 @@ import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
+import { viewportSize } from "#contracts/connections/hostedBrowserProtocol.ts";
 import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
-import { SignInWithGoogleHint } from "./SignInWithGoogleHint";
+import { SessionSignInWithGoogleHint, SignInWithGoogleHint } from "./SignInWithGoogleHint";
 import { statusMessage } from "./useHostedLinking";
 import type { HostedLinkingController } from "./useHostedLinking";
 
@@ -23,7 +24,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
         {defaultProviderName()} sign-in
       </Heading>
       <Text size="body" tone="muted">
-        Sign in as you normally would. The private browser closes when you finish or cancel.
+        Sign in as you normally would, in a browser that belongs to this sign-in only.
       </Text>
       <Show
         fallback={
@@ -47,10 +48,12 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
       >
         {(session) => (
           <Stack gap="sm">
+            <SessionSignInWithGoogleHint />
             <BrowserFrame
               frameUrl={props.controller.frameUrl()}
               ready={props.controller.ready()}
               statusLabel={statusMessage(props.controller.status())}
+              viewport={viewportSize(props.controller.viewportProfile())}
               onCancel={props.controller.cancel}
               onKey={props.controller.sendKey}
               onPointer={props.controller.click}
@@ -63,15 +66,15 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
                 : statusMessage(props.controller.status())}
             </Text>
             <Text size="caption" tone="muted">
-              Keystrokes go to {defaultProviderName()}'s page through the private browser.
-              Lineupkeep does not store or log them.
+              Tap the page and type. Keystrokes go to {defaultProviderName()}'s page through the
+              private browser. Lineupkeep does not store or log them.
             </Text>
             <Text size="caption" tone="muted">
               This sign-in expires{" "}
               <Time datetime={session().session.expiresAt}>
                 {formatReaderTime(session().session.expiresAt)}
               </Time>
-              . Closing or cancelling discards the private browser profile.
+              . Cancelling closes the private browser and discards its profile.
             </Text>
           </Stack>
         )}

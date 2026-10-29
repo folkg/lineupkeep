@@ -1,4 +1,28 @@
-export const browserViewport = { width: 1100, height: 720 } as const;
+export const hostedBrowserViewports = {
+  desktop: { width: 1100, height: 720 },
+  phone: { width: 390, height: 844 },
+} as const;
+
+export type HostedBrowserViewportProfile = keyof typeof hostedBrowserViewports;
+
+export const maximumHostedBrowserTextLength = 2_048;
+
+export function viewportSize(profile: HostedBrowserViewportProfile): {
+  readonly width: number;
+  readonly height: number;
+} {
+  return hostedBrowserViewports[profile];
+}
+
+export function viewportProfileForClientWidth(width: number): HostedBrowserViewportProfile {
+  return width >= 768 ? "desktop" : "phone";
+}
+
+export function isHostedBrowserViewportProfile(
+  value: unknown,
+): value is HostedBrowserViewportProfile {
+  return value === "desktop" || value === "phone";
+}
 
 export type HostedBrowserInput =
   | { readonly _tag: "Click"; readonly x: number; readonly y: number }
@@ -72,7 +96,9 @@ export function parseHostedBrowserInput(value: string): HostedBrowserInput | und
     }
     case "Text": {
       const text = decoded["text"];
-      return typeof text === "string" && text.length >= 1 && text.length <= 2_048
+      return typeof text === "string" &&
+        text.length >= 1 &&
+        text.length <= maximumHostedBrowserTextLength
         ? { _tag: "Text", text }
         : undefined;
     }

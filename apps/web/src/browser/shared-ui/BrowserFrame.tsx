@@ -8,7 +8,23 @@ import { Button } from "./Button";
 import { Text } from "./Text";
 
 export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
-  const handlePointerDown: JSX.EventHandler<HTMLButtonElement, PointerEvent> = (event) => {
+  let surface: HTMLInputElement | undefined;
+  let composing = false;
+
+  const forwardTypedText = (): void => {
+    const element = surface;
+    if (element === undefined) {
+      return;
+    }
+    const text = element.value;
+    if (text === "") {
+      return;
+    }
+    element.value = "";
+    props.onText(text);
+  };
+
+  const handlePointerDown: JSX.EventHandler<HTMLInputElement, PointerEvent> = (event) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     if (bounds.width === 0 || bounds.height === 0) {
       return;
@@ -18,37 +34,89 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
     props.onPointer(x, y);
   };
 
-  const handleKeyDown: JSX.EventHandler<HTMLButtonElement, KeyboardEvent> = (event) => {
+  const handleKeyDown: JSX.EventHandler<HTMLInputElement, KeyboardEvent> = (event) => {
+    if (composing || event.isComposing) {
+      return;
+    }
     if (event.ctrlKey || event.metaKey || event.altKey) {
       return;
     }
-    if (event.key.length === 1) {
-      event.preventDefault();
-      props.onText(event.key);
+    const key = hostedKey(event.key);
+    if (key === undefined) {
       return;
     }
-    const key = hostedKey(event.key);
-    if (key !== undefined) {
-      event.preventDefault();
-      props.onKey(key);
+    event.preventDefault();
+    props.onKey(key);
+  };
+
+  const handleBeforeInput: JSX.EventHandler<HTMLInputElement, InputEvent> = (event) => {
+    if (composing || event.isComposing) {
+      return;
+    }
+    switch (event.inputType) {
+      case "insertText":
+        if (event.data !== null && event.data !== "") {
+          event.preventDefault();
+          props.onText(event.data);
+        }
+        return;
+      case "insertLineBreak":
+      case "insertParagraph":
+        event.preventDefault();
+        props.onKey("Enter");
+        return;
+      case "deleteContentBackward":
+        event.preventDefault();
+        props.onKey("Backspace");
+        return;
+      case "deleteContentForward":
+        event.preventDefault();
+        props.onKey("Delete");
+        return;
+      default:
+        return;
     }
   };
 
-  const handleWheel: JSX.EventHandler<HTMLButtonElement, WheelEvent> = (event) => {
+  const handleInput: JSX.EventHandler<HTMLInputElement, InputEvent> = (event) => {
+    if (composing || event.isComposing) {
+      return;
+    }
+    forwardTypedText();
+  };
+
+  const handleCompositionStart: JSX.EventHandler<HTMLInputElement, CompositionEvent> = () => {
+    composing = true;
+  };
+
+  const handleCompositionEnd: JSX.EventHandler<HTMLInputElement, CompositionEvent> = () => {
+    composing = false;
+    forwardTypedText();
+  };
+
+  const handlePaste: JSX.EventHandler<HTMLInputElement, ClipboardEvent> = (event) => {
+    event.preventDefault();
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+    if (text !== "") {
+      props.onText(text);
+    }
+  };
+
+  const handleWheel: JSX.EventHandler<HTMLInputElement, WheelEvent> = (event) => {
     event.preventDefault();
     props.onScroll(Math.max(Math.min(event.deltaY, 2_000), -2_000));
   };
 
   return (
-    <div class="overflow-hidden rounded-surface border border-rule-strong bg-paper shadow-lift">
+    <div class="overflow-hidden rounded-surface border border-rule-strong bg-paper shadow-lift focus-within:shadow-focus">
       <div class="flex items-center gap-2 border-b border-rule px-3.5 py-2.5">
-        <span class="size-2.5 rounded-full bg-danger" aria-hidden="true" />
-        <span class="size-2.5 rounded-full bg-accent" aria-hidden="true" />
-        <span class="size-2.5 rounded-full bg-ink/20" aria-hidden="true" />
+        <span class="size-2.5 shrink-0 rounded-full bg-danger" aria-hidden="true" />
+        <span class="size-2.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+        <span class="size-2.5 shrink-0 rounded-full bg-ink/20" aria-hidden="true" />
         <Text size="caption" tone="muted">
-          Private browser session
+          Private to this session. Closes when you finish or cancel.
         </Text>
-        <span class="ml-auto">
+        <span class="ml-auto shrink-0">
           <Button
             pending={props.ready}
             pendingLabel="Connected"
@@ -59,36 +127,49 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
           </Button>
         </span>
       </div>
-      <button
-        type="button"
-        ref={(element) => element.focus()}
-        class="relative block aspect-[1100/720] w-full cursor-crosshair touch-none overflow-hidden bg-ink/5 p-0 text-left outline-none focus-visible:shadow-focus"
-        aria-label={`${defaultProviderName()} sign-in browser`}
-        onClick={(event) => event.preventDefault()}
-        onKeyDown={handleKeyDown}
-        onPointerDown={handlePointerDown}
-        onWheel={handleWheel}
+      <div
+        class="relative w-full overflow-hidden bg-ink/5"
+        style={{ "aspect-ratio": `${props.viewport.width} / ${props.viewport.height}` }}
       >
-        <Show
-          fallback={
-            <span class="grid h-full place-items-center">
-              <Text size="caption" tone="muted">
-                {props.statusLabel}
-              </Text>
-            </span>
-          }
-          when={props.frameUrl}
-        >
+        <Show when={props.frameUrl}>
           {(frame) => (
             <img
               alt={`${defaultProviderName()} sign-in page`}
-              class="h-full w-full select-none object-contain"
+              class="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
               draggable={false}
               src={frame()}
             />
           )}
         </Show>
-      </button>
+        <Show when={props.frameUrl === undefined}>
+          <span class="pointer-events-none absolute inset-0 grid place-items-center">
+            <Text size="caption" tone="muted">
+              {props.statusLabel}
+            </Text>
+          </span>
+        </Show>
+        <input
+          ref={(element) => {
+            surface = element;
+            element.focus({ preventScroll: true });
+          }}
+          type="text"
+          aria-label={`${defaultProviderName()} sign-in browser`}
+          autocomplete="off"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck={false}
+          class="absolute inset-0 h-full w-full cursor-text touch-auto appearance-none border-0 bg-transparent p-0 text-base text-transparent caret-transparent outline-none"
+          onBeforeInput={handleBeforeInput}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onPointerDown={handlePointerDown}
+          onWheel={handleWheel}
+        />
+      </div>
     </div>
   );
 }
@@ -118,6 +199,7 @@ type BrowserFrameProps = {
   readonly frameUrl: string | undefined;
   readonly statusLabel: string;
   readonly ready: boolean;
+  readonly viewport: { readonly width: number; readonly height: number };
   readonly onCancel: () => void;
   readonly onPointer: (x: number, y: number) => void;
   readonly onText: (text: string) => void;

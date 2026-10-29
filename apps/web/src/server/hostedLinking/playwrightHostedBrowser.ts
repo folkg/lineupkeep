@@ -27,6 +27,7 @@ export function createPlaywrightHostedBrowser(
           id: session.id,
           expiresAt: DateTime.toEpochMillis(session.expiresAt),
           loginUrl: session.loginUrl.href,
+          viewport: session.viewport,
           ...(session.fixtureOrigin === undefined ? {} : { fixtureOrigin: session.fixtureOrigin }),
         },
         {

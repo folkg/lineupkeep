@@ -10,12 +10,14 @@ import type { WebSocketHooks } from "h3";
 
 import {
   encodeHostedBrowserMessage,
+  isHostedBrowserViewportProfile,
   parseHostedBrowserInput,
 } from "#contracts/connections/hostedBrowserProtocol.ts";
 import type {
   HostedBrowserFailure,
   HostedBrowserInput,
   HostedBrowserMessage,
+  HostedBrowserViewportProfile,
 } from "#contracts/connections/hostedBrowserProtocol.ts";
 import { deploymentTarget } from "#deployment-target";
 import { runBackend } from "#server/backendEntry.ts";
@@ -38,17 +40,22 @@ export function hostedLinkingHooks(
   if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return Promise.resolve(rejectUpgrade(426, "WebSocket upgrade is required."));
   }
+  const viewport = new URL(request.url).searchParams.get("viewport");
+  if (!isHostedBrowserViewportProfile(viewport)) {
+    return Promise.resolve(rejectUpgrade(400, "A browser viewport profile is required."));
+  }
   const ticket = hostedLinkingTicket(request.headers.get("cookie"));
   if (ticket === undefined) {
     return Promise.resolve(rejectUpgrade(401, "Unauthorized"));
   }
-  return authorizeStream(request, sessionId, ticket);
+  return authorizeStream(request, sessionId, ticket, viewport);
 }
 
 async function authorizeStream(
   request: Request,
   sessionId: string,
   ticket: string,
+  viewport: HostedBrowserViewportProfile,
 ): Promise<Partial<WebSocketHooks>> {
   const authorized = await runBackend(
     request,
@@ -89,6 +96,7 @@ async function authorizeStream(
     userId,
     expiresAt: linking.expiresAt,
     loginUrl: providerLogin.loginUrl,
+    viewport,
     ...(providerLogin.fixtureOrigin === undefined
       ? {}
       : { fixtureOrigin: providerLogin.fixtureOrigin }),

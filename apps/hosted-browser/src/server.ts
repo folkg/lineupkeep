@@ -217,6 +217,7 @@ export function createHostedBrowserService(
           id: descriptor.sessionId,
           expiresAt: descriptor.expiresAt,
           loginUrl: descriptor.loginUrl,
+          viewport: descriptor.viewport,
           ...(options.fixtureOrigin === undefined ? {} : { fixtureOrigin: options.fixtureOrigin }),
         },
         {

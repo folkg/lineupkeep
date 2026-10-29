@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -62,6 +64,14 @@ describe("hosted browser session descriptors", () => {
     expect(verifyHostedBrowserDescriptor(key, scriptLogin, now)).toBeUndefined();
   });
 
+  it("rejects a descriptor without a known viewport profile", () => {
+    const missing = signRaw({ ...descriptor(), viewport: undefined });
+    const unknown = signRaw({ ...descriptor(), viewport: "tablet" });
+
+    expect(verifyHostedBrowserDescriptor(key, missing, now)).toBeUndefined();
+    expect(verifyHostedBrowserDescriptor(key, unknown, now)).toBeUndefined();
+  });
+
   it("rejects something that is not a signed envelope", () => {
     expect(verifyHostedBrowserDescriptor(key, "not-json", now)).toBeUndefined();
     expect(
@@ -75,10 +85,17 @@ function descriptor(overrides: Partial<HostedBrowserDescriptor> = {}): HostedBro
     sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
     expiresAt: now + 10 * 60 * 1_000,
     loginUrl: "https://login.yahoo.com/",
+    viewport: "desktop",
     ...overrides,
   };
 }
 
 function signedEnvelope(): string {
   return signHostedBrowserDescriptor(key, descriptor());
+}
+
+function signRaw(payload: Record<string, unknown>): string {
+  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const signature = createHmac("sha256", key).update(encoded).digest("base64url");
+  return JSON.stringify({ payload: encoded, signature });
 }

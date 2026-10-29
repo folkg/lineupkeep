@@ -7,20 +7,23 @@ import type { BrowserContext, Page } from "playwright";
 
 import { createEgressProxy, type EgressProxy, type EgressRefusal } from "./egress.ts";
 import {
-  browserViewport,
+  viewportSize,
   type HostedBrowserFailure,
   type HostedBrowserInput,
   type HostedBrowserStatus,
+  type HostedBrowserViewportProfile,
 } from "./protocol.ts";
 
 const capturePollMillis = 400;
 const navigationTimeoutMillis = 30_000;
+const autofocusTimeoutMillis = 2_000;
 const maximumFrameBytes = 1_500_000;
 
 export type HostedBrowserSession = {
   readonly id: string;
   readonly expiresAt: number;
   readonly loginUrl: string;
+  readonly viewport: HostedBrowserViewportProfile;
   readonly fixtureOrigin?: string;
 };
 
@@ -85,6 +88,7 @@ async function openBrowser(
   const profileDirectory = await mkdtemp(
     join(options.profileRoot ?? tmpdir(), "lineupkeep-hosted-browser-"),
   );
+  const viewport = viewportSize(session.viewport);
   let closed = false;
   let settled = false;
   let capturePoll: NodeJS.Timeout | undefined;
@@ -146,7 +150,7 @@ async function openBrowser(
   try {
     context = await chromium.launchPersistentContext(profileDirectory, {
       headless: true,
-      viewport: browserViewport,
+      viewport,
       deviceScaleFactor: 1,
       serviceWorkers: "block",
       locale: "en-US",
@@ -171,6 +175,12 @@ async function openBrowser(
       waitUntil: "domcontentloaded",
       timeout: navigationTimeoutMillis,
     });
+    if ((await initial.locator("[autofocus]").count()) > 0) {
+      await initial
+        .locator("[autofocus]:focus")
+        .waitFor({ timeout: autofocusTimeoutMillis })
+        .catch(() => undefined);
+    }
   } catch {
     await fail("provider_unavailable");
     throw new Error("The provider login page did not load");
@@ -235,7 +245,7 @@ async function openBrowser(
     page.on("close", () => {
       forgetTarget(page);
     });
-    void page.setViewportSize(browserViewport).catch(() => undefined);
+    void page.setViewportSize(viewport).catch(() => undefined);
     activate(page);
   }
 
@@ -244,6 +254,7 @@ async function openBrowser(
       return;
     }
     active = page;
+    void page.bringToFront().catch(() => undefined);
     switchQueue = switchQueue.then(() => streamTarget(page)).catch(() => undefined);
   }
 
@@ -272,7 +283,7 @@ async function openBrowser(
             events.onFrame(new Uint8Array(data));
           }
         },
-        size: browserViewport,
+        size: viewport,
         quality: 55,
         fps: 5,
       });
@@ -313,7 +324,7 @@ async function openBrowser(
       inputQueue = inputQueue
         .then(() => {
           const page = active;
-          return page === undefined ? Promise.resolve() : applyInput(page, input);
+          return page === undefined ? Promise.resolve() : applyInput(page, input, viewport);
         })
         .catch(() => undefined);
     },
@@ -321,12 +332,16 @@ async function openBrowser(
   };
 }
 
-async function applyInput(page: Page, input: HostedBrowserInput): Promise<void> {
+async function applyInput(
+  page: Page,
+  input: HostedBrowserInput,
+  viewport: { readonly width: number; readonly height: number },
+): Promise<void> {
   switch (input._tag) {
     case "Click":
       await page.mouse.click(
-        Math.round(input.x * browserViewport.width),
-        Math.round(input.y * browserViewport.height),
+        Math.round(input.x * viewport.width),
+        Math.round(input.y * viewport.height),
       );
       return;
     case "Text":

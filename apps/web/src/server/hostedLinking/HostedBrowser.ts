@@ -7,6 +7,7 @@ import type {
   HostedBrowserFailure,
   HostedBrowserInput,
   HostedBrowserMessage,
+  HostedBrowserViewportProfile,
 } from "#contracts/connections/hostedBrowserProtocol.ts";
 
 export type HostedBrowserSession = {
@@ -14,6 +15,7 @@ export type HostedBrowserSession = {
   readonly userId: UserId;
   readonly expiresAt: DateTime.Utc;
   readonly loginUrl: URL;
+  readonly viewport: HostedBrowserViewportProfile;
   readonly fixtureOrigin?: string;
 };
 

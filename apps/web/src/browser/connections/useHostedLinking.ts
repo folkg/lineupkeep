@@ -6,7 +6,9 @@ import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx"
 import type { StartHostedLinkingView } from "#contracts/connections/connectionContract.ts";
 import {
   encodeHostedBrowserInput,
+  maximumHostedBrowserTextLength,
   parseHostedBrowserMessage,
+  viewportProfileForClientWidth,
 } from "#contracts/connections/hostedBrowserProtocol.ts";
 import type {
   HostedBrowserInput,
@@ -14,6 +16,7 @@ import type {
   HostedBrowserMessage,
   HostedBrowserRefusalReason,
   HostedBrowserStatus,
+  HostedBrowserViewportProfile,
 } from "#contracts/connections/hostedBrowserProtocol.ts";
 import { defaultProviderKey, defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
@@ -28,6 +31,8 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
   const [starting, setStarting] = createSignal(false);
   const [startingConnectionId, setStartingConnectionId] = createSignal<string>();
   const [ready, setReady] = createSignal(false);
+  const [viewportProfile, setViewportProfile] =
+    createSignal<HostedBrowserViewportProfile>("desktop");
   const navigate = useNavigate();
   let socket: WebSocket | undefined;
   let currentFrameUrl: string | undefined;
@@ -188,6 +193,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
       .remote()
       .startHosted({
         provider: defaultProviderKey,
+        viewport: viewportProfileForClientWidth(window.innerWidth),
         ...(input.connectionId === undefined ? {} : { connectionId: input.connectionId }),
       })
       .then((view) => {
@@ -195,6 +201,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
           void options.remote().cancelHosted({ id: view.session.id });
           return;
         }
+        setViewportProfile(view.viewport);
         setSession(view);
         setStatus("starting");
         connect(view);
@@ -211,6 +218,12 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
       return;
     }
     socket.send(encodeHostedBrowserInput(input));
+  };
+
+  const sendText = (text: string): void => {
+    for (const chunk of textChunks(text)) {
+      sendInput({ _tag: "Text", text: chunk });
+    }
   };
 
   onCleanup(() => {
@@ -234,13 +247,22 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
     starting,
     startingConnectionId,
     ready,
+    viewportProfile,
     start,
     cancel,
     click: (x, y) => sendInput({ _tag: "Click", x, y }),
-    sendText: (text) => sendInput({ _tag: "Text", text }),
+    sendText,
     sendKey: (key: HostedBrowserKey) => sendInput({ _tag: "Key", key }),
     scroll: (deltaY) => sendInput({ _tag: "Scroll", deltaY }),
   };
+}
+
+function textChunks(text: string): ReadonlyArray<string> {
+  const chunks: Array<string> = [];
+  for (let index = 0; index < text.length; index += maximumHostedBrowserTextLength) {
+    chunks.push(text.slice(index, index + maximumHostedBrowserTextLength));
+  }
+  return chunks;
 }
 
 function refusalMessage(host: string, reason: HostedBrowserRefusalReason): string {
@@ -293,6 +315,7 @@ export type HostedLinkingController = {
   readonly starting: Accessor<boolean>;
   readonly startingConnectionId: Accessor<string | undefined>;
   readonly ready: Accessor<boolean>;
+  readonly viewportProfile: Accessor<HostedBrowserViewportProfile>;
   readonly start: (options?: StartHostedLinkingOptions) => Promise<void>;
   readonly cancel: () => void;
   readonly click: (x: number, y: number) => void;

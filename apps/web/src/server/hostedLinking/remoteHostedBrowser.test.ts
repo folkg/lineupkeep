@@ -22,11 +22,14 @@ it("relays the hosted browser stream and completes the owner session", async () 
   await listening(server);
   const received: Array<string | undefined> = [];
   let descriptorOrigin: string | undefined;
+  let descriptorViewport: string | undefined;
   server.on("connection", (socket, request) => {
     received.push(request.headers.authorization);
     socket.once("message", (data) => {
       const text = Buffer.isBuffer(data) ? data.toString("utf8") : "";
-      descriptorOrigin = verifyHostedBrowserDescriptor(descriptorKey, text, Date.now())?.loginUrl;
+      const descriptor = verifyHostedBrowserDescriptor(descriptorKey, text, Date.now());
+      descriptorOrigin = descriptor?.loginUrl;
+      descriptorViewport = descriptor?.viewport;
       socket.send(encodeTransportMessage({ _tag: "Status", status: "waiting" }));
       socket.send(Buffer.from([1, 2, 3, 4]));
       socket.send(
@@ -73,6 +76,7 @@ it("relays the hosted browser stream and completes the owner session", async () 
 
   expect(received).toEqual(["Bearer test-identity-token"]);
   expect(descriptorOrigin).toBe("https://login.yahoo.com/");
+  expect(descriptorViewport).toBe("desktop");
   expect(frames).toEqual([new Uint8Array([1, 2, 3, 4])]);
   expect(messages).toEqual([
     { _tag: "Status", status: "waiting" },
@@ -130,6 +134,7 @@ function session(): HostedBrowserSession {
     userId: decodeUserId("owner"),
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),
     loginUrl: new URL("https://login.yahoo.com/"),
+    viewport: "desktop",
   };
 }
 

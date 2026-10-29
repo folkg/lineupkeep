@@ -27,7 +27,7 @@ test("signs in through the hosted browser or reports why it is unavailable", asy
     return;
   }
 
-  const signInView = page.getByRole("button", { name: "Yahoo sign-in browser" });
+  const signInView = page.getByRole("textbox", { name: "Yahoo sign-in browser" });
   await expect(signInView).toBeVisible();
   await expect(page.locator('img[alt="Yahoo sign-in page"]')).toBeVisible();
   await captureCheckpoint(page, info, "hosted-browser-open");

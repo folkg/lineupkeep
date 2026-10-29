@@ -1,9 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+import { isHostedBrowserViewportProfile } from "./protocol.ts";
+import type { HostedBrowserViewportProfile } from "./protocol.ts";
+
 export type HostedBrowserDescriptor = {
   readonly sessionId: string;
   readonly expiresAt: number;
   readonly loginUrl: string;
+  readonly viewport: HostedBrowserViewportProfile;
 };
 
 const maximumDescriptorLifetimeMillis = 15 * 60 * 1_000;
@@ -52,6 +56,7 @@ function decodeDescriptor(payload: string): HostedBrowserDescriptor | undefined 
   const sessionId = decoded["sessionId"];
   const expiresAt = decoded["expiresAt"];
   const loginUrl = decoded["loginUrl"];
+  const viewport = decoded["viewport"];
   if (typeof sessionId !== "string" || sessionId.length < 1 || sessionId.length > 100) {
     return undefined;
   }
@@ -61,7 +66,10 @@ function decodeDescriptor(payload: string): HostedBrowserDescriptor | undefined 
   if (typeof loginUrl !== "string" || !isHttpUrl(loginUrl)) {
     return undefined;
   }
-  return { sessionId, expiresAt, loginUrl };
+  if (!isHostedBrowserViewportProfile(viewport)) {
+    return undefined;
+  }
+  return { sessionId, expiresAt, loginUrl, viewport };
 }
 
 function isHttpUrl(value: string): boolean {
