@@ -11,6 +11,7 @@ export function Text(props: TextProps): JSX.Element {
   const Tag = dynamic(() => props.as ?? "p");
   return (
     <Tag
+      role={props.role}
       class={cx(
         sizeClass[props.size ?? "body"],
         toneClass[surface][props.tone ?? "default"],
@@ -38,6 +39,7 @@ type TextTone = "default" | "muted" | "faint";
 
 type TextProps = {
   readonly size?: keyof typeof sizeClass;
+  readonly role?: "status";
   readonly tone?: TextTone;
 
   readonly wrap?: "preserve";

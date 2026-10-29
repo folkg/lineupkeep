@@ -18,7 +18,7 @@ export function RuleListItem(props: {
       class={cx(
         "grid gap-2 border-b border-rule py-4",
         props.layout === "columns" &&
-          "md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-8 md:py-5",
+          "md:grid-cols-[minmax(0,1fr)_18rem] md:items-start md:gap-8 md:py-5",
       )}
     >
       {props.children}

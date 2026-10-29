@@ -44,6 +44,14 @@ class RunReadFailure extends Error {
 }
 
 export function describeTeamFailure(error: unknown): TeamFailure {
+  return classifyTeamFailure(error, "refresh");
+}
+
+export function describeControlFailure(error: unknown): TeamFailure {
+  return classifyTeamFailure(error, "control");
+}
+
+function classifyTeamFailure(error: unknown, surface: "control" | "refresh"): TeamFailure {
   if (error instanceof AuthenticationRequestFailure) {
     return {
       kind: "authentication",
@@ -56,12 +64,18 @@ export function describeTeamFailure(error: unknown): TeamFailure {
       case "team.input_invalid":
         return {
           kind: "rejected",
-          message: "This team is no longer available. Refresh the latest list before retrying.",
+          message:
+            surface === "control"
+              ? "This team is no longer available, so the control returned to the last known state. Refresh the latest list before trying again."
+              : "This team is no longer available. Refresh the latest list before retrying.",
         };
       case "team.control_rejected":
         return {
           kind: "rejected",
-          message: "This team changed. Refresh the latest status before retrying.",
+          message:
+            surface === "control"
+              ? "This team changed while the request was in flight, so the control returned to the last known state. Refresh the latest status before trying again."
+              : "This team changed. Refresh the latest status before retrying.",
         };
       case "team.persistence_failed":
         break;
@@ -74,7 +88,10 @@ export function describeTeamFailure(error: unknown): TeamFailure {
   }
   return {
     kind: "unconfirmed",
-    message: "We could not confirm the change. Check the latest list before retrying.",
+    message:
+      surface === "control"
+        ? "We could not confirm the change, so the control returned to the last known state. Check the latest list before trying again."
+        : "We could not confirm the change. Check the latest list before retrying.",
   };
 }
 

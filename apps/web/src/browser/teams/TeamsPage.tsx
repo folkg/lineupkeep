@@ -28,14 +28,11 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
           <TeamList
             isLoading={page.isLoading}
             loadFailure={page.loadFailure}
-            pendingTeam={page.pendingTeam}
             refreshing={page.refreshing}
+            remote={props.remote}
             teams={page.teams}
-            onPause={page.pause}
             onRefresh={page.refresh}
             onRefreshTeams={page.refreshTeams}
-            onResume={page.resume}
-            onSetEnabled={page.setEnabled}
           />
           <ActionFeedback feedback={page.feedback()} />
         </Stack>

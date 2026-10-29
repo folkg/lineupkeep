@@ -223,11 +223,13 @@ Status metadata is labelled text, not a rank sticker. Reserve gold emphasis for 
 
 Connection health, team automation, actionable period, and run outcome are explicit in team and run rows. Automation off, paused, reconnect required, unavailable, queued, checking, verified unchanged, verified updated, and needs reconciliation are distinct. Never flatten them into green/red or Done.
 
-A pause is not a disable, expired connection is not lost enrollment, unavailable is not deleted, and sent is not verified. Paused rows name the rest of the fantasy day and show the resume time and named zone. Reconnect-required rows retain enrollment and expose one explicit reconnect path.
+A pause is not a disable, expired connection is not lost enrollment, unavailable is not deleted, and sent is not verified. Paused rows name the rest of the fantasy day and show the resume time in the reader's locale. Reconnect-required rows retain enrollment and expose one explicit reconnect path.
 
 ### Teams and runs
 
-Teams are a ruled list, not a grid of marketing cards. Each row carries the team name, sport/league/provider, availability, automation state, connection state, and the last run's status with its safe explanation. The team detail keeps the same controls and adds the five most recent runs. A run detail shows the target period, trigger, attempts, verified outcome, changes, and pending reason without exposing credentials, cookies, provider GUIDs, raw payloads, or raw errors.
+Teams are a ruled list, not a grid of marketing cards. Each row carries the team name, one line of league context (sport, league, season), what the last check did and how long ago, and a tally of recent checks that changed the lineup. Status words appear only when something needs attention: a connection that needs a new sign-in, a sign-in in progress, or a team the provider no longer lists.
+
+Lineup checks are one switch, optimistic and labelled for the team; pause and resume sit beside it as a quieter control. The switch keeps its confirmed state, shows a pending label while the write is in flight, and returns to the server's state with a message when the write is refused. The team detail keeps the same controls and the recent runs, folding consecutive checks that changed nothing into one expandable line while changed, blocked, failed, uncertain, and in-progress runs always stand alone. A run detail shows the target period, trigger, attempts, verified outcome, changes, and pending reason without exposing credentials, cookies, provider GUIDs, raw payloads, or raw errors.
 
 ### Connections and incidents
 

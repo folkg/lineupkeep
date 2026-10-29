@@ -1,69 +1,101 @@
-import { formatDateTime } from "#browser/shared-ui/formatTime.ts";
-import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
-import type { LineupRunView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import { formatDateTime, formatDay, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import type {
+  LineupRunView,
+  TeamAutomationView,
+  TeamView,
+} from "#contracts/connections/teamContract.ts";
 
-export function automationLabel(team: TeamSummaryView): string {
-  switch (team.team.automation.status) {
-    case "disabled":
-      return "Lineup checks off";
-    case "enabled":
-      return "Lineup checks on";
-    case "paused-until-fantasy-day-end":
-      return "Paused until the end of the fantasy day";
+export function teamContextLabel(team: TeamView): string {
+  return `${sportLabel(team.sport)} · ${leagueLabel(team.league)} ${String(team.season)}`;
+}
+
+export function lastCheckLine(run: LineupRunView, now?: Date): string {
+  if (run.outcome === undefined) {
+    return `${lastCheckLabel(run)} · started ${formatReaderTime(run.createdAt, now)}`;
+  }
+  return `${lastCheckLabel(run)} · ${formatReaderTime(run.updatedAt, now)}`;
+}
+
+function lastCheckLabel(run: LineupRunView): string {
+  if (run.outcome !== undefined) {
+    switch (run.outcome.kind) {
+      case "changed":
+        return `Last check changed ${playerCount(run.outcome.changes.length)}`;
+      case "no_op":
+        return "Last check changed nothing";
+      case "blocked":
+        return "Last check was blocked";
+      case "failed":
+        return "Last check failed";
+      case "uncertain":
+        return "Last check is not confirmed";
+      case "skipped":
+        return "Last check had nothing to do";
+      case "superseded":
+        return "Last check was replaced by a later run";
+    }
+  }
+  switch (run.status) {
+    case "queued":
+      return "Last check is waiting to start";
+    case "reading":
+      return "Last check is reading the lineup";
+    case "planning":
+      return "Last check is choosing players";
+    case "validating":
+      return "Last check is checking the lineup";
+    case "applying":
+      return "Last check is setting the lineup";
+    case "verifying":
+      return "Last check is confirming the result";
+    case "retry-wait":
+      return "Last check is waiting to retry";
+    case "completed":
+    case "skipped":
+    case "blocked":
+    case "failed":
+    case "uncertain":
+    case "superseded":
+      return "Last check finished";
   }
 }
 
-export function automationStateLabel(team: TeamSummaryView): string {
-  switch (team.team.automation.status) {
-    case "disabled":
-      return "Off";
-    case "enabled":
-      return "On";
-    case "paused-until-fantasy-day-end":
-      return "Paused";
-  }
-}
-
-export function availabilityLabel(team: TeamSummaryView): string {
-  return team.team.availability === "available"
-    ? `${providerDisplayName(team.team.provider)} lists this team`
-    : `${providerDisplayName(team.team.provider)} no longer lists this team`;
-}
-
-export function connectionLabel(team: TeamSummaryView): string {
-  switch (team.connectionStatus) {
-    case "ready":
-      return `${providerDisplayName(team.team.provider)} connected`;
-    case "reconnect-required":
-      return `Reconnect ${providerDisplayName(team.team.provider)}`;
-    case "linking":
-      return `${providerDisplayName(team.team.provider)} sign-in in progress`;
-    case "disconnected":
-      return `${providerDisplayName(team.team.provider)} disconnected`;
-  }
-}
-
-export function connectionStateLabel(team: TeamSummaryView): string {
-  switch (team.connectionStatus) {
-    case "ready":
-      return "Connected";
-    case "reconnect-required":
-      return "Reconnect needed";
-    case "linking":
-      return "Sign-in in progress";
-    case "disconnected":
-      return "Disconnected";
-  }
-}
-
-export function pauseResumeLabel(team: TeamSummaryView): string | undefined {
-  if (team.team.automation.status !== "paused-until-fantasy-day-end") {
+export function checkTallyLabel(runs: ReadonlyArray<LineupRunView>): string | undefined {
+  if (runs.length < 2) {
     return undefined;
   }
-  if (team.team.automation.resumesAt === undefined) {
-    return "Lineup checks resume at the start of the next fantasy day.";
+  const changed = runs.filter((run) => (run.outcome?.changes.length ?? 0) > 0).length;
+  if (changed === 0) {
+    return undefined;
   }
-  return `Lineup checks resume at ${formatDateTime(team.team.automation.resumesAt)}.`;
+  if (changed === runs.length) {
+    return `The last ${String(runs.length)} checks all changed the lineup`;
+  }
+  return `${String(changed)} of the last ${String(runs.length)} checks changed the lineup`;
+}
+
+export function quietGroupLabel(runs: ReadonlyArray<LineupRunView>): string {
+  const newest = runs[0];
+  const oldest = runs[runs.length - 1];
+  if (newest === undefined || oldest === undefined) {
+    throw new Error("A quiet group needs at least one run");
+  }
+  const noun = runs.length === 1 ? "check" : "checks";
+  const first = formatDay(oldest.updatedAt);
+  const last = formatDay(newest.updatedAt);
+  return first === last
+    ? `${String(runs.length)} ${noun} on ${first} changed nothing`
+    : `${String(runs.length)} ${noun} between ${first} and ${last} changed nothing`;
+}
+
+export function pauseResumeLabel(automation: TeamAutomationView): string | undefined {
+  if (automation.status !== "paused-until-fantasy-day-end") {
+    return undefined;
+  }
+  if (automation.resumesAt === undefined) {
+    return "Paused for the rest of the fantasy day.";
+  }
+  return `Paused for the rest of the fantasy day. Resumes ${formatDateTime(automation.resumesAt)}.`;
 }
 
 export function runStatusLabel(status: LineupRunView["status"]): string {
@@ -140,4 +172,16 @@ export function targetLabel(target: LineupRunView["target"]): string {
 
 export function triggerLabel(run: LineupRunView): string {
   return run.trigger === "scheduled" ? "Scheduled check" : "Manual run";
+}
+
+function playerCount(count: number): string {
+  return count === 1 ? "1 player" : `${String(count)} players`;
+}
+
+function leagueLabel(league: TeamView["league"]): string {
+  return league === "nfl" ? "NFL" : "NHL";
+}
+
+function sportLabel(sport: TeamView["sport"]): string {
+  return sport === "football" ? "Football" : "Hockey";
 }

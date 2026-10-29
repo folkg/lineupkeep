@@ -5,15 +5,10 @@ import type { Accessor } from "solid-js";
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
 import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
-import type {
-  TeamChangeView,
-  TeamControlData,
-  TeamRefreshView,
-  TeamSummaryView,
-} from "#contracts/connections/teamContract.ts";
+import type { TeamRefreshView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { describeTeamFailure } from "./teamFailure";
-import { storeRefreshedTeamList, storeRefreshedTeams, teamMutations } from "./teamMutations";
+import { storeRefreshedTeamList, teamMutations } from "./teamMutations";
 import type { TeamListQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 
@@ -21,10 +16,9 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
   const teams = useQuery(() => props.teamsQuery());
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
-  const [pendingTeam, setPendingTeam] = createSignal<string>();
   const [refreshing, setRefreshing] = createSignal(false);
 
-  const reportFailure = (error: unknown): void => {
+  const reportRefreshFailure = (error: unknown): void => {
     const failure = describeTeamFailure(error);
     setFeedback({
       type: "attention",
@@ -33,37 +27,21 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     });
   };
 
-  const control = useMutation(() => ({
-    ...teamMutations.control(props.remote()),
-    onSuccess: (change: TeamChangeView, variables: TeamControlData, onMutateResult, context) => {
-      storeRefreshedTeams(change, variables, onMutateResult, context);
-      setFeedback({ type: "success", message: successMessage(variables.action) });
-    },
-    onError: reportFailure,
-    onSettled: () => setPendingTeam(undefined),
-  }));
   const refreshTeams = useMutation(() => ({
     ...teamMutations.refresh(props.remote()),
     onSuccess: (view: TeamRefreshView, variables, onMutateResult, context) => {
       storeRefreshedTeamList(view, variables, onMutateResult, context);
       setFeedback({ type: "success", message: `Teams refreshed from ${defaultProviderName()}.` });
     },
-    onError: reportFailure,
+    onError: reportRefreshFailure,
     onSettled: () => setRefreshing(false),
   }));
-
-  const changeAutomation = (team: TeamSummaryView, action: TeamControlData["action"]): void => {
-    setPendingTeam(team.team.id);
-    setFeedback({ type: "pending", message: pendingMessage(action) });
-    void control.mutate({ team: team.team.id, action });
-  };
 
   return {
     teams: () => teams.data,
     isLoading: () => teams.isPending,
     loadFailure: () => teams.error,
     feedback,
-    pendingTeam,
     refreshing,
     refresh: () => props.onRefresh(),
     refreshTeams: () => {
@@ -71,9 +49,6 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
       setFeedback({ type: "pending", message: `Refreshing teams from ${defaultProviderName()}…` });
       void refreshTeams.mutate(undefined);
     },
-    setEnabled: (team, enabled) => changeAutomation(team, enabled ? "enable" : "disable"),
-    pause: (team) => changeAutomation(team, "pause-today"),
-    resume: (team) => changeAutomation(team, "resume"),
   };
 }
 
@@ -82,13 +57,9 @@ export type TeamsPageController = {
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
-  readonly pendingTeam: Accessor<string | undefined>;
   readonly refreshing: Accessor<boolean>;
   readonly refresh: () => Promise<void>;
   readonly refreshTeams: () => void;
-  readonly setEnabled: (team: TeamSummaryView, enabled: boolean) => void;
-  readonly pause: (team: TeamSummaryView) => void;
-  readonly resume: (team: TeamSummaryView) => void;
 };
 
 type TeamsPageOptions = {
@@ -96,29 +67,3 @@ type TeamsPageOptions = {
   readonly remote: Accessor<TeamRemote>;
   readonly onRefresh: () => Promise<void>;
 };
-
-function pendingMessage(action: TeamControlData["action"]): string {
-  switch (action) {
-    case "enable":
-      return "Turning on lineup checks…";
-    case "disable":
-      return "Turning off lineup checks…";
-    case "pause-today":
-      return "Pausing for the rest of the fantasy day…";
-    case "resume":
-      return "Resuming lineup checks…";
-  }
-}
-
-function successMessage(action: TeamControlData["action"]): string {
-  switch (action) {
-    case "enable":
-      return "Lineup checks are on.";
-    case "disable":
-      return "Lineup checks are off.";
-    case "pause-today":
-      return "Paused for the rest of the fantasy day.";
-    case "resume":
-      return "Lineup checks are back on.";
-  }
-}

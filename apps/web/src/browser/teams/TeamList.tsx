@@ -11,17 +11,13 @@ import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
-import { defaultProviderName, providerDisplayName } from "#contracts/connections/providerLabels.ts";
+import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
-import {
-  automationLabel,
-  availabilityLabel,
-  connectionLabel,
-  pauseResumeLabel,
-  runExplanation,
-  runStatusLabel,
-} from "./teamLabels";
+import { TeamAttention } from "./TeamAttention";
+import { TeamControls } from "./TeamControls";
+import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
+import type { TeamRemote } from "./teamRemote";
 
 export function TeamList(props: TeamListProps): JSX.Element {
   return (
@@ -71,16 +67,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
           >
             <RuleList>
               <For each={props.teams()}>
-                {(team) => (
-                  <TeamRow
-                    pending={props.pendingTeam() === team.team.id}
-                    team={team}
-                    onDisable={() => props.onSetEnabled(team, false)}
-                    onEnable={() => props.onSetEnabled(team, true)}
-                    onPause={() => props.onPause(team)}
-                    onResume={() => props.onResume(team)}
-                  />
-                )}
+                {(team) => <TeamRow team={team} remote={props.remote} />}
               </For>
             </RuleList>
           </Show>
@@ -91,141 +78,54 @@ export function TeamList(props: TeamListProps): JSX.Element {
 }
 
 function TeamRow(props: TeamRowProps): JSX.Element {
-  const enabled = (): boolean => props.team.team.automation.status !== "disabled";
-  const paused = (): boolean =>
-    props.team.team.automation.status === "paused-until-fantasy-day-end";
   return (
     <RuleListItem layout="columns">
-      <Stack gap="sm">
-        <Inline gap="sm">
-          <TextLink params={{ teamId: props.team.team.id }} size="item" to="/teams/$teamId">
-            {props.team.team.name}
-          </TextLink>
-          <Text size="caption" tone="muted">
-            {leagueLabel(props.team.team.league)} · {sportLabel(props.team.team.sport)} ·{" "}
-            {providerDisplayName(props.team.team.provider)}
-          </Text>
-        </Inline>
-        <Inline gap="md">
-          <StatusText>{availabilityLabel(props.team)}</StatusText>
-          <StatusText>{automationLabel(props.team)}</StatusText>
-          <StatusText>{connectionLabel(props.team)}</StatusText>
-        </Inline>
-        <Show when={pauseResumeLabel(props.team)}>
-          {(label) => (
+      <Stack gap="xs">
+        <TextLink params={{ teamId: props.team.team.id }} size="item" to="/teams/$teamId">
+          {props.team.team.name}
+        </TextLink>
+        <Text size="caption" tone="muted">
+          {teamContextLabel(props.team.team)}
+        </Text>
+        <Show
+          fallback={
             <Text size="caption" tone="muted">
-              {label()}
+              No lineup checks have run yet.
+            </Text>
+          }
+          when={props.team.lastRun}
+        >
+          {(run) => (
+            <Text size="caption" tone="muted">
+              {lastCheckLine(run())}
             </Text>
           )}
         </Show>
-        <LastRun team={props.team} />
+        <Show when={checkTallyLabel(props.team.recentRuns)}>
+          {(tally) => (
+            <Text size="caption" tone="faint">
+              {tally()}
+            </Text>
+          )}
+        </Show>
+        <TeamAttention team={props.team} />
       </Stack>
-      <Inline gap="sm">
-        <Show
-          when={enabled()}
-          fallback={
-            <Button pending={props.pending} pendingLabel="Turning on…" onClick={props.onEnable}>
-              Turn on lineup checks
-            </Button>
-          }
-        >
-          <Show
-            when={paused()}
-            fallback={
-              <Button
-                pending={props.pending}
-                pendingLabel="Pausing…"
-                variant="secondary"
-                onClick={props.onPause}
-              >
-                Pause for the rest of the fantasy day
-              </Button>
-            }
-          >
-            <Button pending={props.pending} pendingLabel="Resuming…" onClick={props.onResume}>
-              Resume lineup checks
-            </Button>
-          </Show>
-          <Button
-            pending={props.pending}
-            pendingLabel="Turning off…"
-            variant="quiet"
-            onClick={props.onDisable}
-          >
-            Turn off lineup checks
-          </Button>
-        </Show>
-        <Show when={props.team.connectionStatus === "reconnect-required"}>
-          <TextLink to="/connections">
-            Reconnect {providerDisplayName(props.team.team.provider)}
-          </TextLink>
-        </Show>
-      </Inline>
+      <TeamControls team={props.team} remote={props.remote} />
     </RuleListItem>
   );
-}
-
-function LastRun(props: { readonly team: TeamSummaryView }): JSX.Element {
-  return (
-    <Show
-      fallback={
-        <Text size="caption" tone="muted">
-          No lineup runs yet.
-        </Text>
-      }
-      when={props.team.lastRun}
-    >
-      {(run) => (
-        <Stack gap="xs">
-          <Text size="caption" weight="semibold">
-            {runStatusLabel(run().status)}
-          </Text>
-          <Text size="caption" tone="muted">
-            {runExplanation(run())}
-          </Text>
-          <TextLink params={{ runId: run().run }} to="/runs/$runId">
-            View run detail
-          </TextLink>
-        </Stack>
-      )}
-    </Show>
-  );
-}
-
-function StatusText(props: { readonly children: JSX.Element }): JSX.Element {
-  return (
-    <Text as="span" size="caption" tone="muted">
-      {props.children}
-    </Text>
-  );
-}
-
-function leagueLabel(league: TeamSummaryView["team"]["league"]): string {
-  return league === "nfl" ? "NFL" : "NHL";
-}
-
-function sportLabel(sport: TeamSummaryView["team"]["sport"]): string {
-  return sport === "football" ? "Football" : "Hockey";
 }
 
 type TeamListProps = {
   readonly teams: Accessor<ReadonlyArray<TeamSummaryView>>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
-  readonly pendingTeam: Accessor<string | undefined>;
   readonly refreshing: Accessor<boolean>;
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshTeams: () => void;
-  readonly onSetEnabled: (team: TeamSummaryView, enabled: boolean) => void;
-  readonly onPause: (team: TeamSummaryView) => void;
-  readonly onResume: (team: TeamSummaryView) => void;
+  readonly remote: TeamRemote;
 };
 
 type TeamRowProps = {
   readonly team: TeamSummaryView;
-  readonly pending: boolean;
-  readonly onEnable: () => void;
-  readonly onDisable: () => void;
-  readonly onPause: () => void;
-  readonly onResume: () => void;
+  readonly remote: TeamRemote;
 };

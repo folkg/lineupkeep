@@ -14,17 +14,19 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
-import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { formatDateTime, formatDay, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type { LineupRunView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { TeamDetailPage } from "./TeamDetailPage";
 import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 
-const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1_000).toISOString();
 const teamId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1";
+const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1_000).toISOString();
 
-const recentRun: LineupRunView = {
+const noOpSummary = "The lineup already matched the explicit plan; no provider write was needed.";
+
+const noOpRun: LineupRunView = {
   run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b1",
   request: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b2",
   team: teamId,
@@ -40,7 +42,42 @@ const recentRun: LineupRunView = {
     kind: "no_op",
     verified: true,
     reconciled: false,
-    summary: "No changes were needed.",
+    summary: noOpSummary,
+    observedAt: threeDaysAgo,
+    changes: [],
+    lockedPlayers: 0,
+    editablePlayers: 8,
+  },
+};
+
+const changedRun: LineupRunView = {
+  ...noOpRun,
+  run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b3",
+  status: "completed",
+  outcome: {
+    kind: "changed",
+    verified: true,
+    reconciled: false,
+    summary: "Verified 2 native lineup changes.",
+    observedAt: threeDaysAgo,
+    changes: [
+      { name: "Sam Rivers", from: "BN", to: "WR" },
+      { name: "Alex Vance", from: "BN", to: "RB" },
+    ],
+    lockedPlayers: 0,
+    editablePlayers: 8,
+  },
+};
+
+const failedRun: LineupRunView = {
+  ...noOpRun,
+  run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b4",
+  status: "failed",
+  outcome: {
+    kind: "failed",
+    verified: false,
+    reconciled: false,
+    summary: "The provider rejected the lineup.",
     observedAt: threeDaysAgo,
     changes: [],
     lockedPlayers: 0,
@@ -69,8 +106,8 @@ const team: TeamSummaryView = {
     updatedAt: threeDaysAgo,
   },
   connectionStatus: "ready",
-  lastRun: recentRun,
-  recentRuns: [recentRun],
+  lastRun: noOpRun,
+  recentRuns: [noOpRun],
 };
 
 it("offers a way back to the teams list and shows the run time in the reader's zone", async () => {
@@ -82,6 +119,72 @@ it("offers a way back to the teams list and shows the run time in the reader's z
   const time = document.querySelector<HTMLTimeElement>(`time[datetime="${threeDaysAgo}"]`);
   expect(time?.textContent).toBe(formatReaderTime(threeDaysAgo));
   await expect.element(page.getByText(formatReaderTime(threeDaysAgo))).toBeVisible();
+});
+
+it("names the league context and keeps quiet states off the page", async () => {
+  using _app = setupTeamDetailPage(team);
+
+  await expect.element(page.getByText("Football · NFL 2026")).toBeVisible();
+  await expect.element(page.getByText("Connected")).not.toBeInTheDocument();
+  await expect.element(page.getByText("Available")).not.toBeInTheDocument();
+});
+
+it("names the pause in reader-local time", async () => {
+  const paused: TeamSummaryView = {
+    ...team,
+    team: {
+      ...team.team,
+      automation: {
+        status: "paused-until-fantasy-day-end",
+        changedAt: threeDaysAgo,
+        pausedAt: threeDaysAgo,
+        resumesAt: "2026-10-26T07:00:00.000Z",
+        timeZone: "America/Los_Angeles",
+        fantasyDay: "2026-10-25",
+        fantasyDayVersion: "yahoo-pacific-midnight/1",
+      },
+    },
+  };
+  using _app = setupTeamDetailPage(paused);
+
+  await expect
+    .element(
+      page.getByText(
+        `Paused for the rest of the fantasy day. Resumes ${formatDateTime(
+          "2026-10-26T07:00:00.000Z",
+        )}.`,
+      ),
+    )
+    .toBeVisible();
+});
+
+it("folds consecutive checks that changed nothing and keeps the rest on their own", async () => {
+  const runs = [
+    changedRun,
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1" },
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c2" },
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c3" },
+    failedRun,
+  ];
+  using _app = setupTeamDetailPage({ ...team, lastRun: changedRun, recentRuns: runs });
+
+  const groupLabel = `3 checks on ${formatDay(noOpRun.updatedAt)} changed nothing`;
+  await expect.element(page.getByText(groupLabel)).toBeVisible();
+  await expect.element(page.getByText("Verified 2 native lineup changes.")).toBeVisible();
+  await expect.element(page.getByText("The provider rejected the lineup.")).toBeVisible();
+  await expect.element(page.getByText(noOpSummary).first()).not.toBeVisible();
+
+  await page.getByText(groupLabel).click();
+
+  await expect.element(page.getByText(noOpSummary).first()).toBeVisible();
+  await expect.element(page.getByRole("link", { name: "View run detail" }).first()).toBeVisible();
+});
+
+it("leaves a lone quiet check on its own line", async () => {
+  using _app = setupTeamDetailPage({ ...team, lastRun: noOpRun, recentRuns: [noOpRun] });
+
+  await expect.element(page.getByText(noOpSummary)).toBeVisible();
+  await expect.element(page.getByText(/changed nothing$/u)).not.toBeInTheDocument();
 });
 
 it("links a team report to the feedback form with the team reference", async () => {

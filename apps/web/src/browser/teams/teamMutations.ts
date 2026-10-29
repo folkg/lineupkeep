@@ -21,7 +21,7 @@ export const teamMutations = {
     }),
 };
 
-export function storeRefreshedTeams(
+function storeRefreshedTeams(
   change: TeamChangeView,
   _variables: unknown,
   _onMutateResult: unknown,

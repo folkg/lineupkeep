@@ -34,16 +34,26 @@ test("enables, pauses, resumes, and disables a team through the automation contr
   );
   await page.goto("/teams");
   const row = page.getByRole("listitem").filter({ hasText: "Embedded Browser Team" });
+  const toggle = row.getByRole("switch", { name: "Lineup checks for Embedded Browser Team" });
 
-  await expect(row.getByText("Lineup checks off")).toBeVisible();
-  await row.getByRole("button", { name: "Turn on lineup checks" }).click();
-  await expect(row.getByText("Lineup checks on")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).not.toHaveAttribute("aria-busy");
+
   await row.getByRole("button", { name: "Pause for the rest of the fantasy day" }).click();
-  await expect(row.getByText("Paused until the end of the fantasy day")).toBeVisible();
+  await expect(row.getByText(/^Paused for the rest of the fantasy day\./u)).toBeVisible();
+  await expect(row.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
+
   await row.getByRole("button", { name: "Resume lineup checks" }).click();
-  await expect(row.getByText("Lineup checks on")).toBeVisible();
-  await row.getByRole("button", { name: "Turn off lineup checks" }).click();
-  await expect(row.getByText("Lineup checks off")).toBeVisible();
+  await expect(row.getByText(/^Paused for the rest of the fantasy day\./u)).toHaveCount(0);
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(
+    row.getByRole("button", { name: "Pause for the rest of the fantasy day" }),
+  ).toHaveCount(0);
 });
 
 test("renders the teams surface before client scripts and hydrates its navigation", async ({

@@ -15,7 +15,7 @@ import type { TeamControlInput } from "@lineupkeep/backend/connections/Teams";
 import type { AuthenticationFailure } from "#contracts/auth/authContract.ts";
 import type { UseCaseResult } from "#contracts/useCaseContract.ts";
 
-type TeamAutomationView = {
+export type TeamAutomationView = {
   readonly status: TeamAutomationStatus;
   readonly changedAt: string;
   readonly pausedAt?: string;

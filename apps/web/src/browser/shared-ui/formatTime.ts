@@ -5,6 +5,8 @@ const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
 
 const relativeTimeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
+const dayFormat = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "long" });
+
 const minuteMillis = 60_000;
 const hourMillis = 60 * minuteMillis;
 const dayMillis = 24 * hourMillis;
@@ -12,6 +14,10 @@ const relativeWindowMillis = 7 * dayMillis;
 
 export function formatDateTime(value: string | Date): string {
   return dateTimeFormat.format(toDate(value));
+}
+
+export function formatDay(value: string | Date): string {
+  return dayFormat.format(toDate(value));
 }
 
 export function formatReaderTime(value: string | Date, now: Date = new Date()): string {
