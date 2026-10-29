@@ -17,6 +17,7 @@ const ProviderOperation = Schema.Literals([
   "search_players",
   "read_matchups",
   "read_transactions",
+  "read_draft_results",
   "read_league_teams",
   "build_review_link",
   "apply_native_action",
@@ -260,6 +261,10 @@ export type ProviderShape = {
       readonly limit: number;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderTransaction>, ProviderReadFailure>;
+
+  readonly readDraftResults: (
+    input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
+  ) => Effect.Effect<ReadonlyArray<ProviderDraftPick>, ProviderReadFailure>;
 
   readonly readStandings: (
     input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
@@ -551,9 +556,20 @@ export type ProviderMatchup = {
   readonly categoryWinners: ReadonlyArray<ProviderCategoryWinner>;
 };
 
+export type ProviderTransactionTeam = {
+  readonly providerTeamKey: string;
+  readonly name: string | undefined;
+};
+
+export type ProviderTransactionMovement = {
+  readonly kind: "add" | "drop" | "trade" | "other";
+  readonly from: ProviderTransactionTeam | undefined;
+  readonly to: ProviderTransactionTeam | undefined;
+};
+
 type ProviderTransactionPlayer = {
   readonly providerPlayerKey: string;
-  readonly direction: "add" | "drop" | "incoming" | "outgoing";
+  readonly movement: ProviderTransactionMovement;
   readonly name: string | undefined;
   readonly primaryPosition: string | undefined;
   readonly displayPosition: string | undefined;
@@ -561,17 +577,36 @@ type ProviderTransactionPlayer = {
   readonly proTeam: string | undefined;
 };
 
-type ProviderTransactionTeam = {
-  readonly providerTeamKey: string;
-  readonly name: string;
+export type ProviderTransactionParty = {
+  readonly role: "proposer" | "receiver" | "participant";
+  readonly team: ProviderTransactionTeam;
+};
+
+export type ProviderTransactionParties = {
+  readonly source: "provider" | "player_movements";
+  readonly entries: ReadonlyArray<ProviderTransactionParty>;
+};
+
+export type ProviderTransactionIncomplete = {
+  readonly code: "no_movements" | "movement_missing_party" | "unknown_movement";
+  readonly detail: string;
 };
 
 export type ProviderTransaction = {
   readonly occurredAt: string;
   readonly type: "add" | "drop" | "add_drop" | "trade" | "commissioner" | "other";
   readonly status: string | undefined;
+  readonly parties: ProviderTransactionParties | undefined;
   readonly teams: ReadonlyArray<ProviderTransactionTeam>;
   readonly players: ReadonlyArray<ProviderTransactionPlayer>;
+  readonly incomplete: ProviderTransactionIncomplete | undefined;
+};
+
+export type ProviderDraftPick = {
+  readonly round: number;
+  readonly pick: number;
+  readonly providerTeamKey: string;
+  readonly providerPlayerKey: string;
 };
 
 export type ProviderLeagueTeam = {

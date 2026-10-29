@@ -60,6 +60,11 @@ import type {
   ProviderTeam,
   ProviderTeamScore,
   ProviderTransaction,
+  ProviderTransactionIncomplete,
+  ProviderTransactionMovement,
+  ProviderTransactionParties,
+  ProviderTransactionParty,
+  ProviderTransactionTeam,
   ProviderShape,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
@@ -684,6 +689,39 @@ export const yahooProvider = Effect.gen(function* () {
     return transactions;
   });
 
+  const readDraftResults = Effect.fn("YahooProvider.readDraftResults")(function* (
+    input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_draft_results");
+    const cookie = yield* sessionCookie(input, "read_draft_results");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_draft_results");
+    const payload = yield* readJson(internet, {
+      operation: "read_draft_results",
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${leagueKey}/draftresults`,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(DraftResultsPayload, payload, "read_draft_results");
+    if (
+      decoded.league.league_key !== leagueKey ||
+      decoded.league.draft_results.some(
+        ({ draft_result }) => providerLeagueKey(draft_result.team_key) !== leagueKey,
+      )
+    ) {
+      return yield* responseMismatch({ operation: "read_draft_results" });
+    }
+    const picks = decoded.league.draft_results.map(({ draft_result }) => ({
+      round: draft_result.round,
+      pick: draft_result.pick,
+      providerTeamKey: draft_result.team_key,
+      providerPlayerKey: draft_result.player_key,
+    }));
+    yield* Effect.annotateCurrentSpan("provider.draft_pick_count", picks.length);
+    return picks;
+  });
+
   const readLeagueTeams = Effect.fn("YahooProvider.readLeagueTeams")(function* (
     input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
   ) {
@@ -761,6 +799,7 @@ export const yahooProvider = Effect.gen(function* () {
     searchPlayers,
     readMatchups,
     readTransactions,
+    readDraftResults,
     readLeagueTeams,
     buildReviewLink,
     scoreRoster: (input: ProviderScoreRequest) =>
@@ -2225,40 +2264,28 @@ function decodeTransactions(
     const decoded: ProviderTransaction[] = [];
     for (const transaction of transactions) {
       const occurredAt = yield* providerInstant(transaction.timestamp);
-      const players = transaction.players ?? [];
-      const teams = new Map<string, ProviderTransaction["teams"][number]>();
-      for (const player of players) {
-        const data = player.transaction_data;
-        if (data.source_team_key !== undefined && data.source_team_name !== undefined) {
-          teams.set(data.source_team_key, {
-            providerTeamKey: data.source_team_key,
-            name: data.source_team_name,
-          });
-        }
-        if (data.destination_team_key !== undefined && data.destination_team_name !== undefined) {
-          teams.set(data.destination_team_key, {
-            providerTeamKey: data.destination_team_key,
-            name: data.destination_team_name,
-          });
-        }
-      }
+      const type = transactionType(transaction.type);
+      const players = (transaction.players ?? []).map((player) => ({
+        providerPlayerKey: player.player_key,
+        movement: playerMovement(player.transaction_data),
+        name: optionalNonEmpty(player.name?.full ?? ""),
+        primaryPosition: optionalNonEmpty(player.primary_position ?? ""),
+        displayPosition: optionalNonEmpty(player.display_position ?? ""),
+        eligiblePositions:
+          player.eligible_positions === undefined
+            ? undefined
+            : player.eligible_positions.map(({ position }) => position),
+        proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
+      }));
+      const parties = transactionParties(transaction, type, players);
       decoded.push({
         occurredAt,
-        type: transactionType(transaction.type),
+        type,
         status: optionalNonEmpty(transaction.status ?? ""),
-        teams: [...teams.values()],
-        players: players.map((player) => ({
-          providerPlayerKey: player.player_key,
-          direction: playerDirection(player.transaction_data),
-          name: optionalNonEmpty(player.name?.full ?? ""),
-          primaryPosition: optionalNonEmpty(player.primary_position ?? ""),
-          displayPosition: optionalNonEmpty(player.display_position ?? ""),
-          eligiblePositions:
-            player.eligible_positions === undefined
-              ? undefined
-              : player.eligible_positions.map(({ position }) => position),
-          proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
-        })),
+        parties,
+        teams: transactionTeams(players, parties),
+        players,
+        incomplete: incompleteTransaction(type, players),
       });
     }
     return decoded;
@@ -2280,17 +2307,161 @@ function transactionType(type: string): ProviderTransaction["type"] {
   }
 }
 
-function playerDirection(
+function playerMovement(
   data: (typeof TransactionPlayerPayload.Type)["transaction_data"],
-): ProviderTransaction["players"][number]["direction"] {
-  switch (data.type) {
+): ProviderTransactionMovement {
+  return {
+    kind: movementKind(data.type),
+    from: transactionTeam(data.source_team_key, data.source_team_name),
+    to: transactionTeam(data.destination_team_key, data.destination_team_name),
+  };
+}
+
+function movementKind(type: string): ProviderTransactionMovement["kind"] {
+  switch (type) {
     case "add":
       return "add";
     case "drop":
       return "drop";
+    case "trade":
+      return "trade";
     default:
-      return data.destination_team_key === undefined ? "outgoing" : "incoming";
+      return "other";
   }
+}
+
+function transactionTeam(
+  providerTeamKey: string | undefined,
+  name: string | undefined,
+): ProviderTransactionTeam | undefined {
+  return providerTeamKey === undefined
+    ? undefined
+    : { providerTeamKey, name: optionalNonEmpty(name ?? "") };
+}
+
+function transactionParties(
+  transaction: typeof TransactionPayload.Type,
+  type: ProviderTransaction["type"],
+  players: ReadonlyArray<ProviderTransaction["players"][number]>,
+): ProviderTransactionParties | undefined {
+  const named = (team: ProviderTransactionTeam): ProviderTransactionTeam => {
+    if (team.name !== undefined) {
+      return team;
+    }
+    for (const player of players) {
+      for (const movementTeam of [player.movement.from, player.movement.to]) {
+        if (
+          movementTeam?.providerTeamKey === team.providerTeamKey &&
+          movementTeam.name !== undefined
+        ) {
+          return movementTeam;
+        }
+      }
+    }
+    return team;
+  };
+  const proposer = transactionTeam(transaction.trader_team_key, transaction.trader_team_name);
+  const receiver = transactionTeam(transaction.tradee_team_key, transaction.tradee_team_name);
+  if (proposer !== undefined || receiver !== undefined) {
+    return {
+      source: "provider",
+      entries: [
+        ...(proposer === undefined ? [] : [{ role: "proposer" as const, team: named(proposer) }]),
+        ...(receiver === undefined ? [] : [{ role: "receiver" as const, team: named(receiver) }]),
+      ],
+    };
+  }
+  if (type !== "trade") {
+    return undefined;
+  }
+  const entries: ProviderTransactionParty[] = [];
+  for (const player of players) {
+    for (const team of [player.movement.from, player.movement.to]) {
+      if (
+        team !== undefined &&
+        !entries.some((entry) => entry.team.providerTeamKey === team.providerTeamKey)
+      ) {
+        entries.push({ role: "participant", team });
+      }
+    }
+  }
+  return entries.length === 0 ? undefined : { source: "player_movements", entries };
+}
+
+function transactionTeams(
+  players: ReadonlyArray<ProviderTransaction["players"][number]>,
+  parties: ProviderTransactionParties | undefined,
+): ReadonlyArray<ProviderTransactionTeam> {
+  const teams = new Map<string, ProviderTransactionTeam>();
+  const add = (team: ProviderTransactionTeam | undefined): void => {
+    if (team === undefined) {
+      return;
+    }
+    const existing = teams.get(team.providerTeamKey);
+    if (existing === undefined || (existing.name === undefined && team.name !== undefined)) {
+      teams.set(team.providerTeamKey, team);
+    }
+  };
+  for (const player of players) {
+    add(player.movement.from);
+    add(player.movement.to);
+  }
+  for (const party of parties?.entries ?? []) {
+    add(party.team);
+  }
+  return [...teams.values()];
+}
+
+function incompleteTransaction(
+  type: ProviderTransaction["type"],
+  players: ReadonlyArray<ProviderTransaction["players"][number]>,
+): ProviderTransactionIncomplete | undefined {
+  if (players.length === 0) {
+    return {
+      code: "no_movements",
+      detail:
+        "The provider published this transaction with no player movements, so neither side can be reconstructed. This is not evidence that no players moved.",
+    };
+  }
+  for (const player of players) {
+    const movement = player.movement;
+    if (type === "trade" || movement.kind === "trade") {
+      if (
+        movement.from === undefined ||
+        movement.to === undefined ||
+        movement.from.providerTeamKey === movement.to.providerTeamKey
+      ) {
+        return {
+          code: "movement_missing_party",
+          detail: `The provider published a trade movement for ${playerLabel(player)} without both the team it left and the team it joined, so neither side can be reconstructed.`,
+        };
+      }
+      continue;
+    }
+    if (movement.kind === "add" && movement.to === undefined) {
+      return {
+        code: "movement_missing_party",
+        detail: `The provider published an add for ${playerLabel(player)} without the team it joined, so the movement cannot be reconstructed.`,
+      };
+    }
+    if (movement.kind === "drop" && movement.from === undefined) {
+      return {
+        code: "movement_missing_party",
+        detail: `The provider published a drop for ${playerLabel(player)} without the team it left, so the movement cannot be reconstructed.`,
+      };
+    }
+    if (movement.kind === "other") {
+      return {
+        code: "unknown_movement",
+        detail: `The provider gave ${playerLabel(player)} a movement type this adapter cannot place on a team, so the movement cannot be reconstructed.`,
+      };
+    }
+  }
+  return undefined;
+}
+
+function playerLabel(player: ProviderTransaction["players"][number]): string {
+  return player.name === undefined ? "a player" : `player ${JSON.stringify(player.name)}`;
 }
 
 function rosterStatusOf(ownershipType: string | undefined): ProviderPlayerDetail["rosterStatus"] {
@@ -3016,7 +3187,27 @@ const TransactionPayload = Schema.Struct({
   type: Schema.NonEmptyString,
   status: Schema.optional(Schema.String),
   timestamp: IntFromStringOrNumber,
+  trader_team_key: Schema.optional(TeamKey),
+  trader_team_name: Schema.optional(Schema.String),
+  tradee_team_key: Schema.optional(TeamKey),
+  tradee_team_name: Schema.optional(Schema.String),
   players: Schema.optional(Schema.Array(TransactionPlayerPayload)),
+});
+
+const DraftResultPayload = Schema.Struct({
+  draft_result: Schema.Struct({
+    round: IntFromStringOrNumber,
+    pick: IntFromStringOrNumber,
+    team_key: TeamKey,
+    player_key: PlayerKey,
+  }),
+});
+
+const DraftResultsPayload = Schema.Struct({
+  league: Schema.Struct({
+    league_key: LeagueKey,
+    draft_results: Schema.Array(DraftResultPayload),
+  }),
 });
 
 const TransactionsPayload = Schema.Struct({

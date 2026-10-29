@@ -93,7 +93,13 @@ export type CalendarResult = typeof CalendarResult.Type;
 export const StandingDetail = Schema.Literals(["compact", "detailed"]);
 export type StandingDetail = typeof StandingDetail.Type;
 
-export const LeagueGroup = Schema.Literals(["overview", "scoring", "roster_rules", "standings"]);
+export const LeagueGroup = Schema.Literals([
+  "overview",
+  "scoring",
+  "roster_rules",
+  "standings",
+  "draft_history",
+]);
 export type LeagueGroup = typeof LeagueGroup.Type;
 
 export const GetLeagueInput = Schema.Struct({
@@ -234,6 +240,28 @@ const StandingsData = Schema.Struct({
   teams: Schema.Array(StandingRow),
 });
 
+const DraftPick = Schema.Struct({
+  round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  pick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  team: CounterpartyRef,
+  teamName: Schema.optional(Schema.NonEmptyString),
+  player: PlayerRef,
+});
+export type DraftPick = typeof DraftPick.Type;
+
+const DraftHistory = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    draftStatus: Schema.optional(Schema.NonEmptyString),
+    detailNote: Schema.NonEmptyString,
+    picks: Schema.Array(DraftPick),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unsupported"),
+    detail: Schema.String,
+  }),
+]);
+
 export const LeagueData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
@@ -253,6 +281,12 @@ export const LeagueData = Schema.Struct({
         detail: Schema.String,
       }),
     ]),
+  ),
+  draftHistory: Schema.optional(DraftHistory).pipe(
+    Schema.annotate({
+      description:
+        "Completed draft picks for this league's draft, one row per pick. Present when the `draft_history` group is requested. This is history, not current or future pick ownership: the provider publishes no pick-ownership read, and a trade transaction carries no draft picks.",
+    }),
   ),
   coverage: Schema.Array(QueryCoverage),
   failures: Schema.Array(QueryFailure),
@@ -703,15 +737,56 @@ export const TransactionWindow = Schema.Struct({
 });
 export type TransactionWindow = typeof TransactionWindow.Type;
 
+const TransactionTeam = Schema.Struct({
+  team: CounterpartyRef,
+  name: Schema.optional(Schema.NonEmptyString),
+});
+
+const TransactionMovement = Schema.Struct({
+  kind: Schema.Literals(["add", "drop", "trade", "other"]),
+  from: Schema.NullOr(TransactionTeam).pipe(
+    Schema.annotate({
+      description: "The team the player left, or null when the move has no leaving team.",
+    }),
+  ),
+  to: Schema.NullOr(TransactionTeam).pipe(
+    Schema.annotate({
+      description: "The team the player joined, or null when the move has no joining team.",
+    }),
+  ),
+});
+
+const TransactionParty = Schema.Struct({
+  role: Schema.Literals(["proposer", "receiver", "participant"]),
+  team: CounterpartyRef,
+  name: Schema.optional(Schema.NonEmptyString),
+});
+
+const TransactionParties = Schema.Struct({
+  source: Schema.Literals(["provider", "player_movements"]),
+  entries: Schema.Array(TransactionParty),
+});
+
+const TransactionCompleteness = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("complete") }),
+  Schema.Struct({
+    status: Schema.Literal("incomplete"),
+    code: Schema.NonEmptyString,
+    detail: Schema.NonEmptyString,
+  }),
+]);
+
 const Transaction = Schema.Struct({
   occurredAt: Schema.String,
   type: Schema.Literals(["add", "drop", "add_drop", "trade", "commissioner", "other"]),
   status: Schema.optional(Schema.String),
-  teams: Schema.Array(Schema.Struct({ team: CounterpartyRef, name: Schema.NonEmptyString })),
+  completeness: TransactionCompleteness,
+  parties: Schema.optional(TransactionParties),
+  teams: Schema.Array(TransactionTeam),
   players: Schema.Array(
     Schema.Struct({
       player: PlayerRef,
-      direction: Schema.Literals(["add", "drop", "incoming", "outgoing"]),
+      movement: TransactionMovement,
       name: Schema.optional(Schema.NonEmptyString),
       primaryPosition: Schema.optional(Schema.NonEmptyString),
       displayPosition: Schema.optional(Schema.NonEmptyString),

@@ -22,6 +22,8 @@ import { TransactionReviewsLive } from "./internal/TransactionReviewsLive.ts";
 import type {
   ProviderLeagueSettings,
   ProviderTransaction,
+  ProviderTransactionMovement,
+  ProviderTransactionTeam,
   ProviderPlayerDetail,
   ProviderPlayerSearchResult,
   ProviderRoster,
@@ -361,16 +363,23 @@ it.effect("resolves a dropped player's identity from transaction history", () =>
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
     const teamId = Array.getUnsafe(seeded, 0).id;
     yield* fake.setTransactions([
-      {
+      transaction({
         occurredAt: "2026-09-20T12:00:00.000Z",
         type: "add_drop",
-        status: "successful",
-        teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
+        teams: [alphaTeam],
         players: [
-          transactionPlayer("461.p.10003", "add", "Synthetic Addition"),
-          transactionPlayer("461.p.10004", "drop", "Dropped Veteran"),
+          transactionPlayer(
+            "461.p.10003",
+            movement("add", undefined, alphaTeam),
+            "Synthetic Addition",
+          ),
+          transactionPlayer(
+            "461.p.10004",
+            movement("drop", alphaTeam, undefined),
+            "Dropped Veteran",
+          ),
         ],
-      },
+      }),
     ]);
 
     const transactions = yield* queries.getTransactions(owner, { team: teamId });
@@ -379,7 +388,8 @@ it.effect("resolves a dropped player's identity from transaction history", () =>
       return;
     }
     const dropped = Array.getUnsafe(Array.getUnsafe(transactions.transactions, 0).players, 1);
-    assert.strictEqual(dropped.direction, "drop");
+    assert.strictEqual(dropped.movement.kind, "drop");
+    assert.strictEqual(dropped.movement.to, null);
 
     const hydrated = yield* queries.getPlayers(owner, {
       team: teamId,
@@ -770,19 +780,23 @@ it.effect("reports add/drop transactions without inventing execution", () =>
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
     yield* fake.setTransactions([
-      {
+      transaction({
         occurredAt: "2026-09-20T12:00:00.000Z",
         type: "add_drop",
-        status: "successful",
-        teams: [
-          { providerTeamKey: "461.l.1000.t.1", name: "Alpha" },
-          { providerTeamKey: "461.l.1000.t.2", name: "Beta" },
-        ],
+        teams: [alphaTeam, betaTeam],
         players: [
-          transactionPlayer("461.p.10003", "add", "Synthetic Addition"),
-          transactionPlayer("461.p.10001", "drop", "Synthetic Drop"),
+          transactionPlayer(
+            "461.p.10003",
+            movement("add", undefined, alphaTeam),
+            "Synthetic Addition",
+          ),
+          transactionPlayer(
+            "461.p.10001",
+            movement("drop", alphaTeam, undefined),
+            "Synthetic Drop",
+          ),
         ],
-      },
+      }),
     ]);
 
     const transactions = yield* queries.getTransactions(owner, {
@@ -794,10 +808,198 @@ it.effect("reports add/drop transactions without inventing execution", () =>
       return;
     }
     assert.strictEqual(transactions.transactions.length, 1);
-    const transaction = Array.getUnsafe(transactions.transactions, 0);
-    assert.strictEqual(transaction.type, "add_drop");
-    assert.strictEqual(transaction.teams.length, 2);
-    assert.strictEqual(transaction.players.length, 2);
+    const addDrop = Array.getUnsafe(transactions.transactions, 0);
+    assert.strictEqual(addDrop.type, "add_drop");
+    assert.strictEqual(addDrop.teams.length, 2);
+    assert.strictEqual(addDrop.players.length, 2);
+    assert.deepStrictEqual(addDrop.completeness, { status: "complete" });
+    const added = Array.getUnsafe(addDrop.players, 0);
+    assert.strictEqual(added.movement.kind, "add");
+    assert.strictEqual(added.movement.from, null);
+    assert.strictEqual(added.movement.to?.name, "Alpha");
+    const removed = Array.getUnsafe(addDrop.players, 1);
+    assert.strictEqual(removed.movement.kind, "drop");
+    assert.strictEqual(removed.movement.from?.name, "Alpha");
+    assert.strictEqual(removed.movement.to, null);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports both sides of a trade with the team each player left and joined", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setTransactions([
+      transaction({
+        occurredAt: "2026-09-22T12:00:00.000Z",
+        type: "trade",
+        teams: [alphaTeam, betaTeam],
+        parties: {
+          source: "provider",
+          entries: [
+            { role: "proposer", team: alphaTeam },
+            { role: "receiver", team: betaTeam },
+          ],
+        },
+        players: [
+          transactionPlayer(
+            "461.p.10003",
+            movement("trade", alphaTeam, betaTeam),
+            "Synthetic Sender",
+          ),
+          transactionPlayer(
+            "461.p.10004",
+            movement("trade", betaTeam, alphaTeam),
+            "Synthetic Return",
+          ),
+        ],
+      }),
+    ]);
+
+    const transactions = yield* queries.getTransactions(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+    });
+
+    assert.strictEqual(transactions.status, "ok");
+    if (transactions.status !== "ok") {
+      return;
+    }
+    const trade = Array.getUnsafe(transactions.transactions, 0);
+    assert.strictEqual(trade.type, "trade");
+    assert.deepStrictEqual(trade.completeness, { status: "complete" });
+    assert.deepStrictEqual(
+      trade.parties?.entries.map((party) => [party.role, party.name]),
+      [
+        ["proposer", "Alpha"],
+        ["receiver", "Beta"],
+      ],
+    );
+    assert.strictEqual(trade.parties?.source, "provider");
+    assert.strictEqual(trade.teams.length, 2);
+
+    const sent = Array.getUnsafe(trade.players, 0);
+    assert.strictEqual(sent.movement.kind, "trade");
+    assert.strictEqual(sent.movement.from?.name, "Alpha");
+    assert.strictEqual(sent.movement.to?.name, "Beta");
+    assert.isString(sent.movement.from?.team);
+    assert.notStrictEqual(sent.movement.from?.team, sent.movement.to?.team);
+
+    const returned = Array.getUnsafe(trade.players, 1);
+    assert.strictEqual(returned.movement.from?.name, "Beta");
+    assert.strictEqual(returned.movement.to?.name, "Alpha");
+    assert.strictEqual(returned.movement.from?.team, sent.movement.to?.team);
+    assert.strictEqual(returned.movement.to?.team, sent.movement.from?.team);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("flags a transaction with no player movements incomplete instead of an empty trade", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setTransactions([
+      transaction({
+        occurredAt: "2026-09-22T12:00:00.000Z",
+        type: "trade",
+        teams: [alphaTeam, betaTeam],
+        parties: {
+          source: "provider",
+          entries: [
+            { role: "proposer", team: alphaTeam },
+            { role: "receiver", team: betaTeam },
+          ],
+        },
+        players: [],
+        incomplete: {
+          code: "no_movements",
+          detail: "The provider published this transaction with no player movements.",
+        },
+      }),
+    ]);
+
+    const transactions = yield* queries.getTransactions(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+    });
+
+    assert.strictEqual(transactions.status, "ok");
+    if (transactions.status !== "ok") {
+      return;
+    }
+    const trade = Array.getUnsafe(transactions.transactions, 0);
+    assert.strictEqual(trade.type, "trade");
+    assert.deepStrictEqual(trade.players, []);
+    assert.deepStrictEqual(trade.completeness, {
+      status: "incomplete",
+      code: "no_movements",
+      detail: "The provider published this transaction with no player movements.",
+    });
+    assert.strictEqual(trade.completeness.status, "incomplete");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("returns draft history with round, pick, team, and player for the league", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setLeagueTeams([
+      { providerTeamKey: "461.l.1000.t.1", providerLeagueKey: "461.l.1000", name: "Alpha" },
+      { providerTeamKey: "461.l.1000.t.2", providerLeagueKey: "461.l.1000", name: "Beta" },
+    ]);
+    yield* fake.setDraftResults([
+      {
+        round: 1,
+        pick: 1,
+        providerTeamKey: "461.l.1000.t.1",
+        providerPlayerKey: "461.p.10001",
+      },
+      {
+        round: 1,
+        pick: 2,
+        providerTeamKey: "461.l.1000.t.2",
+        providerPlayerKey: "461.p.10002",
+      },
+    ]);
+
+    const league = yield* queries.getLeague(owner, { team: teamId, groups: ["draft_history"] });
+
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok") {
+      return;
+    }
+    const draft = league.draftHistory;
+    assert.strictEqual(draft?.status, "available");
+    if (draft?.status !== "available") {
+      return;
+    }
+    assert.include(draft.detailNote, "not current or future pick ownership");
+    assert.strictEqual(draft.draftStatus, "postdraft");
+    assert.strictEqual(draft.picks.length, 2);
+    const first = Array.getUnsafe(draft.picks, 0);
+    assert.strictEqual(first.round, 1);
+    assert.strictEqual(first.pick, 1);
+    assert.strictEqual(first.teamName, "Alpha");
+    assert.isTrue(
+      league.coverage.some(
+        (entry) => entry.resource === "draft_history" && entry.status === "available",
+      ),
+    );
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players: [first.player],
+      groups: ["identity"],
+    });
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(Array.getUnsafe(hydrated.players, 0).identity, {
+      name: "Synthetic 0",
+      displayPosition: "QB",
+      primaryPosition: "QB",
+    });
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -1543,27 +1745,42 @@ it.effect("filters transactions by scope and date inside the bounded provider wi
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
     const teamId = Array.getUnsafe(seeded, 0).id;
     yield* fake.setTransactions([
-      {
+      transaction({
         occurredAt: "2026-09-24T12:00:00.000Z",
         type: "add",
-        status: "successful",
-        teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
-        players: [transactionPlayer("461.p.10003", "add", "Synthetic Addition")],
-      },
-      {
+        teams: [alphaTeam],
+        players: [
+          transactionPlayer(
+            "461.p.10003",
+            movement("add", undefined, alphaTeam),
+            "Synthetic Addition",
+          ),
+        ],
+      }),
+      transaction({
         occurredAt: "2026-09-20T12:00:00.000Z",
         type: "drop",
-        status: "successful",
-        teams: [{ providerTeamKey: "461.l.1000.t.2", name: "Beta" }],
-        players: [transactionPlayer("461.p.10004", "drop", "Synthetic Rival Drop")],
-      },
-      {
+        teams: [betaTeam],
+        players: [
+          transactionPlayer(
+            "461.p.10004",
+            movement("drop", betaTeam, undefined),
+            "Synthetic Rival Drop",
+          ),
+        ],
+      }),
+      transaction({
         occurredAt: "2026-09-10T12:00:00.000Z",
         type: "add",
-        status: "successful",
-        teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
-        players: [transactionPlayer("461.p.10005", "add", "Synthetic Older Add")],
-      },
+        teams: [alphaTeam],
+        players: [
+          transactionPlayer(
+            "461.p.10005",
+            movement("add", undefined, alphaTeam),
+            "Synthetic Older Add",
+          ),
+        ],
+      }),
     ]);
 
     const own = yield* queries.getTransactions(owner, { team: teamId, scope: "team" });
@@ -1609,15 +1826,24 @@ it.effect("reports a truncated transaction window instead of silently narrowing 
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
     const teamId = Array.getUnsafe(seeded, 0).id;
     yield* fake.setTransactions(
-      globalThis.Array.from({ length: 50 }, (_, index) => ({
-        occurredAt: DateTime.formatIso(
-          DateTime.makeUnsafe("2026-09-25T12:00:00.000Z").pipe(DateTime.subtract({ hours: index })),
-        ),
-        type: "add" as const,
-        status: "successful",
-        teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
-        players: [transactionPlayer("461.p.10003", "add" as const, "Synthetic Addition")],
-      })),
+      globalThis.Array.from({ length: 50 }, (_, index) =>
+        transaction({
+          occurredAt: DateTime.formatIso(
+            DateTime.makeUnsafe("2026-09-25T12:00:00.000Z").pipe(
+              DateTime.subtract({ hours: index }),
+            ),
+          ),
+          type: "add",
+          teams: [alphaTeam],
+          players: [
+            transactionPlayer(
+              "461.p.10003",
+              movement("add", undefined, alphaTeam),
+              "Synthetic Addition",
+            ),
+          ],
+        }),
+      ),
     );
 
     const ranged = yield* queries.getTransactions(owner, {
@@ -2009,12 +2235,12 @@ it.effect("documents how to narrow a summary that cannot fit a single record", (
 
 function transactionPlayer(
   providerPlayerKey: string,
-  direction: "add" | "drop" | "incoming" | "outgoing",
+  playerMovement: ProviderTransactionMovement,
   name: string,
 ): ProviderTransaction["players"][number] {
   return {
     providerPlayerKey,
-    direction,
+    movement: playerMovement,
     name,
     primaryPosition: undefined,
     displayPosition: "WR",
@@ -2022,6 +2248,36 @@ function transactionPlayer(
     proTeam: "SYN",
   };
 }
+
+function movement(
+  kind: ProviderTransactionMovement["kind"],
+  from: ProviderTransactionTeam | undefined,
+  to: ProviderTransactionTeam | undefined,
+): ProviderTransactionMovement {
+  return { kind, from, to };
+}
+
+function transaction(fields: {
+  readonly occurredAt: string;
+  readonly type: ProviderTransaction["type"];
+  readonly players: ReadonlyArray<ProviderTransaction["players"][number]>;
+  readonly teams?: ReadonlyArray<ProviderTransactionTeam>;
+  readonly parties?: ProviderTransaction["parties"];
+  readonly incomplete?: ProviderTransaction["incomplete"];
+}): ProviderTransaction {
+  return {
+    occurredAt: fields.occurredAt,
+    type: fields.type,
+    status: "successful",
+    parties: fields.parties,
+    teams: fields.teams ?? [],
+    players: fields.players,
+    incomplete: fields.incomplete,
+  };
+}
+
+const alphaTeam: ProviderTransactionTeam = { providerTeamKey: "461.l.1000.t.1", name: "Alpha" };
+const betaTeam: ProviderTransactionTeam = { providerTeamKey: "461.l.1000.t.2", name: "Beta" };
 
 const unknownStatRef = Schema.decodeSync(StatRef)("s1.unknown");
 
@@ -2078,13 +2334,18 @@ function seed(
       },
     ]);
     yield* fake.setTransactions([
-      {
+      transaction({
         occurredAt: "2026-09-20T12:00:00.000Z",
         type: "add",
-        status: "successful",
-        teams: [{ providerTeamKey: "461.l.1000.t.1", name: "Alpha" }],
-        players: [transactionPlayer("461.p.10003", "add", "Synthetic Addition")],
-      },
+        teams: [alphaTeam],
+        players: [
+          transactionPlayer(
+            "461.p.10003",
+            movement("add", undefined, alphaTeam),
+            "Synthetic Addition",
+          ),
+        ],
+      }),
     ]);
     const linkingInput = yield* Schema.decodeEffect(StartLinkingInput)({
       requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",

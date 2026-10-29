@@ -3,6 +3,26 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — round-4 MCP fixes, part 2 (two-sided trades and draft history)
+
+- `get_transactions` player rows are movements with both ends: `from` is the team the player left
+  or null and `to` is the team it joined or null. A trade player carries both teams, so both sides
+  of a trade are reconstructible; an add or drop keeps exactly one end. The raw `direction` field is
+  removed because it labelled every traded player incoming, hiding the outgoing half.
+- A trade carries `parties` with the provider's proposing and receiving team keys when the payload
+  publishes them, and otherwise the teams involved as `participant` entries derived from the
+  movements, without inventing proposer/receiver roles.
+- A transaction that cannot be reconstructed is marked `completeness: {status: "incomplete", code,
+  detail}` instead of being served as a complete record. A trade the provider returns with no
+  player movements is `no_movements` with an empty `players` array, never a complete empty trade.
+- The `get_transactions` description states that the provider publishes no proposals resource, so
+  pending and rejected trade offers are unavailable, and that a trade transaction carries no draft
+  picks. The `transactions:review` description now says the scope cannot review offers it cannot
+  see.
+- `get_league` adds the `draft_history` group: the provider's `draftresults` read, one row per pick
+  with round, pick number, team, and private player reference, beside the league's draft status.
+  It is completed draft history, not current or future pick ownership, and the detail note says so.
+
 ## Unreleased — round-4 MCP fixes, part 1 (periods, standings, stat names, ownership)
 
 - `get_players` accepts four `period` shapes for `actual_stats`: `{kind: "season"}`, `{kind: "week",

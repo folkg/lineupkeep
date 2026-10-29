@@ -5,7 +5,9 @@ import { Connections } from "#contexts/connections/Connections.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import type {
+  ProviderDraftPick,
   ProviderLeagueSettings,
+  ProviderLeagueTeam,
   ProviderPeriodWindow,
   ProviderPlayerDetail,
   ProviderPlayerStatGroup,
@@ -20,11 +22,13 @@ import type {
   ProviderStatPeriod,
   ProviderStatValue,
   ProviderTeamScore,
+  ProviderTransactionTeam,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderLimitationSubject } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import type {
   CalendarData,
+  DraftPick,
   GetCalendarInput,
   GetLeagueInput,
   GetMatchupsInput,
@@ -490,9 +494,41 @@ export const FantasyQueriesLive = Layer.effect(
           : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
       const standingsRows = standingTable.rows;
       const standingsFormat = league.format;
-      const pagedStandings = groups.includes("standings");
+      const draftOutcome = groups.includes("draft_history")
+        ? yield* readOutcome(
+            context,
+            "draft_results",
+            context.provider.readDraftResults({
+              ...providerIdentity(context),
+              providerLeagueKey: context.owned.team.providerLeagueKey,
+            }),
+          )
+        : undefined;
+      const leagueTeamsOutcome =
+        draftOutcome?._tag === "ok"
+          ? yield* readOutcome(
+              context,
+              "league_teams",
+              context.provider.readLeagueTeams({
+                ...providerIdentity(context),
+                providerLeagueKey: context.owned.team.providerLeagueKey,
+              }),
+            )
+          : undefined;
+      const draftPicks =
+        draftOutcome?._tag === "ok"
+          ? yield* draftPickRows(
+              context,
+              tokens,
+              draftOutcome.value,
+              leagueTeamsOutcome?._tag === "ok" ? leagueTeamsOutcome.value : [],
+            )
+          : [];
+      const draftPaged = groups.includes("draft_history") && draftOutcome?._tag === "ok";
+      const standingsPaged = groups.includes("standings") && !draftPaged;
+      const pagedResource = draftPaged ? "draft_history" : standingsPaged ? "standings" : "scoring";
       const fingerprintValue = yield* queryFingerprint(
-        `league|team=${input.team}|groups=${[...groups].sort().join(",")}|standings=${pagedStandings ? presentation : "none"}|order=${pagedStandings ? "rank" : "stat_id"}`,
+        `league|team=${input.team}|groups=${[...groups].sort().join(",")}|standings=${standingsPaged ? presentation : "none"}|paged=${pagedResource}|order=${draftPaged ? "draft_pick" : standingsPaged ? "rank" : "stat_id"}`,
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
@@ -518,6 +554,50 @@ export const FantasyQueriesLive = Layer.effect(
           failures.push(standingsOutcome.failure);
         }
       }
+      if (draftOutcome !== undefined) {
+        coverageEntries.push(
+          draftOutcome._tag === "ok"
+            ? coverage("draft_history", "draft_results", fetchedAt)
+            : draftOutcome._tag === "unsupported"
+              ? unsupportedCoverage(
+                  "draft_history",
+                  "draft_results",
+                  fetchedAt,
+                  draftOutcome.detail,
+                )
+              : degradedCoverage(
+                  "draft_history",
+                  "draft_results",
+                  fetchedAt,
+                  draftOutcome.failure.message,
+                ),
+        );
+        if (draftOutcome._tag === "failed") {
+          failures.push(draftOutcome.failure);
+        }
+      }
+      if (leagueTeamsOutcome !== undefined) {
+        coverageEntries.push(
+          leagueTeamsOutcome._tag === "ok"
+            ? coverage("league_teams", "league_teams", fetchedAt)
+            : leagueTeamsOutcome._tag === "unsupported"
+              ? unsupportedCoverage(
+                  "league_teams",
+                  "league_teams",
+                  fetchedAt,
+                  leagueTeamsOutcome.detail,
+                )
+              : degradedCoverage(
+                  "league_teams",
+                  "league_teams",
+                  fetchedAt,
+                  leagueTeamsOutcome.failure.message,
+                ),
+        );
+        if (leagueTeamsOutcome._tag === "failed") {
+          failures.push(leagueTeamsOutcome.failure);
+        }
+      }
       const base = {
         status: "ok" as const,
         team,
@@ -527,7 +607,39 @@ export const FantasyQueriesLive = Layer.effect(
         failures,
         budget: queryBudget,
       };
-      if (pagedStandings && standingsOutcome !== undefined) {
+      if (draftPaged) {
+        return yield* fitPage({
+          schema: LeagueSchema,
+          rows: draftPicks,
+          offset,
+          limit: input.limit ?? 20,
+          resource: "draft_history.picks",
+          groups,
+          remedy:
+            "Request the `draft_history` group without the other groups for the most picks per page.",
+          build: (pageRows, page) => ({
+            ...base,
+            ...(includeScoring ? { scoring } : {}),
+            ...(standingsOutcome === undefined
+              ? {}
+              : {
+                  standings: standingsData(
+                    standingsOutcome,
+                    standingsRows,
+                    standingTable.omittedCategoryCount,
+                    standingsFormat,
+                    presentation,
+                  ),
+                }),
+            draftHistory: draftHistoryData(draftOutcome, pageRows, league.draftStatus),
+            page,
+          }),
+          makeNext: (nextOffset) =>
+            tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
+          recordLabel: (pick) => `${String(pick.round)}.${String(pick.pick)}`,
+        });
+      }
+      if (standingsPaged && standingsOutcome !== undefined) {
         return yield* fitPage({
           schema: LeagueSchema,
           rows: standingsRows,
@@ -540,6 +652,9 @@ export const FantasyQueriesLive = Layer.effect(
           build: (pageRows, page) => ({
             ...base,
             ...(includeScoring ? { scoring } : {}),
+            ...(draftOutcome === undefined
+              ? {}
+              : { draftHistory: draftHistoryData(draftOutcome, draftPicks, league.draftStatus) }),
             standings: standingsData(
               standingsOutcome,
               [...pageRows],
@@ -575,6 +690,9 @@ export const FantasyQueriesLive = Layer.effect(
                   presentation,
                 ),
               }),
+          ...(draftOutcome === undefined
+            ? {}
+            : { draftHistory: draftHistoryData(draftOutcome, draftPicks, league.draftStatus) }),
           scoring: [...pageRows],
           page,
         }),
@@ -1425,25 +1543,42 @@ export const FantasyQueriesLive = Layer.effect(
           : coverage("transactions", "transactions", fetchedAt),
       ];
       const leagueKey = context.owned.team.providerLeagueKey;
-      const teamKeys = filtered.flatMap((transaction) =>
-        transaction.teams.map((transactionTeam) => transactionTeam.providerTeamKey),
-      );
+      const teamKeys = [
+        ...new Set(
+          filtered.flatMap((transaction) => [
+            ...transaction.teams.map((transactionTeam) => transactionTeam.providerTeamKey),
+            ...transaction.players.flatMap((player) =>
+              [player.movement.from, player.movement.to].flatMap((movementTeam) =>
+                movementTeam === undefined ? [] : [movementTeam.providerTeamKey],
+              ),
+            ),
+            ...(transaction.parties?.entries ?? []).map((party) => party.team.providerTeamKey),
+          ]),
+        ),
+      ];
       const playerKeys = filtered.flatMap((transaction) =>
         transaction.players.map((player) => player.providerPlayerKey),
       );
       const teamRefs = yield* tokens.sealCounterpartyRefs({ userId, leagueKey, teamKeys });
       const playerRefs = yield* tokens.sealPlayerRefs({ userId, leagueKey, playerKeys });
-      let teamOffset = 0;
+      const teamRefByKey = new Map(
+        teamKeys.map((key, index) => [key, EffectArray.getUnsafe(teamRefs, index)] as const),
+      );
+      const teamRef = (providerTeamKey: string): CounterpartyRef => {
+        const ref = teamRefByKey.get(providerTeamKey);
+        if (ref === undefined) {
+          throw new Error("Every transaction team key must seal a counterparty reference.");
+        }
+        return ref;
+      };
+      const transactionTeamView = (
+        transactionTeam: ProviderTransactionTeam,
+      ): { team: CounterpartyRef; name?: string } => ({
+        team: teamRef(transactionTeam.providerTeamKey),
+        ...(transactionTeam.name === undefined ? {} : { name: transactionTeam.name }),
+      });
       let playerOffset = 0;
       const transactions = filtered.map((transaction) => {
-        const teams = EffectArray.map(
-          EffectArray.zip(
-            transaction.teams,
-            teamRefs.slice(teamOffset, teamOffset + transaction.teams.length),
-          ),
-          ([transactionTeam, ref]) => ({ team: ref, name: transactionTeam.name }),
-        );
-        teamOffset += transaction.teams.length;
         const players = EffectArray.map(
           EffectArray.zip(
             transaction.players,
@@ -1451,7 +1586,14 @@ export const FantasyQueriesLive = Layer.effect(
           ),
           ([player, ref]) => ({
             player: ref,
-            direction: player.direction,
+            movement: {
+              kind: player.movement.kind,
+              from:
+                player.movement.from === undefined
+                  ? null
+                  : transactionTeamView(player.movement.from),
+              to: player.movement.to === undefined ? null : transactionTeamView(player.movement.to),
+            },
             ...(player.name === undefined ? {} : { name: player.name }),
             ...(player.primaryPosition === undefined
               ? {}
@@ -1470,7 +1612,26 @@ export const FantasyQueriesLive = Layer.effect(
           occurredAt: transaction.occurredAt,
           type: transaction.type,
           ...(transaction.status === undefined ? {} : { status: transaction.status }),
-          teams,
+          completeness:
+            transaction.incomplete === undefined
+              ? { status: "complete" as const }
+              : {
+                  status: "incomplete" as const,
+                  code: transaction.incomplete.code,
+                  detail: transaction.incomplete.detail,
+                },
+          ...(transaction.parties === undefined
+            ? {}
+            : {
+                parties: {
+                  source: transaction.parties.source,
+                  entries: transaction.parties.entries.map((party) => ({
+                    role: party.role,
+                    ...transactionTeamView(party.team),
+                  })),
+                },
+              }),
+          teams: transaction.teams.map(transactionTeamView),
           players,
         };
       });
@@ -2228,6 +2389,66 @@ function labelledCategories(
   return labelled;
 }
 
+function draftPickRows(
+  context: TeamContext,
+  tokens: QueryTokens["Service"],
+  picks: ReadonlyArray<ProviderDraftPick>,
+  leagueTeams: ReadonlyArray<ProviderLeagueTeam>,
+): Effect.Effect<ReadonlyArray<DraftPick>> {
+  return Effect.gen(function* () {
+    const leagueKey = context.owned.team.providerLeagueKey;
+    const teamKeys = [...new Set(picks.map((pick) => pick.providerTeamKey))];
+    const teamRefs = yield* tokens.sealCounterpartyRefs({
+      userId: context.userId,
+      leagueKey,
+      teamKeys,
+    });
+    const playerRefs = yield* tokens.sealPlayerRefs({
+      userId: context.userId,
+      leagueKey,
+      playerKeys: picks.map((pick) => pick.providerPlayerKey),
+    });
+    const teamRefByKey = new Map(
+      teamKeys.map((key, index) => [key, EffectArray.getUnsafe(teamRefs, index)] as const),
+    );
+    const teamNameByKey = new Map(leagueTeams.map((team) => [team.providerTeamKey, team.name]));
+    return picks.map((pick, index) => {
+      const team = teamRefByKey.get(pick.providerTeamKey);
+      if (team === undefined) {
+        throw new Error("Every draft pick team key must seal a counterparty reference.");
+      }
+      const teamName = teamNameByKey.get(pick.providerTeamKey);
+      return {
+        round: pick.round,
+        pick: pick.pick,
+        team,
+        ...(teamName === undefined ? {} : { teamName }),
+        player: EffectArray.getUnsafe(playerRefs, index),
+      };
+    });
+  });
+}
+
+function draftHistoryData(
+  outcome: ReadOutcome<ReadonlyArray<ProviderDraftPick>>,
+  picks: ReadonlyArray<DraftPick>,
+  draftStatus: string | undefined,
+): NonNullable<LeagueData["draftHistory"]> {
+  if (outcome._tag !== "ok") {
+    return {
+      status: "unsupported",
+      detail: outcome._tag === "failed" ? outcome.failure.message : outcome.detail,
+    };
+  }
+  return {
+    status: "available",
+    ...(draftStatus === undefined ? {} : { draftStatus }),
+    detailNote:
+      "These are the picks the provider publishes for this league's draft. This is draft history, not current or future pick ownership: the provider publishes no pick-ownership read, and a trade transaction carries no draft picks.",
+    picks: [...picks],
+  };
+}
+
 function queryTeam(owned: OwnedTeam): QueryTeam {
   const team = owned.team;
   return {
@@ -2368,10 +2589,24 @@ function leagueWithoutData(
           },
         }
       : {}),
+    ...(groups.includes("draft_history")
+      ? {
+          draftHistory: {
+            status: "unsupported" as const,
+            detail:
+              outcome._tag === "failed"
+                ? outcome.failure.message
+                : "The provider did not publish league settings, so draft history could not be read.",
+          },
+        }
+      : {}),
     coverage: [
       leagueCoverage(outcome, fetchedAt),
       ...(groups.includes("standings")
         ? [unsupportedCoverage("standings", "standings", fetchedAt)]
+        : []),
+      ...(groups.includes("draft_history")
+        ? [unsupportedCoverage("draft_history", "draft_results", fetchedAt)]
         : []),
     ],
     failures: leagueFailure(outcome),

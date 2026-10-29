@@ -71,6 +71,10 @@ import {
   yahooNhlPlayerDetailsWithUnparseableStartedValue,
   yahooNhlPlayerDetailsWithoutStartedPercentage,
   yahooNflTransactions,
+  yahooNflTradeTransactions,
+  yahooNflTradeTransactionsWithoutPartyKeys,
+  yahooNflEmptyTradeTransaction,
+  yahooNflDraftResults,
   yahooNflRoster,
   yahooNflStandings,
   yahooNhlCategoryStandings,
@@ -2378,11 +2382,16 @@ it.effect("reads bounded league transaction history with dropped-player identity
         occurredAt: "2026-10-03T04:00:00.000Z",
         type: "add_drop",
         status: "successful",
+        parties: undefined,
         teams: [{ providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" }],
         players: [
           {
             providerPlayerKey: "466.p.20003",
-            direction: "add",
+            movement: {
+              kind: "add",
+              from: undefined,
+              to: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+            },
             name: "Synthetic Addition",
             primaryPosition: undefined,
             displayPosition: "WR",
@@ -2391,7 +2400,11 @@ it.effect("reads bounded league transaction history with dropped-player identity
           },
           {
             providerPlayerKey: "466.p.20004",
-            direction: "drop",
+            movement: {
+              kind: "drop",
+              from: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+              to: undefined,
+            },
             name: "Synthetic Drop",
             primaryPosition: undefined,
             displayPosition: "RB",
@@ -2399,16 +2412,22 @@ it.effect("reads bounded league transaction history with dropped-player identity
             proTeam: "SYN",
           },
         ],
+        incomplete: undefined,
       },
       {
         occurredAt: "2026-10-02T00:13:20.000Z",
         type: "drop",
         status: "successful",
+        parties: undefined,
         teams: [{ providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" }],
         players: [
           {
             providerPlayerKey: "466.p.20005",
-            direction: "drop",
+            movement: {
+              kind: "drop",
+              from: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+              to: undefined,
+            },
             name: "Synthetic Retired",
             primaryPosition: undefined,
             displayPosition: "TE",
@@ -2416,6 +2435,188 @@ it.effect("reads bounded league transaction history with dropped-player identity
             proTeam: "SYN",
           },
         ],
+        incomplete: undefined,
+      },
+    ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("decodes both sides of a trade with the team each player left and joined", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTradeTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const transactions = yield* provider.readTransactions({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: undefined,
+      limit: 25,
+    });
+
+    assert.deepStrictEqual(transactions, [
+      {
+        occurredAt: "2026-10-05T08:46:40.000Z",
+        type: "trade",
+        status: "successful",
+        parties: {
+          source: "provider",
+          entries: [
+            {
+              role: "proposer",
+              team: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+            },
+            {
+              role: "receiver",
+              team: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+            },
+          ],
+        },
+        teams: [
+          { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+          { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+        ],
+        players: [
+          {
+            providerPlayerKey: "466.p.20003",
+            movement: {
+              kind: "trade",
+              from: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+              to: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+            },
+            name: "Synthetic Sender",
+            primaryPosition: undefined,
+            displayPosition: "WR",
+            eligiblePositions: undefined,
+            proTeam: "SYN",
+          },
+          {
+            providerPlayerKey: "466.p.20006",
+            movement: {
+              kind: "trade",
+              from: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+              to: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+            },
+            name: "Synthetic Return",
+            primaryPosition: undefined,
+            displayPosition: "RB",
+            eligiblePositions: undefined,
+            proTeam: "SYN",
+          },
+        ],
+        incomplete: undefined,
+      },
+    ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("derives trade parties from the player movements when the payload omits them", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTradeTransactionsWithoutPartyKeys));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const transactions = yield* provider.readTransactions({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: undefined,
+      limit: 25,
+    });
+
+    const transaction = Array.getUnsafe(transactions, 0);
+    assert.deepStrictEqual(transaction.parties, {
+      source: "player_movements",
+      entries: [
+        {
+          role: "participant",
+          team: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+        },
+        {
+          role: "participant",
+          team: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+        },
+      ],
+    });
+    assert.strictEqual(transaction.players.length, 2);
+    assert.isUndefined(transaction.incomplete);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("marks a trade with no player movements incomplete instead of empty", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflEmptyTradeTransaction));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const transactions = yield* provider.readTransactions({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: undefined,
+      limit: 25,
+    });
+
+    assert.deepStrictEqual(transactions, [
+      {
+        occurredAt: "2026-10-03T04:00:00.000Z",
+        type: "trade",
+        status: "successful",
+        parties: {
+          source: "provider",
+          entries: [
+            {
+              role: "proposer",
+              team: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+            },
+            {
+              role: "receiver",
+              team: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+            },
+          ],
+        },
+        teams: [
+          { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+          { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+        ],
+        players: [],
+        incomplete: {
+          code: "no_movements",
+          detail:
+            "The provider published this transaction with no player movements, so neither side can be reconstructed. This is not evidence that no players moved.",
+        },
+      },
+    ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads a league's draft results with round, pick, team, and player", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflDraftResults));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const picks = yield* provider.readDraftResults({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/draftresults?format=json",
+    );
+    assert.deepStrictEqual(picks, [
+      {
+        round: 1,
+        pick: 1,
+        providerTeamKey: "466.l.4000.t.1",
+        providerPlayerKey: "466.p.20003",
+      },
+      {
+        round: 1,
+        pick: 2,
+        providerTeamKey: "466.l.4000.t.2",
+        providerPlayerKey: "466.p.20006",
+      },
+      {
+        round: 2,
+        pick: 3,
+        providerTeamKey: "466.l.4000.t.1",
+        providerPlayerKey: "466.p.20009",
       },
     ]);
   }).pipe(Effect.provide(yahooLayer(internet)));

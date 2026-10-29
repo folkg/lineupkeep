@@ -14,6 +14,7 @@ import {
 import type {
   ProviderAvailabilityTier,
   ProviderCapabilities,
+  ProviderDraftPick,
   ProviderGamesPlayed,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
@@ -80,6 +81,7 @@ type FakeProviderState = {
   readonly playerDetailsFailure: ProviderPeriodMismatch | undefined;
   readonly matchups: ReadonlyArray<ProviderMatchup>;
   readonly transactions: ReadonlyArray<ProviderTransaction>;
+  readonly draftResults: ReadonlyArray<ProviderDraftPick>;
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
   readonly unsupported: ReadonlySet<ProviderOperation>;
   readonly reviewLinkFailure: ProviderReviewLinkInvalid | undefined;
@@ -122,6 +124,7 @@ export type FakeProviderWorldShape = {
   readonly setTransactions: (
     transactions: ReadonlyArray<ProviderTransaction>,
   ) => Effect.Effect<void>;
+  readonly setDraftResults: (picks: ReadonlyArray<ProviderDraftPick>) => Effect.Effect<void>;
   readonly setLeagueTeams: (teams: ReadonlyArray<ProviderLeagueTeam>) => Effect.Effect<void>;
   readonly unsupportedOperations: (
     operations: ReadonlyArray<ProviderOperation>,
@@ -173,6 +176,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         playerDetailsFailure: undefined,
         matchups: [],
         transactions: [],
+        draftResults: [],
         leagueTeams: [],
         unsupported: new Set(),
         reviewLinkFailure: undefined,
@@ -232,6 +236,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           modify((current) => ({ ...current, playerDetailsFailure })),
         setMatchups: (matchups) => modify((current) => ({ ...current, matchups })),
         setTransactions: (transactions) => modify((current) => ({ ...current, transactions })),
+        setDraftResults: (draftResults) => modify((current) => ({ ...current, draftResults })),
         setLeagueTeams: (leagueTeams) => modify((current) => ({ ...current, leagueTeams })),
         unsupportedOperations: (operations) =>
           modify((current) => ({ ...current, unsupported: new Set(operations) })),
@@ -573,6 +578,12 @@ const providerFake = Effect.gen(function* () {
             transaction.teams.some((team) => team.providerTeamKey === input.providerTeamKey),
         )
         .slice(0, input.limit);
+    }),
+    readDraftResults: Effect.fn("FakeProvider.readDraftResults")(function* (input) {
+      const current = yield* prepare(input, "read_draft_results");
+      return current.draftResults.filter((pick) =>
+        pick.providerTeamKey.startsWith(`${input.providerLeagueKey}.t.`),
+      );
     }),
     readLeagueTeams: Effect.fn("FakeProvider.readLeagueTeams")(function* (input) {
       const current = yield* prepare(input, "read_league_teams");

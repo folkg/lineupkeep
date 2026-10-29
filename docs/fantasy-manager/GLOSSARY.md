@@ -93,6 +93,22 @@ _Avoid_: Starter bonus, confirmed-start when the fact is meant, probable starter
 One rung of an ordered ladder from most to least likely to appear — confirmed start, will play, might play, unlikely to play, will not play, no game — that the lineup objective ranks above the final score. The provider selects the rung for each player from its own status and starting-lineup facts; the generic layer declares only the order.
 _Avoid_: Health score, injury penalty, availability factor
 
+**Player movement**:
+One player's two ends in a transaction: the team it left and the team it joined, each absent when the move has no team on that side. A trade player has both ends; an added player joined a team and left no team; a dropped player left a team and joined none. This replaces a single direction, which cannot describe a trade from both sides.
+_Avoid_: Direction, incoming/outgoing, transfer when referring to one player's two ends
+
+**Trade parties**:
+The teams on the two sides of a trade. The proposing team and the receiving team are named only when the provider publishes those keys; otherwise the involved teams are reported as participants derived from the player movements, without assigning a proposing or receiving role.
+_Avoid_: Trade sides when the roles are unknown
+
+**Transaction completeness**:
+Whether the provider payload lets a client reconstruct every movement in a transaction. An incomplete transaction carries a code and reason, and an empty transaction is incomplete rather than a complete trade with no assets.
+_Avoid_: Success, empty trade
+
+**Draft history**:
+The picks a league's draft actually made: round, pick number, the team that made the pick, and the player taken. It is not current or future pick ownership, and the provider publishes no picks inside trade transactions.
+_Avoid_: Draft board, pick ownership when the read is history
+
 ## Automation
 
 **Disabled team**:
