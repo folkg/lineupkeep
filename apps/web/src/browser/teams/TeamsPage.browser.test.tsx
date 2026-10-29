@@ -14,6 +14,7 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
+import { formatDateTime } from "#browser/shared-ui/formatTime.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { requireTeamSuccess } from "./teamFailure";
@@ -97,7 +98,11 @@ it("labels a pause as the rest of the fantasy day and resumes through the contro
 
   await expect.element(page.getByText("Paused until the end of the fantasy day")).toBeVisible();
   await expect
-    .element(page.getByText(/Lineup checks resume at .*America\/Los_Angeles/))
+    .element(
+      page.getByText(
+        `Lineup checks resume at ${formatDateTime(pausedTeam.team.automation.resumesAt ?? "")}.`,
+      ),
+    )
     .toBeVisible();
   await page.getByRole("button", { name: "Resume lineup checks" }).click();
 

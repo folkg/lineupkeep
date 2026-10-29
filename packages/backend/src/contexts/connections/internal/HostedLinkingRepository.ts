@@ -38,6 +38,7 @@ type Record = HostedLinkingRecord;
 type CreateHostedLinkingCommand = {
   readonly id: HostedLinkingSessionId;
   readonly provider: ProviderKey;
+  readonly connectionId?: ConnectionId;
   readonly ticketHash: string;
 };
 
@@ -83,6 +84,7 @@ export class HostedLinkingRepository extends Context.Service<
           provider: command.provider,
           startedAt: now,
           expiresAt: DateTime.addDuration(now, hostedLinkingWindowMillis),
+          ...(command.connectionId === undefined ? {} : { connectionId: command.connectionId }),
           updatedAt: now,
         };
         const values = yield* encodeRecord({

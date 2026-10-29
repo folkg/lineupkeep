@@ -6,6 +6,7 @@ import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
+import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
@@ -13,6 +14,7 @@ import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
+import { Time } from "#browser/shared-ui/Time.tsx";
 import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
@@ -20,7 +22,6 @@ import {
   automationStateLabel,
   availabilityLabel,
   connectionStateLabel,
-  formatDateTime,
   pauseResumeLabel,
   runExplanation,
   runStatusLabel,
@@ -46,7 +47,7 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
         title={team()?.team.name ?? "Team"}
       >
         <Stack gap="lg">
-          <TextLink to="/teams">All teams</TextLink>
+          <TextLink to="/teams">Back to teams</TextLink>
           <Show
             fallback={<LoadingState label="Loading team">Loading this team…</LoadingState>}
             when={!page.isLoading()}
@@ -167,7 +168,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
                       {runStatusLabel(run.status)} · {targetLabel(run.target)}
                     </Text>
                     <Text size="caption" tone="faint">
-                      {formatDateTime(run.updatedAt)}
+                      <Time datetime={run.updatedAt}>{formatReaderTime(run.updatedAt)}</Time>
                     </Text>
                   </Inline>
                   <Text size="caption" tone="muted">

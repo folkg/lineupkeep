@@ -5,6 +5,7 @@ import type { Accessor } from "solid-js";
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
+import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
@@ -16,13 +17,7 @@ import { defaultProviderName, providerDisplayName } from "#contracts/connections
 import type { LineupRunView } from "#contracts/connections/teamContract.ts";
 
 import { describeRunFailure } from "./teamFailure";
-import {
-  formatDateTime,
-  runExplanation,
-  runStatusLabel,
-  targetLabel,
-  triggerLabel,
-} from "./teamLabels";
+import { runExplanation, runStatusLabel, targetLabel, triggerLabel } from "./teamLabels";
 import type { TeamListQueryOptions, TeamRunQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 import { useRunPage } from "./useRunPage";
@@ -42,6 +37,13 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
     <AppShell>
       <Page lede="What this run checked and what it found." title="Lineup run">
         <Stack gap="lg">
+          <Show fallback={<TextLink to="/teams">Back to teams</TextLink>} when={page.team()}>
+            {(team) => (
+              <TextLink params={{ teamId: team().team.id }} to="/teams/$teamId">
+                Back to {team().team.name}
+              </TextLink>
+            )}
+          </Show>
           <Show
             fallback={<LoadingState label="Loading run">Loading this run…</LoadingState>}
             when={!page.isLoading()}
@@ -102,7 +104,7 @@ function RunDetail(props: {
         <Definition term="Attempts" value={String(props.run.attempts)} />
         <Definition term="Team" value={props.teamName} />
         <Show when={props.run.pending?.retryAt}>
-          {(retryAt) => <Definition term="Retry at" value={formatDateTime(retryAt())} />}
+          {(retryAt) => <Definition term="Retry at" value={formatReaderTime(retryAt())} />}
         </Show>
       </DefinitionList>
 

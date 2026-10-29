@@ -53,6 +53,7 @@ export type HostedLinkingSession = typeof HostedLinkingSession.Type;
 
 export const StartHostedLinkingInput = Schema.Struct({
   provider: ProviderKey,
+  connectionId: Schema.optional(ConnectionId),
 });
 export type StartHostedLinkingInput = typeof StartHostedLinkingInput.Type;
 

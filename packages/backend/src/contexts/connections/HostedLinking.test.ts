@@ -115,6 +115,71 @@ it.effect("completes once, stores the validated connection, and discovers teams"
   }).pipe(Effect.provide(HostedLinkingTestLayer)),
 );
 
+it.effect("reconnects an expired connection in place instead of creating another", () =>
+  Effect.gen(function* () {
+    const hosted = yield* HostedLinking;
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const linked = yield* hosted.start(owner, startInput);
+    const first = yield* hosted.complete(owner, {
+      id: linked.session.id,
+      ticket: Redacted.value(linked.ticket),
+      provider: decodeProviderKey("yahoo"),
+      session,
+    });
+
+    yield* fake.rejectSession(true);
+    yield* Effect.flip(connections.discoverTeams(owner, [{ id: first.connection.id }]));
+    yield* fake.rejectSession(false);
+    const [reconnectRequired] = yield* connections.list(owner);
+    assert.strictEqual(reconnectRequired?.status, "reconnect-required");
+
+    const reconnect = yield* hosted.start(owner, {
+      provider: decodeProviderKey("yahoo"),
+      connectionId: first.connection.id,
+    });
+    const completed = yield* hosted.complete(owner, {
+      id: reconnect.session.id,
+      ticket: Redacted.value(reconnect.ticket),
+      provider: decodeProviderKey("yahoo"),
+      session,
+    });
+
+    assert.strictEqual(reconnect.session.connectionId, first.connection.id);
+    assert.strictEqual(completed.session.connectionId, first.connection.id);
+    assert.strictEqual(completed.connection.id, first.connection.id);
+    assert.strictEqual(completed.connection.status, "ready");
+    assert.deepStrictEqual(
+      (yield* connections.list(owner)).map((connection) => connection.id),
+      [first.connection.id],
+    );
+  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+);
+
+it.effect("refuses a reconnect target owned by someone else", () =>
+  Effect.gen(function* () {
+    const hosted = yield* HostedLinking;
+    const links = yield* Connections;
+    const linked = yield* hosted.start(other, startInput);
+    const foreign = yield* hosted.complete(other, {
+      id: linked.session.id,
+      ticket: Redacted.value(linked.ticket),
+      provider: decodeProviderKey("yahoo"),
+      session,
+    });
+
+    const error = yield* Effect.flip(
+      hosted.start(owner, {
+        provider: decodeProviderKey("yahoo"),
+        connectionId: foreign.connection.id,
+      }),
+    );
+
+    assert.strictEqual(error._tag, "connection.not_found");
+    assert.deepStrictEqual(yield* links.list(owner), []);
+  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+);
+
 it.effect("expires a session after its window and refuses completion", () =>
   Effect.gen(function* () {
     const hosted = yield* HostedLinking;

@@ -10,11 +10,15 @@ import type {
 } from "#contracts/connections/connectionContract.ts";
 import type { ExpectedFailure } from "#server/backendEntry.ts";
 
-export function toConnectionView(connection: ProviderConnection): ConnectionView {
+export function toConnectionView(
+  connection: ProviderConnection,
+  teamCount: number,
+): ConnectionView {
   return {
     id: connection.id,
     provider: connection.provider,
     status: connection.status,
+    teamCount,
     ...(connection.pairingCode === undefined ? {} : { pairingCode: connection.pairingCode }),
     ...(connection.linkingExpiresAt === undefined
       ? {}
@@ -37,11 +41,9 @@ export function toConnectionView(connection: ProviderConnection): ConnectionView
 }
 
 export function mapConnectionError(
-  error: ConnectionError | ConnectionDeviceRejected | ConnectionInputInvalid,
+  error: ConnectionError | ConnectionInputInvalid,
 ): ExpectedFailure<ConnectionMutationError["type"]> {
   switch (error._tag) {
-    case "ConnectionDeviceRejected":
-      return { type: "connection.device_rejected", outcome: "rejected" };
     case "ConnectionInputInvalid":
       return { type: "connection.input_invalid", outcome: "rejected" };
     case "connection.link_expired":
@@ -56,13 +58,6 @@ export function mapConnectionError(
       return { type: error._tag, outcome: "failure" };
   }
 }
-
-export class ConnectionDeviceRejected extends Schema.TaggedError<
-  ConnectionDeviceRejected,
-  { readonly brand: unique symbol }
->()("ConnectionDeviceRejected", {
-  reason: Schema.String,
-}) {}
 
 export class ConnectionInputInvalid extends Schema.TaggedError<
   ConnectionInputInvalid,

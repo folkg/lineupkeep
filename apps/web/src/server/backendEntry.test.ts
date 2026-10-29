@@ -55,7 +55,7 @@ it.effect("returns ownership-free ISO dates through the authenticated result", (
     });
 
     const result = yield* authenticatedUseCase(
-      () => Effect.succeed(toConnectionView(connection)),
+      () => Effect.succeed(toConnectionView(connection, 3)),
       mapConnectionError,
     ).pipe(Effect.provide(yield* authentication(true)));
 
@@ -65,6 +65,7 @@ it.effect("returns ownership-free ISO dates through the authenticated result", (
         id: connection.id,
         provider: decodeProviderKey("yahoo"),
         status: "linking",
+        teamCount: 3,
         linkingExpiresAt: "2026-01-02T03:04:05.000Z",
         createdAt: "2026-01-02T03:04:05.000Z",
         updatedAt: "2026-01-02T03:04:05.000Z",

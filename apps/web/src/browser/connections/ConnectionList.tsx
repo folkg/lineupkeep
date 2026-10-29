@@ -5,6 +5,7 @@ import type { Accessor } from "solid-js";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
+import { RuleList } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import type { ConnectionView } from "#contracts/connections/connectionContract.ts";
 import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
@@ -47,27 +48,19 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
             }
             when={props.connections().length > 0}
           >
-            <Stack gap="md">
+            <RuleList>
               <For each={props.connections()}>
                 {(connection) => (
                   <ConnectionCard
-                    approving={props.approvingId() === connection.id}
-                    canceling={props.cancelingId() === connection.id}
                     connection={connection}
                     disconnecting={props.disconnectingId() === connection.id}
                     reconnecting={props.reconnectingId() === connection.id}
-                    onApprove={() => props.onApprove(connection)}
-                    onCancel={() => props.onCancel(connection)}
                     onDisconnect={() => props.onDisconnect(connection)}
-                    reconnectCode={props.reconnectCode(connection.id)}
-                    onChangeReconnectCode={(value) =>
-                      props.onChangeReconnectCode(connection.id, value)
-                    }
                     onReconnect={() => props.onReconnect(connection)}
                   />
                 )}
               </For>
-            </Stack>
+            </RuleList>
           </Show>
         </Show>
       </Show>
@@ -79,15 +72,9 @@ type ConnectionListProps = {
   readonly connections: Accessor<ReadonlyArray<ConnectionView>>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
-  readonly approvingId: Accessor<string | undefined>;
-  readonly cancelingId: Accessor<string | undefined>;
   readonly disconnectingId: Accessor<string | undefined>;
   readonly reconnectingId: Accessor<string | undefined>;
-  readonly onApprove: (connection: ConnectionView) => void;
-  readonly onCancel: (connection: ConnectionView) => void;
   readonly onDisconnect: (connection: ConnectionView) => void;
-  readonly reconnectCode: (connectionId: string) => string;
-  readonly onChangeReconnectCode: (connectionId: string, value: string) => void;
   readonly onReconnect: (connection: ConnectionView) => void;
   readonly onRefresh: () => Promise<void>;
 };

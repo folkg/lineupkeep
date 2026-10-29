@@ -7,30 +7,6 @@ import { connectionQueries } from "./connectionQueries";
 import type { ConnectionRemote } from "./connectionRemote";
 
 export const connectionMutations = {
-  start: (remote: ConnectionRemote) =>
-    mutationOptions({
-      mutationKey: ["connections", "start"],
-      mutationFn: remote.start,
-      onSuccess: storeRefreshedConnections,
-    }),
-  startReconnect: (remote: ConnectionRemote) =>
-    mutationOptions({
-      mutationKey: ["connections", "start-reconnect"],
-      mutationFn: remote.startReconnect,
-      onSuccess: storeRefreshedConnections,
-    }),
-  approve: (remote: ConnectionRemote) =>
-    mutationOptions({
-      mutationKey: ["connections", "approve"],
-      mutationFn: remote.approve,
-      onSuccess: storeRefreshedConnections,
-    }),
-  cancel: (remote: ConnectionRemote) =>
-    mutationOptions({
-      mutationKey: ["connections", "cancel"],
-      mutationFn: remote.cancel,
-      onSuccess: storeRefreshedConnections,
-    }),
   disconnect: (remote: ConnectionRemote) =>
     mutationOptions({
       mutationKey: ["connections", "disconnect"],

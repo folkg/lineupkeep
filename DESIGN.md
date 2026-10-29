@@ -217,7 +217,7 @@ TextField, TextArea, and SearchField keep persistent labels, visible boundaries,
 
 ### Containers and metadata
 
-Badge is labelled metadata, not a rank sticker. Its gold treatment adds emphasis; quieter supporting states can use action-soft without inventing another status palette. IntroPanel/Panel are occasional dark companion surfaces, not a site-wide card recipe. Entry remains a starter primitive; do not derive the fantasy domain by renaming starter components.
+Status metadata is labelled text, not a rank sticker. Reserve gold emphasis for highlighted calls to action; supporting state stays in ink tones without inventing another status palette. IntroPanel/Panel are occasional dark companion surfaces, not a site-wide card recipe. Do not derive the fantasy domain by renaming starter components.
 
 ### Operational states
 
@@ -231,7 +231,7 @@ Teams are a ruled list, not a grid of marketing cards. Each row carries the team
 
 ### Connections and incidents
 
-The connection surface keeps the helper pairing flow and adds an explicit reconnect action for an expired session. The helper uploads the replacement session; the person never types a password here. One connection expiration opens one durable incident, and the paired action-required email uses a stable logical idempotency identity so retries cannot multiply reminders.
+The connection surface links through the hosted browser only; the web UI has no local helper, pairing code, or password field. Each connection row names the provider, the number of teams it covers, when it was connected, and what its current status can do. A connection that needs a new sign-in reopens the same hosted browser session in place. The person never types a password here. One connection expiration opens one durable incident, and the paired action-required email uses a stable logical idempotency identity so retries cannot multiply reminders.
 
 ### Browser surfaces
 

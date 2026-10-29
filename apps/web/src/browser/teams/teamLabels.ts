@@ -1,3 +1,4 @@
+import { formatDateTime } from "#browser/shared-ui/formatTime.ts";
 import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { LineupRunView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
@@ -62,17 +63,7 @@ export function pauseResumeLabel(team: TeamSummaryView): string | undefined {
   if (team.team.automation.resumesAt === undefined) {
     return "Lineup checks resume at the start of the next fantasy day.";
   }
-  const resumes = new Date(team.team.automation.resumesAt);
-  const zone = team.team.automation.timeZone;
-  if (zone === undefined) {
-    return `Lineup checks resume at ${formatDateTime(resumes)}.`;
-  }
-  const formatted = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: zone,
-  }).format(resumes);
-  return `Lineup checks resume at ${formatted} ${zone}.`;
+  return `Lineup checks resume at ${formatDateTime(team.team.automation.resumesAt)}.`;
 }
 
 export function runStatusLabel(status: LineupRunView["status"]): string {
@@ -149,11 +140,4 @@ export function targetLabel(target: LineupRunView["target"]): string {
 
 export function triggerLabel(run: LineupRunView): string {
   return run.trigger === "scheduled" ? "Scheduled check" : "Manual run";
-}
-
-export function formatDateTime(value: string | Date): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }

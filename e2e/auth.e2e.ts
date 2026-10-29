@@ -72,18 +72,17 @@ test("returns to the email step to use a different address", async ({ page }) =>
 
 test("signs in again after an ended session and returns to the page", async ({ page }) => {
   const account = await signUp(page);
+  await page.goto("/teams");
   await page.context().clearCookies();
-  await page.getByRole("button", { name: "Use the local helper instead", exact: true }).click();
-  await page.getByRole("textbox", { name: "Pairing code" }).fill("ABCD2345");
-  await page.getByRole("button", { name: "Pair helper" }).click();
+  await page.getByRole("button", { name: "Refresh teams" }).click();
   await expect(page.getByText(/^Your session has ended\./)).toBeVisible();
-  await expect(page).toHaveURL("/connections");
+  await expect(page).toHaveURL("/teams");
   await page.getByRole("button", { name: "Sign in again" }).click();
-  await expect(page).toHaveURL("/auth?redirect=%2Fconnections");
+  await expect(page).toHaveURL("/auth?redirect=%2Fteams");
 
   await signIn(page, account);
 
-  await expect(page).toHaveURL("/connections");
+  await expect(page).toHaveURL("/teams");
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
 

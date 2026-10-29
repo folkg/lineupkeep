@@ -26,6 +26,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
   const [status, setStatus] = createSignal<HostedBrowserStatus>("starting");
   const [failure, setFailure] = createSignal<ActionFeedbackState>();
   const [starting, setStarting] = createSignal(false);
+  const [startingConnectionId, setStartingConnectionId] = createSignal<string>();
   const [ready, setReady] = createSignal(false);
   const navigate = useNavigate();
   let socket: WebSocket | undefined;
@@ -166,23 +167,29 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
       if (socket === opened) {
         setFailure({
           type: "attention",
-          message: "The private browser could not connect. Try again or use the local helper.",
+          message: "The private browser could not connect. Try again.",
         });
         cancel();
       }
     };
   };
 
-  const start = (): void => {
+  const start = (input: StartHostedLinkingOptions = {}): Promise<void> => {
     if (starting()) {
-      return;
+      return Promise.resolve();
     }
     setFailure(undefined);
     setReady(false);
     setStarting(true);
-    void options
+    if (input.connectionId !== undefined) {
+      setStartingConnectionId(input.connectionId);
+    }
+    return options
       .remote()
-      .startHosted({ provider: defaultProviderKey })
+      .startHosted({
+        provider: defaultProviderKey,
+        ...(input.connectionId === undefined ? {} : { connectionId: input.connectionId }),
+      })
       .then((view) => {
         if (disposed) {
           void options.remote().cancelHosted({ id: view.session.id });
@@ -193,7 +200,10 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
         connect(view);
       })
       .catch(reportFailure)
-      .finally(() => setStarting(false));
+      .finally(() => {
+        setStarting(false);
+        setStartingConnectionId(undefined);
+      });
   };
 
   const sendInput = (input: HostedBrowserInput): void => {
@@ -222,6 +232,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
     status,
     failure,
     starting,
+    startingConnectionId,
     ready,
     start,
     cancel,
@@ -251,11 +262,11 @@ function failureMessage(reason: HostedBrowserMessageFailure): string {
       return `${defaultProviderName()} could not be reached. Try again in a moment.`;
     case "browser_unavailable":
     case "page_unavailable":
-      return "The private browser could not start. Try again or use the local helper.";
+      return "The private browser could not start. Try again.";
     case "expired":
       return `This sign-in session expired. Start again to reconnect ${defaultProviderName()}.`;
     case "completion_failed":
-      return "We could not confirm the sign-in. Try again or use the local helper.";
+      return "We could not confirm the sign-in. Try again.";
   }
 }
 
@@ -270,7 +281,7 @@ export function statusMessage(status: HostedBrowserStatus): string {
     case "two-factor":
       return `${defaultProviderName()} asked for an additional verification step. Complete it here.`;
     case "blocked":
-      return `${defaultProviderName()} blocked this sign-in. Cancel and try again, or use the local helper.`;
+      return `${defaultProviderName()} blocked this sign-in. Cancel and try again.`;
   }
 }
 
@@ -280,8 +291,9 @@ export type HostedLinkingController = {
   readonly status: Accessor<HostedBrowserStatus>;
   readonly failure: Accessor<ActionFeedbackState | undefined>;
   readonly starting: Accessor<boolean>;
+  readonly startingConnectionId: Accessor<string | undefined>;
   readonly ready: Accessor<boolean>;
-  readonly start: () => void;
+  readonly start: (options?: StartHostedLinkingOptions) => Promise<void>;
   readonly cancel: () => void;
   readonly click: (x: number, y: number) => void;
   readonly sendText: (text: string) => void;
@@ -292,6 +304,10 @@ export type HostedLinkingController = {
 type HostedLinkingOptions = {
   readonly remote: Accessor<ConnectionRemote>;
   readonly onRefresh: () => Promise<void>;
+};
+
+type StartHostedLinkingOptions = {
+  readonly connectionId?: string;
 };
 
 type HostedBrowserMessageFailure = Extract<HostedBrowserMessage, { _tag: "Failed" }>["reason"];

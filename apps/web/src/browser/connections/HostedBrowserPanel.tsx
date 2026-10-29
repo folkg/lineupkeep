@@ -4,12 +4,15 @@ import { Show } from "solid-js";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { BrowserFrame } from "#browser/shared-ui/BrowserFrame.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
+import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
+import { Time } from "#browser/shared-ui/Time.tsx";
 import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
+import { SignInWithGoogleHint } from "./SignInWithGoogleHint";
 import { statusMessage } from "./useHostedLinking";
 import type { HostedLinkingController } from "./useHostedLinking";
 
@@ -24,18 +27,21 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
       </Text>
       <Show
         fallback={
-          <Inline gap="sm">
-            <Button
-              pending={props.controller.starting()}
-              pendingLabel="Starting…"
-              onClick={props.controller.start}
-            >
-              Connect {defaultProviderName()}
-            </Button>
-            <Text size="caption" tone="muted">
-              Nothing to install.
-            </Text>
-          </Inline>
+          <Stack gap="sm">
+            <Inline gap="sm">
+              <Button
+                pending={props.controller.starting()}
+                pendingLabel="Starting…"
+                onClick={() => void props.controller.start()}
+              >
+                Connect {defaultProviderName()}
+              </Button>
+              <Text size="caption" tone="muted">
+                Nothing to install.
+              </Text>
+            </Inline>
+            <SignInWithGoogleHint />
+          </Stack>
         }
         when={props.controller.session()}
       >
@@ -61,9 +67,11 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
               Lineupkeep does not store or log them.
             </Text>
             <Text size="caption" tone="muted">
-              This sign-in expires at{" "}
-              {new Date(session().session.expiresAt).toISOString().slice(11, 16)} UTC. Closing or
-              cancelling discards the private browser profile.
+              This sign-in expires{" "}
+              <Time datetime={session().session.expiresAt}>
+                {formatReaderTime(session().session.expiresAt)}
+              </Time>
+              . Closing or cancelling discards the private browser profile.
             </Text>
           </Stack>
         )}

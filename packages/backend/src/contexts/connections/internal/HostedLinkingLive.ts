@@ -1,7 +1,8 @@
 import { Array, Crypto, DateTime, Duration, Effect, Layer, Redacted, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
-import type { ConnectionError } from "#contexts/connections/Connection.ts";
+import { ConnectionLinkRejected, ConnectionNotFound } from "#contexts/connections/Connection.ts";
+import type { ConnectionError, ConnectionId } from "#contexts/connections/Connection.ts";
 import {
   hostedLinkingStartWindowMillis,
   hostedLinkingStartsPerWindow,
@@ -38,6 +39,17 @@ export const HostedLinkingLive = Layer.effect(
       userId: UserId,
       input: StartHostedLinkingInput,
     ) {
+      if (input.connectionId !== undefined) {
+        const owned = yield* connections.list(userId);
+        const target = owned.find((connection) => connection.id === input.connectionId);
+        if (target === undefined) {
+          return yield* ConnectionNotFound.make({ id: input.connectionId });
+        }
+        if (target.provider !== input.provider || target.status !== "reconnect-required") {
+          return yield* ConnectionLinkRejected.make({ id: target.id, status: target.status });
+        }
+      }
+
       const now = yield* DateTime.now;
       yield* repository.expireStale(userId, now);
       const since = DateTime.subtractDuration(now, Duration.millis(hostedLinkingStartWindowMillis));
@@ -56,6 +68,7 @@ export const HostedLinkingLive = Layer.effect(
       const session = yield* repository.create(userId, {
         id,
         provider: input.provider,
+        ...(input.connectionId === undefined ? {} : { connectionId: input.connectionId }),
         ticketHash: ticket.hash,
       });
 
@@ -94,9 +107,15 @@ export const HostedLinkingLive = Layer.effect(
         ticketHash,
         at: yield* DateTime.now,
       });
-      const linked = yield* connections
-        .link(userId, [{ provider: input.provider, session: input.session }])
-        .pipe(Effect.result);
+      const reconnectTarget =
+        claimed.state._tag === "Completing" ? claimed.state.connectionId : undefined;
+      const linked = yield* (
+        reconnectTarget === undefined
+          ? connections.link(userId, [{ provider: input.provider, session: input.session }])
+          : connections.completeReconnect(userId, [
+              { id: reconnectTarget, provider: input.provider, session: input.session },
+            ])
+      ).pipe(Effect.result);
 
       if (linked._tag === "Failure") {
         yield* repository
@@ -179,10 +198,11 @@ export const HostedLinkingLive = Layer.effect(
 
 function toSession(record: HostedLinkingRecord): HostedLinkingSession {
   const state = record.state;
+  const connectionId = connectionIdOf(state);
   return {
     id: record.id,
     userId: record.userId,
-    ...(state._tag === "Completed" ? { connectionId: state.connectionId } : {}),
+    ...(connectionId === undefined ? {} : { connectionId }),
     provider: state.provider,
     status: hostedLinkingStatusOf(state),
     startedAt: state.startedAt,
@@ -194,6 +214,19 @@ function toSession(record: HostedLinkingRecord): HostedLinkingSession {
     createdAt: record.createdAt,
     updatedAt: state.updatedAt,
   };
+}
+
+function connectionIdOf(state: HostedLinkingRecord["state"]): ConnectionId | undefined {
+  switch (state._tag) {
+    case "Active":
+    case "Completing":
+    case "Completed":
+      return state.connectionId;
+    case "Cancelled":
+    case "Expired":
+    case "Failed":
+      return undefined;
+  }
 }
 
 function isExpired(expiresAt: DateTime.Utc, now: DateTime.Utc): boolean {

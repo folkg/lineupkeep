@@ -56,15 +56,9 @@ The owner has chosen to proceed with local implementation on the current pinned 
 
 Open **Connections** and choose **Connect Yahoo**. A private browser opens inside the page; sign in there once. Lineupkeep never stores your password, and keystrokes are relayed only to that temporary browser. When Yahoo accepts the sign-in, the connection becomes ready, teams are discovered automatically, and the app opens **Teams**. No install, code copy, or second approval is required. The temporary browser profile is destroyed when the session ends.
 
-Hosted sign-in runs on the Node target when a Playwright Chromium is installed. The Cloudflare target and a Node image without that browser report `hosted_browser.unsupported`; the dedicated production browser service is [planned but not provisioned](docs/fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md). The local helper remains the fallback when hosted sign-in is unavailable:
+Hosted sign-in runs on the Node target when a Playwright Chromium is installed. The Cloudflare target and a Node image without that browser report `hosted_browser.unsupported`; the dedicated production browser service is [planned but not provisioned](docs/fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md). The local helper pairing path has been removed from the web interface, so the hosted browser is the only linking path.
 
-```sh
-./node_modules/.bin/lineupkeep link
-```
-
-The helper prints a public pairing code and the app's Connections URL. Open that URL, sign in to Lineupkeep, enter the code, and approve the helper. It opens Yahoo in a dedicated temporary Chromium profile; sign in there and leave the window open until the helper reports success. The app validates the session and stores an encrypted connection, and the helper removes the temporary profile when it finishes.
-
-Use `--app-url <origin>` (or `LINEUPKEEP_APP_URL`) when the app is not at `http://localhost:5173`, and `--help` for the full usage. The helper keeps the device code and access token in memory, never in command arguments or output, and never reads your normal browser profile. The token authorizes only the credential upload and expires on its own. Live linking requires a Yahoo account and is not part of the automated test suite; see [the helper README](apps/linking-helper/README.md).
+If your Yahoo account signs in with Google, Yahoo will not accept a Gmail address on the hosted sign-in page. Add a phone number to your Yahoo account and sign in with that number instead. The Connections page has the same note beside **Connect Yahoo**.
 
 ## Connecting an MCP client
 

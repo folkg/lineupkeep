@@ -32,23 +32,13 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
   }
   if (error instanceof ConnectionWriteFailure) {
     switch (error.reason.type) {
-      case "connection.device_rejected":
-        return {
-          kind: "rejected",
-          message:
-            "The helper request was rejected, expired, or already used. Start a new pairing request from the helper.",
-        };
       case "connection.link_expired":
-        return {
-          kind: "rejected",
-          message: "This pairing attempt expired. Start a new pairing request from the helper.",
-        };
       case "connection.link_rejected":
       case "connection.input_invalid":
       case "connection.not_found":
         return {
           kind: "rejected",
-          message: "This connection is no longer available. Check the latest list before retrying.",
+          message: "This connection is no longer available. Refresh the page before retrying.",
         };
       case "connection.credential_generation_stale":
         return {
@@ -58,7 +48,7 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
       case "connection.provider_rejected":
         return {
           kind: "rejected",
-          message: `${defaultProviderName()} rejected this helper session. Reconnect to continue.`,
+          message: `${defaultProviderName()} rejected this sign-in. Try connecting again.`,
         };
       case "connection.create_failed":
       case "connection.persistence_failed":
@@ -67,12 +57,12 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
       case "hosted_browser.unsupported":
         return {
           kind: "rejected",
-          message: "The in-page browser is not available here. Use the local helper instead.",
+          message: "The private browser is not available here. Try again from the Lineupkeep app.",
         };
       case "hosted_linking.session_active":
         return {
           kind: "rejected",
-          message: "A hosted sign-in is already open. Finish or cancel it first.",
+          message: "A sign-in is already open. Finish or cancel it first.",
         };
       case "hosted_linking.rate_limited":
         return {
@@ -86,12 +76,12 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
       case "hosted_linking.input_invalid":
         return {
           kind: "rejected",
-          message: "This hosted sign-in session ended. Start a new one.",
+          message: "This sign-in session ended. Start a new one.",
         };
       case "hosted_linking.persistence_failed":
         return {
           kind: "unconfirmed",
-          message: "We could not start the private browser. Try again or use the local helper.",
+          message: "We could not start the private browser. Try again.",
         };
     }
   }

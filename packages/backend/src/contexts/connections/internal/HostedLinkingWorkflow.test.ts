@@ -46,6 +46,35 @@ it.effect("round-trips every hosted linking lifecycle state through its row code
   }),
 );
 
+it.effect("round-trips a reconnect target through the row codec", () =>
+  Effect.gen(function* () {
+    const record = {
+      id: sessionId,
+      userId: owner,
+      ticketHash: "ticket-hash",
+      createdAt: at,
+      state: {
+        _tag: "Active" as const,
+        provider: decodeProviderKey("yahoo"),
+        startedAt: at,
+        expiresAt: DateTime.addDuration(at, "10 minutes"),
+        connectionId,
+        updatedAt: at,
+      },
+    };
+
+    const row = yield* Schema.encodeEffect(HostedLinkingRow)(record);
+    const decoded = yield* Schema.decodeEffect(HostedLinkingRow)(row);
+
+    assert.strictEqual(decoded.state._tag, "Active");
+    assert.strictEqual(
+      decoded.state._tag === "Active" ? decoded.state.connectionId : undefined,
+      connectionId,
+    );
+    assert.deepStrictEqual(yield* Schema.encodeEffect(HostedLinkingRow)(decoded), row);
+  }),
+);
+
 it.effect("checks generated event sequences against the hosted linking machine", () =>
   Effect.gen(function* () {
     const values = Arbitrary.schema(

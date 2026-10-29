@@ -11,9 +11,14 @@ const HostedLinkingContent = {
   updatedAt: Schema.DateTimeUtc,
 };
 
+const HostedLinkingReconnectContent = {
+  ...HostedLinkingContent,
+  connectionId: Schema.optional(ConnectionId),
+};
+
 export const HostedLinkingState = Schema.TaggedUnion({
-  Active: HostedLinkingContent,
-  Completing: HostedLinkingContent,
+  Active: HostedLinkingReconnectContent,
+  Completing: HostedLinkingReconnectContent,
   Completed: {
     ...HostedLinkingContent,
     connectionId: ConnectionId,
@@ -80,6 +85,7 @@ export const HostedLinkingWorkflow = Machine.make({
             provider: state.provider,
             startedAt: state.startedAt,
             expiresAt: state.expiresAt,
+            ...reconnectTarget(state.connectionId),
             updatedAt: event.at,
           }),
         },
@@ -160,3 +166,7 @@ export const HostedLinkingWorkflow = Machine.make({
 });
 
 export type HostedLinkingRequest = Machine.Machine.InputEvent<typeof HostedLinkingWorkflow>;
+
+function reconnectTarget(connectionId: ConnectionId | undefined): { connectionId?: ConnectionId } {
+  return connectionId === undefined ? {} : { connectionId };
+}

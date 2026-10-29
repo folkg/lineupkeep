@@ -108,9 +108,9 @@ function stateFromRow(
 ): typeof HostedLinkingState.Type {
   switch (row.status) {
     case "active":
-      return { _tag: "Active", ...content };
+      return { _tag: "Active", ...content, ...optionalConnectionId(row.connectionId) };
     case "completing":
-      return { _tag: "Completing", ...content };
+      return { _tag: "Completing", ...content, ...optionalConnectionId(row.connectionId) };
     case "completed":
       return {
         _tag: "Completed",
@@ -143,7 +143,7 @@ function rowFromState(
   return {
     id: record.id,
     userId: record.userId,
-    connectionId: state._tag === "Completed" ? state.connectionId : null,
+    connectionId: connectionIdOf(state) ?? null,
     provider: state.provider,
     status: statusFromState(state),
     ticketHash: record.ticketHash,
@@ -183,11 +183,29 @@ function requiredDate(value: Date | null, column: string): DateTime.Utc {
   return DateTime.fromDateUnsafe(value);
 }
 
+function optionalConnectionId(value: string | null): { connectionId?: ConnectionId } {
+  return value === null ? {} : { connectionId: Schema.decodeSync(ConnectionId)(value) };
+}
+
+function connectionIdOf(state: typeof HostedLinkingState.Type): ConnectionId | undefined {
+  switch (state._tag) {
+    case "Active":
+    case "Completing":
+    case "Completed":
+      return state.connectionId;
+    case "Cancelled":
+    case "Expired":
+    case "Failed":
+      return undefined;
+  }
+}
+
 function requiredConnectionId(value: string | null): ConnectionId {
-  if (value === null) {
+  const connectionId = optionalConnectionId(value).connectionId;
+  if (connectionId === undefined) {
     throw new Error("hosted_linking_sessions.connection_id is required for a completed session");
   }
-  return Schema.decodeSync(ConnectionId)(value);
+  return connectionId;
 }
 
 function failureReason(value: HostedLinkingFailureReason | null): HostedLinkingFailureReason {

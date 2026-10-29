@@ -16,9 +16,12 @@ test("signs in through the hosted browser or reports why it is unavailable", asy
 
   if (!hostedBrowserAvailable) {
     await expect(
-      page.getByText("The in-page browser is not available here. Use the local helper instead.", {
-        exact: true,
-      }),
+      page.getByText(
+        "The private browser is not available here. Try again from the Lineupkeep app.",
+        {
+          exact: true,
+        },
+      ),
     ).toBeVisible();
     expect(sockets).toEqual([]);
     return;
