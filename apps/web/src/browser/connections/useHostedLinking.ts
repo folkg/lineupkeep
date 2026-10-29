@@ -99,6 +99,8 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
       case "Status":
         setStatus(message.status);
         return;
+      case "AcceptsInput":
+        return;
       case "Refused":
         setFailure({
           type: "attention",

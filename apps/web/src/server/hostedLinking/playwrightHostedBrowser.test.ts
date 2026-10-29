@@ -26,6 +26,7 @@ it.live(
         const factory = createPlaywrightHostedBrowser({ profileRoot });
         const firstFrame = yield* Deferred.make<void>();
         const waiting = yield* Deferred.make<void>();
+        const acceptsInput = yield* Deferred.make<void>();
         const completed = yield* Deferred.make<HostedBrowserMessage>();
         let captured: string | undefined;
         const faults: string[] = [];
@@ -38,6 +39,9 @@ it.live(
             onMessage: (message) => {
               if (message._tag === "Status" && message.status === "waiting") {
                 Deferred.doneUnsafe(waiting, Effect.void);
+              }
+              if (message._tag === "AcceptsInput") {
+                Deferred.doneUnsafe(acceptsInput, Effect.void);
               }
               if (message._tag === "Ready" || message._tag === "Failed") {
                 Deferred.doneUnsafe(completed, Effect.succeed(message));
@@ -57,6 +61,7 @@ it.live(
 
         yield* Deferred.await(firstFrame);
         yield* Deferred.await(waiting);
+        yield* Deferred.await(acceptsInput);
         handle.input({ _tag: "Text", text: "user@example.test" });
         handle.input({ _tag: "Key", key: "Enter" });
 

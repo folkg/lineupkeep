@@ -106,6 +106,9 @@ function streamHandle(
       case "Status":
         callbacks.onMessage({ _tag: "Status", status: message.status });
         return;
+      case "AcceptsInput":
+        callbacks.onMessage({ _tag: "AcceptsInput" });
+        return;
       case "Refused":
         callbacks.onMessage({
           _tag: "Refused",

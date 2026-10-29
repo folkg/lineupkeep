@@ -31,6 +31,7 @@ it("relays the hosted browser stream and completes the owner session", async () 
       descriptorOrigin = descriptor?.loginUrl;
       descriptorViewport = descriptor?.viewport;
       socket.send(encodeTransportMessage({ _tag: "Status", status: "waiting" }));
+      socket.send(encodeTransportMessage({ _tag: "AcceptsInput" }));
       socket.send(Buffer.from([1, 2, 3, 4]));
       socket.send(
         encodeTransportMessage({
@@ -80,6 +81,7 @@ it("relays the hosted browser stream and completes the owner session", async () 
   expect(frames).toEqual([new Uint8Array([1, 2, 3, 4])]);
   expect(messages).toEqual([
     { _tag: "Status", status: "waiting" },
+    { _tag: "AcceptsInput" },
     {
       _tag: "Ready",
       connectionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",

@@ -227,6 +227,7 @@ export function createHostedBrowserService(
             }
           },
           onStatus: (status) => send({ _tag: "Status", status }),
+          onAcceptsInput: () => send({ _tag: "AcceptsInput" }),
           onRefused: (refusal) => {
             refused.push(refusal);
             send({ _tag: "Refused", host: refusal.host, reason: refusal.reason });

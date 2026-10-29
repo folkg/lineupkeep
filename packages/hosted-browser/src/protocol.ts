@@ -67,6 +67,7 @@ export type HostedBrowserFailure =
 
 export type HostedBrowserMessage =
   | { readonly _tag: "Status"; readonly status: HostedBrowserStatus }
+  | { readonly _tag: "AcceptsInput" }
   | { readonly _tag: "Refused"; readonly host: string; readonly reason: HostedBrowserRefusalReason }
   | { readonly _tag: "Ready"; readonly connectionId: string; readonly teamsDiscovered: number }
   | { readonly _tag: "Failed"; readonly reason: HostedBrowserFailure }
@@ -74,6 +75,7 @@ export type HostedBrowserMessage =
 
 export type HostedBrowserTransportMessage =
   | { readonly _tag: "Status"; readonly status: HostedBrowserStatus }
+  | { readonly _tag: "AcceptsInput" }
   | { readonly _tag: "Refused"; readonly host: string; readonly reason: HostedBrowserRefusalReason }
   | { readonly _tag: "Captured"; readonly session: string }
   | { readonly _tag: "Failed"; readonly reason: HostedBrowserFailure }
@@ -131,6 +133,8 @@ export function parseHostedBrowserMessage(value: string): HostedBrowserMessage |
       return isHostedBrowserStatus(decoded["status"])
         ? { _tag: "Status", status: decoded["status"] }
         : undefined;
+    case "AcceptsInput":
+      return { _tag: "AcceptsInput" };
     case "Refused": {
       const host = decoded["host"];
       const reason = decoded["reason"];
@@ -176,6 +180,8 @@ export function parseTransportMessage(value: string): HostedBrowserTransportMess
       return isHostedBrowserStatus(decoded["status"])
         ? { _tag: "Status", status: decoded["status"] }
         : undefined;
+    case "AcceptsInput":
+      return { _tag: "AcceptsInput" };
     case "Refused": {
       const host = decoded["host"];
       const reason = decoded["reason"];

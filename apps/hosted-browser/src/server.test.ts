@@ -45,6 +45,7 @@ it("streams provider sign-in, captures the session, and removes the profile", as
     const statuses: HostedBrowserStatus[] = [];
     const frames: Array<Uint8Array> = [];
     const waiting = Promise.withResolvers<void>();
+    const acceptsInput = Promise.withResolvers<void>();
     const captured = Promise.withResolvers<string>();
 
     client.on("message", (data, isBinary) => {
@@ -62,6 +63,9 @@ it("streams provider sign-in, captures the session, and removes the profile", as
           waiting.resolve();
         }
       }
+      if (message?._tag === "AcceptsInput") {
+        acceptsInput.resolve();
+      }
       if (message?._tag === "Captured") {
         captured.resolve(message.session);
       }
@@ -70,6 +74,7 @@ it("streams provider sign-in, captures the session, and removes the profile", as
     await opened(client);
     client.send(signHostedBrowserDescriptor(descriptorKey, session));
     await waiting.promise;
+    await acceptsInput.promise;
 
     client.send(encodeHostedBrowserInput({ _tag: "Text", text: "hosted-user" }));
     client.send(encodeHostedBrowserInput({ _tag: "Key", key: "Enter" }));

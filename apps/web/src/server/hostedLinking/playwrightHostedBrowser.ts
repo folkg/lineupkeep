@@ -33,6 +33,7 @@ export function createPlaywrightHostedBrowser(
         {
           onFrame: callbacks.onFrame,
           onStatus: (status) => callbacks.onMessage({ _tag: "Status", status }),
+          onAcceptsInput: () => callbacks.onMessage({ _tag: "AcceptsInput" }),
           onRefused: (refusal) =>
             callbacks.onMessage({
               _tag: "Refused",

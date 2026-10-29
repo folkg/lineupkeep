@@ -16,7 +16,6 @@ import {
 
 const capturePollMillis = 400;
 const navigationTimeoutMillis = 30_000;
-const autofocusTimeoutMillis = 2_000;
 const maximumFrameBytes = 1_500_000;
 
 export type HostedBrowserSession = {
@@ -30,6 +29,7 @@ export type HostedBrowserSession = {
 export type HostedBrowserEvents = {
   readonly onFrame: (frame: Uint8Array) => void;
   readonly onStatus: (status: HostedBrowserStatus) => void;
+  readonly onAcceptsInput: () => void;
   readonly onRefused: (refusal: EgressRefusal) => void;
   readonly onCaptured: (cookieHeader: string) => void;
   readonly onFailure: (reason: HostedBrowserFailure) => void;
@@ -175,12 +175,7 @@ async function openBrowser(
       waitUntil: "domcontentloaded",
       timeout: navigationTimeoutMillis,
     });
-    if ((await initial.locator("[autofocus]").count()) > 0) {
-      await initial
-        .locator("[autofocus]:focus")
-        .waitFor({ timeout: autofocusTimeoutMillis })
-        .catch(() => undefined);
-    }
+    await focusDeclaredField(initial);
   } catch {
     await fail("provider_unavailable");
     throw new Error("The provider login page did not load");
@@ -228,7 +223,12 @@ async function openBrowser(
     if (targets.has(page)) {
       return;
     }
-    const target: Target = { generation: 0, streaming: false };
+    const target: Target = {
+      generation: 0,
+      streaming: false,
+      inputGeneration: 0,
+      inputWatch: undefined,
+    };
     targets.set(page, target);
     activationOrder.push(page);
     page.on("dialog", (dialog) => {
@@ -238,9 +238,13 @@ async function openBrowser(
       void download.cancel();
     });
     page.on("framenavigated", (frame) => {
-      if (frame === page.mainFrame() && active === page) {
+      if (frame !== page.mainFrame()) {
+        return;
+      }
+      if (active === page) {
         report(currentStatus(page));
       }
+      watchForInput(page);
     });
     page.on("close", () => {
       forgetTarget(page);
@@ -256,6 +260,7 @@ async function openBrowser(
     active = page;
     void page.bringToFront().catch(() => undefined);
     switchQueue = switchQueue.then(() => streamTarget(page)).catch(() => undefined);
+    watchForInput(page);
   }
 
   async function streamTarget(page: Page): Promise<void> {
@@ -302,6 +307,7 @@ async function openBrowser(
       target.generation++;
       void page.screencast.stop().catch(() => undefined);
     }
+    target?.inputWatch?.abort();
     targets.delete(page);
     const index = activationOrder.lastIndexOf(page);
     if (index >= 0) {
@@ -319,6 +325,25 @@ async function openBrowser(
     }
   }
 
+  function watchForInput(page: Page): void {
+    const target = targets.get(page);
+    if (target === undefined || closed) {
+      return;
+    }
+    target.inputWatch?.abort();
+    const watch = new AbortController();
+    target.inputWatch = watch;
+    const generation = ++target.inputGeneration;
+    void page
+      .waitForFunction(focusedEditable, undefined, { timeout: 0, signal: watch.signal })
+      .then(() => {
+        if (target.inputGeneration === generation && active === page && !closed) {
+          events.onAcceptsInput();
+        }
+      })
+      .catch(() => undefined);
+  }
+
   return {
     input: (input) => {
       inputQueue = inputQueue
@@ -330,6 +355,42 @@ async function openBrowser(
     },
     close,
   };
+}
+
+async function focusDeclaredField(page: Page): Promise<void> {
+  await page
+    .evaluate(() => {
+      const element = document.querySelector("[autofocus]");
+      if (element instanceof HTMLElement) {
+        element.focus();
+      }
+    })
+    .catch(() => undefined);
+}
+
+function focusedEditable(): boolean {
+  const element = document.activeElement;
+  if (element instanceof HTMLTextAreaElement) {
+    return true;
+  }
+  if (element instanceof HTMLElement && element.isContentEditable) {
+    return true;
+  }
+  if (!(element instanceof HTMLInputElement)) {
+    return false;
+  }
+  switch (element.type) {
+    case "text":
+    case "search":
+    case "email":
+    case "password":
+    case "tel":
+    case "url":
+    case "number":
+      return true;
+    default:
+      return false;
+  }
 }
 
 async function applyInput(
@@ -420,4 +481,6 @@ async function removeProfile(directory: string): Promise<void> {
 type Target = {
   generation: number;
   streaming: boolean;
+  inputGeneration: number;
+  inputWatch: AbortController | undefined;
 };

@@ -641,6 +641,7 @@ export default defineConfig({
   overrides: [
     { files: ["**/*.{js,cjs,mjs}"], rules: { "no-redeclare": "error" } },
     { files: source, env: { node: false, browser: true } },
+    { files: ["packages/hosted-browser/src/browser.ts"], env: { browser: true, node: true } },
     { files: server, env: { browser: false, node: true } },
     { files: ["e2e/**/*.ts"], env: { browser: true, node: true } },
     {
