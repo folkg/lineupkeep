@@ -588,7 +588,11 @@ export type ProviderTransactionParties = {
 };
 
 export type ProviderTransactionIncomplete = {
-  readonly code: "no_movements" | "movement_missing_party" | "unknown_movement";
+  readonly code:
+    | "no_movements"
+    | "movement_missing_party"
+    | "unknown_movement"
+    | "trade_return_unpublished";
   readonly detail: string;
 };
 

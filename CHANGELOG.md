@@ -15,6 +15,8 @@ revisions that carried each change.
 - A transaction that cannot be reconstructed is marked `completeness: {status: "incomplete", code,
   detail}` instead of being served as a complete record. A trade the provider returns with no
   player movements is `no_movements` with an empty `players` array, never a complete empty trade.
+  A trade whose published movements only go from one team to the other is `trade_return_unpublished`,
+  because the provider publishes no draft picks or other non-player trade assets.
 - The `get_transactions` description states that the provider publishes no proposals resource, so
   pending and rejected trade offers are unavailable, and that a trade transaction carries no draft
   picks. The `transactions:review` description now says the scope cannot review offers it cannot

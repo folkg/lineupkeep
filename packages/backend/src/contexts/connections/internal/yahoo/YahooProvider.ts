@@ -2457,6 +2457,14 @@ function incompleteTransaction(
       };
     }
   }
+  const sendingTeams = new Set(players.map((player) => player.movement.from?.providerTeamKey));
+  if (type === "trade" && sendingTeams.size === 1) {
+    return {
+      code: "trade_return_unpublished",
+      detail:
+        "The provider published every player movement in this trade from one team to the other. It publishes no draft picks or other non-player trade assets, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
+    };
+  }
   return undefined;
 }
 

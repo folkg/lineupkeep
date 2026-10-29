@@ -73,6 +73,7 @@ import {
   yahooNflTransactions,
   yahooNflTradeTransactions,
   yahooNflTradeTransactionsWithoutPartyKeys,
+  yahooNflSinglePlayerTrade,
   yahooNflEmptyTradeTransaction,
   yahooNflDraftResults,
   yahooNflRoster,
@@ -2582,6 +2583,33 @@ it.effect("marks a trade with no player movements incomplete instead of empty", 
         },
       },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("marks a trade whose published movements go one way incomplete", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflSinglePlayerTrade));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const transactions = yield* provider.readTransactions({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: undefined,
+      limit: 25,
+    });
+
+    const trade = Array.getUnsafe(transactions, 0);
+    assert.strictEqual(trade.type, "trade");
+    assert.strictEqual(trade.players.length, 1);
+    assert.deepStrictEqual(trade.incomplete, {
+      code: "trade_return_unpublished",
+      detail:
+        "The provider published every player movement in this trade from one team to the other. It publishes no draft picks or other non-player trade assets, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
+    });
+    assert.deepStrictEqual(
+      trade.parties?.entries.map((party) => party.role),
+      ["proposer", "receiver"],
+    );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

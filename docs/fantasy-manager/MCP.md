@@ -156,7 +156,10 @@ an empty success. `completeness` is `{ status: "complete" }` or `{ status: "inco
 detail }`, and the reason says what the client can act on. A trade the provider returns with no
 player rows is `incomplete` with code `no_movements` and its `players` array stays empty; a movement
 missing its required end is `movement_missing_party`; a movement type the adapter cannot place on a
-team is `unknown_movement`. An incomplete record is never a comp a client should price against.
+team is `unknown_movement`; and a trade whose published movements only go from one team to the
+other is `trade_return_unpublished`, because the provider publishes no draft picks or other
+non-player trade assets and the return side therefore cannot be reconstructed. An incomplete record
+is never a comp a client should price against.
 
 The provider publishes no proposals resource. Pending, accepted-by-one-side, and rejected trade
 offers are not available to any client, and a trade transaction payload carries no draft picks. The
