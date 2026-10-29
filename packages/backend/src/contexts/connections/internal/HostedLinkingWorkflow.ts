@@ -5,7 +5,6 @@ import { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
 import { HostedLinkingFailureReason } from "#contexts/connections/HostedLinking.ts";
 
 const HostedLinkingContent = {
-  connectionId: ConnectionId,
   provider: ProviderKey,
   startedAt: Schema.DateTimeUtc,
   expiresAt: Schema.DateTimeUtc,
@@ -17,6 +16,7 @@ export const HostedLinkingState = Schema.TaggedUnion({
   Completing: HostedLinkingContent,
   Completed: {
     ...HostedLinkingContent,
+    connectionId: ConnectionId,
     completedAt: Schema.DateTimeUtc,
   },
   Cancelled: {
@@ -59,7 +59,7 @@ const HostedLinkingStates = Machine.state({
 
 export const HostedLinkingEvents = Schema.TaggedUnion({
   CompletionStarted: { at: Schema.DateTimeUtc },
-  CompletionSucceeded: { at: Schema.DateTimeUtc },
+  CompletionSucceeded: { at: Schema.DateTimeUtc, connectionId: ConnectionId },
   CompletionFailed: { at: Schema.DateTimeUtc, reason: HostedLinkingFailureReason },
   Cancelled: { at: Schema.DateTimeUtc },
   Expired: { at: Schema.DateTimeUtc },
@@ -77,7 +77,6 @@ export const HostedLinkingWorkflow = Machine.make({
         CompletionStarted: {
           target: "Completing",
           data: ({ state, event }) => ({
-            connectionId: state.connectionId,
             provider: state.provider,
             startedAt: state.startedAt,
             expiresAt: state.expiresAt,
@@ -87,7 +86,6 @@ export const HostedLinkingWorkflow = Machine.make({
         Cancelled: {
           target: "Cancelled",
           data: ({ state, event }) => ({
-            connectionId: state.connectionId,
             provider: state.provider,
             startedAt: state.startedAt,
             expiresAt: state.expiresAt,
@@ -98,7 +96,6 @@ export const HostedLinkingWorkflow = Machine.make({
         Expired: {
           target: "Expired",
           data: ({ state, event }) => ({
-            connectionId: state.connectionId,
             provider: state.provider,
             startedAt: state.startedAt,
             expiresAt: state.expiresAt,
@@ -109,7 +106,6 @@ export const HostedLinkingWorkflow = Machine.make({
         CompletionFailed: {
           target: "Failed",
           data: ({ state, event }) => ({
-            connectionId: state.connectionId,
             provider: state.provider,
             startedAt: state.startedAt,
             expiresAt: state.expiresAt,
@@ -125,7 +121,7 @@ export const HostedLinkingWorkflow = Machine.make({
         CompletionSucceeded: {
           target: "Completed",
           data: ({ state, event }) => ({
-            connectionId: state.connectionId,
+            connectionId: event.connectionId,
             provider: state.provider,
             startedAt: state.startedAt,
             expiresAt: state.expiresAt,
@@ -136,7 +132,6 @@ export const HostedLinkingWorkflow = Machine.make({
         CompletionFailed: {
           target: "Failed",
           data: ({ state, event }) => ({
-            connectionId: state.connectionId,
             provider: state.provider,
             startedAt: state.startedAt,
             expiresAt: state.expiresAt,
@@ -148,7 +143,6 @@ export const HostedLinkingWorkflow = Machine.make({
         Expired: {
           target: "Expired",
           data: ({ state, event }) => ({
-            connectionId: state.connectionId,
             provider: state.provider,
             startedAt: state.startedAt,
             expiresAt: state.expiresAt,

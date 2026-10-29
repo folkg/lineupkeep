@@ -394,6 +394,26 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           );
       });
 
+      const discardLinking = Effect.fn("ConnectionRepository.discardLinking")(function* (
+        userId: UserId,
+        ids: ReadonlyArray<ConnectionId>,
+      ) {
+        const uniqueIds = [...new Set(ids)];
+        if (!Array.isArrayNonEmpty(uniqueIds)) {
+          return;
+        }
+        yield* database
+          .delete(providerConnections)
+          .where(
+            and(
+              eq(providerConnections.userId, userId),
+              anyOf(providerConnections.id, uniqueIds),
+              eq(providerConnections.status, "linking"),
+            ),
+          )
+          .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+      });
+
       const completeLinking = Effect.fn("ConnectionRepository.completeLinking")(function* (
         userId: UserId,
         commands: ReadonlyArray<CompleteLinkingCommand>,
@@ -1036,6 +1056,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         startLinking,
         startReconnect,
         cancelLinking,
+        discardLinking,
         completeLinking,
         reconnect,
         disconnect,

@@ -963,6 +963,7 @@ const unavailableConnections: ConnectionsShape = {
   startReconnect: () => Effect.succeed([]),
   cancelLinking: () => Effect.succeed([]),
   completeLinking: () => Effect.succeed([]),
+  link: () => Effect.succeed([]),
   completeReconnect: () => Effect.succeed([]),
   reconnect: () => Effect.succeed([]),
   disconnect: () => Effect.succeed([]),

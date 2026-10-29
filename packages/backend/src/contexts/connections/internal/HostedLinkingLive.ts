@@ -2,7 +2,6 @@ import { Array, Crypto, DateTime, Duration, Effect, Layer, Redacted, Schema } fr
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { ConnectionError } from "#contexts/connections/Connection.ts";
-import { StartLinkingInput as StartLinkingInputSchema } from "#contexts/connections/Connection.ts";
 import {
   hostedLinkingStartWindowMillis,
   hostedLinkingStartsPerWindow,
@@ -53,29 +52,12 @@ export const HostedLinkingLive = Layer.effect(
       const id = yield* Schema.decodeEffect(HostedLinkingSessionId)(idValue).pipe(
         Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })),
       );
-      const connectionInput = yield* Schema.decodeEffect(StartLinkingInputSchema)({
-        requestId: idValue,
-        provider: input.provider,
-        pairingCode: `hosted-${idValue}`,
-      }).pipe(Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })));
-      const started = yield* connections.startLinking(userId, [connectionInput]);
-      const connection = Array.getUnsafe(started, 0);
-
       const ticket = yield* issueTicket();
-      const session = yield* repository
-        .create(userId, {
-          id,
-          connectionId: connection.id,
-          provider: input.provider,
-          ticketHash: ticket.hash,
-        })
-        .pipe(
-          Effect.catch((error) =>
-            connections
-              .cancelLinking(userId, [{ id: connection.id }])
-              .pipe(Effect.ignore, Effect.andThen(Effect.fail(error))),
-          ),
-        );
+      const session = yield* repository.create(userId, {
+        id,
+        provider: input.provider,
+        ticketHash: ticket.hash,
+      });
 
       return { session: toSession(session), ticket: Redacted.make(ticket.value) };
     });
@@ -90,8 +72,7 @@ export const HostedLinkingLive = Layer.effect(
       }
       const now = yield* DateTime.now;
       if (record.state._tag === "Active" && isExpired(record.state.expiresAt, now)) {
-        const expired = yield* repository.expire(userId, [record.id], now);
-        yield* cancelConnections(userId, expired);
+        yield* repository.expire(userId, [record.id], now);
         return yield* HostedLinkingExpired.make({ id: record.id });
       }
       if (record.state._tag !== "Active") {
@@ -113,33 +94,30 @@ export const HostedLinkingLive = Layer.effect(
         ticketHash,
         at: yield* DateTime.now,
       });
-      const completed = yield* connections
-        .completeLinking(userId, [
-          {
-            id: claimed.state.connectionId,
-            provider: input.provider,
-            session: input.session,
-          },
-        ])
+      const linked = yield* connections
+        .link(userId, [{ provider: input.provider, session: input.session }])
         .pipe(Effect.result);
 
-      if (completed._tag === "Failure") {
+      if (linked._tag === "Failure") {
         yield* repository
-          .markFailed(userId, input.id, yield* DateTime.now, failureReason(completed.failure))
+          .markFailed(userId, input.id, yield* DateTime.now, failureReason(linked.failure))
           .pipe(Effect.ignore);
-        yield* connections
-          .cancelLinking(userId, [{ id: claimed.state.connectionId }])
-          .pipe(Effect.ignore);
-        return yield* completed.failure;
+        return yield* linked.failure;
       }
 
-      const session = yield* repository.markCompleted(userId, input.id, yield* DateTime.now);
+      const connection = Array.getUnsafe(linked.success, 0);
+      const session = yield* repository.markCompleted(
+        userId,
+        claimed.id,
+        connection.id,
+        yield* DateTime.now,
+      );
       const teams = yield* connections
-        .discoverTeams(userId, [{ id: claimed.state.connectionId }])
+        .discoverTeams(userId, [{ id: connection.id }])
         .pipe(Effect.result);
       return {
         session: toSession(session),
-        connection: Array.getUnsafe(completed.success, 0),
+        connection,
         teamsDiscovered: teams._tag === "Success" ? teams.success.length : 0,
       };
     });
@@ -151,7 +129,6 @@ export const HostedLinkingLive = Layer.effect(
       const ids = [...new Set(inputs.map((input) => input.id))];
       const now = yield* DateTime.now;
       const records = yield* repository.cancel(userId, ids, now);
-      yield* cancelConnections(userId, records);
       return records.map(toSession);
     });
 
@@ -162,7 +139,6 @@ export const HostedLinkingLive = Layer.effect(
       const ids = [...new Set(inputs.map((input) => input.id))];
       const now = yield* DateTime.now;
       const records = yield* repository.expire(userId, ids, now);
-      yield* cancelConnections(userId, records);
       return records.map(toSession);
     });
 
@@ -172,24 +148,8 @@ export const HostedLinkingLive = Layer.effect(
       reason: HostedLinkingFailureReason,
     ) {
       const record = yield* repository.markFailed(userId, input.id, yield* DateTime.now, reason);
-      yield* cancelConnections(userId, [record]);
       return toSession(record);
     });
-
-    const cancelConnections = (
-      userId: UserId,
-      records: ReadonlyArray<HostedLinkingRecord>,
-    ): Effect.Effect<void> => {
-      if (records.length === 0) {
-        return Effect.void;
-      }
-      return connections
-        .cancelLinking(
-          userId,
-          records.map((record) => ({ id: record.state.connectionId })),
-        )
-        .pipe(Effect.ignore);
-    };
 
     function issueTicket(): Effect.Effect<
       { readonly value: string; readonly hash: string },
@@ -222,7 +182,7 @@ function toSession(record: HostedLinkingRecord): HostedLinkingSession {
   return {
     id: record.id,
     userId: record.userId,
-    connectionId: state.connectionId,
+    ...(state._tag === "Completed" ? { connectionId: state.connectionId } : {}),
     provider: state.provider,
     status: hostedLinkingStatusOf(state),
     startedAt: state.startedAt,

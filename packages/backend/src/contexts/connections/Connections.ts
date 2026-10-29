@@ -7,6 +7,7 @@ import type {
   CompleteReconnectInput,
   ConnectionError,
   ConnectionIdInput,
+  LinkInput,
   ProviderConnection,
   ReconnectInput,
   StartLinkingInput,
@@ -36,6 +37,11 @@ export type ConnectionsShape = {
   readonly completeLinking: (
     userId: UserId,
     inputs: ReadonlyArray<CompleteLinkingInput>,
+  ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
+
+  readonly link: (
+    userId: UserId,
+    inputs: ReadonlyArray<LinkInput>,
   ) => Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError>;
 
   readonly startReconnect: (

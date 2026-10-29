@@ -87,7 +87,6 @@ async function authorizeStream(
   const browserSession: HostedBrowserSession = {
     id: linking.id,
     userId,
-    connectionId: linking.connectionId,
     expiresAt: linking.expiresAt,
     loginUrl: providerLogin.loginUrl,
     ...(providerLogin.fixtureOrigin === undefined
@@ -186,6 +185,7 @@ async function authorizeStream(
       }
       return {
         status: "ready",
+        connectionId: completed.success.connection.id,
         teamsDiscovered: completed.success.teamsDiscovered,
       };
     },

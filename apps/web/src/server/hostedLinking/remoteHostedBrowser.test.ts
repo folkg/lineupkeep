@@ -59,7 +59,7 @@ it("relays the hosted browser stream and completes the owner session", async () 
       },
       complete: (material) => {
         captured = Redacted.value(material);
-        return Promise.resolve({ status: "ready", teamsDiscovered: 2 });
+        return Promise.resolve({ status: "ready", connectionId, teamsDiscovered: 2 });
       },
       fault: () => Promise.resolve(),
       expire: () => Promise.resolve(),
@@ -128,11 +128,12 @@ function session(): HostedBrowserSession {
   return {
     id: Schema.decodeSync(HostedLinkingSessionId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
     userId: decodeUserId("owner"),
-    connectionId: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3"),
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),
     loginUrl: new URL("https://login.yahoo.com/"),
   };
 }
+
+const connectionId = decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3");
 
 function port(server: WebSocketServer): number {
   const address: AddressInfo | string | null = server.address();

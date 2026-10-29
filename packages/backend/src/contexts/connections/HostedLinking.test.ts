@@ -6,6 +6,7 @@ import { TestClock } from "effect/testing";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
+import { ConnectionProviderRejected } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import {
   HostedLinkingExpired,
@@ -29,9 +30,12 @@ import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest
 it.effect("starts an owner-bound session, authorizes its ticket, and hides it from others", () =>
   Effect.gen(function* () {
     const hosted = yield* HostedLinking;
+    const connections = yield* Connections;
     const started = yield* hosted.start(owner, startInput);
 
     assert.strictEqual(started.session.status, "active");
+    assert.isUndefined(started.session.connectionId);
+    assert.deepStrictEqual(yield* connections.list(owner), []);
     assert.isAbove(
       started.session.expiresAt.epochMilliseconds,
       started.session.startedAt.epochMilliseconds,
@@ -98,17 +102,23 @@ it.effect("completes once, stores the validated connection, and discovers teams"
     );
 
     assert.strictEqual(completed.session.status, "completed");
+    assert.strictEqual(completed.session.connectionId, completed.connection.id);
     assert.strictEqual(completed.connection.status, "ready");
     assert.strictEqual(completed.teamsDiscovered, 1);
     assert.instanceOf(replay, HostedLinkingNotActive);
     assert.instanceOf(replayedStream, HostedLinkingNotActive);
     assert.deepStrictEqual(yield* connections.list(owner), [completed.connection]);
+    assert.deepStrictEqual(
+      (yield* connections.listTeams(owner)).map((team) => team.name),
+      ["Hosted Team"],
+    );
   }).pipe(Effect.provide(HostedLinkingTestLayer)),
 );
 
 it.effect("expires a session after its window and refuses completion", () =>
   Effect.gen(function* () {
     const hosted = yield* HostedLinking;
+    const connections = yield* Connections;
     const started = yield* hosted.start(owner, startInput);
 
     yield* TestClock.adjust(Duration.minutes(11));
@@ -124,18 +134,74 @@ it.effect("expires a session after its window and refuses completion", () =>
 
     assert.instanceOf(error, HostedLinkingExpired);
     assert.strictEqual(expired[0]?.status, "expired");
+    assert.deepStrictEqual(yield* connections.list(owner), []);
   }).pipe(Effect.provide(HostedLinkingTestLayer)),
 );
 
-it.effect("cancels idempotently and rejects completion after cancellation", () =>
+it.effect("expires a session explicitly without leaving a connection", () =>
   Effect.gen(function* () {
     const hosted = yield* HostedLinking;
     const connections = yield* Connections;
     const started = yield* hosted.start(owner, startInput);
 
-    const cancelled = yield* hosted.cancel(owner, [{ id: started.session.id }]);
-    const retried = yield* hosted.cancel(owner, [{ id: started.session.id }]);
-    const completion = yield* Effect.flip(
+    const expired = yield* hosted.expire(owner, [{ id: started.session.id }]);
+
+    assert.strictEqual(expired[0]?.status, "expired");
+    assert.isUndefined(expired[0]?.connectionId);
+    assert.deepStrictEqual(yield* connections.list(owner), []);
+  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+);
+
+it.effect(
+  "cancels idempotently, rejects completion after cancellation, and leaves no connection",
+  () =>
+    Effect.gen(function* () {
+      const hosted = yield* HostedLinking;
+      const connections = yield* Connections;
+      const started = yield* hosted.start(owner, startInput);
+
+      const cancelled = yield* hosted.cancel(owner, [{ id: started.session.id }]);
+      const retried = yield* hosted.cancel(owner, [{ id: started.session.id }]);
+      const completion = yield* Effect.flip(
+        hosted.complete(owner, {
+          id: started.session.id,
+          ticket: Redacted.value(started.ticket),
+          provider: decodeProviderKey("yahoo"),
+          session,
+        }),
+      );
+
+      assert.strictEqual(cancelled[0]?.status, "cancelled");
+      assert.isUndefined(cancelled[0]?.connectionId);
+      assert.deepStrictEqual(retried, cancelled);
+      assert.instanceOf(completion, HostedLinkingNotActive);
+      assert.deepStrictEqual(yield* connections.list(owner), []);
+    }).pipe(Effect.provide(HostedLinkingTestLayer)),
+);
+
+it.effect("fails a session without leaving a connection behind", () =>
+  Effect.gen(function* () {
+    const hosted = yield* HostedLinking;
+    const connections = yield* Connections;
+    const started = yield* hosted.start(owner, startInput);
+
+    const failed = yield* hosted.fail(owner, { id: started.session.id }, "provider_unavailable");
+
+    assert.strictEqual(failed.status, "failed");
+    assert.strictEqual(failed.failureReason, "provider_unavailable");
+    assert.deepStrictEqual(yield* connections.list(owner), []);
+  }).pipe(Effect.provide(HostedLinkingTestLayer)),
+);
+
+it.effect("leaves no connection behind when the provider rejects the captured session", () =>
+  Effect.gen(function* () {
+    const hosted = yield* HostedLinking;
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const started = yield* hosted.start(owner, startInput);
+    yield* fake.rejectSession(true);
+
+    const error = yield* Effect.flip(
       hosted.complete(owner, {
         id: started.session.id,
         ticket: Redacted.value(started.ticket),
@@ -143,12 +209,9 @@ it.effect("cancels idempotently and rejects completion after cancellation", () =
         session,
       }),
     );
-    const connection = (yield* connections.list(owner))[0];
 
-    assert.strictEqual(cancelled[0]?.status, "cancelled");
-    assert.deepStrictEqual(retried, cancelled);
-    assert.instanceOf(completion, HostedLinkingNotActive);
-    assert.strictEqual(connection?.status, "disconnected");
+    assert.instanceOf(error, ConnectionProviderRejected);
+    assert.deepStrictEqual(yield* connections.list(owner), []);
   }).pipe(Effect.provide(HostedLinkingTestLayer)),
 );
 

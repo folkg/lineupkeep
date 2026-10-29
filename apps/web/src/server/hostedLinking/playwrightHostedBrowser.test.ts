@@ -45,7 +45,7 @@ it.live(
             },
             complete: (session) => {
               captured = Redacted.value(session);
-              return Promise.resolve({ status: "ready", teamsDiscovered: 2 });
+              return Promise.resolve({ status: "ready", connectionId, teamsDiscovered: 2 });
             },
             fault: (reason) => {
               faults.push(reason);
@@ -63,7 +63,7 @@ it.live(
         const message = yield* Deferred.await(completed);
         assert.deepStrictEqual(message, {
           _tag: "Ready",
-          connectionId: sessionFor(server.url).connectionId,
+          connectionId,
           teamsDiscovered: 2,
         });
         assert.strictEqual(captured, "T=temporary-session-token; Y=temporary-user-token");
@@ -107,7 +107,7 @@ it.live(
             },
             complete: (session) => {
               captured = Redacted.value(session);
-              return Promise.resolve({ status: "ready", teamsDiscovered: 2 });
+              return Promise.resolve({ status: "ready", connectionId, teamsDiscovered: 2 });
             },
             fault: () => Promise.resolve(),
             expire: () => Promise.resolve(),
@@ -125,7 +125,7 @@ it.live(
         const message = yield* Deferred.await(completed);
         assert.deepStrictEqual(message, {
           _tag: "Ready",
-          connectionId: sessionFor(server.url).connectionId,
+          connectionId,
           teamsDiscovered: 2,
         });
         assert.strictEqual(captured, "T=temporary-session-token; Y=temporary-user-token");
@@ -174,7 +174,7 @@ it.live(
             },
             complete: (session) => {
               captured = Redacted.value(session);
-              return Promise.resolve({ status: "ready", teamsDiscovered: 1 });
+              return Promise.resolve({ status: "ready", connectionId, teamsDiscovered: 1 });
             },
             fault: () => Promise.resolve(),
             expire: () => Promise.resolve(),
@@ -241,12 +241,13 @@ function sessionFor(origin: URL, path = "/login"): HostedBrowserSession {
   return {
     id: Schema.decodeSync(HostedLinkingSessionId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
     userId: decodeUserId("owner"),
-    connectionId: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3"),
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),
     loginUrl: new URL(path, origin),
     fixtureOrigin: origin.origin,
   };
 }
+
+const connectionId = decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3");
 
 function popupProviderServer(): Effect.Effect<TestServer, never, Scope.Scope> {
   return Effect.acquireRelease(

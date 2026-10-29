@@ -17,7 +17,7 @@ export const hostedLinkingSessions = pgTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
-    connectionId: text("connection_id").notNull(),
+    connectionId: text("connection_id"),
     provider: text("provider").notNull(),
     status: text("status", {
       enum: ["active", "completing", "completed", "cancelled", "expired", "failed"],
@@ -74,10 +74,8 @@ export const HostedLinkingRow = HostedLinkingRowSelect.pipe(
         Effect.gen(function* () {
           const id = yield* Schema.decodeEffect(HostedLinkingSessionId)(row.id);
           const userId = yield* Schema.decodeEffect(UserId)(row.userId);
-          const connectionId = yield* Schema.decodeEffect(ConnectionId)(row.connectionId);
           const provider = yield* Schema.decodeEffect(ProviderKey)(row.provider);
           const content = {
-            connectionId,
             provider,
             startedAt: DateTime.fromDateUnsafe(row.startedAt),
             expiresAt: DateTime.fromDateUnsafe(row.expiresAt),
@@ -98,7 +96,6 @@ export const HostedLinkingRow = HostedLinkingRowSelect.pipe(
 );
 
 type RowContent = {
-  readonly connectionId: ConnectionId;
   readonly provider: ProviderKey;
   readonly startedAt: DateTime.Utc;
   readonly expiresAt: DateTime.Utc;
@@ -118,6 +115,7 @@ function stateFromRow(
       return {
         _tag: "Completed",
         ...content,
+        connectionId: requiredConnectionId(row.connectionId),
         completedAt: requiredDate(row.completedAt, "completed_at"),
       };
     case "cancelled":
@@ -145,7 +143,7 @@ function rowFromState(
   return {
     id: record.id,
     userId: record.userId,
-    connectionId: state.connectionId,
+    connectionId: state._tag === "Completed" ? state.connectionId : null,
     provider: state.provider,
     status: statusFromState(state),
     ticketHash: record.ticketHash,
@@ -183,6 +181,13 @@ function requiredDate(value: Date | null, column: string): DateTime.Utc {
     throw new Error(`hosted_linking_sessions.${column} is required for its status`);
   }
   return DateTime.fromDateUnsafe(value);
+}
+
+function requiredConnectionId(value: string | null): ConnectionId {
+  if (value === null) {
+    throw new Error("hosted_linking_sessions.connection_id is required for a completed session");
+  }
+  return Schema.decodeSync(ConnectionId)(value);
 }
 
 function failureReason(value: HostedLinkingFailureReason | null): HostedLinkingFailureReason {

@@ -73,7 +73,6 @@ it.effect("checks generated event sequences against the hosted linking machine",
       inputArbitrary: values.pipe(
         Arbitrary.map(({ at }) => ({
           _tag: "Active" as const,
-          connectionId,
           provider: decodeProviderKey("yahoo"),
           startedAt: at,
           expiresAt: at,
@@ -84,10 +83,12 @@ it.effect("checks generated event sequences against the hosted linking machine",
         values.pipe(
           Arbitrary.map(({ at, kind, reason }) => {
             switch (kind) {
+              case "CompletionStarted":
+                return { _tag: kind, at };
+              case "CompletionSucceeded":
+                return { _tag: kind, at, connectionId };
               case "CompletionFailed":
                 return { _tag: kind, at, reason };
-              case "CompletionStarted":
-              case "CompletionSucceeded":
               case "Cancelled":
               case "Expired":
                 return { _tag: kind, at };
@@ -119,7 +120,6 @@ const connectionId = decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3");
 
 const input = {
   _tag: "Active" as const,
-  connectionId,
   provider: decodeProviderKey("yahoo"),
   startedAt: at,
   expiresAt: DateTime.addDuration(at, "10 minutes"),
@@ -128,7 +128,7 @@ const input = {
 
 const events = [
   HostedLinkingEvents.cases.CompletionStarted.make({ at }),
-  HostedLinkingEvents.cases.CompletionSucceeded.make({ at }),
+  HostedLinkingEvents.cases.CompletionSucceeded.make({ at, connectionId }),
   HostedLinkingEvents.cases.CompletionFailed.make({
     at,
     reason: "session_rejected",

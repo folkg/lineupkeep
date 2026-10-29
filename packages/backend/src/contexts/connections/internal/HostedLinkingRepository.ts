@@ -37,7 +37,6 @@ type Record = HostedLinkingRecord;
 
 type CreateHostedLinkingCommand = {
   readonly id: HostedLinkingSessionId;
-  readonly connectionId: ConnectionId;
   readonly provider: ProviderKey;
   readonly ticketHash: string;
 };
@@ -81,7 +80,6 @@ export class HostedLinkingRepository extends Context.Service<
         const now = yield* DateTime.now;
         const state: typeof HostedLinkingState.Type = {
           _tag: "Active",
-          connectionId: command.connectionId,
           provider: command.provider,
           startedAt: now,
           expiresAt: DateTime.addDuration(now, hostedLinkingWindowMillis),
@@ -197,11 +195,12 @@ export class HostedLinkingRepository extends Context.Service<
       const markCompleted = Effect.fn("HostedLinkingRepository.markCompleted")(function* (
         userId: UserId,
         id: HostedLinkingSessionId,
+        connectionId: ConnectionId,
         at: DateTime.Utc,
       ) {
         const records = yield* transition(userId, [id], (record) =>
           record.state._tag === "Completing"
-            ? HostedLinkingEvents.cases.CompletionSucceeded.make({ at })
+            ? HostedLinkingEvents.cases.CompletionSucceeded.make({ at, connectionId })
             : notActive(record),
         );
         return Array.getUnsafe(records, 0);
@@ -455,6 +454,7 @@ export type HostedLinkingRepositoryShape = {
   readonly markCompleted: (
     userId: UserId,
     id: HostedLinkingSessionId,
+    connectionId: ConnectionId,
     at: DateTime.Utc,
   ) => Effect.Effect<Record, HostedLinkingError>;
 

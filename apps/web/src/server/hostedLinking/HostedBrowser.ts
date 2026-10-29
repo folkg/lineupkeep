@@ -12,14 +12,17 @@ import type {
 export type HostedBrowserSession = {
   readonly id: HostedLinkingSessionId;
   readonly userId: UserId;
-  readonly connectionId: ConnectionId;
   readonly expiresAt: DateTime.Utc;
   readonly loginUrl: URL;
   readonly fixtureOrigin?: string;
 };
 
 export type HostedBrowserCompletion =
-  | { readonly status: "ready"; readonly teamsDiscovered: number }
+  | {
+      readonly status: "ready";
+      readonly connectionId: ConnectionId;
+      readonly teamsDiscovered: number;
+    }
   | { readonly status: "failed"; readonly reason: HostedBrowserFailure };
 
 export type HostedBrowserCallbacks = {

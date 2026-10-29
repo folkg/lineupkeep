@@ -11,7 +11,6 @@ import type {
   HostedBrowserCallbacks,
   HostedBrowserFactory,
   HostedBrowserHandle,
-  HostedBrowserSession,
 } from "./HostedBrowser.ts";
 
 const handshakeTimeoutMillis = 10_000;
@@ -52,7 +51,7 @@ export function createRemoteHostedBrowser(
         throw error;
       }
       socket.send(descriptor);
-      return streamHandle(socket, session, callbacks, () => live.delete(socket));
+      return streamHandle(socket, callbacks, () => live.delete(socket));
     },
     closeAll: async () => {
       await Promise.all([...live].map((socket) => closeSocket(socket)));
@@ -63,7 +62,6 @@ export function createRemoteHostedBrowser(
 
 function streamHandle(
   socket: WebSocket,
-  session: HostedBrowserSession,
   callbacks: HostedBrowserCallbacks,
   forget: () => void,
 ): HostedBrowserHandle {
@@ -116,7 +114,7 @@ function streamHandle(
         return;
       case "Captured":
         terminal = true;
-        void completeSession(session, callbacks, message.session)
+        void completeSession(callbacks, message.session)
           .catch(() => undefined)
           .finally(() => {
             void close();
@@ -170,7 +168,6 @@ function streamHandle(
 }
 
 async function completeSession(
-  session: HostedBrowserSession,
   callbacks: HostedBrowserCallbacks,
   cookieHeader: string,
 ): Promise<void> {
@@ -179,7 +176,7 @@ async function completeSession(
     completion.status === "ready"
       ? {
           _tag: "Ready",
-          connectionId: session.connectionId,
+          connectionId: completion.connectionId,
           teamsDiscovered: completion.teamsDiscovered,
         }
       : { _tag: "Failed", reason: completion.reason },

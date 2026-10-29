@@ -79,6 +79,12 @@ export const CompleteLinkingInput = Schema.Struct({
 });
 export type CompleteLinkingInput = typeof CompleteLinkingInput.Type;
 
+export const LinkInput = Schema.Struct({
+  provider: ProviderKey,
+  session: ProviderSessionValue,
+});
+export type LinkInput = typeof LinkInput.Type;
+
 export const StartReconnectInput = Schema.Struct({
   requestId: ConnectionRequestId,
   id: ConnectionId,

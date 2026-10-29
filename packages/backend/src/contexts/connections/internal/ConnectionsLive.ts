@@ -1,4 +1,4 @@
-import { Array, DateTime, Effect, Layer } from "effect";
+import { Array, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import {
@@ -9,6 +9,7 @@ import {
   ConnectionPersistenceFailed,
   ConnectionProviderRejected,
   ConnectionProviderUnavailable,
+  StartLinkingInput as StartLinkingInputSchema,
 } from "#contexts/connections/Connection.ts";
 import type { ConnectionStatus } from "#contexts/connections/Connection.ts";
 import type {
@@ -17,6 +18,7 @@ import type {
   ConnectionError,
   ConnectionId,
   ConnectionIdInput,
+  LinkInput,
   ProviderConnection,
   ReconnectInput,
   StartLinkingInput,
@@ -44,6 +46,7 @@ export const ConnectionsLive = Layer.effect(
     const repository = yield* ConnectionRepository;
     const registry = yield* ProviderRegistry;
     const encryption = yield* ConnectionCredentialEncryption;
+    const crypto = yield* Crypto.Crypto;
 
     const list = (
       userId: UserId,
@@ -146,6 +149,40 @@ export const ConnectionsLive = Layer.effect(
         return yield* repository
           .completeLinking(userId, commands)
           .pipe(Effect.tap(annotateOneConnection));
+      });
+
+    const link = (
+      userId: UserId,
+      inputs: ReadonlyArray<LinkInput>,
+    ): Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError> =>
+      Effect.gen(function* () {
+        if (inputs.length === 0) {
+          return [];
+        }
+        const starts = yield* Effect.forEach(inputs, (input) =>
+          crypto.randomUUIDv7().pipe(
+            Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+            Effect.flatMap((requestId) =>
+              Schema.decodeEffect(StartLinkingInputSchema)({
+                requestId,
+                provider: input.provider,
+                pairingCode: requestId,
+              }).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
+            ),
+          ),
+        );
+        const started = yield* startLinking(userId, starts);
+        const startedIds = started.map((connection) => connection.id);
+        return yield* completeLinking(
+          userId,
+          inputs.map((input, index) => ({
+            id: Array.getUnsafe(started, index).id,
+            provider: input.provider,
+            session: input.session,
+          })),
+        ).pipe(
+          Effect.onError(() => repository.discardLinking(userId, startedIds).pipe(Effect.ignore)),
+        );
       });
 
     const startReconnect = (
@@ -356,6 +393,7 @@ export const ConnectionsLive = Layer.effect(
       startReconnect,
       cancelLinking,
       completeLinking,
+      link,
       completeReconnect,
       reconnect,
       disconnect,

@@ -12,17 +12,6 @@ import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 import { ConnectionCard } from "./ConnectionCard";
 
 export function ConnectionList(props: ConnectionListProps): JSX.Element {
-  const visibleConnections = (): ReadonlyArray<ConnectionView> =>
-    props
-      .connections()
-      .filter(
-        (connection) =>
-          !(
-            connection.status === "linking" &&
-            (connection.pairingCode?.startsWith("hosted-") ?? false)
-          ),
-      );
-
   return (
     <Stack as="section" gap="md" labelledBy="connections-list-title">
       <Heading id="connections-list-title" level={2} size="section">
@@ -56,10 +45,10 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
                 Connect {defaultProviderName()} above to see the teams this account can manage.
               </EmptyState>
             }
-            when={visibleConnections().length > 0}
+            when={props.connections().length > 0}
           >
             <Stack gap="md">
-              <For each={visibleConnections()}>
+              <For each={props.connections()}>
                 {(connection) => (
                   <ConnectionCard
                     approving={props.approvingId() === connection.id}

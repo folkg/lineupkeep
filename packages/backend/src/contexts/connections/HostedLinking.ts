@@ -36,7 +36,7 @@ const SessionTimestamp = Schema.DateTimeUtc;
 export const HostedLinkingSession = Schema.Struct({
   id: HostedLinkingSessionId,
   userId: UserId,
-  connectionId: ConnectionId,
+  connectionId: Schema.optional(ConnectionId),
   provider: ProviderKey,
   status: HostedLinkingSessionStatus,
   startedAt: SessionTimestamp,

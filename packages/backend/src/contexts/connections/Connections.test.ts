@@ -277,6 +277,34 @@ it.effect("completes one linking connection, validates its session, and rejects 
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
+it.effect("links a captured session into one ready connection", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+
+    const linked = yield* connections.link(owner, [linkInput]);
+    const connection = Array.getUnsafe(linked, 0);
+
+    assert.strictEqual(connection.status, "ready");
+    assert.strictEqual(connection.credentialGeneration, 1);
+    assert.isDefined(connection.approvedAt);
+    assert.isUndefined(connection.pairingCode);
+    assert.deepStrictEqual(yield* connections.list(owner), linked);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("leaves no connection when a link's session is rejected", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    yield* fake.rejectSession(true);
+
+    const error = yield* Effect.flip(connections.link(owner, [linkInput]));
+
+    assert.instanceOf(error, ConnectionProviderRejected);
+    assert.deepStrictEqual(yield* connections.list(owner), []);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
 it.effect("rejects provider session validation without moving the connection to ready", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
@@ -507,6 +535,11 @@ const startInput = Schema.decodeSync(StartLinkingInput)({
   provider: decodeProviderKey("yahoo"),
   pairingCode,
 });
+
+const linkInput = {
+  provider: decodeProviderKey("yahoo"),
+  session,
+};
 
 const EncryptionTestLayer = ConnectionCredentialEncryption.forKey(
   ConnectionEncryptionKey.fromBytes({

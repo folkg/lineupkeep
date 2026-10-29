@@ -6,11 +6,7 @@ import { chromium } from "playwright";
 
 import type { HostedBrowserMessage } from "#contracts/connections/hostedBrowserProtocol.ts";
 
-import type {
-  HostedBrowserCallbacks,
-  HostedBrowserFactory,
-  HostedBrowserSession,
-} from "./HostedBrowser.ts";
+import type { HostedBrowserCallbacks, HostedBrowserFactory } from "./HostedBrowser.ts";
 
 export function chromiumInstalled(): boolean {
   try {
@@ -43,7 +39,7 @@ export function createPlaywrightHostedBrowser(
               reason: refusal.reason,
             }),
           onCaptured: (cookieHeader) => {
-            void completeSession(session, callbacks, cookieHeader);
+            void completeSession(callbacks, cookieHeader);
           },
           onFailure: (reason) => {
             callbacks.onMessage({ _tag: "Failed", reason });
@@ -62,7 +58,6 @@ export function createPlaywrightHostedBrowser(
 }
 
 async function completeSession(
-  session: HostedBrowserSession,
   callbacks: HostedBrowserCallbacks,
   cookieHeader: string,
 ): Promise<void> {
@@ -71,7 +66,7 @@ async function completeSession(
     completion.status === "ready"
       ? {
           _tag: "Ready",
-          connectionId: session.connectionId,
+          connectionId: completion.connectionId,
           teamsDiscovered: completion.teamsDiscovered,
         }
       : { _tag: "Failed", reason: completion.reason };

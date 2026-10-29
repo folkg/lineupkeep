@@ -16,7 +16,7 @@ export function toHostedLinkingSessionView(
 ): HostedLinkingSessionView {
   return {
     id: session.id,
-    connectionId: session.connectionId,
+    ...(session.connectionId === undefined ? {} : { connectionId: session.connectionId }),
     provider: session.provider,
     status: session.status,
     startedAt: DateTime.formatIso(session.startedAt),
