@@ -3,6 +3,7 @@ import { Array as EffectArray, DateTime, Effect, Layer } from "effect";
 import type { UserId } from "#contexts/auth/User.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
+import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import type {
   ProviderLeagueSettings,
   ProviderPeriodWindow,
@@ -15,6 +16,8 @@ import type {
   ProviderRemainingGames,
   ProviderRosterPlayer,
   ProviderStandings,
+  ProviderStatBasis,
+  ProviderStatPeriod,
   ProviderStatValue,
   ProviderTeamScore,
 } from "#contexts/connections/Provider.ts";
@@ -44,6 +47,7 @@ import type {
   TransactionWindow,
   GetTeamSummaryInput,
   StandingRow,
+  StandingDetail,
   SummaryGroup,
   SummaryScheduleWeek,
   TeamSummaryData,
@@ -68,6 +72,7 @@ import {
   type QueryStatus,
   type CounterpartyRef,
   type QueryTeam,
+  type StatPeriod,
   QueryPersistenceFailed,
   QuerySelectionInvalid,
   type StatRef,
@@ -168,6 +173,15 @@ export const FantasyQueriesLive = Layer.effect(
                   code: "period_unavailable",
                   resource,
                   message: periodMismatchDetail(error.requested, error.covered),
+                },
+              });
+            case "provider.period_unsupported":
+              return Effect.succeed<ReadOutcome<A>>({
+                _tag: "failed",
+                failure: {
+                  code: "period_unsupported",
+                  resource,
+                  message: `${error.reason} ${error.remedy}`,
                 },
               });
           }
@@ -439,13 +453,21 @@ export const FantasyQueriesLive = Layer.effect(
           detail: "Select at least one league group.",
         });
       }
+      const presentation = input.standingsDetail ?? "compact";
+      if (input.standingsDetail !== undefined && !groups.includes("standings")) {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "`standingsDetail` applies only when the `standings` group is requested. Add `standings` to `groups`, or omit `standingsDetail`.",
+        });
+      }
       const fetchedAt = yield* DateTime.now;
       const outcome = yield* readLeague(context);
       if (outcome._tag !== "ok") {
         return leagueWithoutData(team, groups, fetchedAt, outcome);
       }
       const league = outcome.value;
-      const scoring = yield* scoringCategories(context, tokens, league);
+      const includeScoring = groups.includes("scoring") || presentation === "detailed";
+      const scoring = includeScoring ? yield* scoringCategories(context, tokens, league) : [];
       const standingsOutcome = groups.includes("standings")
         ? yield* readOutcome(
             context,
@@ -456,16 +478,21 @@ export const FantasyQueriesLive = Layer.effect(
             }),
           )
         : undefined;
-      const scoringStatIds = new Set(league.statCategories.map((category) => category.statId));
-      const standingsTable =
+      const scoringNames = categoryNames(league);
+      const standingTable =
         standingsOutcome?._tag === "ok"
-          ? yield* standingRows(context, tokens, standingsOutcome.value, scoringStatIds)
+          ? yield* standingRows(
+              context,
+              tokens,
+              standingsOutcome.value,
+              presentation === "compact" ? undefined : scoringNames,
+            )
           : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
-      const standingsRows = standingsTable.rows;
+      const standingsRows = standingTable.rows;
       const standingsFormat = league.format;
       const pagedStandings = groups.includes("standings");
       const fingerprintValue = yield* queryFingerprint(
-        `league|team=${input.team}|groups=${[...groups].sort().join(",")}|order=${pagedStandings ? "rank" : "stat_id"}`,
+        `league|team=${input.team}|groups=${[...groups].sort().join(",")}|standings=${pagedStandings ? presentation : "none"}|order=${pagedStandings ? "rank" : "stat_id"}`,
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
@@ -508,15 +535,17 @@ export const FantasyQueriesLive = Layer.effect(
           limit: input.limit ?? 20,
           resource: "standings.teams",
           groups,
-          remedy: "Request the `standings` group without the other groups, or a smaller limit.",
+          remedy:
+            "Request the `standings` group without the other groups or `scoring`, or use `standingsDetail: compact`.",
           build: (pageRows, page) => ({
             ...base,
-            scoring,
+            ...(includeScoring ? { scoring } : {}),
             standings: standingsData(
               standingsOutcome,
               [...pageRows],
-              standingsTable.omittedCategoryCount,
+              standingTable.omittedCategoryCount,
               standingsFormat,
+              presentation,
             ),
             page,
           }),
@@ -541,8 +570,9 @@ export const FantasyQueriesLive = Layer.effect(
                 standings: standingsData(
                   standingsOutcome,
                   standingsRows,
-                  standingsTable.omittedCategoryCount,
+                  standingTable.omittedCategoryCount,
                   standingsFormat,
+                  presentation,
                 ),
               }),
           scoring: [...pageRows],
@@ -875,16 +905,13 @@ export const FantasyQueriesLive = Layer.effect(
           }
         }
       }
-      if (input.period !== undefined && groups.includes("actual_stats")) {
-        yield* validateActualStatsPeriod(context, league, input.period);
-      }
       const rosterOutcome = yield* readOutcome(
         context,
         "roster",
         context.provider.readRoster({
           ...providerIdentity(context),
           providerTeamKey: context.owned.team.providerTeamKey,
-          period: providerRosterPeriod(input.period),
+          period: undefined,
         }),
       );
       let roster: ProviderRoster | undefined;
@@ -907,9 +934,7 @@ export const FantasyQueriesLive = Layer.effect(
           failures.push(rosterOutcome.failure);
         }
       }
-      const requestedPeriod =
-        input.period ??
-        (roster?.coverage.type === "week" ? { week: roster.coverage.week } : undefined);
+      const requestedPeriod = normalizeStatPeriod(input.period);
       let details: ReadonlyArray<ProviderPlayerDetail> = [];
       let detailsUnsupported: string | undefined;
       if (groups.includes("actual_stats")) {
@@ -923,6 +948,8 @@ export const FantasyQueriesLive = Layer.effect(
             sport: context.owned.team.sport,
             period: requestedPeriod,
             currentPeriod: league?.periodWindow?.current,
+            seasonStart: league?.startDate,
+            seasonEnd: league?.endDate,
           }),
         );
         if (detailsOutcome._tag === "ok") {
@@ -934,10 +961,18 @@ export const FantasyQueriesLive = Layer.effect(
               "player_details",
               fetchedAt,
               undefined,
-              basis === undefined ? undefined : `Actual statistics use the ${basis.type} basis.`,
+              basis === undefined ? undefined : statBasisDetail(basis),
             ),
           );
         } else {
+          if (
+            detailsOutcome._tag === "failed" &&
+            detailsOutcome.failure.code === "period_unsupported"
+          ) {
+            return yield* QuerySelectionInvalid.make({
+              detail: `${periodKindRefusal(requestedPeriod)} ${detailsOutcome.failure.message}`,
+            });
+          }
           detailsUnsupported =
             detailsOutcome._tag === "unsupported"
               ? detailsOutcome.detail
@@ -997,6 +1032,39 @@ export const FantasyQueriesLive = Layer.effect(
             statRefFor(stat.statId).pipe(Effect.map((ref) => ({ stat: ref, value: stat.value }))),
           { concurrency: 1 },
         );
+      const statGroup = (
+        group: ProviderPlayerStatGroup,
+      ): Effect.Effect<NonNullable<PlayersData["players"][number]["actualStats"]>> =>
+        Effect.gen(function* () {
+          const notAggregated = yield* Effect.forEach(
+            group.notAggregated,
+            (omitted) =>
+              statRefFor(omitted.statId).pipe(
+                Effect.map((stat) => ({ stat, detail: omitted.detail })),
+              ),
+            { concurrency: 1 },
+          );
+          return {
+            status: "available" as const,
+            basis: group.basis.type,
+            ...(group.basis.type === "week" ? { period: { week: group.basis.week } } : {}),
+            ...(group.basis.type === "date_range"
+              ? {
+                  range: {
+                    start: group.basis.start,
+                    end: group.basis.end,
+                    days: group.basis.days,
+                  },
+                  aggregation: {
+                    method: "daily_sum" as const,
+                    detail: `Summed from ${String(group.basis.days)} provider daily reads; categories in \`notAggregated\` are not summed.`,
+                  },
+                }
+              : {}),
+            stats: yield* statValues(group.stats),
+            notAggregated,
+          };
+        });
       const scoringFor = (
         player: ProviderRosterPlayer | undefined,
       ): Effect.Effect<NonNullable<PlayersData["players"][number]["scoringContext"]>> =>
@@ -1059,26 +1127,12 @@ export const FantasyQueriesLive = Layer.effect(
                       status: "unsupported" as const,
                       detail: "The provider reported no actual statistics for this player.",
                     }
-                  : {
-                      status: "available" as const,
-                      basis: detail.actual.basis.type,
-                      ...(detail.actual.basis.type === "week"
-                        ? { period: { week: detail.actual.basis.week } }
-                        : {}),
-                      stats: yield* statValues(detail.actual.stats),
-                    };
+                  : yield* statGroup(detail.actual);
             const projections = !groups.includes("projections")
               ? undefined
               : context.provider.capabilities.publishesProjections &&
                   detail?.projected !== undefined
-                ? {
-                    status: "available" as const,
-                    basis: detail.projected.basis.type,
-                    ...(detail.projected.basis.type === "week"
-                      ? { period: { week: detail.projected.basis.week } }
-                      : {}),
-                    stats: yield* statValues(detail.projected.stats),
-                  }
+                ? yield* statGroup(detail.projected)
                 : {
                     status: "unsupported" as const,
                     detail: limitation(context.provider, "projections"),
@@ -1087,7 +1141,10 @@ export const FantasyQueriesLive = Layer.effect(
               ? undefined
               : yield* scoringFor(rosterPlayer);
             if (actualStats?.status === "available") {
-              for (const stat of detail?.actual?.stats ?? []) {
+              for (const stat of [
+                ...(detail?.actual?.stats ?? []),
+                ...(detail?.actual?.notAggregated ?? []),
+              ]) {
                 dictionaryStatIds.add(stat.statId);
               }
             }
@@ -1116,10 +1173,6 @@ export const FantasyQueriesLive = Layer.effect(
           statRefFor(statId).pipe(Effect.map((ref) => dictionaryEntry(statId, ref, league))),
         { concurrency: 1 },
       );
-      const weekBasis = details.flatMap((player) =>
-        player.actual?.basis.type === "week" ? [player.actual.basis.week] : [],
-      );
-      const period = weekBasis.length === 0 ? undefined : { week: weekBasis[0] ?? 1 };
       const hasData = playerRows.some(
         (row) =>
           row.identity !== undefined ||
@@ -1131,7 +1184,7 @@ export const FantasyQueriesLive = Layer.effect(
         [
           "players",
           `team=${input.team}`,
-          `period=${input.period === undefined ? "" : String(input.period.week)}`,
+          `period=${statPeriodKey(requestedPeriod)}`,
           `groups=${[...groups].sort().join(",")}`,
           `players=${input.players.join(",")}`,
           "order=request",
@@ -1142,7 +1195,8 @@ export const FantasyQueriesLive = Layer.effect(
       const base: Omit<PlayersData, "players" | "page"> = {
         status,
         team,
-        ...(period === undefined ? {} : { period }),
+        period: requestedPeriod,
+        periodSupport: periodSupportOf(context, context.owned.team.sport),
         dictionary: definitions,
         coverage: coverageEntries,
         failures,
@@ -1201,6 +1255,9 @@ export const FantasyQueriesLive = Layer.effect(
         return matchupsWithoutData(team, input.period, fetchedAt, outcome);
       }
       const statRefs = new Map<number, StatRef>();
+      const scoringNames = categoryNames(
+        leagueOutcome._tag === "ok" ? leagueOutcome.value : undefined,
+      );
       const matchups = yield* Effect.forEach(
         outcome.value,
         (matchup) =>
@@ -1241,7 +1298,7 @@ export const FantasyQueriesLive = Layer.effect(
                         context,
                         tokens,
                         statRefs,
-                        matchup.home.categoryTotals,
+                        labelledCategories(matchup.home.categoryTotals, scoringNames, new Set()),
                         matchupValueMissing,
                       ),
                     }),
@@ -1262,7 +1319,7 @@ export const FantasyQueriesLive = Layer.effect(
                         context,
                         tokens,
                         statRefs,
-                        matchup.away.categoryTotals,
+                        labelledCategories(matchup.away.categoryTotals, scoringNames, new Set()),
                         matchupValueMissing,
                       ),
                     }),
@@ -1509,13 +1566,15 @@ export const FantasyQueriesLive = Layer.effect(
             }),
           )
         : undefined;
-      const scoringStatIds =
-        league === undefined
-          ? undefined
-          : new Set(league.statCategories.map((category) => category.statId));
+      const scoringNames = categoryNames(league);
       const standingTable =
         standingsOutcome?._tag === "ok"
-          ? yield* standingRows(context, tokens, standingsOutcome.value, scoringStatIds)
+          ? yield* standingRows(
+              context,
+              tokens,
+              standingsOutcome.value,
+              league === undefined ? undefined : scoringNames,
+            )
           : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
       const rows = standingTable.rows;
       const current = rows.find((row) => row.current);
@@ -1574,7 +1633,7 @@ export const FantasyQueriesLive = Layer.effect(
         "The league scoring categories could not be read, so standings categories cannot be labelled.";
       const categoryTotals: TeamSummaryData["categoryTotals"] = !includes("categories")
         ? undefined
-        : current === undefined || !hasPublishedCategoryValue(current.categories)
+        : current === undefined || !hasPublishedCategoryValue(current.categories ?? [])
           ? {
               status: "unsupported",
               detail:
@@ -1586,12 +1645,12 @@ export const FantasyQueriesLive = Layer.effect(
             }
           : {
               status: "available",
-              values: [...current.categories],
+              values: [...(current.categories ?? [])],
               omittedCategories: omittedCategories(standingTable.omittedCategoryCount),
             };
       const categoryPoints: TeamSummaryData["categoryPoints"] = !includes("categories")
         ? undefined
-        : current === undefined || !hasPublishedCategoryValue(current.categoryPoints)
+        : current === undefined || !hasPublishedCategoryValue(current.categoryPoints ?? [])
           ? {
               status: "unsupported",
               detail:
@@ -1605,7 +1664,7 @@ export const FantasyQueriesLive = Layer.effect(
             }
           : {
               status: "available",
-              values: [...current.categoryPoints],
+              values: [...(current.categoryPoints ?? [])],
               omittedCategories: omittedCategories(standingTable.omittedCategoryCount),
             };
       const standingsSection: TeamSummaryData["standings"] = !includes("standings")
@@ -1788,7 +1847,7 @@ export const FantasyQueriesLive = Layer.effect(
                   context,
                   tokens,
                   statRefs,
-                  own.categoryTotals,
+                  labelledCategories(own.categoryTotals, scoringNames, new Set()),
                   matchupValueMissing,
                 ),
               }
@@ -1799,7 +1858,7 @@ export const FantasyQueriesLive = Layer.effect(
                   context,
                   tokens,
                   statRefs,
-                  opponent.categoryTotals,
+                  labelledCategories(opponent.categoryTotals, scoringNames, new Set()),
                   matchupValueMissing,
                 ),
               }
@@ -1984,11 +2043,26 @@ const rotisseriePointsMissing = "The provider published no rotisserie points for
 const matchupValueMissing =
   "The provider published no value for this category in the scoring week.";
 
+type LabelledStat = {
+  readonly statId: number;
+  readonly name: string;
+  readonly value: number | null;
+};
+
+function categoryNames(league: ProviderLeagueSettings | undefined): ReadonlyMap<number, string> {
+  return new Map(
+    (league?.statCategories ?? []).map((category): [number, string] => [
+      category.statId,
+      category.name,
+    ]),
+  );
+}
+
 function categoryValueRows(
   context: TeamContext,
   tokens: QueryTokens["Service"],
   cache: Map<number, StatRef>,
-  stats: ReadonlyArray<ProviderStatValue>,
+  stats: ReadonlyArray<LabelledStat>,
   missingDetail: string,
 ): Effect.Effect<ReadonlyArray<CategoryValue>> {
   return Effect.forEach(
@@ -1997,8 +2071,8 @@ function categoryValueRows(
       statRefFor(context, tokens, cache, entry.statId).pipe(
         Effect.map((stat): CategoryValue =>
           entry.value === null
-            ? { stat, status: "not_published", detail: missingDetail }
-            : { stat, status: "published", value: entry.value },
+            ? { stat, name: entry.name, status: "not_published", detail: missingDetail }
+            : { stat, name: entry.name, status: "published", value: entry.value },
         ),
       ),
     { concurrency: 1 },
@@ -2034,6 +2108,7 @@ function standingsData(
   rows: ReadonlyArray<StandingRow>,
   omittedCategoryCount: number,
   format: ProviderLeagueSettings["format"],
+  presentation: StandingDetail,
 ): NonNullable<LeagueData["standings"]> {
   if (outcome._tag !== "ok") {
     return {
@@ -2041,17 +2116,32 @@ function standingsData(
       detail: outcome._tag === "failed" ? outcome.failure.message : outcome.detail,
     };
   }
+  const detailNote =
+    presentation === "compact"
+      ? "The compact form carries every team's rank, points, and record. Ask for `standingsDetail: detailed` to add per-category season totals and rotisserie points; that form pages teams."
+      : "Per-category totals and points are included, so this form pages teams; request the `standings` group alone for the most rows per page.";
+  if (presentation === "compact") {
+    return {
+      status: "available",
+      format,
+      presentation,
+      detailNote,
+      teams: [...rows],
+    };
+  }
   return {
     status: "available",
     format,
+    presentation,
+    detailNote,
     categoryTotals: categoryAvailability(
       rows,
-      (row) => row.categories,
+      (row) => row.categories ?? [],
       "The provider published no season category totals for this league format.",
     ),
     categoryPoints: categoryAvailability(
       rows,
-      (row) => row.categoryPoints,
+      (row) => row.categoryPoints ?? [],
       format === "rotisserie"
         ? rotisseriePointsMissing
         : "The provider publishes rotisserie category points only for rotisserie leagues.",
@@ -2065,7 +2155,7 @@ function standingRows(
   context: TeamContext,
   tokens: QueryTokens["Service"],
   standings: ProviderStandings,
-  scoringStatIds: ReadonlySet<number> | undefined,
+  scoring: ReadonlyMap<number, string> | undefined,
 ): Effect.Effect<{
   readonly rows: ReadonlyArray<StandingRow>;
   readonly omittedCategoryCount: number;
@@ -2095,20 +2185,24 @@ function standingRows(
             pointsFor: standing.pointsFor,
             pointsAgainst: standing.pointsAgainst,
             ...(standing.streak === undefined ? {} : { streak: standing.streak }),
-            categories: yield* categoryValueRows(
-              context,
-              tokens,
-              statRefs,
-              labelledCategories(standing.categoryTotals, scoringStatIds, omitted),
-              seasonTotalMissing,
-            ),
-            categoryPoints: yield* categoryValueRows(
-              context,
-              tokens,
-              statRefs,
-              labelledCategories(standing.categoryPoints, scoringStatIds, omitted),
-              rotisseriePointsMissing,
-            ),
+            ...(scoring === undefined
+              ? {}
+              : {
+                  categories: yield* categoryValueRows(
+                    context,
+                    tokens,
+                    statRefs,
+                    labelledCategories(standing.categoryTotals, scoring, omitted),
+                    seasonTotalMissing,
+                  ),
+                  categoryPoints: yield* categoryValueRows(
+                    context,
+                    tokens,
+                    statRefs,
+                    labelledCategories(standing.categoryPoints, scoring, omitted),
+                    rotisseriePointsMissing,
+                  ),
+                }),
           };
         }),
       { concurrency: 1 },
@@ -2119,16 +2213,19 @@ function standingRows(
 
 function labelledCategories(
   stats: ReadonlyArray<ProviderStatValue>,
-  scoringStatIds: ReadonlySet<number> | undefined,
+  scoring: ReadonlyMap<number, string>,
   omitted: Set<number>,
-): ReadonlyArray<ProviderStatValue> {
-  return stats.filter((entry) => {
-    if (scoringStatIds?.has(entry.statId) === true) {
-      return true;
+): ReadonlyArray<LabelledStat> {
+  const labelled: Array<LabelledStat> = [];
+  for (const entry of stats) {
+    const name = scoring.get(entry.statId);
+    if (name === undefined) {
+      omitted.add(entry.statId);
+      continue;
     }
-    omitted.add(entry.statId);
-    return false;
-  });
+    labelled.push({ statId: entry.statId, name, value: entry.value });
+  }
+  return labelled;
 }
 
 function queryTeam(owned: OwnedTeam): QueryTeam {
@@ -2446,36 +2543,56 @@ function providerRosterPeriod(period: QueryPeriod | undefined): ProviderRosterCo
   return period === undefined ? undefined : { type: "week", week: period.week };
 }
 
-function validateActualStatsPeriod(
-  context: TeamContext,
-  league: ProviderLeagueSettings | undefined,
-  period: QueryPeriod,
-): Effect.Effect<void, QuerySelectionInvalid> {
-  const sport = context.owned.team.sport;
-  if (!context.provider.capabilities.playerSearch.weeklyStatSeriesSports.includes(sport)) {
-    return Effect.fail(
-      QuerySelectionInvalid.make({
-        detail: `The provider publishes no weekly player statistics for ${sport}, so \`period\` cannot select a weekly \`actual_stats\` basis. Omit \`period\` to read season totals, or use get_matchups for scoring-week team totals.`,
-      }),
-    );
+function normalizeStatPeriod(period: StatPeriod | undefined): ProviderStatPeriod {
+  if (period === undefined || period.kind === "season") {
+    return { kind: "season" };
   }
-  const currentWeek = league?.periodWindow?.current;
-  if (currentWeek === undefined) {
-    return Effect.fail(
-      QuerySelectionInvalid.make({
-        detail:
-          "The current scoring week could not be resolved, so a weekly actual-stat basis cannot be verified for this request. Omit `period` to read season totals.",
-      }),
-    );
+  if (period.kind === "preset") {
+    return { kind: "preset", preset: period.preset };
   }
-  if (period.week >= currentWeek) {
-    return Effect.fail(
-      QuerySelectionInvalid.make({
-        detail: `The provider publishes actual weekly statistics only for completed weeks; week ${period.week} is the current or upcoming week (current week ${currentWeek}). Omit \`period\` to read season totals, or request a completed week.`,
-      }),
-    );
+  if (period.kind === "range") {
+    return { kind: "range", start: period.start, end: period.end };
   }
-  return Effect.void;
+  return { kind: "week", week: period.week };
+}
+
+function statPeriodKey(period: ProviderStatPeriod): string {
+  switch (period.kind) {
+    case "season":
+      return "season";
+    case "week":
+      return `week:${String(period.week)}`;
+    case "preset":
+      return `preset:${period.preset}`;
+    case "range":
+      return `range:${period.start}..${period.end}`;
+  }
+}
+
+function periodSupportOf(context: TeamContext, sport: FantasySport): PlayersData["periodSupport"] {
+  const support = context.provider.capabilities.statPeriods[sport];
+  return {
+    sport,
+    kinds: support.kinds,
+    presets: [...support.presets],
+    maximumRangeDays: support.maximumRangeDays,
+    detail: support.detail,
+  };
+}
+
+function statBasisDetail(basis: ProviderStatBasis): string {
+  switch (basis.type) {
+    case "week":
+      return `Actual statistics use the week basis for week ${String(basis.week)}.`;
+    case "season":
+      return "Actual statistics use the season basis.";
+    case "date_range":
+      return `Actual statistics use the date_range basis: ${String(basis.days)} daily reads summed from ${basis.start} to ${basis.end}.`;
+  }
+}
+
+function periodKindRefusal(period: ProviderStatPeriod): string {
+  return `The provider cannot serve the requested \`period\` for kind \`${period.kind}\`.`;
 }
 
 function leagueOverview(league: ProviderLeagueSettings): NonNullable<LeagueData["overview"]> {
@@ -2506,12 +2623,12 @@ function scoringCategories(
   context: TeamContext,
   tokens: QueryTokens["Service"],
   league: ProviderLeagueSettings,
-): Effect.Effect<LeagueData["scoring"]> {
+): Effect.Effect<ReadonlyArray<NonNullable<LeagueData["scoring"]>[number]>> {
   return Effect.gen(function* () {
     const modifiers = new Map(
       league.statModifiers.map((modifier) => [modifier.statId, modifier.points]),
     );
-    const result: Array<LeagueData["scoring"][number]> = [];
+    const result: Array<NonNullable<LeagueData["scoring"]>[number]> = [];
     for (const category of league.statCategories.toSorted(
       (left, right) => left.statId - right.statId,
     )) {

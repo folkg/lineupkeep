@@ -177,7 +177,55 @@ A second Yahoo connection appeared on Oct 27 and disconnected two minutes later.
       after, and the disconnected connection row remains without a credential generation
 - [x] Record the answer in the feedback entry's resolution note
 
-## 3. Operational gaps
+## 3. MCP client feedback — round 4, part 1
+
+Source: Muse round-4 report, filed through `submit_feedback` on Oct 28 2026. Findings R4-5 to R4-8
+(transactions and draft picks) are tracked separately.
+
+### R4-4 — a period concept that declares what it can serve
+
+`get_players` accepted only `{week: n}`, so every hockey request for actual statistics was refused and
+a recent window could not be asked for at all; the client probed fourteen shapes to find the boundary.
+
+- [x] Period kinds: season, scoring week, preset windows (`last_7_days`, `last_14_days`,
+      `last_30_days`), and an explicit inclusive `{start, end}` range
+- [x] Per-sport provider support declared as data beside the other capabilities: `native`,
+      `aggregated`, or `unsupported`, plus preset windows and the range cap
+- [x] Discoverable before a call: the tool description lists the accepted shapes and the result
+      carries `periodSupport`; an unsupported kind is refused naming the kind, whether it is served at
+      all, and what can be asked instead; season totals are never substituted
+- [x] Hockey preset windows and ranges served by summing daily provider reads, batched per day across
+      all requested players, capped at 31 days, with a whole-season range served as the season
+- [x] Hockey scoring weeks stay refused, now as a declared capability with a remedy
+- [x] Test per provider that the declared table matches what the adapter does, for every sport and
+      period kind
+- [ ] Verify live: a hockey preset window summed against the live daily series, a range cap refusal,
+      and a football preset refusal
+
+### R4-2 — a roto standings table should fit in one call
+
+`get_league` with only the standings group returned one team per page, so a 13-team table cost 13 calls.
+
+- [x] Compact standings: rank, points, and record for every team in one result, without per-category
+      payloads
+- [x] Keep the detailed per-category view, and state in the section that it pages
+- [x] Test: a 13-team compact read returns every team in one result inside the budget
+- [x] Verify live: the owner's 13-team rotisserie league returned every team in one call
+
+### R4-3 — inline stat names in category totals
+
+- [x] Category values carry the league's stat name beside the private reference in `get_league`,
+      `get_matchups`, and `get_team_summary`
+- [x] Test: a season category total carries its name and value without a dictionary read
+
+### R4-1 — resolve the duplicated ownership field
+
+- [x] `search_players` publishes one ownership-change field, `percentOwnedDelta`; the always-null
+      `percentOwnedChange` is absent from the response and the published output schema
+- [x] Both change fields state the provider window they measure
+- [x] Test: a search row carries the provider delta once, and a missing started change stays null
+
+## 4. Operational gaps
 
 - [ ] **Database restore drill.** Back up, restore into a scratch database, prove the application reads
       it. Never rehearsed; the largest unverified operational claim.
@@ -193,7 +241,7 @@ A second Yahoo connection appeared on Oct 27 and disconnected two minutes later.
 - [x] **Deploy the ownership-delta clamp.** Deployed with the round-2 MCP rollout (web `00026-nss`,
       worker `00027-knr`); affects only leagues declaring a games limit, of which the owner has none.
 
-## 4. Lineup algorithm follow-ups
+## 5. Lineup algorithm follow-ups
 
 - [ ] **Positional scarcity.** A league-wide measure of how thin each position is, computed periodically
       rather than per run. Provider-neutral and portable beyond Yahoo. The natural foundation for add/drop
@@ -208,7 +256,7 @@ A second Yahoo connection appeared on Oct 27 and disconnected two minutes later.
       Stat categories, games-played and innings-pitched limits, and provider request shapes for those sports
       are not built.
 
-## 5. Product work needing a decision
+## 6. Product work needing a decision
 
 - [ ] **Transactions.** Review links exist; execution and add/drop recommendations do not, by design.
       Scarcity (section 3) is the prerequisite.
@@ -218,7 +266,7 @@ A second Yahoo connection appeared on Oct 27 and disconnected two minutes later.
 - [ ] **Domain and production email.** The Resend test sender delivers only to the owner address. A
       domain makes this a non-issue and is otherwise cheap.
 
-## 6. Known non-goals
+## 7. Known non-goals
 
 Recorded so they are not rediscovered as gaps: no server-side LLM in the solver, no scoring controls, no
 premium provider actions, no arbitrary URL or SQL escape hatches, no multi-period planning, no

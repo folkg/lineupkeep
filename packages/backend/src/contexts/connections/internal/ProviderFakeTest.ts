@@ -1,8 +1,10 @@
-import { Context, Deferred, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
+import { Context, DateTime, Deferred, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
 
+import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import {
   ProviderOperationUnsupported,
   ProviderPeriodMismatch,
+  ProviderPeriodUnsupported,
   ProviderRequestFailed,
   ProviderResponseInvalid,
   ProviderReviewLinkInvalid,
@@ -30,6 +32,8 @@ import type {
   ProviderRosterCoverage,
   ProviderShape,
   ProviderStandings,
+  ProviderStatBasis,
+  ProviderStatPeriod,
   ProviderTeam,
   ProviderTransaction,
   ProviderWriteResult,
@@ -467,8 +471,17 @@ const providerFake = Effect.gen(function* () {
           covered: current.playerDetailsFailure.covered,
         });
       }
+      const basis = yield* fakePlayerBasis(input.period, input.sport, input.currentPeriod);
       const requested = new Set(input.providerPlayerKeys);
-      return current.playerDetails.filter((player) => requested.has(player.providerPlayerKey));
+      return current.playerDetails
+        .filter((player) => requested.has(player.providerPlayerKey))
+        .map((player) => ({
+          ...player,
+          actual:
+            player.actual === undefined
+              ? undefined
+              : { basis, stats: player.actual.stats, notAggregated: [] },
+        }));
     }),
     readPlayerHistory: Effect.fn("FakeProvider.readPlayerHistory")(function* (input) {
       const current = yield* prepare(input, "read_player_history");
@@ -632,6 +645,47 @@ const fakeCapabilities: ProviderCapabilities = {
     providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
     weeklyStatSeriesSports: ["football"],
   },
+  statPeriods: {
+    football: {
+      kinds: { season: "native", week: "native", preset: "unsupported", range: "unsupported" },
+      presets: [],
+      maximumRangeDays: 0,
+      detail: "The fake provider publishes season and completed-week player series only.",
+    },
+    hockey: {
+      kinds: { season: "native", week: "unsupported", preset: "aggregated", range: "aggregated" },
+      presets: [
+        { preset: "last_7_days", days: 7 },
+        { preset: "last_14_days", days: 14 },
+        { preset: "last_30_days", days: 30 },
+      ],
+      maximumRangeDays: 31,
+      detail:
+        "The fake provider publishes no weekly player series for hockey and serves preset windows and explicit ranges by aggregating daily reads.",
+    },
+    baseball: {
+      kinds: {
+        season: "unsupported",
+        week: "unsupported",
+        preset: "unsupported",
+        range: "unsupported",
+      },
+      presets: [],
+      maximumRangeDays: 0,
+      detail: "The fake provider does not serve baseball.",
+    },
+    basketball: {
+      kinds: {
+        season: "unsupported",
+        week: "unsupported",
+        preset: "unsupported",
+        range: "unsupported",
+      },
+      presets: [],
+      maximumRangeDays: 0,
+      detail: "The fake provider does not serve basketball.",
+    },
+  },
   publishesProjections: false,
   limitations: [
     {
@@ -705,6 +759,73 @@ function validate(
     ),
     Effect.mapError(() => ProviderSessionRejected.make({ operation })),
   );
+}
+
+const fakeFantasyDay = "2026-10-26";
+
+function fakePlayerBasis(
+  period: ProviderStatPeriod,
+  sport: FantasySport,
+  currentPeriod: number | undefined,
+): Effect.Effect<ProviderStatBasis, ProviderPeriodUnsupported> {
+  const support = fakeCapabilities.statPeriods[sport];
+  const unsupported = support.kinds[period.kind] === "unsupported";
+  if (unsupported) {
+    return ProviderPeriodUnsupported.make({
+      operation: "read_player_details",
+      kind: period.kind,
+      declared: "unsupported",
+      reason: support.detail,
+      remedy: `Ask for one of: \`kind: "season"\` for season totals, \`kind: "preset"\` with ${support.presets
+        .map((entry) => entry.preset)
+        .join(", ")}, \`kind: "range"\` with an explicit \`start\` and \`end\` of at most ${String(
+        support.maximumRangeDays,
+      )} days.`,
+    });
+  }
+  switch (period.kind) {
+    case "season":
+      return Effect.succeed({ type: "season" as const });
+    case "week":
+      return currentPeriod === undefined || period.week >= currentPeriod
+        ? ProviderPeriodUnsupported.make({
+            operation: "read_player_details",
+            kind: "week",
+            declared: support.kinds.week,
+            reason: `The provider publishes weekly player statistics only for a completed scoring week, and week ${String(period.week)} is the current or upcoming week.`,
+            remedy: 'Ask for a completed week, or `kind: "season"` for season totals.',
+          })
+        : Effect.succeed({ type: "week" as const, week: period.week });
+    case "preset": {
+      const window = support.presets.find((entry) => entry.preset === period.preset);
+      const days = window?.days ?? 1;
+      return Effect.succeed({
+        type: "date_range" as const,
+        start: fakeShiftDate(fakeFantasyDay, -(days - 1)),
+        end: fakeFantasyDay,
+        days,
+      });
+    }
+    case "range":
+      return Effect.succeed({
+        type: "date_range" as const,
+        start: period.start,
+        end: period.end,
+        days: fakeDayCount(period.start, period.end),
+      });
+  }
+}
+
+function fakeShiftDate(date: string, days: number): string {
+  return DateTime.formatIsoDate(
+    DateTime.add(DateTime.makeUnsafe(`${date}T00:00:00.000Z`), { days }),
+  );
+}
+
+function fakeDayCount(start: string, end: string): number {
+  const from = DateTime.toEpochMillis(DateTime.makeUnsafe(`${start}T00:00:00.000Z`));
+  const to = DateTime.toEpochMillis(DateTime.makeUnsafe(`${end}T00:00:00.000Z`));
+  return (to - from) / 86_400_000 + 1;
 }
 
 function writeResult(action: FakeWriteAction): ProviderWriteResult {

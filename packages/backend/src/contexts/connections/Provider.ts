@@ -4,7 +4,7 @@ import type { Effect } from "effect";
 import { FantasyLeague, FantasySport } from "./FantasyTeam.ts";
 import type { LineupTargetPeriod } from "./LineupRun.ts";
 import { ProviderKey } from "./ProviderKey.ts";
-import type { LeagueFormat } from "./QueryValues.ts";
+import type { LeagueFormat, StatPeriodKind } from "./QueryValues.ts";
 
 const ProviderOperation = Schema.Literals([
   "validate_session",
@@ -71,8 +71,23 @@ export type ProviderCapabilities = {
     readonly providerOrderedSorts: ReadonlyArray<ProviderPlayerSearchSort>;
     readonly weeklyStatSeriesSports: ReadonlyArray<FantasySport>;
   };
+  readonly statPeriods: Readonly<Record<FantasySport, ProviderPeriodSupport>>;
   readonly publishesProjections: boolean;
   readonly limitations: ReadonlyArray<ProviderLimitation>;
+};
+
+type ProviderPeriodMode = "native" | "aggregated" | "unsupported";
+
+type ProviderPeriodPresetWindow = {
+  readonly preset: StatPeriodPresetName;
+  readonly days: number;
+};
+
+export type ProviderPeriodSupport = {
+  readonly kinds: Readonly<Record<StatPeriodKind, ProviderPeriodMode>>;
+  readonly presets: ReadonlyArray<ProviderPeriodPresetWindow>;
+  readonly maximumRangeDays: number;
+  readonly detail: string;
 };
 
 const ProviderDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
@@ -129,6 +144,17 @@ export class ProviderPeriodMismatch extends Schema.TaggedError<
   covered: Schema.NullOr(ProviderRosterCoverage),
 }) {}
 
+export class ProviderPeriodUnsupported extends Schema.TaggedError<
+  ProviderPeriodUnsupported,
+  { readonly brand: unique symbol }
+>()("provider.period_unsupported", {
+  operation: ProviderOperation,
+  kind: Schema.Literals(["season", "week", "preset", "range"]),
+  declared: Schema.Literals(["native", "aggregated", "unsupported"]),
+  reason: Schema.String,
+  remedy: Schema.String,
+}) {}
+
 export class ProviderReviewLinkInvalid extends Schema.TaggedError<
   ProviderReviewLinkInvalid,
   { readonly brand: unique symbol }
@@ -156,7 +182,8 @@ export type ProviderFailure =
 export type ProviderReadFailure =
   | ProviderFailure
   | ProviderOperationUnsupported
-  | ProviderPeriodMismatch;
+  | ProviderPeriodMismatch
+  | ProviderPeriodUnsupported;
 
 export type Provider = ProviderShape;
 
@@ -205,7 +232,6 @@ export type ProviderShape = {
   readonly readPlayerDetails: (
     input: ProviderSessionMaterial & ProviderPlayerReadInput,
   ) => Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure>;
-
   readonly readPlayerHistory: (
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
@@ -258,8 +284,10 @@ type ProviderPlayerReadInput = {
   readonly providerLeagueKey: string;
   readonly providerPlayerKeys: ReadonlyArray<string>;
   readonly sport: FantasySport;
-  readonly period: ProviderScoringWeek | undefined;
+  readonly period: ProviderStatPeriod;
   readonly currentPeriod: number | undefined;
+  readonly seasonStart: string | undefined;
+  readonly seasonEnd: string | undefined;
 };
 
 export type ProviderCoverageKind = ProviderRosterCoverage["type"];
@@ -377,13 +405,33 @@ export type ProviderStatValue = {
   readonly value: number | null;
 };
 
+type StatPeriodPresetName = "last_7_days" | "last_14_days" | "last_30_days";
+
+export type ProviderStatPeriod =
+  | { readonly kind: "season" }
+  | { readonly kind: "week"; readonly week: number }
+  | { readonly kind: "preset"; readonly preset: StatPeriodPresetName }
+  | { readonly kind: "range"; readonly start: string; readonly end: string };
+
 export type ProviderStatBasis =
   | { readonly type: "week"; readonly week: number }
-  | { readonly type: "season" };
+  | { readonly type: "season" }
+  | {
+      readonly type: "date_range";
+      readonly start: string;
+      readonly end: string;
+      readonly days: number;
+    };
+
+export type ProviderStatOmission = {
+  readonly statId: number;
+  readonly detail: string;
+};
 
 export type ProviderPlayerStatGroup = {
   readonly basis: ProviderStatBasis;
   readonly stats: ReadonlyArray<ProviderStatValue>;
+  readonly notAggregated: ReadonlyArray<ProviderStatOmission>;
 };
 
 export type ProviderPlayerDetail = {

@@ -8,6 +8,7 @@ import {
   SchemaTransformation,
 } from "effect";
 
+import { fantasyDayLabel } from "#contexts/connections/FantasyDay.ts";
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import type {
   PlayerRank,
@@ -16,6 +17,7 @@ import type {
 import { communityStartRateCut } from "#contexts/connections/internal/provider-scoring/ValueSource.ts";
 import {
   ProviderPeriodMismatch,
+  ProviderPeriodUnsupported,
   ProviderOperationUnsupported,
   ProviderRequestFailed,
   ProviderResponseInvalid,
@@ -25,10 +27,14 @@ import {
 } from "#contexts/connections/Provider.ts";
 import type {
   ProviderCategoryWinner,
+  ProviderFantasyDay,
   ProviderGamesPlayed,
   ProviderLeagueSettings,
   ProviderLineupAssignment,
+  ProviderPeriodSupport,
   ProviderStatBasis,
+  ProviderStatOmission,
+  ProviderStatPeriod,
   ProviderMatchup,
   ProviderNativeTarget,
   ProviderOperation,
@@ -110,6 +116,8 @@ const rankedSearchSorts = new Set<ProviderPlayerSearchInput["sort"]>([
   "overall_rank",
   "stat",
 ]);
+const goalsAgainstAverageStatId = 23;
+const savePercentageStatId = 26;
 const maximumSelectedPlayers = 25;
 const maximumHistoryPlayers = 200;
 const maximumUpstreamLimit = 50;
@@ -384,19 +392,22 @@ export const yahooProvider = Effect.gen(function* () {
     readonly cookie: string;
     readonly leagueKey: string;
     readonly playerKeys: ReadonlyArray<string>;
-    readonly basis: ProviderStatBasis;
+    readonly query: PlayerStatQuery;
+    readonly ownership: boolean;
     readonly operation: "read_player_details" | "read_player_history";
   }) {
     const payload = yield* readJson(internet, {
       operation: input.operation,
       origin: readOrigin,
-      path: `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")};out=stats,ownership`,
-      query: playerDetailQuery(input.basis),
+      path:
+        `/fantasy/v2/league/${input.leagueKey}/players;player_keys=${input.playerKeys.join(",")}` +
+        `;out=${input.ownership ? "stats,ownership" : "stats"}`,
+      query: playerDetailQuery(input.query),
       cookie: input.cookie,
       normalize: true,
     });
     const decoded = yield* decodePayload(PlayerDetailsPayload, payload, input.operation);
-    return yield* playerDetailsFromPayload(decoded, input.leagueKey, input.basis);
+    return yield* playerDetailsFromPayload(decoded, input.leagueKey, input.query);
   });
 
   const readPlayerDetails = Effect.fn("YahooProvider.readPlayerDetails")(function* (
@@ -404,27 +415,65 @@ export const yahooProvider = Effect.gen(function* () {
       readonly providerLeagueKey: string;
       readonly providerPlayerKeys: ReadonlyArray<string>;
       readonly sport: FantasySport;
-      readonly period: ProviderScoringWeek | undefined;
+      readonly period: ProviderStatPeriod;
       readonly currentPeriod: number | undefined;
+      readonly seasonStart: string | undefined;
+      readonly seasonEnd: string | undefined;
     },
   ) {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_player_details");
     const cookie = yield* sessionCookie(input, "read_player_details");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_details");
-    const period =
-      input.period === undefined ? undefined : { week: yield* ValidWeek(input.period.week) };
     const playerKeys = yield* ValidPlayerKeys(input.providerPlayerKeys, "read_player_details");
-    const basis = statBasis(input.sport, period, input.currentPeriod);
-    const details = yield* readPlayerPeriod({
-      cookie,
-      leagueKey,
-      playerKeys,
-      basis,
+    const resolution = yield* resolvePlayerPeriod({
       operation: "read_player_details",
+      period: input.period,
+      support: yahooCapabilities.statPeriods[input.sport],
+      currentPeriod: input.currentPeriod,
+      seasonStart: input.seasonStart,
+      seasonEnd: input.seasonEnd,
+      fantasyDay: yahooCapabilities.fantasyDay,
+      now: yield* DateTime.now,
     });
+    if (resolution.kind === "single") {
+      const details = yield* readPlayerPeriod({
+        cookie,
+        leagueKey,
+        playerKeys,
+        query: resolution.query,
+        ownership: true,
+        operation: "read_player_details",
+      });
+      yield* Effect.annotateCurrentSpan({
+        "provider.player_count": details.length,
+        "provider.stat_basis": resolution.query.type,
+      });
+      return details;
+    }
+    const daily = yield* Effect.forEach(
+      resolution.days,
+      (date) =>
+        readPlayerPeriod({
+          cookie,
+          leagueKey,
+          playerKeys,
+          query: { type: "date", date },
+          ownership: date === resolution.days[resolution.days.length - 1],
+          operation: "read_player_details",
+        }).pipe(Effect.map((details) => ({ date, details }))),
+      { concurrency: maximumDayReadConcurrency },
+    );
+    const details = aggregateDailyDetails(
+      daily,
+      resolution.start,
+      resolution.end,
+      resolution.days.length,
+      input.sport,
+    );
     yield* Effect.annotateCurrentSpan({
       "provider.player_count": details.length,
-      "provider.stat_basis": basis.type,
+      "provider.stat_basis": "date_range",
+      "provider.day_count": resolution.days.length,
     });
     return details;
   });
@@ -445,14 +494,15 @@ export const yahooProvider = Effect.gen(function* () {
     const periods = yield* ValidPlayerPeriods(input.periods);
     const history: Array<ProviderPlayerPeriod> = [];
     for (const period of periods) {
-      const basis = statBasis(input.sport, period, input.currentPeriod);
+      const query = historyQuery(input.sport, period, input.currentPeriod);
       const details: Array<ProviderPlayerDetail> = [];
       for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
         const chunkDetails = yield* readPlayerPeriod({
           cookie,
           leagueKey,
           playerKeys: playerKeys.slice(index, index + maximumSelectedPlayers),
-          basis,
+          query,
+          ownership: true,
           operation: "read_player_history",
         });
         for (const detail of chunkDetails) {
@@ -868,6 +918,7 @@ function yahooUrl(origin: URL, path: string, query: Readonly<Record<string, stri
         key !== "format" &&
         key !== "stats.type" &&
         key !== "stats.week" &&
+        key !== "stats.date" &&
         key !== "percent_started.cut_types" &&
         key !== "ranks",
     )
@@ -1437,16 +1488,255 @@ const rankTypeMap: Readonly<Record<string, RankType>> = {
   PN4W: "PN4W",
 };
 
-function playerDetailQuery(basis: ProviderStatBasis): Record<string, string> {
-  return basis.type === "week"
-    ? { format: "json", "stats.type": "week", "stats.week": String(basis.week) }
-    : { format: "json", "stats.type": "season" };
+const providerDatePattern = /^\d{4}-\d{2}-\d{2}$/u;
+
+const hockeyRateStatIds: ReadonlySet<number> = new Set([
+  goalsAgainstAverageStatId,
+  savePercentageStatId,
+]);
+const rateStatNotAggregated =
+  "A rate or percentage is not summed across days; the provider publishes this category only as a season total or a single date.";
+
+const maximumDayReadConcurrency = 5;
+
+type PlayerStatQuery =
+  | { readonly type: "season" }
+  | { readonly type: "week"; readonly week: number }
+  | { readonly type: "date"; readonly date: string };
+
+type PlayerPeriodResolution =
+  | { readonly kind: "single"; readonly query: PlayerStatQuery }
+  | {
+      readonly kind: "daily";
+      readonly start: string;
+      readonly end: string;
+      readonly days: ReadonlyArray<string>;
+    };
+
+function playerDetailQuery(query: PlayerStatQuery): Record<string, string> {
+  switch (query.type) {
+    case "season":
+      return { format: "json", "stats.type": "season" };
+    case "week":
+      return { format: "json", "stats.type": "week", "stats.week": String(query.week) };
+    case "date":
+      return { format: "json", "stats.type": "date", "stats.date": query.date };
+  }
+}
+
+function resolvePlayerPeriod(input: {
+  readonly operation: ProviderOperation;
+  readonly period: ProviderStatPeriod;
+  readonly support: ProviderPeriodSupport;
+  readonly currentPeriod: number | undefined;
+  readonly seasonStart: string | undefined;
+  readonly seasonEnd: string | undefined;
+  readonly fantasyDay: ProviderFantasyDay;
+  readonly now: DateTime.Utc;
+}): Effect.Effect<PlayerPeriodResolution, ProviderReadFailure> {
+  return Effect.gen(function* () {
+    const period = input.period;
+    const mode = input.support.kinds[period.kind];
+    if (mode === "unsupported") {
+      return yield* unsupportedPeriod(input, input.support.detail);
+    }
+    switch (period.kind) {
+      case "season":
+        return { kind: "single" as const, query: { type: "season" as const } };
+      case "week": {
+        const week = yield* ValidWeek(period.week);
+        if (input.currentPeriod === undefined || week >= input.currentPeriod) {
+          return yield* unsupportedPeriod(
+            input,
+            `The provider publishes weekly player statistics only for a completed scoring week, and week ${String(week)} is the current or upcoming week.`,
+          );
+        }
+        return { kind: "single" as const, query: { type: "week" as const, week } };
+      }
+      case "preset": {
+        const window = input.support.presets.find((entry) => entry.preset === period.preset);
+        if (window === undefined) {
+          return yield* unsupportedPeriod(
+            input,
+            `The provider does not declare the \`${period.preset}\` window.`,
+          );
+        }
+        const end = fantasyDayLabel(input.now, input.fantasyDay);
+        const start = shiftDate(end, -(window.days - 1));
+        return yield* dailyResolution(input, start, end);
+      }
+      case "range":
+        if (!isProviderDate(period.start) || !isProviderDate(period.end)) {
+          return yield* unsupportedPeriod(
+            input,
+            "The requested range is not a pair of calendar dates in `YYYY-MM-DD` form.",
+          );
+        }
+        if (period.start > period.end) {
+          return yield* unsupportedPeriod(input, "The requested range ends before it starts.");
+        }
+        if (
+          input.seasonStart !== undefined &&
+          input.seasonEnd !== undefined &&
+          period.start <= input.seasonStart &&
+          period.end >= input.seasonEnd
+        ) {
+          yield* Effect.annotateCurrentSpan("provider.period_served_as", "season");
+          return { kind: "single" as const, query: { type: "season" as const } };
+        }
+        if (
+          (input.seasonEnd !== undefined && period.start > input.seasonEnd) ||
+          (input.seasonStart !== undefined && period.end < input.seasonStart)
+        ) {
+          return yield* unsupportedPeriod(
+            input,
+            `The requested range is outside the league's declared season (${input.seasonStart ?? "unknown"} to ${input.seasonEnd ?? "unknown"}).`,
+          );
+        }
+        return yield* dailyResolution(input, period.start, period.end);
+    }
+  });
+}
+
+function dailyResolution(
+  input: {
+    readonly support: ProviderPeriodSupport;
+  } & Parameters<typeof unsupportedPeriod>[0],
+  start: string,
+  end: string,
+): Effect.Effect<PlayerPeriodResolution, ProviderReadFailure> {
+  return Effect.gen(function* () {
+    const days = calendarDays(start, end);
+    if (days.length > input.support.maximumRangeDays) {
+      return yield* unsupportedPeriod(
+        input,
+        `The requested window covers ${String(days.length)} days, and this provider serves an explicit window of at most ${String(input.support.maximumRangeDays)} days.`,
+      );
+    }
+    return { kind: "daily" as const, start, end, days };
+  });
+}
+
+function unsupportedPeriod(
+  input: {
+    readonly operation: ProviderOperation;
+    readonly period: ProviderStatPeriod;
+    readonly support: ProviderPeriodSupport;
+  },
+  reason: string,
+): Effect.Effect<never, ProviderPeriodUnsupported> {
+  const alternatives = servedAlternatives(input.support);
+  return ProviderPeriodUnsupported.make({
+    operation: input.operation,
+    kind: input.period.kind,
+    declared: input.support.kinds[input.period.kind],
+    reason,
+    remedy:
+      alternatives.length === 0
+        ? "This provider serves no player-statistics period for this sport."
+        : `Ask for one of: ${alternatives.join(", ")}.`,
+  });
+}
+
+function servedAlternatives(support: ProviderPeriodSupport): ReadonlyArray<string> {
+  const alternatives: Array<string> = [];
+  if (support.kinds.season !== "unsupported") {
+    alternatives.push('`kind: "season"` for season totals');
+  }
+  if (support.kinds.week !== "unsupported") {
+    alternatives.push('`kind: "week"` with a completed scoring week');
+  }
+  if (support.kinds.preset !== "unsupported" && support.presets.length > 0) {
+    alternatives.push(
+      `\`kind: "preset"\` with ${support.presets.map((entry) => `\`${entry.preset}\``).join(", ")}`,
+    );
+  }
+  if (support.kinds.range !== "unsupported") {
+    alternatives.push(
+      `\`kind: "range"\` with an explicit \`start\` and \`end\` of at most ${String(support.maximumRangeDays)} days`,
+    );
+  }
+  return alternatives;
+}
+
+function aggregateDailyDetails(
+  days: ReadonlyArray<{
+    readonly date: string;
+    readonly details: ReadonlyArray<ProviderPlayerDetail>;
+  }>,
+  start: string,
+  end: string,
+  windowDays: number,
+  sport: FantasySport,
+): ReadonlyArray<ProviderPlayerDetail> {
+  const basis: ProviderStatBasis = { type: "date_range", start, end, days: windowDays };
+  const rateStatIds = sport === "hockey" ? hockeyRateStatIds : new Set<number>();
+  const players = new Map<
+    string,
+    { head: ProviderPlayerDetail; sums: Map<number, number | null> }
+  >();
+  for (const day of days) {
+    for (const detail of day.details) {
+      const entry = players.get(detail.providerPlayerKey) ?? { head: detail, sums: new Map() };
+      entry.head = detail;
+      for (const stat of detail.actual?.stats ?? []) {
+        if (rateStatIds.has(stat.statId)) {
+          entry.sums.set(stat.statId, null);
+        } else if (stat.value !== null) {
+          entry.sums.set(stat.statId, (entry.sums.get(stat.statId) ?? 0) + stat.value);
+        } else if (!entry.sums.has(stat.statId)) {
+          entry.sums.set(stat.statId, null);
+        }
+      }
+      players.set(detail.providerPlayerKey, entry);
+    }
+  }
+  return [...players.values()].map(({ head, sums }) => ({
+    ...head,
+    actual:
+      sums.size === 0
+        ? undefined
+        : {
+            basis,
+            stats: [...sums]
+              .filter(([statId]) => !rateStatIds.has(statId))
+              .map(([statId, value]) => ({ statId, value })),
+            notAggregated: [...rateStatIds]
+              .filter((statId) => sums.has(statId))
+              .toSorted((left, right) => left - right)
+              .map((statId): ProviderStatOmission => ({
+                statId,
+                detail: rateStatNotAggregated,
+              })),
+          },
+  }));
+}
+
+function calendarDays(start: string, end: string): ReadonlyArray<string> {
+  const days: Array<string> = [];
+  for (let date = start; date <= end; date = shiftDate(date, 1)) {
+    days.push(date);
+  }
+  return days;
+}
+
+function shiftDate(date: string, days: number): string {
+  return DateTime.formatIsoDate(
+    DateTime.add(DateTime.makeUnsafe(`${date}T00:00:00.000Z`), { days }),
+  );
+}
+
+function isProviderDate(value: string): boolean {
+  return (
+    providerDatePattern.test(value) &&
+    DateTime.formatIsoDate(DateTime.makeUnsafe(`${value}T00:00:00.000Z`)) === value
+  );
 }
 
 function playerDetailsFromPayload(
   payload: typeof PlayerDetailsPayload.Type,
   requestedLeagueKey: string,
-  basis: ProviderStatBasis,
+  query: PlayerStatQuery,
 ): Effect.Effect<
   ReadonlyArray<ProviderPlayerDetail>,
   ProviderResponseInvalid | ProviderPeriodMismatch
@@ -1463,7 +1753,7 @@ function playerDetailsFromPayload(
       const series =
         player.player_stats === undefined
           ? undefined
-          : yield* statSeries(player.player_stats, basis);
+          : yield* statSeries(player.player_stats, query);
       details.push({
         providerPlayerKey: player.player_key,
         name: optionalNonEmpty(player.name?.full ?? ""),
@@ -1474,12 +1764,26 @@ function playerDetailsFromPayload(
             ? undefined
             : player.eligible_positions.map(({ position }) => position),
         rosterStatus: rosterStatusOf(player.ownership?.ownership_type),
-        actual: series === undefined ? undefined : { basis, stats: series },
+        actual:
+          series === undefined
+            ? undefined
+            : { basis: basisOfQuery(query), stats: series, notAggregated: [] },
         projected: undefined,
       });
     }
     return details;
   });
+}
+
+function basisOfQuery(query: PlayerStatQuery): ProviderStatBasis {
+  switch (query.type) {
+    case "season":
+      return { type: "season" };
+    case "week":
+      return { type: "week", week: query.week };
+    case "date":
+      return { type: "date_range", start: query.date, end: query.date, days: 1 };
+  }
 }
 
 function playerFactsFromPayload(
@@ -1630,25 +1934,19 @@ function sameCoverage(left: ProviderRosterCoverage, right: ProviderRosterCoverag
   return false;
 }
 
-function statBasis(
+function historyQuery(
   sport: FantasySport,
-  period: ProviderScoringWeek | undefined,
+  period: ProviderScoringWeek,
   currentWeek: number | undefined,
-): ProviderStatBasis {
-  if (
-    sport === "football" &&
-    period !== undefined &&
-    currentWeek !== undefined &&
-    period.week < currentWeek
-  ) {
-    return { type: "week", week: period.week };
-  }
-  return { type: "season" };
+): PlayerStatQuery {
+  return sport === "football" && currentWeek !== undefined && period.week < currentWeek
+    ? { type: "week", week: period.week }
+    : { type: "season" };
 }
 
 function statSeries(
   stats: typeof PlayerStats.Type,
-  basis: ProviderStatBasis,
+  query: PlayerStatQuery,
 ): Effect.Effect<
   ReadonlyArray<{ readonly statId: number; readonly value: number | null }>,
   ProviderResponseInvalid | ProviderPeriodMismatch
@@ -1658,19 +1956,26 @@ function statSeries(
     if (
       stats.entries.length !== 1 ||
       coverage === undefined ||
-      coverage.coverage_type !== basis.type
+      coverage.coverage_type !== query.type
     ) {
       return yield* responseMismatch({
         operation: "read_player_details",
         field: "player_stats",
       });
     }
-    if (basis.type === "week" && coverage.week !== basis.week) {
+    if (query.type === "week" && coverage.week !== query.week) {
       return yield* ProviderPeriodMismatch.make({
         operation: "read_player_details",
-        requested: { type: "week", week: basis.week },
+        requested: { type: "week", week: query.week },
         covered:
           coverage.week === undefined ? null : { type: "week" as const, week: coverage.week },
+      });
+    }
+    if (query.type === "date" && coverage.date !== undefined && coverage.date !== query.date) {
+      return yield* ProviderPeriodMismatch.make({
+        operation: "read_player_details",
+        requested: { type: "date", date: query.date },
+        covered: { type: "date" as const, date: coverage.date },
       });
     }
     return stats.stats.map(({ stat }) => ({
@@ -2502,6 +2807,7 @@ const StatCoverageEntry = Schema.Struct({
   coverage_type: Schema.NonEmptyString,
   week: Schema.optional(IntFromStringOrNumber),
   season: Schema.optional(IntFromStringOrNumber),
+  date: Schema.optional(Schema.String),
 });
 
 const PlayerStats = Schema.Struct({

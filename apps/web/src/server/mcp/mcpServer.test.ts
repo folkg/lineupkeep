@@ -1050,6 +1050,56 @@ function request(
   });
 }
 
+it("publishes the accepted player-statistics periods and the compact standings form before a call", async () => {
+  const response = await handle(request("tools/list", {}, "read"));
+  const body = await json(response);
+  const listed = Schema.decodeUnknownSync(
+    Schema.Struct({
+      result: Schema.Struct({
+        tools: Schema.Array(
+          Schema.Struct({
+            name: Schema.String,
+            description: Schema.String,
+            inputSchema: Schema.Record(Schema.String, Schema.Unknown),
+            outputSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+          }),
+        ),
+      }),
+    }),
+  )(body);
+  const tool = (name: string): (typeof listed.result.tools)[number] => {
+    const found = listed.result.tools.find((entry) => entry.name === name);
+    if (found === undefined) {
+      throw new Error(`Expected the tool list to include ${name}`);
+    }
+    return found;
+  };
+
+  const players = JSON.stringify(tool("get_players").inputSchema);
+  for (const shape of [
+    "season",
+    "preset",
+    "range",
+    "last_7_days",
+    "last_14_days",
+    "last_30_days",
+  ]) {
+    expect(players).toContain(shape);
+  }
+  expect(tool("get_players").description).toContain("periodSupport");
+  expect(tool("get_players").description).toContain("aggregated");
+
+  const league = tool("get_league");
+  expect(JSON.stringify(league.inputSchema)).toContain("standingsDetail");
+  expect(JSON.stringify(league.inputSchema)).toContain("compact");
+  expect(league.description).toContain("13");
+
+  const search = JSON.stringify(tool("search_players").outputSchema);
+  expect(search).toContain("percentOwnedDelta");
+  expect(search).not.toContain("percentOwnedChange");
+  expect(search).toContain("ownership week");
+});
+
 function json(response: Response): Promise<unknown> {
   return response.json();
 }

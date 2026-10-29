@@ -1123,6 +1123,40 @@ two scored-but-undeclared ids with numeric values. A provider fixture test asser
 stat ids and the empty-value set; a query test asserts every emitted stat reference resolves to a
 league scoring category and that the omitted count matches the undeclared ids.
 
+## Round-4 period live check (2026-10-29)
+
+A third gitignored harness under `.artifacts/round4/` ran the committed `YahooProvider` through
+`PublicInternet` with the real transport, using the owner's signed-in browser session over loopback.
+Evidence holds status codes, byte sizes, request shapes with player keys masked, stat ids, and the
+adapter's own refusals; no cookie, crumb, league id, team key, player name, or manager identity was
+printed or written. Reads only.
+
+Findings:
+
+- **Football publishes no daily player series.** `stats.type=date&stats.date={past date}` answers
+  HTTP 200 with **no `player_stats` node** for either sampled player, exactly as a weekly hockey read
+  does. The declared `range`/`preset` refusal for football is therefore grounded in the provider's own
+  behaviour, not an assumption from the hockey probes.
+- **Football season and completed-week bases still work.** `{kind: "season"}` returned the season
+  basis with 23 stat ids for both sampled players; `{kind: "week", week: 7}` (current week 8)
+  returned the week basis with the same ids and populated counts.
+- **Refusals name the kind, the declaration, and the remedy.** A football preset and a football range
+  both answered `provider.period_unsupported` with `declared: "unsupported"` and the remedy listing
+  `kind: "season"` and `kind: "week"` with a completed scoring week. No request was issued for either.
+- **Standings shape.** The football league publishes 10 teams and no per-category totals (points
+  league), matching the format rule.
+- **Hockey could not be checked.** The browser session's Yahoo account now lists an `nhl` game with
+  **zero teams** (its games list holds `nhl` 2022 and 2023 with no teams, and `nfl` 2026 with one), so
+  no hockey league is reachable from this session. The hockey half of the period table — daily sums,
+  the ratio-category exclusion, the 31-day cap, and the whole-season substitution — is verified
+  against captured fixtures and the live-shaped adapter tests, but a live hockey read remains open
+  until the account that owns the four hockey leagues is signed in. The same blocker covers the
+  13-team rotisserie compact standings read; the compact budget is proven by the fixture test only.
+
+The `date` key on a date-scoped `player_stats` coverage entry could not be observed for the same
+reason. The adapter requires `coverage_type: "date"` and compares the published `date` only when the
+provider includes one, so an entry without that key still verifies.
+
 ## Live review-link verification (2026-10-28)
 
 The owner's existing read-only session was reused for a second gitignored harness under

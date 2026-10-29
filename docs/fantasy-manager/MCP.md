@@ -87,16 +87,23 @@ Upstream response caps are separate from agent-output caps. The adapter may fetc
 provider's scoring type and modifiers, and the record the provider actually publishes. A
 rotisserie league publishes rank, season points, points back, and per-category rotisserie points
 but no win-loss record; the row simply omits `record`, and `record` in `get_team_summary` says so
-with a reason. Every category entry is `{ stat, status: "published", value }` or
-`{ stat, status: "not_published", detail }`: a category the provider tracks but publishes no value
-for is stated, never returned as a silent null and never flattened to zero. A provider stat id
-with no league scoring definition cannot be labelled, so it is omitted from both category arrays
-and counted in the section-level `omittedCategories` declaration. The
-`categoryTotals`/`categoryPoints` coverage states whether any value was published, so an empty
-array is never read as zero. When standings are requested, that response pages teams; otherwise it
-pages scoring categories. `get_matchups` and the summary's matchup section use the same
-`{ stat, status, value }` category entry, so a scoring-week category with no published value is
-stated the same way.
+with a reason. Every category entry is `{ stat, name, status: "published", value }` or
+`{ stat, name, status: "not_published", detail }`: the stat name is inlined so a client can read
+the number without a dictionary call, and a category the provider tracks but publishes no value for
+is stated, never returned as a silent null and never flattened to zero. A provider stat id with no
+league scoring definition cannot be labelled, so it is omitted from both category arrays and counted
+in the section-level `omittedCategories` declaration. The `categoryTotals`/`categoryPoints` coverage
+states whether any value was published, so an empty array is never read as zero.
+
+The standings group has two forms, selected by `standingsDetail`. `compact` is the default: it
+returns every team's rank, points, points back, games back, and the record the format publishes, with
+no per-category arrays, so a 13-team league arrives in one result (verified against a 13-team
+fixture inside the 12 KiB target). `detailed` adds the per-category season totals and rotisserie
+points; that form genuinely does not fit a league in one result, so it pages teams and says so in
+the section's `detailNote` instead of paging silently. The compact form omits the scoring dictionary
+because its rows carry no stat references; a request that also asks for the `scoring` group gets it
+as usual. `get_matchups` and the summary's matchup section use the same `{ stat, name, status,
+value }` category entry, so a scoring-week category with no published value is stated the same way.
 
 `get_matchups` carries per-category values and the category winner (or a tie) for category
 leagues, plus `remainingGames` for the scoring week where the provider publishes it. Its `schedule`
@@ -113,9 +120,14 @@ current-season rank, which orders `actual_rank`), `overallRank` (which orders `o
 `statValue` (the season value of the requested `stat`, present only for a `stat` sort). A client can
 therefore check the order it received without a second read. Provider ownership and started
 percentages and their changes are null only when the provider published no value for that row, and
-the field descriptions say so. Weekly rank and stat sorts are refused with the remedy because the
-provider's search payload publishes only season values for them; offering the sort would return an
-order the rows cannot explain.
+the field descriptions say so. There is exactly one ownership-change field, `percentOwnedDelta`; an
+earlier response shape carried a second, always-null `percentOwnedChange`, which is removed rather
+than published beside it. `percentOwnedDelta` is the provider's delta over its current ownership
+week, and `percentStartedChange` is its delta over its current started-percentage window (a scoring
+week in football, the provider's fantasy day in hockey); both windows are stated in the field
+descriptions. Weekly rank and stat sorts are refused with the remedy because the provider's search
+payload publishes only season values for them; offering the sort would return an order the rows
+cannot explain.
 
 `get_transactions` maps `scope: team` onto the provider's team filter. The provider has no date
 filter: `since`/`until` filter the bounded window the provider returns, `window` reports how many
@@ -152,7 +164,33 @@ Do not advertise multi-week aggregation, advanced-stat availability, diamond dat
 
 Separate roster membership reads from bounded player hydration. Live verification found no projected-statistics series in the provider's read surface: completed weeks report actual values, while the current and future weeks report zero rather than projections. Projections therefore stay typed unsupported unless a future verified read proves otherwise. See [live read endpoints](RESEARCH.md#live-yahoo-read-endpoints-2026-10-25).
 
-Actual statistics state their basis: `week` with the covered period when the provider declares a weekly player series for the sport, otherwise `season`. A client must not compare a season total against a weekly value, and the read reports the basis it used rather than relabelling one as the other. A supplied `period` is honoured only for a completed week in a sport with a declared weekly series; a provider without one refuses the argument with the reason and the remedy instead of returning season totals. Yahoo declares football weekly series; weekly hockey series are absent, although Yahoo publishes date-scoped hockey statistics (verified 2026-10-28). Player identity resolves from the roster, then selected-player hydration, then transaction history, so a player who is no longer rostered anywhere is still named by the drop side of an add/drop; a transaction player row carries its inline identity beside the reference, and its primary position is omitted where the provider does not publish one.
+Actual statistics state their basis: `week` with the covered period when the provider declares a weekly player series for the sport, `date_range` with the covered dates when the provider served a window by aggregation, otherwise `season`. A client must not compare a season total against a weekly or window value, and the read reports the basis it used rather than relabelling one as the other. Player identity resolves from the roster, then selected-player hydration, then transaction history, so a player who is no longer rostered anywhere is still named by the drop side of an add/drop; a transaction player row carries its inline identity beside the reference, and its primary position is omitted where the provider does not publish one.
+
+### Player-statistics periods
+
+`get_players` accepts exactly four period shapes for `actual_stats`: `{kind: "season"}` (the default),
+`{kind: "week", week}` with `{week}` as its short form, `{kind: "preset", preset}` with
+`last_7_days`, `last_14_days`, or `last_30_days`, and `{kind: "range", start, end}` with inclusive
+`YYYY-MM-DD` dates. The provider declares, as data beside its other capabilities, how it serves each
+kind for each sport — `native`, `aggregated`, or `unsupported` — plus the preset windows and the range
+length cap. The published tool description lists the shapes and the result repeats the declaration in
+`periodSupport`, so a client can read the boundary instead of probing it.
+
+| Provider | Sport    | season | week                          | preset      | range       | Notes                                                                                            |
+| -------- | -------- | ------ | ----------------------------- | ----------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| Yahoo    | football | native | native (completed weeks only) | unsupported | unsupported | No daily player series; a preset or range is refused with the week or season remedy              |
+| Yahoo    | hockey   | native | unsupported                   | aggregated  | aggregated  | Daily reads summed; range capped at 31 days; the window's rate categories are listed, not summed |
+
+A refusal names the period kind, whether the provider serves that kind at all, and the kinds it can
+serve instead; season totals are never substituted silently. Yahoo's hockey preset windows and
+ranges are one batched request per day for every requested player reference (25 references at most),
+run with bounded concurrency, so a 7-day window for 25 players is 7 upstream reads rather than 175.
+A range that covers the league's declared season is served as the season series instead of daily
+calls, and a range longer than the declared cap is refused with the cap and the alternative windows.
+An aggregated group states its covered dates, its `daily_sum` method, and a `notAggregated` list for
+categories the provider publishes as rates or percentages (Yahoo hockey goals against average and
+save percentage): a rate is never summed across days, and an unpublished day stays null rather than
+becoming zero.
 
 A coverage entry has one of three states. `available` means the resource was read and verified. `unsupported` means the provider or league does not establish it, and the entry, or a typed group result beside it, carries the reason. `degraded` means a dependency could not be verified while the read still returned what does not depend on it: the entry names the failed field, the affected resource lists a bounded failure, and roster and matchup reads are not erased because league settings failed. A calendar that needs the scoring-week window reports the degraded dependency instead of inventing periods. A group that declares itself unsupported never also reports a period failure; the two statements would contradict each other.
 

@@ -98,6 +98,13 @@ _Avoid_: Health score, injury penalty, availability factor
 **Disabled team**:
 A fantasy team not enrolled in scheduled lineup automation. Newly discovered teams are disabled.
 
+**Statistic period**:
+The window a player-statistics read covers: a whole season, one scoring week, a fixed recent preset window, or an explicit inclusive date range. A provider declares per sport whether it serves each kind natively, by aggregating its daily reads, or not at all, and a kind it does not serve is refused with the alternative rather than replaced by season totals.
+_Avoid_: Timeframe, split, timespan
+
+**Aggregated period**:
+A statistic period a provider serves by summing its own daily reads for every day in the window. It reports the covered dates and its method, and it never sums categories the provider publishes as rates or percentages.
+
 **Enabled team**:
 A fantasy team enrolled in scheduled lineup automation and not paused.
 

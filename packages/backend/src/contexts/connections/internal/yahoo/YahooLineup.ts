@@ -30,6 +30,7 @@ import type {
   ProviderRoster,
   ProviderRosterPlayer,
   ProviderScoringWeek,
+  ProviderPeriodSupport,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderReadFailure } from "#contexts/connections/Provider.ts";
 
@@ -40,6 +41,20 @@ type SupportedSport = (typeof supportedSports)[number];
 
 function isSupportedSport(sport: FantasySport): sport is SupportedSport {
   return supportedSports.some((supported) => supported === sport);
+}
+
+function unsupportedSportPeriods(detail: string): ProviderPeriodSupport {
+  return {
+    kinds: {
+      season: "unsupported",
+      week: "unsupported",
+      preset: "unsupported",
+      range: "unsupported",
+    },
+    presets: [],
+    maximumRangeDays: 0,
+    detail,
+  };
 }
 
 export const yahooCapabilities: ProviderCapabilities = {
@@ -53,6 +68,38 @@ export const yahooCapabilities: ProviderCapabilities = {
     sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
     providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
     weeklyStatSeriesSports: ["football"],
+  },
+  statPeriods: {
+    football: {
+      kinds: {
+        season: "native",
+        week: "native",
+        preset: "unsupported",
+        range: "unsupported",
+      },
+      presets: [],
+      maximumRangeDays: 0,
+      detail:
+        "Football publishes season and completed-week player series, and no daily player series, so a preset window or an explicit range is refused rather than guessed from weekly values.",
+    },
+    hockey: {
+      kinds: {
+        season: "native",
+        week: "unsupported",
+        preset: "aggregated",
+        range: "aggregated",
+      },
+      presets: [
+        { preset: "last_7_days", days: 7 },
+        { preset: "last_14_days", days: 14 },
+        { preset: "last_30_days", days: 30 },
+      ],
+      maximumRangeDays: 31,
+      detail:
+        "Hockey publishes season totals and one day of player statistics at a time, and no weekly player series. A preset window or an explicit range is the sum of the provider's daily reads for the days it covers; average and percentage categories are not summed and are listed as not aggregated.",
+    },
+    baseball: unsupportedSportPeriods("This provider does not serve baseball."),
+    basketball: unsupportedSportPeriods("This provider does not serve basketball."),
   },
   publishesProjections: false,
   limitations: [

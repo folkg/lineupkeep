@@ -25,6 +25,60 @@ export const QueryPeriod = Schema.Struct({
 });
 export type QueryPeriod = typeof QueryPeriod.Type;
 
+const StatPeriodWeek = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1),
+  Schema.isLessThanOrEqualTo(99),
+);
+
+const StatPeriodDate = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
+  Schema.annotate({ description: "Calendar date as `YYYY-MM-DD`." }),
+);
+
+export const StatPeriodPreset = Schema.Literals(["last_7_days", "last_14_days", "last_30_days"]);
+export type StatPeriodPreset = typeof StatPeriodPreset.Type;
+
+export const StatPeriod = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("season"),
+  }).pipe(
+    Schema.annotate({
+      description: "Season-to-date totals. This is what an omitted `period` means.",
+    }),
+  ),
+  Schema.Struct({
+    kind: Schema.optional(Schema.Literal("week")),
+    week: StatPeriodWeek,
+  }).pipe(
+    Schema.annotate({
+      description:
+        'One scoring week of the league. `week` alone is the short form of `kind: "week"`. Served only for a completed week in a sport whose provider publishes a weekly player series.',
+    }),
+  ),
+  Schema.Struct({
+    kind: Schema.Literal("preset"),
+    preset: StatPeriodPreset,
+  }).pipe(
+    Schema.annotate({
+      description:
+        "A fixed recent window ending on the provider's current fantasy day: `last_7_days`, `last_14_days`, or `last_30_days`.",
+    }),
+  ),
+  Schema.Struct({
+    kind: Schema.Literal("range"),
+    start: StatPeriodDate,
+    end: StatPeriodDate,
+  }).pipe(
+    Schema.annotate({
+      description:
+        "An explicit inclusive calendar range. A provider bounds its length and reports the cap in `periodSupport` on the result.",
+    }),
+  ),
+]);
+export type StatPeriod = typeof StatPeriod.Type;
+
+export type StatPeriodKind = "season" | "week" | "preset" | "range";
+
 export const PlayerRef = Schema.String.pipe(
   Schema.check(Schema.isMinLength(1), Schema.isMaxLength(2_048)),
   Schema.brand("PlayerRef"),

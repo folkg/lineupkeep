@@ -3,6 +3,7 @@ import type { Tracer } from "effect";
 import {
   Array,
   Cause,
+  DateTime,
   Effect,
   Exit,
   Layer,
@@ -10,11 +11,13 @@ import {
   Schema,
   Tracer as EffectTracer,
 } from "effect";
+import { TestClock } from "effect/testing";
 
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import {
   ProviderOperationUnsupported,
   ProviderPeriodMismatch,
+  ProviderPeriodUnsupported,
   ProviderRequestFailed,
   ProviderResponseInvalid,
   ProviderReviewLinkInvalid,
@@ -30,6 +33,7 @@ import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/Prov
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 import type { PublicInternetOptions } from "#runtime/PublicInternet.ts";
 
+import { yahooCapabilities } from "./YahooLineup.ts";
 import {
   yahooEmptyRoster,
   yahooNflFreeAgents,
@@ -73,6 +77,7 @@ import {
   yahooNhlMatchupsWithGames,
   yahooNhlRotoStandings,
 } from "./YahooPayloadFixturesTest.ts";
+import { yahooNhlDatePlayerDetails } from "./YahooPayloadFixturesTest.ts";
 import { yahooProvider } from "./YahooProvider.ts";
 
 it.effect("validates a session with one exact read request", () => {
@@ -1281,8 +1286,10 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
       providerLeagueKey: "466.l.4000",
       providerPlayerKeys: ["466.p.20001"],
       sport: "football",
-      period: { week: 6 },
+      period: { kind: "week", week: 6 },
       currentPeriod: 7,
+      seasonStart: "2026-09-03",
+      seasonEnd: "2026-12-28",
     });
 
     assert.strictEqual(
@@ -1299,6 +1306,7 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
         rosterStatus: "rostered",
         actual: {
           basis: { type: "week", week: 6 },
+          notAggregated: [],
           stats: [
             { statId: 4, value: 287 },
             { statId: 9, value: 2 },
@@ -1311,36 +1319,37 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("reads season statistics on a season basis when no completed week is available", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
-  return Effect.gen(function* () {
-    const provider = yield* testProvider;
+it.effect(
+  "refuses a week the provider has not completed instead of substituting season totals",
+  () => {
+    const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
 
-    const details = yield* provider.readPlayerDetails({
-      ...sessionInput,
-      providerLeagueKey: "466.l.4000",
-      providerPlayerKeys: ["466.p.20001"],
-      sport: "football",
-      period: { week: 6 },
-      currentPeriod: 6,
-    });
+      const error = yield* Effect.flip(
+        provider.readPlayerDetails({
+          ...sessionInput,
+          providerLeagueKey: "466.l.4000",
+          providerPlayerKeys: ["466.p.20001"],
+          sport: "football",
+          period: { kind: "week", week: 6 },
+          currentPeriod: 6,
+          seasonStart: "2026-09-03",
+          seasonEnd: "2026-12-28",
+        }),
+      );
 
-    assert.strictEqual(
-      internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=season",
-    );
-    assert.deepStrictEqual(details[0]?.actual, {
-      basis: { type: "season" },
-      stats: [
-        { statId: 4, value: 1640 },
-        { statId: 9, value: 11 },
-        { statId: 79, value: null },
-      ],
-    });
-    assert.strictEqual(details[0]?.rosterStatus, "free_agent");
-    assert.strictEqual(details[0]?.projected, undefined);
-  }).pipe(Effect.provide(yahooLayer(internet)));
-});
+      assert.isTrue(Schema.is(ProviderPeriodUnsupported)(error));
+      if (Schema.is(ProviderPeriodUnsupported)(error)) {
+        assert.strictEqual(error.kind, "week");
+        assert.strictEqual(error.declared, "native");
+        assert.include(error.reason, "only for a completed scoring week");
+        assert.include(error.remedy, '`kind: "season"`');
+      }
+      assert.deepStrictEqual(internet.calls, []);
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
 
 it.effect("reads a bounded player history in one request per period", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
@@ -1369,32 +1378,26 @@ it.effect("reads a bounded player history in one request per period", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("uses the season basis when the current week is unknown", () => {
+it.effect("refuses a week whose completion cannot be verified", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    const details = yield* provider.readPlayerDetails({
-      ...sessionInput,
-      providerLeagueKey: "466.l.4000",
-      providerPlayerKeys: ["466.p.20001"],
-      sport: "football",
-      period: { week: 6 },
-      currentPeriod: undefined,
-    });
-
-    assert.strictEqual(
-      internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001;out=stats,ownership?format=json&stats.type=season",
+    const error = yield* Effect.flip(
+      provider.readPlayerDetails({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerPlayerKeys: ["466.p.20001"],
+        sport: "football",
+        period: { kind: "week", week: 6 },
+        currentPeriod: undefined,
+        seasonStart: "2026-09-03",
+        seasonEnd: "2026-12-28",
+      }),
     );
-    assert.deepStrictEqual(details[0]?.actual, {
-      basis: { type: "season" },
-      stats: [
-        { statId: 4, value: 1640 },
-        { statId: 9, value: 11 },
-        { statId: 79, value: null },
-      ],
-    });
+
+    assert.instanceOf(error, ProviderPeriodUnsupported);
+    assert.deepStrictEqual(internet.calls, []);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -1408,8 +1411,10 @@ it.effect("reads season statistics for hockey instead of requesting a weekly ser
       providerLeagueKey: "466.l.4002",
       providerPlayerKeys: ["466.p.30001"],
       sport: "hockey",
-      period: undefined,
+      period: { kind: "season" },
       currentPeriod: 7,
+      seasonStart: "2026-10-01",
+      seasonEnd: "2027-04-01",
     });
 
     assert.strictEqual(
@@ -1418,6 +1423,7 @@ it.effect("reads season statistics for hockey instead of requesting a weekly ser
     );
     assert.deepStrictEqual(details[0]?.actual, {
       basis: { type: "season" },
+      notAggregated: [],
       stats: [
         { statId: 11, value: 4 },
         { statId: 12, value: 6 },
@@ -1438,14 +1444,280 @@ it.effect("reports no actual statistics when the provider omits the series", () 
       providerLeagueKey: "466.l.4002",
       providerPlayerKeys: ["466.p.30001"],
       sport: "hockey",
-      period: undefined,
+      period: { kind: "season" },
       currentPeriod: undefined,
+      seasonStart: "2026-10-01",
+      seasonEnd: "2027-04-01",
     });
 
     assert.strictEqual(details[0]?.actual, undefined);
     assert.strictEqual(details[0]?.name, "Synthetic Skater");
     assert.strictEqual(details[0]?.projected, undefined);
   }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+const hockeySeasonWindow = { seasonStart: "2026-10-01", seasonEnd: "2027-04-01" };
+
+const hockeyDailyFixture = (date: string): ReturnType<typeof yahooNhlDatePlayerDetails> =>
+  yahooNhlDatePlayerDetails(date, [
+    {
+      playerKey: "466.p.30001",
+      name: "Synthetic Skater",
+      stats:
+        date === "2026-10-20" || date === "2026-10-22"
+          ? [
+              { statId: 1, value: "2" },
+              { statId: 14, value: "5" },
+              { statId: 22, value: "1" },
+              { statId: 23, value: "2.5" },
+              { statId: 26, value: ".900" },
+            ]
+          : [
+              { statId: 1, value: "-" },
+              { statId: 14, value: "-" },
+              { statId: 22, value: "-" },
+              { statId: 23, value: "-" },
+              { statId: 26, value: "-" },
+            ],
+    },
+    {
+      playerKey: "466.p.30002",
+      name: "Synthetic Centre",
+      stats: [
+        { statId: 1, value: "0" },
+        { statId: 14, value: "-" },
+        { statId: 22, value: "-" },
+        { statId: 23, value: "-" },
+        { statId: 26, value: "-" },
+      ],
+    },
+  ]);
+
+it.effect("serves a hockey preset window as the sum of batched daily reads", () => {
+  const internet = recordingInternet((request) =>
+    jsonResponse(hockeyDailyFixture(request.url.searchParams.get("stats.date") ?? "2026-10-26")),
+  );
+  return Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00Z")));
+    const provider = yield* testProvider;
+
+    const details = yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+      providerPlayerKeys: ["466.p.30001", "466.p.30002"],
+      sport: "hockey",
+      period: { kind: "preset", preset: "last_7_days" },
+      currentPeriod: 4,
+      ...hockeySeasonWindow,
+    });
+
+    assert.deepStrictEqual(
+      internet.calls.map((call) => call.url.searchParams.get("stats.date")),
+      [
+        "2026-10-20",
+        "2026-10-21",
+        "2026-10-22",
+        "2026-10-23",
+        "2026-10-24",
+        "2026-10-25",
+        "2026-10-26",
+      ],
+    );
+    assert.isTrue(
+      internet.calls.every((call) => call.url.searchParams.get("stats.type") === "date"),
+    );
+    assert.isTrue(
+      internet.calls.every((call) =>
+        call.url.pathname.includes("player_keys=466.p.30001,466.p.30002"),
+      ),
+      "each day batches every requested player reference into one request",
+    );
+    assert.isTrue(internet.calls.every((call) => call.url.searchParams.get("format") === "json"));
+
+    const skater = details.find((player) => player.providerPlayerKey === "466.p.30001");
+    assert.deepStrictEqual(skater?.actual, {
+      basis: { type: "date_range", start: "2026-10-20", end: "2026-10-26", days: 7 },
+      stats: [
+        { statId: 1, value: 4 },
+        { statId: 14, value: 10 },
+        { statId: 22, value: 2 },
+      ],
+      notAggregated: [
+        {
+          statId: 23,
+          detail:
+            "A rate or percentage is not summed across days; the provider publishes this category only as a season total or a single date.",
+        },
+        {
+          statId: 26,
+          detail:
+            "A rate or percentage is not summed across days; the provider publishes this category only as a season total or a single date.",
+        },
+      ],
+    });
+    assert.strictEqual(skater?.name, "Synthetic Skater");
+
+    const centre = details.find((player) => player.providerPlayerKey === "466.p.30002");
+    assert.deepStrictEqual(
+      centre?.actual?.stats.find((stat) => stat.statId === 1),
+      { statId: 1, value: 0 },
+      "a published zero is summed as zero, and a day without a game adds nothing",
+    );
+    assert.strictEqual(
+      centre?.actual?.stats.find((stat) => stat.statId === 14)?.value,
+      null,
+      "a category the player never recorded stays null rather than becoming zero",
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("serves a range that covers the declared season as the season series", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlSeasonPlayerDetails));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const details = yield* provider.readPlayerDetails({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+      providerPlayerKeys: ["466.p.30001"],
+      sport: "hockey",
+      period: { kind: "range", start: "2026-09-01", end: "2027-04-30" },
+      currentPeriod: 4,
+      ...hockeySeasonWindow,
+    });
+
+    assert.strictEqual(internet.calls.length, 1);
+    assert.include(internet.calls[0]?.url.href, "stats.type=season");
+    assert.deepStrictEqual(details[0]?.actual?.basis, { type: "season" });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses a range longer than the declared cap and names the window it can serve", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlSeasonPlayerDetails));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readPlayerDetails({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4002",
+        providerPlayerKeys: ["466.p.30001"],
+        sport: "hockey",
+        period: { kind: "range", start: "2026-10-11", end: "2026-11-11" },
+        currentPeriod: 4,
+        ...hockeySeasonWindow,
+      }),
+    );
+
+    assert.isTrue(Schema.is(ProviderPeriodUnsupported)(error));
+    if (Schema.is(ProviderPeriodUnsupported)(error)) {
+      assert.strictEqual(error.kind, "range");
+      assert.strictEqual(error.declared, "aggregated");
+      assert.include(error.reason, "32 days");
+      assert.include(error.reason, "at most 31 days");
+      assert.include(error.remedy, "at most 31 days");
+      assert.include(error.remedy, '`kind: "preset"`');
+    }
+    assert.deepStrictEqual(internet.calls, []);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("declares each period kind's support as the capability table says", () => {
+  const anyBody = (): typeof yahooNflSeasonPlayerDetails => yahooNflSeasonPlayerDetails;
+  const cases = [
+    {
+      sport: "football" as const,
+      period: { kind: "season" as const },
+      sportWindow: { seasonStart: "2026-09-03", seasonEnd: "2026-12-28" },
+      respond: () => yahooNflSeasonPlayerDetails,
+    },
+    {
+      sport: "football" as const,
+      period: { kind: "week" as const, week: 6 },
+      sportWindow: { seasonStart: "2026-09-03", seasonEnd: "2026-12-28" },
+      respond: () => yahooNflWeekPlayerDetails,
+    },
+    {
+      sport: "football" as const,
+      period: { kind: "preset" as const, preset: "last_7_days" as const },
+      sportWindow: { seasonStart: "2026-09-03", seasonEnd: "2026-12-28" },
+      respond: anyBody,
+    },
+    {
+      sport: "football" as const,
+      period: { kind: "range" as const, start: "2026-10-20", end: "2026-10-26" },
+      sportWindow: { seasonStart: "2026-09-03", seasonEnd: "2026-12-28" },
+      respond: anyBody,
+    },
+    {
+      sport: "hockey" as const,
+      period: { kind: "season" as const },
+      sportWindow: hockeySeasonWindow,
+      respond: () => yahooNhlSeasonPlayerDetails,
+    },
+    {
+      sport: "hockey" as const,
+      period: { kind: "week" as const, week: 4 },
+      sportWindow: hockeySeasonWindow,
+      respond: anyBody,
+    },
+    {
+      sport: "hockey" as const,
+      period: { kind: "preset" as const, preset: "last_14_days" as const },
+      sportWindow: hockeySeasonWindow,
+      respond: (url: URL) => hockeyDailyFixture(url.searchParams.get("stats.date") ?? ""),
+    },
+    {
+      sport: "hockey" as const,
+      period: { kind: "range" as const, start: "2026-10-20", end: "2026-10-26" },
+      sportWindow: hockeySeasonWindow,
+      respond: (url: URL) => hockeyDailyFixture(url.searchParams.get("stats.date") ?? ""),
+    },
+  ];
+
+  return Effect.gen(function* () {
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00Z")));
+    for (const entry of cases) {
+      const declared = yahooCapabilities.statPeriods[entry.sport].kinds[entry.period.kind];
+      const internet = recordingInternet((request) => jsonResponse(entry.respond(request.url)));
+      const attempt = yield* Effect.gen(function* () {
+        const provider = yield* testProvider;
+        return yield* Effect.result(
+          provider.readPlayerDetails({
+            ...sessionInput,
+            providerLeagueKey: entry.sport === "hockey" ? "466.l.4002" : "466.l.4000",
+            providerPlayerKeys: [entry.sport === "hockey" ? "466.p.30001" : "466.p.20001"],
+            sport: entry.sport,
+            period: entry.period,
+            currentPeriod: 7,
+            ...entry.sportWindow,
+          }),
+        );
+      }).pipe(Effect.provide(yahooLayer(internet)));
+      const label = `${entry.sport} ${entry.period.kind}`;
+      if (declared === "unsupported") {
+        assert.strictEqual(attempt._tag, "Failure", label);
+        assert.isTrue(
+          attempt._tag === "Failure" && Schema.is(ProviderPeriodUnsupported)(attempt.failure),
+          label,
+        );
+        assert.deepStrictEqual(internet.calls, [], label);
+        continue;
+      }
+      assert.strictEqual(attempt._tag, "Success", label);
+      if (attempt._tag !== "Success") {
+        continue;
+      }
+      const basis = attempt.success[0]?.actual?.basis;
+      if (declared === "native") {
+        assert.strictEqual(internet.calls.length, 1, label);
+        assert.notStrictEqual(basis?.type, "date_range", label);
+      } else {
+        assert.isAbove(internet.calls.length, 1, label);
+        assert.strictEqual(basis?.type, "date_range", label);
+      }
+    }
+  });
 });
 
 it.effect("reads a declared games limit and the team's per-position allowance", () => {

@@ -102,6 +102,15 @@ export const TransactionReviewsLive = Layer.effect(
                   message: "The provider did not return the requested period.",
                 },
               });
+            case "provider.period_unsupported":
+              return Effect.succeed<ReadOutcome<A>>({
+                _tag: "failed",
+                failure: {
+                  code: "period_unsupported",
+                  resource,
+                  message: `${error.reason} ${error.remedy}`,
+                },
+              });
           }
         },
       });

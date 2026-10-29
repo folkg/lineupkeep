@@ -16,6 +16,8 @@ import {
   QueryPeriod,
   QueryStatus,
   QueryTeam,
+  StatPeriod,
+  StatPeriodPreset,
   StatRef,
   TeamListRow,
 } from "./QueryValues.ts";
@@ -88,12 +90,23 @@ export type CalendarData = typeof CalendarData.Type;
 export const CalendarResult = Schema.Union([CalendarData, NarrowingResult]);
 export type CalendarResult = typeof CalendarResult.Type;
 
+export const StandingDetail = Schema.Literals(["compact", "detailed"]);
+export type StandingDetail = typeof StandingDetail.Type;
+
 export const LeagueGroup = Schema.Literals(["overview", "scoring", "roster_rules", "standings"]);
 export type LeagueGroup = typeof LeagueGroup.Type;
 
 export const GetLeagueInput = Schema.Struct({
   team: TeamId,
   groups: Schema.optional(Schema.Array(LeagueGroup)),
+  standingsDetail: Schema.optional(
+    StandingDetail.pipe(
+      Schema.annotate({
+        description:
+          "Form of the `standings` group. `compact`, the default, returns every team's rank, points, and record without per-category arrays, so a 13-team league fits in one result. `detailed` adds per-category season totals and rotisserie points and therefore pages teams; request it with the `standings` group alone for the most rows per page.",
+      }),
+    ),
+  ),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
 });
@@ -143,11 +156,18 @@ const ScoringCategory = Schema.Struct({
 export const CategoryValue = Schema.Union([
   Schema.Struct({
     stat: StatRef,
+    name: Schema.NonEmptyString.pipe(
+      Schema.annotate({
+        description:
+          "The league scoring category's name, inlined so the number needs no dictionary read.",
+      }),
+    ),
     status: Schema.Literal("published"),
     value: Schema.Finite,
   }),
   Schema.Struct({
     stat: StatRef,
+    name: Schema.NonEmptyString,
     status: Schema.Literal("not_published"),
     detail: Schema.String,
   }),
@@ -189,17 +209,28 @@ export const StandingRow = Schema.Struct({
       value: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     }),
   ),
-  categories: Schema.Array(CategoryValue),
-  categoryPoints: Schema.Array(CategoryValue),
+  categories: Schema.optional(Schema.Array(CategoryValue)).pipe(
+    Schema.annotate({
+      description:
+        "Per-category season totals. Present only with `standingsDetail: detailed`; the compact form omits them so a whole league fits in one result.",
+    }),
+  ),
+  categoryPoints: Schema.optional(Schema.Array(CategoryValue)).pipe(
+    Schema.annotate({
+      description: "Per-category rotisserie points. Present only with `standingsDetail: detailed`.",
+    }),
+  ),
 });
 export type StandingRow = typeof StandingRow.Type;
 
 const StandingsData = Schema.Struct({
   status: Schema.Literal("available"),
   format: LeagueFormat,
-  categoryTotals: StandingsCoverage,
-  categoryPoints: StandingsCoverage,
-  omittedCategories: OmittedCategories,
+  presentation: StandingDetail,
+  detailNote: Schema.NonEmptyString,
+  categoryTotals: Schema.optional(StandingsCoverage),
+  categoryPoints: Schema.optional(StandingsCoverage),
+  omittedCategories: Schema.optional(OmittedCategories),
   teams: Schema.Array(StandingRow),
 });
 
@@ -208,7 +239,12 @@ export const LeagueData = Schema.Struct({
   team: QueryTeam,
   overview: Schema.optional(LeagueOverview),
   rosterRules: Schema.optional(RosterRules),
-  scoring: Schema.Array(ScoringCategory),
+  scoring: Schema.optional(Schema.Array(ScoringCategory)).pipe(
+    Schema.annotate({
+      description:
+        "League scoring categories in order. Present when the `scoring` group is requested and whenever standings rows carry stat references, which the compact standings form does not.",
+    }),
+  ),
   standings: Schema.optional(
     Schema.Union([
       StandingsData,
@@ -361,7 +397,7 @@ const SearchPlayer = Schema.Struct({
   percentOwnedDelta: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Change in percent owned over the provider's reporting window. Null means the provider published no change for this row.",
+        "Change in percent owned over the provider's current reporting window, which for this provider is its ownership week rather than the fantasy day. This is the only ownership-change field; null means the provider published no change for this row.",
     }),
   ),
   percentStarted: Schema.NullOr(Schema.Finite).pipe(
@@ -373,7 +409,7 @@ const SearchPlayer = Schema.Struct({
   percentStartedChange: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Change in percent started over the provider's reporting window. Null means the provider published no change for this row.",
+        "Change in percent started over the provider's current started-percentage window (a scoring week in football, the provider's fantasy day in hockey). Null means the provider published no change for this row.",
     }),
   ),
   actualRank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).pipe(
@@ -415,10 +451,10 @@ export const GetPlayersInput = Schema.Struct({
     Schema.check(Schema.isMinLength(1), Schema.isMaxLength(25)),
   ),
   period: Schema.optional(
-    QueryPeriod.pipe(
+    StatPeriod.pipe(
       Schema.annotate({
         description:
-          "Selects a completed scoring week for `actual_stats` where the provider publishes a weekly player series (football). A provider without a weekly series refuses a supplied period with the remedy instead of returning season totals; omit it for season totals.",
+          'Period the `actual_stats` group covers. Accepted shapes: `{kind: "season"}` (the default when omitted), `{kind: "week", week}` or its short form `{week}`, `{kind: "preset", preset}` with `last_7_days`, `last_14_days`, or `last_30_days`, and `{kind: "range", start, end}` with inclusive `YYYY-MM-DD` dates. Each provider declares which kinds it serves natively, by aggregating daily reads, or not at all, and the result repeats that declaration in `periodSupport`; an unsupported kind is refused naming the kind and the alternative instead of substituting season totals.',
       }),
     ),
   ),
@@ -426,7 +462,7 @@ export const GetPlayersInput = Schema.Struct({
     Schema.Array(PlayerGroup).pipe(
       Schema.annotate({
         description:
-          "Groups to hydrate. `actual_stats` states the basis the provider declares: weekly where it publishes weekly series, otherwise season totals. `projections` is available only where the provider publishes them; otherwise the group returns an unsupported status naming that limitation.",
+          "Groups to hydrate. `actual_stats` states the basis the provider declares: a completed week, season totals, or a daily-summed window with its covered dates. `projections` is available only where the provider publishes them; otherwise the group returns an unsupported status naming that limitation.",
       }),
     ),
   ),
@@ -440,18 +476,62 @@ const StatValue = Schema.Struct({
   value: Schema.NullOr(Schema.Finite),
 });
 
+const StatPeriodRange = Schema.Struct({
+  start: Schema.NonEmptyString,
+  end: Schema.NonEmptyString,
+  days: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+});
+
+const StatPeriodAggregation = Schema.Struct({
+  method: Schema.Literal("daily_sum"),
+  detail: Schema.NonEmptyString,
+});
+
 const StatGroup = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("available"),
-    basis: Schema.Literals(["week", "season"]),
+    basis: Schema.Literals(["week", "season", "date_range"]),
     period: Schema.optional(QueryPeriod),
+    range: Schema.optional(StatPeriodRange),
+    aggregation: Schema.optional(StatPeriodAggregation),
     stats: Schema.Array(StatValue),
+    notAggregated: Schema.Array(
+      Schema.Struct({ stat: StatRef, detail: Schema.NonEmptyString }),
+    ).pipe(
+      Schema.annotate({
+        description:
+          "Categories the provider publishes but that cannot be summed across days, such as averages and percentages. Empty for a provider-native week or season basis.",
+      }),
+    ),
   }),
   Schema.Struct({
     status: Schema.Literal("unsupported"),
     detail: Schema.String,
   }),
 ]);
+
+const StatPeriodSupport = Schema.Struct({
+  sport: FantasySport,
+  kinds: Schema.Struct({
+    season: Schema.Literals(["native", "aggregated", "unsupported"]),
+    week: Schema.Literals(["native", "aggregated", "unsupported"]),
+    preset: Schema.Literals(["native", "aggregated", "unsupported"]),
+    range: Schema.Literals(["native", "aggregated", "unsupported"]),
+  }).pipe(
+    Schema.annotate({
+      description:
+        "How this provider serves each period kind for this sport: `native` is one provider series, `aggregated` is a sum of provider reads, and `unsupported` is refused with a remedy.",
+    }),
+  ),
+  presets: Schema.Array(
+    Schema.Struct({
+      preset: StatPeriodPreset,
+      days: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    }),
+  ),
+  maximumRangeDays: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  detail: Schema.NonEmptyString,
+});
 
 const ScoringContext = Schema.Union([
   Schema.Struct({
@@ -504,7 +584,8 @@ const StatDefinition = Schema.Struct({
 export const PlayersData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
-  period: Schema.optional(QueryPeriod),
+  period: Schema.optional(StatPeriod),
+  periodSupport: StatPeriodSupport,
   dictionary: Schema.Array(StatDefinition),
   players: Schema.Array(PlayerDetail),
   coverage: Schema.Array(QueryCoverage),

@@ -140,9 +140,9 @@ it.effect("returns league scoring, roster rules, and explicit standings coverage
       benchCount: 6,
       reserveCount: 0,
     });
-    assert.strictEqual(league.scoring.length, 2);
-    assert.strictEqual(Array.getUnsafe(league.scoring, 0).points, "0.04");
-    assert.strictEqual(Array.getUnsafe(league.scoring, 1).points, null);
+    assert.strictEqual(league.scoring?.length, 2);
+    assert.strictEqual(Array.getUnsafe(league.scoring ?? [], 0).points, "0.04");
+    assert.strictEqual(Array.getUnsafe(league.scoring ?? [], 1).points, null);
     assert.strictEqual(league.standings?.status, "unsupported");
     assert.isTrue(
       league.coverage.some(
@@ -442,8 +442,8 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
     assert.strictEqual(hydratedPlayer.identity?.name, "Free Agent");
     assert.strictEqual(hydratedPlayer.actualStats?.status, "available");
     if (hydratedPlayer.actualStats?.status === "available") {
-      assert.strictEqual(hydratedPlayer.actualStats.basis, "week");
-      assert.deepStrictEqual(hydratedPlayer.actualStats.period, { week: 3 });
+      assert.strictEqual(hydratedPlayer.actualStats.basis, "season");
+      assert.strictEqual(hydratedPlayer.actualStats.period, undefined);
       assert.strictEqual(Array.getUnsafe(hydratedPlayer.actualStats.stats, 0).value, 0);
     }
     assert.deepStrictEqual(hydratedPlayer.projections, {
@@ -451,7 +451,7 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
       detail: "This provider does not expose projected player statistics.",
     });
     assert.deepStrictEqual(hydrated.failures, []);
-    assert.deepStrictEqual(hydrated.period, { week: 3 });
+    assert.deepStrictEqual(hydrated.period, { kind: "season" });
     assert.strictEqual(hydrated.dictionary.length, 1);
     assert.strictEqual(Array.getUnsafe(hydrated.dictionary, 0).name, "Passing Yards");
   }).pipe(Effect.provide(QueriesTestLayer)),
@@ -483,7 +483,11 @@ it.effect(
             displayPosition: "QB",
             eligiblePositions: ["QB"],
             rosterStatus: "rostered",
-            actual: { basis: { type: "season" }, stats: [{ statId: 11, value: 4 }] },
+            actual: {
+              basis: { type: "season" },
+              stats: [{ statId: 11, value: 4 }],
+              notAggregated: [],
+            },
             projected: undefined,
           },
         ],
@@ -513,7 +517,11 @@ it.effect(
         assert.strictEqual(Array.getUnsafe(player.actualStats.stats, 0).value, 4);
       }
       assert.strictEqual(player.projections?.status, "unsupported");
-      assert.strictEqual(hydrated.period, undefined);
+      assert.deepStrictEqual(hydrated.period, { kind: "season" });
+      assert.strictEqual(
+        player.actualStats?.status === "available" && player.actualStats.notAggregated.length,
+        0,
+      );
       assert.deepStrictEqual(hydrated.failures, []);
       assert.isTrue(
         hydrated.coverage.some(
@@ -563,8 +571,10 @@ it.effect("refuses a period the provider cannot honour instead of ignoring it", 
     );
     assert.strictEqual(noWeeklySeries._tag, "query.selection_invalid");
     if (noWeeklySeries._tag === "query.selection_invalid") {
-      assert.include(noWeeklySeries.detail, "no weekly player statistics for hockey");
-      assert.include(noWeeklySeries.detail, "Omit `period`");
+      assert.include(noWeeklySeries.detail, "kind `week`");
+      assert.include(noWeeklySeries.detail, "no weekly player series");
+      assert.include(noWeeklySeries.detail, "last_7_days");
+      assert.include(noWeeklySeries.detail, "at most 31 days");
     }
 
     yield* fake.setLeague(leagueFixture);
@@ -588,10 +598,100 @@ it.effect("refuses a period the provider cannot honour instead of ignoring it", 
     );
     assert.strictEqual(currentWeek._tag, "query.selection_invalid");
     if (currentWeek._tag === "query.selection_invalid") {
+      assert.include(currentWeek.detail, "kind `week`");
       assert.include(currentWeek.detail, "week 3 is the current or upcoming week");
-      assert.include(currentWeek.detail, "completed week");
+      assert.include(currentWeek.detail, "completed scoring week");
     }
   }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect(
+  "serves a hockey preset window through the provider and states its aggregation basis",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
+        league: { ...hockeyLeagueFixture, providerLeagueKey: "465.l.2000" },
+        roster: rosterFixture({
+          count: 1,
+          coverage: { type: "date", date: "2026-10-26" },
+          providerTeamKey: "465.l.2000.t.9",
+          providerLeagueKey: "465.l.2000",
+        }),
+        playerDetails: [
+          {
+            providerPlayerKey: "461.p.10001",
+            name: "Synthetic Skater",
+            primaryPosition: "C",
+            displayPosition: "C",
+            eligiblePositions: ["C"],
+            rosterStatus: "rostered",
+            actual: {
+              basis: { type: "season" },
+              stats: [{ statId: 11, value: 4 }],
+              notAggregated: [],
+            },
+            projected: undefined,
+          },
+        ],
+      });
+      const teamId = Array.getUnsafe(seeded, 0).id;
+      const roster = yield* queries.getRosters(owner, { team: teamId });
+      assert.strictEqual(roster.status, "ok");
+      if (roster.status !== "ok") {
+        return;
+      }
+
+      const hydrated = yield* queries.getPlayers(owner, {
+        team: teamId,
+        players: [Array.getUnsafe(roster.players, 0).player],
+        period: { kind: "preset", preset: "last_7_days" },
+        groups: ["actual_stats"],
+      });
+
+      assert.strictEqual(hydrated.status, "ok");
+      if (hydrated.status !== "ok") {
+        return;
+      }
+      assert.deepStrictEqual(hydrated.period, { kind: "preset", preset: "last_7_days" });
+      assert.deepStrictEqual(hydrated.periodSupport.kinds, {
+        season: "native",
+        week: "unsupported",
+        preset: "aggregated",
+        range: "aggregated",
+      });
+      assert.deepStrictEqual(hydrated.periodSupport.presets, [
+        { preset: "last_7_days", days: 7 },
+        { preset: "last_14_days", days: 14 },
+        { preset: "last_30_days", days: 30 },
+      ]);
+      assert.strictEqual(hydrated.periodSupport.maximumRangeDays, 31);
+      assert.strictEqual(hydrated.periodSupport.sport, "hockey");
+
+      const stats = Array.getUnsafe(hydrated.players, 0).actualStats;
+      assert.strictEqual(stats?.status, "available");
+      if (stats?.status !== "available") {
+        return;
+      }
+      assert.strictEqual(stats.basis, "date_range");
+      assert.deepStrictEqual(stats.range, {
+        start: "2026-10-20",
+        end: "2026-10-26",
+        days: 7,
+      });
+      assert.strictEqual(stats.aggregation?.method, "daily_sum");
+      assert.include(stats.aggregation?.detail, "7 provider daily reads");
+      assert.include(stats.aggregation?.detail, "notAggregated");
+      assert.isTrue(
+        hydrated.coverage.some(
+          (entry) =>
+            entry.resource === "players" &&
+            entry.detail ===
+              "Actual statistics use the date_range basis: 7 daily reads summed from 2026-10-20 to 2026-10-26.",
+        ),
+      );
+    }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
 it.effect("never pairs an unsupported stat group with a period failure", () =>
@@ -1022,6 +1122,109 @@ it.effect("marks a drop link unsupported when the player is not on the roster", 
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+const thirteenTeamStandings = (providerLeagueKey: string): ProviderStandings => ({
+  providerLeagueKey,
+  teams: globalThis.Array.from({ length: 13 }, (_, index) => ({
+    providerTeamKey: `${providerLeagueKey}.t.${String(index + 1)}`,
+    name: `Synthetic Fantasy Squad ${String(index + 1)}`,
+    rank: index + 1,
+    playoffSeed: null,
+    record: undefined,
+    gamesBack: null,
+    pointsBack: index,
+    points: 120 - index,
+    pointsFor: 120 - index,
+    pointsAgainst: null,
+    streak: undefined,
+    categoryTotals: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26].map((statId) => ({
+      statId,
+      value: 100 - index,
+    })),
+    categoryPoints: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26].map((statId) => ({
+      statId,
+      value: 13 - index,
+    })),
+  })),
+});
+
+it.effect("returns a thirteen-team compact standings table in one result", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Alpha", "nhl")], {
+      league: { ...rotoLeagueFixture, providerLeagueKey: "465.l.2000" },
+      roster: rosterFixture({
+        count: 1,
+        coverage: { type: "date", date: "2026-10-26" },
+        providerTeamKey: "465.l.2000.t.1",
+        providerLeagueKey: "465.l.2000",
+      }),
+    });
+    yield* fake.setStandings(thirteenTeamStandings("465.l.2000"));
+
+    const compact = yield* queries.getLeague(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["standings"],
+    });
+
+    assert.strictEqual(compact.status, "ok");
+    if (compact.status !== "ok" || compact.standings?.status !== "available") {
+      assert.fail("expected available compact standings");
+      return;
+    }
+    assert.strictEqual(compact.standings.presentation, "compact");
+    assert.strictEqual(compact.standings.teams.length, 13);
+    assert.strictEqual(compact.page.complete, true);
+    assert.isUndefined(compact.page.next);
+    assert.deepStrictEqual(
+      compact.standings.teams.map((row) => row.rank),
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+    );
+    assert.isTrue(
+      compact.standings.teams.every(
+        (row) =>
+          row.categories === undefined &&
+          row.categoryPoints === undefined &&
+          row.points !== null &&
+          row.pointsBack !== null,
+      ),
+      "the compact form carries rank, points, and record only",
+    );
+    assert.isTrue(compact.standings.teams.some((row) => row.current));
+
+    const detailed = yield* queries.getLeague(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["standings"],
+      standingsDetail: "detailed",
+    });
+    assert.strictEqual(detailed.status, "ok");
+    if (detailed.status !== "ok" || detailed.standings?.status !== "available") {
+      assert.fail("expected available detailed standings");
+      return;
+    }
+    assert.strictEqual(detailed.standings.presentation, "detailed");
+    assert.strictEqual(detailed.page.complete, false);
+    assert.isString(detailed.page.next);
+    assert.isAbove(detailed.standings.teams.length, 0);
+    assert.isBelow(detailed.standings.teams.length, 13);
+
+    const mismatched = yield* Effect.flip(
+      queries.getLeague(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+        groups: ["overview"],
+        standingsDetail: "compact",
+      }),
+    );
+    assert.strictEqual(mismatched._tag, "query.selection_invalid");
+    if (mismatched._tag === "query.selection_invalid") {
+      assert.include(
+        mismatched.detail,
+        "`standingsDetail` applies only when the `standings` group",
+      );
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("reads standings with category totals and marks the linked team", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -1070,6 +1273,7 @@ it.effect("reads standings with category totals and marks the linked team", () =
     const league = yield* queries.getLeague(owner, {
       team: teamId,
       groups: ["standings"],
+      standingsDetail: "detailed",
     });
 
     assert.strictEqual(league.status, "ok");
@@ -1078,6 +1282,7 @@ it.effect("reads standings with category totals and marks the linked team", () =
       return;
     }
     assert.strictEqual(league.standings.format, "head_to_head_points");
+    assert.strictEqual(league.standings.presentation, "detailed");
     assert.strictEqual(league.standings.teams.length, 2);
     assert.isTrue(Array.getUnsafe(league.standings.teams, 0).current);
     assert.isFalse(Array.getUnsafe(league.standings.teams, 1).current);
@@ -1088,9 +1293,9 @@ it.effect("reads standings with category totals and marks the linked team", () =
       ties: 0,
       percentage: 0.727,
     });
-    assert.strictEqual(Array.getUnsafe(league.standings.teams, 0).categories.length, 2);
-    assert.strictEqual(league.standings.categoryTotals.status, "available");
-    assert.strictEqual(league.standings.categoryPoints.status, "unsupported");
+    assert.strictEqual(Array.getUnsafe(league.standings.teams, 0).categories?.length, 2);
+    assert.strictEqual(league.standings.categoryTotals?.status, "available");
+    assert.strictEqual(league.standings.categoryPoints?.status, "unsupported");
     assert.strictEqual(league.page.complete, true);
     assert.isTrue(
       league.coverage.some(
@@ -1157,41 +1362,68 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
       ],
     });
 
-    const league = yield* queries.getLeague(owner, { team: teamId, groups: ["standings"] });
+    const compact = yield* queries.getLeague(owner, { team: teamId, groups: ["standings"] });
+    assert.strictEqual(compact.status, "ok");
+    if (compact.status !== "ok" || compact.standings?.status !== "available") {
+      assert.fail("expected available rotisserie standings");
+      return;
+    }
+    assert.strictEqual(compact.standings.presentation, "compact");
+    assert.strictEqual(compact.standings.teams.length, 1);
+    const compactRow = Array.getUnsafe(compact.standings.teams, 0);
+    assert.isUndefined(compactRow.categories);
+    assert.isUndefined(compactRow.categoryPoints);
+    assert.strictEqual(compactRow.rank, 1);
+    assert.strictEqual(compactRow.points, 92);
+    assert.isUndefined(compactRow.record);
+    assert.include(compact.standings.detailNote, "standingsDetail: detailed");
+
+    const league = yield* queries.getLeague(owner, {
+      team: teamId,
+      groups: ["standings"],
+      standingsDetail: "detailed",
+    });
     assert.strictEqual(league.status, "ok");
     if (league.status !== "ok" || league.standings?.status !== "available") {
       assert.fail("expected available rotisserie standings");
       return;
     }
     assert.strictEqual(league.standings.format, "rotisserie");
+    assert.strictEqual(league.standings.presentation, "detailed");
     const row = Array.getUnsafe(league.standings.teams, 0);
     assert.isUndefined(row.record);
     assert.strictEqual(row.pointsBack, 0);
-    assert.strictEqual(row.categoryPoints.length, 13);
-    assert.strictEqual(row.categories.length, 13);
-    assert.strictEqual(league.standings.categoryPoints.status, "available");
-    assert.strictEqual(league.standings.omittedCategories.count, 2);
+    assert.strictEqual(row.categoryPoints?.length, 13);
+    assert.strictEqual(row.categories?.length, 13);
+    assert.strictEqual(league.standings.categoryPoints?.status, "available");
+    assert.strictEqual(league.standings.omittedCategories?.count, 2);
 
-    const scoringRefs = new Set(league.scoring.map((category) => category.stat));
-    const named = [...row.categories, ...row.categoryPoints];
+    const scoring = league.scoring ?? [];
+    const scoringRefs = new Set(scoring.map((category) => category.stat));
+    const named = [...(row.categories ?? []), ...(row.categoryPoints ?? [])];
     assert.isTrue(named.every((entry) => scoringRefs.has(entry.stat)));
+    assert.isTrue(
+      named.every((entry) => entry.name.length > 0),
+      "every category value carries the league's name for the stat",
+    );
 
-    const pointStats = new Map(row.categoryPoints.map((entry) => [entry.stat, entry]));
-    const totalStats = new Map(row.categories.map((entry) => [entry.stat, entry]));
+    const pointStats = new Map((row.categoryPoints ?? []).map((entry) => [entry.stat, entry]));
+    const totalStats = new Map((row.categories ?? []).map((entry) => [entry.stat, entry]));
     const gaaRef = Array.getUnsafe(
-      league.scoring.filter((category) => category.abbreviation === "GAA"),
+      scoring.filter((category) => category.abbreviation === "GAA"),
       0,
     ).stat;
     const gaRef = Array.getUnsafe(
-      league.scoring.filter((category) => category.abbreviation === "GA"),
+      scoring.filter((category) => category.abbreviation === "GA"),
       0,
     ).stat;
     const savesRef = Array.getUnsafe(
-      league.scoring.filter((category) => category.abbreviation === "SV"),
+      scoring.filter((category) => category.abbreviation === "SV"),
       0,
     ).stat;
     assert.deepStrictEqual(pointStats.get(gaaRef), {
       stat: gaaRef,
+      name: "Goals Against Average",
       status: "published",
       value: 7,
     });
@@ -1204,11 +1436,12 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     }
     assert.deepStrictEqual(totalStats.get(gaRef), {
       stat: gaRef,
+      name: "Goals Against",
       status: "published",
       value: 51,
     });
     assert.strictEqual(
-      row.categoryPoints.filter((entry) => entry.status === "published").length,
+      (row.categoryPoints ?? []).filter((entry) => entry.status === "published").length,
       10,
     );
 
@@ -1237,6 +1470,28 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     if (summary.categoryPoints?.status === "available") {
       assert.strictEqual(summary.categoryPoints.values.length, 13);
       assert.strictEqual(summary.categoryPoints.omittedCategories.count, 2);
+      assert.isTrue(
+        summary.categoryPoints.values.every(
+          (entry) => entry.name.length > 0 && entry.name !== entry.stat,
+        ),
+        "category totals carry the league's stat name beside the reference",
+      );
+    }
+    assert.strictEqual(summary.categoryTotals?.status, "available");
+    if (summary.categoryTotals?.status === "available") {
+      const gaa = summary.categoryTotals.values.find(
+        (entry) => entry.name === "Goals Against Average",
+      );
+      assert.deepStrictEqual(
+        gaa?.status === "published" ? gaa.value : gaa?.status,
+        2.63,
+        "the season total is inlined beside the league's name for the category",
+      );
+      assert.isTrue(
+        summary.categoryTotals.values.some(
+          (entry) => entry.name === "Save Percentage" && entry.status === "published",
+        ),
+      );
     }
     assert.strictEqual(summary.matchup?.status, "unsupported");
     assert.isTrue(summary.roster.length > 0);
@@ -1396,7 +1651,7 @@ it.effect("resolves a league stat reference for a stat-ordered player search", (
     if (league.status !== "ok") {
       return;
     }
-    const stat = Array.getUnsafe(league.scoring, 0).stat;
+    const stat = Array.getUnsafe(league.scoring ?? [], 0).stat;
 
     const ordered = yield* queries.searchPlayers(owner, {
       team: teamId,
@@ -1502,6 +1757,19 @@ it.effect("surfaces the rank and stat values that each provider-ordered sort use
       byActualRank.players.map((player) => player.percentOwnedDelta),
       [2, 0],
     );
+    assert.isTrue(
+      byActualRank.players.every(
+        (player) =>
+          !Object.hasOwn(player, "percentOwnedChange") &&
+          Object.hasOwn(player, "percentOwnedDelta"),
+      ),
+      "the ownership change is reported once, under the field that carries the provider delta",
+    );
+    assert.deepStrictEqual(
+      byActualRank.players.map((player) => player.percentStartedChange),
+      [null, 1],
+      "a started change the provider did not publish stays null instead of being invented",
+    );
     assert.isTrue(byActualRank.players.every((player) => player.statValue === undefined));
 
     const byOverallRank = yield* queries.searchPlayers(owner, {
@@ -1523,7 +1791,7 @@ it.effect("surfaces the rank and stat values that each provider-ordered sort use
     if (league.status !== "ok") {
       return;
     }
-    const stat = Array.getUnsafe(league.scoring, 0).stat;
+    const stat = Array.getUnsafe(league.scoring ?? [], 0).stat;
     const byStat = yield* queries.searchPlayers(owner, {
       team: teamId,
       availability: "free_agent",
@@ -2144,7 +2412,11 @@ const playerDetails = [
     displayPosition: "QB",
     eligiblePositions: ["QB"],
     rosterStatus: "rostered" as const,
-    actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 275 }] },
+    actual: {
+      basis: { type: "week" as const, week: 3 },
+      stats: [{ statId: 4, value: 275 }],
+      notAggregated: [],
+    },
     projected: undefined,
     communityStartRate: undefined,
   },
@@ -2155,7 +2427,11 @@ const playerDetails = [
     displayPosition: "QB",
     eligiblePositions: ["QB"],
     rosterStatus: "rostered" as const,
-    actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 0 }] },
+    actual: {
+      basis: { type: "week" as const, week: 3 },
+      stats: [{ statId: 4, value: 0 }],
+      notAggregated: [],
+    },
     projected: undefined,
     communityStartRate: undefined,
   },
@@ -2166,7 +2442,11 @@ const playerDetails = [
     displayPosition: "RB",
     eligiblePositions: ["RB", "W/R"],
     rosterStatus: "free_agent" as const,
-    actual: { basis: { type: "week" as const, week: 3 }, stats: [{ statId: 4, value: 0 }] },
+    actual: {
+      basis: { type: "week" as const, week: 3 },
+      stats: [{ statId: 4, value: 0 }],
+      notAggregated: [],
+    },
     projected: undefined,
     communityStartRate: undefined,
   },

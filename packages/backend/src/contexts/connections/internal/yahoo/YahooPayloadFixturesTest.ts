@@ -2804,3 +2804,51 @@ function playerDetailsPayload(input: {
     },
   };
 }
+
+export function yahooNhlDatePlayerDetails(
+  date: string,
+  players: ReadonlyArray<{
+    readonly playerKey: string;
+    readonly name: string;
+    readonly stats: ReadonlyArray<{ readonly statId: number; readonly value: string }>;
+  }>,
+): { fantasy_content: Record<string, unknown> } {
+  const entries: Record<string, unknown> = {};
+  players.forEach((player, index) => {
+    entries[String(index)] = {
+      player: [
+        [
+          { player_key: player.playerKey },
+          { player_id: player.playerKey.slice(player.playerKey.lastIndexOf(".p.") + 3) },
+          { name: { full: player.name, first: "Synthetic", last: player.name } },
+          { display_position: "C,LW" },
+          { position_type: "P" },
+          { primary_position: "C" },
+          { eligible_positions: [{ position: "C" }, { position: "LW" }] },
+        ],
+        {
+          player_stats: {
+            "0": { coverage_type: "date", date },
+            stats: player.stats.map(({ statId, value }) => ({ stat: { stat_id: statId, value } })),
+          },
+        },
+        { ownership: { ownership_type: "waivers" } },
+      ],
+    };
+  });
+  entries["count"] = players.length;
+  return {
+    fantasy_content: {
+      "xml:lang": "en-US",
+      league: [
+        {
+          league_key: "466.l.4002",
+          league_id: "4002",
+          name: "Synthetic Roto League",
+          url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
+        },
+        { players: entries },
+      ],
+    },
+  };
+}

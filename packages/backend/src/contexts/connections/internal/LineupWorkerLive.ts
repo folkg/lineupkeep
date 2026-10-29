@@ -850,6 +850,9 @@ export const LineupWorkerLive = Layer.effect(
             `The provider returned ${describeCoverage(error.covered)} for the ${resource} instead of the requested ${describeCoverage(error.requested)}.`,
           );
           return;
+        case "provider.period_unsupported":
+          yield* fail(run, undefined, "provider_unsupported", `${error.reason} ${error.remedy}`);
+          return;
         case "provider.session_rejected":
           yield* rejectSession(run.record.userId, owned);
           yield* fail(

@@ -885,6 +885,7 @@ function playerDetail(
     actual: {
       basis: { type: "week", week: recordedWeek },
       stats: stats.map(([statId, value]) => ({ statId, value })),
+      notAggregated: [],
     },
     projected: undefined,
   };
