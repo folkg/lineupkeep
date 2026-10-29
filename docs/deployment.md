@@ -199,7 +199,7 @@ account. On 2026-10-28 the owner attempted the Google-identity Yahoo sign-in
 through the deployed browser. Google loaded its identity page and then refused
 with "This browser or app may not be secure", its supported-browser gate against
 software-controlled and embedded browsers. The Google-identity path is not
-accepted; the local helper remains the fallback pending an owner decision.
+accepted; the hosted browser is the only linking path.
 
 **Hosted browser smoke (2026-10-25):** the browser service reached `Ready` with
 its `/healthz` startup probe, invoker IAM refused unauthenticated requests (403
@@ -219,10 +219,10 @@ monitoring at the web service instead. Invoker IAM remains the boundary for the
 browser service's `/` and `/session` paths.
 
 Deployed product acceptance still needs the owner to sign in, link Yahoo through
-the hosted browser or the helper against the deployed origin, and perform one
-live read/write run. The hosted browser's Google-identity path is blocked by
-Google's supported-browser gate; the helper remains the fallback. Hosted
-MCP-client acceptance and a verified sending domain remain open. See [the Phase 1 acceptance record](phase-1-acceptance-2026-10-25.md).
+the hosted browser against the deployed origin, and perform one live read/write
+run. The hosted browser's Google-identity path is blocked by Google's
+supported-browser gate, so a Google-identity account cannot finish linking.
+Hosted MCP-client acceptance and a verified sending domain remain open. See [the Phase 1 acceptance record](phase-1-acceptance-2026-10-25.md).
 
 ## Select a stage and lifecycle
 
@@ -278,8 +278,7 @@ and tests. The `cloud-run` stage runs the dedicated IAM-only browser service
 `lineupkeep-hb` and the web service proxies each owner-bound session to it. The
 Cloudflare target returns `hosted_browser.unsupported`; so does a Node image
 without the Playwright Chromium executable, which the node target checks before
-claiming hosted linking is available. The local-helper path remains available on
-every target.
+claiming hosted linking is available.
 
 The web mints a Cloud Run ID token for the exact service URL from the metadata
 server and opens WSS with an HMAC-signed descriptor (session id, expiry of at
@@ -327,9 +326,9 @@ closes every target.
   known-good revision.
 - **Stop the hosted path:** deploy the previous web revision, or remove the web
   runtime account's `roles/run.invoker` binding on `lineupkeep-hb`. The web then
-  receives IAM refusals, fails the session with an actionable message, and the
-  helper remains usable. Do not remove the binding while expecting hosted
-  linking to work; do not add `allUsers`.
+  receives IAM refusals and fails the session with an actionable message. Do not
+  remove the binding while expecting hosted linking to work; do not add
+  `allUsers`.
 - **Browser rollback:** move traffic to the previous browser revision, then
   redeploy the matching source. The browser service is stateless, so this needs
   no migration. Delete old browser images and superseded secret versions after a

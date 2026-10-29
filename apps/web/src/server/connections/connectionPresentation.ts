@@ -19,7 +19,6 @@ export function toConnectionView(
     provider: connection.provider,
     status: connection.status,
     teamCount,
-    ...(connection.pairingCode === undefined ? {} : { pairingCode: connection.pairingCode }),
     ...(connection.linkingExpiresAt === undefined
       ? {}
       : { linkingExpiresAt: DateTime.formatIso(connection.linkingExpiresAt) }),

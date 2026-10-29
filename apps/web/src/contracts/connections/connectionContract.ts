@@ -13,7 +13,6 @@ export type ConnectionView = {
   readonly provider: string;
   readonly status: ConnectionStatus;
   readonly teamCount: number;
-  readonly pairingCode?: string;
   readonly linkingExpiresAt?: string;
   readonly approvedAt?: string;
   readonly credentialGeneration?: number;

@@ -22,7 +22,7 @@ export class AuthenticationInvalidResponse extends Schema.TaggedError<
   cause: Schema.Defect(),
 }) {}
 
-export type AuthenticationError = AuthenticationUnavailable | AuthenticationInvalidResponse;
+type AuthenticationError = AuthenticationUnavailable | AuthenticationInvalidResponse;
 
 export type AccessTokenResolution =
   | { readonly status: "invalid" }
@@ -48,18 +48,6 @@ export type ConsentRequest =
       };
       readonly scopes: ReadonlyArray<AuthorizationScope>;
     };
-
-type DeviceAuthorizationReview = {
-  readonly clientId: string;
-  readonly scope: string;
-};
-
-export class DeviceAuthorizationRejected extends Schema.TaggedError<
-  DeviceAuthorizationRejected,
-  { readonly brand: unique symbol }
->()("DeviceAuthorizationRejected", {
-  reason: Schema.String,
-}) {}
 
 export type SignInMethods = {
   readonly google: boolean;
@@ -94,19 +82,4 @@ export type AuthServiceShape = {
   readonly getSession: (
     headers: Headers,
   ) => Effect.Effect<AuthenticationSession | undefined, AuthenticationError>;
-
-  readonly claimDeviceAuthorization: (
-    headers: Headers,
-    userCode: string,
-  ) => Effect.Effect<DeviceAuthorizationReview, AuthenticationError | DeviceAuthorizationRejected>;
-
-  readonly approveDeviceAuthorization: (
-    headers: Headers,
-    userCode: string,
-  ) => Effect.Effect<void, AuthenticationError | DeviceAuthorizationRejected>;
-
-  readonly denyDeviceAuthorization: (
-    headers: Headers,
-    userCode: string,
-  ) => Effect.Effect<void, AuthenticationError | DeviceAuthorizationRejected>;
 };

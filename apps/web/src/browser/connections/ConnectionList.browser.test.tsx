@@ -44,14 +44,6 @@ it("identifies each connection by team count, connection time, and status", asyn
   await expect.element(page.getByText(/Cannot read or set lineups/)).toBeVisible();
 });
 
-it("shows no local helper affordances", async () => {
-  using _list = setupConnectionList([connected]);
-
-  await expect.element(page.getByText("Approve helper")).not.toBeInTheDocument();
-  await expect.element(page.getByText("Pairing code")).not.toBeInTheDocument();
-  await expect.element(page.getByText("Start reconnect")).not.toBeInTheDocument();
-});
-
 function setupConnectionList(connections: ReadonlyArray<ConnectionView>): {
   [Symbol.dispose](): void;
 } {

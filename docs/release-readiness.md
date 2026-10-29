@@ -103,8 +103,8 @@ attempted a real Google-identity Yahoo sign-in through the deployed browser.
 Google loaded its identity page and then refused the sign-in with "This browser
 or app may not be secure", its supported-browser gate against software-controlled
 and embedded browsers. The hosted Google-identity path is therefore **not
-accepted**. The local helper remains the fallback for that account pending the
-owner's decision; no evasion of Google's browser check is claimed or accepted.
+accepted**. No local capture path remains, so a Google-identity account cannot
+finish linking; no evasion of Google's browser check is claimed or accepted.
 
 ## Accepted v1 version hold and retained limitations
 

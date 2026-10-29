@@ -166,10 +166,6 @@ function authentication(
           getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
           consent: () => Effect.succeed("https://client.test/callback"),
           handle: () => Effect.succeed(new Response()),
-          claimDeviceAuthorization: () =>
-            Effect.succeed({ clientId: "helper", scope: "connections:read" }),
-          approveDeviceAuthorization: () => Effect.void,
-          denyDeviceAuthorization: () => Effect.void,
           getSession: () =>
             Effect.succeed(
               signedIn

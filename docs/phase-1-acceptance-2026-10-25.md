@@ -1,5 +1,7 @@
 # Phase 1 live acceptance (2026-10-25)
 
+**Historical record.** The local helper and its upload endpoint were removed on 2026-10-29. The hosted browser is now the only linking path; the helper observations below describe the evidence recorded at the time.
+
 This record covers the owner-authorized live checks: one real Yahoo account
 linked through the product's own helper upload path, bounded reads through the
 services behind the MCP tools, one native `set_lineup` run, and the deployed

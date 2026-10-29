@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { expect, signUp, test } from "./support";
 import { captureCheckpoint } from "./verify/capture";
 
@@ -38,7 +36,7 @@ test("carries a team's context into the feedback form from the team page", async
     page,
     "link the provider fake and discover teams",
     "connectYahooAndDiscoverTeams",
-    { requestId: randomUUID(), pairingCode: "ABCD2345" },
+    {},
   );
   await page.goto("/teams");
   await page.getByRole("link", { name: "Embedded Browser Team" }).click();

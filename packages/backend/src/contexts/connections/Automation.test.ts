@@ -11,7 +11,6 @@ import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 
 import { Automation } from "./Automation.ts";
-import { StartLinkingInput } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import type { TeamId } from "./FantasyTeam.ts";
 import { AutomationLive } from "./internal/AutomationLive.ts";
@@ -271,25 +270,13 @@ function seedTeam(
     yield* fake.setLeague(shape.league);
     yield* fake.setRoster(shape.roster);
     yield* fake.setNativeAfter(shape.nativeAfter);
-    const linkingInput = yield* Schema.decodeEffect(StartLinkingInput)({
-      requestId: nextRequestId(),
-      provider: decodeProviderKey("yahoo"),
-      pairingCode: "ABCD2345",
-    });
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [linkingInput]), 0);
-    yield* connections.completeLinking(owner, [
-      { id: linking.id, provider: decodeProviderKey("yahoo"), session },
-    ]);
-    const found = yield* connections.discoverTeams(owner, [{ id: linking.id }]);
+    const linked = Array.getUnsafe(
+      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
+      0,
+    );
+    const found = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return Array.getUnsafe(found, 0).id;
   }).pipe(Effect.orDie);
-}
-
-let requestSerial = 0;
-
-function nextRequestId(): string {
-  requestSerial += 1;
-  return `018f79ea-7d86-7c18-9b4a-8b4d0c916${String(requestSerial).padStart(3, "0")}`;
 }
 
 let owner = decodeUserId("automation-tick-owner-1");

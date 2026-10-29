@@ -1016,7 +1016,6 @@ const providerIdentityOwners = [
   "/runtime/ApplicationLayer.ts",
   "/contracts/connections/providerLabels.ts",
   "/hosted-browser/src/provider.ts",
-  "/linking-helper/src/providers.ts",
 ];
 
 function isGenericSourceModule(filename: string): boolean {

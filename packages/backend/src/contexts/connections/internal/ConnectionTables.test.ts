@@ -28,10 +28,6 @@ it.effect("round-trips every explored lifecycle state through its row codec", ()
         id: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
         userId: yield* Schema.decodeEffect(UserId)("owner"),
         requestId: "request",
-        pairingCode: "ABCD2345",
-        reconnectCode: null,
-        reconnectExpiresAt: null,
-        reconnectRequestId: null,
         createdAt: at,
         state: snapshot.state.value,
       };
@@ -70,10 +66,6 @@ it.effect("round-trips generated lifecycle data and timestamp edges", () =>
             id: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
             userId: yield* Schema.decodeEffect(UserId)("owner"),
             requestId: "request",
-            pairingCode: "ABCD2345",
-            reconnectCode: null,
-            reconnectExpiresAt: null,
-            reconnectRequestId: null,
             createdAt: time,
             state: {
               _tag: "Linking" as const,
@@ -164,16 +156,12 @@ it.effect("rejects incomplete lifecycle rows through the codec", () =>
       id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
       userId: "owner",
       requestId: "request",
-      pairingCode: "ABCD2345",
       provider: decodeProviderKey("yahoo"),
       expiresAt: at,
       approvedAt: at,
       credentialGeneration: 1,
       reconnectRequiredAt: at,
       disconnectedAt: at,
-      reconnectCode: null,
-      reconnectExpiresAt: null,
-      reconnectRequestId: null,
       createdAt: at,
       updatedAt: at,
     };
@@ -202,7 +190,6 @@ const at = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
 const input = {
   _tag: "Linking" as const,
   provider: decodeProviderKey("yahoo"),
-  pairingCode: "ABCD2345",
   expiresAt: DateTime.makeUnsafe("2026-01-01T00:10:00Z"),
   updatedAt: at,
 };

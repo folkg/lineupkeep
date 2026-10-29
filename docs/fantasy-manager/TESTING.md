@@ -137,12 +137,12 @@ Verify actual request origin/method/path/query/XML, redirect rejection, response
 
 Keep dedicated PublicInternet security tests for DNS/TLS/SSRF semantics; MSW cannot prove them. Reuse starter coverage rather than weakening its transport or adding production test bypasses.
 
-Privacy tests need positive controls: inject recognizable secret canaries into rejected provider responses and inspect actual surfaced/logged observations. Assert cookies, crumbs, credential blobs, account GUIDs, manager data, and raw URLs never escape. Test encryption tampering, owner/connection swapping, secret rotation, and expired/replayed pairing approval.
+Privacy tests need positive controls: inject recognizable secret canaries into rejected provider responses and inspect actual surfaced/logged observations. Assert cookies, crumbs, credential blobs, account GUIDs, manager data, and raw URLs never escape. Test encryption tampering, owner/connection swapping, secret rotation, and expired/replayed hosted linking session.
 
 ## 8. Surfaces and deployed acceptance
 
 - MCP protocol: real OAuth/consent, narrow scopes, ownership, pending/verified results, exact UTF-8 output budgets, one oversized record, whole-record continuations, and wrong-owner cursor/run access.
-- Browser: keyboard/focus, passwordless code flow, open registration, hosted-browser linking and helper fallback, reconnect, no teams, long names/many teams, enabled/disabled/paused states, expired pause, pending/uncertain activity, offline/failure recovery, and mobile layout.
+- Browser: keyboard/focus, passwordless code flow, open registration, hosted-browser linking, reconnect, no teams, long names/many teams, enabled/disabled/paused states, expired pause, pending/uncertain activity, offline/failure recovery, and mobile layout.
 - Hosted browser: use the fake provider served by the test/dev server, never a live Yahoo login. Assert owner-bound streaming, wrong-owner and replay rejection, expiry, cancellation, egress blocking, temporary-profile removal, `T`/`Y` capture without logging, automatic ready, and automatic team discovery. Keep production-service probes separate and manually authorized.
 - Built E2E: SSR/hydration, production artifacts, auth persistence, no duplicate browser writes, queue-to-visible-result integration with external fakes. Zero retries; retain first-failure evidence privately.
 - Hosted Muse: harmless read and real OAuth first, then paging and bounded pending-run handling. Do not use compatibility with a different local client as proof.

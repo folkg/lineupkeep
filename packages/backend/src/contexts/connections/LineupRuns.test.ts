@@ -10,7 +10,6 @@ import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 
 import type { ConnectionId } from "./Connection.ts";
-import { StartLinkingInput } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
@@ -1326,16 +1325,11 @@ function seed(
     yield* fake.setLeague(league);
     yield* fake.setRoster(roster);
     yield* fake.setNativeAfter(nativeAfter);
-    const linkingInput = yield* Schema.decodeEffect(StartLinkingInput)({
-      requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
-      provider: decodeProviderKey("yahoo"),
-      pairingCode: "ABCD2345",
-    });
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [linkingInput]), 0);
-    yield* connections.completeLinking(owner, [
-      { id: linking.id, provider: decodeProviderKey("yahoo"), session },
-    ]);
-    const discovered = yield* connections.discoverTeams(owner, [{ id: linking.id }]);
+    const linked = Array.getUnsafe(
+      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
+      0,
+    );
+    const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return discovered.map((row) => ({ id: row.id, connectionId: row.connectionId }));
   }).pipe(Effect.orDie);
 }

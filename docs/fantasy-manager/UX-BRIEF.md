@@ -27,7 +27,7 @@ The primary surface lists compact teams with sport, league, provider, enrollment
 
 ### Provider connections
 
-A compact connection surface supports link, status, reconnect, and disconnect. The primary link opens a private hosted browser inside the page: the human signs in on the provider's own page, the connection becomes ready automatically, and teams appear without a code copy or second approval. The local helper remains a documented fallback. Lineupkeep never stores the provider password or logs keystrokes; the hosted browser profile is temporary and removed when the session ends.
+A compact connection surface supports link, status, reconnect, and disconnect. The primary link opens a private hosted browser inside the page: the human signs in on the provider's own page, the connection becomes ready automatically, and teams appear without a code copy or second approval. Lineupkeep never stores the provider password or logs keystrokes; the hosted browser profile is temporary and removed when the session ends.
 
 An expired connection supplies one clear reconnect action, identifies affected teams safely, retains enrollment, and opens one deduplicated action-required email incident. An inaccessible team retains configuration rather than disappearing silently.
 
@@ -45,7 +45,7 @@ No transaction suggestions, transaction execution UI, marketing/about pages, cus
 
 ## State and accessibility acceptance
 
-Cover signed-out, new account/no connection, linking, canceled/expired pairing, no teams, active teams, disabled, paused, pause expiry, reconnect-required, temporarily unavailable, queued/running, changed/no-op, uncertain, failed, and quota/delivery problems.
+Cover signed-out, new account/no connection, linking, canceled/expired hosted session, no teams, active teams, disabled, paused, pause expiry, reconnect-required, temporarily unavailable, queued/running, changed/no-op, uncertain, failed, and quota/delivery problems.
 
 Use semantic controls, keyboard/focus behavior, visible text—not color alone—for status, reduced-motion behavior, and responsive small-screen layouts. Long team/league names and multiple connections must not break hierarchy. Test actual built SSR/hydration as well as injected browser failures.
 

@@ -163,5 +163,6 @@ instance, with Cloud Run concurrency 1 and a maximum of two instances.
 - **Provision a VPC connector and Cloud NAT or a managed egress proxy.** It would add a recurring charge
   above the owner's budget. It is a useful future defense in depth, not a replacement for the address
   policy.
-- **Keep closing popups and hand Google-identity users to the local helper.** The helper is being removed,
-  and the primary path must work for the owner's own account.
+- **Keep closing popups and hand Google-identity users to the local helper.** The helper has been
+  removed, there is no alternate capture path, and the primary path must work for the owner's own
+  account.

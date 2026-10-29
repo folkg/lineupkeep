@@ -2,7 +2,6 @@ import { Array, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import {
-  ConnectionCredentialGenerationStale,
   ConnectionLinkExpired,
   ConnectionLinkRejected,
   ConnectionNotFound,
@@ -20,9 +19,7 @@ import type {
   ConnectionIdInput,
   LinkInput,
   ProviderConnection,
-  ReconnectInput,
   StartLinkingInput,
-  StartReconnectInput,
 } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
@@ -64,12 +61,6 @@ export const ConnectionsLive = Layer.effect(
       inputs: ReadonlyArray<StartLinkingInput>,
     ): Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError> =>
       repository.startLinking(userId, inputs).pipe(Effect.tap(annotateOneConnection));
-
-    const cancelLinking = (
-      userId: UserId,
-      inputs: ReadonlyArray<ConnectionIdInput>,
-    ): Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError> =>
-      repository.cancelLinking(userId, inputs).pipe(Effect.tap(annotateOneConnection));
 
     const disconnect = (
       userId: UserId,
@@ -166,7 +157,6 @@ export const ConnectionsLive = Layer.effect(
               Schema.decodeEffect(StartLinkingInputSchema)({
                 requestId,
                 provider: input.provider,
-                pairingCode: requestId,
               }).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
             ),
           ),
@@ -184,12 +174,6 @@ export const ConnectionsLive = Layer.effect(
           Effect.onError(() => repository.discardLinking(userId, startedIds).pipe(Effect.ignore)),
         );
       });
-
-    const startReconnect = (
-      userId: UserId,
-      inputs: ReadonlyArray<StartReconnectInput>,
-    ): Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError> =>
-      repository.startReconnect(userId, inputs).pipe(Effect.tap(annotateOneConnection));
 
     const completeReconnect = (
       userId: UserId,
@@ -234,47 +218,6 @@ export const ConnectionsLive = Layer.effect(
             expectedGeneration: record.state.credentialGeneration,
           };
         });
-        return yield* repository
-          .reconnect(userId, commands)
-          .pipe(Effect.tap(annotateOneConnection));
-      });
-
-    const reconnect = (
-      userId: UserId,
-      inputs: ReadonlyArray<ReconnectInput>,
-    ): Effect.Effect<ReadonlyArray<ProviderConnection>, ConnectionError> =>
-      Effect.gen(function* () {
-        const owned = yield* repository.loadOwned(
-          userId,
-          inputs.map((input) => input.id),
-        );
-        const byId = new Map(owned.map((record) => [record.id, record]));
-        for (const input of inputs) {
-          const record = byId.get(input.id);
-          if (record !== undefined) {
-            const rejection = reconnectRejection(record, input);
-            if (rejection !== undefined) {
-              return yield* rejection;
-            }
-          }
-        }
-
-        yield* Effect.forEach(inputs, (input) => validateSession(input.id, input), {
-          concurrency: 1,
-        });
-
-        const encrypted = yield* Effect.forEach(
-          inputs,
-          (input) => encryptCredential(userId, input.id, input),
-          { concurrency: 1 },
-        );
-
-        const commands: ReadonlyArray<ReconnectCommand> = inputs.map((input, index) => ({
-          id: input.id,
-          provider: input.provider,
-          envelope: Array.getUnsafe(encrypted, index),
-          expectedGeneration: input.expectedGeneration,
-        }));
         return yield* repository
           .reconnect(userId, commands)
           .pipe(Effect.tap(annotateOneConnection));
@@ -389,13 +332,8 @@ export const ConnectionsLive = Layer.effect(
 
     return Connections.of({
       list,
-      startLinking,
-      startReconnect,
-      cancelLinking,
-      completeLinking,
       link,
       completeReconnect,
-      reconnect,
       disconnect,
       discoverTeams,
       listTeams,
@@ -417,23 +355,6 @@ function completionRejection(
   }
   if (DateTime.toEpochMillis(record.state.expiresAt) <= DateTime.toEpochMillis(now)) {
     return ConnectionLinkExpired.make({ id: record.id });
-  }
-  return undefined;
-}
-
-function reconnectRejection(
-  record: OwnedConnection,
-  input: ReconnectInput,
-): ConnectionError | undefined {
-  if (record.state._tag !== "Ready" && record.state._tag !== "ReconnectRequired") {
-    return ConnectionLinkRejected.make({ id: input.id, status: statusOf(record) });
-  }
-  if (record.state.credentialGeneration !== input.expectedGeneration) {
-    return ConnectionCredentialGenerationStale.make({
-      id: input.id,
-      expectedGeneration: input.expectedGeneration,
-      actualGeneration: record.state.credentialGeneration,
-    });
   }
   return undefined;
 }

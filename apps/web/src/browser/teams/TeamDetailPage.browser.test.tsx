@@ -200,19 +200,6 @@ it("links a team report to the feedback form with the team reference", async () 
   expect(url.searchParams.get("team")).toBe(teamId);
 });
 
-it("shows no local helper affordances", async () => {
-  using _app = setupTeamDetailPage(team);
-
-  await expect.element(page.getByText("Use the local helper instead")).not.toBeInTheDocument();
-  await expect
-    .element(page.getByRole("button", { name: "Approve helper" }))
-    .not.toBeInTheDocument();
-  await expect.element(page.getByRole("button", { name: "Pair helper" })).not.toBeInTheDocument();
-  await expect
-    .element(page.getByRole("button", { name: "Start reconnect" }))
-    .not.toBeInTheDocument();
-});
-
 function setupTeamDetailPage(teamSummary: TeamSummaryView): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TeamRemote = {

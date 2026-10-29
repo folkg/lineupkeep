@@ -23,7 +23,6 @@ import { Route as TeamsTeamIdRouteImport } from './routes/teams.$teamId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDevProviderLoginRouteImport } from './routes/api/dev/provider-login'
 import { Route as ApiInternalLineupWorkerRouteImport } from './routes/api/internal/lineup-worker'
-import { Route as ApiLinkingCompleteRouteImport } from './routes/api/linking/complete'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -95,11 +94,6 @@ const ApiInternalLineupWorkerRoute = ApiInternalLineupWorkerRouteImport.update({
   path: '/api/internal/lineup-worker',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiLinkingCompleteRoute = ApiLinkingCompleteRouteImport.update({
-  id: '/api/linking/complete',
-  path: '/api/linking/complete',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -116,7 +110,6 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
-  '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -133,7 +126,6 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
-  '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -151,7 +143,6 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
-  '/api/linking/complete': typeof ApiLinkingCompleteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -170,7 +161,6 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
-    | '/api/linking/complete'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -187,7 +177,6 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
-    | '/api/linking/complete'
   id:
     | '__root__'
     | '/'
@@ -204,7 +193,6 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
-    | '/api/linking/complete'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -222,7 +210,6 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDevProviderLoginRoute: typeof ApiDevProviderLoginRoute
   ApiInternalLineupWorkerRoute: typeof ApiInternalLineupWorkerRoute
-  ApiLinkingCompleteRoute: typeof ApiLinkingCompleteRoute
 }
 
 declare module '@tanstack/solid-router' {
@@ -325,13 +312,6 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ApiInternalLineupWorkerRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/linking/complete': {
-      id: '/api/linking/complete'
-      path: '/api/linking/complete'
-      fullPath: '/api/linking/complete'
-      preLoaderRoute: typeof ApiLinkingCompleteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -350,7 +330,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDevProviderLoginRoute: ApiDevProviderLoginRoute,
   ApiInternalLineupWorkerRoute: ApiInternalLineupWorkerRoute,
-  ApiLinkingCompleteRoute: ApiLinkingCompleteRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

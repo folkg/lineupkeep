@@ -152,14 +152,11 @@ test("lists the owner's connection status over MCP without exposing account iden
 }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const connection = Schema.decodeUnknownSync(
-    Schema.Struct({ id: Schema.String, status: Schema.String }),
-  )(
-    await services.exercise(page, "start the owner's link", "startLinking", {
-      requestId: randomUUID(),
-      provider: decodeProviderKey("yahoo"),
-      pairingCode: "ABCD2345",
-    }),
+  await services.exercise(
+    page,
+    "link the provider fake and discover teams",
+    "connectYahooAndDiscoverTeams",
+    {},
   );
   const { credentials } = await authorize(page, origin);
   const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
@@ -168,7 +165,7 @@ test("lists the owner's connection status over MCP without exposing account iden
 
   expect(listed.isError).toBe(false);
   expect(listed.structuredContent).toMatchObject({
-    connections: [{ id: connection.id, provider: decodeProviderKey("yahoo"), status: "linking" }],
+    connections: [{ provider: decodeProviderKey("yahoo"), status: "ready" }],
   });
   expect(JSON.stringify(listed.structuredContent)).not.toContain("userId");
 
@@ -443,7 +440,7 @@ test("changes automation over MCP and reports it through list_teams", async ({
       page,
       "link the provider fake and discover teams",
       "connectYahooAndDiscoverTeams",
-      { requestId: randomUUID(), pairingCode: "ABCD2345" },
+      {},
     ),
   );
   const team = discovered[0]?.id;

@@ -70,7 +70,7 @@ These records preserve the answers and corrections from all recorded rounds thro
 
 ## Round 9 — Local-helper pairing mechanism
 
-Status: chosen and proved locally against the installed Better Auth 1.7.12 auth layer. The app-side pairing lifecycle and the first-party helper client land with the connection vertical; this record fixes the mechanism so that vertical does not invent a competing flow.
+Status: historical. The local helper, its device-authorization client, pairing records, and upload endpoint were removed on 2026-10-29; the hosted browser is the only linking path. This record preserves the mechanism chosen while the helper existed.
 
 ### Chosen mechanism
 
@@ -119,14 +119,14 @@ The helper initiates, the signed-in application user approves, and the helper re
 Status: chosen and proved locally with a fake provider. The owner rejected
 local-helper-first onboarding: it requires an install, copying a pairing code,
 a second approval, does not refresh the provider session, and does not discover
-teams until the helper finishes. Hosted browser linking is now the primary flow;
-the RFC 8628 local helper remains the fallback.
+teams until the helper finishes. Hosted browser linking became the primary flow;
+the RFC 8628 local helper was removed on 2026-10-29.
 
 This round supersedes the Round 9 rejection of **hosted browser login and remote
 CDP** for provider linking only. That rejection still describes helper pairing:
 the helper does not need a hosted browser or remote CDP to pair with the
 application. The helper flow, scoped token, and ten-minute device-code contract
-are unchanged.
+were unchanged until the helper was removed on 2026-10-29.
 
 ### Chosen mechanism
 
@@ -157,17 +157,16 @@ are unchanged.
   excessive starts are rejected. The local end-to-end test proves the
   wrong-owner and replay paths against the real WebSocket endpoint; domain tests
   prove expiry, one-use completion, cancellation, concurrency, and rate limits.
-- The local helper remains fully supported and documented as the fallback. It
-  keeps its RFC 8628 pairing, temporary local profile, scoped upload token, and
-  tests.
+- The local helper was removed on 2026-10-29. The hosted browser is the only
+  linking path; there is no device pairing, local capture, or upload endpoint.
 
 ### Failure states
 
 The stream distinguishes expired sessions, blocked logins, additional
 verification (two-factor), provider unavailability, browser unavailability, and
 a rejected or unconfirmed completion. The UI gives an actionable message and
-keeps the helper fallback visible. A failed completion never leaves the browser
-open for an unbounded retry.
+keeps the failed session visible with a recovery action. A failed completion
+never leaves the browser open for an unbounded retry.
 
 ### Infra status
 

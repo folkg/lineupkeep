@@ -40,22 +40,17 @@ export const providerConnections = pgTable(
     status: text("status", {
       enum: ["linking", "ready", "reconnect-required", "disconnected"],
     }).notNull(),
-    pairingCode: text("pairing_code").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     credentialGeneration: integer("credential_generation"),
     reconnectRequiredAt: timestamp("reconnect_required_at", { withTimezone: true }),
     disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
-    reconnectCode: text("reconnect_code"),
-    reconnectExpiresAt: timestamp("reconnect_expires_at", { withTimezone: true }),
-    reconnectRequestId: text("reconnect_request_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("provider_connections_user_id_id_idx").on(table.userId, table.id),
     uniqueIndex("provider_connections_user_id_request_id_idx").on(table.userId, table.requestId),
-    index("provider_connections_reconnect_code_idx").on(table.reconnectCode),
   ],
 );
 
@@ -254,29 +249,16 @@ function stateFromAutomation(automation: TeamAutomation): TeamAutomationState {
 const Row = createSelectSchema(providerConnections, {
   id: ConnectionId,
   userId: UserId,
-  pairingCode: Schema.String,
   expiresAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   approvedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   credentialGeneration: Schema.NullOr(ConnectionCredentialGeneration),
   reconnectRequiredAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   disconnectedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
-  reconnectCode: Schema.NullOr(Schema.String),
-  reconnectExpiresAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
-  reconnectRequestId: Schema.NullOr(Schema.String),
   createdAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
 });
 
-const Identity = Struct.pick(Row.fields, [
-  "id",
-  "userId",
-  "requestId",
-  "pairingCode",
-  "reconnectCode",
-  "reconnectExpiresAt",
-  "reconnectRequestId",
-  "createdAt",
-]);
+const Identity = Struct.pick(Row.fields, ["id", "userId", "requestId", "createdAt"]);
 const LifecycleConnection = Schema.Struct({ ...Identity, state: ConnectionLifecycleState }).pipe(
   Schema.toType,
 );
@@ -317,10 +299,6 @@ export const ConnectionRow = Row.pipe(
             id: row.id,
             userId: row.userId,
             requestId: row.requestId,
-            pairingCode: row.pairingCode,
-            reconnectCode: row.reconnectCode,
-            reconnectExpiresAt: row.reconnectExpiresAt,
-            reconnectRequestId: row.reconnectRequestId,
             createdAt: row.createdAt,
             state,
           })),

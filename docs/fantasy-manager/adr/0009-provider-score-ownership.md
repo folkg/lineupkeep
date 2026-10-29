@@ -75,7 +75,7 @@ import the scoring module) and `provider-scoring-is-self-contained` (the scoring
 neither the application nor Effect, persistence, transport, or the solver). The `repository` lint
 plugin adds `provider-scoring-vocabulary`, which rejects a fixed list of scoring identifiers anywhere
 outside the provider's own modules, and `provider-identity`, which rejects a provider name in generic
-source outside the adapter, composition root, and keyed presentation/helper declarations. Each has
+source outside the adapter, composition root, and keyed presentation declarations. Each has
 acceptance and rejection fixtures, and the rules were proved against deliberate violations in the real
 tree.
 

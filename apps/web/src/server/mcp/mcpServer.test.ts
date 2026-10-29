@@ -256,9 +256,6 @@ it("asks the auth service only for the calling tool's scope", async () => {
             getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
             consent: () => Effect.succeed("https://client.test/callback"),
             handle: () => Effect.succeed(new Response()),
-            claimDeviceAuthorization: () => Effect.succeed({ clientId: "helper", scope: "" }),
-            approveDeviceAuthorization: () => Effect.void,
-            denyDeviceAuthorization: () => Effect.void,
             getSession: () => Effect.void.pipe(Effect.as(undefined)),
             resolveAccessToken: (_token, scopes) => {
               requested.push(scopes);
@@ -1017,9 +1014,6 @@ const authentication = Layer.succeed(AuthService)({
   handle: () => Effect.succeed(new Response()),
   getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
   consent: () => Effect.succeed("https://client.test/callback"),
-  claimDeviceAuthorization: () => Effect.succeed({ clientId: "helper", scope: "connections:read" }),
-  approveDeviceAuthorization: () => Effect.void,
-  denyDeviceAuthorization: () => Effect.void,
   resolveAccessToken: (token, scopes) => {
     const granted =
       token === "read"
@@ -1050,13 +1044,8 @@ const authentication = Layer.succeed(AuthService)({
 });
 const unavailableConnections: ConnectionsShape = {
   list: () => Effect.succeed([]),
-  startLinking: () => Effect.succeed([]),
-  startReconnect: () => Effect.succeed([]),
-  cancelLinking: () => Effect.succeed([]),
-  completeLinking: () => Effect.succeed([]),
   link: () => Effect.succeed([]),
   completeReconnect: () => Effect.succeed([]),
-  reconnect: () => Effect.succeed([]),
   disconnect: () => Effect.succeed([]),
   discoverTeams: () => Effect.succeed([]),
   listTeams: () => Effect.succeed([]),

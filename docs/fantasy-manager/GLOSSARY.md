@@ -63,10 +63,6 @@ _Avoid_: Login token when referring to the browser ticket
 A temporary browser process and profile created for one hosted linking session, with restricted provider egress and no persisted recording. It is destroyed when the session ends.
 _Avoid_: Remote desktop, general proxy
 
-**Local helper**:
-The first-party command-line fallback that pairs with the signed-in application through RFC 8628 device authorization and opens a dedicated temporary local browser profile for provider sign-in.
-_Avoid_: Hosted browser when referring to the helper
-
 **Provider session material**:
 The minimal provider tokens or cookies required to act on a linked account after sign-in. It is captured only after the provider accepts the sign-in, encrypted at rest, and never treated as a password.
 _Avoid_: Credentials when referring to a provider password

@@ -1,7 +1,3 @@
-import { randomUUID } from "node:crypto";
-
-import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
-
 import { expect, signIn, signUp, test } from "./support";
 
 test("renders Sign out in the server HTML when signed in", async ({ newUser, page }) => {
@@ -39,11 +35,12 @@ test("returns home on sign-out and back to the account's connections on sign-in"
   services,
 }) => {
   const account = await signUp(page);
-  await services.exercise(page, "start the owner's link", "startLinking", {
-    requestId: randomUUID(),
-    provider: decodeProviderKey("yahoo"),
-    pairingCode: "ABCD2345",
-  });
+  await services.exercise(
+    page,
+    "link the provider fake and discover teams",
+    "connectYahooAndDiscoverTeams",
+    {},
+  );
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL("/");

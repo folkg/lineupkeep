@@ -24,8 +24,8 @@ Cloud Scheduler ----------> Private Cloud Run worker
                                   |
                  PublicInternet -> exact approved provider endpoints
 
-User's computer: local linking helper -> explicit pairing approval
-                -> provider's own login page -> encrypted server persistence
+User's browser: hosted browser -> provider's own login page
+              -> encrypted server persistence
 ```
 
 Both Cloud Run services scale to zero. MCP transport remains request-scoped/stateless; domain work is durable independently of an MCP connection. No server LLM, hosted browser, Redis, continuously running scheduler, optimizer sidecar, or custom durable-workflow platform is required.
@@ -40,7 +40,7 @@ Internal roles:
 
 | Module            | Interface responsibility                                                                                                                               | What stays hidden                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| Connections       | Start/finish linking, list safe metadata, reconnect/disconnect                                                                                         | Cookie formats, secret versions, account fingerprints                |
+| Connections       | Link through the hosted browser, list safe metadata, reconnect/disconnect                                                                              | Cookie formats, secret versions, account fingerprints                |
 | Fantasy queries   | Discover teams/leagues, read selected roster/player/stat/matchup/history data                                                                          | Provider endpoints, nested parsing, hydration strategy               |
 | Team automation   | Enable, disable, pause through fantasy-day end                                                                                                         | Persistence and expiry mechanics                                     |
 | Lineup runs       | Request, inspect, execute/reconcile a run                                                                                                              | Queue, leases, provider writes, retry mechanics                      |
@@ -149,7 +149,7 @@ Use the starter's existing Effect-machine conventions and test support unless a 
 
 ### Provider connection
 
-Candidate states: linking, ready, reconnect-required, disconnected. Each state owns its data, rather than combining unrelated booleans and optional fields. Expiring/replaying pairing attempts cannot change another user's connection. Reauthentication creates a new credential generation; stale work must revalidate it before writing.
+Candidate states: linking, ready, reconnect-required, disconnected. Each state owns its data, rather than combining unrelated booleans and optional fields. Expiring or replayed hosted linking sessions cannot change another user's connection. Reauthentication creates a new credential generation; stale work must revalidate it before writing.
 
 A reconnect-required transition opens one connection incident and one notification intent. Five teams using that connection do not create five emails. A later expiration after successful reconnect is a new incident.
 
@@ -234,13 +234,13 @@ Keep application data, infrastructure state, and test databases on separate life
 
 ## 9. Linking and secrets
 
-Use a hosted browser as the primary linking flow, with the first-party local helper as a fallback. The hosted flow runs a fresh ephemeral Chromium profile in an isolated, IAM-private browser service and streams the provider page into the Connections surface. The person signs in once inside that page; the connection becomes ready without copying a code or approving a second device. The service is deployed for the `cloud-run` stage as `lineupkeep-hb`; see [the hosted browser infrastructure](HOSTED-BROWSER-INFRA-PLAN.md). The web proxies the stream and completes the connection, so the browser service is IAM-only, holds no application database or encryption secret, and accepts a session only with a Cloud Run ID token plus an HMAC-signed, one-use descriptor.
+Use a hosted browser as the linking flow. It runs a fresh ephemeral Chromium profile in an isolated, IAM-private browser service and streams the provider page into the Connections surface. The person signs in once inside that page; the connection becomes ready without copying a code or approving a second device. The service is deployed for the `cloud-run` stage as `lineupkeep-hb`; see [the hosted browser infrastructure](HOSTED-BROWSER-INFRA-PLAN.md). The web proxies the stream and completes the connection, so the browser service is IAM-only, holds no application database or encryption secret, and accepts a session only with a Cloud Run ID token plus an HMAC-signed, one-use descriptor.
 
 The browser is per-session and short-lived. Each hosted linking session is bound to the authenticated application owner, expires within ten minutes, and is one-use. The browser can join only with a one-use ticket delivered as an HttpOnly, `SameSite=Strict`, path-scoped cookie; only its hash is stored. A per-owner lock permits one open session, and starts are rate-limited. Wrong-owner joins, replayed sessions, expiry, and concurrent starts are rejected. The browser and its temporary profile are destroyed when session material is captured, when the owner cancels, on disconnect, and on expiry.
 
 The hosted browser is not a general proxy, but it can reach the public internet so a provider's identity chain works. Each session routes Chromium through a local forward proxy that resolves every destination and refuses non-public addresses by address, not by hostname; link-local, metadata, loopback, CGNAT, private, multicast, and reserved destinations are refused, and the verified public address is dialed directly. It cannot reach application-private services. See [ADR 0010](adr/0010-address-based-egress.md). Input is relayed transiently to the provider page through the web process; passwords, page content, screenshots, cookies, and crumbs are never logged, traced, recorded, or persisted. The transient keystroke relay is an accepted decision and the UI does not claim the password stays off our servers ([Round 11](DECISIONS.md#round-11--transient-keystroke-relay-in-the-hosted-browser)). The browser stops as soon as the required `T`/`Y` session cookies are captured and validated. Failure states distinguish expired sessions, blocked logins, additional verification, provider unavailability, and wrong-account rejection.
 
-The local helper remains supported for environments where the hosted browser is unavailable. A bounded pairing flow binds the helper to the authenticated application user with short-lived one-use approval and a helper-held proof. Do not put bearer secrets into shell command arguments or ship a new custom auth protocol when the auth library's supported flow can satisfy the contract. The selected mechanism is RFC 8628 device authorization with a first-party helper client and a scoped access token, proved in a local feasibility spike; see [DECISIONS.md](DECISIONS.md#round-9--local-helper-pairing-mechanism). The helper uses a dedicated temporary local browser profile and uploads the required session material itself. Hosted linking does not remove the helper's tests, documentation, or security requirements.
+The hosted browser is the only linking path. There is no local capture tool or upload endpoint; a deployment where hosted linking is unavailable reports that state instead of offering another route.
 
 Extract only the provider's required session material, send over authenticated TLS, validate the connection server-side, and store encrypted credentials separately. No cookies/crumbs in MCP, frontend state, telemetry, diagnostic snapshots, task payloads, URLs returned to agents, or email. Disconnect blocks future work and removes active secret material; already-sent requests still require reconciliation.
 

@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { expect, signUp, test } from "./support";
 import { captureCheckpoint } from "./verify/capture";
 
@@ -30,7 +28,7 @@ test("enables, pauses, resumes, and disables a team through the automation contr
     page,
     "link the provider fake and discover teams",
     "connectYahooAndDiscoverTeams",
-    { requestId: randomUUID(), pairingCode: "ABCD2345" },
+    {},
   );
   await page.goto("/teams");
   const row = page.getByRole("listitem").filter({ hasText: "Embedded Browser Team" });

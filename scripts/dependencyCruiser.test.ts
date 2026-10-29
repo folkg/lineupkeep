@@ -1490,7 +1490,6 @@ it.each([
   "packages/backend/src/runtime/ApplicationLayer.ts",
   "apps/web/src/contracts/connections/providerLabels.ts",
   "packages/hosted-browser/src/provider.ts",
-  "apps/linking-helper/src/providers.ts",
 ])("accepts a provider identity declaration in %s", async (path) => {
   const result = await checkLint({ [path]: 'export const providerKey = "yahoo";' });
 

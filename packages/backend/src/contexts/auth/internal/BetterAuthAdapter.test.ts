@@ -17,12 +17,7 @@ import {
 } from "effect";
 import { vi } from "vitest";
 
-import {
-  AuthorizationScopes,
-  linkingHelperClient,
-  linkingHelperScope,
-  offlineAccess,
-} from "#contexts/auth/AuthorizationScopes.ts";
+import { AuthorizationScopes, offlineAccess } from "#contexts/auth/AuthorizationScopes.ts";
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
@@ -751,10 +746,6 @@ it.effect(
       assert.deepStrictEqual(
         clients.find((client) => client.clientId === registered.client_id)?.scopes,
         advertised,
-      );
-      assert.deepStrictEqual(
-        clients.find((client) => client.clientId === linkingHelperClient.clientId)?.scopes,
-        [linkingHelperScope.name],
       );
     }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
   databaseTestTimeout,

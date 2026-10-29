@@ -1,6 +1,3 @@
-import { randomUUID } from "node:crypto";
-
-import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
 import { Schema } from "effect";
 
 import { ServiceIdentity } from "./serviceSetup.ts";
@@ -41,11 +38,12 @@ test("signs in named personas headlessly and isolates persisted service outcomes
   const other = await services.signIn("other");
   await services.arrange(owner, "verify the empty starting collection", "readConnections");
 
-  const connection = await services.exercise(owner, "start an owned link", "startLinking", {
-    requestId: randomUUID(),
-    provider: decodeProviderKey("yahoo"),
-    pairingCode: "ABCD2345",
-  });
+  await services.exercise(
+    owner,
+    "link the provider fake and discover teams",
+    "connectYahooAndDiscoverTeams",
+    {},
+  );
   const owned = await services.inspect(owner, "read persisted connections", "readConnections");
   const isolated = await services.inspect(
     other,
@@ -53,7 +51,7 @@ test("signs in named personas headlessly and isolates persisted service outcomes
     "readConnections",
   );
 
-  expect(owned).toEqual([connection]);
+  expect(owned).toMatchObject([{ status: "ready" }]);
   expect(isolated).toEqual([]);
   expect(browser.contexts()).toEqual([]);
   const evidence = test
@@ -64,7 +62,7 @@ test("signs in named personas headlessly and isolates persisted service outcomes
   expect(evidence.map(({ persona }) => persona)).toEqual(["owner", "owner", "owner", "other"]);
   expect(evidence.every(({ traceId }) => /^[a-f0-9]{32}$/u.test(traceId))).toBe(true);
   expect(evidence[1]).toMatchObject({
-    outcome: { status: "succeeded", result: connection },
+    outcome: { status: "succeeded" },
     execution: "application",
   });
 });
@@ -78,11 +76,12 @@ test("uses named browser personas with their real sessions for service calls", a
   const other = await newUser("other");
   await signUp(other);
 
-  await services.exercise(page, "start a link as the browser owner", "startLinking", {
-    requestId: randomUUID(),
-    provider: decodeProviderKey("yahoo"),
-    pairingCode: "ABCD2345",
-  });
+  await services.exercise(
+    page,
+    "link the provider fake and discover teams as the browser owner",
+    "connectYahooAndDiscoverTeams",
+    {},
+  );
   const isolated = await services.inspect(
     other,
     "read as the other browser User",
@@ -95,69 +94,6 @@ test("uses named browser personas with their real sessions for service calls", a
     .attachments.filter(isServiceCallAttachment)
     .map((attachment) => Schema.decodeUnknownSync(ServiceCallJson)(attachment.body?.toString()));
   expect(calls.map(({ persona }) => persona)).toEqual(["owner", "other"]);
-});
-
-test("replays concurrent batch links and rolls back mixed-owner cancellations in PostgreSQL", async ({
-  services,
-}) => {
-  const owner = await services.signIn("batch-owner");
-  const other = await services.signIn("batch-other");
-  const inputs = [
-    { requestId: randomUUID(), provider: decodeProviderKey("yahoo"), pairingCode: "ABCD2345" },
-    { requestId: randomUUID(), provider: decodeProviderKey("yahoo"), pairingCode: "WXYZ6789" },
-  ];
-  await test.step("Baseline: [batch-owner] has no connections", async () => {
-    expect(
-      await services.inspect(owner, "read the starting collection", "readConnections"),
-    ).toEqual([]);
-  });
-
-  const [first, replay] =
-    await test.step("Action: [batch-owner] submits identical link batches concurrently", () =>
-      Promise.all([
-        services.exercise(owner, "start the batch", "startLinkingBatch", inputs),
-        services.exercise(owner, "retry the batch concurrently", "startLinkingBatch", inputs),
-      ]));
-  expect(replay).toEqual(first);
-  const observations = Schema.decodeUnknownSync(
-    Schema.Array(
-      Schema.Struct({
-        id: Schema.String,
-        status: Schema.String,
-        linkingExpiresAt: Schema.optional(Schema.String),
-      }),
-    ),
-  )(first);
-  const foreign = Schema.decodeUnknownSync(
-    Schema.Struct({
-      id: Schema.String,
-      status: Schema.String,
-      linkingExpiresAt: Schema.optional(Schema.String),
-    }),
-  )(
-    await services.exercise(other, "start a foreign link", "startLinking", {
-      requestId: randomUUID(),
-      provider: decodeProviderKey("yahoo"),
-      pairingCode: "ABCD2345",
-    }),
-  );
-
-  await test.step("Result: [batch-owner] cannot cancel a batch containing another owner's connection", async () => {
-    await expect(
-      services.exercise(owner, "reject a mixed-owner cancellation", "cancelLinkingBatch", [
-        ...observations.map((connection) => ({ id: connection.id })),
-        { id: foreign.id },
-      ]),
-    ).rejects.toThrow("connection.not_found");
-  });
-  await test.step("Persistence: both owners retain their original connections without duplicates", async () => {
-    expect(
-      await services.inspect(owner, "read after the rejected cancellation", "readConnections"),
-    ).toEqual(observations.toSorted((left, right) => left.id.localeCompare(right.id)));
-    expect(await services.inspect(other, "read the foreign connection", "readConnections")).toEqual(
-      [foreign],
-    );
-  });
 });
 
 test("rejects anonymous service invocations and invalid programs or arguments", async ({
@@ -184,6 +120,6 @@ test("rejects anonymous service invocations and invalid programs or arguments", 
   ).toBe(404);
   const owner = await services.signIn("owner");
   await expect(
-    services.exercise(owner, "reject invalid arguments", "startLinking", { provider: 42 }),
+    services.exercise(owner, "reject invalid arguments", "readConnections", null),
   ).rejects.toThrow();
 });

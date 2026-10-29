@@ -7,14 +7,11 @@ import { Array, Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
 import {
-  ConnectionCredentialGeneration,
   type ConnectionError,
   type ConnectionId,
-  ConnectionLinkRejected,
   ConnectionNotFound,
   ConnectionProviderRejected,
   ConnectionProviderUnavailable,
-  StartLinkingInput,
 } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import type { FantasyTeam } from "./FantasyTeam.ts";
@@ -128,13 +125,8 @@ it.effect("requires a new credential generation after the provider rejects disco
 
     yield* fake.rejectSession(false);
     const recovered = Array.getUnsafe(
-      yield* connections.reconnect(owner, [
-        {
-          id: ready.id,
-          provider: decodeProviderKey("yahoo"),
-          session,
-          expectedGeneration: makeGeneration(1),
-        },
+      yield* connections.completeReconnect(owner, [
+        { id: ready.id, provider: decodeProviderKey("yahoo"), session },
       ]),
       0,
     );
@@ -146,17 +138,13 @@ it.effect("requires a new credential generation after the provider rejects disco
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
-it.effect("rejects discovery before a connection is ready and for another owner", () =>
+it.effect("rejects discovery for another owner", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [startInput]), 0);
     const ready = yield* connect(connections);
 
-    const notReady = yield* Effect.flip(connections.discoverTeams(owner, [{ id: linking.id }]));
     const foreign = yield* Effect.flip(connections.discoverTeams(other, [{ id: ready.id }]));
 
-    assert.instanceOf(notReady, ConnectionLinkRejected);
-    assert.strictEqual(notReady.status, "linking");
     assert.instanceOf(foreign, ConnectionNotFound);
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
@@ -215,16 +203,9 @@ it.effect("leaves stored teams unchanged when the provider is unavailable", () =
 function connect(
   connections: Connections["Service"],
 ): Effect.Effect<{ readonly id: ConnectionId }, ConnectionError> {
-  return Effect.gen(function* () {
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [connectInput]), 0);
-    const ready = Array.getUnsafe(
-      yield* connections.completeLinking(owner, [
-        { id: linking.id, provider: decodeProviderKey("yahoo"), session },
-      ]),
-      0,
-    );
-    return { id: ready.id };
-  });
+  return connections
+    .link(owner, [{ provider: decodeProviderKey("yahoo"), session }])
+    .pipe(Effect.map((linked) => ({ id: Array.getUnsafe(linked, 0).id })));
 }
 
 function team(providerTeamKey: string, name: string): ProviderTeam {
@@ -237,10 +218,6 @@ function team(providerTeamKey: string, name: string): ProviderTeam {
     season: 2026,
     name,
   };
-}
-
-function makeGeneration(value: number): ConnectionCredentialGeneration {
-  return Schema.decodeSync(ConnectionCredentialGeneration)(value);
 }
 
 function findTeam(teams: ReadonlyArray<FantasyTeam>, providerTeamKey: string): FantasyTeam {
@@ -267,16 +244,6 @@ function ConnectionsLayerFor(
 const owner = decodeUserId("owner");
 const other = decodeUserId("other");
 const session = Redacted.make("A1=test-session-cookie");
-const startInput = Schema.decodeSync(StartLinkingInput)({
-  requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
-  provider: decodeProviderKey("yahoo"),
-  pairingCode: "ABCD2345",
-});
-const connectInput = Schema.decodeSync(StartLinkingInput)({
-  requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",
-  provider: decodeProviderKey("yahoo"),
-  pairingCode: "WXYZ6789",
-});
 const EncryptionTestLayer = ConnectionCredentialEncryption.forKey(
   ConnectionEncryptionKey.fromBytes({
     bytes: new TextEncoder().encode("abcdefghijklmnopqrstuvwxyz012345"),

@@ -47,7 +47,7 @@ The owner authorized live read queries against their own teams and supplied a si
 
 Sizes and times are from a handful of runs on one machine, not a benchmark. Confirmed live:
 
-- Fantasy session material is the `T` and `Y` cookies; the pair the linking helper extracts is sufficient for every request above.
+- Fantasy session material is the `T` and `Y` cookies; the pair the hosted browser extracts is sufficient for every request above.
 - `game_keys` scopes the response to that game, so the NFL and NHL payloads differ.
 - The account returned five teams — one NFL and four NHL, including two teams in one NHL league. Multiple teams per league coexist in one response, and every `team_key` matched the adapter's `^[^.]+\.l\.[^.]+\.t\.[^.]+$` pattern with four- and five-digit league ids and one- and two-digit team ids.
 - `season` arrives as a numeric string, so the schema's string-to-integer transform is load-bearing.

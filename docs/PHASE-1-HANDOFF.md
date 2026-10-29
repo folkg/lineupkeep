@@ -16,7 +16,7 @@ Read [START-HERE.md](../START-HERE.md), [AGENTS.md](../AGENTS.md), the product/d
 | GCP                  | The owner explicitly permits using their authenticated GCP CLI to set up everything needed for this application. Inspect access and prepare the fresh project/resources and Alchemy plan. Confirm billing account and spending authorization before attaching billing or creating billable resources.                                 |
 | Existing resources   | Do not adopt, alter, delete, or migrate AutoCoach/starter resources, credentials, databases, infrastructure state, or sessions. An active CLI project is not a destination approval. Use explicit project selection on cloud commands.                                                                                                |
 | Cloud rollout        | Once destination, billing/budget, origin/email access, protected state, and security gates are satisfied, carry out the bounded Phase 1 rollout under this assignment. Review and record the actual plan yourself; additional owner approval is needed for a material scope/cost change or an unresolved gate, not each routine step. |
-| Yahoo                | The owner can log in through a local Playwright CLI browser session. Arrange that interaction when the helper is ready. Browser login is not permission for arbitrary research or lineup writes; obtain designated-team read acceptance and minimal native-write authority. Never execute transactions or premium actions.            |
+| Yahoo                | The owner signs in through the hosted browser. Browser login is not permission for arbitrary research or lineup writes; obtain designated-team read acceptance and minimal native-write authority. Never execute transactions or premium actions.                                                                                     |
 | Security             | Local work may proceed on the pinned baseline, loopback-only without public tunnels. Publication requires a coherent fixed dependency closure and installed-source/transport/SSR/single-flight acceptance. Ask before departing from the Solid rc.13 hold; do not silently patch around or waive the blocker.                         |
 | Purchases            | No domain purchase, paid plan upgrade, trademark filing, or unrelated resource work is authorized.                                                                                                                                                                                                                                    |
 
@@ -40,7 +40,7 @@ The existing deployment scaffold requires these additional inputs. Generated sec
 | Email                                        | The current scaffold uses Resend. Obtain a sending-scoped `RESEND_API_KEY`, verified domain access, and `EMAIL_FROM`, or return a justified provider change for decision. GCP access does not supply these. No external email sends in ordinary tests.                                                                                                                                   |
 | Application secrets                          | Generate a strong stable `BETTER_AUTH_SECRET` and the connection-encryption material required by the implemented design; store through the reviewed secret mechanism, never source/docs/artifacts. Test rotation/recovery and do not regenerate on each deploy.                                                                                                                          |
 | Public origin                                | Prefer the assigned Cloud Run URL if the owner accepts it; otherwise obtain access to an already-owned domain. Configure `BETTER_AUTH_URL`, callbacks, trusted ingress and abuse controls against the real topology. Do not buy a domain.                                                                                                                                                |
-| Yahoo acceptance                             | Owner login/MFA in a dedicated local browser workspace, then secure transfer through the new helper. Do not request credentials in MCP, commands, logs, or the frontend.                                                                                                                                                                                                                 |
+| Yahoo acceptance                             | Owner login/MFA in the hosted browser, then encrypted server-side persistence of the minimal session material. Do not request credentials in MCP, commands, logs, or the frontend.                                                                                                                                                                                                       |
 | Hosted Muse                                  | Owner account/client action may be necessary for actual OAuth, paging, and pending-result acceptance. Local protocol tests are not proof of hosted-client compatibility.                                                                                                                                                                                                                 |
 
 Google OAuth login is optional and not required for passwordless email-code registration. A Google OAuth application/client secret is unrelated to gcloud deployment access; do not create one unnecessarily.
@@ -82,13 +82,13 @@ Remaining gates before full Phase 1 acceptance:
 
 - **Owner-only deployed sign-in and live product acceptance.** Sign in to the
   deployed origin with the owner's mailbox code, link Yahoo through the hosted
-  browser (or the helper) against that origin, confirm the temporary browser and
-  profile are destroyed, then prove one live read and one native write with
-  verified readback. The agent did not read the inbox or complete the owner's
-  sign-in. The hosted path is deployed and stream-verified. The owner's
-  2026-10-28 Google-identity sign-in attempt was refused by Google with "This
-  browser or app may not be secure", so hosted Google-identity linking is not
-  accepted; the helper remains the fallback pending an owner decision.
+  browser against that origin, confirm the temporary browser and profile are
+  destroyed, then prove one live read and one native write with verified
+  readback. The agent did not read the inbox or complete the owner's sign-in.
+  The hosted path is deployed and stream-verified. The owner's 2026-10-28
+  Google-identity sign-in attempt was refused by Google with "This browser or
+  app may not be secure", so hosted Google-identity linking is not accepted and
+  no alternate capture path exists.
 - **Hosted MCP client acceptance.** Local JSON-RPC calls are blocked by the
   deliberate public-HTTPS client-metadata requirement; publish a CIMD metadata
   document and verify consent, scopes and bounded results with the hosted client.
@@ -106,7 +106,7 @@ Remaining gates before full Phase 1 acceptance:
 ## Execution sequence
 
 1. Inspect jj status and current authoritative documents. Preserve unrelated work. Confirm the pinned Node/Bun toolchain and baseline checks; do not recopy the starter or reinitialize history.
-2. Prove hosted-browser streaming and local-helper pairing feasibility. Build encrypted, owned, multi-account connections and exact NFL/NHL team discovery with behavioral provider fakes and disposable migrated PostgreSQL.
+2. Prove hosted-browser streaming. Build encrypted, owned, multi-account connections and exact NFL/NHL team discovery with behavioral provider fakes and disposable migrated PostgreSQL.
 3. Complete rich bounded provider-neutral query MCP and transaction-review links. Validate exact resource/period semantics, missing versus zero, ownership, scopes, whole-record paging, and byte limits.
 4. Implement durable native `set_lineup`, bounded waiting/status references, outbox/queue recovery, per-team coordination, write intent/readback, and uncertain-outcome reconciliation. Never blindly replay or undo a provider write.
 5. Finish operational UI in the approved royal violet/gold design, hourly current-period automation, enable/disable/provider-day pause, reconnect incidents/email, and enforced 30-day outcomes/seven-day normalized-diagnostic retention.

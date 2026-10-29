@@ -68,7 +68,7 @@ Negative starters lose to empty positions when legal bench accommodation exists.
 
 ### Connection, UI, and retention
 
-Use a hosted browser as the primary linking/reconnect flow, with the user-local helper as fallback. The hosted browser is owner-bound, one-use, short-lived, and egress-restricted; it never exposes a general CDP endpoint or assumes the hosted agent's browser is the user's computer. No password collection in application data, credentials in MCP/frontend/logs/email, or persisted browser recordings. Store minimal provider session material encrypted and connection-scoped; all production Yahoo HTTP uses PublicInternet plus Yahoo-specific exact authorization.
+Use a hosted browser as the linking/reconnect flow. The hosted browser is owner-bound, one-use, short-lived, and egress-restricted; it never exposes a general CDP endpoint or assumes the hosted agent's browser is the user's computer. No password collection in application data, credentials in MCP/frontend/logs/email, or persisted browser recordings. Store minimal provider session material encrypted and connection-scoped; all production Yahoo HTTP uses PublicInternet plus Yahoo-specific exact authorization.
 
 Expired login suspends writes but preserves enrollment. Show reconnect-required and send one action-required email per unresolved connection incident, not per team/hourly run. No reminder campaign initially.
 
@@ -90,17 +90,17 @@ These implement the accepted rules but have not been separately approved:
 
 ## Delivery summary
 
-| Stage | Deliverable                                                                              |
-| ----- | ---------------------------------------------------------------------------------------- |
-| 0     | Ready/fixed starter, name/path approval, contract and feasibility gates                  |
-| 1     | Independent validated baseline; Notes demo removed, connections started                  |
-| 2     | Hosted browser linking with helper fallback, encrypted connections, exact team discovery |
-| 3     | Generic rich-query MCP and safe transaction-review links                                 |
-| 4     | Durable native `set_lineup`, verified/pending results, recovery                          |
-| 5     | Minimal UI, hourly scheduling, action-required email, retention                          |
-| 6     | Separately authorized Cloud Run/Neon acceptance and Phase 1 launch                       |
-| 7     | Pure policy/solver with independent proof and explicit-write acceptance                  |
-| 8     | Direct Phase 2 cutover; no transaction suggestions/execution                             |
+| Stage | Deliverable                                                             |
+| ----- | ----------------------------------------------------------------------- |
+| 0     | Ready/fixed starter, name/path approval, contract and feasibility gates |
+| 1     | Independent validated baseline; Notes demo removed, connections started |
+| 2     | Hosted browser linking, encrypted connections, exact team discovery     |
+| 3     | Generic rich-query MCP and safe transaction-review links                |
+| 4     | Durable native `set_lineup`, verified/pending results, recovery         |
+| 5     | Minimal UI, hourly scheduling, action-required email, retention         |
+| 6     | Separately authorized Cloud Run/Neon acceptance and Phase 1 launch      |
+| 7     | Pure policy/solver with independent proof and explicit-write acceptance |
+| 8     | Direct Phase 2 cutover; no transaction suggestions/execution            |
 
 See DELIVERY-PLAN.md for each stage's tasks and acceptance evidence.
 
@@ -108,7 +108,7 @@ See DELIVERY-PLAN.md for each stage's tasks and acceptance evidence.
 
 1. **Starter publication blocker:** the inspected local `docs/release-readiness.md` explicitly reports a critical Solid Start RPC vulnerability and forbids publication of the installed closure. This is a local tracker observation, not an independent fresh advisory audit. The owner permits local implementation on the validated pinned baseline while awaiting a coherent fix; adopt and accept it before publication. Keep the vulnerable transport loopback-only, without public tunnels; no unauthorized workaround.
 2. **Provider contracts:** confirm Yahoo fantasy-day rollover, bench/pool/reserve rules, meaningful NFL/NHL scoring evidence, and live explicit-assignment write/readback before the relevant stages. An all-zero cut is a recorded finding, not proof of usable fallback quality.
-3. **Client/browser/helper/cloud:** verify hosted Muse OAuth/paging/pending-run behavior, hosted browser streaming and local-helper pairing feasibility, cloud egress/session compatibility, IAM, cold starts, and actual free-allowance availability. No new live Yahoo probes were performed in consolidation.
+3. **Client/browser/cloud:** verify hosted Muse OAuth/paging/pending-run behavior, hosted browser streaming, cloud egress/session compatibility, IAM, cold starts, and actual free-allowance availability. No new live Yahoo probes were performed in consolidation.
 4. **Identity — complete:** the owner selected Lineupkeep, its independent directory, and the royal violet and gold visual direction. No domain purchase, trademark clearance, or production origin is implied.
 5. **Authority:** the [autonomous handoff](../PHASE-1-HANDOFF.md) records the owner's subsequent whole-Phase-1 assignment and GCP CLI setup permission. Review technical seams as implementation work, not a repeated owner-approval ritual. Resolve the remaining billing/security/access/live-provider gates before the affected external action; earlier research authorization does not carry forward.
 

@@ -33,14 +33,11 @@ export const ProviderConnection = Schema.Struct({
   userId: UserId,
   provider: ProviderKey,
   status: ConnectionStatus,
-  pairingCode: Schema.optional(Schema.String),
   linkingExpiresAt: Schema.optional(ConnectionTimestamp),
   approvedAt: Schema.optional(ConnectionTimestamp),
   credentialGeneration: Schema.optional(ConnectionCredentialGeneration),
   reconnectRequiredAt: Schema.optional(ConnectionTimestamp),
   disconnectedAt: Schema.optional(ConnectionTimestamp),
-  reconnectCode: Schema.optional(Schema.String),
-  reconnectExpiresAt: Schema.optional(ConnectionTimestamp),
   createdAt: ConnectionTimestamp,
   updatedAt: ConnectionTimestamp,
 });
@@ -51,11 +48,6 @@ const ConnectionRequestId = Schema.String.pipe(
   Schema.brand("ConnectionRequestId"),
 );
 
-const ConnectionPairingCode = Schema.Trim.pipe(
-  Schema.check(Schema.isMinLength(1), Schema.isMaxLength(64)),
-  Schema.brand("ConnectionPairingCode"),
-);
-
 const ProviderSessionValue = Schema.RedactedFromValue(
   Schema.String.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(8_192))),
 );
@@ -63,7 +55,6 @@ const ProviderSessionValue = Schema.RedactedFromValue(
 export const StartLinkingInput = Schema.Struct({
   requestId: ConnectionRequestId,
   provider: ProviderKey,
-  pairingCode: ConnectionPairingCode,
 });
 export type StartLinkingInput = typeof StartLinkingInput.Type;
 
@@ -85,27 +76,12 @@ export const LinkInput = Schema.Struct({
 });
 export type LinkInput = typeof LinkInput.Type;
 
-export const StartReconnectInput = Schema.Struct({
-  requestId: ConnectionRequestId,
-  id: ConnectionId,
-  pairingCode: ConnectionPairingCode,
-});
-export type StartReconnectInput = typeof StartReconnectInput.Type;
-
 export const CompleteReconnectInput = Schema.Struct({
   id: ConnectionId,
   provider: ProviderKey,
   session: ProviderSessionValue,
 });
 export type CompleteReconnectInput = typeof CompleteReconnectInput.Type;
-
-export const ReconnectInput = Schema.Struct({
-  id: ConnectionId,
-  provider: ProviderKey,
-  session: ProviderSessionValue,
-  expectedGeneration: ConnectionCredentialGeneration,
-});
-export type ReconnectInput = typeof ReconnectInput.Type;
 
 export type ConnectionError =
   | ConnectionNotFound

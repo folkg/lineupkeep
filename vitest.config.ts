@@ -13,7 +13,6 @@ const hangGuardTimeoutMs = 30_000;
 const chromiumTests = [
   "apps/hosted-browser/src/server.test.ts",
   "apps/web/src/server/hostedLinking/playwrightHostedBrowser.test.ts",
-  "apps/linking-helper/src/ProviderBrowser.test.ts",
 ];
 
 const nodeProject = {

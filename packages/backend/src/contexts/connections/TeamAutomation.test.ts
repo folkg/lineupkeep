@@ -10,7 +10,6 @@ import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 
-import { StartLinkingInput } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import { decodeTeamId } from "./FantasyTeam.ts";
 import type { TeamAutomation, TeamId } from "./FantasyTeam.ts";
@@ -394,16 +393,11 @@ function seedTeams(
     yield* fake.setLeague(league);
     yield* fake.setRoster(roster);
     yield* fake.setNativeAfter(nativeAfter);
-    const linkingInput = yield* Schema.decodeEffect(StartLinkingInput)({
-      requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e2",
-      provider: decodeProviderKey("yahoo"),
-      pairingCode: "ABCD2345",
-    });
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [linkingInput]), 0);
-    yield* connections.completeLinking(owner, [
-      { id: linking.id, provider: decodeProviderKey("yahoo"), session },
-    ]);
-    const foundTeams = yield* connections.discoverTeams(owner, [{ id: linking.id }]);
+    const linked = Array.getUnsafe(
+      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
+      0,
+    );
+    const foundTeams = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return foundTeams.map((team) => team.id);
   }).pipe(Effect.orDie);
 }

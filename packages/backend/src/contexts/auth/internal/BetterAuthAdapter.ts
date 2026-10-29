@@ -3,7 +3,6 @@ import { getCurrentAuthEndpointContext } from "@better-auth/core/context";
 import type { DB } from "@better-auth/drizzle-adapter/relations-v2";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { mcp } from "@better-auth/mcp";
-import { DEVICE_CODE_GRANT_TYPE, oauthDeviceAuthorization } from "@better-auth/oauth-provider";
 import { productName } from "@lineupkeep/brand/product";
 import { getSessionCookie } from "better-auth/cookies";
 import { betterAuth } from "better-auth/minimal";
@@ -15,7 +14,6 @@ import {
   Data,
   ConfigProvider,
   Context,
-  DateTime,
   Duration,
   Effect,
   Exit,
@@ -27,21 +25,9 @@ import {
 import type { Scope } from "effect";
 
 import { appEnvironmentConfig } from "#config/AppEnvironment.ts";
-import {
-  AuthenticationInvalidResponse,
-  AuthenticationUnavailable,
-  DeviceAuthorizationRejected,
-} from "#contexts/auth/Auth.ts";
-import type {
-  AuthenticationError,
-  AuthenticationSession,
-  AccessTokenResolution,
-} from "#contexts/auth/Auth.ts";
-import {
-  AuthorizationScopes,
-  linkingHelperClient,
-  linkingHelperScope,
-} from "#contexts/auth/AuthorizationScopes.ts";
+import { AuthenticationInvalidResponse, AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
+import type { AuthenticationSession, AccessTokenResolution } from "#contexts/auth/Auth.ts";
+import { AuthorizationScopes } from "#contexts/auth/AuthorizationScopes.ts";
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import { UserId } from "#contexts/auth/User.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
@@ -54,7 +40,6 @@ import { AuthDatabase } from "./AuthDatabase.ts";
 import * as authSchema from "./AuthTables.ts";
 import { OAuthClientRepository } from "./OAuthClientRepository.ts";
 import * as oauthSchema from "./OAuthTables.ts";
-import { oauthClient, oauthClientResource } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
 
 export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
@@ -105,7 +90,6 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       const loadAuth = yield* Effect.cached(
         Effect.gen(function* () {
           const auth = yield* initializeAuth(authOptions);
-          yield* seedLinkingHelperClient(database, oauthResource);
           yield* oauthClients.widenDynamicRegistrations(scopes);
           return auth;
         }),
@@ -327,76 +311,6 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         return result.url;
       });
 
-      const readDeviceJson = <S extends Schema.Top & { readonly DecodingServices: never }>(
-        response: Response,
-        schema: S,
-      ): Effect.Effect<S["Type"], AuthenticationInvalidResponse> =>
-        Effect.tryPromise({
-          try: () => response.json() as Promise<unknown>,
-          catch: (cause) => AuthenticationInvalidResponse.make({ cause }),
-        }).pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(schema)),
-          Effect.mapError((cause) => AuthenticationInvalidResponse.make({ cause })),
-        );
-
-      const claimDeviceAuthorization = Effect.fn("AuthService.claimDeviceAuthorization")(function* (
-        headers: Headers,
-        userCode: string,
-      ) {
-        const requestHeaders = new Headers(headers);
-        requestHeaders.delete("content-type");
-        const response = yield* runAuthHandler(
-          new Request(
-            new URL(`/api/auth/device?user_code=${encodeURIComponent(userCode)}`, baseUrl),
-            { headers: requestHeaders },
-          ),
-        );
-        if (response.status >= 500) {
-          return yield* AuthenticationUnavailable.make({
-            cause: new Error("Device authorization unavailable"),
-          });
-        }
-        const body = yield* readDeviceJson(response, DeviceAuthorizationReviewResponse);
-        if (!response.ok || body.client_id === undefined || body.scope === undefined) {
-          return yield* DeviceAuthorizationRejected.make({
-            reason: body.error ?? "not_available",
-          });
-        }
-        return { clientId: body.client_id, scope: body.scope };
-      });
-
-      const decideDeviceAuthorization = (
-        path: "/device/approve" | "/device/deny",
-      ): ((
-        headers: Headers,
-        userCode: string,
-      ) => Effect.Effect<void, AuthenticationError | DeviceAuthorizationRejected>) =>
-        Effect.fn(`AuthService${path}`)(function* (headers: Headers, userCode: string) {
-          const requestHeaders = new Headers(headers);
-          requestHeaders.set("content-type", "application/json");
-          const body = yield* Schema.encodeEffect(DeviceUserCode)({ userCode }).pipe(
-            Effect.mapError((cause) => AuthenticationUnavailable.make({ cause })),
-          );
-          const response = yield* runAuthHandler(
-            new Request(new URL(`/api/auth${path}`, baseUrl), {
-              method: "POST",
-              headers: requestHeaders,
-              body,
-            }),
-          );
-          if (response.status >= 500) {
-            return yield* AuthenticationUnavailable.make({
-              cause: new Error("Device authorization unavailable"),
-            });
-          }
-          if (!response.ok) {
-            const failure = yield* readDeviceJson(response, DeviceAuthorizationErrorResponse);
-            return yield* DeviceAuthorizationRejected.make({
-              reason: failure.error ?? "invalid_request",
-            });
-          }
-        });
-
       return {
         signInMethods: { google: Option.isSome(google) },
         oauthResource,
@@ -406,9 +320,6 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         resolveAccessToken,
         getConsentRequest,
         consent,
-        claimDeviceAuthorization,
-        approveDeviceAuthorization: decideDeviceAuthorization("/device/approve"),
-        denyDeviceAuthorization: decideDeviceAuthorization("/device/deny"),
       } as const;
     }),
   },
@@ -454,57 +365,6 @@ function clientMetadataRequest(
 }
 
 class ClientMetadataRedirectRefused extends Data.TaggedError("ClientMetadataRedirectRefused") {}
-
-function seedLinkingHelperClient(
-  database: AuthDatabase["Service"],
-  resource: string,
-): Effect.Effect<void, AuthenticationUnavailable> {
-  return Effect.gen(function* () {
-    const now = DateTime.toDateUtc(yield* DateTime.now);
-    const registration = {
-      clientId: linkingHelperClient.clientId,
-      name: linkingHelperClient.name,
-      redirectUris: [],
-      grantTypes: [DEVICE_CODE_GRANT_TYPE],
-      responseTypes: [],
-      tokenEndpointAuthMethod: "none",
-      applicationType: "native",
-      scopes: [linkingHelperScope.name],
-      disabled: false,
-    };
-    yield* Effect.tryPromise({
-      try: () =>
-        database
-          .insert(oauthClient)
-          .values({
-            ...registration,
-            id: linkingHelperClient.clientId,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .onConflictDoUpdate({
-            target: oauthClient.clientId,
-            set: { ...registration, updatedAt: now },
-          })
-          .then(() => undefined),
-      catch: (cause) => AuthenticationUnavailable.make({ cause }),
-    });
-    yield* Effect.tryPromise({
-      try: () =>
-        database
-          .insert(oauthClientResource)
-          .values({
-            id: `${linkingHelperClient.clientId}:${resource}`,
-            clientId: linkingHelperClient.clientId,
-            resourceId: resource,
-            createdAt: now,
-          })
-          .onConflictDoNothing()
-          .then(() => undefined),
-      catch: (cause) => AuthenticationUnavailable.make({ cause }),
-    });
-  });
-}
 
 function createAuth(options: AuthFactoryOptions): ApplicationAuth {
   return betterAuth<ApplicationAuthOptions>({
@@ -555,11 +415,6 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
       cimd({
         metadataProfile: "mcp-2026-07-28",
         fetchClientMetadataResource: options.fetchMetadata,
-      }),
-      oauthDeviceAuthorization({
-        expiresIn: "10 minutes",
-        interval: "5 seconds",
-        verificationUri: new URL("/connections", options.baseUrl).href,
       }),
       emailOTP({
         otpLength: 6,
@@ -806,20 +661,6 @@ const ConsentRedirect = Schema.Struct({
   url: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
 });
 
-const DeviceUserCode = Schema.fromJsonString(Schema.Struct({ userCode: Schema.String }));
-
-const DeviceAuthorizationReviewResponse = Schema.Struct({
-  user_code: Schema.optional(Schema.String),
-  status: Schema.optional(Schema.String),
-  client_id: Schema.optional(Schema.String),
-  scope: Schema.optional(Schema.String),
-  error: Schema.optional(Schema.String),
-});
-
-const DeviceAuthorizationErrorResponse = Schema.Struct({
-  error: Schema.optional(Schema.String),
-});
-
 const AccessTokenClaims = Schema.Struct({
   sub: UserId,
   scope: Schema.String,
@@ -833,7 +674,6 @@ type ApplicationAuthOptions = import("better-auth").BetterAuthOptions & {
     ReturnType<typeof jwt>,
     ReturnType<typeof mcp>,
     ReturnType<typeof cimd>,
-    ReturnType<typeof oauthDeviceAuthorization>,
     ReturnType<typeof emailOTP>,
   ];
 };

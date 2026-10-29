@@ -13,12 +13,11 @@
 ## Existing platform
 
 - `apps/web/src/routes/`: TanStack Start routes and metadata.
-- `apps/web/src/browser/`: Solid browser UI. Auth is retained from the starter; connections is the first product surface and pairs a local helper.
-- `apps/linking-helper/`: first-party `lineupkeep` CLI that pairs through device authorization, signs in to the provider in a temporary Chromium profile, and uploads the session to the authenticated app endpoint.
+- `apps/web/src/browser/`: Solid browser UI. Auth is retained from the starter; connections is the first product surface and links through the hosted browser.
 - `apps/web/src/browser/brand-ui/`, `apps/web/src/theme/`: Lineupkeep foundation and generic primitives.
-- `apps/web/src/server/`: server functions, session/auth adapters, the authenticated linking upload, stateless starter MCP.
+- `apps/web/src/server/`: server functions, session/auth adapters, hosted linking, stateless starter MCP.
 - `packages/backend/src/contexts/auth/`: application authentication.
-- `packages/backend/src/contexts/connections/`: helper-pairing connection lifecycle, encrypted provider credentials, and exact team discovery.
+- `packages/backend/src/contexts/connections/`: connection lifecycle, encrypted provider credentials, and exact team discovery.
 - `packages/backend/src/runtime/`: runtime composition and PublicInternet.
 - `packages/backend/src/utilities/machine.ts`: starter machine convention, not a durable side-effect engine.
 - `packages/brand/src/product.ts`: shared product identity.

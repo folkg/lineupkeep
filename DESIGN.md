@@ -233,7 +233,7 @@ Lineup checks are one switch, optimistic and labelled for the team; pause and re
 
 ### Connections and incidents
 
-The connection surface links through the hosted browser only; the web UI has no local helper, pairing code, or password field. Each connection row names the provider, the number of teams it covers, when it was connected, and what its current status can do. A connection that needs a new sign-in reopens the same hosted browser session in place. The person never types a password here. One connection expiration opens one durable incident, and the paired action-required email uses a stable logical idempotency identity so retries cannot multiply reminders.
+The connection surface links through the hosted browser only; the web UI has no password field. Each connection row names the provider, the number of teams it covers, when it was connected, and what its current status can do. A connection that needs a new sign-in reopens the same hosted browser session in place. The person never types a password here. One connection expiration opens one durable incident, and the paired action-required email uses a stable logical idempotency identity so retries cannot multiply reminders.
 
 ### Browser surfaces
 

@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
-import { Array, DateTime, Effect, Layer, Redacted, Ref, Schema } from "effect";
+import { Array, DateTime, Effect, Layer, Redacted, Ref } from "effect";
 
 import { UserDirectory } from "#contexts/auth/UserDirectory.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -9,7 +9,6 @@ import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import type { EmailMessage } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
 
-import { StartLinkingInput } from "./Connection.ts";
 import type { ProviderConnection } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
@@ -97,13 +96,8 @@ it.effect("cancels the notification when the connection is reconnected", () =>
       { id: ready.id, expectedGeneration: credentialGeneration(ready) },
     ]);
 
-    yield* connections.reconnect(owner, [
-      {
-        id: ready.id,
-        provider: decodeProviderKey("yahoo"),
-        session,
-        expectedGeneration: credentialGeneration(ready),
-      },
+    yield* connections.completeReconnect(owner, [
+      { id: ready.id, provider: decodeProviderKey("yahoo"), session },
     ]);
     const summary = yield* notifications.run(10, yield* DateTime.now);
     const messages = yield* outbox.messages;
@@ -144,27 +138,13 @@ function credentialGeneration(connection: {
   return connection.credentialGeneration;
 }
 
-let connectSerial = 0;
-
 function connect(
   connections: Connections["Service"],
 ): Effect.Effect<ProviderConnection, never, never> {
-  return Effect.gen(function* () {
-    connectSerial += 1;
-    const input = yield* Schema.decodeEffect(StartLinkingInput)({
-      requestId: `018f79ea-7d86-7c18-9b4a-8b4d0c916${String(connectSerial).padStart(3, "0")}`,
-      provider: decodeProviderKey("yahoo"),
-      pairingCode: "ABCD2345",
-    });
-    const linking = Array.getUnsafe(yield* connections.startLinking(owner, [input]), 0);
-    const linked = Array.getUnsafe(
-      yield* connections.completeLinking(owner, [
-        { id: linking.id, provider: decodeProviderKey("yahoo"), session },
-      ]),
-      0,
-    );
-    return linked;
-  }).pipe(Effect.orDie);
+  return connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]).pipe(
+    Effect.map((linked) => Array.getUnsafe(linked, 0)),
+    Effect.orDie,
+  );
 }
 
 const FlakyEmailDelivery = Layer.effect(EmailDelivery)(

@@ -185,7 +185,6 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
             requestId: input.requestId,
             provider: input.provider,
             status: "linking" as const,
-            pairingCode: input.pairingCode,
             expiresAt: DateTime.toDateUtc(expiresAt),
             approvedAt: null,
             credentialGeneration: null,
@@ -247,151 +246,6 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
             }),
           )
           .pipe(mapTransactionError);
-      });
-
-      const startReconnect = Effect.fn("ConnectionRepository.startReconnect")(function* (
-        userId: UserId,
-        inputs: ReadonlyArray<import("#contexts/connections/Connection.ts").StartReconnectInput>,
-      ) {
-        const ids = [...new Set(inputs.map((input) => input.id))];
-        if (!Array.isArrayNonEmpty(ids)) {
-          return [];
-        }
-        const byId = new Map(inputs.map((input) => [input.id, input]));
-        const now = yield* DateTime.now;
-        const expiresAt = DateTime.addDuration(now, connectionLinkingWindowMillis);
-        return yield* database
-          .transaction((transaction) =>
-            mutateRows(transaction, providerConnections, {
-              where: eq(providerConnections.userId, userId),
-              ids,
-              codec: ConnectionRow,
-              plan: (locked) =>
-                Effect.gen(function* () {
-                  const planned: Array<typeof ConnectionRow.Type> = [];
-                  for (const id of ids) {
-                    const record = locked.get(id);
-                    const input = byId.get(id);
-                    if (record === undefined || input === undefined) {
-                      return yield* ConnectionNotFound.make({ id });
-                    }
-                    if (
-                      record.state._tag !== "Ready" &&
-                      record.state._tag !== "ReconnectRequired"
-                    ) {
-                      return yield* ConnectionLinkRejected.make({
-                        id,
-                        status: connectionStatus(record.state),
-                      });
-                    }
-                    if (
-                      record.reconnectRequestId === input.requestId &&
-                      record.reconnectCode === input.pairingCode &&
-                      record.reconnectExpiresAt !== null &&
-                      DateTime.toEpochMillis(record.reconnectExpiresAt) >
-                        DateTime.toEpochMillis(now)
-                    ) {
-                      planned.push(record);
-                      continue;
-                    }
-                    planned.push({
-                      ...record,
-                      reconnectCode: input.pairingCode,
-                      reconnectExpiresAt: expiresAt,
-                      reconnectRequestId: input.requestId,
-                      state: { ...record.state, updatedAt: now },
-                    });
-                  }
-                  return planned;
-                }),
-            }),
-          )
-          .pipe(
-            Effect.mapError((cause) =>
-              cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
-            ),
-            mapTransactionError,
-            Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
-          );
-      });
-
-      const cancelLinking = Effect.fn("ConnectionRepository.cancelLinking")(function* (
-        userId: UserId,
-        inputs: ReadonlyArray<ConnectionIdInput>,
-      ) {
-        const ids = [...new Set(inputs.map((input) => input.id))];
-        if (!Array.isArrayNonEmpty(ids)) {
-          return [];
-        }
-        const at = yield* DateTime.now;
-        return yield* database
-          .transaction((transaction) =>
-            Effect.gen(function* () {
-              const rows = yield* mutateRows(transaction, providerConnections, {
-                where: eq(providerConnections.userId, userId),
-                ids,
-                codec: ConnectionRow,
-                plan: (locked) =>
-                  Effect.gen(function* () {
-                    const targets: Array<LockedTarget> = [];
-                    const unchanged: Array<typeof ConnectionRow.Type> = [];
-                    for (const id of ids) {
-                      const record = locked.get(id);
-                      if (record === undefined) {
-                        return yield* ConnectionNotFound.make({ id });
-                      }
-                      if (record.state._tag === "Disconnected") {
-                        unchanged.push(record);
-                        continue;
-                      }
-                      if (record.state._tag !== "Linking") {
-                        return yield* ConnectionLinkRejected.make({
-                          id,
-                          status: connectionStatus(record.state),
-                        });
-                      }
-                      const snapshot = yield* snapshotOf(
-                        ConnectionLifecycleWorkflow,
-                        record.state,
-                      ).pipe(
-                        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-                      );
-                      targets.push({ id, record, snapshot });
-                    }
-                    const disconnected: ConnectionLifecycleRequest =
-                      ConnectionLifecycleEvents.cases.Disconnected.make({ at });
-                    const planned = yield* planBatch(
-                      ConnectionLifecycleWorkflow,
-                      targets,
-                      (_target) => disconnected,
-                    ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-                    return [
-                      ...unchanged,
-                      ...planned.map(({ row, snapshot }) => ({
-                        ...row.record,
-                        state: snapshot.state.value,
-                      })),
-                    ];
-                  }),
-              });
-              yield* transaction
-                .delete(providerCredentials)
-                .where(
-                  and(
-                    eq(providerCredentials.userId, userId),
-                    anyOf(providerCredentials.connectionId, ids),
-                  ),
-                );
-              return orderConnections(rows, ids);
-            }),
-          )
-          .pipe(
-            Effect.mapError((cause) =>
-              cause._tag === "SchemaError" ? ConnectionPersistenceFailed.make({ cause }) : cause,
-            ),
-            mapTransactionError,
-            Effect.map((rows) => rows.map((row) => recordToConnection(row, row.state))),
-          );
       });
 
       const discardLinking = Effect.fn("ConnectionRepository.discardLinking")(function* (
@@ -475,9 +329,6 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
                     return planned.map(({ row, snapshot }) => ({
                       ...row.record,
-                      reconnectCode: null,
-                      reconnectExpiresAt: null,
-                      reconnectRequestId: null,
                       state: snapshot.state.value,
                     }));
                   }),
@@ -581,9 +432,6 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
                     return planned.map(({ row, snapshot }) => ({
                       ...row.record,
-                      reconnectCode: null,
-                      reconnectExpiresAt: null,
-                      reconnectRequestId: null,
                       state: snapshot.state.value,
                     }));
                   }),
@@ -661,17 +509,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                       (_target) => disconnected,
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
                     return [
-                      ...unchanged.map((row) => ({
-                        ...row,
-                        reconnectCode: null,
-                        reconnectExpiresAt: null,
-                        reconnectRequestId: null,
-                      })),
+                      ...unchanged,
                       ...planned.map(({ row, snapshot }) => ({
                         ...row.record,
-                        reconnectCode: null,
-                        reconnectExpiresAt: null,
-                        reconnectRequestId: null,
                         state: snapshot.state.value,
                       })),
                     ];
@@ -771,17 +611,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                       (_target) => required,
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
                     const next = [
-                      ...unchanged.map((row) => ({
-                        ...row,
-                        reconnectCode: null,
-                        reconnectExpiresAt: null,
-                        reconnectRequestId: null,
-                      })),
+                      ...unchanged,
                       ...planned.map(({ row, snapshot }) => ({
                         ...row.record,
-                        reconnectCode: null,
-                        reconnectExpiresAt: null,
-                        reconnectRequestId: null,
                         state: snapshot.state.value,
                       })),
                     ];
@@ -1054,8 +886,6 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         loadOwned,
         loadCredential,
         startLinking,
-        startReconnect,
-        cancelLinking,
         discardLinking,
         completeLinking,
         reconnect,
@@ -1213,17 +1043,7 @@ const toConnection: (
 );
 
 function recordToConnection(
-  {
-    id,
-    userId,
-    pairingCode,
-    reconnectCode,
-    reconnectExpiresAt,
-    createdAt,
-  }: Pick<
-    typeof ConnectionRow.Type,
-    "id" | "userId" | "pairingCode" | "reconnectCode" | "reconnectExpiresAt" | "createdAt"
-  >,
+  { id, userId, createdAt }: Pick<typeof ConnectionRow.Type, "id" | "userId" | "createdAt">,
   state: typeof ConnectionRow.Type.state,
 ): ProviderConnection {
   const content = {
@@ -1232,19 +1052,12 @@ function recordToConnection(
     provider: state.provider,
     createdAt,
     updatedAt: state.updatedAt,
-    ...(reconnectCode === null || reconnectExpiresAt === null
-      ? {}
-      : {
-          reconnectCode,
-          reconnectExpiresAt,
-        }),
   };
   switch (state._tag) {
     case "Linking":
       return {
         ...content,
         status: "linking",
-        pairingCode,
         linkingExpiresAt: state.expiresAt,
       };
     case "Ready":

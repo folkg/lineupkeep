@@ -13,7 +13,7 @@ below marked _second pass_ were changed by it. The responsible-module map stays 
 ## Result
 
 No production module outside the provider adapters, their scoring modules, the composition root, and
-the keyed presentation/helper declarations contains the string `Yahoo` or `yahoo`, and no generic
+the keyed presentation declarations contains the string `Yahoo` or `yahoo`, and no generic
 module imports a provider adapter or a provider scoring module. The repository-wide check:
 
 ```sh
@@ -22,10 +22,9 @@ rg -n 'Yahoo|yahoo' packages apps \
 ```
 
 The remaining hits are deliberate: the composition root imports the adapter to build the registry;
-`providerLabels`, the hosted-browser declaration, and the helper declaration are keyed lookup tables;
+`providerLabels` and the hosted-browser declaration are keyed lookup tables;
 the `20261025113924_cool_ted_forrester` migration is an immutable applied record; and
-`ProviderFakeTest.ts` is test support that simulates the first provider through the public seam. The
-helper README is prose for the provider-specific helper. The `repository/provider-identity` lint rule
+`ProviderFakeTest.ts` is test support that simulates the first provider through the public seam. The `repository/provider-identity` lint rule
 makes the source statement enforceable: it rejects a provider name in any `src/` module outside the
 adapter, the composition root, and those declarations.
 
@@ -153,17 +152,16 @@ computed at all (no completed period, no published value), but a scheme whose sc
 placed now blocks the attempt instead of silently switching to a weaker scheme. Roster shape is not
 evidence about which measurement to trust.
 
-### Presentation, tooling, and helper
+### Presentation and tooling
 
-| Where                                                                               | Provider-specific fact                                                           | Disposition                                                                                                                                                            |
-| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Browser auth, landing, connections, team pages, hosted-linking panel, browser frame | Hardcoded "Yahoo" copy                                                           | `contracts/connections/providerLabels.ts` maps a key to a display name; callers render the supplied provider                                                           |
-| `contracts/connections/teamContract.ts`                                             | Provider literal; run `policy { version, basis, code }` (_second pass_)          | `ProviderKey`; run `provenance { kind, label, detail? }`                                                                                                               |
-| MCP `fantasyQueryTools.ts`                                                          | Descriptions claimed Yahoo ranks and "projections always unsupported for Yahoo"  | Descriptions defer to the provider's declared capabilities and limitations                                                                                             |
-| MCP `lineupTools.ts`                                                                | "Lineupkeep's own policy plans the lineup" (_second pass_)                       | "Lineupkeep plans the lineup from the provider's final per-player scores"                                                                                              |
-| `packages/hosted-browser/src/provider.ts`                                           | One Yahoo login URL                                                              | `hostedBrowserProviders` keyed by provider; egress is provider-independent and address-based                                                                           |
-| `apps/linking-helper/src/providers.ts`                                              | Yahoo sign-in URL, `T`/`Y` session cookies, Yahoo label, and a `"yahoo"` default | `helperProviders` declares label, sign-in URL, and required session cookie names; the CLI's default comes from the declared list; `ProviderBrowser` is cookie-agnostic |
-| `e2e/` fixtures                                                                     | `yahoo` key and Yahoo-shaped fake payloads                                       | Retained: they simulate the first provider through the public seam and the fake adapter implements `ProviderShape`                                                     |
+| Where                                                                               | Provider-specific fact                                                          | Disposition                                                                                                        |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Browser auth, landing, connections, team pages, hosted-linking panel, browser frame | Hardcoded "Yahoo" copy                                                          | `contracts/connections/providerLabels.ts` maps a key to a display name; callers render the supplied provider       |
+| `contracts/connections/teamContract.ts`                                             | Provider literal; run `policy { version, basis, code }` (_second pass_)         | `ProviderKey`; run `provenance { kind, label, detail? }`                                                           |
+| MCP `fantasyQueryTools.ts`                                                          | Descriptions claimed Yahoo ranks and "projections always unsupported for Yahoo" | Descriptions defer to the provider's declared capabilities and limitations                                         |
+| MCP `lineupTools.ts`                                                                | "Lineupkeep's own policy plans the lineup" (_second pass_)                      | "Lineupkeep plans the lineup from the provider's final per-player scores"                                          |
+| `packages/hosted-browser/src/provider.ts`                                           | One Yahoo login URL                                                             | `hostedBrowserProviders` keyed by provider; egress is provider-independent and address-based                       |
+| `e2e/` fixtures                                                                     | `yahoo` key and Yahoo-shaped fake payloads                                      | Retained: they simulate the first provider through the public seam and the fake adapter implements `ProviderShape` |
 
 ### Examined and kept, with reasons
 
@@ -181,17 +179,16 @@ evidence about which measurement to trust.
 These are declarations, not leaks. Each is scoped to one surface and consumed through a keyed lookup,
 so another provider adds an entry without touching behavior.
 
-| Declaration                                                  | Location                                                                                         | Why it is acceptable                                                                                                                                                                                           |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Display names and the current default selection              | `apps/web/src/contracts/connections/providerLabels.ts`                                           | Presentation only. The default is the only provider the product currently offers; when a second provider exists, the connections flow should ask which one, which is a product decision rather than a refactor |
-| Hosted browser sign-in URL and allowlisted origins           | `packages/hosted-browser/src/provider.ts`                                                        | The hosted browser must navigate to the provider's own sign-in page and nowhere else; the allowlist is a security boundary, and it is one entry per provider                                                   |
-| Helper sign-in URL, session cookie names, and provider label | `apps/linking-helper/src/providers.ts`                                                           | The local helper drives the provider's real web sign-in. Cookie names are that provider's session format; the helper never sees the password, and `ProviderBrowser` itself is provider-neutral                 |
-| Provider-labelled sign-in page                               | The provider's own page, opened by the helper or hosted browser                                  | We do not restyle or proxy provider authentication. The person sees the provider's page, so provider identity is the honest label                                                                              |
-| Yahoo wire details and scoring                               | `packages/backend/src/contexts/connections/internal/yahoo/**` and `internal/provider-scoring/**` | Endpoints, XML actions, crumb, game codes, scoring cohorts, review-link parameters, and the arithmetic that turns league rules or crowd shares into scores are the adapter's job                               |
+| Declaration                                        | Location                                                                                         | Why it is acceptable                                                                                                                                                                                           |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Display names and the current default selection    | `apps/web/src/contracts/connections/providerLabels.ts`                                           | Presentation only. The default is the only provider the product currently offers; when a second provider exists, the connections flow should ask which one, which is a product decision rather than a refactor |
+| Hosted browser sign-in URL and allowlisted origins | `packages/hosted-browser/src/provider.ts`                                                        | The hosted browser must navigate to the provider's own sign-in page and nowhere else; the allowlist is a security boundary, and it is one entry per provider                                                   |
+| Provider-labelled sign-in page                     | The provider's own page, opened by the hosted browser                                            | We do not restyle or proxy provider authentication. The person sees the provider's page, so provider identity is the honest label                                                                              |
+| Yahoo wire details and scoring                     | `packages/backend/src/contexts/connections/internal/yahoo/**` and `internal/provider-scoring/**` | Endpoints, XML actions, crumb, game codes, scoring cohorts, review-link parameters, and the arithmetic that turns league rules or crowd shares into scores are the adapter's job                               |
 
-Cookie names and the sign-in URL are the two facts that could not be moved behind the server-side
-`ProviderShape`, because they belong to the browser-driving surfaces rather than the backend adapter.
-They are declared in the same keyed style, in the only modules allowed to know them.
+The sign-in URL and the provider's session cookie names are the two facts that cannot move behind
+the server-side `ProviderShape`, because they belong to the hosted browser rather than the backend
+adapter. They stay in the hosted-browser modules that drive the provider's own sign-in.
 
 ## Enforcement
 
@@ -217,7 +214,7 @@ The `repository` lint plugin adds three rules:
 - `provider-action-vocabulary` rejects `start-active`, `start_active`, and `start active` in the same
   generic source, so one provider's native action name cannot become product vocabulary.
 - `provider-identity` rejects `Yahoo` or `yahoo` in generic source outside the adapter, the
-  composition root, and the keyed presentation/helper declarations, so a provider-name branch cannot
+  composition root, and the keyed presentation declarations, so a provider-name branch cannot
   reappear as a string comparison.
 
 Each rule is covered by acceptance and rejection fixtures in `scripts/dependencyCruiser.test.ts`. A

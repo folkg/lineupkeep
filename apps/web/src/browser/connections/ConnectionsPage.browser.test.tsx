@@ -137,20 +137,6 @@ it("starts a desktop viewport profile from a wide client", async () => {
   await expect.poll(() => hostedInputs).toEqual([{ provider: "yahoo", viewport: "desktop" }]);
 });
 
-it("offers no local helper affordances", async () => {
-  using _app = setupConnectionsPage([connected, reconnectable, linking]);
-
-  await expect.element(page.getByText("Use the local helper instead")).not.toBeInTheDocument();
-  await expect
-    .element(page.getByRole("button", { name: "Approve helper" }))
-    .not.toBeInTheDocument();
-  await expect.element(page.getByRole("button", { name: "Pair helper" })).not.toBeInTheDocument();
-  await expect.element(page.getByText("Pairing code")).not.toBeInTheDocument();
-  await expect
-    .element(page.getByRole("button", { name: "Start reconnect" }))
-    .not.toBeInTheDocument();
-});
-
 function setupConnectionsPage(
   connections: ReadonlyArray<ConnectionView>,
   overrides: Partial<Pick<ConnectionRemote, "startHosted">> = {},

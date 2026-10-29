@@ -205,8 +205,8 @@ Remaining acceptance and hardening:
   Google-identity variant is blocked: on 2026-10-28 Google refused the owner's
   sign-in with "This browser or app may not be secure", its supported-browser
   policy against software-controlled and embedded browsers. Hosted linking is
-  not accepted for Google-identity accounts; the local helper remains the
-  fallback pending an owner decision.
+  not accepted for Google-identity accounts, and no alternate capture path
+  remains.
 - Cold and warm start timings are recorded in
   [the deployment runbook](../deployment.md#cold-starts-and-cost): 9.4 s to the
   first frame cold versus 0.8 s warm. Actual per-session billing is still an
@@ -222,7 +222,7 @@ Remaining acceptance and hardening:
 ## Rollback
 
 Removing `HOSTED_BROWSER_URL` from the web service (or deploying the previous
-web revision) returns hosted linking to `hosted_browser.unsupported`; the local
-helper path is unaffected. The browser service can then be scaled to zero or
-deleted with its image. No data migration is required: the browser service
+web revision) returns hosted linking to `hosted_browser.unsupported`; no
+alternate linking path remains. The browser service can then be scaled to zero
+or deleted with its image. No data migration is required: the browser service
 stores nothing, and only the web process holds connection state.
