@@ -9,13 +9,16 @@ verified, because "done" has meant different things at different times in this p
 
 ## Current state
 
-| Area                 | State                                                                                       |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| Phase 1 (stages 0–6) | Complete, deployed, live-accepted                                                           |
-| Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                              |
-| Lineup algorithm     | Custom solver live for all five owner teams, seven consecutive verified ticks               |
-| Provider boundary    | Providers injected through a keyed registry; no adapter import outside the composition root |
-| MCP surface          | 17 tools, seven scopes, per-tool enforcement; round-2 to round-6 fixes in the working copy  |
+| Area                 | State                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| Phase 1 (stages 0–6) | Complete, deployed, live-accepted                                                              |
+| Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                 |
+| Lineup algorithm     | Custom solver live for all five owner teams, seven consecutive verified ticks                  |
+| Provider boundary    | Providers injected through a keyed registry; no adapter import outside the composition root    |
+| MCP surface          | 17 tools, seven scopes, per-tool enforcement; rounds 2 to 6 resolved and deployed              |
+| Client feedback      | Zero open items after round-6 triage on 2026-10-29                                             |
+| Connections          | Hosted browser only; the local helper and its device flow are deleted                          |
+| Interface            | Voice, connections, teams, activity and the mobile browser reworked from the owner walkthrough |
 
 ## 1. MCP client feedback — round 2
 
@@ -309,12 +312,43 @@ either scope. Evidence, the two client-side candidates, and the next step are re
 - [ ] Obtain the failing authorization's `error`/`error_description` and the client's registered or
       metadata-declared scopes before changing our path
 
+## 3b. Interface rework from the owner walkthrough
+
+Source: the owner's screen recording and written notes, 2026-10-28. Every item below is built, verified
+by browser test and screenshot, and deployed.
+
+- [x] **Voice.** No emdashes anywhere in product copy, no slogan headline, and no page repeating the
+      product description another page owns. Landing leads with what the product does.
+- [x] **Failed attempts leave nothing.** A hosted connection row was created when the session started, so
+      abandoned attempts piled up as dead rows. A connection now exists only after a link succeeds, the
+      three abandoned rows were deleted, and a migration test pins the ordering.
+- [x] **Connection identity.** Each row names the team count, when it was connected, and what its status
+      can do, without storing or showing any account identifier.
+- [x] **Helper affordances.** Pairing codes, approve and cancel buttons, and the reconnect form are gone
+      from the web surface, and the helper itself is deleted with its device flow and columns.
+- [x] **Teams.** One line of context, what the last check actually did, and a recent-change tally. Status
+      words appear only when something needs attention.
+- [x] **Optimistic toggles.** One switch per team predicts from the in-flight mutation and returns to the
+      server's confirmed state with a message when the write is refused.
+- [x] **Quiet activity folded.** Consecutive checks that changed nothing collapse into one expandable
+      line; changed, blocked, failed and in-progress runs stay on their own.
+- [x] **Small fixes.** Times in the reader's zone, a back affordance from team and run pages, and feedback
+      pre-filled with the team it was reported from.
+- [x] **Mobile browser.** A real input surface so a phone keyboard opens, a phone viewport profile so the
+      provider renders its own mobile layout, paste support, and no crosshair cursor.
+- [x] **Google-account hint.** The phone-number workaround is a collapsible hint on the connections page
+      and a one-line reminder inside the session.
+- [x] **Two test stalls fixed structurally.** The browser reports input readiness from the live DOM
+      instead of a timer, and shutdown awaits session teardown so profile removal cannot race Chromium.
+      Fourteen consecutive chromium runs green.
+
 ## 4. Operational gaps
 
 - [ ] **Database restore drill.** Back up, restore into a scratch database, prove the application reads
       it. Never rehearsed; the largest unverified operational claim.
-- [ ] **Hosted-browser live sign-in.** Operator handshake and real login page load are proven; a real
-      provider sign-in through the deployed app with owner credentials is not. Needs the owner present.
+- [ ] **Hosted-browser live sign-in.** Operator handshake and real login page load are proven, and the
+      owner completed a real provider sign-in through the deployed app on 2026-10-29 using the phone-number
+      route. Still unproven: a clean first-time sign-in by a different person on a phone.
 - [ ] **Publication security gate.** A temporary backport of an upstream fix is in force. Removal
       condition and acceptance are recorded in [release-readiness.md](release-readiness.md); replace it when
       the fixed upstream parent ships.
