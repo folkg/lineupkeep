@@ -3,6 +3,21 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — round-4 MCP fixes, part 3 (traded draft picks)
+
+- `get_transactions` trade rows carry `picks`: each traded draft pick's round and the private
+  counterparty references for the team that sent it, the team that received it, and the team that
+  originally owned it. The live Elite League 25 payload already contained a top-level `picks` array
+  on trade transactions; no request parameter was needed, and the adapter had been dropping it. A
+  player-for-pick trade now shows both sides.
+- A pick-only trade is complete rather than an empty transaction: `players` may be empty while
+  `picks` and `teams` carry both sides. `no_movements` now means neither players nor picks, and
+  `trade_return_unpublished` means no returning player and no traded pick.
+- The provider publishes no draft year or overall pick number for a traded pick, and the field
+  descriptions say so; none is inferred.
+- The `get_league` draft-history note now points traded picks at the trade transaction instead of
+  claiming trade payloads omit them.
+
 ## Unreleased — round-4 MCP fixes, part 2 (two-sided trades and draft history)
 
 - `get_transactions` player rows are movements with both ends: `from` is the team the player left
@@ -15,8 +30,8 @@ revisions that carried each change.
 - A transaction that cannot be reconstructed is marked `completeness: {status: "incomplete", code,
   detail}` instead of being served as a complete record. A trade the provider returns with no
   player movements is `no_movements` with an empty `players` array, never a complete empty trade.
-  A trade whose published movements only go from one team to the other is `trade_return_unpublished`,
-  because the provider publishes no draft picks or other non-player trade assets.
+  A trade whose published movements only go from one team to the other is `trade_return_unpublished`;
+  part 3 below refines that flag once traded picks are decoded.
 - The `get_transactions` description states that the provider publishes no proposals resource, so
   pending and rejected trade offers are unavailable, and that a trade transaction carries no draft
   picks. The `transactions:review` description now says the scope cannot review offers it cannot

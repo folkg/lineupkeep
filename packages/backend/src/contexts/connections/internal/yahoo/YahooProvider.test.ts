@@ -74,6 +74,8 @@ import {
   yahooNflTradeTransactions,
   yahooNflTradeTransactionsWithoutPartyKeys,
   yahooNflSinglePlayerTrade,
+  yahooNflTradeWithPicks,
+  yahooNflPickOnlyTrade,
   yahooNflEmptyTradeTransaction,
   yahooNflDraftResults,
   yahooNflRoster,
@@ -2385,6 +2387,7 @@ it.effect("reads bounded league transaction history with dropped-player identity
         status: "successful",
         parties: undefined,
         teams: [{ providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" }],
+        picks: [],
         players: [
           {
             providerPlayerKey: "466.p.20003",
@@ -2421,6 +2424,7 @@ it.effect("reads bounded league transaction history with dropped-player identity
         status: "successful",
         parties: undefined,
         teams: [{ providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" }],
+        picks: [],
         players: [
           {
             providerPlayerKey: "466.p.20005",
@@ -2476,6 +2480,7 @@ it.effect("decodes both sides of a trade with the team each player left and join
           { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
           { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
         ],
+        picks: [],
         players: [
           {
             providerPlayerKey: "466.p.20003",
@@ -2575,14 +2580,75 @@ it.effect("marks a trade with no player movements incomplete instead of empty", 
           { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
           { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
         ],
+        picks: [],
         players: [],
         incomplete: {
           code: "no_movements",
           detail:
-            "The provider published this transaction with no player movements, so neither side can be reconstructed. This is not evidence that no players moved.",
+            "The provider published this transaction with no player movements and no traded picks, so neither side can be reconstructed. This is not evidence that no assets moved.",
         },
       },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("decodes traded draft picks as part of the trade", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTradeWithPicks));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const transactions = yield* provider.readTransactions({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: undefined,
+      limit: 25,
+    });
+
+    const trade = Array.getUnsafe(transactions, 0);
+    assert.deepStrictEqual(trade.picks, [
+      {
+        round: 10,
+        from: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+        to: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+        original: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+      },
+      {
+        round: 1,
+        from: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+        to: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+        original: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+      },
+    ]);
+    assert.strictEqual(trade.players.length, 1);
+    assert.isUndefined(trade.incomplete);
+    assert.strictEqual(trade.teams.length, 2);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads a pick-only trade as complete instead of an empty transaction", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPickOnlyTrade));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const transactions = yield* provider.readTransactions({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: undefined,
+      limit: 25,
+    });
+
+    const trade = Array.getUnsafe(transactions, 0);
+    assert.deepStrictEqual(trade.players, []);
+    assert.strictEqual(trade.picks.length, 2);
+    assert.isUndefined(trade.incomplete);
+    assert.deepStrictEqual(
+      trade.teams.map((team) => team.name),
+      ["Synthetic Team", "Synthetic Rival"],
+    );
+    assert.deepStrictEqual(
+      trade.parties?.entries.map((party) => party.role),
+      ["proposer", "receiver"],
+    );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -2604,7 +2670,7 @@ it.effect("marks a trade whose published movements go one way incomplete", () =>
     assert.deepStrictEqual(trade.incomplete, {
       code: "trade_return_unpublished",
       detail:
-        "The provider published every player movement in this trade from one team to the other. It publishes no draft picks or other non-player trade assets, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
+        "The provider published no returning player and no traded draft pick for this trade, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
     });
     assert.deepStrictEqual(
       trade.parties?.entries.map((party) => party.role),

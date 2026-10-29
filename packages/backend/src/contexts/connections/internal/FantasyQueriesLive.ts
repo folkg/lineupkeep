@@ -1552,6 +1552,11 @@ export const FantasyQueriesLive = Layer.effect(
                 movementTeam === undefined ? [] : [movementTeam.providerTeamKey],
               ),
             ),
+            ...transaction.picks.flatMap((pick) =>
+              [pick.from, pick.to, pick.original].flatMap((pickTeam) =>
+                pickTeam === undefined ? [] : [pickTeam.providerTeamKey],
+              ),
+            ),
             ...(transaction.parties?.entries ?? []).map((party) => party.team.providerTeamKey),
           ]),
         ),
@@ -1632,6 +1637,12 @@ export const FantasyQueriesLive = Layer.effect(
                 },
               }),
           teams: transaction.teams.map(transactionTeamView),
+          picks: transaction.picks.map((pick) => ({
+            round: pick.round,
+            from: pick.from === undefined ? null : transactionTeamView(pick.from),
+            to: pick.to === undefined ? null : transactionTeamView(pick.to),
+            original: pick.original === undefined ? null : transactionTeamView(pick.original),
+          })),
           players,
         };
       });
@@ -2444,7 +2455,7 @@ function draftHistoryData(
     status: "available",
     ...(draftStatus === undefined ? {} : { draftStatus }),
     detailNote:
-      "These are the picks the provider publishes for this league's draft. This is draft history, not current or future pick ownership: the provider publishes no pick-ownership read, and a trade transaction carries no draft picks.",
+      "These are the picks the provider publishes for this league's draft. This is draft history, not current or future pick ownership: the provider publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it.",
     picks: [...picks],
   };
 }

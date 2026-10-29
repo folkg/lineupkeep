@@ -106,8 +106,12 @@ Whether the provider payload lets a client reconstruct every movement in a trans
 _Avoid_: Success, empty trade
 
 **Draft history**:
-The picks a league's draft actually made: round, pick number, the team that made the pick, and the player taken. It is not current or future pick ownership, and the provider publishes no picks inside trade transactions.
+The picks a league's draft actually made: round, pick number, the team that made the pick, and the player taken. It is not current or future pick ownership, and a traded pick appears on the trade transaction that moved it rather than in this history.
 _Avoid_: Draft board, pick ownership when the read is history
+
+**Traded draft pick**:
+A draft pick moved in a trade, carrying its round and the teams that sent it, received it, and originally owned it. It is part of the trade transaction, not a proposal, and the provider publishes no draft year or overall pick number for it.
+_Avoid_: Pick ownership when referring to a traded pick
 
 ## Automation
 

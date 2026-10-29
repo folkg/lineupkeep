@@ -285,7 +285,7 @@ export const LeagueData = Schema.Struct({
   draftHistory: Schema.optional(DraftHistory).pipe(
     Schema.annotate({
       description:
-        "Completed draft picks for this league's draft, one row per pick. Present when the `draft_history` group is requested. This is history, not current or future pick ownership: the provider publishes no pick-ownership read, and a trade transaction carries no draft picks.",
+        "Completed draft picks for this league's draft, one row per pick. Present when the `draft_history` group is requested. This is history, not current or future pick ownership: the provider publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it.",
     }),
   ),
   coverage: Schema.Array(QueryCoverage),
@@ -767,6 +767,26 @@ const TransactionParties = Schema.Struct({
   entries: Schema.Array(TransactionParty),
 });
 
+const TransactionPick = Schema.Struct({
+  round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(
+    Schema.annotate({
+      description:
+        "Round of the traded draft pick. The provider publishes no draft year or overall pick number for a traded pick.",
+    }),
+  ),
+  from: Schema.NullOr(TransactionTeam).pipe(
+    Schema.annotate({ description: "The team that sent the pick." }),
+  ),
+  to: Schema.NullOr(TransactionTeam).pipe(
+    Schema.annotate({ description: "The team that received the pick." }),
+  ),
+  original: Schema.NullOr(TransactionTeam).pipe(
+    Schema.annotate({
+      description: "The team that originally owned the pick, before any earlier trade.",
+    }),
+  ),
+});
+
 const TransactionCompleteness = Schema.Union([
   Schema.Struct({ status: Schema.Literal("complete") }),
   Schema.Struct({
@@ -783,6 +803,7 @@ const Transaction = Schema.Struct({
   completeness: TransactionCompleteness,
   parties: Schema.optional(TransactionParties),
   teams: Schema.Array(TransactionTeam),
+  picks: Schema.Array(TransactionPick),
   players: Schema.Array(
     Schema.Struct({
       player: PlayerRef,

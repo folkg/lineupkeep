@@ -24,7 +24,7 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 | `search_players`                    | Bounded league/sport-context player search with ownership/started signals and validated sorts                                                                              |
 | `get_players`                       | Bounded selected-player hydration including generic stats/projections/availability groups                                                                                  |
 | `get_matchups`                      | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                 |
-| `get_transactions`                  | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, and explicit incompleteness; no execution                       |
+| `get_transactions`                  | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution   |
 | `get_team_summary`                  | One bounded per-team snapshot: league, standing and record, standings, current matchup, and compact roster                                                                 |
 | `generate_transaction_review_links` | Typed add/add-drop/drop/trade review intents; return provider human-review URLs only                                                                                       |
 | `set_lineup`                        | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                     |
@@ -151,26 +151,34 @@ they appear as `proposer` and `receiver` with `source: "provider"`. When it does
 are the teams the movements involve, as `participant` entries with `source: "player_movements"`;
 the adapter never assigns a proposer or receiver role the payload does not establish.
 
+A trade also carries `picks`: each traded draft pick with its round and the teams that sent,
+received, and originally owned it. The provider publishes no draft year or overall pick number for a
+traded pick, so neither is reported. A pick's `from`, `to`, and `original` are the same private
+counterparty references as a player movement, so a player-for-pick trade shows both sides without a
+second read. The live Elite League 25 read on 2026-10-29 found this array in the plain
+`transactions;count=50` payload; no extra query parameter was needed, and an earlier adapter simply
+did not decode it.
+
 A transaction whose movements cannot be reconstructed is marked, not omitted and not presented as
 an empty success. `completeness` is `{ status: "complete" }` or `{ status: "incomplete", code,
 detail }`, and the reason says what the client can act on. A trade the provider returns with no
-player rows is `incomplete` with code `no_movements` and its `players` array stays empty; a movement
-missing its required end is `movement_missing_party`; a movement type the adapter cannot place on a
-team is `unknown_movement`; and a trade whose published movements only go from one team to the
-other is `trade_return_unpublished`, because the provider publishes no draft picks or other
-non-player trade assets and the return side therefore cannot be reconstructed. An incomplete record
-is never a comp a client should price against.
+player rows and no traded picks is `incomplete` with code `no_movements` and its `players` array
+stays empty; a pick-only trade is complete because its picks carry both sides. A movement missing
+its required end is `movement_missing_party`; a movement type the adapter cannot place on a team is
+`unknown_movement`; and a trade with no returning player and no traded pick is
+`trade_return_unpublished`, because the return side cannot be reconstructed from the payload. An
+incomplete record is never a comp a client should price against.
 
 The provider publishes no proposals resource. Pending, accepted-by-one-side, and rejected trade
-offers are not available to any client, and a trade transaction payload carries no draft picks. The
-tool description states that boundary so a client does not spend a round probing for data the
-provider does not publish; no pick or offer data is inferred.
+offers are not available to any client. The tool description states that boundary so a client does
+not spend a round probing for data the provider does not publish; no offer data is inferred.
 
 `get_league`'s `draft_history` group returns the provider's `draftresults` read: every published
 pick in provider order with its round, pick number, the team that made it, and a private player
 reference, beside the league's published draft status. It is history, not current or future pick
 ownership; the provider publishes no pick-ownership read, so the group does not pretend to know who
-owns an upcoming pick. Team names come from one batched league-teams read and are omitted when that
+owns an upcoming pick. A traded pick appears on the trade transaction that moved it, not in this
+pick history. Team names come from one batched league-teams read and are omitted when that
 read fails while the picks remain. The group pages picks inside the result budget, and the section's
 detail note repeats that this is completed draft history rather than pick ownership.
 

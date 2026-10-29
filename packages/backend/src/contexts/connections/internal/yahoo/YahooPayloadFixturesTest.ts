@@ -1727,6 +1727,152 @@ export const yahooNflSinglePlayerTrade = {
   },
 };
 
+export const yahooNflTradeWithPicks = {
+  fantasy_content: {
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        transactions: {
+          "0": {
+            transaction: [
+              {
+                transaction_key: "466.l.4000.tr.11",
+                transaction_id: "11",
+                type: "trade",
+                status: "successful",
+                timestamp: "1791000000",
+                trader_team_key: "466.l.4000.t.1",
+                trader_team_name: "Synthetic Team",
+                tradee_team_key: "466.l.4000.t.2",
+                tradee_team_name: "Synthetic Rival",
+              },
+              {
+                picks: [
+                  {
+                    pick: {
+                      source_team_key: "466.l.4000.t.1",
+                      source_team_name: "Synthetic Team",
+                      destination_team_key: "466.l.4000.t.2",
+                      destination_team_name: "Synthetic Rival",
+                      original_team_key: "466.l.4000.t.1",
+                      original_team_name: "Synthetic Team",
+                      round: "10",
+                    },
+                  },
+                  {
+                    pick: {
+                      source_team_key: "466.l.4000.t.2",
+                      source_team_name: "Synthetic Rival",
+                      destination_team_key: "466.l.4000.t.1",
+                      destination_team_name: "Synthetic Team",
+                      original_team_key: "466.l.4000.t.2",
+                      original_team_name: "Synthetic Rival",
+                      round: "1",
+                    },
+                  },
+                ],
+              },
+              {
+                players: {
+                  "0": {
+                    player: [
+                      [
+                        { player_key: "466.p.20003" },
+                        { player_id: "20003" },
+                        { name: { full: "Synthetic Sender", first: "Synthetic", last: "Sender" } },
+                        { editorial_team_abbr: "SYN" },
+                        { display_position: "WR" },
+                        { position_type: "O" },
+                      ],
+                      {
+                        transaction_data: {
+                          type: "trade",
+                          source_type: "team",
+                          source_team_key: "466.l.4000.t.1",
+                          source_team_name: "Synthetic Team",
+                          destination_type: "team",
+                          destination_team_key: "466.l.4000.t.2",
+                          destination_team_name: "Synthetic Rival",
+                        },
+                      },
+                    ],
+                  },
+                  count: 1,
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooNflPickOnlyTrade = {
+  fantasy_content: {
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        transactions: {
+          "0": {
+            transaction: [
+              {
+                transaction_key: "466.l.4000.tr.12",
+                transaction_id: "12",
+                type: "trade",
+                status: "successful",
+                timestamp: "1791000000",
+                trader_team_key: "466.l.4000.t.1",
+                trader_team_name: "Synthetic Team",
+                tradee_team_key: "466.l.4000.t.2",
+                tradee_team_name: "Synthetic Rival",
+              },
+              {
+                picks: [
+                  {
+                    pick: {
+                      source_team_key: "466.l.4000.t.1",
+                      source_team_name: "Synthetic Team",
+                      destination_team_key: "466.l.4000.t.2",
+                      destination_team_name: "Synthetic Rival",
+                      original_team_key: "466.l.4000.t.1",
+                      original_team_name: "Synthetic Team",
+                      round: "2",
+                    },
+                  },
+                  {
+                    pick: {
+                      source_team_key: "466.l.4000.t.2",
+                      source_team_name: "Synthetic Rival",
+                      destination_team_key: "466.l.4000.t.1",
+                      destination_team_name: "Synthetic Team",
+                      original_team_key: "466.l.4000.t.2",
+                      original_team_name: "Synthetic Rival",
+                      round: "12",
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};
+
 export const yahooNflDraftResults = {
   fantasy_content: {
     league: [

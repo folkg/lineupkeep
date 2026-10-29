@@ -2278,14 +2278,21 @@ function decodeTransactions(
         proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
       }));
       const parties = transactionParties(transaction, type, players);
+      const picks = (transaction.picks ?? []).map(({ pick }) => ({
+        round: pick.round,
+        from: transactionTeam(pick.source_team_key, pick.source_team_name),
+        to: transactionTeam(pick.destination_team_key, pick.destination_team_name),
+        original: transactionTeam(pick.original_team_key, pick.original_team_name),
+      }));
       decoded.push({
         occurredAt,
         type,
         status: optionalNonEmpty(transaction.status ?? ""),
         parties,
-        teams: transactionTeams(players, parties),
+        teams: transactionTeams(players, picks, parties),
+        picks,
         players,
-        incomplete: incompleteTransaction(type, players),
+        incomplete: incompleteTransaction(type, players, picks),
       });
     }
     return decoded;
@@ -2390,6 +2397,7 @@ function transactionParties(
 
 function transactionTeams(
   players: ReadonlyArray<ProviderTransaction["players"][number]>,
+  picks: ReadonlyArray<ProviderTransaction["picks"][number]>,
   parties: ProviderTransactionParties | undefined,
 ): ReadonlyArray<ProviderTransactionTeam> {
   const teams = new Map<string, ProviderTransactionTeam>();
@@ -2406,6 +2414,10 @@ function transactionTeams(
     add(player.movement.from);
     add(player.movement.to);
   }
+  for (const pick of picks) {
+    add(pick.from);
+    add(pick.to);
+  }
   for (const party of parties?.entries ?? []) {
     add(party.team);
   }
@@ -2415,12 +2427,13 @@ function transactionTeams(
 function incompleteTransaction(
   type: ProviderTransaction["type"],
   players: ReadonlyArray<ProviderTransaction["players"][number]>,
+  picks: ReadonlyArray<ProviderTransaction["picks"][number]>,
 ): ProviderTransactionIncomplete | undefined {
-  if (players.length === 0) {
+  if (players.length === 0 && picks.length === 0) {
     return {
       code: "no_movements",
       detail:
-        "The provider published this transaction with no player movements, so neither side can be reconstructed. This is not evidence that no players moved.",
+        "The provider published this transaction with no player movements and no traded picks, so neither side can be reconstructed. This is not evidence that no assets moved.",
     };
   }
   for (const player of players) {
@@ -2457,12 +2470,25 @@ function incompleteTransaction(
       };
     }
   }
-  const sendingTeams = new Set(players.map((player) => player.movement.from?.providerTeamKey));
+  for (const pick of picks) {
+    if (pick.from === undefined || pick.to === undefined) {
+      return {
+        code: "movement_missing_party",
+        detail: `The provider published a round ${String(pick.round)} draft pick without both the team that sent it and the team that received it, so the pick's movement cannot be reconstructed.`,
+      };
+    }
+  }
+  const sendingTeams = new Set(
+    [
+      ...players.map((player) => player.movement.from?.providerTeamKey),
+      ...picks.map((pick) => pick.from?.providerTeamKey),
+    ].filter((providerTeamKey): providerTeamKey is string => providerTeamKey !== undefined),
+  );
   if (type === "trade" && sendingTeams.size === 1) {
     return {
       code: "trade_return_unpublished",
       detail:
-        "The provider published every player movement in this trade from one team to the other. It publishes no draft picks or other non-player trade assets, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
+        "The provider published no returning player and no traded draft pick for this trade, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
     };
   }
   return undefined;
@@ -3191,6 +3217,18 @@ const TransactionPlayerPayload = Schema.Struct({
   }),
 });
 
+const TransactionPickPayload = Schema.Struct({
+  pick: Schema.Struct({
+    round: IntFromStringOrNumber,
+    source_team_key: Schema.optional(TeamKey),
+    source_team_name: Schema.optional(Schema.String),
+    destination_team_key: Schema.optional(TeamKey),
+    destination_team_name: Schema.optional(Schema.String),
+    original_team_key: Schema.optional(TeamKey),
+    original_team_name: Schema.optional(Schema.String),
+  }),
+});
+
 const TransactionPayload = Schema.Struct({
   type: Schema.NonEmptyString,
   status: Schema.optional(Schema.String),
@@ -3199,6 +3237,7 @@ const TransactionPayload = Schema.Struct({
   trader_team_name: Schema.optional(Schema.String),
   tradee_team_key: Schema.optional(TeamKey),
   tradee_team_name: Schema.optional(Schema.String),
+  picks: Schema.optional(Schema.Array(TransactionPickPayload)),
   players: Schema.optional(Schema.Array(TransactionPlayerPayload)),
 });
 

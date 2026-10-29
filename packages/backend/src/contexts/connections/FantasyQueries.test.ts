@@ -937,6 +937,53 @@ it.effect("flags a transaction with no player movements incomplete instead of an
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("reports a pick-only trade with both sides and no players", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setTransactions([
+      transaction({
+        occurredAt: "2026-09-22T12:00:00.000Z",
+        type: "trade",
+        teams: [alphaTeam, betaTeam],
+        parties: {
+          source: "provider",
+          entries: [
+            { role: "proposer", team: alphaTeam },
+            { role: "receiver", team: betaTeam },
+          ],
+        },
+        picks: [
+          { round: 2, from: alphaTeam, to: betaTeam, original: alphaTeam },
+          { round: 12, from: betaTeam, to: alphaTeam, original: betaTeam },
+        ],
+        players: [],
+      }),
+    ]);
+
+    const transactions = yield* queries.getTransactions(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+    });
+
+    assert.strictEqual(transactions.status, "ok");
+    if (transactions.status !== "ok") {
+      return;
+    }
+    const trade = Array.getUnsafe(transactions.transactions, 0);
+    assert.deepStrictEqual(trade.completeness, { status: "complete" });
+    assert.deepStrictEqual(trade.players, []);
+    assert.deepStrictEqual(
+      trade.picks.map((pick) => [pick.round, pick.from?.name, pick.to?.name, pick.original?.name]),
+      [
+        [2, "Alpha", "Beta", "Alpha"],
+        [12, "Beta", "Alpha", "Beta"],
+      ],
+    );
+    assert.strictEqual(trade.teams.length, 2);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("returns draft history with round, pick, team, and player for the league", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -2261,6 +2308,7 @@ function transaction(fields: {
   readonly occurredAt: string;
   readonly type: ProviderTransaction["type"];
   readonly players: ReadonlyArray<ProviderTransaction["players"][number]>;
+  readonly picks?: ReadonlyArray<ProviderTransaction["picks"][number]>;
   readonly teams?: ReadonlyArray<ProviderTransactionTeam>;
   readonly parties?: ProviderTransaction["parties"];
   readonly incomplete?: ProviderTransaction["incomplete"];
@@ -2271,6 +2319,7 @@ function transaction(fields: {
     status: "successful",
     parties: fields.parties,
     teams: fields.teams ?? [],
+    picks: fields.picks ?? [],
     players: fields.players,
     incomplete: fields.incomplete,
   };

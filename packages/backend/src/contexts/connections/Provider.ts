@@ -596,12 +596,20 @@ export type ProviderTransactionIncomplete = {
   readonly detail: string;
 };
 
+type ProviderTransactionPick = {
+  readonly round: number;
+  readonly from: ProviderTransactionTeam | undefined;
+  readonly to: ProviderTransactionTeam | undefined;
+  readonly original: ProviderTransactionTeam | undefined;
+};
+
 export type ProviderTransaction = {
   readonly occurredAt: string;
   readonly type: "add" | "drop" | "add_drop" | "trade" | "commissioner" | "other";
   readonly status: string | undefined;
   readonly parties: ProviderTransactionParties | undefined;
   readonly teams: ReadonlyArray<ProviderTransactionTeam>;
+  readonly picks: ReadonlyArray<ProviderTransactionPick>;
   readonly players: ReadonlyArray<ProviderTransactionPlayer>;
   readonly incomplete: ProviderTransactionIncomplete | undefined;
 };
