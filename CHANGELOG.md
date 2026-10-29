@@ -3,6 +3,35 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — round-5 and round-6 MCP fixes
+
+- `get_league` scoring lists the league's configured categories and marks each one `scoring` or
+  `informational`, with a `detail` on every informational entry naming the provider flag that
+  decided it. The provider sets `enabled` on every category it lists, so a display-only category
+  such as Saves or Shots Against in a league that does not score them previously looked scored.
+  Authorizing: a live head-to-head hockey league publishes fifteen categories, thirteen scored, with
+  Saves and Shots Against display-only.
+- Every published category value now carries the same `scoring` marking, in standings totals,
+  rotisserie points, and matchup categories, so no surface presents a displayed number as a scored
+  one. `get_players` scoring context lists scoring categories only, and an informational stat used as
+  a `stat` sort key is refused with the reason.
+- `search_players` rows carry `status`: `healthy`, `day_to_day`, `out`, `injured_reserve`, or
+  `unknown`, with the provider's own `code` and `detail` where it publishes them and the
+  `observedAt` instant. An unrecognised code is `unknown` and never healthy. The provider already
+  sends these fields in the search payload; the adapter now decodes them.
+- `get_team_summary` includes a roster page only when the `roster` group is requested. A budget
+  refusal names what consumed the budget: the roster page when one was requested, otherwise
+  `team_summary` with the selected groups listed.
+- A continuation cursor reused with different request arguments is refused as a mismatch that names
+  the binding instead of "invalid or expired", and a genuinely expired cursor says so. The published
+  `cursor` description states the binding in every tool that accepts one.
+- `list_feedback` requires `connections:read`, the same scope as `submit_feedback`, so a submitter
+  can read back its own reports and their statuses. Triage still needs `feedback:manage`, and every
+  query remains owner-filtered, so a submitter never sees another account's reports.
+- A rotisserie category the provider publishes no points for is stated per category, including a
+  configured category the provider omits from the points array entirely, rather than being absent or
+  reading as zero.
+
 ## Unreleased — round-4 MCP fixes, part 3 (traded draft picks)
 
 - `get_transactions` trade rows carry `picks`: each traded draft pick's round and the private

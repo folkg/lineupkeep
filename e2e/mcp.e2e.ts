@@ -361,10 +361,6 @@ test("reads on a restricted grant and refuses only the manage tools", async ({ p
   expect(automation.status).toBe(403);
   expect(automation.headers.get("www-authenticate")).toContain('scope="teams:manage"');
 
-  const listed = await client.request("tools/call", { name: "list_feedback", arguments: {} });
-  expect(listed.status).toBe(403);
-  expect(listed.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
-
   const submitted = await client.callTool("submit_feedback", {
     kind: "friction",
     title: "Restricted grant",
@@ -372,6 +368,22 @@ test("reads on a restricted grant and refuses only the manage tools", async ({ p
   });
   expect(submitted.isError).toBe(false);
   expect(JSON.stringify(submitted.structuredContent)).toContain('"status":"open"');
+  const feedbackId = Schema.decodeUnknownSync(
+    Schema.Struct({ feedback: Schema.Struct({ id: Schema.String }) }),
+  )(submitted.structuredContent).feedback.id;
+
+  const listed = await client.callTool("list_feedback", {});
+  expect(listed.isError).toBe(false);
+  expect(listed.structuredContent).toMatchObject({
+    feedback: [{ id: feedbackId, status: "open", title: "Restricted grant" }],
+  });
+
+  const triaged = await client.request("tools/call", {
+    name: "triage_feedback",
+    arguments: { feedback: [{ feedback: feedbackId, action: "acknowledge" }] },
+  });
+  expect(triaged.status).toBe(403);
+  expect(triaged.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
 });
 
 test("lists tools and submits feedback on the onboarding grant", async ({ page, baseURL }) => {
@@ -390,17 +402,22 @@ test("lists tools and submits feedback on the onboarding grant", async ({ page, 
     title: "Onboarding grant",
     body: "The minimal first authorization can submit this report.",
   });
-  const listed = await client.request("tools/call", { name: "list_feedback", arguments: {} });
+  const feedbackId = Schema.decodeUnknownSync(
+    Schema.Struct({ feedback: Schema.Struct({ id: Schema.String }) }),
+  )(submitted.structuredContent).feedback.id;
+  const listed = await client.callTool("list_feedback", {});
   const triaged = await client.request("tools/call", {
     name: "triage_feedback",
-    arguments: { feedback: [{ feedback: randomUUID(), action: "acknowledge" }] },
+    arguments: { feedback: [{ feedback: feedbackId, action: "acknowledge" }] },
   });
 
   expect(tools.status).toBe(200);
   expect(read.status).toBe(200);
   expect(submitted.isError).toBe(false);
-  expect(listed.status).toBe(403);
-  expect(listed.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+  expect(listed.isError).toBe(false);
+  expect(listed.structuredContent).toMatchObject({
+    feedback: [{ id: feedbackId, status: "open", title: "Onboarding grant" }],
+  });
   expect(triaged.status).toBe(403);
   expect(triaged.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
 });

@@ -11,7 +11,11 @@ import type { LineupSubmitData } from "@lineupkeep/backend/connections/LineupRun
 import type { LineupRunsShape } from "@lineupkeep/backend/connections/LineupRuns";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
-import { PlayerRef, QuerySelectionInvalid } from "@lineupkeep/backend/connections/QueryValues";
+import {
+  PlayerRef,
+  QueryCursorInvalid,
+  QuerySelectionInvalid,
+} from "@lineupkeep/backend/connections/QueryValues";
 import type { TeamsShape } from "@lineupkeep/backend/connections/Teams";
 import { Teams } from "@lineupkeep/backend/connections/Teams";
 import type { ReviewLinksData } from "@lineupkeep/backend/connections/TransactionReview";
@@ -164,7 +168,16 @@ it("challenges an unauthenticated client with protected-resource discovery and a
 
 it("names only the calling tool's missing scope in a 403 body", async () => {
   const response = await handle(
-    request("tools/call", { name: "list_feedback", arguments: {} }, "restricted"),
+    request(
+      "tools/call",
+      {
+        name: "triage_feedback",
+        arguments: {
+          feedback: [{ feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" }],
+        },
+      },
+      "restricted",
+    ),
   );
   const body = await json(response);
 
@@ -190,16 +203,25 @@ it("reads on a five-scope grant and refuses only the tools that need a manage sc
       "restricted",
     ),
   );
-  const feedback = await handle(
-    request("tools/call", { name: "list_feedback", arguments: {} }, "restricted"),
+  const triage = await handle(
+    request(
+      "tools/call",
+      {
+        name: "triage_feedback",
+        arguments: {
+          feedback: [{ feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" }],
+        },
+      },
+      "restricted",
+    ),
   );
 
   expect(listing.status).toBe(200);
   expect(read.status).toBe(200);
   expect(automation.status).toBe(403);
   expect(automation.headers.get("www-authenticate")).toContain('scope="teams:manage"');
-  expect(feedback.status).toBe(403);
-  expect(feedback.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+  expect(triage.status).toBe(403);
+  expect(triage.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
 });
 
 it("asks the auth service only for the calling tool's scope", async () => {
@@ -439,6 +461,42 @@ it("reaches search_players with an empty query and returns the remedy instead of
   expect(JSON.stringify(body)).toContain("Omit the query");
 });
 
+it("names the cause when a continuation cursor is reused with different arguments", async () => {
+  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const queries: FantasyQueriesShape = {
+    ...unavailableQueries,
+    getTeamSummary: () => Effect.fail(QueryCursorInvalid.make({ reason: "mismatch" })),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(queries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
+  );
+  const response = await handleMcpRequest(
+    request(
+      "tools/call",
+      {
+        name: "get_team_summary",
+        arguments: { team: teamId, groups: ["league"], cursor: "c1.x.y" },
+      },
+      "fantasy",
+    ),
+    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+  );
+  const body = await json(response);
+  const text = JSON.stringify(body);
+
+  expect(response.status).toBe(200);
+  expect(body).toMatchObject({ result: { isError: true } });
+  expect(text).toContain('\\"code\\":\\"cursor_invalid\\"');
+  expect(text).toContain("issued for a different request");
+  expect(text).not.toContain("invalid or expired");
+});
+
 it("requires transaction review scope and returns human-review-only links", async () => {
   const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
   const reviewData: ReviewLinksData = {
@@ -665,8 +723,25 @@ it("requires teams:manage and changes automation through the shared team service
 it("records agent feedback for the authenticated account on a read grant", async () => {
   const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
   const submitted: Array<{ readonly userId: string; readonly submitter: unknown }> = [];
+  const lists: Array<{ readonly userId: string; readonly filter: unknown }> = [];
   const feedback: FeedbackShape = {
     ...unavailableFeedback,
+    list: (userId, filter) => {
+      lists.push({ userId, filter });
+      return Effect.succeed([
+        {
+          id: Schema.decodeSync(FeedbackId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
+          submitter: { kind: "agent" as const, reference: "mcp" },
+          kind: "bug" as const,
+          status: "acknowledged" as const,
+          title: "Week is wrong",
+          body: "The run used the next week.",
+          context: { tool: "get_rosters", surface: "mcp" as const },
+          createdAt: at,
+          updatedAt: at,
+        },
+      ]);
+    },
     submit: (userId, submitter, submissions) => {
       submitted.push({ userId, submitter });
       return Effect.succeed(
@@ -736,9 +811,25 @@ it("records agent feedback for the authenticated account on a read grant", async
   const listed = await call(
     request("tools/call", { name: "list_feedback", arguments: {} }, "read"),
   );
+  const listedBody = await json(listed);
 
-  expect(listed.status).toBe(403);
-  expect(listed.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+  expect(listed.status).toBe(200);
+  expect(listedBody).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        feedback: [
+          {
+            id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3",
+            status: "acknowledged",
+            title: "Week is wrong",
+          },
+        ],
+        page: { returned: 1, limit: 20 },
+      },
+    },
+  });
+  expect(lists).toEqual([{ userId: "reader", filter: { limit: 20 } }]);
 });
 
 it("returns an actionable failure for refused feedback instead of leaking persistence details", async () => {
@@ -786,8 +877,8 @@ it("returns an actionable failure for refused feedback instead of leaking persis
 
   const throttled = await run(limited, "submit_feedback", submission, "read");
   const invalid = await run(rejected, "submit_feedback", submission, "read");
-  const failed = await run(broken, "list_feedback", {}, "feedback");
-  const invalidLimit = await run(broken, "list_feedback", { limit: 0 }, "feedback");
+  const failed = await run(broken, "list_feedback", {}, "restricted");
+  const invalidLimit = await run(broken, "list_feedback", { limit: 0 }, "restricted");
 
   const throttledBody = await json(throttled);
   const invalidBody = await json(invalid);
@@ -1098,6 +1189,15 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(search).toContain("percentOwnedDelta");
   expect(search).not.toContain("percentOwnedChange");
   expect(search).toContain("ownership week");
+  expect(search).toContain("injured_reserve");
+  expect(search).toContain("observedAt");
+
+  const scoring = JSON.stringify(tool("get_league").outputSchema);
+  expect(scoring).toContain("informational");
+  expect(scoring).toContain("display-only");
+
+  const cursor = JSON.stringify(tool("get_team_summary").inputSchema);
+  expect(cursor).toContain("bound to the arguments");
 });
 
 function json(response: Response): Promise<unknown> {

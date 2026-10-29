@@ -79,7 +79,7 @@ import {
   yahooWriteDeadlineMillis,
   yahooWriteResponseLimitBytes,
 } from "./YahooLimits.ts";
-import { scoreYahooRoster, yahooCapabilities } from "./YahooLineup.ts";
+import { scoreYahooRoster, yahooCapabilities, yahooPlayerStatus } from "./YahooLineup.ts";
 import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
 
 const readOrigin = new URL("https://pub-api-ro.fantasysports.yahoo.com");
@@ -1208,6 +1208,11 @@ function leagueSettings(
         abbreviation: stat.abbr,
         group: stat.group,
         enabled: stat.enabled,
+        displayOnly:
+          stat.is_only_display_stat === true ||
+          (stat.stat_position_types ?? []).some(
+            ({ stat_position_type }) => stat_position_type.is_only_display_stat === true,
+          ),
         positionTypes: (stat.stat_position_types ?? []).flatMap(({ stat_position_type }) =>
           stat_position_type.position_type === undefined ? [] : [stat_position_type.position_type],
         ),
@@ -2029,6 +2034,7 @@ function toSearchPlayer(
   season: number,
   statId: number | undefined,
 ): ProviderPlayerSearchResult["players"][number] {
+  const injuryCode = searchInjuryCode(player.status);
   return {
     providerPlayerKey: player.player_key,
     name: player.name.full,
@@ -2036,6 +2042,12 @@ function toSearchPlayer(
     displayPosition: player.display_position,
     eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
     availability: availabilityOf(player.ownership?.ownership_type),
+    status: {
+      value: yahooPlayerStatus(injuryCode),
+      code: injuryCode,
+      detail:
+        optionalNonEmpty(player.injury_note ?? "") ?? optionalNonEmpty(player.status_full ?? ""),
+    },
     percentOwned:
       player.percent_owned === undefined ? null : providerNumber(player.percent_owned.value),
     percentOwnedDelta:
@@ -2773,6 +2785,10 @@ function optionalNonEmpty(value: string | undefined): string | undefined {
   return value === undefined || value.trim() === "" ? undefined : value;
 }
 
+function searchInjuryCode(status: string | boolean | undefined): string | undefined {
+  return typeof status === "string" ? optionalNonEmpty(status) : undefined;
+}
+
 const SessionCookie = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1)),
   Schema.check(Schema.isMaxLength(8_192)),
@@ -2883,6 +2899,7 @@ const RosterPositionAttributes = Schema.Struct({
 const StatPositionTypeAttributes = Schema.Struct({
   stat_position_type: Schema.Struct({
     position_type: Schema.optional(Schema.String),
+    is_only_display_stat: Schema.optional(Flag),
   }),
 });
 const StatCategoryAttributes = Schema.Struct({
@@ -2892,6 +2909,7 @@ const StatCategoryAttributes = Schema.Struct({
   group: Schema.NonEmptyString,
   abbr: Schema.NonEmptyString,
   enabled: Flag,
+  is_only_display_stat: Schema.optional(Flag),
   stat_position_types: Schema.optional(Schema.Array(StatPositionTypeAttributes)),
 });
 
@@ -3080,6 +3098,9 @@ const SearchPlayerPayload = Schema.Struct({
   percent_started: Schema.optional(PercentOwned),
   player_ranks: Schema.optional(Schema.Array(PlayerRankPayload)),
   player_stats: Schema.optional(PlayerStats),
+  status: Schema.optional(Schema.Union([Schema.String, Schema.Boolean])),
+  status_full: Schema.optional(Schema.String),
+  injury_note: Schema.optional(Schema.String),
 });
 
 const PlayerSearchPayload = Schema.Struct({

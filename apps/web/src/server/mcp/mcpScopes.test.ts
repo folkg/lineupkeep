@@ -31,7 +31,7 @@ it("advertises every tool scope and the refresh scope in the authorization-serve
   expect(advertised).toContain("offline_access");
 });
 
-it("reaches only read tools and feedback submission with the onboarding grant", () => {
+it("reaches only read tools and feedback submission and read-back with the onboarding grant", () => {
   const onboarding = new Set(onboardingScopes.map(({ name }) => name));
   const reachable = toolScopes.filter(({ scope }) => onboarding.has(scope));
 
@@ -42,6 +42,8 @@ it("reaches only read tools and feedback submission with the onboarding grant", 
     expect(readOnly, name).toBe(true);
   }
   expect(reachable.map(({ name }) => name)).toContain("submit_feedback");
+  expect(reachable.map(({ name }) => name)).toContain("list_feedback");
+  expect(reachable.map(({ name }) => name)).not.toContain("triage_feedback");
   expect(onboarding.has("lineups:write")).toBe(false);
   expect(onboarding.has("teams:manage")).toBe(false);
   expect(onboarding.has("feedback:manage")).toBe(false);

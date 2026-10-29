@@ -24,6 +24,17 @@ A provider-hosted fantasy competition with its own roster, scoring, and particip
 A participant's team within a particular league on a particular provider.
 _Avoid_: Professional team, account
 
+**Scoring category**:
+A stat category the league's own configured scoring rules count toward a team's result. Only a
+scoring category can order a scored search or define a competition the league is playing.
+_Avoid_: Enabled category, stat category when the league's configured set is meant
+
+**Informational category**:
+A stat the provider publishes for a league without the league scoring it, such as a display-only
+category a provider shows in stat columns. It is labelled as informational wherever it is published
+and is never presented as a category the league plays for.
+_Avoid_: Display stat when the published marking is meant, inactive category
+
 **Provider team key**:
 A provider's stable identifier for a fantasy team within one provider connection. The same provider team key may appear under a different connection without referring to the same accessible team.
 

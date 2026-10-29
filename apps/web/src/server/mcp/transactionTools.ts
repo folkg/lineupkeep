@@ -65,10 +65,7 @@ function mapOutcome<A>(
             "The selected team's connection is not ready. Reconnect it and list your teams again.",
           );
         case "query.cursor_invalid":
-          return reject(
-            "cursor_invalid",
-            "The continuation cursor is invalid or expired. Start the review again.",
-          );
+          return reject("cursor_invalid", reviewCursorMessage(error.reason));
         case "query.reference_invalid":
           return reject(
             "reference_invalid",
@@ -93,6 +90,17 @@ function mapOutcome<A>(
       }
     }),
   );
+}
+
+function reviewCursorMessage(reason: "invalid" | "expired" | "mismatch"): string {
+  switch (reason) {
+    case "mismatch":
+      return "The continuation cursor was issued for a different request. A cursor is bound to the arguments of the call that returned it, so a cursor from one intent selection is refused for another. Repeat the first call with the arguments you want and follow the `page.next` it returns.";
+    case "expired":
+      return "The continuation cursor has expired, because a cursor is valid for 15 minutes. Repeat the first call to start a new page sequence.";
+    case "invalid":
+      return "The continuation cursor is not one this server issued. Copy `page.next` from the previous response and try again.";
+  }
 }
 
 function reject(

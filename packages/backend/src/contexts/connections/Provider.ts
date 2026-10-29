@@ -320,6 +320,7 @@ type ProviderStatCategory = {
   readonly abbreviation: string;
   readonly group: string;
   readonly enabled: boolean;
+  readonly displayOnly: boolean;
   readonly positionTypes: ReadonlyArray<string>;
 };
 
@@ -474,6 +475,8 @@ export type ProviderPlayerSearchInput = ProviderSessionMaterial & {
   readonly limit: number;
 };
 
+export type ProviderPlayerStatus = "healthy" | "day_to_day" | "out" | "injured_reserve" | "unknown";
+
 export type ProviderPlayerSearchResult = {
   readonly players: ReadonlyArray<{
     readonly providerPlayerKey: string;
@@ -482,6 +485,11 @@ export type ProviderPlayerSearchResult = {
     readonly displayPosition: string;
     readonly eligiblePositions: ReadonlyArray<string>;
     readonly availability: "free_agent" | "waiver" | "rostered" | "unknown";
+    readonly status: {
+      readonly value: ProviderPlayerStatus;
+      readonly code: string | undefined;
+      readonly detail: string | undefined;
+    };
     readonly percentOwned: number | null;
     readonly percentOwnedDelta: number | null;
     readonly percentStarted: number | null;

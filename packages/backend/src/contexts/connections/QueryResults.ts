@@ -149,14 +149,33 @@ const RosterRules = Schema.Struct({
   reserveCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
+const CategoryRole = Schema.Literals(["scoring", "informational"]).pipe(
+  Schema.annotate({
+    description:
+      "Whether this league scores the stat. `scoring` counts toward this league's result; `informational` is published by the provider for this league but does not count, such as a stat the provider marks display-only.",
+  }),
+);
+export type CategoryRole = typeof CategoryRole.Type;
+
 const ScoringCategory = Schema.Struct({
   stat: StatRef,
   name: Schema.NonEmptyString,
   abbreviation: Schema.NonEmptyString,
   group: Schema.NonEmptyString,
-  enabled: Schema.Boolean,
+  scoring: CategoryRole,
+  detail: Schema.optional(Schema.String).pipe(
+    Schema.annotate({
+      description:
+        "Why this stat is informational. Present only when `scoring` is `informational`; absent for a scoring category.",
+    }),
+  ),
   positionTypes: Schema.Array(Schema.NonEmptyString),
-  points: Schema.NullOr(Schema.String),
+  points: Schema.NullOr(Schema.String).pipe(
+    Schema.annotate({
+      description:
+        "Per-stat scoring points for a points league. Null means the provider publishes no per-stat points for this league, which is every categories and rotisserie league.",
+    }),
+  ),
 });
 
 export const CategoryValue = Schema.Union([
@@ -168,12 +187,14 @@ export const CategoryValue = Schema.Union([
           "The league scoring category's name, inlined so the number needs no dictionary read.",
       }),
     ),
+    scoring: CategoryRole,
     status: Schema.Literal("published"),
     value: Schema.Finite,
   }),
   Schema.Struct({
     stat: StatRef,
     name: Schema.NonEmptyString,
+    scoring: CategoryRole,
     status: Schema.Literal("not_published"),
     detail: Schema.String,
   }),
@@ -270,7 +291,7 @@ export const LeagueData = Schema.Struct({
   scoring: Schema.optional(Schema.Array(ScoringCategory)).pipe(
     Schema.annotate({
       description:
-        "League scoring categories in order. Present when the `scoring` group is requested and whenever standings rows carry stat references, which the compact standings form does not.",
+        "This league's configured stat categories in order, each marked `scoring` or `informational`. Present when the `scoring` group is requested and whenever standings rows carry stat references, which the compact standings form does not.",
     }),
   ),
   standings: Schema.optional(
@@ -422,6 +443,32 @@ const SearchPlayer = Schema.Struct({
   displayPosition: Schema.NonEmptyString,
   eligiblePositions: Schema.Array(Schema.NonEmptyString),
   availability: Schema.Literals(["free_agent", "waiver", "rostered", "unknown"]),
+  status: Schema.Struct({
+    value: Schema.Literals(["healthy", "day_to_day", "out", "injured_reserve", "unknown"]).pipe(
+      Schema.annotate({
+        description:
+          "The provider's availability for this player: `healthy`, `day_to_day`, `out`, `injured_reserve`, or `unknown` for a code this adapter has not been taught. `unknown` never means healthy.",
+      }),
+    ),
+    code: Schema.optional(Schema.String).pipe(
+      Schema.annotate({
+        description:
+          "The provider's own status code, kept verbatim (for example `IR-LT`). Absent when the provider reports the player healthy.",
+      }),
+    ),
+    detail: Schema.optional(Schema.String).pipe(
+      Schema.annotate({
+        description:
+          "The provider's own wording where it publishes one, such as an injury note. The provider publishes no separate expected-return field; any such text appears here.",
+      }),
+    ),
+    observedAt: Schema.DateTimeUtc.pipe(
+      Schema.annotate({
+        description:
+          "When this status was read from the provider. Compare it against now to judge staleness.",
+      }),
+    ),
+  }),
   percentOwned: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:

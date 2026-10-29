@@ -59,7 +59,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_league", {
     description:
-      "Read selected league settings, scoring definitions, roster rules, standings, and draft history for one linked team. The `standings` group defaults to `standingsDetail: compact`, which returns every team's rank, points, and record without per-category arrays so a 13-team league fits in one result; `standingsDetail: detailed` adds per-category season totals and rotisserie points and therefore pages teams, which the detail note repeats. A format without a win-loss record says so instead of returning zeros. Category values carry the stat reference, the league's name for that category, the value or an explicit not-published reason. The `draft_history` group returns the provider's draft results: every published pick with its round, pick number, the team that made it, and a private player reference, beside the league's draft status. That is completed draft history, not current or future pick ownership, and the detail note says so: the provider publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it rather than in this history. Without the `standings` and `draft_history` groups the response pages scoring categories; `draft_history` pages picks.",
+      "Read selected league settings, scoring definitions, roster rules, standings, and draft history for one linked team. The `standings` group defaults to `standingsDetail: compact`, which returns every team's rank, points, and record without per-category arrays so a 13-team league fits in one result; `standingsDetail: detailed` adds per-category season totals and rotisserie points and therefore pages teams, which the detail note repeats. A format without a win-loss record says so instead of returning zeros. Category values carry the stat reference, the league's name for that category, whether the league scores that category (`scoring`) or only publishes it (`informational`), and the value or an explicit not-published reason. The `scoring` group lists this league's configured categories with the same marking: a stat the provider displays without scoring it is informational, never enabled as if it counted. The `draft_history` group returns the provider's draft results: every published pick with its round, pick number, the team that made it, and a private player reference, beside the league's draft status. That is completed draft history, not current or future pick ownership, and the detail note says so: the provider publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it rather than in this history. Without the `standings` and `draft_history` groups the response pages scoring categories; `draft_history` pages picks.",
     parameters: GetLeagueInput,
     success: Schema.toCodecJson(LeagueResult),
     failure: ToolFailure,
@@ -85,7 +85,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("search_players", {
     description:
-      'Search a bounded provider player pool for one linked team, with availability, position, and validated sort filters. Omit the query to list the pool; a blank query is rejected with the remedy. Each row reports provider percent owned with its change, and percent started with its change where the league publishes it; a missing signal is null, never zero. Sort by `name`, `position`, `ownership`, the provider\'s `actual_rank` or `overall_rank`, or a league scoring category through `stat` (the reference comes from `get_league` scoring). Every provider-ordered sort carries the value it orders by: `actualRank`, `overallRank`, or `statValue` for a `stat` sort, so the ordering is verifiable from the rows. Only the season basis is offered, because the provider publishes no weekly rank or stat value in this payload; `statPeriod: "week"` answers with the remedy instead of an unexplainable order.',
+      "Search a bounded provider player pool for one linked team, with availability, position, and validated sort filters. Omit the query to list the pool; a blank query is rejected with the remedy. Each row carries the provider's availability status (healthy, day-to-day, out, injured reserve, or unknown) with the provider's own code and wording where it publishes them and the instant that status was read, so a screening pass sees an injured-reserve free agent before recommending them; a code this server cannot interpret is `unknown`, never healthy. Each row also reports provider percent owned with its change, and percent started with its change where the league publishes it; a missing signal is null, never zero. Sort by `name`, `position`, `ownership`, the provider's `actual_rank` or `overall_rank`, or a league scoring category through `stat` (the reference comes from `get_league` scoring). Every provider-ordered sort carries the value it orders by: `actualRank`, `overallRank`, or `statValue` for a `stat` sort, so the ordering is verifiable from the rows. Only the season basis is offered, because the provider publishes no weekly rank or stat value in this payload; `statPeriod: \"week\"` answers with the remedy instead of an unexplainable order.",
     parameters: SearchPlayersInput,
     success: Schema.toCodecJson(SearchPlayersResult),
     failure: ToolFailure,
@@ -124,7 +124,7 @@ export const fantasyQueryTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_team_summary", {
     description:
-      "One bounded snapshot for one linked team: league overview, the team's standing and record, league standings, the current matchup, this week's and next week's remaining player-games, and the current roster with professional-team abbreviations. Each section states its own coverage and degrades independently, so a failed standings read still returns the roster and matchup. A section the provider cannot supply says so with a reason: football publishes no remaining-game count, and no league publishes probable starters. The `groups` input selects sections and defaults to league, standings, matchup, and roster; add `categories` for season category totals and the matchup's per-category values, each carrying the league's stat name beside the private reference. The roster always pages inside the result budget through the cursor this tool returns, so a 22-player hockey roster returns a usable first page instead of a dead end. Use this instead of a per-team pass over the individual tools; the underlying tools remain available for detail.",
+      "One bounded snapshot for one linked team: league overview, the team's standing and record, league standings, the current matchup, this week's and next week's remaining player-games, and the current roster with professional-team abbreviations. Each section states its own coverage and degrades independently, so a failed standings read still returns the roster and matchup. A section the provider cannot supply says so with a reason: football publishes no remaining-game count, and no league publishes probable starters. The `groups` input selects sections and defaults to league, standings, matchup, and roster; add `categories` for season category totals and the matchup's per-category values, each carrying the league's stat name and whether that category scores for this league. A roster section is included only when `roster` is among the groups: without it the response carries no roster array and no roster page, and a budget refusal names the selected sections rather than the roster. With `roster` selected the roster pages inside the result budget through the cursor this tool returns, so a 22-player hockey roster returns a usable first page instead of a dead end; that cursor is bound to the request arguments. Use this instead of a per-team pass over the individual tools; the underlying tools remain available for detail.",
     parameters: GetTeamSummaryInput,
     success: Schema.toCodecJson(TeamSummaryResult),
     failure: ToolFailure,
@@ -188,10 +188,7 @@ function mapOutcome<A>(
             "The selected team's connection is not ready. Reconnect it and list your teams again.",
           );
         case "query.cursor_invalid":
-          return reject(
-            "cursor_invalid",
-            "The continuation cursor is invalid or expired. Start the query again.",
-          );
+          return reject("cursor_invalid", cursorInvalidMessage(error.reason));
         case "query.reference_invalid":
           return reject(
             "reference_invalid",
@@ -211,6 +208,17 @@ function mapOutcome<A>(
       }
     }),
   );
+}
+
+function cursorInvalidMessage(reason: "invalid" | "expired" | "mismatch"): string {
+  switch (reason) {
+    case "mismatch":
+      return "The continuation cursor was issued for a different request. A cursor is bound to the arguments of the call that returned it, so a cursor from one `groups`, `team`, `period`, or filter selection is refused for another. Repeat the first call with the arguments you want and follow the `page.next` it returns.";
+    case "expired":
+      return "The continuation cursor has expired, because a cursor is valid for 15 minutes. Repeat the first call to start a new page sequence.";
+    case "invalid":
+      return "The continuation cursor is not one this server issued. Copy `page.next` from the previous response and try again.";
+  }
 }
 
 function reject(

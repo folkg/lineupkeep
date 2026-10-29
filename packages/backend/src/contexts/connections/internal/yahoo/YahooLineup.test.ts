@@ -990,6 +990,7 @@ function category(
     abbreviation,
     group: "",
     enabled: true,
+    displayOnly: false,
     positionTypes: [] as ReadonlyArray<string>,
   };
 }

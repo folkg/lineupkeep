@@ -15,7 +15,7 @@ verified, because "done" has meant different things at different times in this p
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                              |
 | Lineup algorithm     | Custom solver live for all five owner teams, seven consecutive verified ticks               |
 | Provider boundary    | Providers injected through a keyed registry; no adapter import outside the composition root |
-| MCP surface          | 17 tools, seven scopes, per-tool enforcement; round-2 and round-3 fixes deployed            |
+| MCP surface          | 17 tools, seven scopes, per-tool enforcement; round-2 to round-6 fixes in the working copy  |
 
 ## 1. MCP client feedback — round 2
 
@@ -224,6 +224,90 @@ a recent window could not be asked for at all; the client probed fourteen shapes
       `percentOwnedChange` is absent from the response and the published output schema
 - [x] Both change fields state the provider window they measure
 - [x] Test: a search row carries the provider delta once, and a missing started change stays null
+
+## 3a. MCP client feedback — rounds 5 and 6
+
+Source: the client's round-5/6 report, filed through `submit_feedback`. Ordered by value.
+
+### R6-1 — provider-tracked stats presented as league scoring categories
+
+`get_league` scoring listed fifteen categories, all `enabled: true`, including Saves and Shots
+Against in a head-to-head league that does not score them, and `get_players` scoring context repeated
+the list. A client built a recommendation on a category that does not count.
+
+- [x] Derive the scoring surface from the league's configured categories, using the provider's
+      display-only marking rather than its enabled flag
+- [x] Mark every published stat `scoring` or `informational`, with the deciding flag named on each
+      informational entry, in the scoring dictionary, standings totals, roto points, and matchup
+      categories
+- [x] List scoring categories only in `get_players` scoring context, and refuse an informational stat
+      as a stat-sort key with the reason
+- [x] Test: a league whose configured categories exclude a stat does not mark it scoring
+- [x] Verify live: the owner's head-to-head hockey league returns fifteen categories, thirteen scored,
+      Saves and Shots Against display-only (see RESEARCH/MCP evidence, 2026-10-29)
+
+### R6-2 — no injury status where screening happens
+
+`get_players` carried an injury object, but `search_players` rows carried no status, so a client
+screening free agents could not see an injured-reserve player.
+
+- [x] Put a compact status on search rows: healthy, day-to-day, out, injured reserve, or unknown
+- [x] Pass through the provider's own code and wording, and the instant the status was observed
+- [x] Never let an unknown code read as healthy
+- [x] Test: search rows carry a status and an observation time, and an unknown code stays unknown
+- [x] Verify live: the search payload returns `status` on every sampled row (`false` when healthy, a
+      code when not) beside `status_full` and `injury_note`; no extra provider read is needed
+
+### R5-2 — a summary attached a roster page nobody asked for
+
+A four-group request without `roster` returned `narrowing_required` blaming the roster.
+
+- [x] Include a roster page only when the `roster` group is requested
+- [x] Name what actually consumed the budget: the roster page when requested, otherwise the selected
+      sections
+- [x] Test: a summary without the roster group carries no roster page; an overflowing request without
+      it blames the selected groups
+
+### R5-1 — a cursor error did not say what went wrong
+
+Reusing a cursor with a different `groups` array answered "invalid or expired".
+
+- [x] Distinguish a mismatch, an expiry, and an unknown cursor when opening a continuation
+- [x] Say in the error and in the published `cursor` description that a cursor is bound to the
+      request arguments
+- [x] Test: a cursor reused with different arguments is refused as a mismatch naming the binding
+
+### R6-3 — a submitter could not read back their own reports
+
+`submit_feedback` worked under a lesser scope while `list_feedback` required `feedback:manage`.
+
+- [x] Let a submitter list their own submissions and statuses under the scope submission uses
+- [x] Keep triage behind `feedback:manage`, and keep ownership the boundary: a submitter never sees
+      another account's reports
+- [x] Test: a read grant lists its own report and cannot triage; a service test pins owner isolation
+
+### R2-3 (reopened) — roto categories that publish no points
+
+Totals publish for categories whose rotisserie points the provider leaves empty.
+
+- [x] Publish points where the provider supplies them
+- [x] State per category, in the row itself, that the provider publishes no points for it
+- [x] Include a configured category the provider omits from a points array, so a missing entry is
+      stated rather than absent
+- [x] Test: a rotisserie category with no published points carries a `not_published` entry naming the
+      gap
+
+### Manage scopes could not be granted
+
+Reported as: a connect flow requesting `teams:manage` and `feedback:manage` reached the hosted page,
+then failed with a generic error naming no scope. Not reproduced; no scope path on our side refuses
+either scope. Evidence, the two client-side candidates, and the next step are recorded in
+[MCP.md](fantasy-manager/MCP.md#manage-scope-connection-failure-2026-10-29-investigation).
+
+- [x] Check the consent and authorize path for both manage scopes against a fresh client locally and
+      on the deployed origin
+- [ ] Obtain the failing authorization's `error`/`error_description` and the client's registered or
+      metadata-declared scopes before changing our path
 
 ## 4. Operational gaps
 

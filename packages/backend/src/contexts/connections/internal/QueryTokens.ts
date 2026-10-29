@@ -19,6 +19,7 @@ import {
   StatRef,
   queryCursorTtlMillis,
 } from "#contexts/connections/QueryValues.ts";
+import type { QueryCursorInvalidReason } from "#contexts/connections/QueryValues.ts";
 
 export type QueryTokensShape = {
   readonly sealCursor: (input: {
@@ -130,9 +131,9 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           }),
         ).pipe(
           Effect.flatMap((result) =>
-            result === undefined
-              ? QueryCursorInvalid.make({ reason: "invalid" })
-              : Effect.succeed(result),
+            typeof result === "number"
+              ? Effect.succeed(result)
+              : QueryCursorInvalid.make({ reason: result }),
           ),
         ),
       sealPlayerRef: ({ userId, leagueKey, playerKey }) =>
@@ -256,15 +257,15 @@ function openCursor(
     readonly cursor: string;
     readonly nowMillis: number;
   },
-): Promise<number | undefined> {
+): Promise<number | QueryCursorInvalidReason> {
   const [version, payloadPart, signaturePart] = input.cursor.split(".");
   if (version !== "c1" || payloadPart === undefined || signaturePart === undefined) {
-    return Promise.resolve(undefined);
+    return Promise.resolve("invalid" as const);
   }
   const payloadBytes = fromBase64Url(payloadPart);
   const signature = fromBase64Url(signaturePart);
   if (payloadBytes === undefined || signature === undefined) {
-    return Promise.resolve(undefined);
+    return Promise.resolve("invalid" as const);
   }
   const payload = new TextDecoder().decode(payloadBytes);
   return crypto.subtle
@@ -276,17 +277,17 @@ function openCursor(
     )
     .then((valid) => {
       if (!valid) {
-        return undefined;
+        return "invalid" as const;
       }
       const decoded = decodePayload(payload);
-      if (
-        decoded === undefined ||
-        decoded.f !== input.fingerprint ||
-        decoded.e <= input.nowMillis ||
-        !Number.isSafeInteger(decoded.o) ||
-        decoded.o < 0
-      ) {
-        return undefined;
+      if (decoded === undefined || !Number.isSafeInteger(decoded.o) || decoded.o < 0) {
+        return "invalid" as const;
+      }
+      if (decoded.f !== input.fingerprint) {
+        return "mismatch" as const;
+      }
+      if (decoded.e <= input.nowMillis) {
+        return "expired" as const;
       }
       return decoded.o;
     });

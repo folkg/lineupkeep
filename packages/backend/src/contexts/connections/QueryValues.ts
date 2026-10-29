@@ -165,7 +165,13 @@ export const NarrowingResult = Schema.Struct({
 });
 export type NarrowingResult = typeof NarrowingResult.Type;
 
-export const Cursor = Schema.String.pipe(Schema.check(Schema.isMaxLength(2_048)));
+export const Cursor = Schema.String.pipe(
+  Schema.check(Schema.isMaxLength(2_048)),
+  Schema.annotate({
+    description:
+      "A continuation token copied from `page.next`. It is bound to the arguments of the call that issued it, so a cursor returned for one `groups`, `team`, or `period` selection is refused for another: repeat the original call instead of editing its arguments. It expires 15 minutes after issue.",
+  }),
+);
 export const PageLimit = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(1),
   Schema.isLessThanOrEqualTo(queryPageMaximumLimit),
@@ -200,6 +206,7 @@ export class QueryCursorInvalid extends Schema.TaggedError<
 >()("query.cursor_invalid", {
   reason: Schema.Literals(["invalid", "expired", "mismatch"]),
 }) {}
+export type QueryCursorInvalidReason = typeof QueryCursorInvalid.fields.reason.Type;
 
 export class QueryReferenceInvalid extends Schema.TaggedError<
   QueryReferenceInvalid,

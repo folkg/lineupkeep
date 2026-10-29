@@ -1167,6 +1167,7 @@ const customLeague: ProviderLeagueSettings = {
       abbreviation: "Yds",
       group: "",
       enabled: true,
+      displayOnly: false,
       positionTypes: [],
     },
   ],

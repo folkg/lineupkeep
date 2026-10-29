@@ -23,6 +23,7 @@ import type {
   ProviderCapabilities,
   ProviderGamesPlayed,
   ProviderLeagueSettings,
+  ProviderPlayerStatus,
   ProviderScoreOutcome,
   ProviderScoreRequest,
   ProviderPlayerDetail,
@@ -284,6 +285,20 @@ export function yahooAvailability(injuryCode: string | undefined): PlayerAvailab
     return healthyAvailability;
   }
   return yahooStatusTable[injuryCode] ?? { kind: "unrecognised", code: injuryCode };
+}
+
+export function yahooPlayerStatus(injuryCode: string | undefined): ProviderPlayerStatus {
+  const availability = yahooAvailability(injuryCode);
+  switch (availability.kind) {
+    case "available":
+      return "healthy";
+    case "uncertain":
+      return "day_to_day";
+    case "excluded":
+      return availability.reason === "injured-reserve" ? "injured_reserve" : "out";
+    case "unrecognised":
+      return "unknown";
+  }
 }
 
 export const yahooInjuryStatusCodes: ReadonlyArray<string> = Object.keys(yahooStatusTable);

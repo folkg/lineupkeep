@@ -44,6 +44,7 @@ import type {
   RosterData,
   RosterPlayer as RosterPlayerView,
   RosterDetail,
+  CategoryRole,
   CategoryValue,
   SearchPlayersData,
   SearchPlayersInput,
@@ -231,11 +232,18 @@ export const FantasyQueriesLive = Layer.effect(
                 : "The provider reported no league scoring categories.",
           };
         }
-        const cache = new Map<number, StatRef>();
-        for (const category of outcome.value.statCategories) {
-          const ref = yield* statRefFor(context, tokens, cache, category.statId);
+        const categoryCache = new Map<number, StatRef>();
+        const configured = configuredCategories(outcome.value);
+        for (const category of configured.filter((entry) => entry.scoring === "scoring")) {
+          const ref = yield* statRefFor(context, tokens, categoryCache, category.statId);
           if (ref === stat) {
             return { _tag: "resolved" as const, statId: category.statId };
+          }
+        }
+        for (const category of configured.filter((entry) => entry.scoring === "informational")) {
+          const ref = yield* statRefFor(context, tokens, categoryCache, category.statId);
+          if (ref === stat) {
+            return { _tag: "informational" as const, name: category.name };
           }
         }
         return { _tag: "unknown" as const };
@@ -482,14 +490,14 @@ export const FantasyQueriesLive = Layer.effect(
             }),
           )
         : undefined;
-      const scoringNames = categoryNames(league);
+      const categoryLabelsByStat = categoryLabels(league);
       const standingTable =
         standingsOutcome?._tag === "ok"
           ? yield* standingRows(
               context,
               tokens,
               standingsOutcome.value,
-              presentation === "compact" ? undefined : scoringNames,
+              presentation === "compact" ? undefined : categoryLabelsByStat,
             )
           : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
       const standingsRows = standingTable.rows;
@@ -860,6 +868,11 @@ export const FantasyQueriesLive = Layer.effect(
             },
           });
         }
+        if (resolved._tag === "informational") {
+          return yield* QuerySelectionInvalid.make({
+            detail: `${resolved.name} is informational for this league: the provider publishes it but the league does not score it, so it cannot order a scored search. Sort by one of this league's scoring categories, or by name, position, ownership, or a provider rank.`,
+          });
+        }
         if (resolved._tag === "unknown") {
           return yield* QuerySelectionInvalid.make({
             detail:
@@ -910,6 +923,12 @@ export const FantasyQueriesLive = Layer.effect(
         displayPosition: player.displayPosition,
         eligiblePositions: player.eligiblePositions,
         availability: player.availability,
+        status: {
+          value: player.status.value,
+          ...(player.status.code === undefined ? {} : { code: player.status.code }),
+          ...(player.status.detail === undefined ? {} : { detail: player.status.detail }),
+          observedAt: fetchedAt,
+        },
         percentOwned: player.percentOwned,
         percentOwnedDelta: player.percentOwnedDelta,
         percentStarted: player.percentStarted,
@@ -1194,11 +1213,12 @@ export const FantasyQueriesLive = Layer.effect(
             };
           }
           const positionType = player?.positionType;
-          const relevant = league.statCategories.filter(
+          const relevant = configuredCategories(league).filter(
             (category) =>
-              positionType === undefined ||
-              category.positionTypes.length === 0 ||
-              category.positionTypes.includes(positionType),
+              category.scoring === "scoring" &&
+              (positionType === undefined ||
+                category.positionTypes.length === 0 ||
+                category.positionTypes.includes(positionType)),
           );
           const refs = yield* Effect.forEach(
             relevant,
@@ -1373,7 +1393,7 @@ export const FantasyQueriesLive = Layer.effect(
         return matchupsWithoutData(team, input.period, fetchedAt, outcome);
       }
       const statRefs = new Map<number, StatRef>();
-      const scoringNames = categoryNames(
+      const categoryLabelsByStat = categoryLabels(
         leagueOutcome._tag === "ok" ? leagueOutcome.value : undefined,
       );
       const matchups = yield* Effect.forEach(
@@ -1416,7 +1436,11 @@ export const FantasyQueriesLive = Layer.effect(
                         context,
                         tokens,
                         statRefs,
-                        labelledCategories(matchup.home.categoryTotals, scoringNames, new Set()),
+                        labelledCategories(
+                          matchup.home.categoryTotals,
+                          categoryLabelsByStat,
+                          new Set(),
+                        ),
                         matchupValueMissing,
                       ),
                     }),
@@ -1437,7 +1461,11 @@ export const FantasyQueriesLive = Layer.effect(
                         context,
                         tokens,
                         statRefs,
-                        labelledCategories(matchup.away.categoryTotals, scoringNames, new Set()),
+                        labelledCategories(
+                          matchup.away.categoryTotals,
+                          categoryLabelsByStat,
+                          new Set(),
+                        ),
                         matchupValueMissing,
                       ),
                     }),
@@ -1738,14 +1766,14 @@ export const FantasyQueriesLive = Layer.effect(
             }),
           )
         : undefined;
-      const scoringNames = categoryNames(league);
+      const categoryLabelsByStat = categoryLabels(league);
       const standingTable =
         standingsOutcome?._tag === "ok"
           ? yield* standingRows(
               context,
               tokens,
               standingsOutcome.value,
-              league === undefined ? undefined : scoringNames,
+              league === undefined ? undefined : categoryLabelsByStat,
             )
           : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
       const rows = standingTable.rows;
@@ -2019,7 +2047,7 @@ export const FantasyQueriesLive = Layer.effect(
                   context,
                   tokens,
                   statRefs,
-                  labelledCategories(own.categoryTotals, scoringNames, new Set()),
+                  labelledCategories(own.categoryTotals, categoryLabelsByStat, new Set()),
                   matchupValueMissing,
                 ),
               }
@@ -2030,7 +2058,7 @@ export const FantasyQueriesLive = Layer.effect(
                   context,
                   tokens,
                   statRefs,
-                  labelledCategories(opponent.categoryTotals, scoringNames, new Set()),
+                  labelledCategories(opponent.categoryTotals, categoryLabelsByStat, new Set()),
                   matchupValueMissing,
                 ),
               }
@@ -2165,10 +2193,18 @@ export const FantasyQueriesLive = Layer.effect(
         rows: includes("roster") ? rosterRows : [],
         offset,
         limit: input.limit ?? 50,
-        resource: "team_summary.roster",
-        groups: summaryGroups,
-        remedy:
-          "Request fewer summary groups so the roster page fits. The roster pages with the returned cursor; available groups are league, standings, categories, matchup, and roster.",
+        ...(includes("roster")
+          ? {
+              resource: "team_summary.roster",
+              groups: summaryGroups,
+              remedy:
+                "Request fewer summary groups so the selected sections and one roster page fit, or drop `roster` entirely and page it with `get_rosters`. The roster pages with the returned cursor; available groups are league, standings, categories, matchup, and roster.",
+            }
+          : {
+              resource: "team_summary",
+              groups: summaryGroups,
+              remedy: `No roster page was requested, so the selected sections alone exceed the result budget. Request fewer groups (currently ${groups.join(", ")}); available groups are league, standings, categories, matchup, and roster.`,
+            }),
         build: (pageRows, page) => ({ ...base, roster: [...pageRows], page }),
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
@@ -2218,15 +2254,23 @@ const matchupValueMissing =
 type LabelledStat = {
   readonly statId: number;
   readonly name: string;
+  readonly scoring: CategoryRole;
   readonly value: number | null;
 };
 
-function categoryNames(league: ProviderLeagueSettings | undefined): ReadonlyMap<number, string> {
+type CategoryLabels = ReadonlyMap<
+  number,
+  { readonly name: string; readonly scoring: CategoryRole }
+>;
+
+function categoryLabels(league: ProviderLeagueSettings | undefined): CategoryLabels {
   return new Map(
-    (league?.statCategories ?? []).map((category): [number, string] => [
-      category.statId,
-      category.name,
-    ]),
+    (league === undefined ? [] : configuredCategories(league)).map(
+      (category): [number, { readonly name: string; readonly scoring: CategoryRole }] => [
+        category.statId,
+        { name: category.name, scoring: category.scoring },
+      ],
+    ),
   );
 }
 
@@ -2243,8 +2287,20 @@ function categoryValueRows(
       statRefFor(context, tokens, cache, entry.statId).pipe(
         Effect.map((stat): CategoryValue =>
           entry.value === null
-            ? { stat, name: entry.name, status: "not_published", detail: missingDetail }
-            : { stat, name: entry.name, status: "published", value: entry.value },
+            ? {
+                stat,
+                name: entry.name,
+                scoring: entry.scoring,
+                status: "not_published",
+                detail: missingDetail,
+              }
+            : {
+                stat,
+                name: entry.name,
+                scoring: entry.scoring,
+                status: "published",
+                value: entry.value,
+              },
         ),
       ),
     { concurrency: 1 },
@@ -2327,7 +2383,7 @@ function standingRows(
   context: TeamContext,
   tokens: QueryTokens["Service"],
   standings: ProviderStandings,
-  scoring: ReadonlyMap<number, string> | undefined,
+  scoring: CategoryLabels | undefined,
 ): Effect.Effect<{
   readonly rows: ReadonlyArray<StandingRow>;
   readonly omittedCategoryCount: number;
@@ -2385,17 +2441,29 @@ function standingRows(
 
 function labelledCategories(
   stats: ReadonlyArray<ProviderStatValue>,
-  scoring: ReadonlyMap<number, string>,
+  categories: CategoryLabels,
   omitted: Set<number>,
 ): ReadonlyArray<LabelledStat> {
   const labelled: Array<LabelledStat> = [];
+  const published = new Set<number>();
   for (const entry of stats) {
-    const name = scoring.get(entry.statId);
-    if (name === undefined) {
+    const category = categories.get(entry.statId);
+    if (category === undefined) {
       omitted.add(entry.statId);
       continue;
     }
-    labelled.push({ statId: entry.statId, name, value: entry.value });
+    published.add(entry.statId);
+    labelled.push({
+      statId: entry.statId,
+      name: category.name,
+      scoring: category.scoring,
+      value: entry.value,
+    });
+  }
+  for (const [statId, category] of categories) {
+    if (!published.has(statId)) {
+      labelled.push({ statId, name: category.name, scoring: category.scoring, value: null });
+    }
   }
   return labelled;
 }
@@ -2875,9 +2943,7 @@ function scoringCategories(
       league.statModifiers.map((modifier) => [modifier.statId, modifier.points]),
     );
     const result: Array<NonNullable<LeagueData["scoring"]>[number]> = [];
-    for (const category of league.statCategories.toSorted(
-      (left, right) => left.statId - right.statId,
-    )) {
+    for (const category of configuredCategories(league)) {
       result.push({
         stat: yield* tokens.statRef({
           leagueKey: context.owned.team.providerLeagueKey,
@@ -2886,12 +2952,42 @@ function scoringCategories(
         name: category.name,
         abbreviation: category.abbreviation,
         group: category.group,
-        enabled: category.enabled,
+        scoring: category.scoring,
+        ...(category.detail === undefined ? {} : { detail: category.detail }),
         positionTypes: category.positionTypes,
         points: modifiers.get(category.statId) ?? null,
       });
     }
     return result;
+  });
+}
+
+type ConfiguredCategory = {
+  readonly statId: number;
+  readonly name: string;
+  readonly abbreviation: string;
+  readonly group: string;
+  readonly scoring: CategoryRole;
+  readonly detail: string | undefined;
+  readonly positionTypes: ReadonlyArray<string>;
+};
+
+function configuredCategories(league: ProviderLeagueSettings): ReadonlyArray<ConfiguredCategory> {
+  return league.statCategories.map((category): ConfiguredCategory => {
+    const informational = category.displayOnly
+      ? "The provider marks this stat display-only for this league, so it appears for information and does not score."
+      : category.enabled
+        ? undefined
+        : "The provider marks this stat not enabled for this league, so it appears for information and does not score.";
+    return {
+      statId: category.statId,
+      name: category.name,
+      abbreviation: category.abbreviation,
+      group: category.group,
+      scoring: informational === undefined ? "scoring" : "informational",
+      detail: informational,
+      positionTypes: category.positionTypes,
+    };
   });
 }
 
@@ -3004,6 +3100,7 @@ function counterpartyRef(
 
 type StatRefResolution =
   | { readonly _tag: "resolved"; readonly statId: number }
+  | { readonly _tag: "informational"; readonly name: string }
   | { readonly _tag: "unknown" }
   | { readonly _tag: "unavailable"; readonly detail: string };
 
