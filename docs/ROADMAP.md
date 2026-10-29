@@ -344,8 +344,12 @@ by browser test and screenshot, and deployed.
 
 ## 4. Operational gaps
 
-- [ ] **Database restore drill.** Back up, restore into a scratch database, prove the application reads
-      it. Never rehearsed; the largest unverified operational claim.
+- [x] **Database restore drill.** Exercised 2026-10-29 by restoring production to a branch at a past
+      timestamp and proving the restored credentials decrypt with the production key. The restored branch
+      held 2 connections, 6 teams, 484 runs and 28 feedback records, and showed one fewer migration than
+      production, which confirms the restore point was exact. Procedure and result in
+      [deployment.md](deployment.md#application-data-restore-drill). Still outstanding as policy: retention,
+      RPO/RTO, and the recovery owner.
 - [ ] **Hosted-browser live sign-in.** Operator handshake and real login page load are proven, and the
       owner completed a real provider sign-in through the deployed app on 2026-10-29 using the phone-number
       route. Still unproven: a clean first-time sign-in by a different person on a phone.

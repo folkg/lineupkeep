@@ -244,6 +244,36 @@ Remote web stages reference the **same** durable `LineupkeepDatabase` / `product
 
 [database.run.ts](../infra/database.run.ts) owns the durable database independently of web teardown. Retention protects the physical database but removes its state record when destroyed: it does not replace backups or adoption procedures. Routine CI must not destroy this stack.
 
+## Application data restore drill
+
+Application data lives in its own Neon project (`lineupkeep`), separate from the shared state project. Recovery
+is point-in-time restore into a branch, which never touches the production branch.
+
+Procedure, run 2026-10-29:
+
+1. Create a restore branch of the production branch at a chosen past timestamp, using the Neon API with the
+   owner's `NEON_API_KEY` from `~/.config/lineupkeep/infra.env`. Creating a branch is read-only with respect to
+   production.
+2. Create a `read_write` endpoint on that branch. A restore branch has no endpoint of its own, so one must be
+   added before it can be reached.
+3. Point a client at the branch by taking the production connection URI and substituting the restore
+   endpoint's host. The credentials, database and parameters are otherwise identical.
+4. Prove the **application**, not just a SQL client, can use the restored data: read the credentials through
+   `ConnectionCredentialEncryption` with the production `CONNECTION_ENCRYPTION_KEY` and confirm each stored
+   session decrypts. A restore that returns rows which cannot be decrypted has not restored a usable system.
+5. Compare the migration count against production. A restore taken before a deployment must show fewer
+   migrations than production, which is what proves the restore point is exact rather than approximate.
+6. Delete the endpoint and then the branch. Both are disposable and cost nothing once removed.
+
+Recorded result: at a restore point of `2026-10-29T22:30Z`, the branch held 2 connections, 6 teams, 484
+lineup runs and 28 feedback records. Both provider sessions decrypted with the production key (529 and 578
+bytes). The branch showed 19 applied migrations against production's 20, and still carried the
+`pairing_code` column that the 22:46Z deployment removed, confirming the restore point was exact. Endpoint
+and branch were deleted afterwards; production was never touched.
+
+This establishes that PITR produces a usable application database. It does not establish a retention policy,
+an RPO/RTO commitment, or who executes recovery under duress; those remain policy decisions for the owner.
+
 ## Bootstrap protected state — owner only
 
 All non-local stacks use `alchemy/State/PostgresState` through [state.ts](../infra/state.ts). Before any remote command:
