@@ -64,6 +64,8 @@ export function createHostedBrowserService(
   const seenSessions = new Set<string>();
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1_024 });
   let live: LiveSession | undefined;
+  const pendingCloses = new Set<Promise<void>>();
+  const pendingSessions = new Set<Promise<void>>();
   let shuttingDown = false;
 
   const server = createServer((request, response) => {
@@ -127,7 +129,9 @@ export function createHostedBrowserService(
         return;
       }
       seenSessions.add(descriptor.sessionId);
-      void runSession(peer, descriptor, startedAt);
+      const session = runSession(peer, descriptor, startedAt);
+      pendingSessions.add(session);
+      void session.finally(() => pendingSessions.delete(session));
     });
   }
 
@@ -142,13 +146,19 @@ export function createHostedBrowserService(
     const refused: EgressRefusal[] = [];
     const pendingInputs: HostedBrowserInput[] = [];
     const handleReady = Promise.withResolvers<void>();
+    const closeHandle = (): Promise<void> => {
+      const closing = handle?.close().catch(() => undefined) ?? Promise.resolve();
+      pendingCloses.add(closing);
+      void closing.finally(() => pendingCloses.delete(closing));
+      return closing;
+    };
     const liveSession: LiveSession = {
       sessionId: descriptor.sessionId,
       startedAt,
       stop: () => settle("shutdown"),
       close: async () => {
         await handleReady.promise;
-        await handle?.close().catch(() => undefined);
+        await closeHandle();
       },
     };
     live = liveSession;
@@ -201,14 +211,14 @@ export function createHostedBrowserService(
         return;
       }
       settle("cancelled");
-      void handle?.close().catch(() => undefined);
+      void closeHandle();
     });
     peer.on("error", () => {
       if (terminal !== undefined) {
         return;
       }
       settle("cancelled");
-      void handle?.close().catch(() => undefined);
+      void closeHandle();
     });
 
     try {
@@ -254,7 +264,7 @@ export function createHostedBrowserService(
       }
       pendingInputs.length = 0;
       if (terminal !== undefined) {
-        await handle.close().catch(() => undefined);
+        await closeHandle();
       }
     } catch {
       if (terminal === undefined) {
@@ -295,6 +305,8 @@ export function createHostedBrowserService(
         client.close(1001, "Service shutting down");
       }
       await browser.closeAll().catch(() => undefined);
+      await Promise.allSettled(pendingCloses);
+      await Promise.allSettled(pendingSessions);
       for (const client of sockets.clients) {
         client.terminate();
       }
