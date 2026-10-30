@@ -329,6 +329,8 @@ type ProviderStatModifier = {
   readonly points: string;
 };
 
+export type ProviderTradeRatification = "vote" | "commissioner" | "unknown";
+
 export type ProviderLeagueSettings = {
   readonly providerLeagueKey: string;
   readonly name: string;
@@ -344,6 +346,12 @@ export type ProviderLeagueSettings = {
   readonly waiverType: string | undefined;
   readonly waiverRule: string | undefined;
   readonly usesFaab: boolean | undefined;
+  readonly waiverDays: number | undefined;
+  readonly maxWeeklyAcquisitions: number | undefined;
+  readonly maxSeasonAcquisitions: number | undefined;
+  readonly tradeEndDate: string | undefined;
+  readonly tradeRatification: ProviderTradeRatification | undefined;
+  readonly tradeObjectionDays: number | undefined;
   readonly draftStatus: string | undefined;
   readonly periodWindow: ProviderPeriodWindow | undefined;
   readonly rosterCoverage: ProviderCoverageKind;

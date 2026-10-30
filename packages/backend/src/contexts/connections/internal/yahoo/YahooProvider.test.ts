@@ -59,6 +59,7 @@ import {
   yahooNflLeagueSettingsWith,
   yahooNflLeagueSettingsWithGamesLimit,
   yahooNflLeagueSettingsWithPitcherSlot,
+  yahooNflLeagueSettingsWithSettings,
   yahooNflPlayerDetailsWithOwnership,
   yahooNflGamesPlayed,
   yahooNhlRoster,
@@ -480,6 +481,14 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
     assert.deepStrictEqual(league.periodWindow, { current: 6, start: 1, end: 17 });
     assert.strictEqual(league.rosterCoverage, "week");
     assert.strictEqual(league.weeklyDeadline, undefined);
+    assert.strictEqual(league.waiverDays, 1);
+    assert.strictEqual(league.maxWeeklyAcquisitions, undefined);
+    assert.strictEqual(league.maxSeasonAcquisitions, undefined);
+    assert.strictEqual(league.tradeEndDate, "2026-11-20");
+    assert.strictEqual(league.tradeRatification, "commissioner");
+    assert.strictEqual(league.tradeObjectionDays, 2);
+    assert.strictEqual(league.maxGamesPlayed, undefined);
+    assert.strictEqual(league.maxInningsPitched, undefined);
     assert.deepStrictEqual(
       league.rosterPositions.map((position) => [position.position, position.count, position.kind]),
       [
@@ -512,6 +521,53 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads the league's declared acquisition, trade, and games-cap rules", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      yahooNflLeagueSettingsWithSettings({
+        max_weekly_adds: "7",
+        max_adds: "3",
+        max_games_played: "48",
+        trade_ratify_type: "vote",
+      }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+
+    assert.strictEqual(league.maxWeeklyAcquisitions, 7);
+    assert.strictEqual(league.maxSeasonAcquisitions, 3);
+    assert.strictEqual(league.maxGamesPlayed, 48);
+    assert.strictEqual(league.maxInningsPitched, undefined);
+    assert.strictEqual(league.tradeRatification, "vote");
+    assert.strictEqual(league.tradeEndDate, "2026-11-20");
+    assert.strictEqual(league.tradeObjectionDays, 2);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("names a trade ratification rule it was not taught as unknown", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(yahooNflLeagueSettingsWithSettings({ trade_ratify_type: "unanimous" })),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      sport: "football",
+    });
+
+    assert.strictEqual(league.tradeRatification, "unknown");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("reads an NHL head-to-head league with qualifying-days settings and no modifiers", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlLeagueSettings));
   return Effect.gen(function* () {
@@ -527,6 +583,14 @@ it.effect("reads an NHL head-to-head league with qualifying-days settings and no
     assert.strictEqual(league.rosterCoverage, "date");
     assert.strictEqual(league.webUrl, "https://hockey.fantasysports.yahoo.com/hockey/4001");
     assert.strictEqual(league.weeklyDeadline, "game");
+    assert.strictEqual(league.maxWeeklyAcquisitions, 2);
+    assert.strictEqual(league.maxSeasonAcquisitions, 20);
+    assert.strictEqual(league.waiverDays, 1);
+    assert.strictEqual(league.tradeEndDate, "2027-02-20");
+    assert.strictEqual(league.tradeRatification, "commissioner");
+    assert.strictEqual(league.tradeObjectionDays, 2);
+    assert.strictEqual(league.maxGamesPlayed, undefined);
+    assert.strictEqual(league.maxInningsPitched, undefined);
     assert.deepStrictEqual(
       league.rosterPositions.map((position) => position.positionType),
       ["P", "P", "G", undefined, undefined],
@@ -3007,6 +3071,12 @@ function planLeague(input: {
     waiverType: "FR",
     waiverRule: "continuous",
     usesFaab: false,
+    waiverDays: undefined,
+    maxWeeklyAcquisitions: undefined,
+    maxSeasonAcquisitions: undefined,
+    tradeEndDate: undefined,
+    tradeRatification: undefined,
+    tradeObjectionDays: undefined,
     draftStatus: "postdraft",
     rosterPositions: [
       {

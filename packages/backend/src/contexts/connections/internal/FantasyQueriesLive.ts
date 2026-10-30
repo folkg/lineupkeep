@@ -1735,7 +1735,7 @@ export const FantasyQueriesLive = Layer.effect(
       const leagueSection: TeamSummaryData["league"] = !includes("league")
         ? undefined
         : leagueOutcome._tag === "ok"
-          ? { status: "available", ...leagueOverview(leagueOutcome.value) }
+          ? { status: "available", ...leagueFacts(leagueOutcome.value) }
           : leagueOutcome._tag === "unsupported"
             ? { status: "unsupported", detail: leagueOutcome.detail }
             : { status: "degraded", detail: leagueOutcome.failure.message };
@@ -2910,6 +2910,12 @@ function periodKindRefusal(period: ProviderStatPeriod): string {
 }
 
 function leagueOverview(league: ProviderLeagueSettings): NonNullable<LeagueData["overview"]> {
+  return { ...leagueFacts(league), transactionRules: leagueTransactionRules(league) };
+}
+
+function leagueFacts(
+  league: ProviderLeagueSettings,
+): Omit<NonNullable<LeagueData["overview"]>, "transactionRules"> {
   return {
     name: league.name,
     teamCount: league.teamCount,
@@ -2924,13 +2930,49 @@ function leagueOverview(league: ProviderLeagueSettings): NonNullable<LeagueData[
         }),
     ...(league.startDate === undefined ? {} : { startDate: league.startDate }),
     ...(league.endDate === undefined ? {} : { endDate: league.endDate }),
-    ...(league.weeklyDeadline === undefined ? {} : { weeklyDeadline: league.weeklyDeadline }),
-    waiver: {
-      ...(league.waiverType === undefined ? {} : { type: league.waiverType }),
-      ...(league.waiverRule === undefined ? {} : { rule: league.waiverRule }),
-      ...(league.usesFaab === undefined ? {} : { usesFaab: league.usesFaab }),
-    },
   };
+}
+
+function leagueTransactionRules(
+  league: ProviderLeagueSettings,
+): NonNullable<LeagueData["overview"]>["transactionRules"] {
+  return {
+    waiver: {
+      type: declared(league.waiverType),
+      rule: declared(league.waiverRule),
+      usesFaab: declared(league.usesFaab),
+    },
+    timing: {
+      weeklyDeadline: declared(league.weeklyDeadline),
+      waiverDays: declared(league.waiverDays),
+    },
+    acquisitionLimits: {
+      weekly: declared(league.maxWeeklyAcquisitions),
+      season: declared(league.maxSeasonAcquisitions),
+    },
+    trades: {
+      endDate: declared(league.tradeEndDate),
+      ratification: declared(league.tradeRatification),
+      objectionDays: declared(league.tradeObjectionDays),
+    },
+    gamesCaps: {
+      gamesPlayed: declared(league.maxGamesPlayed),
+      inningsPitched: declared(league.maxInningsPitched),
+    },
+    acquisitionUsage: {
+      status: "not_published",
+      detail:
+        "Per-team acquisition usage is not published: the provider exposes no counter for the moves a team has already used this week or this season, so this server does not derive one from transaction history.",
+    },
+    detailNote:
+      "Every rule is either published with the league's declared value or `not_set`. `not_set` means the league declares no such rule, never zero and never a per-team count; a cap that does not apply to the league's sport, such as innings in football, is also `not_set`.",
+  };
+}
+
+function declared<T>(
+  value: T | undefined,
+): { readonly status: "published"; readonly value: T } | { readonly status: "not_set" } {
+  return value === undefined ? { status: "not_set" } : { status: "published", value };
 }
 
 function scoringCategories(

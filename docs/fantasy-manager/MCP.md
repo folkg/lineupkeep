@@ -206,9 +206,25 @@ pick history. Team names come from one batched league-teams read and are omitted
 read fails while the picks remain. The group pages picks inside the result budget, and the section's
 detail note repeats that this is completed draft history rather than pick ownership.
 
+`get_league`'s `overview` carries `transactionRules`, the league's transaction rules in our
+vocabulary rather than the provider's field names. It groups the waiver rules (type, rule, and FAAB
+flag), timing (the weekly deadline and the days a dropped player stays on waivers), acquisition
+limits (per week and per season), trade rules (end date, ratification as `vote` or `commissioner`,
+and the objection window in days), and games caps (games played, and innings pitched where the
+sport declares one). Every rule is `{ status: "published", value }` or `{ status: "not_set" }`: a
+league that sets no such limit reports `not_set` rather than zero or an omitted field, and a cap
+that does not apply to the league's sport is not manufactured. An unfamiliar provider ratification
+rule is `unknown`, never guessed as one of the named forms. `acquisitionUsage` states plainly that
+per-team usage counters are not published: the provider exposes no count of the moves a team has
+already used this week or this season in league settings or in any read this application makes, and
+the application does not derive one from transaction history.
+
 `get_team_summary` composes the league overview, the linked team's standing and record, league
 standings, the current matchup, this week's and next week's remaining player-games, and, only when
-the `roster` group is selected, a compact roster. `groups` selects `league`, `standings`,
+the `roster` group is selected, a compact roster. Its league section is the compact static context
+(name, team count, scoring type, week window, and dates) and deliberately omits `transactionRules`,
+which belongs to `get_league`; the rules would consume the summary's bounded result budget without
+changing a per-team snapshot. `groups` selects `league`, `standings`,
 `categories`, `matchup`, and `roster`; the default is league, standings, matchup, and roster, and
 `categories` adds season category totals and points
 plus the matchup's per-category values. Each section states its own availability, so a failed

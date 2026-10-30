@@ -118,6 +118,111 @@ export const GetLeagueInput = Schema.Struct({
 });
 export type GetLeagueInput = typeof GetLeagueInput.Type;
 
+const declaredStateDetail =
+  "`published` carries the value the league declares. `not_set` means the league declares no such rule; it is never zero and never a derived guess.";
+
+const DeclaredNumber = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("published"),
+    value: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  }),
+  Schema.Struct({ status: Schema.Literal("not_set") }),
+]).pipe(Schema.annotate({ description: declaredStateDetail }));
+
+const DeclaredText = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("published"), value: Schema.NonEmptyString }),
+  Schema.Struct({ status: Schema.Literal("not_set") }),
+]).pipe(Schema.annotate({ description: declaredStateDetail }));
+
+const DeclaredFlag = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("published"), value: Schema.Boolean }),
+  Schema.Struct({ status: Schema.Literal("not_set") }),
+]).pipe(Schema.annotate({ description: declaredStateDetail }));
+
+const TradeRatification = Schema.Literals(["vote", "commissioner", "unknown"]).pipe(
+  Schema.annotate({
+    description:
+      "How a trade is ratified: `vote` by league managers, `commissioner` by the commissioner, or `unknown` for a rule this server cannot name.",
+  }),
+);
+
+const DeclaredTradeRatification = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("published"), value: TradeRatification }),
+  Schema.Struct({ status: Schema.Literal("not_set") }),
+]).pipe(Schema.annotate({ description: declaredStateDetail }));
+
+const TransactionRules = Schema.Struct({
+  waiver: Schema.Struct({
+    type: DeclaredText.pipe(
+      Schema.annotate({ description: "The provider's waiver-system type for this league." }),
+    ),
+    rule: DeclaredText.pipe(
+      Schema.annotate({
+        description:
+          "The provider's waiver-priority rule for this league, such as continuous or a weekly reset.",
+      }),
+    ),
+    usesFaab: DeclaredFlag.pipe(
+      Schema.annotate({
+        description: "Whether the league awards free agents through FAAB bids.",
+      }),
+    ),
+  }),
+  timing: Schema.Struct({
+    weeklyDeadline: DeclaredText.pipe(
+      Schema.annotate({
+        description:
+          "The league's declared weekly deadline as the provider states it, such as `intraday`, `daily`, a weekday, or a week number.",
+      }),
+    ),
+    waiverDays: DeclaredNumber.pipe(
+      Schema.annotate({
+        description: "Days a dropped player stays on waivers before joining the free-agent pool.",
+      }),
+    ),
+  }),
+  acquisitionLimits: Schema.Struct({
+    weekly: DeclaredNumber.pipe(
+      Schema.annotate({ description: "Acquisitions the league allows each team per week." }),
+    ),
+    season: DeclaredNumber.pipe(
+      Schema.annotate({ description: "Acquisitions the league allows each team per season." }),
+    ),
+  }),
+  trades: Schema.Struct({
+    endDate: DeclaredText.pipe(
+      Schema.annotate({
+        description: "Last date on which a trade may be made, as the provider publishes it.",
+      }),
+    ),
+    ratification: DeclaredTradeRatification.pipe(
+      Schema.annotate({ description: "How a trade is ratified in this league." }),
+    ),
+    objectionDays: DeclaredNumber.pipe(
+      Schema.annotate({ description: "Days a manager has to object to a trade." }),
+    ),
+  }),
+  gamesCaps: Schema.Struct({
+    gamesPlayed: DeclaredNumber.pipe(
+      Schema.annotate({
+        description:
+          "Games-played cap for the season. Published only when this league declares one.",
+      }),
+    ),
+    inningsPitched: DeclaredNumber.pipe(
+      Schema.annotate({
+        description:
+          "Innings-pitched cap for the season, which applies to baseball only. Published only when this league declares one.",
+      }),
+    ),
+  }),
+  acquisitionUsage: Schema.Struct({
+    status: Schema.Literal("not_published"),
+    detail: Schema.String,
+  }),
+  detailNote: Schema.String,
+});
+
 const LeagueOverview = Schema.Struct({
   name: Schema.NonEmptyString,
   teamCount: Schema.Int.check(Schema.isGreaterThan(0)),
@@ -128,12 +233,11 @@ const LeagueOverview = Schema.Struct({
   endWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   startDate: Schema.optional(Schema.String),
   endDate: Schema.optional(Schema.String),
-  weeklyDeadline: Schema.optional(Schema.String),
-  waiver: Schema.Struct({
-    type: Schema.optional(Schema.String),
-    rule: Schema.optional(Schema.String),
-    usesFaab: Schema.optional(Schema.Boolean),
-  }),
+});
+
+const LeagueSettingsOverview = Schema.Struct({
+  ...LeagueOverview.fields,
+  transactionRules: TransactionRules,
 });
 
 const RosterRule = Schema.Struct({
@@ -286,7 +390,7 @@ const DraftHistory = Schema.Union([
 export const LeagueData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
-  overview: Schema.optional(LeagueOverview),
+  overview: Schema.optional(LeagueSettingsOverview),
   rosterRules: Schema.optional(RosterRules),
   scoring: Schema.optional(Schema.Array(ScoringCategory)).pipe(
     Schema.annotate({

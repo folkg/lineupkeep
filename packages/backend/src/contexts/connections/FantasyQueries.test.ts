@@ -153,6 +153,115 @@ it.effect("returns league scoring, roster rules, and explicit standings coverage
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect(
+  "publishes every transaction rule the league declares, including the caps that apply",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+        league: {
+          ...leagueFixture,
+          waiverDays: 2,
+          maxWeeklyAcquisitions: 7,
+          maxSeasonAcquisitions: 30,
+          tradeEndDate: "2026-11-20",
+          tradeRatification: "commissioner",
+          tradeObjectionDays: 2,
+          maxGamesPlayed: 48,
+          maxInningsPitched: undefined,
+        },
+      });
+
+      const league = yield* queries.getLeague(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+        groups: ["overview"],
+      });
+
+      assert.strictEqual(league.status, "ok");
+      if (league.status !== "ok") {
+        return;
+      }
+      const rules = league.overview?.transactionRules;
+      assert.deepStrictEqual(rules?.waiver, {
+        type: { status: "published", value: "FR" },
+        rule: { status: "published", value: "continuous" },
+        usesFaab: { status: "published", value: false },
+      });
+      assert.deepStrictEqual(rules?.timing, {
+        weeklyDeadline: { status: "not_set" },
+        waiverDays: { status: "published", value: 2 },
+      });
+      assert.deepStrictEqual(rules?.acquisitionLimits, {
+        weekly: { status: "published", value: 7 },
+        season: { status: "published", value: 30 },
+      });
+      assert.deepStrictEqual(rules?.trades, {
+        endDate: { status: "published", value: "2026-11-20" },
+        ratification: { status: "published", value: "commissioner" },
+        objectionDays: { status: "published", value: 2 },
+      });
+      assert.deepStrictEqual(rules?.gamesCaps, {
+        gamesPlayed: { status: "published", value: 48 },
+        inningsPitched: { status: "not_set" },
+      });
+    }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports a league's unset transaction rules as not set rather than zero", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+
+    const league = yield* queries.getLeague(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["overview"],
+    });
+
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok") {
+      return;
+    }
+    const rules = league.overview?.transactionRules;
+    assert.deepStrictEqual(rules?.acquisitionLimits, {
+      weekly: { status: "not_set" },
+      season: { status: "not_set" },
+    });
+    assert.deepStrictEqual(rules?.timing.waiverDays, { status: "not_set" });
+    assert.deepStrictEqual(rules?.gamesCaps, {
+      gamesPlayed: { status: "not_set" },
+      inningsPitched: { status: "not_set" },
+    });
+    assert.strictEqual(rules?.acquisitionUsage.status, "not_published");
+    assert.include(rules?.acquisitionUsage.detail, "no counter");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("publishes an innings cap only for a league that declares one", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: { ...hockeyLeagueFixture, maxInningsPitched: 1400 },
+    });
+
+    const league = yield* queries.getLeague(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["overview"],
+    });
+
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(league.overview?.transactionRules.gamesCaps, {
+      gamesPlayed: { status: "not_set" },
+      inningsPitched: { status: "published", value: 1400 },
+    });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("marks a provider category the league does not score as informational", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -2830,6 +2939,12 @@ const hockeyLeagueFixture: ProviderLeagueSettings = {
   waiverType: "FR",
   waiverRule: "continuous",
   usesFaab: false,
+  waiverDays: undefined,
+  maxWeeklyAcquisitions: undefined,
+  maxSeasonAcquisitions: undefined,
+  tradeEndDate: undefined,
+  tradeRatification: undefined,
+  tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [
     { position: "C", positionType: "P", count: 2, kind: "starting", eligibility: ["C"] },
@@ -2869,6 +2984,12 @@ const rotoLeagueFixture: ProviderLeagueSettings = {
   waiverType: "FR",
   waiverRule: "continuous",
   usesFaab: false,
+  waiverDays: undefined,
+  maxWeeklyAcquisitions: undefined,
+  maxSeasonAcquisitions: undefined,
+  tradeEndDate: undefined,
+  tradeRatification: undefined,
+  tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [
     {
@@ -2972,6 +3093,12 @@ const leagueFixture: ProviderLeagueSettings = {
   waiverType: "FR",
   waiverRule: "continuous",
   usesFaab: false,
+  waiverDays: undefined,
+  maxWeeklyAcquisitions: undefined,
+  maxSeasonAcquisitions: undefined,
+  tradeEndDate: undefined,
+  tradeRatification: undefined,
+  tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [
     { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },

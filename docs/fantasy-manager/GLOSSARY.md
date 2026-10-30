@@ -112,6 +112,18 @@ _Avoid_: Trade sides when the roles are unknown
 Whether the provider payload lets a client reconstruct every movement in a transaction. An incomplete transaction carries a code and reason, and an empty transaction is incomplete rather than a complete trade with no assets.
 _Avoid_: Success, empty trade
 
+**Transaction rule**:
+One rule the league declares for adding, dropping, or trading players: its waiver type, waiver rule, or FAAB flag; the weekly deadline or days a dropped player stays on waivers; an acquisition limit per week or per season; a trade end date, ratification form, or objection window; or a games-played or innings-pitched cap. Each rule carries the league's declared value or an explicit not-set state.
+_Avoid_: League setting when a transaction rule is meant, default value
+
+**Not set**:
+A transaction rule the league does not declare. It is never zero, never a per-team count, and never a cap the sport happens to lack; a cap that does not apply to the league's sport is also not set rather than omitted.
+_Avoid_: Zero, unset, default
+
+**Acquisition usage**:
+How many acquisitions a team has already used in a week or season. The provider publishes no usage counters in league settings or in any read this application makes, so acquisition usage is reported as not published rather than derived from transaction history.
+_Avoid_: Moves used, remaining adds when a published count is meant
+
 **Draft history**:
 The picks a league's draft actually made: round, pick number, the team that made the pick, and the player taken. It is not current or future pick ownership, and a traded pick appears on the trade transaction that moved it rather than in this history.
 _Avoid_: Draft board, pick ownership when the read is history

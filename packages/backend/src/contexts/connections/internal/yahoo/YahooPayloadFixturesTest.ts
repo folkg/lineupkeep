@@ -314,6 +314,11 @@ export const yahooNflLeagueSettingsWith = (
 ): { fantasy_content: Record<string, unknown> } =>
   nflLeaguePayload({ ...nflLeagueAttributes, ...attributes });
 
+export const yahooNflLeagueSettingsWithSettings = (
+  settings: Readonly<Record<string, unknown>>,
+): { fantasy_content: Record<string, unknown> } =>
+  nflLeaguePayload(nflLeagueAttributes, { ...nflSettingsFragment, ...settings });
+
 function withoutAttribute<T extends Record<string, unknown>>(
   record: T,
   attribute: keyof T,

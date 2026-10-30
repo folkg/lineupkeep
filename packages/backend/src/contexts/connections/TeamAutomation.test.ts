@@ -458,6 +458,12 @@ const league: ProviderLeagueSettings = {
   waiverType: "FR",
   waiverRule: "continuous",
   usesFaab: false,
+  waiverDays: undefined,
+  maxWeeklyAcquisitions: undefined,
+  maxSeasonAcquisitions: undefined,
+  tradeEndDate: undefined,
+  tradeRatification: undefined,
+  tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [
     { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },

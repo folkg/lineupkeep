@@ -42,6 +42,7 @@ import type {
   ProviderCoverageKind,
   ProviderPeriodWindow,
   ProviderScoreRequest,
+  ProviderTradeRatification,
   ProviderPlayerDetail,
   ProviderPlayerPeriod,
   ProviderPlayerSearchInput,
@@ -1186,6 +1187,12 @@ function leagueSettings(
       waiverType: optionalNonEmpty(settings.waiver_type),
       waiverRule: optionalNonEmpty(settings.waiver_rule),
       usesFaab: settings.uses_faab,
+      waiverDays: settings.waiver_time,
+      maxWeeklyAcquisitions: settings.max_weekly_adds,
+      maxSeasonAcquisitions: settings.max_adds,
+      tradeEndDate: optionalNonEmpty(settings.trade_end_date),
+      tradeRatification: tradeRatification(optionalNonEmpty(settings.trade_ratify_type)),
+      tradeObjectionDays: settings.trade_reject_time,
       draftStatus: optionalNonEmpty(attributes.draft_status),
       periodWindow,
       rosterCoverage,
@@ -1227,6 +1234,19 @@ function leagueSettings(
 
 function declaredLimit(limit: number | undefined): number | undefined {
   return limit !== undefined && limit > 0 ? limit : undefined;
+}
+
+function tradeRatification(type: string | undefined): ProviderTradeRatification | undefined {
+  switch (type) {
+    case undefined:
+      return undefined;
+    case "vote":
+      return "vote";
+    case "commish":
+      return "commissioner";
+    default:
+      return "unknown";
+  }
 }
 
 function declaredRosterCoverage(
@@ -2921,10 +2941,16 @@ const StatModifierAttributes = Schema.Struct({
 const LeagueSettingsAttributes = Schema.Struct({
   max_games_played: Schema.optional(IntFromStringOrNumber),
   max_innings_pitched: Schema.optional(IntFromStringOrNumber),
+  max_weekly_adds: Schema.optional(IntFromStringOrNumber),
+  max_adds: Schema.optional(IntFromStringOrNumber),
   roster_type: Schema.optional(Schema.String),
   waiver_type: Schema.optional(Schema.String),
   waiver_rule: Schema.optional(Schema.String),
+  waiver_time: Schema.optional(IntFromStringOrNumber),
   uses_faab: Schema.optional(Flag),
+  trade_end_date: Schema.optional(Schema.String),
+  trade_ratify_type: Schema.optional(Schema.String),
+  trade_reject_time: Schema.optional(IntFromStringOrNumber),
   roster_positions: Schema.Array(
     Schema.Struct({
       roster_position: RosterPositionAttributes,

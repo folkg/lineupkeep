@@ -1173,6 +1173,17 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(JSON.stringify(league.inputSchema)).toContain("standingsDetail");
   expect(JSON.stringify(league.inputSchema)).toContain("compact");
   expect(league.description).toContain("13");
+  expect(league.description).toContain("transactionRules");
+  expect(league.description).toContain("acquisition limits");
+  expect(league.description).toContain("not_set");
+  expect(league.description).toContain("acquisition usage is not published");
+
+  const transactionRules = JSON.stringify(league.outputSchema);
+  expect(transactionRules).toContain("transactionRules");
+  expect(transactionRules).toContain("acquisitionLimits");
+  expect(transactionRules).toContain("gamesCaps");
+  expect(transactionRules).toContain("not_published");
+  expect(transactionRules).toContain("ratification");
 
   const search = JSON.stringify(tool("search_players").outputSchema);
   expect(search).toContain("percentOwnedDelta");
