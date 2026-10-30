@@ -1,4 +1,4 @@
-import { formatDateTime, formatDay, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type {
   LineupRunView,
   TeamAutomationView,
@@ -74,18 +74,13 @@ export function checkTallyLabel(runs: ReadonlyArray<LineupRunView>): string | un
   return `${String(changed)} of the last ${String(runs.length)} checks changed the lineup`;
 }
 
-export function quietGroupLabel(runs: ReadonlyArray<LineupRunView>): string {
+export function quietGroupSpan(runs: ReadonlyArray<LineupRunView>): QuietGroupSpan {
   const newest = runs[0];
   const oldest = runs[runs.length - 1];
   if (newest === undefined || oldest === undefined) {
     throw new Error("A quiet group needs at least one run");
   }
-  const noun = runs.length === 1 ? "check" : "checks";
-  const first = formatDay(oldest.updatedAt);
-  const last = formatDay(newest.updatedAt);
-  return first === last
-    ? `${String(runs.length)} ${noun} on ${first} changed nothing`
-    : `${String(runs.length)} ${noun} between ${first} and ${last} changed nothing`;
+  return { count: runs.length, from: oldest.updatedAt, to: newest.updatedAt };
 }
 
 export function pauseResumeLabel(automation: TeamAutomationView): string | undefined {
@@ -185,3 +180,9 @@ function leagueLabel(league: TeamView["league"]): string {
 function sportLabel(sport: TeamView["sport"]): string {
   return sport === "football" ? "Football" : "Hockey";
 }
+
+export type QuietGroupSpan = {
+  readonly count: number;
+  readonly from: string;
+  readonly to: string;
+};

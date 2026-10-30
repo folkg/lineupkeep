@@ -19,7 +19,7 @@ const disclosureSummaryClass = cx(
 );
 
 type DisclosureProps = {
-  readonly summary: string;
+  readonly summary: Element;
   readonly bordered?: boolean;
   readonly children: Element;
 };

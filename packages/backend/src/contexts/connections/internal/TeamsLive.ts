@@ -1,8 +1,13 @@
 import { DateTime, Effect, Layer } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import { currentFantasyDayStart } from "#contexts/connections/FantasyDay.ts";
 import type { TeamAutomation } from "#contexts/connections/FantasyTeam.ts";
+import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupRun } from "#contexts/connections/LineupRun.ts";
+import type { ProviderFantasyDay } from "#contexts/connections/Provider.ts";
+import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
+import type { ProviderRegistryShape } from "#contexts/connections/ProviderRegistry.ts";
 import { TeamNotFound, TeamPersistenceFailed, Teams } from "#contexts/connections/Teams.ts";
 import type {
   TeamControlInput,
@@ -17,13 +22,12 @@ import { toLineupRun } from "./LineupRunViewRepository.ts";
 import { TeamRepository } from "./TeamRepository.ts";
 import type { TeamControlRecord, TeamRecord } from "./TeamRepository.ts";
 
-const recentRunsPerTeam = 5;
-
 export const TeamsLive = Layer.effect(
   Teams,
   Effect.gen(function* () {
     const teams = yield* TeamRepository;
     const runs = yield* LineupRunRepository;
+    const registry = yield* ProviderRegistry;
 
     const summaries = (
       userId: UserId,
@@ -33,23 +37,32 @@ export const TeamsLive = Layer.effect(
         if (records.length === 0) {
           return [];
         }
+        const now = yield* DateTime.now;
+        const bounds = records.map((record) => ({
+          record,
+          since: currentFantasyDayStart(now, fantasyDayOf(registry, record.team)),
+        }));
         const activity = yield* runs
           .loadTeamActivity(
             userId,
             records.map((record) => record.team.id),
-            recentRunsPerTeam,
+            bounds
+              .map((bound) => bound.since)
+              .reduce((earliest, at) =>
+                DateTime.toEpochMillis(at) < DateTime.toEpochMillis(earliest) ? at : earliest,
+              ),
           )
           .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-        return records.map((record) => {
-          const recentRuns: ReadonlyArray<LineupRun> = (activity.get(record.team.id) ?? []).map(
-            toLineupRun,
-          );
-          const lastRun = recentRuns[0];
+        return bounds.map(({ record, since }) => {
+          const teamActivity = activity.get(record.team.id);
+          const recentRuns: ReadonlyArray<LineupRun> = (teamActivity?.runs ?? [])
+            .filter((run) => DateTime.toEpochMillis(run.createdAt) >= DateTime.toEpochMillis(since))
+            .map(toLineupRun);
           return {
             team: record.team,
             connectionStatus: record.connection.status,
             recentRuns,
-            ...(lastRun === undefined ? {} : { lastRun }),
+            ...(teamActivity === undefined ? {} : { lastRun: toLineupRun(teamActivity.latest) }),
           };
         });
       });
@@ -92,6 +105,14 @@ export const TeamsLive = Layer.effect(
     return Teams.of({ list, get, control });
   }),
 );
+
+function fantasyDayOf(registry: ProviderRegistryShape, team: FantasyTeam): ProviderFantasyDay {
+  const provider = registry.get(team.provider);
+  if (provider === undefined) {
+    throw new Error(`Team ${team.id} references an unregistered provider`);
+  }
+  return provider.capabilities.fantasyDay;
+}
 
 function toControlResult(record: TeamControlRecord): TeamControlResult {
   if (record.outcome === "not_found") {

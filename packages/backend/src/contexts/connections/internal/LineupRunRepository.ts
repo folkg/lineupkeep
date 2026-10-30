@@ -73,6 +73,11 @@ type CreatedLineupRequest = {
   readonly runs: ReadonlyArray<LineupRunRecord>;
 };
 
+type TeamActivityRecord = {
+  readonly runs: ReadonlyArray<LineupRunRecord>;
+  readonly latest: LineupRunRecord;
+};
+
 const nonTerminalRunStatuses = [
   "queued",
   "reading",
@@ -413,15 +418,12 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
       const loadTeamActivity = Effect.fn("LineupRunRepository.loadTeamActivity")(function* (
         userId: UserId,
         teamIds: ReadonlyArray<TeamId>,
-        perTeam: number,
+        since: DateTime.Utc,
       ) {
         const ids = [...new Set(teamIds)];
         if (!Array.isArrayNonEmpty(ids)) {
-          return new Map<TeamId, ReadonlyArray<LineupRunRecord>>();
+          return new Map<TeamId, TeamActivityRecord>();
         }
-        const cutoff = DateTime.toDateUtc(
-          DateTime.subtractDuration(yield* DateTime.now, 30 * 24 * 60 * 60 * 1000),
-        );
         const rows = yield* database
           .select()
           .from(lineupRuns)
@@ -429,25 +431,39 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
             and(
               eq(lineupRuns.userId, userId),
               anyOf(lineupRuns.teamId, ids),
-              gte(lineupRuns.createdAt, cutoff),
+              gte(lineupRuns.createdAt, DateTime.toDateUtc(since)),
             ),
           )
           .orderBy(asc(lineupRuns.teamId), desc(lineupRuns.createdAt), asc(lineupRuns.id))
           .pipe(Effect.mapError(mapPersistenceFailure));
         const grouped = new Map<TeamId, Array<LineupRunRecord>>();
         for (const row of rows) {
-          const teamId = yield* Schema.decodeEffect(TeamId)(row.teamId).pipe(
-            Effect.mapError(mapPersistenceFailure),
-          );
-          const existing = grouped.get(teamId) ?? [];
-          if (existing.length >= perTeam) {
-            continue;
-          }
           const record = yield* decodeRun(row);
+          const existing = grouped.get(record.teamId) ?? [];
           existing.push(record);
           grouped.set(record.teamId, existing);
         }
-        return grouped;
+        const activity = new Map<TeamId, TeamActivityRecord>();
+        for (const [teamId, runs] of grouped) {
+          const latest = runs[0];
+          if (latest !== undefined) {
+            activity.set(teamId, { runs, latest });
+          }
+        }
+        const missing = ids.filter((teamId) => !activity.has(teamId));
+        if (Array.isArrayNonEmpty(missing)) {
+          const latestRows = yield* database
+            .selectDistinctOn([lineupRuns.teamId])
+            .from(lineupRuns)
+            .where(and(eq(lineupRuns.userId, userId), anyOf(lineupRuns.teamId, missing)))
+            .orderBy(asc(lineupRuns.teamId), desc(lineupRuns.createdAt), asc(lineupRuns.id))
+            .pipe(Effect.mapError(mapPersistenceFailure));
+          for (const row of latestRows) {
+            const latest = yield* decodeRun(row);
+            activity.set(latest.teamId, { runs: [], latest });
+          }
+        }
+        return activity;
       });
 
       const claim = Effect.fn("LineupRunRepository.claim")(function* (

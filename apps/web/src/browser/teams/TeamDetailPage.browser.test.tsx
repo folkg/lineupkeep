@@ -14,15 +14,17 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
-import { formatDateTime, formatDay, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type { LineupRunView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { TeamDetailPage } from "./TeamDetailPage";
+import { quietGroupSpan } from "./teamLabels";
 import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 
 const teamId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1";
 const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1_000).toISOString();
+const hoursAgo = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
 
 const noOpSummary = "The lineup already matched the explicit plan; no provider write was needed.";
 
@@ -163,16 +165,18 @@ it("names the pause in reader-local time", async () => {
 });
 
 it("folds consecutive checks that changed nothing and keeps the rest on their own", async () => {
-  const runs = [
-    changedRun,
-    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1" },
-    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c2" },
-    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c3" },
-    failedRun,
+  const quietRuns = [
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1", updatedAt: hoursAgo(1) },
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c2", updatedAt: hoursAgo(2) },
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c3", updatedAt: hoursAgo(3) },
   ];
-  using _app = setupTeamDetailPage({ ...team, lastRun: changedRun, recentRuns: runs });
+  using _app = setupTeamDetailPage({
+    ...team,
+    lastRun: changedRun,
+    recentRuns: [changedRun, ...quietRuns, failedRun],
+  });
 
-  const groupLabel = `3 checks on ${formatDay(noOpRun.updatedAt)} changed nothing`;
+  const groupLabel = foldedLabel(quietRuns);
   await expect.element(page.getByText(groupLabel)).toBeVisible();
   await expect.element(page.getByText("Verified 2 native lineup changes.")).toBeVisible();
   await expect.element(page.getByText("The provider rejected the lineup.")).toBeVisible();
@@ -184,11 +188,84 @@ it("folds consecutive checks that changed nothing and keeps the rest on their ow
   await expect.element(page.getByRole("link", { name: "View run detail" }).first()).toBeVisible();
 });
 
+it("folds three silent stretches between the runs that mattered", async () => {
+  const first = [
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1", updatedAt: hoursAgo(11) },
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d2", updatedAt: hoursAgo(10) },
+  ];
+  const second = [
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d3", updatedAt: hoursAgo(7) },
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d4", updatedAt: hoursAgo(6) },
+  ];
+  const third = [
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d5", updatedAt: hoursAgo(3) },
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d6", updatedAt: hoursAgo(2) },
+  ];
+  const secondChange = {
+    ...changedRun,
+    run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d7",
+    updatedAt: hoursAgo(9),
+  };
+  const failure = { ...failedRun, updatedAt: hoursAgo(5) };
+  const runs = [
+    { ...changedRun, updatedAt: hoursAgo(12) },
+    ...first,
+    secondChange,
+    ...second,
+    failure,
+    ...third,
+  ];
+  using _app = setupTeamDetailPage({ ...team, lastRun: runs[0], recentRuns: runs });
+
+  await expect.element(page.getByText("Verified 2 native lineup changes.").first()).toBeVisible();
+  await expect.element(page.getByText("The provider rejected the lineup.")).toBeVisible();
+  await expect
+    .element(
+      page
+        .getByRole("listitem")
+        .filter({ hasText: "The provider rejected the lineup." })
+        .getByRole("link", { name: "View run detail" }),
+    )
+    .toHaveAttribute("href", `/runs/${failure.run}`);
+
+  for (const group of [first, second, third]) {
+    const label = foldedLabel(group);
+    const item = page.getByRole("listitem").filter({ hasText: label });
+
+    await expect.element(page.getByText(label)).toBeVisible();
+    await page.getByText(label).click();
+
+    for (const [index, run] of group.entries()) {
+      await expect
+        .element(item.getByRole("link", { name: "View run detail" }).nth(index))
+        .toHaveAttribute("href", `/runs/${run.run}`);
+    }
+  }
+});
+
 it("leaves a lone quiet check on its own line", async () => {
   using _app = setupTeamDetailPage({ ...team, lastRun: noOpRun, recentRuns: [noOpRun] });
 
   await expect.element(page.getByText(noOpSummary)).toBeVisible();
-  await expect.element(page.getByText(/changed nothing$/u)).not.toBeInTheDocument();
+  await expect.element(page.getByText(/changed nothing between/u)).not.toBeInTheDocument();
+});
+
+it("says what the fantasy day holds when no checks ran today", async () => {
+  using _app = setupTeamDetailPage({ ...team, lastRun: noOpRun, recentRuns: [] });
+
+  await expect.element(page.getByText("No checks today.")).toBeVisible();
+  await expect
+    .element(page.getByText(`The last check was ${formatReaderTime(noOpRun.updatedAt)}.`))
+    .toBeVisible();
+});
+
+it("says what will happen when a team has never checked", async () => {
+  using _app = setupTeamDetailPage({ ...team, lastRun: undefined, recentRuns: [] });
+
+  await expect.element(page.getByText("No checks today.")).toBeVisible();
+  await expect
+    .element(page.getByText("Checks will appear here after the first scheduled or manual run."))
+    .toBeVisible();
 });
 
 it("links a team report to the feedback form with the team reference", async () => {
@@ -203,6 +280,13 @@ it("links a team report to the feedback form with the team reference", async () 
   expect(url.searchParams.get("surface")).toBe("team");
   expect(url.searchParams.get("team")).toBe(teamId);
 });
+
+function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
+  const span = quietGroupSpan(runs);
+  return `${String(span.count)} checks changed nothing between ${formatDateTime(
+    span.from,
+  )} and ${formatDateTime(span.to)}`;
+}
 
 function setupTeamDetailPage(teamSummary: TeamSummaryView): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();

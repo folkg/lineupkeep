@@ -5,11 +5,13 @@ import type { Accessor } from "solid-js";
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
+import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
+import { Time } from "#browser/shared-ui/Time.tsx";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { RunActivity } from "./RunActivity";
@@ -80,17 +82,31 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           Newest first. Checks that changed nothing are grouped.
         </Text>
         <Show
-          fallback={
-            <EmptyState title="No activity yet.">
-              Runs will appear here after the first scheduled or manual check.
-            </EmptyState>
-          }
+          fallback={<NoChecksToday team={props.team} />}
           when={props.team.recentRuns.length > 0}
         >
           <RunActivity runs={props.team.recentRuns} />
         </Show>
       </Stack>
     </Stack>
+  );
+}
+
+function NoChecksToday(props: NoChecksTodayProps): JSX.Element {
+  return (
+    <EmptyState title="No checks today.">
+      <Show
+        fallback="Checks will appear here after the first scheduled or manual run."
+        when={props.team.lastRun}
+      >
+        {(run) => (
+          <>
+            The last check was{" "}
+            <Time datetime={run().updatedAt}>{formatReaderTime(run().updatedAt)}</Time>.
+          </>
+        )}
+      </Show>
+    </EmptyState>
   );
 }
 
@@ -104,4 +120,8 @@ type TeamDetailPageProps = {
 type TeamDetailProps = {
   readonly team: TeamSummaryView;
   readonly remote: TeamRemote;
+};
+
+type NoChecksTodayProps = {
+  readonly team: TeamSummaryView;
 };

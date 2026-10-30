@@ -125,6 +125,7 @@ const TeamRepositoryLayer = TeamRepository.layer.pipe(
 const TeamsLayer = TeamsLive.pipe(
   Layer.provide(TeamRepositoryLayer),
   Layer.provide(LineupRepositoryLayer),
+  Layer.provide(ProviderLayer),
 );
 const RetentionSweepLayer = RetentionSweepLive.pipe(Layer.provide(ConnectionsDatabase.layer));
 const AutomationLayer = AutomationLive.pipe(

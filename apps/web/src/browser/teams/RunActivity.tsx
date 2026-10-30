@@ -2,7 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
 import { Disclosure } from "#browser/shared-ui/Disclosure.tsx";
-import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -13,7 +13,8 @@ import type { LineupRunView } from "#contracts/connections/teamContract.ts";
 
 import { groupRuns } from "./teamActivity";
 import type { RunActivityEntry } from "./teamActivity";
-import { quietGroupLabel, runExplanation, runStatusLabel, targetLabel } from "./teamLabels";
+import { quietGroupSpan, runExplanation, runStatusLabel, targetLabel } from "./teamLabels";
+import type { QuietGroupSpan } from "./teamLabels";
 
 export function RunActivity(props: RunActivityProps): JSX.Element {
   return (
@@ -33,7 +34,7 @@ export function RunActivity(props: RunActivityProps): JSX.Element {
 
 function QuietGroup(props: { readonly runs: ReadonlyArray<LineupRunView> }): JSX.Element {
   return (
-    <Disclosure bordered={false} summary={quietGroupLabel(props.runs)}>
+    <Disclosure bordered={false} summary={<QuietGroupSummary runs={props.runs} />}>
       <RuleList>
         <For each={props.runs}>
           {(run) => (
@@ -45,6 +46,17 @@ function QuietGroup(props: { readonly runs: ReadonlyArray<LineupRunView> }): JSX
         </For>
       </RuleList>
     </Disclosure>
+  );
+}
+
+function QuietGroupSummary(props: { readonly runs: ReadonlyArray<LineupRunView> }): JSX.Element {
+  const span = (): QuietGroupSpan => quietGroupSpan(props.runs);
+  return (
+    <>
+      {span().count} checks changed nothing between{" "}
+      <Time datetime={span().from}>{formatDateTime(span().from)}</Time> and{" "}
+      <Time datetime={span().to}>{formatDateTime(span().to)}</Time>
+    </>
   );
 }
 

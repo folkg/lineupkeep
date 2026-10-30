@@ -31,39 +31,13 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Publication gate     | Blocked on upstream: a temporary backport of the TanStack advisory is in force                 |
 | Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                       |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                      |
-| Checks               | 1322 node, 86 browser, 9 chromium; end to end 52 per target                                    |
+| Checks               | 1339 node, 89 browser, 9 chromium; end to end 52 per target                                    |
 
 ---
 
 ## A. Quick wins
 
 Independent, small, visible. Each ships on its own.
-
-### A1 — Run lineup checks at :55, not on the hour
-
-Games usually start on the hour, so a check that runs on the hour can miss a late scratch.
-
-- [ ] Move the scheduled run to :55 of each hour, keeping the period identity so a run cannot double up
-      across the boundary.
-- [ ] Confirm a manual `set_lineup` behaves exactly as before.
-
-**Verify**: three consecutive ticks observed at :55 with all five teams, no duplicate for one scoring
-period, and one late-scratch fixture proving the change is picked up. `S`
-
-### A2 — Show the whole fantasy day, with multiple collapsed stretches
-
-The team page shows the last five runs. A day is bursty: a batch at rollover, silence, another batch when
-starters are announced, then silence again. Every silent stretch must fold, not just one.
-
-- [ ] Query by fantasy day rather than a fixed count.
-- [ ] Fold **every** maximal run of consecutive no-op checks, so a day can show several collapsed groups
-      between the runs that mattered.
-- [ ] Keep changed, blocked, failed, uncertain and in-progress runs unfolded, and keep run detail reachable
-      from both the groups and the runs.
-- [ ] Measure the payload on a heavy day before shipping.
-
-**Verify**: a fixture day with three separate silent stretches renders three collapsed groups interleaved
-with active runs, and each expands. `S`
 
 ### A3 — Transaction trends on player rows
 
@@ -540,6 +514,16 @@ cross-account feedback triage.
 
 Rationale for each lives in the commit history and the feedback records. Every item was verified before it
 was closed.
+
+- **Checks at :55.** The declared Scheduler trigger is `55 * * * *`; the scheduled period identity is still
+  the UTC hour, so a retried tick cannot double up, and a manual `set_lineup` is unchanged. The pause copy
+  says checks resume after the fantasy day boundary because the next tick performs the expiry. The deployed
+  job still runs `0 * * * *` until an authorized redeploy. Verified by the three-tick five-team test in
+  `Automation.test.ts`.
+- **The whole fantasy day of activity.** Team activity carries every check from the team's current fantasy
+  day and folds each maximal silent stretch with its count and time span. A day with no checks says so and
+  still names the last check. Verified by the three-stretch fixture in `TeamDetailPage.browser.test.tsx`; a
+  five-team, 120-run day serialized to 75.6 KiB, 2.0 KiB gzipped.
 
 - **MCP client feedback, rounds 2 to 8.** Per-tool scope enforcement, review links, restricted-client
   feedback, roto standings, search row fields, team summary coverage and paging, feedback read-back, hockey

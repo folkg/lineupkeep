@@ -3,13 +3,24 @@ import { env } from "node:process";
 import { assert, it } from "@effect/vitest";
 import { DateTime } from "effect";
 
-import { nextFantasyDayBoundary } from "./FantasyDay.ts";
+import { currentFantasyDayStart, nextFantasyDayBoundary } from "./FantasyDay.ts";
 
 const policy = {
   timeZone: "America/Los_Angeles",
   boundary: "local-midnight" as const,
   version: "yahoo-pacific-midnight/1",
 };
+
+it("starts the current fantasy day at the provider's local midnight", () => {
+  const beforeMidnight = currentFantasyDayStart(
+    DateTime.makeUnsafe("2026-10-25T06:59:59Z"),
+    policy,
+  );
+  const afterMidnight = currentFantasyDayStart(DateTime.makeUnsafe("2026-10-25T07:00:00Z"), policy);
+
+  assert.strictEqual(DateTime.formatIso(beforeMidnight), "2026-10-24T07:00:00.000Z");
+  assert.strictEqual(DateTime.formatIso(afterMidnight), "2026-10-25T07:00:00.000Z");
+});
 
 it("expires at the next Pacific midnight rather than a fixed offset", () => {
   const beforeMidnight = nextFantasyDayBoundary(

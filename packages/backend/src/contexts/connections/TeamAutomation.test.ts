@@ -346,6 +346,54 @@ it.effect("includes the latest verified run in team activity", () =>
   }).pipe(Effect.provide(TeamsTestLayer)),
 );
 
+it.effect("shows only the current fantasy day's checks and keeps the last earlier check", () =>
+  Effect.gen(function* () {
+    const teams = yield* Teams;
+    const runs = yield* LineupRuns;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedTeams(fake, [
+      { ...teamFixture, providerTeamKey: "461.l.1000.t.1", name: "Alpha" },
+      { ...teamFixture, providerTeamKey: "461.l.1000.t.2", name: "Beta" },
+    ]);
+    const quiet = Array.getUnsafe(seeded, 0);
+    const active = Array.getUnsafe(seeded, 1);
+    yield* refuseCustomPlanning(fake);
+    yield* teams.control(owner, [
+      { team: quiet, action: "enable" },
+      { team: active, action: "enable" },
+    ]);
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-25T06:00:00Z")));
+    const earlier = yield* runs.submit(
+      owner,
+      yield* Schema.decodeEffect(LineupRequestInput)({
+        requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e2",
+        teams: [
+          { team: quiet, period: { coverage: "week", week: 3 } },
+          { team: active, period: { coverage: "week", week: 3 } },
+        ],
+      }),
+    );
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-25T12:00:00Z")));
+    const current = yield* runs.submit(owner, lineupRequest(active));
+
+    const quietSummary = yield* teams.get(owner, quiet);
+    const activeSummary = yield* teams.get(owner, active);
+
+    assert.deepStrictEqual(quietSummary.recentRuns, []);
+    assert.strictEqual(
+      quietSummary.lastRun?.run,
+      earlier.runs.find((run) => run.team === quiet)?.run,
+    );
+    assert.deepStrictEqual(
+      activeSummary.recentRuns.map((run) => run.run),
+      [current.runs[0]?.run],
+    );
+    assert.strictEqual(activeSummary.lastRun?.run, current.runs[0]?.run);
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
 function control(
   teams: Teams["Service"],
   team: TeamId,

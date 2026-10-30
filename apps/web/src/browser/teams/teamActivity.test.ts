@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDay, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type { LineupRunView } from "#contracts/connections/teamContract.ts";
 
 import { groupRuns } from "./teamActivity";
-import { checkTallyLabel, lastCheckLine, quietGroupLabel } from "./teamLabels";
+import { checkTallyLabel, lastCheckLine, quietGroupSpan } from "./teamLabels";
 
 const team = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1";
 const now = new Date("2026-10-05T14:00:00.000Z");
@@ -32,6 +32,22 @@ describe("run activity", () => {
     ]);
 
     expect(entries.map(summarize)).toEqual([2, "changed-1", 2]);
+  });
+
+  it("folds every silent stretch in a day separately", () => {
+    const entries = groupRuns([
+      changed("changed-1", "2026-10-05T12:00:00.000Z"),
+      quiet("quiet-1", "2026-10-05T11:00:00.000Z"),
+      quiet("quiet-2", "2026-10-05T10:00:00.000Z"),
+      changed("changed-2", "2026-10-05T09:00:00.000Z"),
+      quiet("quiet-3", "2026-10-05T08:00:00.000Z"),
+      quiet("quiet-4", "2026-10-05T07:00:00.000Z"),
+      blocked("blocked-1", "2026-10-05T06:00:00.000Z"),
+      quiet("quiet-5", "2026-10-05T05:00:00.000Z"),
+      quiet("quiet-6", "2026-10-05T04:00:00.000Z"),
+    ]);
+
+    expect(entries.map(summarize)).toEqual(["changed-1", 2, "changed-2", 2, "blocked-1", 2]);
   });
 
   it("keeps a lone quiet run on its own", () => {
@@ -63,27 +79,31 @@ describe("run activity", () => {
   });
 });
 
-describe("quiet group labels", () => {
-  it("names the count and the single day", () => {
+describe("quiet group spans", () => {
+  it("names the count and both ends of the group", () => {
     expect(
-      quietGroupLabel([
+      quietGroupSpan([
         quiet("quiet-1", "2026-10-05T12:00:00.000Z"),
         quiet("quiet-2", "2026-10-05T09:00:00.000Z"),
       ]),
-    ).toBe(`2 checks on ${formatDay("2026-10-05T12:00:00.000Z")} changed nothing`);
+    ).toEqual({
+      count: 2,
+      from: "2026-10-05T09:00:00.000Z",
+      to: "2026-10-05T12:00:00.000Z",
+    });
   });
 
-  it("names the range across days", () => {
+  it("keeps both ends when the group crosses a reader's midnight", () => {
     expect(
-      quietGroupLabel([
+      quietGroupSpan([
         quiet("quiet-1", "2026-10-05T12:00:00.000Z"),
         quiet("quiet-2", "2026-10-03T09:00:00.000Z"),
       ]),
-    ).toBe(
-      `2 checks between ${formatDay("2026-10-03T09:00:00.000Z")} and ${formatDay(
-        "2026-10-05T12:00:00.000Z",
-      )} changed nothing`,
-    );
+    ).toEqual({
+      count: 2,
+      from: "2026-10-03T09:00:00.000Z",
+      to: "2026-10-05T12:00:00.000Z",
+    });
   });
 });
 
