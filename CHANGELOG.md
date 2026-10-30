@@ -3,6 +3,31 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — round-8 MCP fixes (scoring-period schedule)
+
+- `get_team_summary` accepts a `schedule` group that reports each rostered player's scheduled games
+  in the current scoring period: the dates they play, the opponent abbreviation, whether the game is
+  home or away, and a games-in-period count, plus a per-date count across the roster so a light
+  night needs no client-side arithmetic. A player who does not play in the period is `no_games` with
+  a count of zero, never an empty success. Authorizing: a live dated hockey roster read published
+  one opponent per player per date, with `null` on a night that player's team did not play.
+- The schedule group follows the league's declared coverage. A date-scoped league is read once per
+  date of the current scoring period, whose window comes from the provider's own scoring-week dates;
+  a league whose cadence is a scoring week reports that week's opponent instead and is never given
+  invented dates.
+- The gaps are stated in the tool description and in the result: the provider publishes no start
+  time and no season-long schedule, a league with no published period window (a rotisserie hockey
+  league publishes neither `current_week` nor a week window) says so instead of returning an empty
+  list, and one schedule read is capped at 21 dates so a wider window is refused with that limit
+  rather than silently truncated.
+- `get_team_summary`'s weekly remaining-player-games section is renamed `remainingPlayerGames` so it
+  cannot be confused with the new per-player `schedule` section. The roster and schedule sections
+  share one player page and cursor; a 22-player, three-game hockey schedule returns in two pages.
+- The league players collection is not date-addressable: `players;out=opponent;date=…` returned the
+  same opponents as the undated read across different dates, so the date parameter is accepted and
+  ignored. The plain collection form therefore cannot carry a per-date schedule into search rows,
+  and this change is restricted to the roster.
+
 ## Unreleased — round-5 and round-6 MCP fixes
 
 - `get_league` scoring lists the league's configured categories and marks each one `scoring` or

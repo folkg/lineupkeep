@@ -63,6 +63,7 @@ import {
   yahooNflPlayerDetailsWithOwnership,
   yahooNflGamesPlayed,
   yahooNhlRoster,
+  yahooNhlDatedRoster,
   yahooRosterWithConfirmedStart,
   yahooRosterWithOpponentKinds,
   yahooRosterWithoutOpponent,
@@ -1056,6 +1057,162 @@ it.effect("reports a date period mismatch without relabelling another day", () =
 
     assert.instanceOf(error, ProviderPeriodMismatch);
     assert.deepStrictEqual(error.requested, { type: "date", date: "2026-10-24" });
+    assert.deepStrictEqual(error.covered, { type: "date", date: "2026-10-25" });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads a dated roster whose wrapper declares the roster's weekly cadence", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      yahooNhlDatedRoster({
+        date: "2026-10-31",
+        players: [{ key: "466.p.30001", name: "Synthetic Skater", proTeam: "SJ", opponent: "@LA" }],
+      }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const roster = yield* provider.readRoster({
+      ...sessionInput,
+      providerTeamKey: "466.l.4002.t.3",
+      period: { type: "date", date: "2026-10-31" },
+    });
+
+    assert.deepStrictEqual(roster.coverage, { type: "date", date: "2026-10-31" });
+    assert.deepStrictEqual(
+      roster.players.map((player) => [player.name, player.scheduled]),
+      [["Synthetic Skater", true]],
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads every player's games across a date-scoped period, one request per date", () => {
+  const daily = [
+    { date: "2026-10-26", opponents: ["@LA", null, "WPG"] },
+    { date: "2026-10-27", opponents: [null, "BOS", "Bye"] },
+  ];
+  const internet = recordingInternet((request) => {
+    const date = /roster;date=([0-9-]+)/u.exec(request.url.pathname)?.[1];
+    const day = daily.find((entry) => entry.date === date);
+    if (day === undefined) {
+      return jsonResponse({}, 404);
+    }
+    return jsonResponse(
+      yahooNhlDatedRoster({
+        date: day.date,
+        players: day.opponents.map((opponent, index) => ({
+          key: `466.p.${String(30001 + index)}`,
+          name: `Synthetic Game ${String(index)}`,
+          proTeam: "SYN",
+          opponent,
+        })),
+      }),
+    );
+  });
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const schedule = yield* provider.readRosterSchedule({
+      ...sessionInput,
+      providerTeamKey: "466.l.4002.t.3",
+      period: { type: "date", start: "2026-10-26", end: "2026-10-27" },
+    });
+
+    assert.deepStrictEqual(
+      internet.calls.map((call) => call.url.href),
+      ["2026-10-26", "2026-10-27"].map(
+        (date) =>
+          `https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4002.t.3/roster;date=${date}/players;out=opponent?format=json`,
+      ),
+    );
+    assert.deepStrictEqual(schedule.dates, ["2026-10-26", "2026-10-27"]);
+    assert.deepStrictEqual(
+      schedule.players.map((player) => [player.name, player.games]),
+      [
+        ["Synthetic Game 0", [{ date: "2026-10-26", opponent: "LA", home: false }]],
+        ["Synthetic Game 1", [{ date: "2026-10-27", opponent: "BOS", home: true }]],
+        ["Synthetic Game 2", [{ date: "2026-10-26", opponent: "WPG", home: true }]],
+      ],
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads a weekly league's opponent as the period's game without dates", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflRoster));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const schedule = yield* provider.readRosterSchedule({
+      ...sessionInput,
+      providerTeamKey: "466.l.4000.t.1",
+      period: { type: "week", week: 6 },
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent?format=json",
+    );
+    assert.deepStrictEqual(schedule.dates, []);
+    assert.deepStrictEqual(schedule.players, [
+      {
+        providerPlayerKey: "466.p.20001",
+        name: "Synthetic Starter",
+        proTeamAbbreviation: "SYN",
+        games: [{ date: undefined, opponent: "SEA", home: true }],
+      },
+      {
+        providerPlayerKey: "466.p.20002",
+        name: "Synthetic Reserve",
+        proTeamAbbreviation: "SYN",
+        games: [],
+      },
+    ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses a scoring period wider than the 21-date limit before reading", () => {
+  const internet = recordingInternet(() => jsonResponse({}, 500));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readRosterSchedule({
+        ...sessionInput,
+        providerTeamKey: "466.l.4002.t.3",
+        period: { type: "date", start: "2026-10-01", end: "2026-10-22" },
+      }),
+    );
+
+    assert.instanceOf(error, ProviderOperationUnsupported);
+    assert.include(error.reason, "covers 22 dates");
+    assert.include(error.reason, "21-date limit");
+    assert.strictEqual(internet.calls.length, 0);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reports a dated schedule read that returns another date", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      yahooNhlDatedRoster({
+        date: "2026-10-25",
+        players: [{ key: "466.p.30001", name: "Synthetic Skater", proTeam: "SJ", opponent: "LA" }],
+      }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readRosterSchedule({
+        ...sessionInput,
+        providerTeamKey: "466.l.4002.t.3",
+        period: { type: "date", start: "2026-10-26", end: "2026-10-26" },
+      }),
+    );
+
+    assert.instanceOf(error, ProviderPeriodMismatch);
+    assert.deepStrictEqual(error.requested, { type: "date", date: "2026-10-26" });
     assert.deepStrictEqual(error.covered, { type: "date", date: "2026-10-25" });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });

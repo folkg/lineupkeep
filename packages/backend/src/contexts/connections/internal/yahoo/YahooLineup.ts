@@ -107,7 +107,7 @@ export const yahooCapabilities: ProviderCapabilities = {
     {
       subject: "player_schedule",
       detail:
-        "Yahoo publishes no per-player games-remaining or probable-starter field. A roster entry carries the professional-team abbreviation and, where the league publishes one, the bye week; remaining player-games are available per fantasy team from get_matchups and get_team_summary.",
+        "Yahoo publishes one opponent per player through its roster read: the opponent for the league's declared coverage (a date, or a whole scoring week when the league's cadence is weekly), a leading @ meaning the game is away, and no opponent when the player's team does not play. It publishes no start time, no season-long schedule, and no per-player games-remaining count, so only the current scoring period is covered. A roster entry also carries the professional-team abbreviation and, where the league publishes one, the bye week; remaining player-games are available per fantasy team from get_matchups.",
     },
     {
       subject: "probable_starters",

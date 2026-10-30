@@ -458,6 +458,102 @@ it("reaches search_players with an empty query and returns the remedy instead of
   expect(JSON.stringify(body)).toContain("Omit the query");
 });
 
+it("publishes and serves the scoring-period schedule group over MCP", async () => {
+  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const queries: FantasyQueriesShape = {
+    ...unavailableQueries,
+    getTeamSummary: () =>
+      Effect.succeed({
+        status: "ok",
+        team: {
+          id: teamId,
+          name: "Synthetic Team",
+          provider: decodeProviderKey("yahoo"),
+          league: "nhl",
+          sport: "hockey",
+          season: 2026,
+        },
+        schedule: {
+          status: "available",
+          coverage: "date",
+          period: { week: 5 },
+          dates: [
+            { date: "2026-10-26", rosterGames: 0 },
+            { date: "2026-10-27", rosterGames: 2 },
+          ],
+          players: [
+            {
+              player: Schema.decodeSync(PlayerRef)("r1.test"),
+              name: "Synthetic Skater",
+              proTeam: "SYN",
+              status: "scheduled",
+              gameCount: 1,
+              games: [{ date: "2026-10-27", opponent: "TOR", home: false }],
+            },
+          ],
+          detail: "Each rostered player's opponent on each of the 2 dates of scoring period 5.",
+        },
+        roster: [],
+        coverage: [],
+        failures: [],
+        page: { returned: 0, complete: true, remaining: 0 },
+        budget: { targetBytes: 12_288, hardLimitBytes: 16_384 },
+      }),
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(queries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(unavailableFeedback),
+  );
+  const run = (invocation: Request): Promise<Response> =>
+    handleMcpRequest(invocation, (_request, _operation, program) =>
+      Effect.runPromise(Effect.provide(program, services)),
+    );
+
+  const listed = await json(await run(request("tools/list", {}, "fantasy")));
+  const response = await run(
+    request(
+      "tools/call",
+      { name: "get_team_summary", arguments: { team: teamId, groups: ["schedule"] } },
+      "fantasy",
+    ),
+  );
+
+  expect(response.status).toBe(200);
+  expect(JSON.stringify(listed)).toContain("21 dates");
+  expect(await json(response)).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        schedule: {
+          status: "available",
+          coverage: "date",
+          period: { week: 5 },
+          dates: [
+            { date: "2026-10-26", rosterGames: 0 },
+            { date: "2026-10-27", rosterGames: 2 },
+          ],
+          players: [
+            {
+              player: "r1.test",
+              name: "Synthetic Skater",
+              proTeam: "SYN",
+              status: "scheduled",
+              gameCount: 1,
+              games: [{ date: "2026-10-27", opponent: "TOR", home: false }],
+            },
+          ],
+          detail: "Each rostered player's opponent on each of the 2 dates of scoring period 5.",
+        },
+      },
+    },
+  });
+});
+
 it("names the cause when a continuation cursor is reused with different arguments", async () => {
   const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
   const queries: FantasyQueriesShape = {

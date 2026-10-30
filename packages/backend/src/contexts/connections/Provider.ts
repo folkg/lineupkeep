@@ -12,6 +12,7 @@ const ProviderOperation = Schema.Literals([
   "read_league",
   "read_standings",
   "read_roster",
+  "read_roster_schedule",
   "read_player_details",
   "read_player_history",
   "search_players",
@@ -215,6 +216,13 @@ export type ProviderShape = {
     },
   ) => Effect.Effect<ProviderRoster, ProviderReadFailure>;
 
+  readonly readRosterSchedule: (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly period: ProviderSchedulePeriod;
+    },
+  ) => Effect.Effect<ProviderRosterSchedule, ProviderReadFailure>;
+
   readonly applyNativeAction: (
     input: ProviderSessionMaterial & {
       readonly providerTeamKey: string;
@@ -412,6 +420,30 @@ export type ProviderRoster = {
   readonly providerLeagueKey: string;
   readonly coverage: ProviderRosterCoverage;
   readonly players: ReadonlyArray<ProviderRosterPlayer>;
+};
+
+export type ProviderSchedulePeriod =
+  | { readonly type: "week"; readonly week: number }
+  | { readonly type: "date"; readonly start: string; readonly end: string };
+
+export type ProviderScheduledGame = {
+  readonly date: string | undefined;
+  readonly opponent: string;
+  readonly home: boolean;
+};
+
+export type ProviderSchedulePlayer = {
+  readonly providerPlayerKey: string;
+  readonly name: string;
+  readonly proTeamAbbreviation: string | undefined;
+  readonly games: ReadonlyArray<ProviderScheduledGame>;
+};
+
+export type ProviderRosterSchedule = {
+  readonly providerTeamKey: string;
+  readonly period: ProviderSchedulePeriod;
+  readonly dates: ReadonlyArray<string>;
+  readonly players: ReadonlyArray<ProviderSchedulePlayer>;
 };
 
 export type ProviderStatValue = {

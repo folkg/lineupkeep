@@ -132,6 +132,14 @@ _Avoid_: Draft board, pick ownership when the read is history
 A draft pick moved in a trade, carrying its round and the teams that sent it, received it, and originally owned it. It is part of the trade transaction, not a proposal, and the provider publishes no draft year or overall pick number for it.
 _Avoid_: Pick ownership when referring to a traded pick
 
+**Scheduled game**:
+A game the provider publishes for a rostered player in a scoring period: the opponent's professional-team abbreviation and whether the game is home or away, on a date in a date-scoped league, or as the period's opponent when the league's coverage is a scoring week. It carries no start time.
+_Avoid_: Fixture, matchup (a matchup is between fantasy teams), game time
+
+**Scoring-period schedule**:
+Every rostered player's scheduled games in one scoring period, with each player's games-in-period count and a per-date count across the roster so a light night needs no arithmetic. A league whose provider publishes no period window has no scoring-period schedule, which is stated with the reason rather than returned as an empty list.
+_Avoid_: Season schedule, full schedule, light night when the per-date count is meant
+
 ## Automation
 
 **Disabled team**:

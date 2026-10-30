@@ -31,6 +31,8 @@ import type {
   ProviderReviewLinkInput,
   ProviderRoster,
   ProviderRosterCoverage,
+  ProviderRosterSchedule,
+  ProviderSchedulePeriod,
   ProviderShape,
   ProviderStandings,
   ProviderStatBasis,
@@ -74,6 +76,8 @@ type FakeProviderState = {
   readonly roster: ProviderRoster | undefined;
   readonly rosterAfterNextRead: ProviderRoster | undefined;
   readonly rosterPeriods: ReadonlyArray<ProviderRosterCoverage | undefined>;
+  readonly schedule: ProviderRosterSchedule | undefined;
+  readonly schedulePeriods: ReadonlyArray<ProviderSchedulePeriod>;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
   readonly searchPlayers: ReadonlyArray<ProviderPlayerSearchResult["players"][number]> | undefined;
   readonly playerScores: ReadonlyArray<FakePlayerScore>;
@@ -113,6 +117,8 @@ export type FakeProviderWorldShape = {
   readonly setRoster: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly setRosterAfterNextRead: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly rosterPeriods: Effect.Effect<ReadonlyArray<ProviderRosterCoverage | undefined>>;
+  readonly setSchedule: (schedule: ProviderRosterSchedule | undefined) => Effect.Effect<void>;
+  readonly schedulePeriods: Effect.Effect<ReadonlyArray<ProviderSchedulePeriod>>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
   readonly setSearchPlayers: (
     players: ReadonlyArray<ProviderPlayerSearchResult["players"][number]>,
@@ -169,6 +175,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         roster: undefined,
         rosterAfterNextRead: undefined,
         rosterPeriods: [],
+        schedule: undefined,
+        schedulePeriods: [],
         playerDetails: [],
         searchPlayers: undefined,
         playerScores: [],
@@ -227,6 +235,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setRosterAfterNextRead: (rosterAfterNextRead) =>
           modify((current) => ({ ...current, rosterAfterNextRead })),
         rosterPeriods: Effect.map(Ref.get(state), (current) => current.rosterPeriods),
+        setSchedule: (schedule) => modify((current) => ({ ...current, schedule })),
+        schedulePeriods: Effect.map(Ref.get(state), (current) => current.schedulePeriods),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
         setSearchPlayers: (players) =>
           modify((current) => ({ ...current, searchPlayers: players })),
@@ -405,6 +415,23 @@ const providerFake = Effect.gen(function* () {
         }));
       }
       return current.roster;
+    }),
+    readRosterSchedule: Effect.fn("FakeProvider.readRosterSchedule")(function* (input) {
+      const current = yield* prepare(input, "read_roster_schedule");
+      yield* Ref.update(world.state, (state) => ({
+        ...state,
+        schedulePeriods: [...state.schedulePeriods, input.period],
+      }));
+      if (current.schedule === undefined) {
+        return yield* ProviderOperationUnsupported.make({
+          operation: "read_roster_schedule",
+          reason: "No roster schedule is configured for the fake provider.",
+        });
+      }
+      if (current.schedule.providerTeamKey !== input.providerTeamKey) {
+        return yield* ProviderResponseInvalid.make({ operation: "read_roster_schedule" });
+      }
+      return { ...current.schedule, period: input.period };
     }),
     applyNativeAction: Effect.fn("FakeProvider.applyNativeAction")(function* (input) {
       const current = yield* prepare(input, "apply_native_action").pipe(
@@ -703,7 +730,7 @@ const fakeCapabilities: ProviderCapabilities = {
     {
       subject: "player_schedule",
       detail:
-        "This provider publishes no per-player games-remaining or probable-starter field. A roster entry carries the professional-team abbreviation and, where the league publishes one, the bye week; remaining player-games are available per fantasy team from get_matchups and get_team_summary.",
+        "This provider publishes one opponent per player for the league's declared coverage (a date, or a whole scoring week when the league's cadence is weekly). It publishes no start time, no season-long schedule, and no per-player games-remaining count. A roster entry carries the professional-team abbreviation and, where the league publishes one, the bye week; remaining player-games are available per fantasy team from get_matchups.",
     },
     {
       subject: "probable_starters",

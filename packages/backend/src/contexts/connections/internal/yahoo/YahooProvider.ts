@@ -55,6 +55,9 @@ import type {
   ProviderRosterPlayer,
   ProviderReviewIntent,
   ProviderReviewLinkInput,
+  ProviderSchedulePeriod,
+  ProviderSchedulePlayer,
+  ProviderScheduledGame,
   ProviderStanding,
   ProviderStandings,
   ProviderStatValue,
@@ -284,6 +287,69 @@ export const yahooProvider = Effect.gen(function* () {
     const roster = yield* rosterFromPayload(decoded, input.providerTeamKey, input.period);
     yield* Effect.annotateCurrentSpan("provider.player_count", roster.players.length);
     return roster;
+  });
+
+  const readRosterSchedule = Effect.fn("YahooProvider.readRosterSchedule")(function* (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly period: ProviderSchedulePeriod;
+    },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_roster_schedule");
+    const cookie = yield* sessionCookie(input, "read_roster_schedule");
+    const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_roster_schedule");
+    if (input.period.type === "week") {
+      const week = yield* ValidWeek(input.period.week);
+      const requested = { type: "week" as const, week };
+      const payload = yield* readJson(internet, {
+        operation: "read_roster_schedule",
+        origin: readOrigin,
+        path: `/fantasy/v2/team/${teamKey}/roster;week=${String(week)}/players;out=opponent`,
+        query: { format: "json" },
+        cookie,
+        normalize: true,
+      }).pipe(
+        Effect.catchTag("provider.request_failed", (error) =>
+          Effect.fail(
+            error.status === 400
+              ? ProviderPeriodMismatch.make({
+                  operation: "read_roster_schedule",
+                  requested,
+                  covered: null,
+                })
+              : error,
+          ),
+        ),
+      );
+      const decoded = yield* decodePayload(TeamRosterPayload, payload, "read_roster_schedule");
+      const players = yield* scheduleFromPayload(decoded, teamKey, requested);
+      return { providerTeamKey: teamKey, period: input.period, dates: [], players };
+    }
+    const dates = yield* scheduleDates(input.period);
+    const daily = yield* Effect.forEach(
+      dates,
+      (date) =>
+        Effect.gen(function* () {
+          const payload = yield* readJson(internet, {
+            operation: "read_roster_schedule",
+            origin: readOrigin,
+            path: `/fantasy/v2/team/${teamKey}/roster;date=${date}/players;out=opponent`,
+            query: { format: "json" },
+            cookie,
+            normalize: true,
+          });
+          const decoded = yield* decodePayload(TeamRosterPayload, payload, "read_roster_schedule");
+          return yield* scheduleFromPayload(decoded, teamKey, { type: "date", date });
+        }),
+      { concurrency: maximumDayReadConcurrency },
+    );
+    yield* Effect.annotateCurrentSpan("provider.date_count", dates.length);
+    return {
+      providerTeamKey: teamKey,
+      period: input.period,
+      dates,
+      players: mergeDailySchedules(daily),
+    };
   });
 
   const applyNativeAction: (
@@ -793,6 +859,7 @@ export const yahooProvider = Effect.gen(function* () {
     readLeague,
     readStandings,
     readRoster,
+    readRosterSchedule,
     applyNativeAction,
     applyExplicitAssignments,
     readPlayerDetails,
@@ -1339,40 +1406,13 @@ function rosterFromPayload(
   requestedPeriod: ProviderRosterCoverage | undefined,
 ): Effect.Effect<ProviderRoster, ProviderResponseInvalid | ProviderPeriodMismatch> {
   return Effect.gen(function* () {
-    if (payload.team.team_key !== requestedTeamKey) {
-      return yield* responseMismatch({
-        operation: "read_roster",
-        field: "team.team_key",
-      });
-    }
-    const roster = payload.team.roster;
-    const entries = isReadonlyArray(roster)
-      ? roster
-      : "entries" in roster
-        ? roster.entries
-        : [roster];
-    const players = entries.flatMap((entry) => entry.players);
-    if (players.length === 0) {
-      return yield* responseMismatch({ operation: "read_roster" });
-    }
-    const declaredType = isReadonlyArray(roster) ? undefined : roster.coverage_type;
-    const declaredWeek = isReadonlyArray(roster) ? undefined : roster.week;
-    const declaredDate = isReadonlyArray(roster) ? undefined : roster.date;
-    const coverageTypes = new Set(players.map((player) => player.selected_position.coverage_type));
-    if (coverageTypes.size !== 1) {
-      return yield* responseMismatch({ operation: "read_roster" });
-    }
-    const coverageType = [...coverageTypes][0];
-    if (coverageType === undefined) {
-      return yield* responseMismatch({ operation: "read_roster" });
-    }
-    if (declaredType !== undefined && declaredType !== coverageType) {
-      return yield* responseMismatch({ operation: "read_roster" });
-    }
+    const rows = yield* rosterPayloadRows(payload, requestedTeamKey);
+    const declaredWeek = rows.declared?.week;
+    const declaredDate = rows.declared?.date;
     const leagueKey = providerLeagueKey(requestedTeamKey);
-    if (coverageType === "week") {
+    if (rows.coverageType === "week") {
       const weeks = new Set(
-        players.flatMap((player) =>
+        rows.players.flatMap((player) =>
           player.selected_position.week === undefined ? [] : [player.selected_position.week],
         ),
       );
@@ -1402,12 +1442,12 @@ function rosterFromPayload(
         providerTeamKey: requestedTeamKey,
         providerLeagueKey: leagueKey,
         coverage,
-        players: players.map(toRosterPlayer),
+        players: rows.players.map(toRosterPlayer),
       };
     }
-    if (coverageType === "date") {
+    if (rows.coverageType === "date") {
       const dates = new Set(
-        players.flatMap((player) =>
+        rows.players.flatMap((player) =>
           player.selected_position.date === undefined ? [] : [player.selected_position.date],
         ),
       );
@@ -1437,11 +1477,162 @@ function rosterFromPayload(
         providerTeamKey: requestedTeamKey,
         providerLeagueKey: leagueKey,
         coverage,
-        players: players.map(toRosterPlayer),
+        players: rows.players.map(toRosterPlayer),
       };
     }
     return yield* responseMismatch({ operation: "read_roster" });
   });
+}
+
+function rosterPayloadRows(
+  payload: typeof TeamRosterPayload.Type,
+  requestedTeamKey: string,
+): Effect.Effect<
+  {
+    readonly declared: typeof RosterCoverage.Type | undefined;
+    readonly coverageType: string;
+    readonly players: ReadonlyArray<typeof RosterPlayerPayload.Type>;
+  },
+  ProviderResponseInvalid
+> {
+  return Effect.gen(function* () {
+    if (payload.team.team_key !== requestedTeamKey) {
+      return yield* responseMismatch({ operation: "read_roster", field: "team.team_key" });
+    }
+    const roster = payload.team.roster;
+    const entries = isReadonlyArray(roster)
+      ? roster
+      : "entries" in roster
+        ? roster.entries
+        : [roster];
+    const players = entries.flatMap((entry) => entry.players);
+    if (players.length === 0) {
+      return yield* responseMismatch({ operation: "read_roster" });
+    }
+    const coverageTypes = new Set(players.map((player) => player.selected_position.coverage_type));
+    const coverageType = [...coverageTypes][0];
+    if (coverageTypes.size !== 1 || coverageType === undefined) {
+      return yield* responseMismatch({ operation: "read_roster" });
+    }
+    return {
+      declared: isReadonlyArray(roster) ? undefined : roster,
+      coverageType,
+      players,
+    };
+  });
+}
+
+function scheduleFromPayload(
+  payload: typeof TeamRosterPayload.Type,
+  requestedTeamKey: string,
+  requested: ProviderRosterCoverage,
+): Effect.Effect<
+  ReadonlyArray<ProviderSchedulePlayer>,
+  ProviderResponseInvalid | ProviderPeriodMismatch
+> {
+  return Effect.gen(function* () {
+    const rows = yield* rosterPayloadRows(payload, requestedTeamKey);
+    if (requested.type === "week") {
+      const weeks = new Set(
+        rows.players.flatMap((player) =>
+          player.selected_position.week === undefined ? [] : [player.selected_position.week],
+        ),
+      );
+      const playerWeek = [...weeks][0];
+      const declaredWeek = rows.declared?.week;
+      const week = declaredWeek ?? playerWeek;
+      if (
+        rows.coverageType !== "week" ||
+        weeks.size > 1 ||
+        (declaredWeek !== undefined && playerWeek !== undefined && declaredWeek !== playerWeek) ||
+        week !== requested.week
+      ) {
+        return yield* ProviderPeriodMismatch.make({
+          operation: "read_roster_schedule",
+          requested,
+          covered:
+            rows.coverageType === "week" && week !== undefined ? { type: "week", week } : null,
+        });
+      }
+      return rows.players.map((player) => toSchedulePlayer(player, gamesIn(player, undefined)));
+    }
+    const dates = new Set(
+      rows.players.flatMap((player) =>
+        player.selected_position.date === undefined ? [] : [player.selected_position.date],
+      ),
+    );
+    const playerDate = [...dates][0];
+    const declaredDate = rows.declared?.date;
+    const date = declaredDate ?? playerDate;
+    if (
+      rows.coverageType !== "date" ||
+      dates.size > 1 ||
+      (declaredDate !== undefined && playerDate !== undefined && declaredDate !== playerDate) ||
+      date !== requested.date
+    ) {
+      return yield* ProviderPeriodMismatch.make({
+        operation: "read_roster_schedule",
+        requested,
+        covered: rows.coverageType === "date" && date !== undefined ? { type: "date", date } : null,
+      });
+    }
+    return rows.players.map((player) => toSchedulePlayer(player, gamesIn(player, requested.date)));
+  });
+}
+
+function toSchedulePlayer(
+  player: typeof RosterPlayerPayload.Type,
+  games: ReadonlyArray<ProviderScheduledGame>,
+): ProviderSchedulePlayer {
+  return {
+    providerPlayerKey: player.player_key,
+    name: player.name.full,
+    proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr ?? ""),
+    games,
+  };
+}
+
+function gamesIn(
+  player: typeof RosterPlayerPayload.Type,
+  date: string | undefined,
+): ReadonlyArray<ProviderScheduledGame> {
+  const opponent = scheduledOpponent(player.opponent);
+  return opponent === undefined ? [] : [{ date, ...opponent }];
+}
+
+function mergeDailySchedules(
+  days: ReadonlyArray<ReadonlyArray<ProviderSchedulePlayer>>,
+): ReadonlyArray<ProviderSchedulePlayer> {
+  const players = new Map<string, ProviderSchedulePlayer>();
+  for (const day of days) {
+    for (const player of day) {
+      const existing = players.get(player.providerPlayerKey);
+      players.set(
+        player.providerPlayerKey,
+        existing === undefined
+          ? player
+          : { ...player, games: [...existing.games, ...player.games] },
+      );
+    }
+  }
+  return [...players.values()];
+}
+
+function scheduleDates(period: {
+  readonly start: string;
+  readonly end: string;
+}): Effect.Effect<ReadonlyArray<string>, ProviderOperationUnsupported | ProviderResponseInvalid> {
+  if (!isProviderDate(period.start) || !isProviderDate(period.end) || period.start > period.end) {
+    return ProviderResponseInvalid.make({ operation: "read_roster_schedule" });
+  }
+  const dates = calendarDays(period.start, period.end);
+  if (dates.length > maximumScheduleDates) {
+    return ProviderOperationUnsupported.make({
+      operation: "read_roster_schedule",
+      reason: `The scoring period ${period.start} to ${period.end} covers ${String(dates.length)} dates, above the ${String(maximumScheduleDates)}-date limit for one schedule read.`,
+    });
+  }
+  return Effect.succeed(dates);
 }
 
 function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRosterPlayer {
@@ -1465,8 +1656,19 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
 }
 
 function scheduledIn(opponent: string | null): boolean {
+  return scheduledOpponent(opponent) !== undefined;
+}
+
+function scheduledOpponent(
+  opponent: string | null,
+): { readonly opponent: string; readonly home: boolean } | undefined {
   const named = optionalNonEmpty(opponent ?? "");
-  return named !== undefined && named !== "Bye";
+  if (named === undefined || named === "Bye") {
+    return undefined;
+  }
+  return named.startsWith("@")
+    ? { opponent: named.slice(1), home: false }
+    : { opponent: named, home: true };
 }
 
 function startingLineupIn(
@@ -1562,6 +1764,7 @@ const rateStatNotAggregated =
   "A rate or percentage is not summed across days; the provider publishes this category only as a season total or a single date.";
 
 const maximumDayReadConcurrency = 5;
+const maximumScheduleDates = 21;
 
 type PlayerStatQuery =
   | { readonly type: "season" }

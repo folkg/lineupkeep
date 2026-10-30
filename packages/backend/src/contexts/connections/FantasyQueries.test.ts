@@ -2113,9 +2113,9 @@ it.effect("degrades one team summary section without failing the snapshot", () =
       ),
     );
     assert.isTrue(summary.failures.some((failure) => failure.code === "provider_invalid_response"));
-    assert.strictEqual(summary.schedule?.status, "unsupported");
-    if (summary.schedule?.status === "unsupported") {
-      assert.include(summary.schedule.detail, "bye week");
+    assert.strictEqual(summary.remainingPlayerGames?.status, "unsupported");
+    if (summary.remainingPlayerGames?.status === "unsupported") {
+      assert.include(summary.remainingPlayerGames.detail, "bye week");
     }
     assert.strictEqual(summary.probableStarters?.status, "unsupported");
     if (summary.probableStarters?.status === "unsupported") {
@@ -2483,7 +2483,7 @@ it.effect("reports this week's and next week's remaining player-games for hockey
     if (summary.status !== "ok") {
       return;
     }
-    const schedule = summary.schedule;
+    const schedule = summary.remainingPlayerGames;
     assert.strictEqual(schedule?.status, "available");
     if (schedule?.status !== "available") {
       return;
@@ -2506,8 +2506,404 @@ it.effect("reports this week's and next week's remaining player-games for hockey
     });
     assert.isTrue(
       summary.coverage.some(
+        (entry) => entry.resource === "remaining_player_games" && entry.status === "available",
+      ),
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports each rostered player's scheduled games and the roster count per date", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: hockeyLeagueFixture,
+      roster: rosterFixture({
+        count: 4,
+        providerTeamKey: "465.l.2000.t.1",
+        providerLeagueKey: "465.l.2000",
+        coverage: { type: "date", date: "2026-10-20" },
+      }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setMatchups([matchupFixture({ period: 3 })]);
+    yield* fake.setSchedule(
+      scheduleFixture({
+        providerTeamKey: "465.l.2000.t.1",
+        dates: [
+          "2026-10-19",
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23",
+          "2026-10-24",
+          "2026-10-25",
+        ],
+        players: [
+          {
+            key: "461.p.10001",
+            name: "Synthetic Two Games",
+            games: [
+              { date: "2026-10-19", opponent: "TOR", home: true },
+              { date: "2026-10-21", opponent: "LA", home: false },
+            ],
+          },
+          {
+            key: "461.p.10002",
+            name: "Synthetic One Game",
+            games: [{ date: "2026-10-20", opponent: "BOS", home: true }],
+          },
+          { key: "461.p.10003", name: "Synthetic No Games", games: [] },
+          {
+            key: "461.p.10004",
+            name: "Synthetic Away Game",
+            games: [{ date: "2026-10-19", opponent: "WPG", home: false }],
+          },
+        ],
+      }),
+    );
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["schedule"] });
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(yield* fake.schedulePeriods, [
+      { type: "date", start: "2026-10-19", end: "2026-10-25" },
+    ]);
+    const schedule = summary.schedule;
+    assert.strictEqual(schedule?.status, "available");
+    if (schedule?.status !== "available") {
+      return;
+    }
+    assert.strictEqual(schedule.coverage, "date");
+    assert.deepStrictEqual(schedule.period, { week: 3 });
+    assert.deepStrictEqual(schedule.dates, [
+      { date: "2026-10-19", rosterGames: 2 },
+      { date: "2026-10-20", rosterGames: 1 },
+      { date: "2026-10-21", rosterGames: 1 },
+      { date: "2026-10-22", rosterGames: 0 },
+      { date: "2026-10-23", rosterGames: 0 },
+      { date: "2026-10-24", rosterGames: 0 },
+      { date: "2026-10-25", rosterGames: 0 },
+    ]);
+    assert.deepStrictEqual(
+      schedule.players.map((player) => [
+        player.name,
+        player.status,
+        player.gameCount,
+        player.games,
+      ]),
+      [
+        [
+          "Synthetic Two Games",
+          "scheduled",
+          2,
+          [
+            { date: "2026-10-19", opponent: "TOR", home: true },
+            { date: "2026-10-21", opponent: "LA", home: false },
+          ],
+        ],
+        [
+          "Synthetic One Game",
+          "scheduled",
+          1,
+          [{ date: "2026-10-20", opponent: "BOS", home: true }],
+        ],
+        ["Synthetic No Games", "no_games", 0, []],
+        [
+          "Synthetic Away Game",
+          "scheduled",
+          1,
+          [{ date: "2026-10-19", opponent: "WPG", home: false }],
+        ],
+      ],
+    );
+    assert.include(schedule.detail, "2026-10-19 to 2026-10-25");
+    assert.include(schedule.detail, "no start time");
+    assert.isTrue(
+      summary.coverage.some(
         (entry) => entry.resource === "schedule" && entry.status === "available",
       ),
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("uses the scoring week's opponent for a league whose coverage is a week", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setSchedule({
+      providerTeamKey: "461.l.1000.t.1",
+      period: { type: "week", week: 3 },
+      dates: [],
+      players: [
+        {
+          providerPlayerKey: "461.p.10001",
+          name: "Synthetic 0",
+          proTeamAbbreviation: "SYN",
+          games: [{ date: undefined, opponent: "SEA", home: true }],
+        },
+        {
+          providerPlayerKey: "461.p.10002",
+          name: "Synthetic 1",
+          proTeamAbbreviation: "SYN",
+          games: [],
+        },
+      ],
+    });
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["schedule"] });
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(yield* fake.schedulePeriods, [{ type: "week", week: 3 }]);
+    const schedule = summary.schedule;
+    assert.strictEqual(schedule?.status, "available");
+    if (schedule?.status !== "available") {
+      return;
+    }
+    assert.strictEqual(schedule.coverage, "week");
+    assert.isUndefined(schedule.dates);
+    assert.deepStrictEqual(
+      schedule.players.map((player) => [player.status, player.gameCount, player.games]),
+      [
+        ["scheduled", 1, [{ opponent: "SEA", home: true }]],
+        ["no_games", 0, []],
+      ],
+    );
+    assert.include(schedule.detail, "scoring week 3");
+    assert.include(schedule.detail, "no count of games inside a week");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("says a league with no published scoring period has no schedule to read", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: rotoLeagueFixture,
+      roster: rosterFixture({
+        count: 2,
+        providerTeamKey: "465.l.2000.t.1",
+        providerLeagueKey: "465.l.2000",
+        coverage: { type: "date", date: "2026-10-20" },
+      }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["schedule"] });
+    assert.strictEqual(summary.status, "unsupported");
+    if (summary.status !== "ok") {
+      const schedule = summary.status === "unsupported" ? summary.schedule : undefined;
+      return schedule;
+    }
+    const schedule = summary.schedule;
+    assert.strictEqual(schedule?.status, "unsupported");
+    if (schedule?.status !== "unsupported") {
+      return;
+    }
+    assert.include(schedule.detail, "no current scoring period");
+    assert.include(schedule.detail, "no season-long schedule");
+    assert.deepStrictEqual(yield* fake.schedulePeriods, []);
+    assert.isTrue(
+      summary.coverage.some(
+        (entry) => entry.resource === "schedule" && entry.status === "unsupported",
+      ),
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports a provider refusal for the schedule as unsupported with its reason", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: hockeyLeagueFixture,
+      roster: rosterFixture({
+        count: 2,
+        providerTeamKey: "465.l.2000.t.1",
+        providerLeagueKey: "465.l.2000",
+        coverage: { type: "date", date: "2026-10-20" },
+      }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setMatchups([matchupFixture({ period: 3 })]);
+    yield* fake.unsupportedOperations(["read_roster_schedule"]);
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["league", "schedule"],
+    });
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    const schedule = summary.schedule;
+    assert.strictEqual(schedule?.status, "unsupported");
+    if (schedule?.status !== "unsupported") {
+      return;
+    }
+    assert.include(schedule.detail, "does not support read_roster_schedule");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("pages a full roster's schedule through the roster page and one cursor", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const dates = [
+      "2026-10-19",
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22",
+      "2026-10-23",
+      "2026-10-24",
+      "2026-10-25",
+    ];
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: hockeyLeagueFixture,
+      roster: rosterFixture({
+        count: 22,
+        providerTeamKey: "465.l.2000.t.1",
+        providerLeagueKey: "465.l.2000",
+        coverage: { type: "date", date: "2026-10-20" },
+      }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setMatchups([matchupFixture({ period: 3 })]);
+    yield* fake.setSchedule(
+      scheduleFixture({
+        providerTeamKey: "465.l.2000.t.1",
+        dates,
+        players: globalThis.Array.from({ length: 22 }, (_, index) => ({
+          key: `461.p.${String(10001 + index)}`,
+          name: `Synthetic ${String(index)}`,
+          games: [
+            { date: "2026-10-19", opponent: "TOR", home: true },
+            { date: "2026-10-21", opponent: "LA", home: index % 2 === 0 },
+            { date: "2026-10-24", opponent: "BOS", home: index % 3 === 0 },
+          ],
+        })),
+      }),
+    );
+
+    const first = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+    });
+    assert.strictEqual(first.status, "ok");
+    if (first.status !== "ok") {
+      return;
+    }
+    assert.isAtMost(summarySectionBytes(first), first.budget.hardLimitBytes);
+    assert.isFalse(first.page.complete);
+    assert.isString(first.page.next);
+    const schedule = first.schedule;
+    assert.strictEqual(schedule?.status, "available");
+    if (schedule?.status !== "available") {
+      return;
+    }
+    assert.deepStrictEqual(schedule.dates, [
+      { date: "2026-10-19", rosterGames: 22 },
+      { date: "2026-10-20", rosterGames: 0 },
+      { date: "2026-10-21", rosterGames: 22 },
+      { date: "2026-10-22", rosterGames: 0 },
+      { date: "2026-10-23", rosterGames: 0 },
+      { date: "2026-10-24", rosterGames: 22 },
+      { date: "2026-10-25", rosterGames: 0 },
+    ]);
+
+    const players = new Map<string, number>();
+    const refs = new Set<string>();
+    const collect = (page: typeof first): void => {
+      const section = page.schedule;
+      if (section?.status !== "available") {
+        return;
+      }
+      for (const player of section.players) {
+        players.set(player.name, player.gameCount);
+        refs.add(player.player);
+      }
+    };
+    collect(first);
+    let pages = 1;
+    let next = first.page.next;
+    while (next !== undefined) {
+      pages += 1;
+      const page = yield* queries.getTeamSummary(owner, {
+        team: teamId,
+        groups: ["schedule"],
+        cursor: next,
+      });
+      assert.strictEqual(page.status, "ok");
+      if (page.status !== "ok") {
+        return;
+      }
+      assert.isAtMost(summarySectionBytes(page), page.budget.hardLimitBytes);
+      assert.strictEqual(page.schedule?.status, "available");
+      collect(page);
+      next = page.page.next;
+    }
+    assert.isAtMost(pages, 2);
+    assert.strictEqual(players.size, 22);
+    assert.deepStrictEqual(
+      [...players.values()],
+      globalThis.Array.from({ length: 22 }, () => 3),
+    );
+    assert.strictEqual(refs.size, 22);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("shares one player reference between the roster and schedule sections", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setSchedule({
+      providerTeamKey: "461.l.1000.t.1",
+      period: { type: "week", week: 3 },
+      dates: [],
+      players: [
+        {
+          providerPlayerKey: "461.p.10001",
+          name: "Synthetic 0",
+          proTeamAbbreviation: "SYN",
+          games: [{ date: undefined, opponent: "SEA", home: true }],
+        },
+        {
+          providerPlayerKey: "461.p.10002",
+          name: "Synthetic 1",
+          proTeamAbbreviation: "SYN",
+          games: [],
+        },
+      ],
+    });
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["league", "standings", "matchup", "schedule", "roster"],
+    });
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    const schedule = summary.schedule;
+    assert.strictEqual(schedule?.status, "available");
+    if (schedule?.status !== "available") {
+      return;
+    }
+    assert.deepStrictEqual(
+      schedule.players.map((player) => player.player),
+      summary.roster.map((player) => player.player),
+    );
+    assert.deepStrictEqual(
+      schedule.players.map((player) => player.name),
+      summary.roster.map((player) => player.name),
     );
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
@@ -2723,6 +3119,7 @@ it.effect("documents how to narrow a summary that cannot fit a single record", (
       "standings",
       "categories",
       "matchup",
+      "schedule",
       "roster",
     ]);
     assert.include(summary.detail, "Request fewer summary groups");
@@ -2853,6 +3250,32 @@ function seed(
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     return discovered.map((row) => ({ id: row.id }));
   }).pipe(Effect.orDie);
+}
+
+function scheduleFixture(input: {
+  readonly providerTeamKey: string;
+  readonly dates: ReadonlyArray<string>;
+  readonly players: ReadonlyArray<{
+    readonly key: string;
+    readonly name: string;
+    readonly games: ReadonlyArray<{
+      readonly date: string | undefined;
+      readonly opponent: string;
+      readonly home: boolean;
+    }>;
+  }>;
+}): import("./Provider.ts").ProviderRosterSchedule {
+  return {
+    providerTeamKey: input.providerTeamKey,
+    period: { type: "date", start: input.dates[0] ?? "", end: input.dates.at(-1) ?? "" },
+    dates: input.dates,
+    players: input.players.map((player) => ({
+      providerPlayerKey: player.key,
+      name: player.name,
+      proTeamAbbreviation: "SYN",
+      games: player.games,
+    })),
+  };
 }
 
 function matchupFixture(input: {

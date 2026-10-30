@@ -123,11 +123,12 @@ value }` category entry, so a scoring-week category with no published value is s
 leagues, plus `remainingGames` for the scoring week where the provider publishes it. Its `schedule`
 section states the unit or declares the capability unsupported with the reason: Yahoo publishes
 that remaining-game count only as a fantasy-team total of player-games (National Hockey League),
-and a football player plays at most one game per scoring week. The provider publishes no per-player
-or per-professional-team remaining-game count and no probable-starter field, so `get_rosters`
-returns a `playerSchedule` declaration saying so and reports `proTeam`, injury, and the bye week
-where published; `search_players` reports provider ownership/started percentages without inventing
-either.
+and a football player plays at most one game per scoring week. The provider publishes no
+per-professional-team remaining-game count and no probable-starter field, so `get_rosters` reports
+`proTeam`, injury, and the bye week where published; its `playerSchedule` declaration states the
+per-player schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group
+publishes the games themselves. `search_players` reports provider ownership/started percentages
+without inventing either.
 
 `search_players` rows carry the provider's screening status, because a client choosing between
 available players needs to see an injured-reserve free agent before recommending them. `status.value`
@@ -225,23 +226,38 @@ the `roster` group is selected, a compact roster. Its league section is the comp
 (name, team count, scoring type, week window, and dates) and deliberately omits `transactionRules`,
 which belongs to `get_league`; the rules would consume the summary's bounded result budget without
 changing a per-team snapshot. `groups` selects `league`, `standings`,
-`categories`, `matchup`, and `roster`; the default is league, standings, matchup, and roster, and
-`categories` adds season category totals and points
-plus the matchup's per-category values. Each section states its own availability, so a failed
-standings read leaves the roster and matchup intact. The schedule section names its unit
-(`fantasy_team_player_games`), because that is the only granularity Yahoo publishes; football
-declares the section unsupported with the bye-week alternative, and probable starters are always
-declared unsupported because no read shape exposes them.
+`categories`, `matchup`, `schedule`, and `roster`; the default is league, standings, matchup, and
+roster, `categories` adds season category totals and points plus the matchup's per-category values,
+and `schedule` adds the period's per-player games. Each section states its own availability, so a
+failed standings read leaves the roster and matchup intact. `remainingPlayerGames` names its unit
+(`fantasy_team_player_games`), because that is the only granularity Yahoo publishes for a fantasy
+team; football declares it unsupported with the bye-week alternative, and probable starters are
+always declared unsupported because no read shape exposes them.
 
-The roster is the summary's only paged section, and it exists only when requested: with `roster`
-absent the response carries an empty roster array, a complete page, and no roster read. Each call
-that does select it returns every requested fixed section, a page of the roster, and `page.next`; the
-tool accepts that cursor on the next call. The default snapshot fits a 22-player hockey roster in two
-pages (10 + 11 verified live on 2026-10-28) without dropping league, standing, record, standings, or
-matchup. A budget refusal names what actually consumed the budget: the roster page when one was
-requested, and otherwise `team_summary` itself with the selected groups listed, because a request
-without a roster page cannot have been narrowed by one. The result never emits a record token as a
-substitute cursor.
+The `schedule` group answers what a client cannot otherwise compute: which games a candidate has in
+the current scoring period, and which nights are light. For every rostered player it reports the
+dates they play, the opponent abbreviation, whether the game is home or away, and a games-in-period
+count; `dates` carries a per-date count across the roster, so a light night needs no client-side
+arithmetic and no second schedule source. A player who does not play in the period is
+`status: "no_games"` with a count of zero, never an empty success that reads as unsupported, and a
+league the provider gives no period window says so with the reason instead of returning an empty
+list. Coverage follows what the league declares: a date-scoped league is read once per date of the
+current scoring period, whose window comes from the provider's own scoring-week dates, while a
+league whose cadence is a scoring week reports that week's opponent as the honest equivalent and is
+never given invented dates. The provider publishes no start time and no season-long schedule, and
+`detail` repeats both boundaries in the result; one schedule read covers at most 21 dates, and a
+wider window is refused with that limit rather than silently truncated.
+
+The roster and schedule sections are one paged player list, and they exist only when requested: with
+neither `roster` nor `schedule` selected the response carries an empty roster array, a complete
+page, and no player read. Each call that does select them returns every requested fixed section, a
+page of those players, and `page.next`; the tool accepts that cursor on the next call, and a player
+carries one reference across both sections. The default snapshot fits a 22-player hockey roster in
+two pages (10 + 11 verified live on 2026-10-28) without dropping league, standing, record, standings,
+or matchup, and a 22-player, three-game schedule alone also returns in two pages. A budget refusal
+names what actually consumed the budget: the roster page when one was requested, and otherwise
+`team_summary` itself with the selected groups listed, because a request without a player page
+cannot have been narrowed by one. The result never emits a record token as a substitute cursor.
 
 ### Live scoring evidence (2026-10-29)
 
@@ -260,6 +276,39 @@ The same pass confirmed the search payload shape the status rests on: every samp
 with `status_full` and `injury_note` on some rows. A roster row differs: a healthy rostered player
 omits `status` entirely. Both shapes are decoded from the fields the provider already returns, so
 reading a page of search results still costs one upstream request.
+
+### Live schedule evidence (2026-10-30)
+
+A read-only pass over the owner's hockey leagues and one football league confirmed the schedule
+shapes and their boundaries. Counts and kinds only; no player, team, or league identifiers were
+retained.
+
+- `GET /fantasy/v2/team/{team}/roster;date=YYYY-MM-DD/players;out=opponent` answers 200 for every
+  date of the current scoring week. Each player row carries `selected_position` with
+  `coverage_type: "date"` and the requested date, and one `opponent` that is an abbreviation, a
+  leading `@` for an away game, or `null` when the player's team does not play. The committed
+  provider read the seven dates of one hockey league's current week and returned 0, 19, 3, 17, 5,
+  13, and 9 opponents for a roster of 21 players on any one date; the union across the week was 22
+  players because one roster change happened during it, which is why the schedule group unions
+  players by key across the dates it reads.
+- The roster wrapper on a dated read still declares `coverage_type: "week"`: it names the roster's
+  own cadence, while each player row declares the read's coverage. The adapter takes the coverage
+  from the player rows and uses the wrapper only to cross-check the date or week value.
+- `GET /fantasy/v2/league/{league}/scoreboard;week=N` on a head-to-head hockey league published
+  `week_start` and `week_end` for the current scoring week, which is the dated period window the
+  schedule group reads. The rotisserie hockey league's scoreboard published no `week`, `week_start`,
+  or `week_end`, and its league settings published no `current_week` either, so it has no date
+  window: the schedule group reports that instead of inventing one.
+- On a weekly football league, `roster;week=N/players;out=opponent` returned 14 opponents and one
+  `Bye` across 15 rostered players, so the week's opponent is the published equivalent when the
+  league's coverage is a week rather than dates.
+- The league players collection with `out=opponent` is not date-addressable. `players;out=opponent`
+  and `players;out=opponent;date=YYYY-MM-DD` returned the same 50 players with identical opponents,
+  including across two different dates, so the date parameter is accepted and ignored. The plain
+  form therefore cannot carry a per-date schedule into search rows, and this change is restricted to
+  the roster. The `type=date;date=…` form did move opponents in this pass, which contradicts the
+  earlier negative recorded for it; it was not adopted because it is not the published contract this
+  surface depends on, and a search-row schedule would need its own verification.
 
 ## Coverage correctness
 

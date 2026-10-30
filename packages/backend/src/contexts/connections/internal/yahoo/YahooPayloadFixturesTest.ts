@@ -3309,3 +3309,59 @@ export function yahooNhlDatePlayerDetails(
     },
   };
 }
+
+export function yahooNhlDatedRoster(input: {
+  readonly date: string;
+  readonly teamKey?: string;
+  readonly players: ReadonlyArray<{
+    readonly key: string;
+    readonly name: string;
+    readonly proTeam: string;
+    readonly opponent: string | null;
+    readonly slot?: string;
+  }>;
+}): { fantasy_content: Record<string, unknown> } {
+  const entries = Object.fromEntries(
+    input.players.map((player, index) => [
+      String(index),
+      {
+        player: [
+          [
+            { player_key: player.key },
+            { name: { full: player.name, first: "Synthetic", last: "Player" } },
+            { editorial_team_abbr: player.proTeam },
+            { display_position: "C" },
+            { position_type: "P" },
+            { primary_position: "C" },
+            { eligible_positions: { "0": { position: "C" }, count: 1 } },
+            { opponent: player.opponent },
+            { is_undroppable: "0" },
+          ],
+          {
+            selected_position: [
+              { coverage_type: "date", date: input.date },
+              { position: player.slot ?? "C" },
+            ],
+          },
+          { is_editable: "1" },
+        ],
+      },
+    ]),
+  );
+  return {
+    fantasy_content: {
+      team: [
+        { team_key: input.teamKey ?? "466.l.4002.t.3" },
+        {
+          roster: {
+            "0": { players: { ...entries, count: input.players.length } },
+            count: 1,
+            coverage_type: "week",
+            date: input.date,
+            is_prescoring: 0,
+          },
+        },
+      ],
+    },
+  };
+}
