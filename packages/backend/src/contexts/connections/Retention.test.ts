@@ -199,6 +199,10 @@ const roster: ProviderRoster = {
       scheduled: true,
       startingLineup: "unconfirmed",
       undroppable: false,
+      transactionTrend: {
+        status: "not_published",
+        reason: "Synthetic absence.",
+      },
     },
     {
       providerPlayerKey: "461.p.10002",
@@ -216,6 +220,10 @@ const roster: ProviderRoster = {
       scheduled: true,
       startingLineup: "unconfirmed",
       undroppable: false,
+      transactionTrend: {
+        status: "not_published",
+        reason: "Synthetic absence.",
+      },
     },
   ],
 };

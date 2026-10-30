@@ -37,6 +37,9 @@ export type TeamView = {
   readonly name: string;
   readonly availability: TeamAvailability;
   readonly automation: TeamAutomationView;
+  readonly ownerNote: string | null;
+  readonly ownerNoteUpdatedAt: string | null;
+  readonly ownerNoteLimit: number;
   readonly lastSeenAt: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -112,6 +115,62 @@ export type TeamRefreshView = {
 };
 
 export type TeamControlData = typeof TeamControlInput.Encoded;
+
+export type TeamNoteData = {
+  readonly team: string;
+  readonly note: string;
+};
+
+export type TeamNoteSaveResult =
+  | {
+      readonly outcome: "saved";
+      readonly note: string | null;
+      readonly updatedAt: string | null;
+    }
+  | {
+      readonly outcome: "rejected";
+      readonly reason: "too_long" | "credential_like";
+      readonly message: string;
+    };
+
+export type TeamNoteError = {
+  readonly type: "team.not_found" | "team.persistence_failed" | "team.input_invalid";
+};
+export type TeamNoteRequestResult<A> =
+  | UseCaseResult<A, TeamNoteError["type"]>
+  | { readonly type: "error"; readonly error: AuthenticationFailure };
+
+export type TeamRosterTrendView =
+  | {
+      readonly status: "published";
+      readonly adds: number;
+      readonly drops: number;
+      readonly window: "provider_current_day";
+    }
+  | { readonly status: "not_published"; readonly reason: string };
+
+export type TeamRosterPlayerView = {
+  readonly name: string;
+  readonly slot: string;
+  readonly primaryPosition: string;
+  readonly displayPosition: string;
+  readonly proTeam: string | null;
+  readonly injury: { readonly reported: boolean; readonly code?: string; readonly detail?: string };
+  readonly trend: TeamRosterTrendView;
+};
+
+export type TeamRosterView = {
+  readonly status: "ok" | "unavailable";
+  readonly players: ReadonlyArray<TeamRosterPlayerView>;
+  readonly observedAt: string | null;
+};
+
+export type TeamRosterError = {
+  readonly type: "team.roster_unavailable";
+};
+export type TeamRosterRequestResult<A> =
+  | UseCaseResult<A, TeamRosterError["type"]>
+  | { readonly type: "error"; readonly error: AuthenticationFailure };
 
 export type TeamMutationError = {
   readonly type:

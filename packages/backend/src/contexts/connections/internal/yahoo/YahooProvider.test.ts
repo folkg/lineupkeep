@@ -698,7 +698,7 @@ it.effect(
       assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
       assert.strictEqual(
         internet.calls[1]?.url.pathname,
-        "/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent,starting_status",
+        "/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent,starting_status,transactions",
       );
     }).pipe(Effect.provide(yahooLayer(internet)));
   },
@@ -858,7 +858,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent,starting_status?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent,starting_status,transactions?format=json",
     );
     assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
     assert.deepStrictEqual(roster.players, [
@@ -878,6 +878,12 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         scheduled: true,
         startingLineup: "confirmed-starting",
         undroppable: false,
+        transactionTrend: {
+          status: "published",
+          adds: 37,
+          drops: 3,
+          window: "provider_current_day",
+        },
       },
       {
         providerPlayerKey: "466.p.20002",
@@ -895,6 +901,10 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         scheduled: false,
         startingLineup: "unconfirmed",
         undroppable: true,
+        transactionTrend: {
+          status: "not_published",
+          reason: "The provider published no add and drop counts for this player.",
+        },
       },
     ]);
   }).pipe(Effect.provide(yahooLayer(internet)));
@@ -1041,7 +1051,7 @@ it.effect("reads a date target without sending a period selector", () => {
     assert.deepStrictEqual(roster.coverage, { type: "date", date: "2026-10-25" });
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4002.t.3/roster/players;out=opponent,starting_status?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4002.t.3/roster/players;out=opponent,starting_status,transactions?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -1235,7 +1245,7 @@ it.effect("sends a week selector only for a week target", () => {
     assert.deepStrictEqual(roster.coverage, { type: "week", week: 6 });
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent,starting_status?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4000.t.1/roster;week=6/players;out=opponent,starting_status,transactions?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -1295,7 +1305,7 @@ it.effect("searches free agents with one exact request and typed availability", 
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Free;out=ownership,percent_owned,percent_started,ranks?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Free;out=ownership,percent_owned,percent_started,ranks,transactions?format=json",
     );
     assert.deepStrictEqual(result.players, [
       {
@@ -1314,6 +1324,12 @@ it.effect("searches free agents with one exact request and typed availability", 
         actualRank: 14,
         overallRank: 22,
         statValue: null,
+        transactionTrend: {
+          status: "published",
+          adds: 40,
+          drops: 10,
+          window: "provider_current_day",
+        },
       },
       {
         providerPlayerKey: "466.p.20007",
@@ -1335,6 +1351,10 @@ it.effect("searches free agents with one exact request and typed availability", 
         actualRank: 63,
         overallRank: 41,
         statValue: null,
+        transactionTrend: {
+          status: "not_published",
+          reason: "The provider published no add and drop counts for this player.",
+        },
       },
       {
         providerPlayerKey: "466.p.20008",
@@ -1352,6 +1372,10 @@ it.effect("searches free agents with one exact request and typed availability", 
         actualRank: 7,
         overallRank: 3,
         statValue: null,
+        transactionTrend: {
+          status: "not_published",
+          reason: "The provider published no add and drop counts for this player.",
+        },
       },
     ]);
   }).pipe(Effect.provide(yahooLayer(internet)));
@@ -1431,7 +1455,7 @@ it.effect("searches waiver players without a query", () => {
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks,transactions?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -1455,7 +1479,7 @@ it.effect("searches the whole player pool without an availability filter", () =>
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks,transactions?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -1491,8 +1515,8 @@ it.effect("requests the rank and stat values that each provider-ordered sort pub
     assert.deepStrictEqual(
       internet.calls.map((call) => call.url.href),
       [
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=4;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,stats?format=json",
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=AR;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=4;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,stats,transactions?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=AR;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,transactions?format=json",
       ],
     );
     assert.deepStrictEqual(
@@ -3297,6 +3321,10 @@ function rosterMember(
     scheduled: true,
     startingLineup: "unconfirmed",
     undroppable: false,
+    transactionTrend: {
+      status: "not_published",
+      reason: "Synthetic absence.",
+    },
   };
 }
 

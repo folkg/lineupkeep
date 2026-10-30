@@ -424,6 +424,10 @@ const roster: ProviderRoster = {
       scheduled: true,
       startingLineup: "unconfirmed",
       undroppable: false,
+      transactionTrend: {
+        status: "not_published",
+        reason: "Synthetic absence.",
+      },
     },
     {
       providerPlayerKey: "461.p.10002",
@@ -441,6 +445,10 @@ const roster: ProviderRoster = {
       scheduled: true,
       startingLineup: "unconfirmed",
       undroppable: false,
+      transactionTrend: {
+        status: "not_published",
+        reason: "Synthetic absence.",
+      },
     },
   ],
 };
@@ -518,6 +526,10 @@ const hockeyRoster: ProviderRoster = {
       scheduled: true,
       startingLineup: "unconfirmed",
       undroppable: false,
+      transactionTrend: {
+        status: "not_published",
+        reason: "Synthetic absence.",
+      },
     },
     {
       providerPlayerKey: "465.p.90002",
@@ -535,6 +547,10 @@ const hockeyRoster: ProviderRoster = {
       scheduled: true,
       startingLineup: "unconfirmed",
       undroppable: false,
+      transactionTrend: {
+        status: "not_published",
+        reason: "Synthetic absence.",
+      },
     },
   ],
 };

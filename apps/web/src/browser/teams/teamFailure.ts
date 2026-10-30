@@ -4,7 +4,11 @@ import type {
   LineupRunError,
   LineupRunRequestResult,
   TeamMutationError,
+  TeamNoteError,
+  TeamNoteRequestResult,
   TeamRequestResult,
+  TeamRosterError,
+  TeamRosterRequestResult,
 } from "#contracts/connections/teamContract.ts";
 
 export function requireTeamSuccess<TData>(result: TeamRequestResult<TData>): TData {
@@ -16,6 +20,30 @@ export function requireTeamSuccess<TData>(result: TeamRequestResult<TData>): TDa
         throw new AuthenticationRequestFailure(result.error);
       }
       throw new TeamWriteFailure(result.error);
+  }
+}
+
+export function requireNoteSuccess<TData>(result: TeamNoteRequestResult<TData>): TData {
+  switch (result.type) {
+    case "success":
+      return result.data;
+    case "error":
+      if (result.error.type === "auth.required") {
+        throw new AuthenticationRequestFailure(result.error);
+      }
+      throw new TeamNoteFailure(result.error);
+  }
+}
+
+export function requireRosterSuccess<TData>(result: TeamRosterRequestResult<TData>): TData {
+  switch (result.type) {
+    case "success":
+      return result.data;
+    case "error":
+      if (result.error.type === "auth.required") {
+        throw new AuthenticationRequestFailure(result.error);
+      }
+      throw new TeamRosterFailure(result.error);
   }
 }
 
@@ -37,6 +65,18 @@ class TeamWriteFailure extends Error {
   }
 }
 
+class TeamNoteFailure extends Error {
+  constructor(readonly reason: TeamNoteError) {
+    super(reason.type);
+  }
+}
+
+class TeamRosterFailure extends Error {
+  constructor(readonly reason: TeamRosterError) {
+    super(reason.type);
+  }
+}
+
 class RunReadFailure extends Error {
   constructor(readonly reason: LineupRunError) {
     super(reason.type);
@@ -49,6 +89,37 @@ export function describeTeamFailure(error: unknown): TeamFailure {
 
 export function describeControlFailure(error: unknown): TeamFailure {
   return classifyTeamFailure(error, "control");
+}
+
+export function describeNoteFailure(error: unknown): TeamFailure {
+  if (error instanceof AuthenticationRequestFailure) {
+    return {
+      kind: "authentication",
+      message: "Your session has ended. Sign in again to continue.",
+    };
+  }
+  if (error instanceof TeamNoteFailure) {
+    switch (error.reason.type) {
+      case "team.not_found":
+        return {
+          kind: "rejected",
+          message: "This team is no longer available. Refresh the latest list before trying again.",
+        };
+      case "team.input_invalid":
+        return {
+          kind: "rejected",
+          message:
+            "The note was not saved. Check its length and remove anything that looks like a password or token.",
+        };
+      case "team.persistence_failed":
+        break;
+    }
+  }
+  return {
+    kind: "unconfirmed",
+    message:
+      "We could not confirm the save. Refresh this page and check the note before trying again.",
+  };
 }
 
 function classifyTeamFailure(error: unknown, surface: "control" | "refresh"): TeamFailure {

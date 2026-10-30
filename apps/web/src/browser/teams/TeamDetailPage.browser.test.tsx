@@ -15,7 +15,12 @@ import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import type { LineupRunView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
+import type {
+  LineupRunView,
+  TeamNoteSaveResult,
+  TeamRosterView,
+  TeamSummaryView,
+} from "#contracts/connections/teamContract.ts";
 
 import { TeamDetailPage } from "./TeamDetailPage";
 import { quietGroupSpan } from "./teamLabels";
@@ -103,6 +108,9 @@ const team: TeamSummaryView = {
       status: "enabled",
       changedAt: threeDaysAgo,
     },
+    ownerNote: null,
+    ownerNoteUpdatedAt: null,
+    ownerNoteLimit: 2_000,
     lastSeenAt: threeDaysAgo,
     createdAt: threeDaysAgo,
     updatedAt: threeDaysAgo,
@@ -281,6 +289,149 @@ it("links a team report to the feedback form with the team reference", async () 
   expect(url.searchParams.get("team")).toBe(teamId);
 });
 
+it("saves an owner note explicitly and confirms it", async () => {
+  const captured: Array<{ readonly team: string; readonly note: string }> = [];
+  using _app = setupTeamDetailPage(team, {
+    saveNote: (input) => {
+      captured.push(input);
+      return Promise.resolve({
+        outcome: "saved",
+        note: input.note,
+        updatedAt: threeDaysAgo,
+      });
+    },
+  });
+
+  const note = page.getByLabelText("Note for this team");
+  await note.fill("Keep both goalies through 2027.");
+  await expect.element(page.getByText("31 of 2000 characters")).toBeVisible();
+  await page.getByRole("button", { name: "Save note" }).click();
+
+  await expect.element(page.getByText("Note saved.")).toBeVisible();
+  expect(captured).toEqual([{ team: teamId, note: "Keep both goalies through 2027." }]);
+});
+
+it("shows the stored owner note when the team loads", async () => {
+  const noted: TeamSummaryView = {
+    ...team,
+    team: {
+      ...team.team,
+      ownerNote: "Dynasty league. Keeper cost rises by five each season.",
+      ownerNoteUpdatedAt: threeDaysAgo,
+    },
+  };
+  using _app = setupTeamDetailPage(noted);
+
+  await expect
+    .element(page.getByLabelText("Note for this team"))
+    .toHaveValue("Dynasty league. Keeper cost rises by five each season.");
+});
+
+it("warns about a token-shaped note instead of sending it", async () => {
+  const captured: string[] = [];
+  const token =
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+  using _app = setupTeamDetailPage(team, {
+    saveNote: (input) => {
+      captured.push(input.note);
+      return Promise.resolve({
+        outcome: "rejected",
+        reason: "credential_like",
+        message:
+          "This looks like a sign-in token. Lineupkeep does not store passwords, tokens, or provider session material in a team note. Remove it and save again.",
+      });
+    },
+  });
+
+  const note = page.getByLabelText("Note for this team");
+  await note.fill(`Reconnect with ${token}`);
+  await page.getByRole("button", { name: "Save note" }).click();
+
+  await expect.element(page.getByText(/does not store passwords/)).toBeVisible();
+  expect(captured).toEqual([`Reconnect with ${token}`]);
+  const control = note.element();
+  expect(control).toBeInstanceOf(HTMLTextAreaElement);
+  if (control instanceof HTMLTextAreaElement) {
+    expect(control.value).toContain(token);
+  }
+});
+
+it("refuses a note past the stated limit", async () => {
+  const captured: string[] = [];
+  using _app = setupTeamDetailPage(team, {
+    saveNote: (input) => {
+      captured.push(input.note);
+      return Promise.reject(new Error("The note should not be sent"));
+    },
+  });
+
+  const note = page.getByLabelText("Note for this team");
+  await note.fill("a".repeat(2_001));
+  await expect.element(page.getByText("2001 of 2000 characters")).toBeVisible();
+  await page.getByRole("button", { name: "Save note" }).click();
+
+  await expect.element(page.getByText(/Shorten it and save again/)).toBeVisible();
+  expect(captured).toEqual([]);
+});
+
+it("confirms before navigation discards an unsaved note", async () => {
+  using _app = setupTeamDetailPage(team);
+  await page.getByLabelText("Note for this team").fill("Unsaved keeper note");
+  await page.getByRole("link", { name: "Back to teams" }).click();
+
+  await expect.element(page.getByText("Discard unfinished work?")).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing" }).click();
+
+  await expect
+    .element(page.getByLabelText("Note for this team"))
+    .toHaveValue("Unsaved keeper note");
+});
+
+it("shows a player's day-window trends and states when none are published", async () => {
+  using _app = setupTeamDetailPage(team, {
+    readRoster: () =>
+      Promise.resolve({
+        status: "ok",
+        players: [
+          {
+            name: "Moving Skater",
+            slot: "QB",
+            primaryPosition: "QB",
+            displayPosition: "QB",
+            proTeam: "SYN",
+            injury: { reported: false },
+            trend: { status: "published", adds: 37, drops: 3, window: "provider_current_day" },
+          },
+          {
+            name: "Uncounted Skater",
+            slot: "BN",
+            primaryPosition: "WR",
+            displayPosition: "WR",
+            proTeam: null,
+            injury: { reported: true, code: "O", detail: "Out" },
+            trend: {
+              status: "not_published",
+              reason: "The provider published no add and drop counts for this player.",
+            },
+          },
+        ],
+        observedAt: "2026-10-30T12:00:00.000Z",
+      }),
+  });
+
+  await expect.element(page.getByText("Moving Skater")).toBeVisible();
+  await expect.element(page.getByText("37 adds and 3 drops today")).toBeVisible();
+  await expect.element(page.getByText("QB · SYN")).toBeVisible();
+  await expect.element(page.getByText("Uncounted Skater")).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Trends not published. The provider published no add and drop counts for this player.",
+      ),
+    )
+    .toBeVisible();
+});
+
 function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
   const span = quietGroupSpan(runs);
   return `${String(span.count)} checks changed nothing between ${formatDateTime(
@@ -288,13 +439,32 @@ function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
   )} and ${formatDateTime(span.to)}`;
 }
 
-function setupTeamDetailPage(teamSummary: TeamSummaryView): { [Symbol.dispose](): void } {
+function setupTeamDetailPage(
+  teamSummary: TeamSummaryView,
+  overrides: Partial<Pick<TeamRemote, "saveNote" | "readRoster">> = {},
+): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
     list: () => Promise.resolve([teamSummary]),
     refresh: () => Promise.resolve({ teams: [teamSummary] }),
     control: () => Promise.resolve({ changed: [], teams: [teamSummary] }),
     readRun: () => Promise.reject(new Error("Unexpected run read")),
+    saveNote:
+      overrides.saveNote ??
+      ((input) =>
+        Promise.resolve<TeamNoteSaveResult>({
+          outcome: "saved",
+          note: input.note === "" ? null : input.note,
+          updatedAt: input.note === "" ? null : threeDaysAgo,
+        })),
+    readRoster:
+      overrides.readRoster ??
+      (() =>
+        Promise.resolve<TeamRosterView>({
+          status: "ok",
+          players: [],
+          observedAt: null,
+        })),
   };
   const teamsQuery = teamQueries.list(remote);
   const sessionRemote: SessionRemote = {

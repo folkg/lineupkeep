@@ -1,13 +1,21 @@
 import type { ConnectionError } from "@lineupkeep/backend/connections/Connection";
 import type { LineupRun } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupError } from "@lineupkeep/backend/connections/LineupRun";
+import { teamNoteLimit } from "@lineupkeep/backend/connections/TeamNote";
+import type { TeamRoster } from "@lineupkeep/backend/connections/Teams";
 import type { TeamSummary } from "@lineupkeep/backend/connections/Teams";
-import type { TeamError } from "@lineupkeep/backend/connections/Teams";
+import type {
+  TeamError,
+  TeamNoteError,
+  TeamNoteSaved,
+} from "@lineupkeep/backend/connections/Teams";
 import { DateTime, Schema } from "effect";
 
 import type {
   LineupRunView,
   TeamMutationError,
+  TeamNoteSaveResult,
+  TeamRosterView,
   TeamSummaryView,
   TeamView,
 } from "#contracts/connections/teamContract.ts";
@@ -88,6 +96,10 @@ function toTeamView(summary: TeamSummary["team"]): TeamView {
         ? {}
         : { fantasyDayVersion: summary.automation.fantasyDayVersion }),
     },
+    ownerNote: summary.ownerNote,
+    ownerNoteUpdatedAt:
+      summary.ownerNoteUpdatedAt === null ? null : DateTime.formatIso(summary.ownerNoteUpdatedAt),
+    ownerNoteLimit: teamNoteLimit,
     lastSeenAt: DateTime.formatIso(summary.lastSeenAt),
     createdAt: DateTime.formatIso(summary.createdAt),
     updatedAt: DateTime.formatIso(summary.updatedAt),
@@ -147,6 +159,48 @@ export class TeamInputInvalid extends Schema.TaggedError<
   TeamInputInvalid,
   { readonly brand: unique symbol }
 >()("TeamInputInvalid", {}) {}
+
+export function toTeamNoteSaveResult(note: TeamNoteSaved): TeamNoteSaveResult {
+  return {
+    outcome: "saved",
+    note: note.note,
+    updatedAt: note.updatedAt === null ? null : DateTime.formatIso(note.updatedAt),
+  };
+}
+
+export function toTeamRosterView(roster: TeamRoster): TeamRosterView {
+  return {
+    status: "ok",
+    players: roster.players.map((player) => ({
+      name: player.name,
+      slot: player.slot,
+      primaryPosition: player.primaryPosition,
+      displayPosition: player.displayPosition,
+      proTeam: player.proTeam,
+      injury: player.injury,
+      trend: player.trend,
+    })),
+    observedAt: DateTime.formatIso(roster.observedAt),
+  };
+}
+
+export function mapTeamNoteError(error: TeamNoteError): ExpectedFailure<TeamNoteErrorCode> {
+  switch (error._tag) {
+    case "team.not_found":
+      return { type: "team.not_found", outcome: "rejected" };
+    case "team.note_rejected":
+      return { type: "team.input_invalid", outcome: "rejected" };
+    case "team.persistence_failed":
+      return { type: "team.persistence_failed", outcome: "failure" };
+  }
+}
+
+type TeamNoteErrorCode = "team.not_found" | "team.persistence_failed" | "team.input_invalid";
+
+export class TeamRosterUnavailable extends Schema.TaggedError<
+  TeamRosterUnavailable,
+  { readonly brand: unique symbol }
+>()("TeamRosterUnavailable", {}) {}
 
 export class LineupRunInputInvalid extends Schema.TaggedError<
   LineupRunInputInvalid,

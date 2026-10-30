@@ -36,8 +36,9 @@ import { TeamsLive } from "./internal/TeamsLive.ts";
 import { LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
+import { teamNoteLimit } from "./TeamNote.ts";
 import type { TeamAutomationAction, TeamControlResult } from "./Teams.ts";
-import { TeamPersistenceFailed, Teams } from "./Teams.ts";
+import { TeamNoteRejected, TeamPersistenceFailed, Teams } from "./Teams.ts";
 
 it.effect("enrolls, disables, and re-enrolls a team without deleting its configuration", () =>
   Effect.gen(function* () {
@@ -394,6 +395,121 @@ it.effect("shows only the current fantasy day's checks and keeps the last earlie
   }).pipe(Effect.provide(TeamsTestLayer)),
 );
 
+it.effect("saves an owner note with the team and reads it back for the owner only", () =>
+  Effect.gen(function* () {
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedTeam(fake);
+
+    const saved = yield* teams.saveNote(owner, {
+      team: seeded,
+      note: "  Keeper through 2027; costs a round-3 pick.  ",
+    });
+    const read = yield* teams.get(owner, seeded);
+
+    assert.strictEqual(saved.note, "Keeper through 2027; costs a round-3 pick.");
+    assert.isNotNull(saved.updatedAt);
+    assert.strictEqual(read.team.ownerNote, saved.note);
+    assert.deepStrictEqual(read.team.ownerNoteUpdatedAt, saved.updatedAt);
+    const foreign = yield* Effect.flip(teams.saveNote(other, { team: seeded, note: "Foreign" }));
+    assert.strictEqual(foreign._tag, "team.not_found");
+    assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, saved.note);
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
+it.effect("reads the owner's roster with provider transaction trends", () =>
+  Effect.gen(function* () {
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedTeam(fake);
+
+    const roster = yield* teams.readRoster(owner, seeded);
+    assert.lengthOf(roster.players, 2);
+    assert.strictEqual(roster.players[0]?.name, "Locked Starter");
+    assert.deepStrictEqual(roster.players[0]?.trend, {
+      status: "published",
+      adds: 37,
+      drops: 3,
+      window: "provider_current_day",
+    });
+    assert.strictEqual(roster.players[1]?.trend.status, "not_published");
+
+    const foreign = yield* Effect.flip(teams.readRoster(other, seeded));
+    assert.strictEqual(foreign._tag, "team.not_found");
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
+it.effect("clears an owner note", () =>
+  Effect.gen(function* () {
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedTeam(fake);
+    yield* teams.saveNote(owner, { team: seeded, note: "Keep the goalies." });
+
+    const cleared = yield* teams.saveNote(owner, { team: seeded, note: "   " });
+    const read = yield* teams.get(owner, seeded);
+
+    assert.strictEqual(cleared.note, null);
+    assert.strictEqual(cleared.updatedAt, null);
+    assert.strictEqual(read.team.ownerNote, null);
+    assert.strictEqual(read.team.ownerNoteUpdatedAt, null);
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
+it.effect("refuses a note past its limit without storing it", () =>
+  Effect.gen(function* () {
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedTeam(fake);
+
+    const rejected = yield* Effect.flip(
+      teams.saveNote(owner, { team: seeded, note: "a".repeat(teamNoteLimit + 1) }),
+    );
+
+    assert.instanceOf(rejected, TeamNoteRejected);
+    assert.strictEqual(rejected.reason, "too_long");
+    assert.ok(rejected.message.includes(String(teamNoteLimit)));
+    assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, null);
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
+it.effect("refuses a credential-shaped note without echoing or storing it", () =>
+  Effect.gen(function* () {
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedTeam(fake);
+    const token =
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+
+    const rejected = yield* Effect.flip(
+      teams.saveNote(owner, { team: seeded, note: `Reconnect with ${token}` }),
+    );
+
+    assert.instanceOf(rejected, TeamNoteRejected);
+    assert.strictEqual(rejected.reason, "credential_like");
+    assert.ok(!String(rejected).includes(token));
+    assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, null);
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
+it.effect("keeps an owner note when discovery refreshes the team", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedTeam(fake);
+    yield* teams.saveNote(owner, { team: seeded, note: "Dynasty; keep both goalies." });
+    const connection = Array.getUnsafe(yield* connections.list(owner), 0);
+
+    yield* fake.setTeams([{ ...teamFixture, name: "Renamed Alpha" }]);
+    yield* connections.discoverTeams(owner, [{ id: connection.id }]);
+    const refreshed = yield* teams.get(owner, seeded);
+
+    assert.strictEqual(refreshed.team.name, "Renamed Alpha");
+    assert.strictEqual(refreshed.team.ownerNote, "Dynasty; keep both goalies.");
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
 function control(
   teams: Teams["Service"],
   team: TeamId,
@@ -543,6 +659,12 @@ const roster: ProviderRoster = {
       scheduled: true,
       startingLineup: "unconfirmed",
       undroppable: false,
+      transactionTrend: {
+        status: "published",
+        adds: 37,
+        drops: 3,
+        window: "provider_current_day",
+      },
     },
     {
       providerPlayerKey: "461.p.10002",
@@ -560,6 +682,10 @@ const roster: ProviderRoster = {
       scheduled: true,
       startingLineup: "unconfirmed",
       undroppable: false,
+      transactionTrend: {
+        status: "not_published",
+        reason: "Synthetic absence.",
+      },
     },
   ],
 };

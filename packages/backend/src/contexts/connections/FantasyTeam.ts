@@ -45,6 +45,8 @@ export const FantasyTeam = Schema.Struct({
   name: Schema.NonEmptyString,
   availability: TeamAvailability,
   automation: TeamAutomation,
+  ownerNote: Schema.NullOr(Schema.NonEmptyString),
+  ownerNoteUpdatedAt: Schema.NullOr(Schema.DateTimeUtc),
   lastSeenAt: Schema.DateTimeUtc,
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,

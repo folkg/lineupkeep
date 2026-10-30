@@ -134,6 +134,8 @@ it.effect("round-trips discovered team rows through the codec", () =>
         changedAt: at,
       }),
       automationStatus: "disabled" as const,
+      ownerNote: null,
+      ownerNoteUpdatedAt: null,
       lastSeenAt: atDate,
       createdAt: atDate,
       updatedAt: atDate,

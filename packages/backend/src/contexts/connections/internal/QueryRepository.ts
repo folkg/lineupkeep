@@ -59,6 +59,8 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         readonly availability: "available" | "unavailable";
         readonly automationState: unknown;
         readonly automationStatus: "disabled" | "enabled" | "paused-until-fantasy-day-end";
+        readonly ownerNote: string | null;
+        readonly ownerNoteUpdatedAt: Date | null;
         readonly lastSeenAt: Date;
         readonly createdAt: Date;
         readonly updatedAt: Date;
@@ -122,6 +124,8 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
             availability: providerTeams.availability,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
+            ownerNote: providerTeams.ownerNote,
+            ownerNoteUpdatedAt: providerTeams.ownerNoteUpdatedAt,
             lastSeenAt: providerTeams.lastSeenAt,
             createdAt: providerTeams.createdAt,
             updatedAt: providerTeams.updatedAt,
@@ -206,6 +210,8 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
             availability: providerTeams.availability,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
+            ownerNote: providerTeams.ownerNote,
+            ownerNoteUpdatedAt: providerTeams.ownerNoteUpdatedAt,
             lastSeenAt: providerTeams.lastSeenAt,
             createdAt: providerTeams.createdAt,
             updatedAt: providerTeams.updatedAt,

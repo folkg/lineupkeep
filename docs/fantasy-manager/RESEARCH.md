@@ -1498,3 +1498,41 @@ describes an "Allow roster changes" league setting with "Daily - Today", "Daily 
 weekly forms, but the settings payload does not map those names to a field, and inferring the rule
 from `weekly_deadline` (observed as `""` or `"intraday"`) would guess. The tool description states
 that the rule is not published, and the published fields are returned as they are.
+
+## Live transaction-trend probes (2026-10-30, quick wins round 2)
+
+The provider has no dedicated transaction-trend resource. Every shape below was requested read-only
+against the owner's linked leagues with the stored local session.
+
+| Request                                                                        | Status | Result                                                         |
+| ------------------------------------------------------------------------------ | ------ | -------------------------------------------------------------- |
+| `GET .../league/{league}/players;out=transaction_trends`                       | 400    | `Invalid player resource transaction_trends requested`         |
+| `GET .../league/{league}/players;out=transactions`                             | 200    | a `transactions` node on each player row                       |
+| `GET .../team/{team}/roster/players;out=transactions`                          | 200    | the same node on each rostered player row                      |
+| `GET .../team/{team}/roster;out=transactions`                                  | 400    | unsupported output on the roster resource                      |
+| `GET .../team/{team}/roster;out=opponent,starting_status,transactions`         | 400    | unsupported output; the read must target `roster/players`      |
+| `GET .../team/{team}/roster/players;out=opponent,starting_status,transactions` | 200    | roster rows with opponent, starting status, and the trend node |
+
+The per-player node is:
+
+```json
+{ "transactions": { "total": "120", "adds": "37", "drops": "3", "trades": "80" } }
+```
+
+Every field arrives as a string. The adapter reads `adds` and `drops` as counts and ignores `total`
+and `trades`, which count different things and are not published on the trend. A missing
+`transactions` node is absence, not zero; a node with `"0"` is a real zero.
+
+The counts matched the provider's public Transaction Trends page for the same current day, and a
+league linked to the same provider account saw the same counts. They did not match the historical
+counts shown for earlier dates: a `date=` read of the public buzz-index page for a prior day
+returned different numbers from the API's current counts. The API payload carries no date, start
+time, or window beside the counts. The published meaning is therefore the provider's current day,
+across the provider's leagues, for that player. It is not a league-only count, not percent owned,
+and not a change in percent owned.
+
+The roster read adds `transactions` to the existing `players;out=opponent,starting_status` request,
+so a team's roster and its trends still cost one provider read. Search already reads a bounded player
+page and adds `transactions` to the same request. No second trend request exists, because the
+provider rejects the dedicated resource and the node is available beside the rows the product
+already reads.

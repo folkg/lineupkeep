@@ -146,6 +146,16 @@ publishes the games themselves. `search_players` reports provider ownership/star
 without inventing either, and publishes the player's professional team as `proTeam`, the same
 abbreviation a roster entry carries, so a pool player joins a schedule without another read.
 
+`search_players` and the `get_team_summary` roster publish `transactionTrend` where a player row
+carries it. A published trend is `{ status: "published", adds, drops, window: "provider_current_day" }`:
+the provider's add and drop counts for its current day, across all of the provider's leagues. The
+counts are manager moves, not percent owned, and the window is the provider's day rather than a
+league scoring period or a caller-selected range. The provider does not publish a date with the
+counts, so coverage is the current day only and no historical window is implied. When the provider
+omits the transaction node, the trend is `{ status: "not_published", reason }`; a real count of zero
+is published as zero. The counts are plain numbers with their window: no derived score, ranking, or
+colour coding is attached.
+
 `search_players` rows carry the provider's screening status, because a client choosing between
 available players needs to see an injured-reserve free agent before recommending them. `status.value`
 is `healthy`, `day_to_day`, `out`, `injured_reserve`, or `unknown`; `status.code` keeps the provider's
@@ -243,7 +253,14 @@ count, so `transactionRules.detailNote` states that only the league's games cap 
 
 `get_team_summary` composes the league overview, the linked team's standing and record, league
 standings, the owning team's acquisition usage, the current matchup, this week's and next week's
-remaining player-games, and, only when the `roster` group is selected, a compact roster. Its league section is the compact static context
+remaining player-games, and, only when the `roster` group is selected, a compact roster. The team
+object also carries the owner's own note as `ownerNote`: `{ status: "provided", text, updatedAt }`
+when one is stored or `{ status: "not_set" }` otherwise. It is owner context, not league or provider
+data, and the field description says so; it is never sent to the provider. A note is limited to
+2,000 characters, is stored with the team, and is editable only on the team page. Text that looks
+like a credential is refused with an explanation rather than stored or echoed. Roster entries in
+this summary carry the same `transactionTrend` shape as `search_players`, with the same current-day
+window and the same `not_published` rule. Its league section is the compact static context
 (name, team count, scoring type, week window, and dates) and deliberately omits `transactionRules`,
 which belongs to `get_league`; the rules would consume the summary's bounded result budget without
 changing a per-team snapshot. The `acquisitionUsage` section carries the same row usage as the

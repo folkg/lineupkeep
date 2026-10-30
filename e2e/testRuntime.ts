@@ -50,15 +50,117 @@ function yahooResponse(url: URL): unknown {
   if (league === "nfl" || league === "nhl") {
     return teamsPayload(league);
   }
+  const roster =
+    /^\/fantasy\/v2\/team\/([^/]+)\/roster(?:;week=\d+)?\/players(?:;out=[^/]*)?$/u.exec(
+      url.pathname,
+    );
+  if (roster !== null && roster[1] !== undefined) {
+    return rosterPayload(roster[1]);
+  }
   return undefined;
 }
 
 function sessionPayload(): unknown {
-  return { fantasy_content: { users: { "0": { user: { guid: "e2e-hosted-user" } }, count: 1 } } };
+  return {
+    fantasy_content: {
+      "xml:lang": "en-US",
+      "yahoo:uri": "/fantasy/v2/users;use_login=1",
+      users: {
+        "0": { user: [{ guid: "E2E-USER" }] },
+        count: 1,
+      },
+    },
+  };
+}
+
+function rosterPayload(teamKey: string): unknown {
+  const leagueKey = teamKey.slice(0, teamKey.lastIndexOf(".t."));
+  const game = leagueKey.split(".")[0] ?? "461";
+  return {
+    fantasy_content: {
+      team: [
+        { team_key: teamKey, team_id: "1", name: "Synthetic Team" },
+        {
+          roster: {
+            "0": {
+              players: {
+                "0": {
+                  player: [
+                    [
+                      { player_key: `${game}.p.90001` },
+                      { player_id: "90001" },
+                      {
+                        name: { full: "Riverside Receiver", first: "Riverside", last: "Receiver" },
+                      },
+                      { editorial_team_abbr: "SEA" },
+                      { display_position: "WR" },
+                      { position_type: "O" },
+                      { primary_position: "WR" },
+                      { eligible_positions: { "0": { position: "WR" }, count: 1 } },
+                      { opponent: "SEA" },
+                      {
+                        starting_status: {
+                          "0": { coverage_type: "week", week: "6" },
+                          "1": { is_starting: 1 },
+                          count: 2,
+                        },
+                      },
+                      { is_undroppable: "0" },
+                      { transactions: { total: "40", adds: "37", drops: "3", trades: "0" } },
+                    ],
+                    {
+                      selected_position: [
+                        { coverage_type: "week", week: "6" },
+                        { position: "WR" },
+                        { is_flex: 0 },
+                      ],
+                    },
+                    { is_editable: "1" },
+                  ],
+                },
+                "1": {
+                  player: [
+                    [
+                      { player_key: `${game}.p.90002` },
+                      { player_id: "90002" },
+                      { name: { full: "Harbor Back", first: "Harbor", last: "Back" } },
+                      { editorial_team_abbr: "SF" },
+                      { display_position: "RB" },
+                      { position_type: "O" },
+                      { primary_position: "RB" },
+                      { eligible_positions: { "0": { position: "RB" }, count: 1 } },
+                      { opponent: null },
+                      { status: "Q" },
+                      { status_full: "Questionable" },
+                      { injury_note: "Synthetic injury note" },
+                      { is_undroppable: "0" },
+                    ],
+                    {
+                      selected_position: [
+                        { coverage_type: "week", week: "6" },
+                        { position: "BN" },
+                        { is_flex: 0 },
+                      ],
+                    },
+                    { is_editable: "0" },
+                  ],
+                },
+                count: 2,
+              },
+            },
+            coverage_type: "week",
+            week: 6,
+            is_prescoring: 0,
+            is_editable: 1,
+          },
+        },
+      ],
+    },
+  };
 }
 
 function teamsPayload(league: "nfl" | "nhl"): unknown {
-  const teamKey = league === "nfl" ? "nfl.l.9000.t.1" : "nhl.l.9100.t.2";
+  const teamKey = league === "nfl" ? "461.l.9000.t.1" : "465.l.9100.t.2";
   const name = league === "nfl" ? "Embedded Browser Team" : "Hosted Hockey Team";
   return {
     fantasy_content: {

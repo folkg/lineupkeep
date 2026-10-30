@@ -628,6 +628,10 @@ function member(
     scheduled: availability !== "not-scheduled",
     startingLineup: "unconfirmed",
     undroppable: null,
+    transactionTrend: {
+      status: "not_published",
+      reason: "Synthetic absence.",
+    },
   };
 }
 

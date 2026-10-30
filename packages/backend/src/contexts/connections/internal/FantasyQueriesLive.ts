@@ -950,6 +950,7 @@ export const FantasyQueriesLive = Layer.effect(
         percentStartedChange: player.percentStartedChange,
         actualRank: player.actualRank,
         overallRank: player.overallRank,
+        transactionTrend: player.transactionTrend,
         ...(sort === "stat" ? { statValue: player.statValue } : {}),
       }));
       const fingerprintValue = yield* queryFingerprint(
@@ -2358,6 +2359,16 @@ export const FantasyQueriesLive = Layer.effect(
               },
             }
           : {}),
+        ownerNote:
+          context.owned.team.ownerNote === null
+            ? { status: "not_set" as const }
+            : {
+                status: "provided" as const,
+                text: context.owned.team.ownerNote,
+                ...(context.owned.team.ownerNoteUpdatedAt === null
+                  ? {}
+                  : { updatedAt: context.owned.team.ownerNoteUpdatedAt }),
+              },
         coverage: coverageEntries,
         failures,
         budget: queryBudget,
@@ -3623,6 +3634,7 @@ function rosterPlayer(
         eligiblePositions: player.eligiblePositions,
         editable: player.isEditable,
         injury: injuryOf(player),
+        transactionTrend: player.transactionTrend,
         ...(detail === "full"
           ? {
               byeWeek: player.byeWeek,

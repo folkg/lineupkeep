@@ -747,6 +747,7 @@ export const yahooNflRoster = {
                       },
                     },
                     { is_undroppable: "0" },
+                    { transactions: { total: "120", adds: "37", drops: "3", trades: "80" } },
                   ],
                   {
                     selected_position: [
@@ -2123,6 +2124,7 @@ export const yahooNflFreeAgents = {
                   ],
                 },
               },
+              { transactions: { total: "52", adds: "40", drops: "10", trades: "2" } },
             ],
           },
           "2": {

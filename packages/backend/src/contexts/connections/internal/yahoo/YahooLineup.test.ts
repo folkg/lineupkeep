@@ -739,6 +739,10 @@ function hockeyRosterOf(
       scheduled: row.scheduled,
       startingLineup: row.startingLineup ?? "unconfirmed",
       undroppable: null,
+      transactionTrend: {
+        status: "not_published",
+        reason: "Synthetic absence.",
+      },
     })),
   };
 }
@@ -877,6 +881,10 @@ function rosterPlayer(index: number, row: RecordedRow, editable: boolean): Provi
     scheduled: row.scheduled,
     startingLineup: "unconfirmed",
     undroppable: null,
+    transactionTrend: {
+      status: "not_published",
+      reason: "Synthetic absence.",
+    },
   };
 }
 
@@ -976,6 +984,10 @@ function hockeyRosterPlayer(providerPlayerKey: string, slot: string): ProviderRo
     scheduled: true,
     startingLineup: "unconfirmed",
     undroppable: null,
+    transactionTrend: {
+      status: "not_published",
+      reason: "Synthetic absence.",
+    },
   };
 }
 

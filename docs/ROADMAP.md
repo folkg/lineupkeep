@@ -43,24 +43,32 @@ Independent, small, visible. Each ships on its own.
 
 What other managers are doing with a player is a signal for lineup and waiver decisions.
 
-- [ ] Establish what the provider actually publishes: check the reference implementation, probe the API,
+- [x] Establish what the provider actually publishes: check the reference implementation, probe the API,
       and test a few players with known movement. Trend counts and percent change are different things.
-- [ ] Expose whatever exists on search and player rows, stating the window it covers.
-- [ ] Where the provider publishes nothing, say so rather than implying zero interest.
+- [x] Expose whatever exists on search and player rows, stating the window it covers.
+- [x] Where the provider publishes nothing, say so rather than implying zero interest.
 
 **Verify**: a live read on three players, plus a fixture test. `S`
+
+Shipped as adds and drops for the provider's current day, across its leagues, never percent owned.
+Rows without a provider node say `not_published` with the reason and never show zero. The request
+shapes are recorded in [RESEARCH.md](fantasy-manager/RESEARCH.md).
 
 ### A4 — Per-team context note for agents
 
 League settings cannot express keeper rules, dynasty details, salary implications, or a player kept for
 sentimental reasons.
 
-- [ ] Add an owner-scoped note per team, bounded in length, with guidance that it is not a secret store.
-- [ ] Edit it on the team page, in the product's voice.
-- [ ] Return it wherever a single team is read over MCP, described as owner context rather than provider
+- [x] Add an owner-scoped note per team, bounded in length, with guidance that it is not a secret store.
+- [x] Edit it on the team page, in the product's voice.
+- [x] Return it wherever a single team is read over MCP, described as owner context rather than provider
       fact.
 
 **Verify**: round-trip through the UI and an MCP read; a password-shaped value is rejected or warned. `S`
+
+Shipped with a 2,000-character limit, explicit save, unsaved-change protection, and a refusal for
+credential-shaped text. The MCP team summary labels the note as owner context and never sends it to
+the provider.
 
 ### A5 — Ship the existing spans to Cloud Logging
 

@@ -496,6 +496,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
           detail: "Each rostered player's opponent on each of the 2 dates of scoring period 5.",
         },
         roster: [],
+        ownerNote: { status: "not_set" },
         coverage: [],
         failures: [],
         page: { returned: 0, complete: true, remaining: 0 },
@@ -1192,6 +1193,8 @@ const unavailableTeams: TeamsShape = {
   list: () => Effect.die(new Error("teams unavailable")),
   get: () => Effect.die(new Error("teams unavailable")),
   control: () => Effect.die(new Error("teams unavailable")),
+  saveNote: () => Effect.die(new Error("teams unavailable")),
+  readRoster: () => Effect.die(new Error("teams unavailable")),
 };
 const unavailableFeedback: FeedbackShape = {
   submit: () => Effect.die(new Error("feedback unavailable")),

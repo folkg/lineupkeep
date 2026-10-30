@@ -71,6 +71,7 @@ import type {
   ProviderTransactionParties,
   ProviderTransactionParty,
   ProviderTransactionTeam,
+  ProviderTransactionTrend,
   ProviderShape,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
@@ -268,7 +269,7 @@ export const yahooProvider = Effect.gen(function* () {
     const payload = yield* readJson(internet, {
       operation: "read_roster",
       origin: readOrigin,
-      path: `/fantasy/v2/team/${teamKey}/roster${periodSuffix}/players;out=opponent,starting_status`,
+      path: `/fantasy/v2/team/${teamKey}/roster${periodSuffix}/players;out=opponent,starting_status,transactions`,
       query: { format: "json" },
       cookie,
       normalize: true,
@@ -672,8 +673,8 @@ export const yahooProvider = Effect.gen(function* () {
     const sortType = rankedSearchSorts.has(input.sort) ? `;sort_type=${input.statType}` : "";
     const out =
       input.sort === "stat"
-        ? "ownership,percent_owned,percent_started,ranks,stats"
-        : "ownership,percent_owned,percent_started,ranks";
+        ? "ownership,percent_owned,percent_started,ranks,stats,transactions"
+        : "ownership,percent_owned,percent_started,ranks,transactions";
     const payload = yield* readJson(internet, {
       operation: "search_players",
       origin: readOrigin,
@@ -1656,6 +1657,7 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
     scheduled: scheduledIn(player.opponent),
     startingLineup: startingLineupIn(player.starting_status),
     undroppable: player.is_undroppable ?? null,
+    transactionTrend: transactionTrendOf(player.transactions),
   };
 }
 
@@ -2287,6 +2289,25 @@ function toSearchPlayer(
     actualRank: searchRank(player.player_ranks, "S", season),
     overallRank: searchRank(player.player_ranks, "OR", season),
     statValue: statId === undefined ? null : searchStatValue(player.player_stats, statId),
+    transactionTrend: transactionTrendOf(player.transactions),
+  };
+}
+
+function transactionTrendOf(
+  value: typeof PlayerTransactions.Type | undefined,
+): ProviderTransactionTrend {
+  const counts = value === undefined ? undefined : singleEntry(value);
+  if (counts?.adds === undefined || counts.drops === undefined) {
+    return {
+      status: "not_published",
+      reason: "The provider published no add and drop counts for this player.",
+    };
+  }
+  return {
+    status: "published",
+    adds: counts.adds,
+    drops: counts.drops,
+    window: "provider_current_day",
   };
 }
 
@@ -3232,6 +3253,19 @@ const StartingStatus = Schema.Struct({
   is_starting: Schema.optional(IntFromStringOrNumber),
 });
 
+const PlayerTransactions = Schema.Union([
+  Schema.Struct({
+    adds: Schema.optional(IntFromStringOrNumber),
+    drops: Schema.optional(IntFromStringOrNumber),
+  }),
+  Schema.Array(
+    Schema.Struct({
+      adds: Schema.optional(IntFromStringOrNumber),
+      drops: Schema.optional(IntFromStringOrNumber),
+    }),
+  ),
+]);
+
 const RosterPlayerPayload = Schema.Struct({
   player_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.p\.[0-9]+$/u))),
   name: Schema.Struct({ full: Schema.NonEmptyString }),
@@ -3255,6 +3289,7 @@ const RosterPlayerPayload = Schema.Struct({
   injury_note: Schema.optional(Schema.String),
   bye_weeks: Schema.optional(Schema.Struct({ week: IntFromStringOrNumber })),
   is_undroppable: Schema.optional(Flag),
+  transactions: Schema.optional(PlayerTransactions),
 });
 
 const RosterCoverage = Schema.Struct({
@@ -3380,6 +3415,7 @@ const SearchPlayerPayload = Schema.Struct({
   status: Schema.optional(Schema.Union([Schema.String, Schema.Boolean])),
   status_full: Schema.optional(Schema.String),
   injury_note: Schema.optional(Schema.String),
+  transactions: Schema.optional(PlayerTransactions),
 });
 
 const PlayerSearchPayload = Schema.Struct({

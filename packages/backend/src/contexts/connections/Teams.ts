@@ -11,6 +11,7 @@ import {
   TeamId,
 } from "./FantasyTeam.ts";
 import { LineupRun } from "./LineupRun.ts";
+import type { ProviderReadFailure } from "./Provider.ts";
 
 export const TeamSummary = Schema.Struct({
   team: FantasyTeam,
@@ -52,7 +53,59 @@ export const TeamControlResult = Schema.Union([
 ]);
 export type TeamControlResult = typeof TeamControlResult.Type;
 
+export const TeamNoteInput = Schema.Struct({
+  team: TeamId,
+  note: Schema.String,
+});
+export type TeamNoteInput = typeof TeamNoteInput.Type;
+
+export const TeamNoteSaved = Schema.Struct({
+  team: TeamId,
+  note: Schema.NullOr(Schema.NonEmptyString),
+  updatedAt: Schema.NullOr(Schema.DateTimeUtc),
+});
+export type TeamNoteSaved = typeof TeamNoteSaved.Type;
+
+const TeamRosterPlayer = Schema.Struct({
+  name: Schema.NonEmptyString,
+  slot: Schema.NonEmptyString,
+  primaryPosition: Schema.NonEmptyString,
+  displayPosition: Schema.NonEmptyString,
+  proTeam: Schema.NullOr(Schema.NonEmptyString),
+  injury: Schema.Struct({
+    reported: Schema.Boolean,
+    code: Schema.optional(Schema.String),
+    detail: Schema.optional(Schema.String),
+  }),
+  trend: Schema.Union([
+    Schema.Struct({
+      status: Schema.Literal("published"),
+      adds: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      drops: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      window: Schema.Literal("provider_current_day"),
+    }),
+    Schema.Struct({
+      status: Schema.Literal("not_published"),
+      reason: Schema.NonEmptyString,
+    }),
+  ]),
+});
+
+export const TeamRoster = Schema.Struct({
+  observedAt: Schema.DateTimeUtc,
+  players: Schema.Array(TeamRosterPlayer),
+});
+export type TeamRoster = typeof TeamRoster.Type;
+
 export type TeamError = TeamNotFound | TeamControlRejected | TeamPersistenceFailed;
+
+export type TeamNoteError = TeamNotFound | TeamNoteRejected | TeamPersistenceFailed;
+
+type TeamRosterError =
+  | TeamNotFound
+  | TeamConnectionNotReady
+  | TeamPersistenceFailed
+  | ProviderReadFailure;
 
 export class TeamNotFound extends Schema.TaggedError<
   TeamNotFound,
@@ -67,6 +120,23 @@ export class TeamControlRejected extends Schema.TaggedError<
 >()("team.control_rejected", {
   team: TeamId,
   status: TeamAutomationStatus,
+}) {}
+
+export class TeamConnectionNotReady extends Schema.TaggedError<
+  TeamConnectionNotReady,
+  { readonly brand: unique symbol }
+>()("team.connection_not_ready", {
+  team: TeamId,
+  status: ConnectionStatus,
+}) {}
+
+export class TeamNoteRejected extends Schema.TaggedError<
+  TeamNoteRejected,
+  { readonly brand: unique symbol }
+>()("team.note_rejected", {
+  team: TeamId,
+  reason: Schema.Literals(["too_long", "credential_like"]),
+  message: Schema.NonEmptyString,
 }) {}
 
 export class TeamPersistenceFailed extends Schema.TaggedError<
@@ -89,4 +159,11 @@ export type TeamsShape = {
     userId: UserId,
     inputs: ReadonlyArray<TeamControlInput>,
   ) => Effect.Effect<ReadonlyArray<TeamControlResult>, TeamPersistenceFailed>;
+
+  readonly saveNote: (
+    userId: UserId,
+    input: TeamNoteInput,
+  ) => Effect.Effect<TeamNoteSaved, TeamNoteError>;
+
+  readonly readRoster: (userId: UserId, team: TeamId) => Effect.Effect<TeamRoster, TeamRosterError>;
 };

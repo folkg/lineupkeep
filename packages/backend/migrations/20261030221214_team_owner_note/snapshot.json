@@ -1,0 +1,238 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "c8b35b8c-504d-4b8f-a6c4-8d903939a0a8",
+  "prevIds": ["68643c5a-4997-4761-9282-8f98406032a2"],
+  "footprints": [
+    {
+      "statementType": "drop_table",
+      "statementTarget": ["table", "public", "device_code"],
+      "writes": [
+        "s|tbl|public.device_code",
+        "n|tbl|public.device_code",
+        "e|tbl|public.device_code",
+        "n|rel|public.device_code",
+        "n|type|public.device_code"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "drop_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "provider_connections",
+        "provider_connections_reconnect_code_idx"
+      ],
+      "writes": [
+        "s|idx|public.provider_connections_reconnect_code_idx",
+        "n|idx|public.provider_connections_reconnect_code_idx",
+        "e|idx|public.provider_connections_reconnect_code_idx",
+        "n|rel|public.provider_connections_reconnect_code_idx"
+      ],
+      "reads": [
+        "e|tbl|public.provider_connections",
+        "n|sch|public",
+        "e|col|public.provider_connections.reconnect_code"
+      ],
+      "sharedWrites": []
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "provider_teams", "owner_note"],
+      "writes": [
+        "s|col|public.provider_teams.owner_note",
+        "n|col|public.provider_teams.owner_note",
+        "e|col|public.provider_teams.owner_note"
+      ],
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "provider_teams", "owner_note_updated_at"],
+      "writes": [
+        "s|col|public.provider_teams.owner_note_updated_at",
+        "n|col|public.provider_teams.owner_note_updated_at",
+        "e|col|public.provider_teams.owner_note_updated_at"
+      ],
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": ["column", "public", "provider_connections", "pairing_code"],
+      "writes": [
+        "s|col|public.provider_connections.pairing_code",
+        "n|col|public.provider_connections.pairing_code",
+        "e|col|public.provider_connections.pairing_code"
+      ],
+      "reads": ["n|tbl|public.provider_connections", "n|sch|public"]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": ["column", "public", "provider_connections", "reconnect_code"],
+      "writes": [
+        "s|col|public.provider_connections.reconnect_code",
+        "n|col|public.provider_connections.reconnect_code",
+        "e|col|public.provider_connections.reconnect_code"
+      ],
+      "reads": ["n|tbl|public.provider_connections", "n|sch|public"]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": ["column", "public", "provider_connections", "reconnect_expires_at"],
+      "writes": [
+        "s|col|public.provider_connections.reconnect_expires_at",
+        "n|col|public.provider_connections.reconnect_expires_at",
+        "e|col|public.provider_connections.reconnect_expires_at"
+      ],
+      "reads": ["n|tbl|public.provider_connections", "n|sch|public"]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": ["column", "public", "provider_connections", "reconnect_request_id"],
+      "writes": [
+        "s|col|public.provider_connections.reconnect_request_id",
+        "n|col|public.provider_connections.reconnect_request_id",
+        "e|col|public.provider_connections.reconnect_request_id"
+      ],
+      "reads": ["n|tbl|public.provider_connections", "n|sch|public"]
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "hosted_linking_sessions", "connection_id"],
+      "writes": ["s|colprop|public.hosted_linking_sessions.connection_id.notNull"],
+      "reads": [
+        "n|tbl|public.hosted_linking_sessions",
+        "n|sch|public",
+        "n|col|public.hosted_linking_sessions.connection_id"
+      ],
+      "sqlHash": "21871cabf32a7594"
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "owner_note",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "owner_note_updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"device_code\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"device_code\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"user_code\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"expires_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"status\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"last_polled_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"polling_interval\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"client_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"scope\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"resources\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code\",\"oauth_client_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"provider_connections\",\"pairing_code\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"provider_connections\",\"reconnect_code\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"provider_connections\",\"reconnect_expires_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"provider_connections\",\"reconnect_request_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"device_code_device_code_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"device_code_user_code_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"provider_connections_reconnect_code_idx\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"device_code\",\"device_code_pkey\"]"
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"hosted_linking_sessions\",\"connection_id\"]",
+      "set": {
+        "notNull": false
+      }
+    }
+  ]
+}

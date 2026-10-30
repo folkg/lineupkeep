@@ -89,6 +89,9 @@ const baseTeam: TeamSummaryView = {
       status: "disabled",
       changedAt: "2026-10-25T08:00:00.000Z",
     },
+    ownerNote: null,
+    ownerNoteUpdatedAt: null,
+    ownerNoteLimit: 2_000,
     lastSeenAt: "2026-10-25T08:00:00.000Z",
     createdAt: "2026-10-25T08:00:00.000Z",
     updatedAt: "2026-10-25T08:00:00.000Z",
@@ -369,6 +372,8 @@ function setupTeamsPage(
     refresh: overrides.refresh ?? (() => Promise.resolve({ teams })),
     control: overrides.control ?? (() => Promise.resolve({ changed: [], teams })),
     readRun: () => Promise.reject(new Error("Unexpected run read")),
+    saveNote: () => Promise.reject(new Error("Unexpected note save")),
+    readRoster: () => Promise.resolve({ status: "ok", players: [], observedAt: null }),
   };
   const teamsQuery = teamQueries.list(remote);
   const sessionRemote: SessionRemote = {

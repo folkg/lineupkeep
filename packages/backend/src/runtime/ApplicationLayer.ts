@@ -126,6 +126,7 @@ const TeamsLayer = TeamsLive.pipe(
   Layer.provide(TeamRepositoryLayer),
   Layer.provide(LineupRepositoryLayer),
   Layer.provide(ProviderLayer),
+  Layer.provide(CredentialEncryptionLayer),
 );
 const RetentionSweepLayer = RetentionSweepLive.pipe(Layer.provide(ConnectionsDatabase.layer));
 const AutomationLayer = AutomationLive.pipe(
@@ -160,7 +161,6 @@ export const ApplicationLayer = Layer.mergeAll(
   FeedbackRetentionLayer,
   AuthLayer,
   ProviderLayer,
-  CredentialEncryptionLayer,
   QueryTokens.layer,
 ).pipe(Layer.provide(PostgresLive), Layer.provide(NodeCrypto.layer));
 

@@ -1,7 +1,12 @@
 import { mutationOptions } from "@tanstack/solid-query";
 import type { MutationFunctionContext } from "@tanstack/solid-query";
 
-import type { TeamChangeView, TeamRefreshView } from "#contracts/connections/teamContract.ts";
+import type {
+  TeamChangeView,
+  TeamNoteSaveResult,
+  TeamRefreshView,
+  TeamSummaryView,
+} from "#contracts/connections/teamContract.ts";
 
 import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
@@ -19,7 +24,38 @@ export const teamMutations = {
       mutationFn: remote.refresh,
       onSuccess: storeRefreshedTeamList,
     }),
+  saveNote: (remote: TeamRemote) =>
+    mutationOptions({
+      mutationKey: ["teams", "note"],
+      mutationFn: remote.saveNote,
+      onSuccess: storeSavedNote,
+    }),
 };
+
+function storeSavedNote(
+  saved: TeamNoteSaveResult,
+  variables: { readonly team: string },
+  _onMutateResult: unknown,
+  context: MutationFunctionContext,
+): void {
+  if (saved.outcome !== "saved") {
+    return;
+  }
+  context.client.setQueryData<ReadonlyArray<TeamSummaryView>>(teamQueries.listKey, (current) =>
+    current?.map((summary) =>
+      summary.team.id === variables.team
+        ? {
+            ...summary,
+            team: {
+              ...summary.team,
+              ownerNote: saved.note,
+              ownerNoteUpdatedAt: saved.updatedAt,
+            },
+          }
+        : summary,
+    ),
+  );
+}
 
 function storeRefreshedTeams(
   change: TeamChangeView,

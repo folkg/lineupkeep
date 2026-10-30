@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { eq } from "drizzle-orm";
 import { Array, Cause, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -10,8 +11,10 @@ import { FantasyQueries } from "./FantasyQueries.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
 import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
+import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
+import { providerTeams } from "./internal/ConnectionTables.ts";
 import { FantasyQueriesLive } from "./internal/FantasyQueriesLive.ts";
 import { FakeProviderWorld } from "./internal/ProviderFakeTest.ts";
 import { ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
@@ -24,6 +27,7 @@ import type {
   ProviderTransaction,
   ProviderTransactionMovement,
   ProviderTransactionTeam,
+  ProviderTransactionTrend,
   ProviderPlayerDetail,
   ProviderPlayerSearchResult,
   ProviderRoster,
@@ -1034,6 +1038,106 @@ it.effect("publishes the professional team on search rows", () =>
       [
         ["Available Skater", "SYN"],
         ["Unsigned Skater", null],
+      ],
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("carries the provider's day-window transaction counts on search rows", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setSearchPlayers([
+      searchFixture({
+        providerPlayerKey: "461.p.10011",
+        name: "Moving Skater",
+        availability: "free_agent",
+        actualRank: null,
+        overallRank: null,
+        statValue: null,
+        percentOwned: 40,
+        percentOwnedDelta: 4,
+        percentStarted: null,
+        percentStartedChange: null,
+        transactionTrend: {
+          status: "published",
+          adds: 37,
+          drops: 3,
+          window: "provider_current_day",
+        },
+      }),
+      searchFixture({
+        providerPlayerKey: "461.p.10012",
+        name: "Uncounted Skater",
+        availability: "waiver",
+        actualRank: null,
+        overallRank: null,
+        statValue: null,
+        percentOwned: null,
+        percentOwnedDelta: null,
+        percentStarted: null,
+        percentStartedChange: null,
+        transactionTrend: { status: "not_published", reason: "Synthetic absence." },
+      }),
+    ]);
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      sort: "name",
+    });
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      search.players.map((player) => [player.name, player.transactionTrend]),
+      [
+        [
+          "Moving Skater",
+          { status: "published", adds: 37, drops: 3, window: "provider_current_day" },
+        ],
+        ["Uncounted Skater", { status: "not_published", reason: "Synthetic absence." }],
+      ],
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("carries the transaction counts on roster rows", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      roster: {
+        ...rosterFixture({ count: 2 }),
+        players: rosterFixture({ count: 2 }).players.map((player, index) => ({
+          ...player,
+          transactionTrend:
+            index === 0
+              ? {
+                  status: "published" as const,
+                  adds: 12,
+                  drops: 1,
+                  window: "provider_current_day" as const,
+                }
+              : { status: "not_published" as const, reason: "Synthetic absence." },
+        })),
+      },
+    });
+
+    const roster = yield* queries.getRosters(owner, { team: Array.getUnsafe(seeded, 0).id });
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      roster.players.map((player) => [player.name, player.transactionTrend]),
+      [
+        [
+          "Synthetic 0",
+          { status: "published", adds: 12, drops: 1, window: "provider_current_day" },
+        ],
+        ["Synthetic 1", { status: "not_published", reason: "Synthetic absence." }],
       ],
     );
   }).pipe(Effect.provide(QueriesTestLayer)),
@@ -2381,6 +2485,37 @@ it.effect("degrades one team summary section without failing the snapshot", () =
     if (summary.probableStarters?.status === "unsupported") {
       assert.include(summary.probableStarters.detail, "probable-starter");
     }
+    assert.deepStrictEqual(summary.ownerNote, { status: "not_set" });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("returns the owner note as owner context in a team summary", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const writtenAt = DateTime.makeUnsafe("2026-10-30T18:00:00.000Z");
+    yield* database
+      .update(providerTeams)
+      .set({
+        ownerNote: "Dynasty league. Keep both goalies; cost rises by 5 each season.",
+        ownerNoteUpdatedAt: DateTime.toDateUtc(writtenAt),
+      })
+      .where(eq(providerTeams.id, teamId));
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(summary.ownerNote, {
+      status: "provided",
+      text: "Dynasty league. Keep both goalies; cost rises by 5 each season.",
+      updatedAt: writtenAt,
+    });
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -4211,6 +4346,7 @@ function searchFixture(input: {
   readonly percentStarted: number | null;
   readonly percentStartedChange: number | null;
   readonly proTeam?: string;
+  readonly transactionTrend?: ProviderTransactionTrend;
 }): ProviderPlayerSearchResult["players"][number] {
   return {
     ...input,
@@ -4219,6 +4355,12 @@ function searchFixture(input: {
     displayPosition: "QB",
     eligiblePositions: ["QB"],
     status: { value: "healthy", code: undefined, detail: undefined },
+    transactionTrend: input.transactionTrend ?? {
+      status: "published",
+      adds: 10,
+      drops: 2,
+      window: "provider_current_day",
+    },
   };
 }
 
@@ -4250,6 +4392,12 @@ function rosterFixture(input: {
       scheduled: true,
       startingLineup: "unconfirmed",
       undroppable: false,
+      transactionTrend: {
+        status: "published" as const,
+        adds: 10 + index,
+        drops: 2,
+        window: "provider_current_day" as const,
+      },
     })),
   };
 }

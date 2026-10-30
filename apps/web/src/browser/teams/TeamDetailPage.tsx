@@ -3,6 +3,10 @@ import { Show } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
+import {
+  UnsavedChangesScope,
+  UnsavedNavigationGuard,
+} from "#browser/navigation/UnsavedChanges.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
@@ -18,8 +22,11 @@ import { RunActivity } from "./RunActivity";
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { teamContextLabel } from "./teamLabels";
+import { TeamNote } from "./TeamNote";
 import type { TeamListQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
+import { TeamRoster } from "./TeamRoster";
+import { useTeamNote } from "./useTeamNote";
 import { useTeamsPage } from "./useTeamsPage";
 
 export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
@@ -34,31 +41,35 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
   return (
     <AppShell>
       <Page title={team()?.team.name ?? "Team"}>
-        <Stack gap="lg">
-          <TextLink to="/teams">Back to teams</TextLink>
-          <Show
-            fallback={<LoadingState label="Loading team">Loading this team…</LoadingState>}
-            when={!page.isLoading()}
-          >
+        <UnsavedChangesScope>
+          <Stack gap="lg">
+            <TextLink to="/teams">Back to teams</TextLink>
             <Show
-              fallback={
-                <EmptyState title="Team not found.">
-                  This team is not available to the current account. Return to the team list.
-                </EmptyState>
-              }
-              when={team()}
+              fallback={<LoadingState label="Loading team">Loading this team…</LoadingState>}
+              when={!page.isLoading()}
             >
-              {(summary) => <TeamDetail team={summary()} remote={props.remote} />}
+              <Show
+                fallback={
+                  <EmptyState title="Team not found.">
+                    This team is not available to the current account. Return to the team list.
+                  </EmptyState>
+                }
+                when={team()}
+              >
+                {(summary) => <TeamDetail team={summary()} remote={props.remote} />}
+              </Show>
             </Show>
-          </Show>
-          <ActionFeedback feedback={page.feedback()} />
-        </Stack>
+            <ActionFeedback feedback={page.feedback()} />
+          </Stack>
+          <UnsavedNavigationGuard shouldBlock={() => true} />
+        </UnsavedChangesScope>
       </Page>
     </AppShell>
   );
 }
 
 function TeamDetail(props: TeamDetailProps): JSX.Element {
+  const note = useTeamNote({ team: () => props.team, remote: () => props.remote });
   return (
     <Stack gap="lg">
       <Stack gap="md">
@@ -73,6 +84,9 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           Report a problem with this team
         </TextLink>
       </Stack>
+
+      <TeamNote note={note} />
+      <TeamRoster remote={props.remote} teamId={props.team.team.id} />
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
         <Heading id="team-activity-title" level={2} size="section">

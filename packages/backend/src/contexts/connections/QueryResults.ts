@@ -511,6 +511,29 @@ export const GetRostersInput = Schema.Struct({
 });
 export type GetRostersInput = typeof GetRostersInput.Type;
 
+const PlayerTransactionTrend = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("published"),
+    adds: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    drops: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    window: Schema.Literal("provider_current_day").pipe(
+      Schema.annotate({
+        description:
+          "The day these counts cover. The provider publishes no window or date with the count, so this states the provider's current day; the enclosing result's `coverage` carries the instant the read was made.",
+      }),
+    ),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("not_published"),
+    reason: Schema.NonEmptyString,
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "The provider's own count of adds and drops of this player on its current day, across the provider's leagues. This is not percent owned and not a change in percent owned. `not_published` means the provider returned no count for this player; it is never reported as zero.",
+  }),
+);
+
 export const RosterPlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
@@ -527,6 +550,7 @@ export const RosterPlayer = Schema.Struct({
   }),
   byeWeek: Schema.optional(Schema.NullOr(Schema.Int)),
   undroppable: Schema.optional(Schema.NullOr(Schema.Boolean)),
+  transactionTrend: PlayerTransactionTrend,
 });
 export type RosterPlayer = typeof RosterPlayer.Type;
 
@@ -698,6 +722,7 @@ const SearchPlayer = Schema.Struct({
         "The provider's season value for the requested `stat` category. Present only with sort `stat`; null means the provider published no value for this player.",
     }),
   ),
+  transactionTrend: PlayerTransactionTrend,
 });
 
 export const SearchPlayersData = Schema.Struct({
@@ -1357,6 +1382,20 @@ const SummaryRosterPlayer = Schema.Struct({
 });
 export type SummaryRosterPlayer = typeof SummaryRosterPlayer.Type;
 
+const TeamOwnerNote = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("provided"),
+    text: Schema.NonEmptyString,
+    updatedAt: Schema.optional(Schema.DateTimeUtc),
+  }),
+  Schema.Struct({ status: Schema.Literal("not_set") }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "The note the team's owner wrote in Lineupkeep. This is owner context, not a provider fact: the provider and the league do not publish it, so it is not a rule, a scoring setting, or a fact the league said. It can explain keepers, dynasty cost, salary, or why a player is held. The owner can change or clear it, and it is never a place for passwords, tokens, or provider session material.",
+  }),
+);
+
 export const TeamSummaryData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
@@ -1382,6 +1421,7 @@ export const TeamSummaryData = Schema.Struct({
       detail: Schema.String,
     }),
   ),
+  ownerNote: TeamOwnerNote,
   roster: Schema.optional(Schema.Array(SummaryRosterPlayer)).pipe(
     Schema.annotate({
       description:

@@ -8,15 +8,23 @@ import type { LineupRun } from "#contexts/connections/LineupRun.ts";
 import type { ProviderFantasyDay } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import type { ProviderRegistryShape } from "#contexts/connections/ProviderRegistry.ts";
-import { TeamNotFound, TeamPersistenceFailed, Teams } from "#contexts/connections/Teams.ts";
+import { checkTeamNote } from "#contexts/connections/TeamNote.ts";
+import {
+  TeamNotFound,
+  TeamPersistenceFailed,
+  TeamNoteRejected,
+  Teams,
+} from "#contexts/connections/Teams.ts";
 import type {
   TeamControlInput,
   TeamControlResult,
   TeamError,
+  TeamNoteSaved,
   TeamSummary,
   TeamsShape,
 } from "#contexts/connections/Teams.ts";
 
+import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { LineupRunRepository } from "./LineupRunRepository.ts";
 import { toLineupRun } from "./LineupRunViewRepository.ts";
 import { TeamRepository } from "./TeamRepository.ts";
@@ -28,6 +36,7 @@ export const TeamsLive = Layer.effect(
     const teams = yield* TeamRepository;
     const runs = yield* LineupRunRepository;
     const registry = yield* ProviderRegistry;
+    const encryption = yield* ConnectionCredentialEncryption;
 
     const summaries = (
       userId: UserId,
@@ -102,9 +111,85 @@ export const TeamsLive = Layer.effect(
       return results;
     });
 
-    return Teams.of({ list, get, control });
+    const saveNote: TeamsShape["saveNote"] = (userId, input) =>
+      Effect.gen(function* () {
+        const checked = checkTeamNote(input.note);
+        if (!checked.valid) {
+          return yield* TeamNoteRejected.make({
+            team: input.team,
+            reason: checked.reason,
+            message: checked.message,
+          });
+        }
+        const team = yield* teams.saveNote(userId, { team: input.team, note: checked.note });
+        yield* Effect.annotateCurrentSpan({
+          "team.note_set": team.ownerNote !== null,
+          "team.note_chars": team.ownerNote === null ? 0 : Array.from(team.ownerNote).length,
+        });
+        return {
+          team: team.id,
+          note: team.ownerNote,
+          updatedAt: team.ownerNoteUpdatedAt,
+        } satisfies TeamNoteSaved;
+      });
+
+    const readRoster: TeamsShape["readRoster"] = (userId, team) =>
+      Effect.gen(function* () {
+        const access = yield* teams.loadProviderAccess(userId, team);
+        const provider = registry.get(access.connection.provider);
+        if (provider === undefined) {
+          return yield* TeamPersistenceFailed.make({
+            cause: new Error(`Team ${team} references an unregistered provider`),
+          });
+        }
+        const session = yield* encryption
+          .decrypt({
+            userId,
+            connectionId: access.connection.id,
+            provider: access.connection.provider,
+            envelope: access.connection.envelope,
+          })
+          .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
+        const observedAt = yield* DateTime.now;
+        const roster = yield* provider.readRoster({
+          provider: access.connection.provider,
+          session,
+          providerTeamKey: access.team.providerTeamKey,
+          period: undefined,
+        });
+        yield* Effect.annotateCurrentSpan("provider.player_count", roster.players.length);
+        return {
+          observedAt,
+          players: roster.players.map((player) => ({
+            name: player.name,
+            slot: player.slot,
+            primaryPosition: player.primaryPosition,
+            displayPosition: player.displayPosition,
+            proTeam: player.proTeamAbbreviation ?? null,
+            injury: injuryOf(player),
+            trend: player.transactionTrend,
+          })),
+        };
+      });
+
+    return Teams.of({ list, get, control, saveNote, readRoster });
   }),
 );
+
+function injuryOf(player: {
+  readonly injuryCode: string | undefined;
+  readonly injuryDetail: string | undefined;
+}): {
+  readonly reported: boolean;
+  readonly code?: string;
+  readonly detail?: string;
+} {
+  return {
+    reported: player.injuryCode !== undefined || player.injuryDetail !== undefined,
+    ...(player.injuryCode === undefined ? {} : { code: player.injuryCode }),
+    ...(player.injuryDetail === undefined ? {} : { detail: player.injuryDetail }),
+  };
+}
 
 function fantasyDayOf(registry: ProviderRegistryShape, team: FantasyTeam): ProviderFantasyDay {
   const provider = registry.get(team.provider);

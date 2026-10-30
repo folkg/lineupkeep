@@ -563,6 +563,10 @@ const providerFake = Effect.gen(function* () {
                 actualRank: null,
                 overallRank: null,
                 statValue: null,
+                transactionTrend: {
+                  status: "not_published",
+                  reason: "The fake provider publishes no transaction trend.",
+                },
               },
             ];
           },

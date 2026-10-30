@@ -398,6 +398,17 @@ export const ProviderStartingLineup = Schema.Literals([
 ]);
 export type ProviderStartingLineup = typeof ProviderStartingLineup.Type;
 
+type ProviderTransactionTrendWindow = "provider_current_day";
+
+export type ProviderTransactionTrend =
+  | {
+      readonly status: "published";
+      readonly adds: number;
+      readonly drops: number;
+      readonly window: ProviderTransactionTrendWindow;
+    }
+  | { readonly status: "not_published"; readonly reason: string };
+
 export type ProviderRosterPlayer = {
   readonly providerPlayerKey: string;
   readonly name: string;
@@ -414,6 +425,7 @@ export type ProviderRosterPlayer = {
   readonly scheduled: boolean;
   readonly startingLineup: ProviderStartingLineup;
   readonly undroppable: boolean | null;
+  readonly transactionTrend: ProviderTransactionTrend;
 };
 
 export type ProviderRoster = {
@@ -539,6 +551,7 @@ export type ProviderPlayerSearchResult = {
     readonly actualRank: number | null;
     readonly overallRank: number | null;
     readonly statValue: number | null;
+    readonly transactionTrend: ProviderTransactionTrend;
   }>;
 };
 
