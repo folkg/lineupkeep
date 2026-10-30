@@ -286,7 +286,60 @@ before delegating.
 
 ---
 
-## H. Security and privacy audit
+## H. Transactions review
+
+The whole group sits after the Foldkit migration, deliberately: it is the largest new surface in the product
+and building it before the migration means building it twice.
+
+The current review links do not work. Yahoo's add page ends in a form submission a deep link cannot perform,
+so it lands on a page whose only working action is Cancel, and the Yahoo app claims `*.yahoo.com` on mobile
+before a browser sees it. No link we construct survives either.
+
+**What it is:** the agent proposes, a person decides, the server writes.
+
+### H1 — Trade probe
+
+- [ ] Read-only: does the league transaction feed publish pending trade proposals, and what does the trade
+      review setting actually permit.
+- [ ] Only then, one write on one league, reported before anything is built on it.
+
+**Verify**: a written finding with the request shapes tried. `S`
+
+### H2 — Proposals and the tool
+
+- [ ] One call covers every team: a list of proposals, each naming a team, the players to add or drop, an
+      optional FAAB bid, and a required short reason. One link back, to one review screen.
+- [ ] Proposing writes nothing to the provider.
+- [ ] Re-validate before anything is executable: the player is still available, the roster is still legal,
+      the period is still open. A stale item states why rather than failing at submit.
+- [ ] Carry its own threat model, because this is the first surface where an authorization mistake means
+      writing to somebody else's team.
+
+**Verify**: an account-wide proposal set read back from storage, with a stale item marked and nothing
+written upstream. `M`
+
+### H3 — The screen
+
+- [ ] Grouped by team, with a quiet section for teams that have nothing proposed.
+- [ ] The reason beside each move, and the drop beside the add so a swap reads as one decision.
+- [ ] Reversible and irreversible actions do not look alike: a waiver claim spends FAAB and cannot be
+      undone; a trade involves another person.
+- [ ] Checkboxes to include or exclude, then one submit. Works on a phone first.
+
+**Verify**: a six-team proposal set reviewed on a phone-sized viewport, with a stale item and an excluded
+item both behaving correctly. `M`
+
+### H4 — Execution
+
+- [ ] Writes through the provider's transaction endpoint, using the session and crumb the lineup writer
+      already uses.
+- [ ] Per-item outcome, recorded. No silent retry: a retried add can drop the wrong player.
+- [ ] One team failing never hides the others.
+
+**Verify**: a real add and drop on a disposable league, with per-item outcomes and the provider's own
+transaction feed agreeing. `M`
+
+## I. Security and privacy audit
 
 Distinct from the dependency audit, which is done.
 
@@ -303,11 +356,11 @@ Distinct from the dependency audit, which is done.
 
 ---
 
-## I. MCP client contract
+## J. MCP client contract
 
 Standing friction with the external client, and the verification gap that let it persist.
 
-### I1 — An MCP acceptance command
+### J1 — An MCP acceptance command
 
 Scope problems have been argued from two sides without a shared test. Make them testable.
 
@@ -321,7 +374,7 @@ Scope problems have been argued from two sides without a shared test. Make them 
 **Verify**: the command exercised against a local instance and the deployed origin, with a recorded pass
 for a full grant and for a reduced grant. `M`
 
-### I2 — Reduce the scope set
+### J2 — Reduce the scope set
 
 Seven scopes is more than the product needs, and a client holding a subset has hit repeated friction.
 
@@ -333,10 +386,10 @@ Seven scopes is more than the product needs, and a client holding a subset has h
       authorization-server document lists it.
 - [ ] Document the resulting set for client authors.
 
-**Verify**: I1's command passes for the reduced set, and each tool's required scope is unchanged in
-practice or weaker with a stated reason. `M`, depends on I1.
+**Verify**: J1's command passes for the reduced set, and each tool's required scope is unchanged in
+practice or weaker with a stated reason. `M`, depends on J1.
 
-### I3 — Grants should survive a deploy
+### J3 — Grants should survive a deploy
 
 The client reports reconnecting after every deployment. That should not be necessary: signing keys are
 persisted, so access tokens survive a revision change.
@@ -350,7 +403,7 @@ persisted, so access tokens survive a revision change.
 
 ---
 
-## J. Onboarding
+## K. Onboarding
 
 - [ ] Map the first-run path from landing to a connected, enabled team and count the steps.
 - [ ] Place the Google-account workaround where someone actually gets stuck, not only on the connections
@@ -363,23 +416,16 @@ after. `M`
 
 ---
 
-## K. Solver and product expansion
+## L. Solver and product expansion
 
-### K1 — Positional scarcity
+### L1 — Positional scarcity
 
 - [ ] Compute a league-wide scarcity measure periodically rather than per run, provider-neutrally.
-- [ ] Use it as the foundation for add/drop and transaction recommendations, not as a score multiplier.
+- [ ] Use it as the foundation for transaction proposals, not as a score multiplier.
 
 **Verify**: a fixture league where a thin position changes the recommendation for a documented reason. `M`
 
-### K2 — Transactions and add/drop recommendations
-
-- [ ] Read-only recommendations first, using K1.
-- [ ] Review links exist for add and drop; keep execution out of scope until the owner says otherwise.
-
-**Verify**: recommendations against known-good cases with no provider write. `L`, depends on K1.
-
-### K3 — Category-aware objective
+### L2 — Category-aware objective
 
 **decide**: whether the objective should be expected categories won rather than the current community start
 rate. A product choice, not a defect.
@@ -387,14 +433,14 @@ rate. A product choice, not a defect.
 **Verify**: a league where the two objectives recommend different lineups, with the difference explained.
 `L`
 
-### K4 — Baseball and basketball
+### L3 — Baseball and basketball
 
 Starting-lineup rules for all four sports are declared and tested; stat categories, games and innings limits,
 and provider request shapes are not built.
 
 **Verify**: a real league in each sport, read and planned correctly. `L`
 
-### K5 — Second provider
+### L4 — Second provider
 
 The seam supports it; none is planned. Adding one is an adapter plus a registry entry, provided F1 is done.
 
@@ -403,9 +449,9 @@ depends on F1.
 
 ---
 
-## L. Operations and compliance
+## M. Operations and compliance
 
-### L1 — Restore policy
+### M1 — Restore policy
 
 The drill proved point-in-time restore produces a usable database. What remains is policy.
 
@@ -414,14 +460,14 @@ The drill proved point-in-time restore produces a usable database. What remains 
 
 **Verify**: the written policy plus one rehearsal that follows it end to end. `S`
 
-### L2 — Domain and production email
+### M2 — Domain and production email
 
 - [ ] Acquire a domain and move the sender off the Resend test address.
 - [ ] Verify delivery to a non-owner address and the action-required path.
 
 **Verify**: a real reminder delivered to a real inbox that is not the owner's. `S`
 
-### L3 — Muse acceptance against the deployed origin
+### M3 — Muse acceptance against the deployed origin
 
 - [ ] Run the client's rounds against the deployed server rather than a local instance.
 - [ ] Confirm paging, cursors, scope enforcement and pending outcomes behave the same there.
@@ -430,9 +476,9 @@ The drill proved point-in-time restore produces a usable database. What remains 
 
 ---
 
-## M. Naming
+## N. Naming
 
-### M1 — Rename to lineupgrade
+### N1 — Rename to lineupgrade
 
 Deferred by the owner, but placed deliberately: immediately before the redesign, while nothing is public
 and no domain exists.
@@ -443,7 +489,7 @@ and no domain exists.
 
 ---
 
-## N. Redesign exploration
+## O. Redesign exploration
 
 Later by the owner's choice, and after the framework migration so it is not done twice.
 
@@ -456,9 +502,9 @@ to explore, `L` to apply.
 
 ---
 
-## O. Standing loops
+## P. Standing loops
 
-### O1 — Client feedback
+### P1 — Client feedback
 
 Not a project. External clients file findings through the product; triage them, fix what is real, and record
 why anything is declined. Currently zero open.
@@ -472,15 +518,15 @@ why anything is declined. Currently zero open.
 | D1  | Staging model for CI: long-lived or per-branch                       | C1     |
 | D2  | Cloudflare split, or make GCP cold start good enough                 | D2     |
 | D3  | Schedule cache source: derived from our reads, or external           | E1     |
-| D4  | Retention, RPO/RTO and recovery owner                                | L1     |
-| D5  | Rename to lineupgrade, and when                                      | M1     |
-| D6  | Solver direction: positional scarcity first, or category-aware first | K1, K3 |
-| D7  | Transactions: stay read-only, or plan for execution                  | K2     |
+| D4  | Retention, RPO/RTO and recovery owner                                | M1     |
+| D5  | Rename to lineupgrade, and when                                      | N1     |
+| D6  | Solver direction: positional scarcity first, or category-aware first | L1, L2 |
+| D7  | ~~Transactions read-only or executed~~ settled: H owns it            | —      |
 | D8  | Passkeys as a sign-in option                                         | future |
 
-Ruled already, recorded so they are not reopened: Foldkit before any redesign; the rename before the
-redesign; the visual redesign is exploration rather than committed work; "phase 2 with the solver" is
-complete and is not roadmap work.
+Ruled already, recorded so they are not reopened: Foldkit before any redesign; the transactions review as
+one group after Foldkit, not split around it; the rename before the redesign; the visual redesign is
+exploration rather than committed work; "phase 2 with the solver" is complete and is not roadmap work.
 
 ## Known non-goals
 
@@ -500,6 +546,9 @@ was closed.
   date windows, compact standings, inlined stat names, two-sided trades with picks, draft history,
   scoring-versus-informational categories, injury status on search rows, transaction rules, per-date
   schedules, and per-team acquisition usage. Resolution notes are in the feedback table.
+- **Provider review links.** They do not work in practice: the provider's add page ends in a form
+  submission a link cannot perform, and its mobile app claims the domain before a browser sees it. Group H
+  replaces them.
 - **Interface rework from the owner walkthrough.** Voice without emdashes or slogans, connections that exist
   only after a link succeeds, connection identity without personal data, one switch per team with optimistic
   state, folded quiet activity, local times, back affordances, feedback prefill, and a mobile browser that
