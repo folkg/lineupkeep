@@ -3,7 +3,7 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
-## Unreleased — round-8 MCP fixes (scoring-period schedule)
+## Unreleased — round-8 MCP fixes, part 2 (scoring-period schedule)
 
 - `get_team_summary` accepts a `schedule` group that reports each rostered player's scheduled games
   in the current scoring period: the dates they play, the opponent abbreviation, whether the game is

@@ -15,7 +15,7 @@ verified, because "done" has meant different things at different times in this p
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                 |
 | Lineup algorithm     | Custom solver live for all five owner teams, seven consecutive verified ticks                  |
 | Provider boundary    | Providers injected through a keyed registry; no adapter import outside the composition root    |
-| MCP surface          | 17 tools, seven scopes, per-tool enforcement; rounds 2 to 6 resolved and deployed              |
+| MCP surface          | 17 tools, seven scopes, per-tool enforcement; rounds 2 to 6 deployed, round 8 awaiting deploy  |
 | Client feedback      | Zero open items after round-6 triage on 2026-10-29                                             |
 | Connections          | Hosted browser only; the local helper and its device flow are deleted                          |
 | Interface            | Voice, connections, teams, activity and the mobile browser reworked from the owner walkthrough |
@@ -390,6 +390,37 @@ by browser test and screenshot, and deployed.
       registry entry.
 - [ ] **Domain and production email.** The Resend test sender delivers only to the owner address. A
       domain makes this a non-issue and is otherwise cheap.
+
+### A cached professional-team schedule
+
+- [ ] **Decide the schedule source.** The fantasy provider publishes no season or team schedule: the
+      only schedule fact is one opponent per rostered player per date or scoring week. So a cached
+      professional-team calendar is either derived from our own roster reads (one read per linked
+      team per date, and it already covers every player a work gate must consider) or taken from an
+      external sports schedule (a complete season with start times, at the cost of a new dependency
+      and a verified identity mapping, because provider abbreviations differ from the league's —
+      Yahoo `LA`, `SJ`, `NJ`, `TB` against `LAK`, `SJS`, `NJD`, `TBL`). Recommendation: derive from
+      our own reads first, and add an external source only when a feature needs every team or a whole
+      season. Record the decision in [DECISIONS.md](fantasy-manager/DECISIONS.md) when it is made.
+- [ ] **Persist what the reads already see.** Every roster read names each player's professional team
+      and its opponent for the date or week. Record those as a derived, owner-scoped
+      professional-team game calendar with an observation instant, so the cache grows from normal work
+      and adds no upstream contract. Verify against one week of live reads: every rostered player's
+      dates, opponents, and home or away match the direct read.
+- [ ] **Sweep the scoring period daily, not hourly.** Refresh the current period's dates once a day
+      per linked team, and after a provider-day rollover, so tomorrow's games are known without an
+      hourly read. Measure the provider-request saving against a real week before relying on it.
+- [ ] **Gate scheduled work, failing open.** Skip a team's run only when the cached calendar says no
+      rostered player has a game before the next tick and that date's calendar was observed after the
+      fantasy day began. An unknown, stale, or incomplete calendar runs as usual, a manual
+      `set_lineup` bypasses the gate, and a skipped outcome is recorded with its reason. Acceptance: a
+      fixture whose game moves into today after the sweep proves the gate runs rather than skips,
+      because a wrong skip is worse than a wasted read.
+- [ ] **Publish the calendar's coverage.** Per-player games beyond the current period (next game,
+      games remaining in the period) and a postponed-game signal become available once the cache
+      covers them. Each value states when it was observed, and a postponed game stays unresolved until
+      an observed case proves the provider's marking. Whether a future week's scoreboard publishes its
+      date window is unverified; if it does, sweeping ahead is unnecessary.
 
 ## 7. Known non-goals
 
