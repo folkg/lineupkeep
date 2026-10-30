@@ -1,4 +1,5 @@
 import type { JSX } from "@solidjs/web";
+import { Show } from "solid-js";
 import type { Element } from "solid-js";
 
 import { Heading } from "./Heading";
@@ -11,9 +12,13 @@ export function Page(props: PageProps): JSX.Element {
         <Heading level={1} size="headline">
           {props.title}
         </Heading>
-        <Text size="lede" tone="muted">
-          {props.lede}
-        </Text>
+        <Show when={props.lede}>
+          {(lede) => (
+            <Text size="lede" tone="muted">
+              {lede()}
+            </Text>
+          )}
+        </Show>
       </header>
       {props.children}
     </section>
@@ -22,6 +27,6 @@ export function Page(props: PageProps): JSX.Element {
 
 type PageProps = {
   readonly title: string;
-  readonly lede: string;
+  readonly lede?: string;
   readonly children: Element;
 };

@@ -127,6 +127,10 @@ it("names the league context and keeps quiet states off the page", async () => {
   await expect.element(page.getByText("Football · NFL 2026")).toBeVisible();
   await expect.element(page.getByText("Connected")).not.toBeInTheDocument();
   await expect.element(page.getByText("Available")).not.toBeInTheDocument();
+  await expect.element(page.getByText(/lists this team/)).not.toBeInTheDocument();
+  await expect
+    .element(page.getByText("Lineup settings and recent activity for this team."))
+    .not.toBeInTheDocument();
 });
 
 it("names the pause in reader-local time", async () => {

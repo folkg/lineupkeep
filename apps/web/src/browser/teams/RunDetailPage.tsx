@@ -35,7 +35,7 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
 
   return (
     <AppShell>
-      <Page lede="What this run checked and what it found." title="Lineup run">
+      <Page title="Lineup run">
         <Stack gap="lg">
           <Show fallback={<TextLink to="/teams">Back to teams</TextLink>} when={page.team()}>
             {(team) => (

@@ -31,10 +31,7 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
 
   return (
     <AppShell>
-      <Page
-        lede="Lineup settings and recent activity for this team."
-        title={team()?.team.name ?? "Team"}
-      >
+      <Page title={team()?.team.name ?? "Team"}>
         <Stack gap="lg">
           <TextLink to="/teams">Back to teams</TextLink>
           <Show
@@ -80,7 +77,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           Recent activity
         </Heading>
         <Text size="caption" tone="muted">
-          Newest first. Consecutive checks that changed nothing are grouped.
+          Newest first. Checks that changed nothing are grouped.
         </Text>
         <Show
           fallback={
