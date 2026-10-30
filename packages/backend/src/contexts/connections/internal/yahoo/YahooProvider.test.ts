@@ -481,6 +481,7 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
     assert.strictEqual(internet.calls[0]?.headers["cookie"], Redacted.value(sessionInput.session));
     assert.strictEqual(league.name, "Synthetic NFL League");
     assert.deepStrictEqual(league.periodWindow, { current: 6, start: 1, end: 17 });
+    assert.strictEqual(league.currentDate, undefined);
     assert.strictEqual(league.rosterCoverage, "week");
     assert.strictEqual(league.weeklyDeadline, undefined);
     assert.strictEqual(league.waiverDays, 1);
@@ -582,6 +583,7 @@ it.effect("reads an NHL head-to-head league with qualifying-days settings and no
     });
 
     assert.deepStrictEqual(league.periodWindow, { current: 3, start: 1, end: 24 });
+    assert.strictEqual(league.currentDate, "2026-10-25");
     assert.strictEqual(league.rosterCoverage, "date");
     assert.strictEqual(league.webUrl, "https://hockey.fantasysports.yahoo.com/hockey/4001");
     assert.strictEqual(league.weeklyDeadline, "game");
@@ -614,6 +616,7 @@ it.effect("reads a rotisserie league that publishes no scoring-week window", () 
     });
 
     assert.strictEqual(league.periodWindow, undefined);
+    assert.strictEqual(league.currentDate, "2026-10-25");
     assert.strictEqual(league.rosterCoverage, "date");
     assert.strictEqual(league.scoringType, "roto");
     assert.strictEqual(league.teamCount, 12);
@@ -1302,6 +1305,7 @@ it.effect("searches free agents with one exact request and typed availability", 
         displayPosition: "WR",
         eligiblePositions: ["WR", "W/R"],
         availability: "free_agent",
+        proTeam: "SYN",
         status: { value: "healthy", code: undefined, detail: undefined },
         percentOwned: 42.5,
         percentOwnedDelta: 3,
@@ -1318,6 +1322,7 @@ it.effect("searches free agents with one exact request and typed availability", 
         displayPosition: "RB",
         eligiblePositions: ["RB"],
         availability: "waiver",
+        proTeam: undefined,
         status: {
           value: "injured_reserve",
           code: "IR-LT",
@@ -1338,6 +1343,7 @@ it.effect("searches free agents with one exact request and typed availability", 
         displayPosition: "TE",
         eligiblePositions: ["TE"],
         availability: "free_agent",
+        proTeam: undefined,
         status: { value: "unknown", code: "PUP-2027", detail: undefined },
         percentOwned: 0,
         percentOwnedDelta: 0,
@@ -1348,6 +1354,61 @@ it.effect("searches free agents with one exact request and typed availability", 
         statValue: null,
       },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("never reads a flagged search row as healthy when it names no code", () => {
+  const payload = {
+    fantasy_content: {
+      league: {
+        league_key: "466.l.4000",
+        players: {
+          "0": {
+            player: [
+              { player_key: "466.p.30001" },
+              { name: { full: "Synthetic Flagged" } },
+              { primary_position: "WR" },
+              { display_position: "WR" },
+              { status: true },
+            ],
+          },
+          "1": {
+            player: [
+              { player_key: "466.p.30002" },
+              { name: { full: "Synthetic Cleared" } },
+              { primary_position: "RB" },
+              { display_position: "RB" },
+              { status: false },
+            ],
+          },
+          count: 2,
+        },
+      },
+    },
+  };
+  const internet = recordingInternet(() => jsonResponse(payload));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const result = yield* provider.searchPlayers({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      season: 2026,
+      query: undefined,
+      availability: "all",
+      sort: "name",
+      statId: undefined,
+      statType: "season",
+      limit: 10,
+    });
+
+    assert.deepStrictEqual(
+      result.players.map((player) => [player.name, player.status.value, player.status.code]),
+      [
+        ["Synthetic Flagged", "unknown", undefined],
+        ["Synthetic Cleared", "healthy", undefined],
+      ],
+    );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -3254,6 +3315,7 @@ function planLeague(input: {
     maxInningsPitched: undefined,
     startDate: "2026-09-03",
     endDate: "2026-12-28",
+    currentDate: undefined,
     teamCount: 10,
     format: "head_to_head_points",
     scoringType: "head",

@@ -254,6 +254,7 @@ const footballLeague: ProviderLeagueSettings = {
   maxInningsPitched: undefined,
   startDate: "2026-09-03",
   endDate: "2026-12-28",
+  currentDate: undefined,
   teamCount: 10,
   format: "head_to_head_categories",
   scoringType: "head",
@@ -285,6 +286,7 @@ const hockeyLeague: ProviderLeagueSettings = {
   maxInningsPitched: undefined,
   startDate: "2026-10-01",
   endDate: "2027-04-10",
+  currentDate: undefined,
 };
 
 const longSeasonHockeyLeague: ProviderLeagueSettings = {

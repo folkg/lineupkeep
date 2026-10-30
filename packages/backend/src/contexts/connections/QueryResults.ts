@@ -216,7 +216,7 @@ const GamesPlayedUsage = Schema.Struct({
 }).pipe(
   Schema.annotate({
     description:
-      "Per-team games played is not published. The provider's `out=games_played` teams read returns an empty per-team node, so only the league's games-played cap is known.",
+      "Per-team games played is not published. The provider's `teams;out=games_played` read returns an empty per-team node, and its roster, standings, and players reads refuse that output, so only the league's games-played cap is known.",
   }),
 );
 export type AcquisitionUsage = typeof AcquisitionUsage.Type;
@@ -622,6 +622,12 @@ const SearchPlayer = Schema.Struct({
   name: Schema.NonEmptyString,
   primaryPosition: Schema.NonEmptyString,
   displayPosition: Schema.NonEmptyString,
+  proTeam: Schema.NullOr(Schema.NonEmptyString).pipe(
+    Schema.annotate({
+      description:
+        "The player's professional team abbreviation as the provider publishes it, the same value a roster entry carries under `proTeam`, so a pool player joins a schedule without another read. Null means the provider published no professional team for this row.",
+    }),
+  ),
   eligiblePositions: Schema.Array(Schema.NonEmptyString),
   availability: Schema.Literals(["free_agent", "waiver", "rostered", "unknown"]),
   status: Schema.Struct({
@@ -1069,6 +1075,11 @@ export const SummaryGroup = Schema.Literals([
 ]);
 export type SummaryGroup = typeof SummaryGroup.Type;
 
+const SummaryWindowDate = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
+  Schema.annotate({ description: "Calendar date as `YYYY-MM-DD`." }),
+);
+
 export const GetTeamSummaryInput = Schema.Struct({
   team: TeamId,
   groups: Schema.optional(
@@ -1076,7 +1087,23 @@ export const GetTeamSummaryInput = Schema.Struct({
       Schema.check(Schema.isMaxLength(6)),
       Schema.annotate({
         description:
-          "Sections to include. Defaults to `league`, `standings`, `matchup`, and `roster`. `categories` adds the season category totals and points plus the matchup's per-category values. `schedule` adds each rostered player's scheduled games in the current scoring period with a per-date roster count. The roster and schedule sections page with the returned cursor.",
+          "Sections to include. Defaults to `league`, `standings`, `matchup`, and `roster`. `categories` adds the season category totals and points plus the matchup's per-category values. `schedule` adds each rostered player's scheduled games for the window this result states, with a per-date roster count. The roster and schedule sections page with the returned cursor.",
+      }),
+    ),
+  ),
+  window: Schema.optional(
+    Schema.Struct({ start: SummaryWindowDate, end: SummaryWindowDate }).pipe(
+      Schema.annotate({
+        description:
+          "Inclusive date window for the `schedule` group. It is used instead of the league's scoring period and is the way to read a schedule for a league whose provider publishes no period, such as a rotisserie hockey league. The provider bounds one schedule read to 21 dates, so a wider window is refused with that limit rather than truncated.",
+      }),
+    ),
+  ),
+  days: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(366)).pipe(
+      Schema.annotate({
+        description:
+          "Length in days of the `schedule` window, counted from the provider's current date for the league. It is used only when `window` is absent, and takes precedence over the league's scoring period. The provider bounds one schedule read to 21 dates and refuses a longer window with that limit rather than truncating it, so a longer `days` value is refused too. Omitting both `window` and `days` keeps the scoring period when the league has one and otherwise reads from the provider's current date through the end of that week.",
       }),
     ),
   ),
@@ -1234,13 +1261,13 @@ export const SummarySchedulePlayer = Schema.Struct({
   status: Schema.Literals(["scheduled", "no_games"]).pipe(
     Schema.annotate({
       description:
-        "`scheduled` when the player's team plays in this scoring period, `no_games` when the provider publishes no game for them in it. `no_games` is an answer about the player, not a statement that the provider is unsupported.",
+        "`scheduled` when the player's team plays in the window this section states, `no_games` when the provider publishes no game for them in it. `no_games` is an answer about the player, not a statement that the provider is unsupported.",
     }),
   ),
   gameCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
     Schema.annotate({
       description:
-        "Number of games the player's team plays in this scoring period: the dates with an opponent, or one opponent when the league's coverage is a scoring week.",
+        "Number of games the player's team plays in the window this section states: the dates with an opponent, or one opponent when the league's coverage is a scoring week.",
     }),
   ),
   games: Schema.Array(SummaryScheduledGame),
@@ -1257,15 +1284,48 @@ const SummaryScheduleDate = Schema.Struct({
   ),
 });
 
+export const SummaryScheduleWindow = Schema.Struct({
+  start: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "First date the schedule covers, inclusive." }),
+  ),
+  end: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "Last date the schedule covers, inclusive." }),
+  ),
+  source: Schema.Literals(["period", "requested", "rest_of_week"]).pipe(
+    Schema.annotate({
+      description:
+        "Where this window came from. `period` is the league's own scoring-period window; `requested` is a `window` or `days` argument on this call; `rest_of_week` is the default for a league with no scoring period, counted from the provider's current date through the end of that week. The dates covered are in `start` and `end`, never inferred by the client.",
+    }),
+  ),
+});
+export type SummaryScheduleWindow = typeof SummaryScheduleWindow.Type;
+
 const SummarySchedule = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("available"),
     coverage: Schema.Literals(["date", "week"]),
-    period: QueryPeriod,
+    period: Schema.optional(QueryPeriod).pipe(
+      Schema.annotate({
+        description:
+          "The scoring period that bounds this schedule. Absent for a league whose provider publishes no scoring period, such as a rotisserie league; `window` states the dates covered instead.",
+      }),
+    ),
+    window: Schema.optional(SummaryScheduleWindow).pipe(
+      Schema.annotate({
+        description:
+          "The inclusive dates this schedule covers and where they came from. Present for date coverage; a scoring-week league states the week in `period` instead.",
+      }),
+    ),
+    observedAt: Schema.DateTimeUtc.pipe(
+      Schema.annotate({
+        description:
+          "When these games were read from the provider. Compare it against now to judge staleness.",
+      }),
+    ),
     dates: Schema.optional(Schema.Array(SummaryScheduleDate)).pipe(
       Schema.annotate({
         description:
-          "Every date of the scoring period with the roster's game count for it. Present only for date coverage; a scoring-week league has no per-date view.",
+          "Every date of the window with the roster's game count for it. Present only for date coverage; a scoring-week league has no per-date view.",
       }),
     ),
     players: Schema.Array(SummarySchedulePlayer).pipe(
@@ -1295,6 +1355,7 @@ const SummaryRosterPlayer = Schema.Struct({
     code: Schema.optional(Schema.String),
   }),
 });
+export type SummaryRosterPlayer = typeof SummaryRosterPlayer.Type;
 
 export const TeamSummaryData = Schema.Struct({
   status: QueryStatus,
@@ -1312,7 +1373,7 @@ export const TeamSummaryData = Schema.Struct({
   schedule: Schema.optional(SummarySchedule).pipe(
     Schema.annotate({
       description:
-        "Each rostered player's scheduled games in the current scoring period, present when the `schedule` group is requested. A league whose provider publishes no dated period window says so instead of returning an empty list.",
+        "Each rostered player's scheduled games for the window stated in this section, present when the `schedule` group is requested. A league whose provider publishes no scoring period reads a requested `window` or the rest of the week; when neither is available the section says so and names the argument to pass.",
     }),
   ),
   probableStarters: Schema.optional(
@@ -1321,7 +1382,12 @@ export const TeamSummaryData = Schema.Struct({
       detail: Schema.String,
     }),
   ),
-  roster: Schema.Array(SummaryRosterPlayer),
+  roster: Schema.optional(Schema.Array(SummaryRosterPlayer)).pipe(
+    Schema.annotate({
+      description:
+        "One page of this team's roster, present only when `roster` is among the requested groups. The key is absent when the group was not requested, which is different from an empty page; the roster and schedule sections share `page` and the returned cursor.",
+    }),
+  ),
   coverage: Schema.Array(QueryCoverage),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,

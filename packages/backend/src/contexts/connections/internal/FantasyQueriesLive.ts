@@ -1,4 +1,4 @@
-import { Array as EffectArray, DateTime, Effect, Layer } from "effect";
+import { Array as EffectArray, DateTime, Effect, Layer, Option } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
@@ -62,6 +62,8 @@ import type {
   SummaryGroup,
   SummarySchedulePlayer,
   SummaryScheduleWeek,
+  SummaryRosterPlayer,
+  SummaryScheduleWindow,
   TeamSummaryData,
 } from "#contexts/connections/QueryResults.ts";
 import {
@@ -933,6 +935,7 @@ export const FantasyQueriesLive = Layer.effect(
         name: player.name,
         primaryPosition: player.primaryPosition,
         displayPosition: player.displayPosition,
+        proTeam: player.proTeam ?? null,
         eligiblePositions: player.eligiblePositions,
         availability: player.availability,
         status: {
@@ -1738,6 +1741,21 @@ export const FantasyQueriesLive = Layer.effect(
         });
       }
       const includes = (group: SummaryGroup): boolean => groups.includes(group);
+      if (input.window !== undefined && input.days !== undefined) {
+        return yield* QuerySelectionInvalid.make({
+          detail: "Pass `window` or `days` for the schedule, not both.",
+        });
+      }
+      const requestedDates =
+        input.window === undefined
+          ? undefined
+          : scheduleWindowDates(input.window.start, input.window.end);
+      if (input.window !== undefined && requestedDates === undefined) {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "`window` needs real `YYYY-MM-DD` dates in order, with `start` on or before `end`.",
+        });
+      }
       const coverageEntries: QueryCoverage[] = [];
       const failures: QueryFailure[] = [];
       const statRefs = new Map<number, StatRef>();
@@ -1979,7 +1997,7 @@ export const FantasyQueriesLive = Layer.effect(
         leagueKey: context.owned.team.providerLeagueKey,
         playerKeys: rosterPlayers.map((player) => player.providerPlayerKey),
       });
-      const rosterRowByKey = new Map<string, TeamSummaryData["roster"][number]>();
+      const rosterRowByKey = new Map<string, SummaryRosterPlayer>();
       for (const [player, ref] of EffectArray.zip(rosterPlayers, rosterRefs)) {
         rosterRowByKey.set(player.providerPlayerKey, {
           player: ref,
@@ -2113,14 +2131,21 @@ export const FantasyQueriesLive = Layer.effect(
         currentMatchup,
         matchupOutcome?._tag === "ok" ? matchupOutcome.value : undefined,
       );
-      const schedulePeriod: ProviderSchedulePeriod | undefined =
-        league === undefined || period === undefined
-          ? undefined
-          : league.rosterCoverage === "week"
-            ? { type: "week", week: period.week }
-            : windowDates === undefined
-              ? undefined
-              : { type: "date", start: windowDates.start, end: windowDates.end };
+      const scheduleWindowResolution: ScheduleWindowResolution = !includes("schedule")
+        ? { status: "unavailable", detail: "The schedule group was not requested." }
+        : league === undefined
+          ? { status: "unavailable", detail: leagueUnavailableDetail(leagueOutcome) }
+          : resolveScheduleWindow({
+              league,
+              period,
+              requestedDates,
+              days: input.days,
+              weekDates: windowDates,
+            });
+      const schedulePeriod =
+        scheduleWindowResolution.status === "resolved"
+          ? scheduleWindowResolution.period
+          : undefined;
       const scheduleOutcome =
         !includes("schedule") || schedulePeriod === undefined
           ? undefined
@@ -2133,28 +2158,23 @@ export const FantasyQueriesLive = Layer.effect(
                 period: schedulePeriod,
               }),
             );
+      const scheduleObservedAt = yield* DateTime.now;
       const schedulePlayerByKey = new Map<string, SummarySchedulePlayer>();
       let scheduleSection: TeamSummaryData["schedule"];
       if (!includes("schedule")) {
         scheduleSection = undefined;
       } else if (
+        scheduleWindowResolution.status === "unavailable" ||
         schedulePeriod === undefined ||
-        scheduleOutcome === undefined ||
-        league === undefined ||
-        period === undefined
+        scheduleOutcome === undefined
       ) {
         scheduleSection = {
           status: "unsupported",
-          detail: scheduleUnavailableDetail({
-            league: leagueOutcome,
-            leagueSettings: league,
-            period,
-            matchup: matchupOutcome,
-          }),
+          detail:
+            scheduleWindowResolution.status === "unavailable"
+              ? scheduleWindowResolution.detail
+              : "The provider did not return a schedule for this window.",
         };
-        if (matchupOutcome?._tag === "failed") {
-          failures.push(matchupOutcome.failure);
-        }
       } else if (scheduleOutcome._tag !== "ok") {
         scheduleSection = {
           status: "unsupported",
@@ -2184,24 +2204,32 @@ export const FantasyQueriesLive = Layer.effect(
             games: scheduledGames(player.games),
           });
         }
+        const scheduleWindow = scheduleWindowResolution.window;
         scheduleSection = {
           status: "available",
-          coverage: league.rosterCoverage,
-          period,
-          ...(league.rosterCoverage === "date" ? { dates: scheduleDateCounts(schedule) } : {}),
+          coverage: scheduleWindowResolution.coverage,
+          ...(period === undefined ? {} : { period }),
+          ...(scheduleWindow === undefined ? {} : { window: scheduleWindow }),
+          observedAt: scheduleObservedAt,
+          ...(scheduleWindow === undefined ? {} : { dates: scheduleDateCounts(schedule) }),
           players: [],
-          detail: schedulePeriodDetail(league.rosterCoverage, period, windowDates, schedule.dates),
+          detail: schedulePeriodDetail({
+            coverage: scheduleWindowResolution.coverage,
+            period,
+            window: scheduleWindow,
+            dates: schedule.dates,
+          }),
         };
         coverageEntries.push(
-          league.rosterCoverage === "date"
-            ? coverage(
+          scheduleWindow === undefined
+            ? coverage("schedule", "roster_schedule", fetchedAt, period)
+            : coverage(
                 "schedule",
                 "roster_schedule",
                 fetchedAt,
                 undefined,
                 `Dated roster reads for ${schedule.dates.join(", ")}`,
-              )
-            : coverage("schedule", "roster_schedule", fetchedAt, period),
+              ),
         );
       }
       if (scheduleSection?.status === "unsupported") {
@@ -2298,6 +2326,8 @@ export const FantasyQueriesLive = Layer.effect(
           `team=${input.team}`,
           `groups=${[...groups].sort().join(",")}`,
           `period=${rosterPeriod === undefined ? "date" : String(rosterPeriod.week)}`,
+          `window=${input.window === undefined ? "period" : `${input.window.start}..${input.window.end}`}`,
+          `days=${input.days === undefined ? "default" : String(input.days)}`,
           "order=slot,player,rank",
         ].join("|"),
       );
@@ -2333,7 +2363,7 @@ export const FantasyQueriesLive = Layer.effect(
         budget: queryBudget,
       };
       const playerRows: ReadonlyArray<{
-        readonly roster: TeamSummaryData["roster"][number] | undefined;
+        readonly roster: SummaryRosterPlayer | undefined;
         readonly schedule: SummarySchedulePlayer | undefined;
       }> = [
         ...rosterPlayers.map((player) => ({
@@ -2344,6 +2374,21 @@ export const FantasyQueriesLive = Layer.effect(
           .filter(([providerPlayerKey]) => !rosterRowByKey.has(providerPlayerKey))
           .map(([, row]) => ({ roster: undefined, schedule: row })),
       ];
+      const sectionCandidates: Array<readonly [string, unknown]> = Object.entries(base).filter(
+        ([name]) =>
+          name !== "status" &&
+          name !== "team" &&
+          name !== "coverage" &&
+          name !== "failures" &&
+          name !== "budget",
+      );
+      if (includes("roster")) {
+        sectionCandidates.push(["roster", playerRows[0]?.roster]);
+      }
+      if (scheduleSection !== undefined) {
+        sectionCandidates.push(["schedule", scheduleSection]);
+      }
+      const largestSection = largestSectionBytes(sectionCandidates);
       return yield* fitPage({
         schema: TeamSummarySchema,
         rows: playerRows,
@@ -2353,17 +2398,20 @@ export const FantasyQueriesLive = Layer.effect(
           ? {
               resource: "team_summary.roster",
               groups: summaryGroups,
-              remedy:
-                "Request fewer summary groups so the selected sections and one roster page fit, or drop `roster` entirely and page it with `get_rosters`. The roster pages with the returned cursor; available groups are league, standings, categories, matchup, schedule, and roster.",
+              remedy: `Request fewer summary groups so the selected sections and one roster page fit, or drop \`roster\` entirely and page it with \`get_rosters\`. ${largestSection} The roster pages with the returned cursor, and the available groups are league, standings, categories, matchup, schedule, and roster.`,
             }
           : {
               resource: "team_summary",
               groups: summaryGroups,
-              remedy: `No roster page was requested, so the selected sections alone exceed the result budget. Request fewer groups (currently ${groups.join(", ")}); available groups are league, standings, categories, matchup, schedule, and roster.`,
+              remedy: `No roster page was requested, so the selected sections alone exceed the result budget. ${largestSection} Request fewer groups (currently ${groups.join(", ")}); available groups are league, standings, categories, matchup, schedule, and roster.`,
             }),
         build: (pageRows, page) => ({
           ...base,
-          roster: pageRows.flatMap((row) => (row.roster === undefined ? [] : [row.roster])),
+          ...(includes("roster")
+            ? {
+                roster: pageRows.flatMap((row) => (row.roster === undefined ? [] : [row.roster])),
+              }
+            : {}),
           ...(scheduleSection === undefined
             ? {}
             : {
@@ -2933,40 +2981,191 @@ function publishedWeekWindow(
   return undefined;
 }
 
-function scheduleUnavailableDetail(input: {
-  readonly league: ReadOutcome<ProviderLeagueSettings>;
-  readonly leagueSettings: ProviderLeagueSettings | undefined;
-  readonly period: QueryPeriod | undefined;
-  readonly matchup: ReadOutcome<ReadonlyArray<ProviderMatchup>> | undefined;
-}): string {
-  if (input.leagueSettings === undefined) {
-    return input.league._tag === "failed"
-      ? input.league.failure.message
-      : input.league._tag === "unsupported"
-        ? input.league.detail
-        : "The league settings could not be read, so no scoring period bounds the schedule.";
-  }
-  if (input.period === undefined) {
-    return "The provider publishes no current scoring period for this league, so no period bounds the schedule. It also publishes no season-long schedule.";
-  }
-  return input.matchup?._tag === "failed"
-    ? input.matchup.failure.message
-    : input.matchup?._tag === "unsupported"
-      ? input.matchup.detail
-      : "The provider publishes no date window for this scoring period, so the dates each player plays are not established. It publishes a dated window only for a league whose scoring period it reports as a matchup week.";
+type ScheduleWindowResolution =
+  | {
+      readonly status: "resolved";
+      readonly coverage: ProviderLeagueSettings["rosterCoverage"];
+      readonly period: ProviderSchedulePeriod;
+      readonly window: SummaryScheduleWindow | undefined;
+    }
+  | { readonly status: "unavailable"; readonly detail: string };
+
+const calendarDayMillis = 86_400_000;
+
+function leagueUnavailableDetail(league: ReadOutcome<ProviderLeagueSettings>): string {
+  return league._tag === "failed"
+    ? league.failure.message
+    : league._tag === "unsupported"
+      ? league.detail
+      : "The league settings could not be read, so no scoring period or current date bounds the schedule.";
 }
 
-function schedulePeriodDetail(
-  coverage: ProviderLeagueSettings["rosterCoverage"],
-  period: QueryPeriod,
-  window: { readonly start: string; readonly end: string } | undefined,
-  dates: ReadonlyArray<string>,
-): string {
-  if (coverage === "week") {
-    return `Coverage is scoring week ${String(period.week)}: each player carries at most one opponent for the week rather than per-game dates. The provider publishes no count of games inside a week, no start time, and no season-long schedule.`;
+function resolveScheduleWindow(input: {
+  readonly league: ProviderLeagueSettings;
+  readonly period: QueryPeriod | undefined;
+  readonly requestedDates: ReadonlyArray<string> | undefined;
+  readonly days: number | undefined;
+  readonly weekDates: { readonly start: string; readonly end: string } | undefined;
+}): ScheduleWindowResolution {
+  if (input.league.rosterCoverage === "week") {
+    if (input.requestedDates !== undefined || input.days !== undefined) {
+      return {
+        status: "unavailable",
+        detail:
+          "This league's coverage is a scoring week, so the provider publishes one opponent for the week and no per-date schedule. Omit `window` and `days` to read the week.",
+      };
+    }
+    return input.period === undefined
+      ? {
+          status: "unavailable",
+          detail:
+            "The league's current scoring week could not be read, so no week bounds the schedule. Pass `window` or `days` only for a league whose coverage is by date.",
+        }
+      : {
+          status: "resolved",
+          coverage: "week",
+          period: { type: "week", week: input.period.week },
+          window: undefined,
+        };
   }
-  const range = window === undefined ? "" : ` (${window.start} to ${window.end})`;
-  return `Each rostered player's opponent on each of the ${String(dates.length)} dates of scoring period ${String(period.week)}${range}. The provider publishes no start time, so a light night counts rostered players rather than hours, and it publishes no season-long schedule, so only this period is covered.`;
+  if (input.requestedDates !== undefined) {
+    return dateWindowResolution(input.requestedDates, "requested");
+  }
+  if (input.days !== undefined) {
+    const anchor =
+      input.league.currentDate === undefined ? undefined : calendarDate(input.league.currentDate);
+    if (anchor === undefined) {
+      return {
+        status: "unavailable",
+        detail:
+          "The provider publishes no current date for this league, so a `days` window has no start. Pass `window` with explicit `start` and `end` dates.",
+      };
+    }
+    return dateWindowResolution(
+      calendarDates(anchor, DateTime.add(anchor, { days: input.days - 1 })),
+      "requested",
+    );
+  }
+  if (input.period !== undefined) {
+    if (input.weekDates === undefined) {
+      return {
+        status: "unavailable",
+        detail:
+          "The provider publishes no date window for this scoring period, so the dates each player plays are not established. Pass `window` or `days` to choose one; it publishes a dated window only for a league whose scoring period it reports as a matchup week.",
+      };
+    }
+    const dates = scheduleWindowDates(input.weekDates.start, input.weekDates.end);
+    return dates === undefined
+      ? {
+          status: "unavailable",
+          detail:
+            "The provider's scoring-period window is not a pair of calendar dates, so no dates bound the schedule. Pass `window` with explicit `start` and `end` dates.",
+        }
+      : dateWindowResolution(dates, "period");
+  }
+  const anchor =
+    input.league.currentDate === undefined ? undefined : calendarDate(input.league.currentDate);
+  if (anchor === undefined) {
+    return {
+      status: "unavailable",
+      detail:
+        "The provider publishes neither a scoring period nor a current date for this league, so no window bounds the schedule. Pass `window` with explicit `start` and `end` dates, or `days` for a day count.",
+    };
+  }
+  return dateWindowResolution(calendarDates(anchor, restOfWeekEnd(anchor)), "rest_of_week");
+}
+
+function dateWindowResolution(
+  dates: ReadonlyArray<string> | undefined,
+  source: SummaryScheduleWindow["source"],
+): ScheduleWindowResolution {
+  const start = dates?.[0];
+  const end = dates?.at(-1);
+  return start === undefined || end === undefined
+    ? {
+        status: "unavailable",
+        detail:
+          "The requested dates are not a calendar range in order, so no window bounds the schedule. Pass `window` with `start` on or before `end`.",
+      }
+    : {
+        status: "resolved",
+        coverage: "date",
+        period: { type: "date", start, end },
+        window: { start, end, source },
+      };
+}
+
+function calendarDate(value: string): DateTime.Utc | undefined {
+  const parsed = DateTime.make(`${value}T00:00:00.000Z`);
+  return Option.isSome(parsed) && DateTime.formatIsoDate(parsed.value) === value
+    ? parsed.value
+    : undefined;
+}
+
+function calendarDates(start: DateTime.Utc, end: DateTime.Utc): ReadonlyArray<string> | undefined {
+  const span = Math.floor(
+    (DateTime.toEpochMillis(end) - DateTime.toEpochMillis(start)) / calendarDayMillis,
+  );
+  return span < 0
+    ? undefined
+    : globalThis.Array.from({ length: span + 1 }, (_, index) =>
+        DateTime.formatIsoDate(DateTime.add(start, { days: index })),
+      );
+}
+
+function scheduleWindowDates(start: string, end: string): ReadonlyArray<string> | undefined {
+  const from = calendarDate(start);
+  const to = calendarDate(end);
+  return from === undefined || to === undefined ? undefined : calendarDates(from, to);
+}
+
+function restOfWeekEnd(date: DateTime.Utc): DateTime.Utc {
+  const daysUntilSunday = (7 - DateTime.toPartsUtc(date).weekDay) % 7;
+  return DateTime.add(date, { days: daysUntilSunday });
+}
+
+function schedulePeriodDetail(input: {
+  readonly coverage: ProviderLeagueSettings["rosterCoverage"];
+  readonly period: QueryPeriod | undefined;
+  readonly window: SummaryScheduleWindow | undefined;
+  readonly dates: ReadonlyArray<string>;
+}): string {
+  const boundaries =
+    "The provider publishes no start time, so a light night counts rostered players rather than hours, and it publishes no season-long schedule, so only this window is covered.";
+  if (input.coverage === "week") {
+    return `Coverage is scoring week ${String(input.period?.week)}: each player carries at most one opponent for the week rather than per-game dates. The provider publishes no count of games inside a week, no start time, and no season-long schedule.`;
+  }
+  const range = input.window === undefined ? "" : ` (${input.window.start} to ${input.window.end})`;
+  const count = String(input.dates.length);
+  switch (input.window?.source) {
+    case "requested":
+      return `Each rostered player's opponent on each of the ${count} dates of the requested window${range}. ${boundaries}`;
+    case "rest_of_week":
+      return `Each rostered player's opponent on each of the ${count} dates of the rest of the provider's current week${range}, because this league publishes no scoring period. ${boundaries} Pass \`window\` or \`days\` to read a different set of dates.`;
+    case "period":
+    case undefined:
+      return `Each rostered player's opponent on each of the ${count} dates of scoring period ${String(input.period?.week)}${range}. ${boundaries}`;
+  }
+}
+
+function largestSectionBytes(entries: ReadonlyArray<readonly [string, unknown]>): string {
+  const measured = entries
+    .flatMap(([name, value]) => {
+      if (value === undefined) {
+        return [];
+      }
+      const serialized = JSON.stringify(value);
+      return [{ name, bytes: serialized.length }];
+    })
+    .sort((left, right) => right.bytes - left.bytes)
+    .slice(0, 3);
+  if (measured.length === 0) {
+    return "No single section could be measured.";
+  }
+  const listed = measured
+    .map(({ name, bytes }) => `\`${name}\` (about ${String(bytes)} bytes)`)
+    .join(", ");
+  return `The largest sections are ${listed} of this result, so dropping one of those frees the most space.`;
 }
 
 function scheduledGames(
@@ -3222,7 +3421,7 @@ function declared<T>(
 }
 
 const gamesPlayedUsageDetail =
-  "The provider publishes no per-team games-played count: its `out=games_played` teams read returns an empty node, so only the league's games-played cap is known.";
+  "The provider publishes no per-team games-played count: its `teams;out=games_played` read returns an empty per-team node, and its roster, standings, and players reads refuse that output, so only the league's games-played cap is known.";
 
 type AcquisitionLimitValues = {
   readonly weekly: number | undefined;

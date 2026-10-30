@@ -346,6 +346,7 @@ export type ProviderLeagueSettings = {
   readonly season: number;
   readonly startDate: string | undefined;
   readonly endDate: string | undefined;
+  readonly currentDate: string | undefined;
   readonly teamCount: number;
   readonly format: LeagueFormat;
   readonly scoringType: string;
@@ -525,6 +526,7 @@ export type ProviderPlayerSearchResult = {
     readonly displayPosition: string;
     readonly eligiblePositions: ReadonlyArray<string>;
     readonly availability: "free_agent" | "waiver" | "rostered" | "unknown";
+    readonly proTeam: string | undefined;
     readonly status: {
       readonly value: ProviderPlayerStatus;
       readonly code: string | undefined;

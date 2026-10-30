@@ -49,6 +49,7 @@ import type {
   ProviderPlayerSearchInput,
   ProviderPlayerSearchResult,
   ProviderPlayerSearchSort,
+  ProviderPlayerStatus,
   ProviderReadFailure,
   ProviderRemainingGames,
   ProviderRoster,
@@ -1248,6 +1249,7 @@ function leagueSettings(
       season: attributes.season,
       startDate: optionalNonEmpty(attributes.start_date),
       endDate: optionalNonEmpty(attributes.end_date),
+      currentDate: optionalNonEmpty(attributes.current_date),
       teamCount: attributes.num_teams,
       format: leagueFormat(attributes.scoring_type, settings.stat_modifiers?.stats.length ?? 0),
       scoringType: attributes.scoring_type,
@@ -2259,7 +2261,7 @@ function toSearchPlayer(
   season: number,
   statId: number | undefined,
 ): ProviderPlayerSearchResult["players"][number] {
-  const injuryCode = searchInjuryCode(player.status);
+  const injury = searchInjuryStatus(player.status);
   return {
     providerPlayerKey: player.player_key,
     name: player.name.full,
@@ -2267,9 +2269,10 @@ function toSearchPlayer(
     displayPosition: player.display_position,
     eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
     availability: availabilityOf(player.ownership?.ownership_type),
+    proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
     status: {
-      value: yahooPlayerStatus(injuryCode),
-      code: injuryCode,
+      value: injury.value,
+      code: injury.code,
       detail:
         optionalNonEmpty(player.injury_note ?? "") ?? optionalNonEmpty(player.status_full ?? ""),
     },
@@ -3038,8 +3041,15 @@ function optionalNonEmpty(value: string | undefined): string | undefined {
   return value === undefined || value.trim() === "" ? undefined : value;
 }
 
-function searchInjuryCode(status: string | boolean | undefined): string | undefined {
-  return typeof status === "string" ? optionalNonEmpty(status) : undefined;
+function searchInjuryStatus(status: string | boolean | undefined): {
+  readonly value: ProviderPlayerStatus;
+  readonly code: string | undefined;
+} {
+  if (typeof status === "boolean") {
+    return status ? { value: "unknown", code: undefined } : { value: "healthy", code: undefined };
+  }
+  const code = optionalNonEmpty(status ?? "");
+  return { value: yahooPlayerStatus(code), code };
 }
 
 const SessionCookie = Schema.Trim.pipe(
@@ -3142,6 +3152,7 @@ const LeagueAttributes = Schema.Struct({
   end_week: Schema.optional(IntFromStringOrNumber),
   start_date: Schema.optional(Schema.String),
   end_date: Schema.optional(Schema.String),
+  current_date: Schema.optional(Schema.String),
   scoring_type: Schema.NonEmptyString,
   scoring_label: Schema.optional(Schema.String),
   weekly_deadline: Schema.optional(Schema.String),
@@ -3360,6 +3371,7 @@ const SearchPlayerPayload = Schema.Struct({
   primary_position: Schema.NonEmptyString,
   display_position: Schema.NonEmptyString,
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
+  editorial_team_abbr: Schema.optional(Schema.String),
   ownership: Schema.optional(PlayerOwnership),
   percent_owned: Schema.optional(PercentOwned),
   percent_started: Schema.optional(PercentOwned),

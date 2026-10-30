@@ -137,8 +137,12 @@ A game the provider publishes for a rostered player in a scoring period: the opp
 _Avoid_: Fixture, matchup (a matchup is between fantasy teams), game time
 
 **Scoring-period schedule**:
-Every rostered player's scheduled games in one scoring period, with each player's games-in-period count and a per-date count across the roster so a light night needs no arithmetic. A league whose provider publishes no period window has no scoring-period schedule, which is stated with the reason rather than returned as an empty list.
+Every rostered player's scheduled games in one scoring period, with each player's games-in-period count and a per-date count across the roster so a light night needs no arithmetic. A league whose provider publishes no period window has no scoring-period schedule; its schedule is read over a schedule window instead, and the result names the source.
 _Avoid_: Season schedule, full schedule, light night when the per-date count is meant
+
+**Schedule window**:
+The inclusive dates a schedule read covers and where they came from: the league's scoring period, a window or day count requested on the call, or the rest of the provider's current week when the league publishes no period. The result states the window and its observation time. When the provider establishes neither a period nor a current date and the call requested neither, the window is refused with the argument to pass rather than invented.
+_Avoid_: Guessed week, assumed dates, games remaining when the window is meant
 
 ## Automation
 

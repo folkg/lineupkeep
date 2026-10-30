@@ -1425,3 +1425,76 @@ team name, or manager identity was printed or written.
   objects carried the counters, so the "provider published neither counter" state remains covered
   by synthetic fixtures rather than by today's live data. The adapter distinguishes it from a
   published zero at the provider type and at the query surface.
+
+## Live schedule-window, status, and games-played probes (2026-10-30, round 9)
+
+A read-only pass re-used the stored provider credential through the application's own credential
+service and `PublicInternet`, then ran the committed `FantasyQueries.getTeamSummary` and
+`searchPlayers` against the owner's linked teams. Retained evidence holds dates, counts, field names,
+JSON types, status codes, and byte sizes only; no cookie, league id, team key, team name, player
+name, or manager identity was printed or written. Nothing was written to the provider.
+
+### The period-less league publishes a current date
+
+- `GET .../league/{rotisserie hockey league}/settings` published `current_date: "2026-10-30"` and no
+  `current_week`; its scoreboard published no week window. `current_date` is the anchor the schedule
+  group uses for the rest-of-week default. Both hockey leagues published `current_date`; the sampled
+  football league did not, so the adapter keeps it optional and refuses a `days` window when it is
+  absent.
+- `GET .../team/{team}/roster;date=YYYY-MM-DD/players;out=opponent` answered 200 for each date of
+  the rest of the provider's week (Friday through Sunday) and returned one opponent or `null` per
+  player, with a leading `@` for away, matching the earlier pass.
+- Through `getTeamSummary`, the rotisserie league returned a three-date window
+  (`2026-10-30` to `2026-11-01`, source `rest_of_week`), 23 players across two pages, and per-date
+  roster counts of 4, 15, and 5. The head-to-head league returned its scoring-period window
+  (`2026-10-26` to `2026-11-01`, source `period`) unchanged.
+
+### Search rows publish the professional team, and the status vocabulary is wider
+
+- `GET .../league/{league}/players;sort=NAME;count=50;search={letter};out=ownership` carried
+  `editorial_team_abbr` on search rows as well as roster rows, so `search_players` now publishes it
+  as `proTeam`. In the live tool read, ten of ten ownership-sorted rows carried one.
+- Across five leagues and eighteen name queries the observed search `status` values were `O` (24),
+  `Q` (18), `DTD` (12), `IR` (139), `IR-LT` (92), `IR-NR` (76), `IR-R` (5), and `NA` (2,602 across
+  two wordings: "Not Active" and "Inactive: Coach's Decision or Not on Roster"). `IR+` was not
+  sampled this pass but remains in the adapter's table from earlier evidence. `IR-NR` and `IR-R`
+  were not in the table, so those players read `unknown`; their `status_full` wording is "Injured
+  Reserve" and "Injured Reserve - Designated for Return", which is the injured-reserve shape the
+  adapter already models. Both codes are now mapped to `injured_reserve`.
+- An earlier observation that healthy search rows carry `status: false` was a misread of the
+  payload: the boolean belongs to `is_keeper.status` on the player record. A healthy player row
+  simply omits `status`, exactly as a healthy roster row does. The adapter already decoded a missing
+  status as healthy; the adapter's own fixture set the boolean at the wrong level and is corrected
+  through the typed provider rows rather than by trusting `is_keeper`.
+
+### Games-played request shapes
+
+Every shape below was requested read-only against the owner's hockey and football leagues.
+
+| Request                                                                  | Status | Games-played result                                        |
+| ------------------------------------------------------------------------ | ------ | ---------------------------------------------------------- |
+| `GET /league/{league}/teams;out=games_played`                            | 200    | one `"games_played": []` per team (13 hockey, 12 football) |
+| `GET /league/{league}/teams;out=games_played;type=season`                | 200    | same empty per-team node                                   |
+| `GET /league/{league}/teams;team_keys={team};out=games_played`           | 200    | same empty per-team node                                   |
+| `GET /league/{league}/teams;team_keys={team};out=games_played;type=date` | 200    | same empty per-team node                                   |
+| `GET /league/{league}/teams;out=games_played,roster`                     | 200    | same empty per-team node                                   |
+| `GET /team/{team}/roster;out=games_played`                               | 400    | unsupported output                                         |
+| `GET /team/{team}/roster;date=…/players;out=games_played`                | 400    | unsupported output                                         |
+| `GET /team/{team}/roster;week=…/players;out=games_played`                | 400    | unsupported output                                         |
+| `GET /league/{league}/standings;out=games_played`                        | 400    | unsupported output                                         |
+| `GET /league/{league}/players;out=games_played`                          | 400    | unsupported output                                         |
+| `GET /team/{team}/stats;type=season`                                     | 200    | no games-played field                                      |
+
+The node exists only as a `teams` output and is empty in every league sampled, so the per-team
+usage remains `not_published`; the detail names the accepted-but-empty shape instead of implying the
+field was never requested.
+
+### Transaction timing
+
+The settings payload for all five leagues carries `waiver_type`, `waiver_rule`, `uses_faab`,
+`waiver_time`, `weekly_deadline`, `trade_end_date`, `trade_ratify_type`, and `trade_reject_time`. It
+carries no field naming the roster-transaction deadline as same-day or next-day. Yahoo's public help
+describes an "Allow roster changes" league setting with "Daily - Today", "Daily - Tomorrow", and
+weekly forms, but the settings payload does not map those names to a field, and inferring the rule
+from `weekly_deadline` (observed as `""` or `"intraday"`) would guess. The tool description states
+that the rule is not published, and the published fields are returned as they are.

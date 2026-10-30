@@ -570,6 +570,7 @@ function league(
     season: 2026,
     startDate: undefined,
     endDate: undefined,
+    currentDate: undefined,
     teamCount: 10,
     format: "head_to_head_points",
     scoringType: "head",

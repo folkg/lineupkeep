@@ -129,9 +129,10 @@ without a second read. `status: "published"` reports `seasonMovesUsed`, `weeklyA
 it is never zero used. The section's `acquisitionLimits` states the league's weekly and season limits
 once, `not_set` when the league declares none. `seasonMovesRemaining` and `weeklyAddsRemaining`
 appear only where the league declares the matching limit, so no remaining count is manufactured
-against no limit. The provider publishes no per-team games-played count — its `out=games_played`
-teams read returns an empty per-team node — so only the league's games cap is known, and the
-standings `detailNote` says so.
+against no limit. The provider publishes no per-team games-played count — its
+`teams;out=games_played` read returns an empty per-team node, and its roster, standings, and players
+reads refuse that output — so only the league's games cap is known, and the standings `detailNote`
+says so.
 
 `get_matchups` carries per-category values and the category winner (or a tie) for category
 leagues, plus `remainingGames` for the scoring week where the provider publishes it. Its `schedule`
@@ -142,17 +143,20 @@ per-professional-team remaining-game count and no probable-starter field, so `ge
 `proTeam`, injury, and the bye week where published; its `playerSchedule` declaration states the
 per-player schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group
 publishes the games themselves. `search_players` reports provider ownership/started percentages
-without inventing either.
+without inventing either, and publishes the player's professional team as `proTeam`, the same
+abbreviation a roster entry carries, so a pool player joins a schedule without another read.
 
 `search_players` rows carry the provider's screening status, because a client choosing between
 available players needs to see an injured-reserve free agent before recommending them. `status.value`
 is `healthy`, `day_to_day`, `out`, `injured_reserve`, or `unknown`; `status.code` keeps the provider's
-own code (for example `IR-LT`) and `status.detail` its own wording where it publishes one, such as an
-injury note. `status.observedAt` is the instant the status was read, so a client can judge staleness
+own code (for example `IR-LT`, `IR-NR`, or `IR-R`) and `status.detail` its own wording where it
+publishes one, such as an injury note. `status.observedAt` is the instant the status was read, so a client can judge staleness
 against its own clock. The provider publishes no separate expected-return field, so none is invented;
 any such text appears in the note. `unknown` is a real answer: a code this adapter has not been
 taught is reported as unknown and never as healthy, because the two lead to opposite
-recommendations. A healthy row omits `code` and `detail` rather than filling them with placeholders.
+recommendations. The provider's boolean status flag follows the same rule: `false` is healthy, while
+`true` says the provider flagged the player without naming why and is therefore `unknown`. A healthy
+row omits `code` and `detail` rather than filling them with placeholders.
 
 `search_players` rows carry the value each provider-ordered sort uses: `actualRank` (the provider's
 current-season rank, which orders `actual_rank`), `overallRank` (which orders `overall_rank`), and
@@ -229,7 +233,10 @@ and the objection window in days), and games caps (games played, and innings pit
 sport declares one). Every rule is `{ status: "published", value }` or `{ status: "not_set" }`: a
 league that sets no such limit reports `not_set` rather than zero or an omitted field, and a cap
 that does not apply to the league's sport is not manufactured. An unfamiliar provider ratification
-rule is `unknown`, never guessed as one of the named forms. Per-team usage is published with the
+rule is `unknown`, never guessed as one of the named forms. The settings publish the waiver fields
+and the `weeklyDeadline` value, but nothing that states whether an add or drop takes effect the same
+day or the next day; `timing` reports the published fields and the tool description says the rule is
+not stated rather than leaving a client to infer it. Per-team usage is published with the
 team objects the provider returns: every standings row carries it, and `get_team_summary` repeats
 the owning team's usage beside the league limits. The provider publishes no per-team games-played
 count, so `transactionRules.detailNote` states that only the league's games cap is known.
@@ -252,29 +259,43 @@ team; football declares it unsupported with the bye-week alternative, and probab
 always declared unsupported because no read shape exposes them.
 
 The `schedule` group answers what a client cannot otherwise compute: which games a candidate has in
-the current scoring period, and which nights are light. For every rostered player it reports the
-dates they play, the opponent abbreviation, whether the game is home or away, and a games-in-period
-count; `dates` carries a per-date count across the roster, so a light night needs no client-side
-arithmetic and no second schedule source. A player who does not play in the period is
-`status: "no_games"` with a count of zero, never an empty success that reads as unsupported, and a
-league the provider gives no period window says so with the reason instead of returning an empty
-list. Coverage follows what the league declares: a date-scoped league is read once per date of the
-current scoring period, whose window comes from the provider's own scoring-week dates, while a
-league whose cadence is a scoring week reports that week's opponent as the honest equivalent and is
+a stated window, and which nights are light. For every rostered player it reports the dates they
+play, the opponent abbreviation, whether the game is home or away, and a game count for the window;
+`dates` carries a per-date count across the roster, so a light night needs no client-side arithmetic
+and no second schedule source. The section states its own `window` — the inclusive `start` and `end`
+dates and a `source` — and `observedAt`, so a client never has to assume which dates were covered.
+`source` is `period` when the window is the league's own scoring period, `requested` when the call
+passed `window` or `days`, and `rest_of_week` when a league with no scoring period was read from the
+provider's current date through the end of that week. A player who does not play in the window is
+`status: "no_games"` with a count of zero, never an empty success that reads as unsupported.
+
+A league the provider gives no period window is no longer a dead end: `get_team_summary` accepts a
+date `window` or a `days` count for the schedule, and a period-less date-scoped league defaults to
+the rest of the provider's current week. Games remaining in a period are genuinely undefined without
+a period, but games per date are not, and that is the lineup decision the client needs. When the
+provider publishes neither a period nor a current date and the call passed neither argument, the
+section says so in one sentence and names `window`/`days` instead of inventing dates. An explicit
+`window` or `days` takes precedence over a scoring period and is marked `requested`. Coverage
+follows what the league declares: a date-scoped league is read once per date of the window, from the
+provider's own scoring-week dates or the requested/default window, while a league whose cadence is a
+scoring week reports that week's opponent as the honest equivalent, refuses a date window, and is
 never given invented dates. The provider publishes no start time and no season-long schedule, and
 `detail` repeats both boundaries in the result; one schedule read covers at most 21 dates, and a
 wider window is refused with that limit rather than silently truncated.
 
 The roster and schedule sections are one paged player list, and they exist only when requested: with
-neither `roster` nor `schedule` selected the response carries an empty roster array, a complete
-page, and no player read. Each call that does select them returns every requested fixed section, a
-page of those players, and `page.next`; the tool accepts that cursor on the next call, and a player
-carries one reference across both sections. The default snapshot fits a 22-player hockey roster in
-two pages (10 + 11 verified live on 2026-10-28) without dropping league, standing, record, standings,
-or matchup, and a 22-player, three-game schedule alone also returns in two pages. A budget refusal
-names what actually consumed the budget: the roster page when one was requested, and otherwise
-`team_summary` itself with the selected groups listed, because a request without a player page
-cannot have been narrowed by one. The result never emits a record token as a substitute cursor.
+neither `roster` nor `schedule` selected the response carries no `roster` key at all, a complete
+page, and no player read. An absent key is deliberate, because an empty array is not the same as
+absent and a client cannot tell them apart. Schedule rows only ever appear under `schedule`, and
+roster rows only under `roster`, so a player who entered the window's dated reads without being on
+the roster page cannot be mistaken for a roster member. Each call that does select them returns
+every requested fixed section, a page of those players, and `page.next`; the tool accepts that
+cursor on the next call, and a player carries one reference across both sections. The default
+snapshot fits a 22-player hockey roster in two pages (10 + 11 verified live on 2026-10-28) without
+dropping league, standing, record, standings, or matchup, and a 22-player, three-game schedule alone
+also returns in two pages. A budget refusal names the largest sections that consumed the result, in
+bytes, before it names the groups to drop, so a client is never told only to ask for fewer groups.
+The result never emits a record token as a substitute cursor.
 
 ### Live scoring evidence (2026-10-29)
 
@@ -314,8 +335,10 @@ retained.
 - `GET /fantasy/v2/league/{league}/scoreboard;week=N` on a head-to-head hockey league published
   `week_start` and `week_end` for the current scoring week, which is the dated period window the
   schedule group reads. The rotisserie hockey league's scoreboard published no `week`, `week_start`,
-  or `week_end`, and its league settings published no `current_week` either, so it has no date
-  window: the schedule group reports that instead of inventing one.
+  or `week_end`, and its league settings published no `current_week` either. It does publish
+  `current_date` (`2026-10-30` in this pass), which is the anchor for the rest-of-week default
+  described below; a league with neither a period nor a current date is refused rather than given an
+  invented window.
 - On a weekly football league, `roster;week=N/players;out=opponent` returned 14 opponents and one
   `Bye` across 15 rostered players, so the week's opponent is the published equivalent when the
   league's coverage is a week rather than dates.
@@ -333,6 +356,65 @@ retained.
   the roster. The `type=date;date=…` form did move opponents in this pass, which contradicts the
   earlier negative recorded for it; it was not adopted because it is not the published contract this
   surface depends on, and a search-row schedule would need its own verification.
+
+### Live tool read for the date-window schedule (2026-10-30, round 9)
+
+A read-only pass ran the committed `FantasyQueries.getTeamSummary` and `searchPlayers` against the
+owner's linked teams through the committed Yahoo provider. It recorded counts, dates, field presence,
+and statuses only; no player names, team names, identifiers, or session material were retained.
+
+- The rotisserie hockey league (13 teams, 15 categories, date coverage, no scoring period) returned
+  `schedule.status: "available"` for groups `["schedule"]` with
+  `window: { start: "2026-10-30", end: "2026-11-01", source: "rest_of_week" }`, a three-date
+  `dates` array (4, 15, and 5 roster games), one page of 16 players and a second of 7, and the full
+  23-player roster across the two pages. `period` was absent, as it must be for a league with no
+  period, and no row lacked a professional team.
+- The head-to-head hockey league returned the period behaviour unchanged:
+  `period: { week: 5 }`, `window: { start: "2026-10-26", end: "2026-11-01", source: "period" }`, the
+  same seven-date per-date counts as the earlier pass, and `observedAt` beside the window.
+- The client's exact failing group set (`league`, `standings`, `categories`, `matchup`, `roster`)
+  still returns `narrowing_required`, and now names the sections that consumed the result:
+  `standings` (about 2,532 bytes), `categoryPoints` (about 1,819), and `categoryTotals` (about
+  1,636). The default groups (`league`, `standings`, `matchup`, `roster`) returned `ok` with a
+  ten-player first page. A 13-team league with 15 categories cannot carry standings plus both
+  category arrays and a roster page inside the 16 KiB ceiling without dropping a requested section;
+  the refusal is explicit about which one to drop.
+- A single-group `["league"]` call returned keys `status`, `team`, `league`, `coverage`, `failures`,
+  `page`, and `budget`, with no `roster` key.
+- Ten search rows sorted by ownership all carried a `proTeam` string.
+
+The same pass recorded the provider status vocabulary that `search_players` decodes: `O`, `Q`,
+`DTD`, `IR`, `IR-LT`, `IR-NR` (wording "Injured Reserve"), `IR-R` (wording "Injured Reserve -
+Designated for Return"), and two `NA` wordings ("Not Active" and "Inactive: Coach's Decision or Not
+on Roster"); `IR+` remains in the adapter's table from the earlier pass. `IR-NR` and `IR-R` were
+previously untaught and read `unknown`; both are injured-reserve shapes, so the adapter now maps them
+to `injured_reserve`. A boolean `status` seen in a search payload belongs to `is_keeper.status`, not
+the player's injury status, so a row with no injury simply omits `status` and reads healthy for the
+right reason. A player-level boolean is still decoded conservatively: `false` is healthy and `true`
+is `unknown`, never healthy.
+
+### Games-played read shapes tried (2026-10-30, round 9)
+
+Every shape below was requested read-only against the owner's hockey and football leagues. The
+provider accepts `out=games_played` only as a teams output, and every per-team node it returns is
+empty, so no per-team games-played count is published:
+
+| Request                                                                  | Result                                                          |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `GET /league/{league}/teams;out=games_played`                            | 200; one `"games_played": []` per team (13 hockey, 12 football) |
+| `GET /league/{league}/teams;out=games_played;type=season`                | 200; same empty per-team node                                   |
+| `GET /league/{league}/teams;team_keys={team};out=games_played`           | 200; same empty per-team node                                   |
+| `GET /league/{league}/teams;team_keys={team};out=games_played;type=date` | 200; same empty per-team node                                   |
+| `GET /league/{league}/teams;out=games_played,roster`                     | 200; same empty per-team node                                   |
+| `GET /team/{team}/roster;out=games_played`                               | 400; unsupported output                                         |
+| `GET /team/{team}/roster;date=…/players;out=games_played`                | 400; unsupported output                                         |
+| `GET /team/{team}/roster;week=…/players;out=games_played`                | 400; unsupported output                                         |
+| `GET /league/{league}/standings;out=games_played`                        | 400; unsupported output                                         |
+| `GET /league/{league}/players;out=games_played`                          | 400; unsupported output                                         |
+| `GET /team/{team}/stats;type=season`                                     | 200; no games-played field                                      |
+
+The per-team usage field therefore keeps its honest `not_published` status, and its detail now names
+the shapes the provider accepts but leaves empty.
 
 ## Coverage correctness
 

@@ -477,6 +477,8 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
           status: "available",
           coverage: "date",
           period: { week: 5 },
+          window: { start: "2026-10-26", end: "2026-10-27", source: "period" },
+          observedAt: DateTime.makeUnsafe("2026-10-26T12:00:00.000Z"),
           dates: [
             { date: "2026-10-26", rosterGames: 0 },
             { date: "2026-10-27", rosterGames: 2 },
@@ -533,6 +535,8 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
           status: "available",
           coverage: "date",
           period: { week: 5 },
+          window: { start: "2026-10-26", end: "2026-10-27", source: "period" },
+          observedAt: "2026-10-26T12:00:00.000Z",
           dates: [
             { date: "2026-10-26", rosterGames: 0 },
             { date: "2026-10-27", rosterGames: 2 },

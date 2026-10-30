@@ -3,6 +3,37 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — round-9 MCP fixes (schedule window, roster key, search team)
+
+- `get_team_summary` accepts a `window` of inclusive dates or a `days` count for the `schedule`
+  group, so a league whose provider publishes no scoring period still gets a usable schedule. A
+  period-less date-scoped league defaults to the rest of the provider's current week. The schedule
+  section states its `window` (`start`, `end`, and `source` of `period`, `requested`, or
+  `rest_of_week`) and `observedAt`, and a league with neither a period nor a current date is refused
+  in one sentence naming `window`/`days` instead of being given invented dates. Authorizing: the
+  owner's rotisserie hockey league now returns `2026-10-30` to `2026-11-01` with per-date roster
+  counts of 4, 15, and 5, and a 23-player roster across two pages; the head-to-head league's
+  scoring-period window is unchanged.
+- `get_team_summary` omits the `roster` key entirely when the `roster` group was not requested;
+  an empty array is not the same as absent. Schedule rows appear only under `schedule`, so they
+  cannot be read as roster rows in either direction.
+- A budget refusal now names the largest sections in bytes (`standings`, `categoryPoints`,
+  `categoryTotals` for the owner's 13-team league) before naming the groups to drop, instead of only
+  asking for fewer groups. The default summary groups and a roster page fit a 13-team hockey league;
+  the exact `league`/`standings`/`categories`/`matchup`/`roster` set names the three sections that
+  consume the result.
+- `search_players` rows carry `proTeam`, the same professional-team abbreviation a roster entry
+  carries, so a pool player joins a schedule without another read. Authorizing: ten of ten live
+  ownership-sorted rows carried one.
+- `search_players` decodes the provider's `IR-NR` and `IR-R` status codes as injured reserve
+  instead of `unknown`, and a player-level boolean status flag is `unknown` when `true` rather than
+  healthy. A code the adapter has not been taught is still `unknown`.
+- `get_league` states that the provider's settings do not say whether an add or drop takes effect
+  the same day or the next day, and reports the published waiver and deadline fields as they are.
+  The no-per-team-games-played boundary now names every request shape tried: `teams;out=games_played`
+  answers with an empty per-team node, and the roster, standings, and players reads refuse that
+  output.
+
 ## Unreleased — round-8 MCP fixes, part 2 (scoring-period schedule)
 
 - `get_team_summary` accepts a `schedule` group that reports each rostered player's scheduled games

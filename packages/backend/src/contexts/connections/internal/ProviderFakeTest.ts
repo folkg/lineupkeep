@@ -554,6 +554,7 @@ const providerFake = Effect.gen(function* () {
                 displayPosition: player.displayPosition,
                 eligiblePositions: player.eligiblePositions,
                 availability: player.rosterStatus,
+                proTeam: undefined,
                 status: { value: "healthy", code: undefined, detail: undefined },
                 percentOwned: null,
                 percentOwnedDelta: null,

@@ -230,6 +230,8 @@ const yahooStatusTable: Readonly<Record<string, PlayerAvailability>> = {
   IR: { kind: "excluded", reason: "injured-reserve" },
   "IR+": { kind: "excluded", reason: "injured-reserve" },
   "IR-LT": { kind: "excluded", reason: "injured-reserve" },
+  "IR-NR": { kind: "excluded", reason: "injured-reserve" },
+  "IR-R": { kind: "excluded", reason: "injured-reserve" },
   NA: { kind: "excluded", reason: "not-active" },
   SUSP: { kind: "excluded", reason: "suspended" },
   D: { kind: "uncertain", code: "D" },

@@ -450,6 +450,7 @@ const league: ProviderLeagueSettings = {
   maxInningsPitched: undefined,
   startDate: "2026-09-03",
   endDate: "2026-12-28",
+  currentDate: undefined,
   teamCount: 10,
   format: "head_to_head_categories",
   scoringType: "head",
