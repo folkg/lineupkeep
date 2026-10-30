@@ -199,7 +199,7 @@ it("labels a pause as the rest of the fantasy day and resumes through the contro
   await expect
     .element(
       page.getByText(
-        `Paused for the rest of the fantasy day. Resumes ${formatDateTime(
+        `Paused for the rest of the fantasy day. Resumes after ${formatDateTime(
           pausedTeam.team.automation.resumesAt ?? "",
         )}.`,
       ),
@@ -230,7 +230,7 @@ it("pauses an enabled team for the rest of the fantasy day", async () => {
   await expect
     .element(
       page.getByText(
-        `Paused for the rest of the fantasy day. Resumes ${formatDateTime(
+        `Paused for the rest of the fantasy day. Resumes after ${formatDateTime(
           pausedTeam.team.automation.resumesAt ?? "",
         )}.`,
       ),

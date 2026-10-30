@@ -75,6 +75,51 @@ it.effect("runs one current-period automation per team per hour", () =>
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
+it.effect("checks all five owner teams at minute 55 without repeating an hour's period", () =>
+  Effect.gen(function* () {
+    const automation = yield* Automation;
+    const runs = yield* LineupRuns;
+    const fake = yield* FakeProviderWorld;
+    const teams = yield* Teams;
+    const seeded = yield* seedOwnerTeams(fake, 5);
+    yield* refuseCustomPlanning(fake);
+    yield* teams.control(
+      owner,
+      seeded.map((team) => ({ team, action: "enable" as const })),
+    );
+
+    const scheduled: Array<number> = [];
+    for (const at of ["2026-10-26T13:55:00Z", "2026-10-26T14:55:00Z", "2026-10-26T15:55:00Z"]) {
+      yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe(at)));
+      scheduled.push((yield* automation.run(50)).scheduledRuns);
+    }
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T15:59:00Z")));
+    const retried = yield* automation.run(50);
+    const activity = yield* runs.get(owner, { limit: 50 });
+
+    assert.deepStrictEqual(scheduled, [5, 5, 5]);
+    assert.strictEqual(retried.scheduledRuns, 0);
+    assert.strictEqual(activity.runs.length, 15);
+    assert.deepStrictEqual([...new Set(activity.runs.map((run) => run.trigger))], ["scheduled"]);
+    assert.deepStrictEqual(
+      [...new Set(activity.runs.map((run) => DateTime.formatIso(run.createdAt)))].sort(),
+      ["2026-10-26T13:55:00.000Z", "2026-10-26T14:55:00.000Z", "2026-10-26T15:55:00.000Z"],
+    );
+
+    const manual = yield* runs.submit(
+      owner,
+      yield* Schema.decodeEffect(LineupRequestInput)({
+        requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164e9",
+        teams: [{ team: Array.getUnsafe(seeded, 0), period: { coverage: "current" } }],
+      }),
+    );
+
+    assert.strictEqual(manual.runs[0]?.trigger, "manual");
+    assert.strictEqual(manual.runs[0]?.status, "completed");
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
 it.effect("collapses several missed hourly ticks into one current run", () =>
   Effect.gen(function* () {
     const automation = yield* Automation;
@@ -257,6 +302,31 @@ type SeedShape = {
   readonly roster: ProviderRoster;
   readonly nativeAfter: ProviderRoster;
 };
+
+function seedOwnerTeams(
+  fake: FakeProviderWorld["Service"],
+  count: number,
+): Effect.Effect<ReadonlyArray<TeamId>, never, Connections> {
+  return Effect.gen(function* () {
+    const connections = yield* Connections;
+    yield* fake.setTeams(
+      Array.range(1, count).map((index) => ({
+        ...teamFixture,
+        providerTeamKey: `461.l.1000.t.${String(index)}`,
+        name: `Team ${String(index)}`,
+      })),
+    );
+    yield* fake.setLeague(league);
+    yield* fake.setRoster(roster);
+    yield* fake.setNativeAfter(nativeAfter);
+    const linked = Array.getUnsafe(
+      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
+      0,
+    );
+    const found = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
+    return found.map((team) => team.id);
+  }).pipe(Effect.orDie);
+}
 
 function seedTeam(
   fake: FakeProviderWorld["Service"],

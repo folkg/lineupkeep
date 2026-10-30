@@ -154,7 +154,7 @@ export function cloudRunHost(
       });
       yield* GCP.CloudScheduler.Job("LineupTick", {
         location: region,
-        schedule: "0 * * * *",
+        schedule: "55 * * * *",
         timeZone: "UTC",
         attemptDeadline: "300s",
         retryConfig: {

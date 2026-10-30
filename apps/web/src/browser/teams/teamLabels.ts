@@ -95,7 +95,7 @@ export function pauseResumeLabel(automation: TeamAutomationView): string | undef
   if (automation.resumesAt === undefined) {
     return "Paused for the rest of the fantasy day.";
   }
-  return `Paused for the rest of the fantasy day. Resumes ${formatDateTime(automation.resumesAt)}.`;
+  return `Paused for the rest of the fantasy day. Resumes after ${formatDateTime(automation.resumesAt)}.`;
 }
 
 export function runStatusLabel(status: LineupRunView["status"]): string {

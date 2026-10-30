@@ -154,7 +154,7 @@ it("names the pause in reader-local time", async () => {
   await expect
     .element(
       page.getByText(
-        `Paused for the rest of the fantasy day. Resumes ${formatDateTime(
+        `Paused for the rest of the fantasy day. Resumes after ${formatDateTime(
           "2026-10-26T07:00:00.000Z",
         )}.`,
       ),
