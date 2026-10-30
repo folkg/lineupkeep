@@ -356,8 +356,11 @@ by browser test and screenshot, and deployed.
 - [ ] **Publication security gate.** A temporary backport of an upstream fix is in force. Removal
       condition and acceptance are recorded in [release-readiness.md](release-readiness.md); replace it when
       the fixed upstream parent ships.
-- [ ] **Dependency audit refresh.** The prior scan's 47 records are untriaged, and the lineup work added
-      `munkres` and no other runtime dependency.
+- [x] **Dependency audit refresh.** [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md) records a fresh scan
+      (2026-10-29) of every advisory record, its chain, whether it is shipped or tooling, the reachability
+      evidence, and the action taken or declined. `zod` and `seroval` were upgraded in the shipped bundle;
+      the remaining 49 records are tooling-only dispositions or the tracked critical advisory. The lineup
+      work added `munkres` and no other runtime dependency.
 - [ ] **Muse acceptance on the hosted deployment.** OAuth, paging, and pending-outcome behaviour against
       the deployed origin rather than a local one.
 - [x] **Deploy the ownership-delta clamp.** Deployed with the round-2 MCP rollout (web `00026-nss`,

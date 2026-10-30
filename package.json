@@ -88,7 +88,10 @@
     "@solidjs/compiler": "2.0.0-rc.13",
     "@solidjs/signals": "2.0.0-rc.13",
     "@solidjs/web": "2.0.0-rc.13",
-    "solid-js": "2.0.0-rc.13"
+    "seroval": "1.6.12",
+    "seroval-plugins": "1.6.12",
+    "solid-js": "2.0.0-rc.13",
+    "zod": "4.6.7"
   },
   "engines": {
     "node": ">=24.11.1 <25"
