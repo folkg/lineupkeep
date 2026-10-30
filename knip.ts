@@ -14,6 +14,9 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
       entry: [
         ".dependency-cruiser.ts!",
         "e2e/playwright.config.ts",
+        "e2e/mcpAccept.config.ts",
+        "e2e/mcpAccept.local.ts",
+        "e2e/mcpAccept.token.ts",
         "e2e/*.e2e.ts",
         "e2e/serviceRoute.ts",
         "e2e/testRuntime.ts",

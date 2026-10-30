@@ -11,6 +11,25 @@ A name labels exchanges, not a different User; pass another signed-in Page for a
 Cite tool assertions, not successful OAuth. Assert missing-scope and cross-User behavior where relevant. Independent [service reads](services.md) corroborate persistence, not protocol behavior.
 The [README](../../../../README.md#connecting-an-mcp-client) owns client prerequisites, revocation, and offline-grant handling.
 
+## Scope acceptance command
+
+Run `bun run mcp:accept` before accepting an MCP change. It exercises the real protocol surface and prints a per-tool table. It exits non-zero on a metadata disagreement other than the deliberate `offline_access` difference, a wrong 401 baseline, a tool that runs without its scope, or a 403 that names a different scope. It never prints, logs, or stores a token.
+
+### Local flow: the scope boundary
+
+`bun run mcp:accept` starts a disposable local stack, registers a fresh public client for each grant, and runs discovery, PKCE, browser sign-in, and consent. It requests the full advertised set, the onboarding baseline, and baseline + `feedback:manage`, then prints every tool's result under the requested and restricted grants. Each tool's required scope comes from that tool's own unauthenticated 401 challenge, cross-checked against whether the grant actually runs or refuses it. `--scopes <subset>` reproduces a client's exact request; the restricted baseline and the `feedback:manage` case are still tested. `--origin` may point at an existing loopback test-composition stack with `RESEND_API_BASE_URL` set; otherwise omit it.
+
+### Provided token: the deployed origin
+
+```sh
+read -rs MCP_ACCEPT_TOKEN && export MCP_ACCEPT_TOKEN
+bun run mcp:accept --origin https://<host> --token-env MCP_ACCEPT_TOKEN
+```
+
+The command reads the token from the named environment variable, never from an argument. It checks metadata consistency, the 401 baseline, and every listed tool against the token's granted scopes. Write tools are called only with empty arguments, so a 400 proves the scope check passed without a write. Use a fresh access token: access tokens last five minutes. It cannot prove dynamic registration, consent, PKCE, or a scope the token does not hold.
+
+Each local grant uses a fresh dynamic client so the grant's scope is tested independently; reusing one dynamic registration for a second authorization is a separate case. If a client fails after consent, capture its authorization `error` and `error_description` and its metadata document. The report includes both metadata scope lists and their differences, the baseline challenge, the tool table, the `feedback:manage` case, findings, and limitations. Cite the tool assertions, not the successful OAuth setup.
+
 ## Evidence
 
 Each exchange retains a redacted transcript with persona, method/tool, arguments, status, response, and trace linkage; [harness privacy](harness.md#evidence-privacy) owns safe artifacts.

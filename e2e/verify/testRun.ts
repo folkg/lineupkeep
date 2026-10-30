@@ -147,7 +147,7 @@ export async function runTests(run: TestRun): Promise<VerificationOutcome> {
                 fileURLToPath(import.meta.resolve("@playwright/test/cli")),
                 "test",
                 "--config",
-                "e2e/playwright.config.ts",
+                run.playwrightConfig ?? "e2e/playwright.config.ts",
                 ...run.playwrightArguments,
               ],
               cwd: root,
@@ -308,6 +308,7 @@ export type TestRun = {
     stack: Stack | undefined,
   ) => Record<string, string | undefined>;
   readonly playwrightArguments: ReadonlyArray<string>;
+  readonly playwrightConfig?: string;
   readonly echo: boolean;
   readonly timeoutMs: number;
 };

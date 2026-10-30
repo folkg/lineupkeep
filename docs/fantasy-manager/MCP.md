@@ -546,6 +546,8 @@ are in the [client setup](../../README.md#connecting-an-mcp-client).
 
 Use actual hosted Muse with a harmless read first: discovery, OAuth/consent, correct scopes, egress, an access-token expiry followed by a public-client refresh rather than a reconnect, structured/text output, continuation use, and bounded-run waiting. The hosted browser runs on our origin, so the client only needs to authorize MCP.
 
+The shared scope check is `bun run mcp:accept`. Its local flow starts a disposable stack and proves discovery, dynamic registration, PKCE, browser sign-in and consent, the full advertised grant, the onboarding baseline, and the `feedback:manage` case with a per-tool table. Its provided-token mode checks a deployed origin's metadata, 401 baseline, and per-tool enforcement for the token's scopes without writing. Each tool's required scope comes from the server's own unauthenticated 401 challenge, so the command cannot drift from the declaration the handler enforces. The local flow registers a fresh dynamic client per grant; a second authorization that reuses one registration is a separate case, and the client's own `error`/`error_description` and metadata document remain the decisive evidence for it. See [MCP proof](../../.agents/skills/verify-app/references/mcp.md) for both modes and the report.
+
 OpenCode is a possible fallback after an actual test. Pi compatibility can improve later; retain the starter's stateless/serverless transport rather than adding a legacy/stateful branch.
 
 Acceptance requires actual protocol tests, not only direct handlers. Preserve Effect-free browser/universal runtime contracts and request-scoped identity across simultaneous users.

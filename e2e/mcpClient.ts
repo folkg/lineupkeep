@@ -178,6 +178,13 @@ export async function exchangeCode(
 }
 
 export async function registerPublicClient(origin: string, clientName: string): Promise<string> {
+  return (await registerPublicClientDetails(origin, clientName)).clientId;
+}
+
+export async function registerPublicClientDetails(
+  origin: string,
+  clientName: string,
+): Promise<{ readonly clientId: string; readonly scope: string }> {
   const response = await fetch(new URL("/api/auth/oauth2/register", origin), {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -190,13 +197,20 @@ export async function registerPublicClient(origin: string, clientName: string): 
       application_type: "native",
     }),
   });
-  const body = Schema.decodeUnknownSync(
-    Schema.Struct({ client_id: Schema.String, client_secret: Schema.optional(Schema.String) }),
-  )(await response.json());
-  if (response.status !== 201 || body.client_secret !== undefined) {
+  if (response.status !== 201) {
     throw new Error(`Public client registration failed (${response.status})`);
   }
-  return body.client_id;
+  const body = Schema.decodeUnknownSync(
+    Schema.Struct({
+      client_id: Schema.String,
+      client_secret: Schema.optional(Schema.String),
+      scope: Schema.String,
+    }),
+  )(await response.json());
+  if (body.client_secret !== undefined) {
+    throw new Error("Public client registration returned a client secret");
+  }
+  return { clientId: body.client_id, scope: body.scope };
 }
 
 export function exchangeRefreshToken(

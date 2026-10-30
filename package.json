@@ -33,6 +33,7 @@
     "test:e2e": "node e2e/test.ts",
     "test:e2e:container": "node e2e/test.ts --target container",
     "test:e2e:cloudflare": "node e2e/test.ts --target cloudflare",
+    "mcp:accept": "node scripts/mcpAccept.ts",
     "verify": "node e2e/verify.ts",
     "verify:video": "node e2e/verify/renderVideo.ts",
     "verify:review": "node e2e/verify/review.ts",
