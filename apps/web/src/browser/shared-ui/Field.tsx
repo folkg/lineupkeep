@@ -43,7 +43,9 @@ export function Field(props: FieldProps): JSX.Element {
       when={props.label !== undefined}
     >
       <div class={fieldLabelClass(surface)}>
-        <label for={id}>{props.label}</label>
+        <label class="font-bold" for={id}>
+          {props.label}
+        </label>
         {control}
       </div>
       {messages()}
@@ -52,7 +54,7 @@ export function Field(props: FieldProps): JSX.Element {
 }
 
 function fieldLabelClass(surface: Surface): string {
-  return cx("grid gap-2 text-label font-bold", surface === "panel" ? "text-on-panel" : "text-ink");
+  return cx("grid gap-2 text-label", surface === "panel" ? "text-on-panel" : "text-ink");
 }
 
 export function fieldControlClass(options: FieldControlOptions = {}): string {
