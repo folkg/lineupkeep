@@ -1,11 +1,19 @@
 # Roadmap
 
-Tracked work for Lineupkeep. Stages 0–8 of the [delivery plan](fantasy-manager/DELIVERY-PLAN.md) are
-complete and deployed; this file tracks what remains, including defects, operational gaps, and product
-work that needs a decision before it becomes implementation.
+Long-term work for Lineupkeep. Phases 1 and 2 are deployed; this file tracks what remains, grouped so one
+group can be handed to one agent as a unit.
 
-Check an item only when it is verified, not when it is written. Each item names how it will be
-verified, because "done" has meant different things at different times in this project.
+**An item is checked only when it is verified, not when it is written.** Every item names how it will be
+verified, because "done" has meant different things at different times here. Work closed before this
+restructuring is summarised in the [appendix](#appendix--closed-work).
+
+## How to read this
+
+- **Groups** are delivery units. A group should be small enough for one agent, except where it says `XL`.
+- **Size**: `S` is hours, `M` is a day or two, `L` is a multi-day chunk, `XL` must be split before delegating.
+- **Depends** names what must land first. Empty means it can start now.
+- **decide** marks an owner decision that gates the work.
+- Where the owner has already ruled, the decision is recorded inline so it is not reopened.
 
 ## Current state
 
@@ -13,433 +21,492 @@ verified, because "done" has meant different things at different times in this p
 | -------------------- | ---------------------------------------------------------------------------------------------- |
 | Phase 1 (stages 0–6) | Complete, deployed, live-accepted                                                              |
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                 |
-| Lineup algorithm     | Custom solver live for all five owner teams, seven consecutive verified ticks                  |
-| Provider boundary    | Providers injected through a keyed registry; no adapter import outside the composition root    |
-| MCP surface          | 17 tools, seven scopes, per-tool enforcement; rounds 2 to 6 deployed, round 8 awaiting deploy  |
-| Client feedback      | Zero open items after round-6 triage on 2026-10-29                                             |
-| Connections          | Hosted browser only; the local helper and its device flow are deleted                          |
-| Interface            | Voice, connections, teams, activity and the mobile browser reworked from the owner walkthrough |
+| Lineup algorithm     | Custom solver live for all five owner teams                                                    |
+| Provider boundary    | Keyed injection at the composition root; some provider-shaped ideas still reach generic layers |
+| MCP surface          | 17 tools, seven scopes, per-tool enforcement; feedback rounds 2 to 8 closed                    |
+| Client feedback      | Zero open items                                                                                |
+| Connections          | Hosted browser only; local helper and device flow deleted                                      |
+| Interface            | Reworked from the owner walkthrough; a bolder direction is a later exploration                 |
+| Deployment           | Cloud Run web, worker and hosted browser on GCP; no repository remote and no CI                |
+| Publication gate     | Blocked on upstream: a temporary backport of the TanStack advisory is in force                 |
+| Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                       |
+| Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                      |
+| Checks               | 1322 node, 86 browser, 9 chromium; end to end 52 per target                                    |
 
-## 1. MCP client feedback — round 2
+---
 
-Source: Muse round-2 report, Oct 26 2026. Round-1 items are regression-tested as fixed except where
-noted. These are ordered by severity.
+## A. Quick wins
 
-### R2-6 — full-set scope enforcement locks out restricted clients (top priority)
+Independent, small, visible. Each ships on its own.
 
-Every call requires all seven advertised scopes, so a client platform that refuses `teams:manage` and
-`feedback:manage` cannot read anything. Muse worked for ~30 minutes on a five-scope grant and then began
-receiving the full-set 401 on ordinary reads.
+### A1 — Run lineup checks at :55, not on the hour
 
-- [x] Each tool declares the single scope it needs, and enforcement happens per tool
-- [x] A token holding `fantasy:read` can call read tools without holding write or manage scopes
-- [x] A 403 names the missing scope for _that tool_, not the whole advertised set
-- [x] The 401 challenge no longer instructs clients to request scopes the call does not need
-- [x] Test: a five-scope grant reads successfully and is refused only on the manage tools
-- [x] Verify with a real restricted-scope grant against the deployed server
+Games usually start on the hour, so a check that runs on the hour can miss a late scratch.
 
-### R2-5 — review links use the wrong provider path (high)
-
-`generate_transaction_review_links` emits `/add?apid=…&dpid=…`; the working form is
-`/addplayer?apid=…&dpid=…`. Every link from rounds 1 and 2 lands wrong while the tool reports `ok`.
-
-- [x] Correct the path template: `addplayer` for add and add/drop, team-scoped `dropplayer` for drop,
-      and an explicit unsupported result for trade, whose page has no verified parameterized prefill
-- [x] Fixture test asserting the exact URL per supported sport, so a template change cannot ship silently
-- [x] Report the template version in the tool result so clients can detect staleness
-- [x] Verify each intent's generated link opens the intended review page for the intended player
-      against all five linked leagues (see RESEARCH.md)
-
-### R2-2 — feedback cannot be submitted from restricted clients
-
-`submit_feedback` requires `feedback:manage`, so the channel for reporting the scope problem is behind
-the scope problem.
-
-- [x] Submitting feedback requires a narrower grant than triaging it
-- [x] Rate limits and owner scoping still apply to submission
-- [x] Test: a read-only grant can submit feedback but cannot list or triage it
-
-### R2-0 / R2-1 — a scope-set change invalidates every existing grant
-
-Yesterday's grant died the moment the advertised set grew, with no grace path. New scopes are also
-rejected as "invalid" by the client connect flow even though both discovery documents advertise them.
-
-- [x] Adding a scope no longer invalidates grants that do not need it
-- [x] Existing grants keep working for previously-existing scopes; only new-scope tools 403
-- [x] Documented as versioned behaviour rather than incidental
-- [x] Protected-resource metadata and authorization-server metadata record the deliberate
-      `offline_access` difference with a citation
-- [x] Confirm whether the client-side rejection is stale metadata caching and record the finding
-
-### R2-3 — roto standings return unexplained nulls and unlabelled stat ids
-
-`categoryPoints` is null for GA, SA and SV while their totals are present, and the category arrays carry
-stat ids that appear in no scoring dictionary. A client cannot distinguish "not published" from zero.
-
-- [x] Populate category points where the provider publishes them
-- [x] Where it does not, say so explicitly instead of returning null
-- [x] Name or omit stat ids that appear in no scoring dictionary
-- [x] Build realistic captured fixtures so this class of gap is caught by tests rather than by a client
-
-### R2-4 — search rows omit the field the sort advertises
-
-Rows sorted by `actual_rank` do not surface a rank value, and `percentOwnedChange` was null everywhere
-tested, so a client cannot explain the ordering it was given.
+- [ ] Move the scheduled run to :55 of each hour, keeping the period identity so a run cannot double up
+      across the boundary.
+- [ ] Confirm a manual `set_lineup` behaves exactly as before.
 
-- [x] Align row field names with the sort names
-- [x] Surface the rank value that the sort orders by
-- [x] Confirm whether `percentOwnedChange` is genuinely absent or dropped in decoding
+**Verify**: three consecutive ticks observed at :55 with all five teams, no duplicate for one scoring
+period, and one late-scratch fixture proving the change is picked up. `S`
 
-## 2. MCP client feedback — round 3
+### A2 — Show the whole fantasy day, with multiple collapsed stretches
 
-Source: Muse round-3 report, filed through `submit_feedback` on Oct 28 2026. These are the first
-reports filed through the product's own feedback channel. Ordered by severity.
-
-### R3-3 — `get_team_summary` was unreachable for every hockey team
-
-The summary asked for narrowing on `team_summary.roster` but exposed no `groups` or selection input,
-and the returned record token was not a cursor. A 22-player hockey roster never fit, so the one-call
-snapshot could not be used for four of the owner's five teams.
-
-- [x] Add a `groups` input (`league`, `standings`, `categories`, `matchup`, `roster`) with league,
-      standings, matchup, and roster as the default, and make category arrays opt-in
-- [x] Page the roster with a cursor the tool issues and accepts; keep every fixed section on each page
-- [x] Name the selectable groups and the remedy in every summary narrowing result, and omit the
-      misleading record token from a paged summary
-- [x] Test: a multi-section summary pages a 40-player roster to completion, accepts each cursor, and
-      fits every page inside the hard budget; a one-record overflow names the groups
-- [x] Verify live: the 21-player hockey roster returned league, standing, record, 10-team standings,
-      matchup, and schedule, then paged 10 + 11 through the returned cursor
-
-### R3-7 — `submit_feedback` rejected a null optional context field its schema allowed
-
-Three of five calls failed with an opaque `400 Invalid tool arguments`; the published JSON schema
-marked the optional context fields nullable, while the validator rejected `null`.
-
-- [x] Accept `null` for optional feedback context fields and a null context object, normalizing them
-      away before storage; keep the response context non-null
-- [x] Return the offending field path from every invalid-arguments 400, in the message and in
-      `error.data.field`
-- [x] Test: the published schema and validator agree for `context.tool: null`; an invalid limit names
-      `["limit"]`
-- [x] Verify live: `submit_feedback` accepted `{tool: null, ...}` and stored only `client` and
-      `surface`; an invalid summary limit returned 400 naming `["limit"]`
-
-### R3-8 — `get_players` silently ignored `period`
-
-`actual_stats` returned identical season totals for a supplied week, so a client could not tell
-whether the argument was honoured.
-
-- [x] Declare which sports publish weekly player series on the provider capability, and check it in
-      the generic query layer rather than by provider name
-- [x] Honour `period` for a completed week where the sport declares a weekly series
-- [x] Refuse a period the provider cannot honour with the reason and the remedy; never fall back to
-      season totals silently
-- [x] Test: hockey refuses a period, football refuses the current week, and the declared capability
-      gates the decision
-- [x] Verify live: hockey week 4 was refused with the remedy; football week 7 returned basis `week`
-      with week-7 values
-- [ ] **Date-scoped recent-window splits.** Yahoo publishes date-scoped player statistics for
-      hockey (`stats.type=date`, verified 2026-10-28) but no weekly series. Last-14/30-day waiver
-      splits need a neutral date basis, date-window reads, and aggregation that does not sum rate
-      statistics. Deferred until a date-window contract is designed; verify against the live
-      hockey read and a captured fixture before exposing it.
-
-### R3-5 — transaction rows omitted inline identity
-
-`get_transactions` returned only references plus direction, so naming who moved cost a
-`get_players` join per transaction.
-
-- [x] Add the provider's inline identity to transaction player rows, consistent with
-      `search_players`, while keeping the private reference and dictionaries canonical
-- [x] Carry the professional team through the adapter
-- [x] Test: a transaction row carries name, display position, and professional team with its
-      reference
-- [x] Verify live: the hockey transaction window returned name, display position, and `proTeam`
-      inline
-
-### R3-4 — do deploys invalidate grants?
-
-The reporter saw reauthorization after three deploys and suggested a key grace window or a
-changelog warning. Production evidence showed one signing key and long-lived refresh tokens.
-
-- [x] Record the pre-deploy access token and refresh token, deploy, and test both
-- [x] Confirm the `jwks` table and grant records were not rotated by the deploy
-- [x] Document the result plainly in the MCP contract and changelog: deploys do not require
-      reconnection; access tokens expire in five minutes by design; clients must persist each
-      rotated refresh token, and replay after the 30-second window revokes the grant
-- [x] Evidence: the round-3 deploy (web `00027-kwq`, worker `00028-29h`) accepted a pre-deploy
-      access token and a pre-deploy refresh token; the single 2026-10-25 EdDSA key was unchanged
-
-### R3-6 — the stray connection was not a lifecycle leak
-
-A second Yahoo connection appeared on Oct 27 and disconnected two minutes later. It has no
-`provider_credentials` row, so the disconnect path cleaned up the stored session.
-
-- [x] Strengthen the disconnect test: prove the credential exists before disconnect, is deleted
-      after, and the disconnected connection row remains without a credential generation
-- [x] Record the answer in the feedback entry's resolution note
-
-## 3. MCP client feedback — round 4, part 1
-
-Source: Muse round-4 report, filed through `submit_feedback` on Oct 28 2026. Findings R4-5 to R4-8
-(transactions and draft picks) are tracked separately.
-
-### R4-4 — a period concept that declares what it can serve
-
-`get_players` accepted only `{week: n}`, so every hockey request for actual statistics was refused and
-a recent window could not be asked for at all; the client probed fourteen shapes to find the boundary.
-
-- [x] Period kinds: season, scoring week, preset windows (`last_7_days`, `last_14_days`,
-      `last_30_days`), and an explicit inclusive `{start, end}` range
-- [x] Per-sport provider support declared as data beside the other capabilities: `native`,
-      `aggregated`, or `unsupported`, plus preset windows and the range cap
-- [x] Discoverable before a call: the tool description lists the accepted shapes and the result
-      carries `periodSupport`; an unsupported kind is refused naming the kind, whether it is served at
-      all, and what can be asked instead; season totals are never substituted
-- [x] Hockey preset windows and ranges served by summing daily provider reads, batched per day across
-      all requested players, capped at 31 days, with a whole-season range served as the season
-- [x] Hockey scoring weeks stay refused, now as a declared capability with a remedy
-- [x] Test per provider that the declared table matches what the adapter does, for every sport and
-      period kind
-- [ ] Verify live: a hockey preset window summed against the live daily series, a range cap refusal,
-      and a football preset refusal
-
-### R4-2 — a roto standings table should fit in one call
-
-`get_league` with only the standings group returned one team per page, so a 13-team table cost 13 calls.
-
-- [x] Compact standings: rank, points, and record for every team in one result, without per-category
-      payloads
-- [x] Keep the detailed per-category view, and state in the section that it pages
-- [x] Test: a 13-team compact read returns every team in one result inside the budget
-- [x] Verify live: the owner's 13-team rotisserie league returned every team in one call
-
-### R4-3 — inline stat names in category totals
-
-- [x] Category values carry the league's stat name beside the private reference in `get_league`,
-      `get_matchups`, and `get_team_summary`
-- [x] Test: a season category total carries its name and value without a dictionary read
-
-### R4-1 — resolve the duplicated ownership field
-
-- [x] `search_players` publishes one ownership-change field, `percentOwnedDelta`; the always-null
-      `percentOwnedChange` is absent from the response and the published output schema
-- [x] Both change fields state the provider window they measure
-- [x] Test: a search row carries the provider delta once, and a missing started change stays null
-
-## 3a. MCP client feedback — rounds 5 and 6
-
-Source: the client's round-5/6 report, filed through `submit_feedback`. Ordered by value.
-
-### R6-1 — provider-tracked stats presented as league scoring categories
-
-`get_league` scoring listed fifteen categories, all `enabled: true`, including Saves and Shots
-Against in a head-to-head league that does not score them, and `get_players` scoring context repeated
-the list. A client built a recommendation on a category that does not count.
-
-- [x] Derive the scoring surface from the league's configured categories, using the provider's
-      display-only marking rather than its enabled flag
-- [x] Mark every published stat `scoring` or `informational`, with the deciding flag named on each
-      informational entry, in the scoring dictionary, standings totals, roto points, and matchup
-      categories
-- [x] List scoring categories only in `get_players` scoring context, and refuse an informational stat
-      as a stat-sort key with the reason
-- [x] Test: a league whose configured categories exclude a stat does not mark it scoring
-- [x] Verify live: the owner's head-to-head hockey league returns fifteen categories, thirteen scored,
-      Saves and Shots Against display-only (see RESEARCH/MCP evidence, 2026-10-29)
-
-### R6-2 — no injury status where screening happens
-
-`get_players` carried an injury object, but `search_players` rows carried no status, so a client
-screening free agents could not see an injured-reserve player.
-
-- [x] Put a compact status on search rows: healthy, day-to-day, out, injured reserve, or unknown
-- [x] Pass through the provider's own code and wording, and the instant the status was observed
-- [x] Never let an unknown code read as healthy
-- [x] Test: search rows carry a status and an observation time, and an unknown code stays unknown
-- [x] Verify live: the search payload returns `status` on every sampled row (`false` when healthy, a
-      code when not) beside `status_full` and `injury_note`; no extra provider read is needed
-
-### R5-2 — a summary attached a roster page nobody asked for
-
-A four-group request without `roster` returned `narrowing_required` blaming the roster.
-
-- [x] Include a roster page only when the `roster` group is requested
-- [x] Name what actually consumed the budget: the roster page when requested, otherwise the selected
-      sections
-- [x] Test: a summary without the roster group carries no roster page; an overflowing request without
-      it blames the selected groups
-
-### R5-1 — a cursor error did not say what went wrong
-
-Reusing a cursor with a different `groups` array answered "invalid or expired".
-
-- [x] Distinguish a mismatch, an expiry, and an unknown cursor when opening a continuation
-- [x] Say in the error and in the published `cursor` description that a cursor is bound to the
-      request arguments
-- [x] Test: a cursor reused with different arguments is refused as a mismatch naming the binding
-
-### R6-3 — a submitter could not read back their own reports
-
-`submit_feedback` worked under a lesser scope while `list_feedback` required `feedback:manage`.
-
-- [x] Let a submitter list their own submissions and statuses under the scope submission uses
-- [x] Keep triage behind `feedback:manage`, and keep ownership the boundary: a submitter never sees
-      another account's reports
-- [x] Test: a read grant lists its own report and cannot triage; a service test pins owner isolation
-
-### R2-3 (reopened) — roto categories that publish no points
-
-Totals publish for categories whose rotisserie points the provider leaves empty.
-
-- [x] Publish points where the provider supplies them
-- [x] State per category, in the row itself, that the provider publishes no points for it
-- [x] Include a configured category the provider omits from a points array, so a missing entry is
-      stated rather than absent
-- [x] Test: a rotisserie category with no published points carries a `not_published` entry naming the
-      gap
-
-### Manage scopes could not be granted
-
-Reported as: a connect flow requesting `teams:manage` and `feedback:manage` reached the hosted page,
-then failed with a generic error naming no scope. Not reproduced; no scope path on our side refuses
-either scope. Evidence, the two client-side candidates, and the next step are recorded in
-[MCP.md](fantasy-manager/MCP.md#manage-scope-connection-failure-2026-10-29-investigation).
-
-- [x] Check the consent and authorize path for both manage scopes against a fresh client locally and
-      on the deployed origin
-- [ ] Obtain the failing authorization's `error`/`error_description` and the client's registered or
-      metadata-declared scopes before changing our path
-
-## 3b. Interface rework from the owner walkthrough
-
-Source: the owner's screen recording and written notes, 2026-10-28. Every item below is built, verified
-by browser test and screenshot, and deployed.
-
-- [x] **Voice.** No emdashes anywhere in product copy, no slogan headline, and no page repeating the
-      product description another page owns. Landing leads with what the product does.
-- [x] **Failed attempts leave nothing.** A hosted connection row was created when the session started, so
-      abandoned attempts piled up as dead rows. A connection now exists only after a link succeeds, the
-      three abandoned rows were deleted, and a migration test pins the ordering.
-- [x] **Connection identity.** Each row names the team count, when it was connected, and what its status
-      can do, without storing or showing any account identifier.
-- [x] **Helper affordances.** Pairing codes, approve and cancel buttons, and the reconnect form are gone
-      from the web surface, and the helper itself is deleted with its device flow and columns.
-- [x] **Teams.** One line of context, what the last check actually did, and a recent-change tally. Status
-      words appear only when something needs attention.
-- [x] **Optimistic toggles.** One switch per team predicts from the in-flight mutation and returns to the
-      server's confirmed state with a message when the write is refused.
-- [x] **Quiet activity folded.** Consecutive checks that changed nothing collapse into one expandable
-      line; changed, blocked, failed and in-progress runs stay on their own.
-- [x] **Small fixes.** Times in the reader's zone, a back affordance from team and run pages, and feedback
-      pre-filled with the team it was reported from.
-- [x] **Mobile browser.** A real input surface so a phone keyboard opens, a phone viewport profile so the
-      provider renders its own mobile layout, paste support, and no crosshair cursor.
-- [x] **Google-account hint.** The phone-number workaround is a collapsible hint on the connections page
-      and a one-line reminder inside the session.
-- [x] **Two test stalls fixed structurally.** The browser reports input readiness from the live DOM
-      instead of a timer, and shutdown awaits session teardown so profile removal cannot race Chromium.
-      Fourteen consecutive chromium runs green.
-
-## 4. Operational gaps
-
-- [x] **Database restore drill.** Exercised 2026-10-29 by restoring production to a branch at a past
-      timestamp and proving the restored credentials decrypt with the production key. The restored branch
-      held 2 connections, 6 teams, 484 runs and 28 feedback records, and showed one fewer migration than
-      production, which confirms the restore point was exact. Procedure and result in
-      [deployment.md](deployment.md#application-data-restore-drill). Still outstanding as policy: retention,
-      RPO/RTO, and the recovery owner.
-- [ ] **Hosted-browser live sign-in.** Operator handshake and real login page load are proven, and the
-      owner completed a real provider sign-in through the deployed app on 2026-10-29 using the phone-number
-      route. Still unproven: a clean first-time sign-in by a different person on a phone.
-- [ ] **Publication security gate.** A temporary backport of an upstream fix is in force. Removal
-      condition and acceptance are recorded in [release-readiness.md](release-readiness.md); replace it when
-      the fixed upstream parent ships.
-- [x] **Dependency audit refresh.** [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md) records a fresh scan
-      (2026-10-29) of every advisory record, its chain, whether it is shipped or tooling, the reachability
-      evidence, and the action taken or declined. `zod` and `seroval` were upgraded in the shipped bundle;
-      the remaining 49 records are tooling-only dispositions or the tracked critical advisory. The lineup
-      work added `munkres` and no other runtime dependency.
-- [ ] **Muse acceptance on the hosted deployment.** OAuth, paging, and pending-outcome behaviour against
-      the deployed origin rather than a local one.
-- [x] **Deploy the ownership-delta clamp.** Deployed with the round-2 MCP rollout (web `00026-nss`,
-      worker `00027-knr`); affects only leagues declaring a games limit, of which the owner has none.
-
-## 5. Lineup algorithm follow-ups
-
-- [ ] **Positional scarcity.** A league-wide measure of how thin each position is, computed periodically
-      rather than per run. Provider-neutral and portable beyond Yahoo. The natural foundation for add/drop
-      and transaction recommendations. Recorded in
-      [AUTOCOACH-KNOWLEDGE.md](fantasy-manager/AUTOCOACH-KNOWLEDGE.md); deliberately not built during the
-      max-games work.
-- [ ] **Postponed games.** Participation currently reads the opponent only. A postponed game needs an
-      observed case to verify against.
-- [ ] **Category- and rotisserie-aware scoring.** The owner chose the community start rate for category
-      leagues. Changing the objective to expected categories won is a product decision, not a defect.
-- [ ] **Baseball and basketball.** Starting-lineup rules for all four sports are declared and tested.
-      Stat categories, games-played and innings-pitched limits, and provider request shapes for those sports
-      are not built.
-
-## 6. Product work needing a decision
-
-- [ ] **Transactions.** Review links exist; execution and add/drop recommendations do not, by design.
-      Scarcity (section 3) is the prerequisite.
-- [ ] **Category-aware recommendations.** Depends on the objective decision above.
-- [ ] **Second provider.** The seam supports it; no provider is planned. Adding one is an adapter plus a
-      registry entry.
-- [ ] **Domain and production email.** The Resend test sender delivers only to the owner address. A
-      domain makes this a non-issue and is otherwise cheap.
-
-## 6a. Cached professional-team schedule and work gating
-
-Decided 2026-10-30: derive the calendar from our own roster reads first, and keep an external sports
-schedule on the roadmap as later work. Provider data joins by professional-team key, never by an
-abbreviation or prefix. Implementation has not started; each item names how it will be verified.
-
-- [x] **Choose the source.** The fantasy provider publishes no season or team schedule: the only
-      schedule fact is one opponent per rostered player for one date or scoring week. The first slice
-      derives the calendar from our own roster reads. Recorded in
-      [DECISIONS.md](fantasy-manager/DECISIONS.md#round-13--schedule-cache-source-and-identity).
-- [ ] **Store a provider-neutral professional-team identity.** Every roster row publishes the player's
-      professional team with a provider key (`editorial_team_key`, observed as `nhl.t.26`) beside its
-      abbreviation and full name. Reference rows carry the sport, league, name, and abbreviation plus
-      one provider-key column per provider — `yahoo_team_key` first, another column when another
-      provider is real. The provider key is the only join: an abbreviation is display text, and a
-      prefix is not identity. App-wide reference rows sit outside owner scoping, so their owning
-      domain and migration need review before use. Revisit a separate provider-key mapping table only
-      when a second provider is real.
-- [ ] **Persist what the reads already see.** Record each observation as a professional-team game on a
-      date, with home or away, the opponent abbreviation, the resolved opponent key when known, and an
-      observation instant, so the cache grows from normal work and adds no upstream contract.
-- [ ] **Resolve opponents through observed keys.** The opponent is published only as an abbreviation
-      while the player's own team carries a key, so learn abbreviation-to-key pairs from the same
-      roster rows, keep an unknown abbreviation unresolved, and never match one by prefix or
-      similarity. A non-null opponent already proves the player's team plays, so work gating does not
-      depend on resolving the opponent.
-- [ ] **Sweep the scoring period daily, not hourly.** Refresh the current period's dates once a day
-      per linked team, and after a provider-day rollover, so tomorrow's games are known without an
-      hourly read. Measure the provider-request saving against a real week before relying on it.
-- [ ] **Gate scheduled work, failing open.** Skip a team's run only when the cached calendar says no
-      rostered player has a game before the next tick and that date's calendar was observed after the
-      fantasy day began. An unknown, stale, or incomplete calendar runs as usual, a manual
-      `set_lineup` bypasses the gate, and a skipped outcome is recorded with its reason. Acceptance: a
-      fixture whose game moves into today after the sweep proves the gate runs rather than skips,
-      because a wrong skip is worse than a wasted read.
-- [ ] **Publish the calendar's coverage.** Per-player games beyond the current period (next game,
-      games remaining in the period) and a postponed-game signal become available once the cache
-      covers them. Each value states when it was observed, and a postponed game stays unresolved until
-      an observed case proves the provider's marking. Whether a future week's scoreboard publishes its
-      date window is unverified; if it does, sweeping ahead is unnecessary.
-- [ ] **Plan the external schedule source, later.** The reference implementation cached start times and
-      a postponed flag per day from a non-fantasy Yahoo sports surface and joined its postponed set by
-      team id, so that surface family is the known candidate and would add start times, a season-long
-      view, and postponement status. It is not built: it needs a verified identity mapping into the
-      canonical team rows, a freshness and retention policy, and the same fail-open gating rule,
-      because a wrong join reads as "no game" and would skip a lineup.
-
-## 7. Known non-goals
+The team page shows the last five runs. A day is bursty: a batch at rollover, silence, another batch when
+starters are announced, then silence again. Every silent stretch must fold, not just one.
+
+- [ ] Query by fantasy day rather than a fixed count.
+- [ ] Fold **every** maximal run of consecutive no-op checks, so a day can show several collapsed groups
+      between the runs that mattered.
+- [ ] Keep changed, blocked, failed, uncertain and in-progress runs unfolded, and keep run detail reachable
+      from both the groups and the runs.
+- [ ] Measure the payload on a heavy day before shipping.
+
+**Verify**: a fixture day with three separate silent stretches renders three collapsed groups interleaved
+with active runs, and each expands. `S`
+
+### A3 — Transaction trends on player rows
+
+What other managers are doing with a player is a signal for lineup and waiver decisions.
+
+- [ ] Establish what the provider actually publishes: check the reference implementation, probe the API,
+      and test a few players with known movement. Trend counts and percent change are different things.
+- [ ] Expose whatever exists on search and player rows, stating the window it covers.
+- [ ] Where the provider publishes nothing, say so rather than implying zero interest.
+
+**Verify**: a live read on three players, plus a fixture test. `S`
+
+### A4 — Per-team context note for agents
+
+League settings cannot express keeper rules, dynasty details, salary implications, or a player kept for
+sentimental reasons.
+
+- [ ] Add an owner-scoped note per team, bounded in length, with guidance that it is not a secret store.
+- [ ] Edit it on the team page, in the product's voice.
+- [ ] Return it wherever a single team is read over MCP, described as owner context rather than provider
+      fact.
+
+**Verify**: round-trip through the UI and an MCP read; a password-shaped value is rejected or warned. `S`
+
+### A5 — Ship the existing spans to Cloud Logging
+
+The Effect spans and annotations from the starter should already exist. This is a tracer provider, not new
+instrumentation.
+
+- [ ] Confirm the spans and annotations are present and useful in the worker, the web app and the hosted
+      browser before adding anything.
+- [ ] Inject a tracer that exports them to Cloud Logging in a queryable format.
+- [ ] Document the queries worth knowing in the deployment runbook.
+- [ ] Add an alert on failed and uncertain runs.
+
+**Verify**: a known run id is found in Logs Explorer with its provider operations, and a deliberately
+failed run raises the alert. `S`
+
+---
+
+## B. GCP configuration and cost
+
+Settings changes, not projects.
+
+### B1 — Cloud Run configuration and cost
+
+The container appears to live about fifteen minutes after each hourly wake, which is paid compute for no
+work.
+
+- [ ] Find what keeps it alive: CPU always allocated, a long-lived connection, or a keepalive setting.
+- [ ] Review memory and CPU against real usage, and concurrency against real traffic.
+- [ ] Review the worker's minimum instances, and whether the hosted browser should scale to zero.
+- [ ] Record the monthly cost per service so any change can be judged.
+
+**Verify**: measured idle time and cost after the change, with no latency regression on a real request. `S`
+
+### B2 — Skip runs that cannot do anything
+
+- [ ] Return early only when the cached calendar says no rostered player has a game before the next tick
+      **and** that date was observed after the fantasy day began.
+- [ ] Fail open: an unknown, stale or incomplete calendar runs as usual, and a manual `set_lineup` bypasses
+      the gate.
+- [ ] Record a skipped outcome with its reason.
+
+**Verify**: a fixture whose game moves into today after the sweep proves the run happens, because a wrong
+skip is worse than a wasted read. Measure the request saving over a real week. `M`, depends on E1.
+
+---
+
+## C. Foundations
+
+### C1 — Repository remote and CI
+
+There is no remote and no CI. Staging, dual deployments and review workflows all wait on this.
+
+- [ ] Create the repository and push the history.
+- [ ] CI runs checks and all three end-to-end targets on a clean Linux runner.
+- [ ] **decide** the staging model: a long-lived environment, or one per branch destroyed after review.
+- [ ] Deploy production only from a merge, preserving the traffic-pinning step.
+- [ ] Keep secrets, including the state database URL, in CI and out of the repository.
+
+**Verify**: a pull request runs checks, a merge deploys staging, and production requires the documented
+approval. `M`
+
+### C2 — `bun checks` is too slow
+
+Every chunk pays this, currently two to four minutes.
+
+- [ ] Measure per-project and per-file timings and name the long poles.
+- [ ] Cut what is measurable: redundant builds, repeated setup, work that could parallelise.
+- [ ] Keep the discipline: no retries, no skips, no inflated timeouts.
+
+**Verify**: measured before and after, same suites, same counts. `M`
+
+---
+
+## D. Cold start and the edge question
+
+### D1 — Cold start is a white page
+
+The first paint waits for the container because everything is server-rendered.
+
+- [ ] Measure cold start, p50 and p95, from a cold revision and after scale-to-zero.
+- [ ] Render a static shell immediately with an honest "waking" state, rather than a blank page or a
+      spinner that never resolves.
+- [ ] Consider showing the last read from local storage while waiting, marked as stale rather than
+      presented as current.
+
+**Verify**: measured time to first paint from a genuinely cold state, and the shell never claims data it
+cannot substantiate. `M`
+
+### D2 — Evaluate a Cloudflare split
+
+Separate from the GCP settings wins above, because it is a real project with real complexity.
+
+- [ ] Evaluate the free tier honestly: request cost, worker CPU limits, database access from the edge, and
+      whether the MCP surface works there.
+- [ ] Judge the split on its merits: live UI and MCP where cold start is negligible, scheduled work on GCP
+      where cold start does not matter.
+- [ ] Define the shared-code boundary and how one repository expresses two deployments.
+- [ ] **decide** whether the split is worth it; if not, record why so it is not reopened without evidence.
+
+**Verify**: one read path served from the edge, with measured latency and a cost comparison against B1's
+numbers. `M`, depends on C1.
+
+### D3 — Alchemy idiom audit
+
+- [ ] Review the stacks against how Alchemy expects resources, outputs and state to be expressed.
+- [ ] Fix what is not idiomatic, particularly anything that would make D2 awkward.
+- [ ] Keep the state-database rules from the deployment runbook intact.
+
+**Verify**: a review with each deviation fixed or justified, and a clean deploy with no drift. `M`
+
+---
+
+## E. Schedule cache
+
+The provider publishes no season or team schedule; the only schedule fact is one opponent per rostered
+player per date or scoring week.
+
+### E1 — Cache the professional-team calendar
+
+- [ ] **decide** the source: derive from our own roster reads, or add an external schedule for a whole
+      season with start times. Recommendation: derive first, add an external source only when a feature
+      needs every team or a full season.
+- [ ] **Never join on an abbreviation.** Roster rows carry a professional-team key, observed as `nhl.t.26`.
+      League abbreviations differ from the provider's (`LAK` against `LA`). An opponent arrives only as an
+      abbreviation, so its key comes from observed key/abbreviation pairs, and an unknown abbreviation
+      stays unresolved rather than guessed.
+- [ ] Persist what the reads already see, with an observation instant, so the calendar grows from normal
+      work and adds no upstream contract.
+- [ ] Sweep the current period daily, not hourly, and after a provider-day rollover.
+- [ ] Publish coverage: games beyond the current period, games remaining, and a postponed signal once the
+      cache covers them, each stating when it was observed.
+
+**Verify**: one week of live reads match the direct provider read for every rostered player's dates,
+opponents and home or away; a postponed game stays unresolved until an observed case proves the marking.
+`L`. See [DECISIONS.md round 13](fantasy-manager/DECISIONS.md).
+
+---
+
+## F. Provider boundary and simplification
+
+### F1 — Stop provider-shaped ideas leaking into generic code
+
+Weekly versus daily coverage, league types, waiver shapes and stat quirks are provider facts. A second
+provider must not require editing generic modules.
+
+- [ ] Audit every generic module — lineups, queries, runs, policy — for provider-shaped concepts.
+- [ ] Express each as declared capability data beside the existing table.
+- [ ] Extend the boundary audit and ADR 0007 with what is now enforceable.
+- [ ] Keep the dependency rule that rejects an adapter import outside the composition root.
+
+**Verify**: a deliberate violation is rejected, and adding a fake provider with different coverage and
+league types requires no edit outside the provider. `M`
+
+### F2 — Ponytail discipline
+
+The owner's standing instruction, applied as ongoing practice rather than a one-off pass: the smallest
+change that fully solves the task, delete before adding, no speculative abstraction, no option nobody
+asked for, and no dependency for a few lines. It never cuts validation at trust boundaries, error handling
+that prevents data loss, security, accessibility, or anything explicitly requested.
+
+- [ ] Apply it to every chunk from here on, and note in each reply what was deliberately not built.
+
+**Verify**: reviewed per change; no separate deliverable. `S`, continuous.
+
+---
+
+## G. Foldkit migration
+
+The preview is already merged into the rush-hour starter, so the shape is proven. The final release is
+expected shortly; adopt it when it lands. This removes the TanStack advisory entirely, which is the
+current publication blocker.
+
+### G1 — Adopt in the sample app and evaluate
+
+- [ ] Bring the rush-hour sample onto the released version and record what is better and worse in practice.
+- [ ] Code splitting: what the bundle looks like without it, and whether it can be recovered.
+- [ ] Rendering: virtual DOM against signals, measured on a list-heavy screen rather than argued.
+
+**Verify**: a running sample with feature parity, plus numbers on both concerns and a recommendation.
+`M`, blocked on the final release.
+
+### G2 — Migrate Lineupkeep
+
+- [ ] Migrate in slices, keeping the product working throughout.
+- [ ] Preserve the provider boundary, the MCP surface and every acceptance test.
+
+**Verify**: full end-to-end parity plus the measured bundle and interaction numbers from G1. `XL`, split
+before delegating.
+
+### G3 — Close the publication gate
+
+- [ ] Remove the temporary backport once the framework no longer carries the vulnerable transport.
+- [ ] Update [release-readiness.md](release-readiness.md) and the README gate.
+
+**Verify**: the built-app regression test that reproduces the advisory no longer applies, and no vulnerable
+`start-server-core` remains installed. `S`, depends on G2.
+
+---
+
+## H. Security and privacy audit
+
+Distinct from the dependency audit, which is done.
+
+- [ ] Threat model the whole surface: sign-in, sessions, the hosted browser, the MCP server and its OAuth
+      issuer, the worker, and the database.
+- [ ] Review dynamic client registration for abuse, and per-tool scope enforcement.
+- [ ] Review encrypted credential storage, key handling and rotation.
+- [ ] Inventory personal data actually stored, where it lives, and how long it lives.
+- [ ] Review the address-based egress policy and the hosted browser's blast radius.
+- [ ] Review rate limits, logging hygiene, and what a compromised worker could reach.
+
+**Verify**: written findings with severities, each fixed or accepted with a reason, and a re-test per fix.
+`L`, split into audit and remediation.
+
+---
+
+## I. MCP client contract
+
+Standing friction with the external client, and the verification gap that let it persist.
+
+### I1 — An MCP acceptance command
+
+Scope problems have been argued from two sides without a shared test. Make them testable.
+
+- [ ] A command that registers a client against a chosen origin, runs the full authorization flow, and
+      asserts per-tool scope enforcement for each tool and each scope subset.
+- [ ] Prove both directions: a restricted grant reads what it should and is refused on exactly the tools
+      it lacks, with the refusal naming the scope.
+- [ ] Run it against the deployed origin as part of accepting any MCP change, and add it to the verify
+      skill so it is not ad hoc.
+
+**Verify**: the command exercised against a local instance and the deployed origin, with a recorded pass
+for a full grant and for a reduced grant. `M`
+
+### I2 — Reduce the scope set
+
+Seven scopes is more than the product needs, and a client holding a subset has hit repeated friction.
+
+- [ ] Map every tool to the scope it truly needs and find scopes that can merge without weakening
+      enforcement.
+- [ ] Keep `offline_access`: it is the OAuth scope that asks for a refresh token, and without it an
+      unattended agent must re-authorize constantly.
+- [ ] Fix the metadata inconsistency where the protected-resource document omits `offline_access` while the
+      authorization-server document lists it.
+- [ ] Document the resulting set for client authors.
+
+**Verify**: I1's command passes for the reduced set, and each tool's required scope is unchanged in
+practice or weaker with a stated reason. `M`, depends on I1.
+
+### I3 — Grants should survive a deploy
+
+The client reports reconnecting after every deployment. That should not be necessary: signing keys are
+persisted, so access tokens survive a revision change.
+
+- [ ] Instrument refresh-token use around a deploy and find whether the strict rotation plus a cold-start
+      failure is what ends the grant.
+- [ ] If so, widen the reuse window and document the behaviour instead of leaving clients to rediscover it.
+- [ ] Prove it by holding a grant across a deploy with a client that retries.
+
+**Verify**: the same grant serves requests before and after a deploy with no re-authorization. `M`
+
+---
+
+## J. Onboarding
+
+- [ ] Map the first-run path from landing to a connected, enabled team and count the steps.
+- [ ] Place the Google-account workaround where someone actually gets stuck, not only on the connections
+      page.
+- [ ] Make progress states truthful about what is not automated until a connection succeeds.
+- [ ] Reduce what a first-time user must understand before value.
+
+**Verify**: a first-time user reaches a connected team without help, with the step count measured before and
+after. `M`
+
+---
+
+## K. Solver and product expansion
+
+### K1 — Positional scarcity
+
+- [ ] Compute a league-wide scarcity measure periodically rather than per run, provider-neutrally.
+- [ ] Use it as the foundation for add/drop and transaction recommendations, not as a score multiplier.
+
+**Verify**: a fixture league where a thin position changes the recommendation for a documented reason. `M`
+
+### K2 — Transactions and add/drop recommendations
+
+- [ ] Read-only recommendations first, using K1.
+- [ ] Review links exist for add and drop; keep execution out of scope until the owner says otherwise.
+
+**Verify**: recommendations against known-good cases with no provider write. `L`, depends on K1.
+
+### K3 — Category-aware objective
+
+**decide**: whether the objective should be expected categories won rather than the current community start
+rate. A product choice, not a defect.
+
+**Verify**: a league where the two objectives recommend different lineups, with the difference explained.
+`L`
+
+### K4 — Baseball and basketball
+
+Starting-lineup rules for all four sports are declared and tested; stat categories, games and innings limits,
+and provider request shapes are not built.
+
+**Verify**: a real league in each sport, read and planned correctly. `L`
+
+### K5 — Second provider
+
+The seam supports it; none is planned. Adding one is an adapter plus a registry entry, provided F1 is done.
+
+**Verify**: a second adapter reading and planning one league without touching generic modules. `L`,
+depends on F1.
+
+---
+
+## L. Operations and compliance
+
+### L1 — Restore policy
+
+The drill proved point-in-time restore produces a usable database. What remains is policy.
+
+- [ ] **decide** retention window, recovery point and time objectives, and who executes recovery.
+- [ ] Record it in the deployment runbook and test the alert path.
+
+**Verify**: the written policy plus one rehearsal that follows it end to end. `S`
+
+### L2 — Domain and production email
+
+- [ ] Acquire a domain and move the sender off the Resend test address.
+- [ ] Verify delivery to a non-owner address and the action-required path.
+
+**Verify**: a real reminder delivered to a real inbox that is not the owner's. `S`
+
+### L3 — Muse acceptance against the deployed origin
+
+- [ ] Run the client's rounds against the deployed server rather than a local instance.
+- [ ] Confirm paging, cursors, scope enforcement and pending outcomes behave the same there.
+
+**Verify**: a recorded acceptance pass with the tool results. `S`
+
+---
+
+## M. Naming
+
+### M1 — Rename to lineupgrade
+
+Deferred by the owner, but placed deliberately: immediately before the redesign, while nothing is public
+and no domain exists.
+
+- [ ] **decide** the name, then update the wordmark, MCP metadata, documentation and any artifacts.
+
+**Verify**: every reference updated. `M` if taken.
+
+---
+
+## N. Redesign exploration
+
+Later by the owner's choice, and after the framework migration so it is not done twice.
+
+- [ ] Explore a more vibrant and playful direction: tasteful motion, and whether cards beat lists.
+- [ ] Reconcile with the locked violet and gold identity and the established copy discipline.
+- [ ] Agree the direction on two or three screens before building a system.
+
+**Verify**: a direction approved by the owner on real screens, at mobile and desktop, light and dark. `M`
+to explore, `L` to apply.
+
+---
+
+## O. Standing loops
+
+### O1 — Client feedback
+
+Not a project. External clients file findings through the product; triage them, fix what is real, and record
+why anything is declined. Currently zero open.
+
+---
+
+## Decisions needed from the owner
+
+| ID  | Decision                                                             | Blocks |
+| --- | -------------------------------------------------------------------- | ------ |
+| D1  | Staging model for CI: long-lived or per-branch                       | C1     |
+| D2  | Cloudflare split, or make GCP cold start good enough                 | D2     |
+| D3  | Schedule cache source: derived from our reads, or external           | E1     |
+| D4  | Retention, RPO/RTO and recovery owner                                | L1     |
+| D5  | Rename to lineupgrade, and when                                      | M1     |
+| D6  | Solver direction: positional scarcity first, or category-aware first | K1, K3 |
+| D7  | Transactions: stay read-only, or plan for execution                  | K2     |
+| D8  | Passkeys as a sign-in option                                         | future |
+
+Ruled already, recorded so they are not reopened: Foldkit before any redesign; the rename before the
+redesign; the visual redesign is exploration rather than committed work; "phase 2 with the solver" is
+complete and is not roadmap work.
+
+## Known non-goals
 
 Recorded so they are not rediscovered as gaps: no server-side LLM in the solver, no scoring controls, no
 premium provider actions, no arbitrary URL or SQL escape hatches, no multi-period planning, no
 cross-account feedback triage.
+
+---
+
+## Appendix — closed work
+
+Rationale for each lives in the commit history and the feedback records. Every item was verified before it
+was closed.
+
+- **MCP client feedback, rounds 2 to 8.** Per-tool scope enforcement, review links, restricted-client
+  feedback, roto standings, search row fields, team summary coverage and paging, feedback read-back, hockey
+  date windows, compact standings, inlined stat names, two-sided trades with picks, draft history,
+  scoring-versus-informational categories, injury status on search rows, transaction rules, per-date
+  schedules, and per-team acquisition usage. Resolution notes are in the feedback table.
+- **Interface rework from the owner walkthrough.** Voice without emdashes or slogans, connections that exist
+  only after a link succeeds, connection identity without personal data, one switch per team with optimistic
+  state, folded quiet activity, local times, back affordances, feedback prefill, and a mobile browser that
+  can be typed into.
+- **Local helper removal.** The helper app, its upload endpoint, the device flow, the pairing and reconnect
+  columns, and the seeded OAuth client are gone.
+- **Dependency audit.** Two reachable vulnerabilities fixed; 49 remaining records dispositioned in
+  [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md).
+- **Restore drill.** Passed 2026-10-29; procedure in the [deployment runbook](deployment.md).
+- **Two test stalls.** Input readiness now comes from the live DOM, and shutdown awaits session teardown.
