@@ -559,6 +559,7 @@ export type ProviderStanding = {
   readonly pointsFor: number | null;
   readonly pointsAgainst: number | null;
   readonly streak: { readonly type: string; readonly value: number } | undefined;
+  readonly acquisitionUsage: ProviderAcquisitionUsage;
   readonly categoryTotals: ReadonlyArray<ProviderStatValue>;
   readonly categoryPoints: ReadonlyArray<ProviderStatValue>;
 };
@@ -669,10 +670,21 @@ export type ProviderDraftPick = {
   readonly providerPlayerKey: string;
 };
 
+export type ProviderAcquisitionUsage = {
+  readonly seasonMoves: number | undefined;
+  readonly weeklyAdds:
+    | {
+        readonly used: number;
+        readonly coverage: ProviderRosterCoverage;
+      }
+    | undefined;
+};
+
 export type ProviderLeagueTeam = {
   readonly providerTeamKey: string;
   readonly providerLeagueKey: string;
   readonly name: string;
+  readonly acquisitionUsage: ProviderAcquisitionUsage;
 };
 
 export type ProviderReviewIntent =

@@ -121,8 +121,8 @@ A transaction rule the league does not declare. It is never zero, never a per-te
 _Avoid_: Zero, unset, default
 
 **Acquisition usage**:
-How many acquisitions a team has already used in a week or season. The provider publishes no usage counters in league settings or in any read this application makes, so acquisition usage is reported as not published rather than derived from transaction history.
-_Avoid_: Moves used, remaining adds when a published count is meant
+How many acquisitions a team has already used in a covered week and in the season, as the provider's own team object reports them: `seasonMovesUsed` from its move count and `weeklyAddsUsed` over the stated coverage. The remaining count is published only where the league declares a limit, and a team whose payload carries no counter is not published with a reason, never reported as zero. It is not derived from transaction history.
+_Avoid_: Estimated usage, transaction count as usage, zero when the provider published nothing
 
 **Draft history**:
 The picks a league's draft actually made: round, pick number, the team that made the pick, and the player taken. It is not current or future pick ownership, and a traded pick appears on the trade transaction that moved it rather than in this history.

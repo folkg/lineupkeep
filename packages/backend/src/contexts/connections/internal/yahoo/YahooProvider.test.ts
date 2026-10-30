@@ -82,6 +82,7 @@ import {
   yahooNflDraftResults,
   yahooNflRoster,
   yahooNflStandings,
+  yahooNflStandingsWithAcquisitionUsage,
   yahooNhlCategoryStandings,
   yahooNhlMatchupsWithGames,
   yahooNhlRotoStandings,
@@ -2345,6 +2346,10 @@ it.effect("reads head-to-head point standings with record and season points", ()
         pointsFor: 1583.16,
         pointsAgainst: 1447.26,
         streak: { type: "loss", value: 2 },
+        acquisitionUsage: {
+          seasonMoves: 1,
+          weeklyAdds: { used: 2, coverage: { type: "week", week: 6 } },
+        },
         categoryTotals: [],
         categoryPoints: [],
       },
@@ -2360,10 +2365,34 @@ it.effect("reads head-to-head point standings with record and season points", ()
         pointsFor: 1494.02,
         pointsAgainst: 1501.44,
         streak: { type: "win", value: 1 },
+        acquisitionUsage: {
+          seasonMoves: 1,
+          weeklyAdds: { used: 2, coverage: { type: "week", week: 6 } },
+        },
         categoryTotals: [],
         categoryPoints: [],
       },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("decodes a published zero add count separately from absent usage", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflStandingsWithAcquisitionUsage));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const standings = yield* provider.readStandings({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4004",
+    });
+
+    assert.deepStrictEqual(
+      standings.teams.map((team) => team.acquisitionUsage),
+      [
+        { seasonMoves: 0, weeklyAdds: { used: 0, coverage: { type: "week", week: 9 } } },
+        { seasonMoves: undefined, weeklyAdds: undefined },
+      ],
+    );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -2968,11 +2997,16 @@ it.effect("reads league team membership", () => {
         providerTeamKey: "466.l.4000.t.1",
         providerLeagueKey: "466.l.4000",
         name: "Synthetic NFL Team",
+        acquisitionUsage: {
+          seasonMoves: 4,
+          weeklyAdds: { used: 0, coverage: { type: "week", week: 8 } },
+        },
       },
       {
         providerTeamKey: "466.l.4000.t.2",
         providerLeagueKey: "466.l.4000",
         name: "Synthetic Rival",
+        acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
       },
     ]);
   }).pipe(Effect.provide(yahooLayer(internet)));

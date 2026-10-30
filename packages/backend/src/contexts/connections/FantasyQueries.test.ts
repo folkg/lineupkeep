@@ -19,6 +19,7 @@ import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
 import { TransactionReviewsLive } from "./internal/TransactionReviewsLive.ts";
 import type {
+  ProviderAcquisitionUsage,
   ProviderLeagueSettings,
   ProviderTransaction,
   ProviderTransactionMovement,
@@ -233,8 +234,181 @@ it.effect("reports a league's unset transaction rules as not set rather than zer
       gamesPlayed: { status: "not_set" },
       inningsPitched: { status: "not_set" },
     });
-    assert.strictEqual(rules?.acquisitionUsage.status, "not_published");
-    assert.include(rules?.acquisitionUsage.detail, "no counter");
+    assert.notProperty(rules, "acquisitionUsage");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("publishes each team's acquisition usage beside the league limits", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: { ...leagueFixture, maxWeeklyAcquisitions: 7, maxSeasonAcquisitions: 30 },
+    });
+    yield* fake.setStandings({
+      providerLeagueKey: "461.l.1000",
+      teams: [
+        standingWithUsage("461.l.1000.t.1", "Alpha", 1, {
+          seasonMoves: 12,
+          weeklyAdds: { used: 3, coverage: { type: "week", week: 3 } },
+        }),
+        standingWithUsage("461.l.1000.t.2", "Beta", 2, {
+          seasonMoves: 24,
+          weeklyAdds: { used: 7, coverage: { type: "week", week: 3 } },
+        }),
+      ],
+    });
+
+    const league = yield* queries.getLeague(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["standings"],
+    });
+
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok" || league.standings?.status !== "available") {
+      assert.fail("expected available standings");
+      return;
+    }
+    assert.deepStrictEqual(league.standings.acquisitionLimits, {
+      weekly: { status: "published", value: 7 },
+      season: { status: "published", value: 30 },
+    });
+    const [own, rival] = league.standings.teams;
+    assert.deepStrictEqual(own?.acquisitionUsage, {
+      status: "published",
+      seasonMovesUsed: 12,
+      weeklyAddsUsed: 3,
+      coverage: { week: 3 },
+      seasonMovesRemaining: 18,
+      weeklyAddsRemaining: 4,
+    });
+    assert.deepStrictEqual(rival?.acquisitionUsage, {
+      status: "published",
+      seasonMovesUsed: 24,
+      weeklyAddsUsed: 7,
+      coverage: { week: 3 },
+      seasonMovesRemaining: 6,
+      weeklyAddsRemaining: 0,
+    });
+    assert.include(league.standings.detailNote, "No per-team games-played count");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("publishes usage without a remaining count when the league sets no limit", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setStandings({
+      providerLeagueKey: "461.l.1000",
+      teams: [
+        standingWithUsage("461.l.1000.t.1", "Alpha", 1, {
+          seasonMoves: 4,
+          weeklyAdds: { used: 0, coverage: { type: "week", week: 3 } },
+        }),
+      ],
+    });
+
+    const league = yield* queries.getLeague(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["standings"],
+    });
+
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok" || league.standings?.status !== "available") {
+      assert.fail("expected available standings");
+      return;
+    }
+    assert.deepStrictEqual(league.standings.acquisitionLimits, {
+      weekly: { status: "not_set" },
+      season: { status: "not_set" },
+    });
+    assert.deepStrictEqual(Array.getUnsafe(league.standings.teams, 0).acquisitionUsage, {
+      status: "published",
+      seasonMovesUsed: 4,
+      weeklyAddsUsed: 0,
+      coverage: { week: 3 },
+    });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports a team with no published counters as not published rather than zero", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setStandings({
+      providerLeagueKey: "461.l.1000",
+      teams: [
+        standingWithUsage("461.l.1000.t.1", "Alpha", 1, {
+          seasonMoves: undefined,
+          weeklyAdds: undefined,
+        }),
+      ],
+    });
+
+    const league = yield* queries.getLeague(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["standings"],
+    });
+
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok" || league.standings?.status !== "available") {
+      assert.fail("expected available standings");
+      return;
+    }
+    assert.deepStrictEqual(Array.getUnsafe(league.standings.teams, 0).acquisitionUsage, {
+      status: "not_published",
+      detail:
+        "The provider published neither a season move count nor a weekly adds count for this team.",
+    });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("carries the owning team's acquisition usage on the team summary", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: { ...leagueFixture, maxWeeklyAcquisitions: 7, maxSeasonAcquisitions: 30 },
+    });
+    yield* fake.setStandings({
+      providerLeagueKey: "461.l.1000",
+      teams: [
+        standingWithUsage("461.l.1000.t.1", "Alpha", 1, {
+          seasonMoves: 12,
+          weeklyAdds: { used: 3, coverage: { type: "week", week: 3 } },
+        }),
+        standingWithUsage("461.l.1000.t.2", "Beta", 2, {
+          seasonMoves: 24,
+          weeklyAdds: { used: 7, coverage: { type: "week", week: 3 } },
+        }),
+      ],
+    });
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["standings"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok" || summary.acquisitionUsage?.status !== "available") {
+      assert.fail("expected the summary's acquisition usage");
+      return;
+    }
+    assert.deepStrictEqual(summary.acquisitionUsage.limits, {
+      weekly: { status: "published", value: 7 },
+      season: { status: "published", value: 30 },
+    });
+    assert.deepStrictEqual(summary.acquisitionUsage.usage, {
+      status: "published",
+      seasonMovesUsed: 12,
+      weeklyAddsUsed: 3,
+      coverage: { week: 3 },
+      seasonMovesRemaining: 18,
+      weeklyAddsRemaining: 4,
+    });
+    assert.strictEqual(summary.acquisitionUsage.gamesPlayedUsage.status, "not_published");
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -1262,8 +1436,18 @@ it.effect("returns draft history with round, pick, team, and player for the leag
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
     const teamId = Array.getUnsafe(seeded, 0).id;
     yield* fake.setLeagueTeams([
-      { providerTeamKey: "461.l.1000.t.1", providerLeagueKey: "461.l.1000", name: "Alpha" },
-      { providerTeamKey: "461.l.1000.t.2", providerLeagueKey: "461.l.1000", name: "Beta" },
+      {
+        providerTeamKey: "461.l.1000.t.1",
+        providerLeagueKey: "461.l.1000",
+        name: "Alpha",
+        acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+      },
+      {
+        providerTeamKey: "461.l.1000.t.2",
+        providerLeagueKey: "461.l.1000",
+        name: "Beta",
+        acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+      },
     ]);
     yield* fake.setDraftResults([
       {
@@ -1509,7 +1693,12 @@ it.effect("builds a trade review link only for a league member counterparty", ()
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
     const teamId = Array.getUnsafe(seeded, 0).id;
     yield* fake.setLeagueTeams([
-      { providerTeamKey: "461.l.1000.t.2", providerLeagueKey: "461.l.1000", name: "Beta" },
+      {
+        providerTeamKey: "461.l.1000.t.2",
+        providerLeagueKey: "461.l.1000",
+        name: "Beta",
+        acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+      },
     ]);
 
     const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
@@ -1656,6 +1845,10 @@ const thirteenTeamStandings = (providerLeagueKey: string): ProviderStandings => 
     pointsFor: 120 - index,
     pointsAgainst: null,
     streak: undefined,
+    acquisitionUsage: {
+      seasonMoves: index,
+      weeklyAdds: { used: index % 7, coverage: { type: "week", week: 5 } },
+    },
     categoryTotals: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26].map((statId) => ({
       statId,
       value: 100 - index,
@@ -1766,6 +1959,10 @@ it.effect("reads standings with category totals and marks the linked team", () =
           pointsFor: 1234.5,
           pointsAgainst: 1100,
           streak: { type: "win", value: 3 },
+          acquisitionUsage: {
+            seasonMoves: 4,
+            weeklyAdds: { used: 2, coverage: { type: "week", week: 3 } },
+          },
           categoryTotals: [
             { statId: 4, value: 3120 },
             { statId: 20, value: 980 },
@@ -1784,6 +1981,10 @@ it.effect("reads standings with category totals and marks the linked team", () =
           pointsFor: 1090.25,
           pointsAgainst: 1142,
           streak: undefined,
+          acquisitionUsage: {
+            seasonMoves: 0,
+            weeklyAdds: { used: 0, coverage: { type: "week", week: 3 } },
+          },
           categoryTotals: [{ statId: 4, value: 2800 }],
           categoryPoints: [],
         },
@@ -1898,6 +2099,8 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     assert.isUndefined(compactRow.record);
     assert.include(compact.standings.detailNote, "standingsDetail: detailed");
 
+    const dictionary = yield* queries.getLeague(owner, { team: teamId, groups: ["scoring"] });
+    assert.strictEqual(dictionary.status, "ok");
     const league = yield* queries.getLeague(owner, {
       team: teamId,
       groups: ["standings"],
@@ -1918,7 +2121,7 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     assert.strictEqual(league.standings.categoryPoints?.status, "available");
     assert.strictEqual(league.standings.omittedCategories?.count, 2);
 
-    const scoring = league.scoring ?? [];
+    const scoring = dictionary.status === "ok" ? (dictionary.scoring ?? []) : [];
     const scoringRefs = new Set(scoring.map((category) => category.stat));
     const named = [...(row.categories ?? []), ...(row.categoryPoints ?? [])];
     assert.isTrue(named.every((entry) => scoringRefs.has(entry.stat)));
@@ -2063,7 +2266,7 @@ it.effect("states the rotisserie categories whose points the provider does not p
     }
     const row = Array.getUnsafe(league.standings.teams, 0);
     const savePercentage = Array.getUnsafe(
-      (league.scoring ?? []).filter((category) => category.abbreviation === "SV%"),
+      (row.categoryPoints ?? []).filter((entry) => entry.name === "Save Percentage"),
       0,
     ).stat;
     const points = new Map((row.categoryPoints ?? []).map((entry) => [entry.stat, entry]));
@@ -2930,6 +3133,10 @@ it.effect("fits a multi-section team summary inside the result budget", () =>
         pointsFor: 1234.5,
         pointsAgainst: 1100,
         streak: undefined,
+        acquisitionUsage: {
+          seasonMoves: index,
+          weeklyAdds: { used: index % 7, coverage: { type: "week", week: 3 } },
+        },
         categoryTotals: [
           { statId: 4, value: 3120 },
           { statId: 20, value: 980 },
@@ -3487,6 +3694,10 @@ const rotoStanding = (values: {
   pointsFor: 92,
   pointsAgainst: null,
   streak: undefined,
+  acquisitionUsage: {
+    seasonMoves: 6,
+    weeklyAdds: { used: 1, coverage: { type: "week", week: 5 } },
+  },
   categoryTotals: [1, 2, 3, 8, 14, 31, 32, 19, 22, 23, 25, 24, 26, 29, 30].map((statId) => ({
     statId,
     value: values.totals[statId] ?? null,
@@ -3551,6 +3762,30 @@ const leagueFixture: ProviderLeagueSettings = {
   ],
   statModifiers: [{ statId: 4, points: "0.04" }],
 };
+
+function standingWithUsage(
+  providerTeamKey: string,
+  name: string,
+  rank: number,
+  acquisitionUsage: ProviderAcquisitionUsage,
+): ProviderStandings["teams"][number] {
+  return {
+    providerTeamKey,
+    name,
+    rank,
+    playoffSeed: null,
+    record: undefined,
+    gamesBack: null,
+    pointsBack: null,
+    points: 10,
+    pointsFor: 10,
+    pointsAgainst: null,
+    streak: undefined,
+    acquisitionUsage,
+    categoryTotals: [],
+    categoryPoints: [],
+  };
+}
 
 function searchFixture(input: {
   readonly providerPlayerKey: string;

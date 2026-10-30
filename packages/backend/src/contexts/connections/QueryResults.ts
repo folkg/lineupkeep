@@ -151,6 +151,77 @@ const DeclaredTradeRatification = Schema.Union([
   Schema.Struct({ status: Schema.Literal("not_set") }),
 ]).pipe(Schema.annotate({ description: declaredStateDetail }));
 
+export const AcquisitionLimits = Schema.Struct({
+  weekly: DeclaredNumber.pipe(
+    Schema.annotate({ description: "Acquisitions the league allows each team per week." }),
+  ),
+  season: DeclaredNumber.pipe(
+    Schema.annotate({ description: "Acquisitions the league allows each team per season." }),
+  ),
+});
+
+const AddCoverage = Schema.Union([
+  Schema.Struct({ week: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)) }),
+  Schema.Struct({ date: Schema.NonEmptyString }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "The period the provider's adds count covers: the league's scoring week, or a date for a league the provider counts by day.",
+  }),
+);
+
+export const AcquisitionUsage = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("published"),
+    seasonMovesUsed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+      Schema.annotate({
+        description:
+          "Season-long moves the provider reports this team has used. A published zero means the provider reported none; it is never a missing count.",
+      }),
+    ),
+    weeklyAddsUsed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+      Schema.annotate({
+        description:
+          "Adds the provider reports this team has used in `coverage`. A published zero means the provider reported none; it is never a missing count.",
+      }),
+    ),
+    coverage: AddCoverage,
+    seasonMovesRemaining: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(
+      Schema.annotate({
+        description:
+          "Season moves the team may still use before reaching the league limit, so a client does not subtract the count itself. Absent when the league declares no such limit; never manufactured against no limit.",
+      }),
+    ),
+    weeklyAddsRemaining: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(
+      Schema.annotate({
+        description:
+          "Adds the team may still use in `coverage` before reaching the league limit. Absent when the league declares no such limit; never manufactured against no limit.",
+      }),
+    ),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("not_published"),
+    detail: Schema.NonEmptyString.pipe(
+      Schema.annotate({
+        description:
+          "Why this team's acquisition usage is unknown. The provider published no such counter, which is different from reporting zero used.",
+      }),
+    ),
+  }),
+]);
+
+const GamesPlayedUsage = Schema.Struct({
+  status: Schema.Literal("not_published"),
+  detail: Schema.NonEmptyString,
+}).pipe(
+  Schema.annotate({
+    description:
+      "Per-team games played is not published. The provider's `out=games_played` teams read returns an empty per-team node, so only the league's games-played cap is known.",
+  }),
+);
+export type AcquisitionUsage = typeof AcquisitionUsage.Type;
+export type AcquisitionLimits = typeof AcquisitionLimits.Type;
+
 const TransactionRules = Schema.Struct({
   waiver: Schema.Struct({
     type: DeclaredText.pipe(
@@ -181,14 +252,12 @@ const TransactionRules = Schema.Struct({
       }),
     ),
   }),
-  acquisitionLimits: Schema.Struct({
-    weekly: DeclaredNumber.pipe(
-      Schema.annotate({ description: "Acquisitions the league allows each team per week." }),
-    ),
-    season: DeclaredNumber.pipe(
-      Schema.annotate({ description: "Acquisitions the league allows each team per season." }),
-    ),
-  }),
+  acquisitionLimits: AcquisitionLimits.pipe(
+    Schema.annotate({
+      description:
+        "The league's acquisition limits. Each team's used count is published with its standings row, where `seasonMovesRemaining` and `weeklyAddsRemaining` are stated beside these limits when the league declares them.",
+    }),
+  ),
   trades: Schema.Struct({
     endDate: DeclaredText.pipe(
       Schema.annotate({
@@ -215,10 +284,6 @@ const TransactionRules = Schema.Struct({
           "Innings-pitched cap for the season, which applies to baseball only. Published only when this league declares one.",
       }),
     ),
-  }),
-  acquisitionUsage: Schema.Struct({
-    status: Schema.Literal("not_published"),
-    detail: Schema.String,
   }),
   detailNote: Schema.String,
 });
@@ -340,6 +405,12 @@ export const StandingRow = Schema.Struct({
       value: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     }),
   ),
+  acquisitionUsage: AcquisitionUsage.pipe(
+    Schema.annotate({
+      description:
+        "This team's acquisition usage, published even for a rival so a waiver decision compares against the league without another call. `not_published` is stated with the provider's missing counter, never as zero used.",
+    }),
+  ),
   categories: Schema.optional(Schema.Array(CategoryValue)).pipe(
     Schema.annotate({
       description:
@@ -359,6 +430,12 @@ const StandingsData = Schema.Struct({
   format: LeagueFormat,
   presentation: StandingDetail,
   detailNote: Schema.NonEmptyString,
+  acquisitionLimits: AcquisitionLimits.pipe(
+    Schema.annotate({
+      description:
+        "The league's acquisition limits, published once for the rows. A team's remaining count is present only for a limit published here; `not_set` means the league declares none, so no row manufactures a remaining count.",
+    }),
+  ),
   categoryTotals: Schema.optional(StandingsCoverage),
   categoryPoints: Schema.optional(StandingsCoverage),
   omittedCategories: Schema.optional(OmittedCategories),
@@ -1077,6 +1154,21 @@ const SummaryStandings = Schema.Union([
   Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
 ]);
 
+const SummaryAcquisitionUsage = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    limits: AcquisitionLimits,
+    usage: AcquisitionUsage,
+    gamesPlayedUsage: GamesPlayedUsage,
+  }),
+  Schema.Struct({ status: Schema.Literal("unsupported"), detail: Schema.String }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "This team's acquisition usage beside the league's limits, so a waiver decision needs no second call. The limits are also published here because the summary omits the full transaction rules.",
+  }),
+);
+
 const SummaryMatchup = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("available"),
@@ -1214,6 +1306,7 @@ export const TeamSummaryData = Schema.Struct({
   categoryTotals: Schema.optional(SummaryCategories),
   categoryPoints: Schema.optional(SummaryCategories),
   standings: Schema.optional(SummaryStandings),
+  acquisitionUsage: Schema.optional(SummaryAcquisitionUsage),
   matchup: Schema.optional(SummaryMatchup),
   remainingPlayerGames: Schema.optional(SummaryRemainingGames),
   schedule: Schema.optional(SummarySchedule).pipe(

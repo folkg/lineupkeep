@@ -1390,3 +1390,38 @@ A password field (or a working "use password instead" affordance) would mean the
 this account class without Google, and the whole password path should be revisited. The notice, as
 observed on every surface tested here, means the account cannot use a Yahoo password at the sign-in page
 at all, regardless of whether one is set.
+
+## Live acquisition-usage verification (2026-10-30)
+
+A read-only pass over the owner's five current football and hockey leagues probed the team objects
+that carry acquisition usage. A disposable gitignored harness (`.artifacts/acquisition-usage/`)
+decrypted the stored provider credential with the application's own credential service and issued
+the reads through `PublicInternet` with the real transport. Retained evidence holds field names,
+JSON types, counts, ranges, status codes, and byte sizes only; no cookie, league id, team key,
+team name, or manager identity was printed or written.
+
+- **Both counters are on the team object.** `GET /fantasy/v2/league/{league_key}/teams?format=json`
+  returned `number_of_moves` and `roster_adds` on every team in all five leagues: 60 teams across
+  the five reads, with no team missing either field. `number_of_moves` arrived as a JSON number.
+  `roster_adds` arrived as `{ coverage_type: "week", coverage_value: <number>, value: "<integer>" }`
+  on every team: the coverage value was a number, the value a numeric string. A published zero
+  (`value: "0"`) is a real zero, not an empty string.
+- **The standings read carries the same team object.** `GET .../standings?format=json` returned
+  `number_of_moves` and `roster_adds` on 58 of 58 team rows across the same five leagues, so
+  standings rows can carry per-team usage without a second upstream read.
+- **The league's own limits vary as the earlier settings pass recorded.** One league declared both a
+  weekly and a season limit, one declared only a season limit, one declared only a weekly limit,
+  one declared neither, and the remaining league declared a weekly limit only. The counter's
+  `coverage_type` was `week` in every league, including the football points league and the
+  rotisserie hockey league.
+- **`out=games_played` publishes no per-team count.** The query form
+  `.../teams?format=json&out=games_played` answered HTTP 400, and so did
+  `.../standings;out=games_played`. The collection-path form
+  `.../teams;out=games_played?format=json` answered 200, and on the two leagues that returned the
+  field at all it was the empty array `[]` for every team (`"games_played": []`). The other three
+  leagues omitted the field entirely. No team, league, or sport in the pass published a
+  games-played count, so only the league's `max_games_played` cap is known.
+- **No incomplete team payload appeared in this pass.** Every current league's team and settings
+  objects carried the counters, so the "provider published neither counter" state remains covered
+  by synthetic fixtures rather than by today's live data. The adapter distinguishes it from a
+  published zero at the provider type and at the query surface.

@@ -1941,6 +1941,8 @@ const nflTeamEntry = [
   { is_owned_by_current_login: 1 },
   { url: "https://football.fantasysports.yahoo.com/f1/4000/1" },
   { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic-nfl.png" } }] },
+  { number_of_moves: "4" },
+  { roster_adds: { coverage_type: "week", coverage_value: "8", value: "0" } },
   [],
   { managers: [{ manager: { manager_id: "1", is_current_login: "1" } }] },
   [],
@@ -2624,6 +2626,7 @@ function standingsTeam(key: string, name: string, fragments: ReadonlyArray<unkno
       { team_logos: [{ team_logo: { size: "large", url: "https://s.yimg.com/synthetic.png" } }] },
       { waiver_priority: 1 },
       { number_of_moves: 1 },
+      { roster_adds: { coverage_type: "week", coverage_value: 6, value: "2" } },
       { number_of_trades: 0 },
       { league_scoring_type: "head" },
       { draft_position: 1 },
@@ -2702,6 +2705,23 @@ export const yahooNflStandings = standingsPayload("466.l.4000", "Synthetic NFL L
     },
   ]),
 ]);
+
+export const yahooNflStandingsWithAcquisitionUsage = standingsPayload(
+  "466.l.4004",
+  "Synthetic Acquisition League",
+  [
+    [
+      [
+        { team_key: "466.l.4004.t.1" },
+        { team_id: "1" },
+        { name: "Synthetic Zero Team" },
+        { number_of_moves: "0" },
+        { roster_adds: { coverage_type: "week", coverage_value: "9", value: "0" } },
+      ],
+    ],
+    [[{ team_key: "466.l.4004.t.2" }, { team_id: "2" }, { name: "Synthetic Silent Team" }]],
+  ],
+);
 
 export const yahooNhlCategoryStandings = standingsPayload(
   "466.l.4002",

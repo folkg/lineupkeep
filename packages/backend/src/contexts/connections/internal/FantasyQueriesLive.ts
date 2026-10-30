@@ -5,6 +5,7 @@ import { Connections } from "#contexts/connections/Connections.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import type {
+  ProviderAcquisitionUsage,
   ProviderDraftPick,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
@@ -30,6 +31,8 @@ import type {
 import type { ProviderLimitationSubject } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import type {
+  AcquisitionLimits,
+  AcquisitionUsage,
   CalendarData,
   DraftPick,
   GetCalendarInput,
@@ -483,7 +486,7 @@ export const FantasyQueriesLive = Layer.effect(
         return leagueWithoutData(team, groups, fetchedAt, outcome);
       }
       const league = outcome.value;
-      const includeScoring = groups.includes("scoring") || presentation === "detailed";
+      const includeScoring = groups.includes("scoring");
       const scoring = includeScoring ? yield* scoringCategories(context, tokens, league) : [];
       const standingsOutcome = groups.includes("standings")
         ? yield* readOutcome(
@@ -503,6 +506,7 @@ export const FantasyQueriesLive = Layer.effect(
               tokens,
               standingsOutcome.value,
               presentation === "compact" ? undefined : categoryLabelsByStat,
+              acquisitionLimitValues(league),
             )
           : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
       const standingsRows = standingTable.rows;
@@ -642,6 +646,7 @@ export const FantasyQueriesLive = Layer.effect(
                     standingTable.omittedCategoryCount,
                     standingsFormat,
                     presentation,
+                    acquisitionLimitsOf(league),
                   ),
                 }),
             draftHistory: draftHistoryData(draftOutcome, pageRows, league.draftStatus),
@@ -674,6 +679,7 @@ export const FantasyQueriesLive = Layer.effect(
               standingTable.omittedCategoryCount,
               standingsFormat,
               presentation,
+              acquisitionLimitsOf(league),
             ),
             page,
           }),
@@ -701,6 +707,7 @@ export const FantasyQueriesLive = Layer.effect(
                   standingTable.omittedCategoryCount,
                   standingsFormat,
                   presentation,
+                  acquisitionLimitsOf(league),
                 ),
               }),
           ...(draftOutcome === undefined
@@ -1779,6 +1786,7 @@ export const FantasyQueriesLive = Layer.effect(
               tokens,
               standingsOutcome.value,
               league === undefined ? undefined : categoryLabelsByStat,
+              acquisitionLimitValues(league),
             )
           : { rows: [] as ReadonlyArray<StandingRow>, omittedCategoryCount: 0 };
       const rows = standingTable.rows;
@@ -1897,6 +1905,25 @@ export const FantasyQueriesLive = Layer.effect(
               })),
             }
           : { status: "unsupported", detail: standingsDetail };
+      const acquisitionUsageSection: TeamSummaryData["acquisitionUsage"] = !includes("standings")
+        ? undefined
+        : current === undefined || standingsOutcome?._tag !== "ok"
+          ? { status: "unsupported", detail: standingsDetail }
+          : league === undefined
+            ? {
+                status: "unsupported",
+                detail:
+                  "The league settings could not be read, so the acquisition limits and any remaining count cannot be verified.",
+              }
+            : {
+                status: "available",
+                limits: acquisitionLimitsOf(league),
+                usage: current.acquisitionUsage,
+                gamesPlayedUsage: {
+                  status: "not_published",
+                  detail: gamesPlayedUsageDetail,
+                },
+              };
 
       const window = league?.periodWindow;
       const period = currentPeriod(window);
@@ -2286,6 +2313,9 @@ export const FantasyQueriesLive = Layer.effect(
         ...(categoryTotals === undefined ? {} : { categoryTotals }),
         ...(categoryPoints === undefined ? {} : { categoryPoints }),
         ...(standingsSection === undefined ? {} : { standings: standingsSection }),
+        ...(acquisitionUsageSection === undefined
+          ? {}
+          : { acquisitionUsage: acquisitionUsageSection }),
         ...(matchupSection === undefined ? {} : { matchup: matchupSection }),
         ...(remainingGamesSection === undefined
           ? {}
@@ -2480,6 +2510,7 @@ function standingsData(
   omittedCategoryCount: number,
   format: ProviderLeagueSettings["format"],
   presentation: StandingDetail,
+  acquisitionLimits: AcquisitionLimits,
 ): NonNullable<LeagueData["standings"]> {
   if (outcome._tag !== "ok") {
     return {
@@ -2489,14 +2520,15 @@ function standingsData(
   }
   const detailNote =
     presentation === "compact"
-      ? "The compact form carries every team's rank, points, and record. Ask for `standingsDetail: detailed` to add per-category season totals and rotisserie points; that form pages teams."
-      : "Per-category totals and points are included, so this form pages teams; request the `standings` group alone for the most rows per page.";
+      ? "Every team row carries rank, points, record, and acquisition usage. `standingsDetail: detailed` adds per-category totals and rotisserie points and pages teams. No per-team games-played count is published."
+      : "Per-category totals and points are included, so this form pages teams; request `standings` alone for the most rows per page. No per-team games-played count is published.";
   if (presentation === "compact") {
     return {
       status: "available",
       format,
       presentation,
       detailNote,
+      acquisitionLimits,
       teams: [...rows],
     };
   }
@@ -2505,6 +2537,7 @@ function standingsData(
     format,
     presentation,
     detailNote,
+    acquisitionLimits,
     categoryTotals: categoryAvailability(
       rows,
       (row) => row.categories ?? [],
@@ -2527,6 +2560,7 @@ function standingRows(
   tokens: QueryTokens["Service"],
   standings: ProviderStandings,
   scoring: CategoryLabels | undefined,
+  acquisitionLimits: AcquisitionLimitValues | undefined,
 ): Effect.Effect<{
   readonly rows: ReadonlyArray<StandingRow>;
   readonly omittedCategoryCount: number;
@@ -2556,6 +2590,7 @@ function standingRows(
             pointsFor: standing.pointsFor,
             pointsAgainst: standing.pointsAgainst,
             ...(standing.streak === undefined ? {} : { streak: standing.streak }),
+            acquisitionUsage: acquisitionUsageOf(standing.acquisitionUsage, acquisitionLimits),
             ...(scoring === undefined
               ? {}
               : {
@@ -3175,13 +3210,8 @@ function leagueTransactionRules(
       gamesPlayed: declared(league.maxGamesPlayed),
       inningsPitched: declared(league.maxInningsPitched),
     },
-    acquisitionUsage: {
-      status: "not_published",
-      detail:
-        "Per-team acquisition usage is not published: the provider exposes no counter for the moves a team has already used this week or this season, so this server does not derive one from transaction history.",
-    },
     detailNote:
-      "Every rule is either published with the league's declared value or `not_set`. `not_set` means the league declares no such rule, never zero and never a per-team count; a cap that does not apply to the league's sport, such as innings in football, is also `not_set`.",
+      "Every rule is either published with the league's declared value or `not_set`. `not_set` means the league declares no such rule, never zero and never a per-team count; a cap that does not apply to the league's sport, such as innings in football, is also `not_set`. Each team's acquisition usage is published with its standings row beside these limits, and the provider publishes no per-team games-played count, so only the games-played cap is known.",
   };
 }
 
@@ -3189,6 +3219,66 @@ function declared<T>(
   value: T | undefined,
 ): { readonly status: "published"; readonly value: T } | { readonly status: "not_set" } {
   return value === undefined ? { status: "not_set" } : { status: "published", value };
+}
+
+const gamesPlayedUsageDetail =
+  "The provider publishes no per-team games-played count: its `out=games_played` teams read returns an empty node, so only the league's games-played cap is known.";
+
+type AcquisitionLimitValues = {
+  readonly weekly: number | undefined;
+  readonly season: number | undefined;
+};
+
+function acquisitionLimitValues(
+  league: ProviderLeagueSettings | undefined,
+): AcquisitionLimitValues | undefined {
+  return league === undefined
+    ? undefined
+    : { weekly: league.maxWeeklyAcquisitions, season: league.maxSeasonAcquisitions };
+}
+
+function acquisitionLimitsOf(league: ProviderLeagueSettings): AcquisitionLimits {
+  return {
+    weekly: declared(league.maxWeeklyAcquisitions),
+    season: declared(league.maxSeasonAcquisitions),
+  };
+}
+
+function acquisitionUsageOf(
+  usage: ProviderAcquisitionUsage,
+  limits: AcquisitionLimitValues | undefined,
+): AcquisitionUsage {
+  const { seasonMoves, weeklyAdds } = usage;
+  if (seasonMoves === undefined || weeklyAdds === undefined) {
+    return { status: "not_published", detail: missingAcquisitionUsage(seasonMoves, weeklyAdds) };
+  }
+  return {
+    status: "published",
+    seasonMovesUsed: seasonMoves,
+    weeklyAddsUsed: weeklyAdds.used,
+    coverage:
+      weeklyAdds.coverage.type === "week"
+        ? { week: weeklyAdds.coverage.week }
+        : { date: weeklyAdds.coverage.date },
+    ...(limits?.season === undefined
+      ? {}
+      : { seasonMovesRemaining: Math.max(0, limits.season - seasonMoves) }),
+    ...(limits?.weekly === undefined
+      ? {}
+      : { weeklyAddsRemaining: Math.max(0, limits.weekly - weeklyAdds.used) }),
+  };
+}
+
+function missingAcquisitionUsage(
+  seasonMoves: number | undefined,
+  weeklyAdds: ProviderAcquisitionUsage["weeklyAdds"],
+): string {
+  if (seasonMoves === undefined && weeklyAdds === undefined) {
+    return "The provider published neither a season move count nor a weekly adds count for this team.";
+  }
+  return seasonMoves === undefined
+    ? "The provider published no season move count for this team."
+    : "The provider published no weekly adds count for this team.";
 }
 
 function scoringCategories(

@@ -26,6 +26,7 @@ import {
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
 import type {
+  ProviderAcquisitionUsage,
   ProviderCategoryWinner,
   ProviderFantasyDay,
   ProviderGamesPlayed,
@@ -814,6 +815,7 @@ export const yahooProvider = Effect.gen(function* () {
       providerTeamKey: team.team_key,
       providerLeagueKey: leagueKey,
       name: team.name,
+      acquisitionUsage: acquisitionUsageOf(team.number_of_moves, team.roster_adds),
     }));
   });
 
@@ -2366,9 +2368,37 @@ function toStanding(team: typeof StandingsTeamPayload.Type): ProviderStanding {
       standings?.streak === undefined
         ? undefined
         : { type: standings.streak.type, value: standings.streak.value },
+    acquisitionUsage: acquisitionUsageOf(team.number_of_moves, team.roster_adds),
     categoryTotals: (team.team_stats?.stats ?? []).map(statValue),
     categoryPoints: (team.team_points?.stats ?? []).map(statValue),
   };
+}
+
+function acquisitionUsageOf(
+  seasonMoves: number | string | undefined,
+  rosterAdds: typeof AcquisitionPayload.Type | undefined,
+): ProviderAcquisitionUsage {
+  const weeklyAdds = rosterAdds === undefined ? undefined : weeklyAddsOf(rosterAdds);
+  return { seasonMoves: providerNumber(seasonMoves) ?? undefined, weeklyAdds };
+}
+
+function weeklyAddsOf(
+  rosterAdds: typeof AcquisitionPayload.Type,
+): ProviderAcquisitionUsage["weeklyAdds"] {
+  const used = providerNumber(rosterAdds.value);
+  if (used === null) {
+    return undefined;
+  }
+  if (rosterAdds.coverage_type === "date") {
+    return typeof rosterAdds.coverage_value === "string" &&
+      isProviderDate(rosterAdds.coverage_value)
+      ? { used, coverage: { type: "date", date: rosterAdds.coverage_value } }
+      : undefined;
+  }
+  const week = providerNumber(rosterAdds.coverage_value);
+  return week !== null && Number.isInteger(week) && week >= 1 && week <= 99
+    ? { used, coverage: { type: "week", week } }
+    : undefined;
 }
 
 function statValue(entry: typeof StatEntry.Type): ProviderStatValue {
@@ -3069,9 +3099,17 @@ const SessionPayload = Schema.Struct({
   ),
 });
 
+const AcquisitionPayload = Schema.Struct({
+  coverage_type: Schema.Literals(["week", "date"]),
+  coverage_value: Schema.Union([Schema.Finite, Schema.String]),
+  value: Schema.Union([Schema.Finite, Schema.String]),
+});
+
 const TeamPayload = Schema.Struct({
   team_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[^.]+\.l\.[^.]+\.t\.[^.]+$/u))),
   name: Schema.NonEmptyString,
+  number_of_moves: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+  roster_adds: Schema.optional(AcquisitionPayload),
 });
 
 const GamePayload = Schema.Struct({
@@ -3541,6 +3579,8 @@ const TeamStandingsPayload = Schema.Struct({
 const StandingsTeamPayload = Schema.Struct({
   team_key: TeamKey,
   name: Schema.NonEmptyString,
+  number_of_moves: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+  roster_adds: Schema.optional(AcquisitionPayload),
   team_points: Schema.optional(ScoreboardPointsPayload),
   team_standings: Schema.optional(TeamStandingsPayload),
   team_stats: Schema.optional(TeamStatsPayload),

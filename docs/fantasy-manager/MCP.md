@@ -110,14 +110,28 @@ be labelled, so it is omitted from both category arrays and counted in the secti
 value was published, so an empty array is never read as zero.
 
 The standings group has two forms, selected by `standingsDetail`. `compact` is the default: it
-returns every team's rank, points, points back, games back, and the record the format publishes, with
-no per-category arrays, so a 13-team league arrives in one result (verified against a 13-team
-fixture inside the 12 KiB target). `detailed` adds the per-category season totals and rotisserie
-points; that form genuinely does not fit a league in one result, so it pages teams and says so in
-the section's `detailNote` instead of paging silently. The compact form omits the scoring dictionary
-because its rows carry no stat references; a request that also asks for the `scoring` group gets it
-as usual. `get_matchups` and the summary's matchup section use the same `{ stat, name, status,
+returns every team's rank, points, points back, games back, the record the format publishes, and the
+team's acquisition usage, with no per-category arrays. A 13-team fixture whose league sets no
+acquisition limits arrives in one result inside the 12 KiB target; a league that sets limits adds
+each team's remaining counts and can therefore page, and a table over the budget pages with a cursor
+instead of dropping rows. `detailed` adds the per-category season totals and rotisserie points; that
+form genuinely does not fit a league in one result, so it pages teams and says so in the section's
+`detailNote` instead of paging silently. Both forms inline each category's name in a row, so the
+scoring dictionary is included only when the `scoring` group is requested; asking for detailed
+standings and scoring together can exceed the result budget, and the refusal names the groups to
+drop. `get_matchups` and the summary's matchup section use the same `{ stat, name, status,
 value }` category entry, so a scoring-week category with no published value is stated the same way.
+
+Each standings row carries `acquisitionUsage`, so a waiver decision compares against league rivals
+without a second read. `status: "published"` reports `seasonMovesUsed`, `weeklyAddsUsed`, and the
+`coverage` those adds count over (the scoring week in every league verified). `status:
+"not_published"` carries a reason and is what a team payload with neither provider counter reports;
+it is never zero used. The section's `acquisitionLimits` states the league's weekly and season limits
+once, `not_set` when the league declares none. `seasonMovesRemaining` and `weeklyAddsRemaining`
+appear only where the league declares the matching limit, so no remaining count is manufactured
+against no limit. The provider publishes no per-team games-played count — its `out=games_played`
+teams read returns an empty per-team node — so only the league's games cap is known, and the
+standings `detailNote` says so.
 
 `get_matchups` carries per-category values and the category winner (or a tie) for category
 leagues, plus `remainingGames` for the scoring week where the provider publishes it. Its `schedule`
@@ -215,17 +229,20 @@ and the objection window in days), and games caps (games played, and innings pit
 sport declares one). Every rule is `{ status: "published", value }` or `{ status: "not_set" }`: a
 league that sets no such limit reports `not_set` rather than zero or an omitted field, and a cap
 that does not apply to the league's sport is not manufactured. An unfamiliar provider ratification
-rule is `unknown`, never guessed as one of the named forms. `acquisitionUsage` states plainly that
-per-team usage counters are not published: the provider exposes no count of the moves a team has
-already used this week or this season in league settings or in any read this application makes, and
-the application does not derive one from transaction history.
+rule is `unknown`, never guessed as one of the named forms. Per-team usage is published with the
+team objects the provider returns: every standings row carries it, and `get_team_summary` repeats
+the owning team's usage beside the league limits. The provider publishes no per-team games-played
+count, so `transactionRules.detailNote` states that only the league's games cap is known.
 
 `get_team_summary` composes the league overview, the linked team's standing and record, league
-standings, the current matchup, this week's and next week's remaining player-games, and, only when
-the `roster` group is selected, a compact roster. Its league section is the compact static context
+standings, the owning team's acquisition usage, the current matchup, this week's and next week's
+remaining player-games, and, only when the `roster` group is selected, a compact roster. Its league section is the compact static context
 (name, team count, scoring type, week window, and dates) and deliberately omits `transactionRules`,
 which belongs to `get_league`; the rules would consume the summary's bounded result budget without
-changing a per-team snapshot. `groups` selects `league`, `standings`,
+changing a per-team snapshot. The `acquisitionUsage` section carries the same row usage as the
+standings group beside the league limits, because the summary omits `transactionRules`; it is
+available when the `standings` group is selected and the league settings could be read, and it states
+the same no-per-team-games-played boundary. `groups` selects `league`, `standings`,
 `categories`, `matchup`, `schedule`, and `roster`; the default is league, standings, matchup, and
 roster, `categories` adds season category totals and points plus the matchup's per-category values,
 and `schedule` adds the period's per-player games. Each section states its own availability, so a

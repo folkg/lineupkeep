@@ -1272,11 +1272,17 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(league.description).toContain("transactionRules");
   expect(league.description).toContain("acquisition limits");
   expect(league.description).toContain("not_set");
-  expect(league.description).toContain("acquisition usage is not published");
+  expect(league.description).toContain("acquisitionUsage");
+  expect(league.description).toContain("remaining count");
+  expect(league.description).not.toContain("13-team league fits in one result");
+  expect(league.description).toContain("not_set");
+  expect(league.description).not.toContain("acquisition usage is not published");
 
   const transactionRules = JSON.stringify(league.outputSchema);
   expect(transactionRules).toContain("transactionRules");
   expect(transactionRules).toContain("acquisitionLimits");
+  expect(transactionRules).toContain("acquisitionUsage");
+  expect(transactionRules).toContain("remaining");
   expect(transactionRules).toContain("gamesCaps");
   expect(transactionRules).toContain("not_published");
   expect(transactionRules).toContain("ratification");
