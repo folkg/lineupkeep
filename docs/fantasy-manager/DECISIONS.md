@@ -1,6 +1,6 @@
 # Agreed decisions from grilling
 
-These records preserve the answers and corrections from all recorded rounds through Round 10. Later rounds refine earlier ones; [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) is the consolidated current scope. Technical recommendations remain subject to final plan approval.
+These records preserve the answers and corrections from all recorded rounds through Round 13. Later rounds refine earlier ones; [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) is the consolidated current scope. Technical recommendations remain subject to final plan approval.
 
 ## Round 1 decisions
 
@@ -251,3 +251,27 @@ Status: implemented. The alpha report of a grant that stopped working after an i
 3. **Accepted: rotation is strict.** A client must request `offline_access` on the first authorization and persist every rotated `refresh_token`. A client that keeps presenting an already-rotated token loses the whole grant at its next renewal after the retry window and must authorize again. This is documented for client authors because the provider cannot recover a token the client did not store.
 4. **Accepted: signing material is durable.** JWT keys are persisted in the `jwks` table, so a Cloud Run revision change or scale-to-zero does not invalidate a live access token. A fresh auth instance against the same migrated database verifies a token issued by the previous instance and renews its grant; the node test proves both.
 5. **Not selected: an absolute family lifetime.** The installed provider renews the refresh token's 30-day window on every rotation and exposes no family-lifetime cap. We kept that behavior rather than patch the dependency: the grant is bounded by 30 days of inactivity, explicit revocation, and the user's consent. Revisit if the provider adds an absolute family lifetime or if the owner wants a forced periodic re-authorization.
+
+## Round 13 — Schedule cache source and identity
+
+Status: decided; implementation not started. Raised after the scoring-period schedule landed, when
+the owner asked to plan a cached schedule that would let automation run only for sports with games
+coming up.
+
+1. **Derive the calendar from our own roster reads first.** The fantasy provider publishes no season
+   or team schedule, so the first slice records the opponent facts roster reads already publish, one
+   read per linked team per date. An external sports schedule stays on the roadmap as planned later
+   work, not a dependency of the first slice.
+2. **Never join on an abbreviation or a prefix.** The provider publishes a professional-team key on
+   every roster row (`editorial_team_key`, observed as `nhl.t.26`) beside its abbreviation and full
+   name, so stored schedule and reference data join on that key. Abbreviations are display text, and
+   league abbreviations differ from the provider's (`LAK` against `LA`).
+3. **App-wide reference data carries one provider-key column per provider.** Where stored data could
+   be shared beyond one account, the canonical row holds the linking keys: a Yahoo team key column
+   now, and one column per provider as each is added. The owner chose columns over a separate mapping
+   table for now; revisit the mapping table only when a second provider is real.
+4. **An opponent is published only as an abbreviation.** A player's own team carries a key but its
+   opponent does not, so the opponent's key comes from abbreviation-to-key pairs observed on roster
+   rows; an unknown abbreviation stays unresolved rather than matched by guesswork. A non-null
+   opponent already establishes that the player's team plays, which is what work gating needs, and a
+   skipped run must fail open because a wrong skip is worse than a wasted read.

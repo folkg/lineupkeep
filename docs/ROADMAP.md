@@ -391,22 +391,32 @@ by browser test and screenshot, and deployed.
 - [ ] **Domain and production email.** The Resend test sender delivers only to the owner address. A
       domain makes this a non-issue and is otherwise cheap.
 
-### A cached professional-team schedule
+## 6a. Cached professional-team schedule and work gating
 
-- [ ] **Decide the schedule source.** The fantasy provider publishes no season or team schedule: the
-      only schedule fact is one opponent per rostered player per date or scoring week. So a cached
-      professional-team calendar is either derived from our own roster reads (one read per linked
-      team per date, and it already covers every player a work gate must consider) or taken from an
-      external sports schedule (a complete season with start times, at the cost of a new dependency
-      and a verified identity mapping, because provider abbreviations differ from the league's —
-      Yahoo `LA`, `SJ`, `NJ`, `TB` against `LAK`, `SJS`, `NJD`, `TBL`). Recommendation: derive from
-      our own reads first, and add an external source only when a feature needs every team or a whole
-      season. Record the decision in [DECISIONS.md](fantasy-manager/DECISIONS.md) when it is made.
-- [ ] **Persist what the reads already see.** Every roster read names each player's professional team
-      and its opponent for the date or week. Record those as a derived, owner-scoped
-      professional-team game calendar with an observation instant, so the cache grows from normal work
-      and adds no upstream contract. Verify against one week of live reads: every rostered player's
-      dates, opponents, and home or away match the direct read.
+Decided 2026-10-30: derive the calendar from our own roster reads first, and keep an external sports
+schedule on the roadmap as later work. Provider data joins by professional-team key, never by an
+abbreviation or prefix. Implementation has not started; each item names how it will be verified.
+
+- [x] **Choose the source.** The fantasy provider publishes no season or team schedule: the only
+      schedule fact is one opponent per rostered player for one date or scoring week. The first slice
+      derives the calendar from our own roster reads. Recorded in
+      [DECISIONS.md](fantasy-manager/DECISIONS.md#round-13--schedule-cache-source-and-identity).
+- [ ] **Store a provider-neutral professional-team identity.** Every roster row publishes the player's
+      professional team with a provider key (`editorial_team_key`, observed as `nhl.t.26`) beside its
+      abbreviation and full name. Reference rows carry the sport, league, name, and abbreviation plus
+      one provider-key column per provider — `yahoo_team_key` first, another column when another
+      provider is real. The provider key is the only join: an abbreviation is display text, and a
+      prefix is not identity. App-wide reference rows sit outside owner scoping, so their owning
+      domain and migration need review before use. Revisit a separate provider-key mapping table only
+      when a second provider is real.
+- [ ] **Persist what the reads already see.** Record each observation as a professional-team game on a
+      date, with home or away, the opponent abbreviation, the resolved opponent key when known, and an
+      observation instant, so the cache grows from normal work and adds no upstream contract.
+- [ ] **Resolve opponents through observed keys.** The opponent is published only as an abbreviation
+      while the player's own team carries a key, so learn abbreviation-to-key pairs from the same
+      roster rows, keep an unknown abbreviation unresolved, and never match one by prefix or
+      similarity. A non-null opponent already proves the player's team plays, so work gating does not
+      depend on resolving the opponent.
 - [ ] **Sweep the scoring period daily, not hourly.** Refresh the current period's dates once a day
       per linked team, and after a provider-day rollover, so tomorrow's games are known without an
       hourly read. Measure the provider-request saving against a real week before relying on it.
@@ -421,6 +431,12 @@ by browser test and screenshot, and deployed.
       covers them. Each value states when it was observed, and a postponed game stays unresolved until
       an observed case proves the provider's marking. Whether a future week's scoreboard publishes its
       date window is unverified; if it does, sweeping ahead is unnecessary.
+- [ ] **Plan the external schedule source, later.** The reference implementation cached start times and
+      a postponed flag per day from a non-fantasy Yahoo sports surface and joined its postponed set by
+      team id, so that surface family is the known candidate and would add start times, a season-long
+      view, and postponement status. It is not built: it needs a verified identity mapping into the
+      canonical team rows, a freshness and retention policy, and the same fail-open gating rule,
+      because a wrong join reads as "no game" and would skip a lineup.
 
 ## 7. Known non-goals
 

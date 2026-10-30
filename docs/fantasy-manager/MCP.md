@@ -302,6 +302,13 @@ retained.
 - On a weekly football league, `roster;week=N/players;out=opponent` returned 14 opponents and one
   `Bye` across 15 rostered players, so the week's opponent is the published equivalent when the
   league's coverage is a week rather than dates.
+- A roster row identifies the player's own professional team with a provider key
+  (`editorial_team_key`, observed as `nhl.t.26`) beside the abbreviation and full name, while the
+  opponent arrives only as an abbreviation. Any stored schedule therefore joins the player's team by
+  provider key and learns an opponent's key from the abbreviation-to-key pairs roster rows publish,
+  rather than matching abbreviations or prefixes; an unlearned abbreviation stays unresolved. A
+  non-null opponent already establishes that the player's team plays, which is what scheduled-work
+  gating needs.
 - The league players collection with `out=opponent` is not date-addressable. `players;out=opponent`
   and `players;out=opponent;date=YYYY-MM-DD` returned the same 50 players with identical opponents,
   including across two different dates, so the date parameter is accepted and ignored. The plain
