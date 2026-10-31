@@ -63,6 +63,10 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "get_team_summary",
     "get_transactions",
     "generate_transaction_review_links",
+    "propose_transactions",
+    "get_transaction_proposal_set",
+    "revalidate_transaction_proposal_set",
+    "get_pending_trade_offers",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
@@ -122,6 +126,23 @@ test("serves every tool scope after one consent for the documented scope set", a
     ["list_teams", {}],
     ["get_calendar", { team }],
     ["generate_transaction_review_links", { team, intents: [{ kind: "add", add: "r1.test" }] }],
+    [
+      "propose_transactions",
+      {
+        items: [
+          {
+            team,
+            kind: "drop",
+            adds: [],
+            drops: ["r1.test"],
+            reason: "Checking the proposal scope.",
+          },
+        ],
+      },
+    ],
+    ["get_transaction_proposal_set", { set: randomUUID() }],
+    ["revalidate_transaction_proposal_set", { set: randomUUID() }],
+    ["get_pending_trade_offers", { team }],
     [
       "set_lineup",
       { requestId: randomUUID(), teams: [{ team, period: { coverage: "week", week: 3 } }] },
@@ -417,6 +438,138 @@ test("lists tools and submits feedback on the onboarding grant", async ({ page, 
   });
   expect(triaged.status).toBe(403);
   expect(triaged.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+});
+
+test("proposes transactions without writing to the provider and reads pending offers", async ({
+  page,
+  baseURL,
+  newUser,
+  services,
+}) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+  const discovered = Schema.decodeUnknownSync(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        name: Schema.String,
+      }),
+    ),
+  )(
+    await services.exercise(
+      page,
+      "link the provider fake and discover teams",
+      "connectYahooAndDiscoverTeams",
+      {},
+    ),
+  );
+  const football = discovered.find((team) => team.name === "Embedded Browser Team");
+  const hockey = discovered.find((team) => team.name === "Hosted Hockey Team");
+  expect(football, "a football team").toBeDefined();
+  expect(hockey, "a hockey team").toBeDefined();
+  if (football === undefined || hockey === undefined) {
+    return;
+  }
+
+  const { credentials } = await authorize(page, origin, "fantasy:read transactions:review");
+  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
+
+  const roster = await client.callTool("get_rosters", { team: football.id });
+  expect(roster.isError).toBe(false);
+  const players = Schema.decodeUnknownSync(
+    Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
+  )(roster.structuredContent).players;
+  expect(players.length).toBeGreaterThan(0);
+  const drop = players[0]?.player;
+  expect(drop, "a rostered player reference").toBeDefined();
+  if (drop === undefined) {
+    return;
+  }
+
+  const proposed = await client.callTool("propose_transactions", {
+    items: [
+      {
+        team: football.id,
+        kind: "drop",
+        adds: [],
+        drops: [drop],
+        reason: "Open a bench spot for the incoming wing.",
+      },
+    ],
+  });
+  expect(proposed.isError).toBe(false);
+  const set = Schema.decodeUnknownSync(
+    Schema.Struct({
+      created: Schema.Boolean,
+      reviewUrl: Schema.String,
+      set: Schema.Struct({ id: Schema.String, expired: Schema.Boolean }),
+      items: Schema.Array(Schema.Struct({ outcome: Schema.String })),
+    }),
+  )(proposed.structuredContent);
+  expect(set.created).toBe(true);
+  expect(set.set.expired).toBe(false);
+  expect(set.reviewUrl).toBe(`${origin}/transactions/${set.set.id}`);
+  expect(set.items).toMatchObject([{ outcome: "accepted" }]);
+
+  const repeated = await client.callTool("propose_transactions", {
+    items: [
+      {
+        team: football.id,
+        kind: "drop",
+        adds: [],
+        drops: [drop],
+        reason: "Open a bench spot for the incoming wing.",
+      },
+    ],
+  });
+  expect(repeated.structuredContent).toMatchObject({
+    created: false,
+    set: { id: set.set.id },
+  });
+
+  const read = await client.callTool("get_transaction_proposal_set", { set: set.set.id });
+  expect(read.isError).toBe(false);
+  const review = Schema.decodeUnknownSync(
+    Schema.Struct({
+      teams: Schema.Array(
+        Schema.Struct({
+          team: Schema.Struct({ id: Schema.String }),
+          items: Schema.Array(Schema.Unknown),
+        }),
+      ),
+    }),
+  )(read.structuredContent);
+  expect(review.teams.map((entry) => entry.team.id).sort()).toEqual(
+    [football.id, hockey.id].sort(),
+  );
+  expect(review.teams.find((entry) => entry.team.id === football.id)?.items).toHaveLength(1);
+  expect(review.teams.find((entry) => entry.team.id === hockey.id)?.items).toHaveLength(0);
+  expect(JSON.stringify(read)).not.toContain("461.p.90001");
+
+  const other = await newUser();
+  await signUp(other);
+  const otherAuthorization = await authorize(other, origin, "fantasy:read transactions:review");
+  const otherClient = mcpClient(mcpEndpoint(origin), otherAuthorization.credentials.access_token);
+  const hidden = await otherClient.callTool("get_transaction_proposal_set", { set: set.set.id });
+  expect(hidden.isError).toBe(true);
+  expect(JSON.stringify(hidden)).not.toContain("Open a bench spot");
+
+  const offers = await client.callTool("get_pending_trade_offers", { team: hockey.id });
+  expect(offers.isError).toBe(false);
+  expect(offers.structuredContent).toMatchObject({
+    status: "available",
+    readOnly: true,
+    offers: [
+      {
+        canRespond: true,
+        proposingTeam: { name: "Synthetic Rival" },
+        receivingTeam: { name: "Hosted Hockey Team" },
+        players: [{ name: "Synthetic Incoming" }],
+        picks: [{ round: 3 }],
+      },
+    ],
+  });
+  expect(JSON.stringify(offers)).not.toContain("465.p.95001");
 });
 
 test("changes automation over MCP and reports it through list_teams", async ({

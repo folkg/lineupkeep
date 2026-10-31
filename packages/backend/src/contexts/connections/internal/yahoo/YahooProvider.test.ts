@@ -39,6 +39,7 @@ import {
   yahooNflFreeAgents,
   yahooNflLeagueSettings,
   yahooNflLeagueTeams,
+  yahooNflLeagueTeamsWithFaab,
   yahooNflPlayerDetailsWithMismatchedStartedCoverage,
   yahooNflPlayerDetailsWithPopulatedCut,
   yahooNflPlayerDetailsWithUnpopulatedCut,
@@ -78,6 +79,7 @@ import {
   yahooNflSinglePlayerTrade,
   yahooNflTradeWithPicks,
   yahooNflPickOnlyTrade,
+  yahooNflPendingTrades,
   yahooNflEmptyTradeTransaction,
   yahooNflDraftResults,
   yahooNflRoster,
@@ -2866,6 +2868,106 @@ it.effect("scopes a transaction read to one team in the same league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads the owner's pending trade offers from the typed feed", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPendingTrades));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const offers = yield* provider.readPendingTrades({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: "466.l.4000.t.1",
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;type=pending_trade;team_key=466.l.4000.t.1?format=json",
+    );
+    assert.deepStrictEqual(offers, [
+      {
+        proposedAt: "2026-10-03T04:00:00.000Z",
+        note: "A synthetic offer.",
+        canRespond: true,
+        proposer: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+        receiver: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+        unusedRosterSpots: 0,
+        players: [
+          {
+            providerPlayerKey: "466.p.20003",
+            movement: {
+              kind: "other",
+              from: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+              to: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+            },
+            name: "Synthetic Incoming",
+            primaryPosition: undefined,
+            displayPosition: "WR",
+            eligiblePositions: undefined,
+            proTeam: "SYN",
+          },
+          {
+            providerPlayerKey: "466.p.20004",
+            movement: {
+              kind: "other",
+              from: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+              to: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+            },
+            name: "Synthetic Outgoing",
+            primaryPosition: undefined,
+            displayPosition: "RB",
+            eligiblePositions: undefined,
+            proTeam: "SYN",
+          },
+        ],
+        picks: [
+          {
+            round: 3,
+            from: { providerTeamKey: "466.l.4000.t.2", name: "Synthetic Rival" },
+            to: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+            original: { providerTeamKey: "466.l.4000.t.1", name: "Synthetic Team" },
+          },
+        ],
+        incomplete: undefined,
+      },
+    ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses a pending trade row that is not a pending trade", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readPendingTrades({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerTeamKey: "466.l.4000.t.1",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("refuses a pending trade team filter from another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPendingTrades));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readPendingTrades({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        providerTeamKey: "466.l.4001.t.1",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.deepStrictEqual(internet.calls, []);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("refuses a transaction team filter from another league", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
   return Effect.gen(function* () {
@@ -3268,6 +3370,21 @@ it.effect("reads league team membership", () => {
         acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
       },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("publishes a team's remaining FAAB balance only when the provider sends one", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueTeamsWithFaab));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const teams = yield* provider.readLeagueTeams({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+    });
+
+    assert.strictEqual(teams[0]?.remainingBudget, 42);
+    assert.strictEqual(teams[1]?.remainingBudget, undefined);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

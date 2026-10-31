@@ -247,9 +247,15 @@ its required end is `movement_missing_party`; a movement type the adapter cannot
 `trade_return_unpublished`, because the return side cannot be reconstructed from the payload. An
 incomplete record is never a comp a client should price against.
 
-The provider publishes no proposals resource. Pending, accepted-by-one-side, and rejected trade
-offers are not available to any client. The tool description states that boundary so a client does
-not spend a round probing for data the provider does not publish; no offer data is inferred.
+The provider does publish pending trade offers, but only to the account that manages one of the two
+teams: `transactions;type=pending_trade;team_key={own}` returns a `pending_trade` row with
+`status: proposed`, both parties, both ends of every player, the traded picks, the proposal time,
+and whether the session can respond. The plain league feed never carries them and another team's
+request is refused, so there is no league-wide trade wire and no offer data is inferred.
+`get_pending_trade_offers` reads that feed for one owned team, marks the result `readOnly: true`,
+and states that this product cannot accept, reject, cancel, or propose a trade. It never exposes a
+provider team key or player key; parties and players arrive as private references. A provider that
+publishes no such feed reports `status: "unsupported"` with the reason instead of an empty success.
 
 `get_league`'s `draft_history` group returns the provider's `draftresults` read: every published
 pick in provider order with its round, pick number, the team that made it, and a private player
@@ -556,6 +562,38 @@ becoming zero.
 
 A coverage entry has one of three states. `available` means the resource was read and verified. `unsupported` means the provider or league does not establish it, and the entry, or a typed group result beside it, carries the reason. `degraded` means a dependency could not be verified while the read still returned what does not depend on it: the entry names the failed field, the affected resource lists a bounded failure, and roster and matchup reads are not erased because league settings failed. A calendar that needs the scoring-week window reports the degraded dependency instead of inventing periods. A group that declares itself unsupported never also reports a period failure; the two statements would contradict each other.
 
+## Transaction proposals
+
+`propose_transactions` stores what an agent proposes; it writes nothing to the provider. One call
+covers every team the account has, and the set it creates is grouped by team, so teams with nothing
+proposed still appear as an empty section on the review. Each item names one team, a kind
+(`free_agent_add`, `waiver_claim`, or `drop`), the players to add and drop, an optional FAAB bid, and
+a required reason. A free-agent add carries no bid, a waiver claim carries one of 0 or more, and a
+drop item only drops. The result carries the set id, the review link
+(`https://{origin}/transactions/{setId}`), the surface (`mcp`) and acting client, and each item's
+outcome by position: accepted with its stored state, or refused with a code and a sentence that
+names the item. A reference from another account or league, a team the account does not have, a
+player named in both adds and drops, a kind and bid that disagree, or the same move repeated are
+refused and named. Repeating the identical set returns the existing set with `created: false`
+rather than stacking a duplicate.
+
+A set expires 24 hours after creation. `revalidate_transaction_proposal_set` re-reads current state
+once per team (its roster, its league rules, the pool state of the players it adds, and its FAAB
+balance when a bid is present) and marks each open item `current` or `stale` with reasons: the added
+player is no longer in the pool, a dropped player is no longer on the roster, the roster would
+exceed the league's declared capacity, the league's period has closed, the bid exceeds the team's
+remaining budget, the league has no FAAB budget, or the team's state could not be read. Staleness is
+recorded beside the item's state and is never a failure; an item stays `proposed`. A team whose
+state cannot be read marks only its own items, and the review reports the failure beside that team.
+An expired set refuses re-validation instead of re-checking or executing, so a set that sat overnight
+cannot be executed from facts nobody re-checked. `get_transaction_proposal_set` reads the set back
+with every team, including the teams that had nothing proposed, each item's state and last staleness
+check, and the same review link. Another account's set is reported as not found.
+
+The item state vocabulary is `proposed`, `approved`, `executed`, `failed`, and `skipped`. Nothing in
+this change reaches `approved` or later: execution is a later slice, and no tool in this set submits,
+accepts, or spends anything.
+
 ## Review-link safety
 
 Generate links from typed domain intents and verified relationships. Users may choose players/counterparty, not origins, endpoint stages, or submission parameters. Validate provider, league, owning team, membership, and numeric-ID mapping privately.
@@ -568,8 +606,9 @@ template after an upgrade without guessing from URL shape. The Yahoo template
 team-scoped `dropplayer` page for `drop`; each was verified against the provider as the intended
 review page for the named player. The provider publishes no parameterized trade proposal page, so a
 `trade` intent returns `unsupported` with that reason instead of a link that opens an empty form.
-The provider also publishes no proposals resource, so this scope creates prefill links only: it
-cannot list, read, or act on a trade offer another manager made.
+This scope also covers the transaction proposal tools, which store proposals and read provider
+state but never submit anything. A pending trade offer another manager made is a separate read
+(`get_pending_trade_offers`); a review link still cannot act on it.
 Review links are season-independent; a provider template change requires a version change and a new
 per-sport URL fixture test.
 
@@ -580,25 +619,29 @@ per-sport URL fixture test.
 Every tool enforces one scope, and only that scope. Holding a scope no tool needs, or
 lacking a scope a different tool needs, does not change whether a call succeeds.
 
-| Tool                                | Required scope        |
-| ----------------------------------- | --------------------- |
-| `list_connections`                  | `connections:read`    |
-| `list_teams`                        | `fantasy:read`        |
-| `get_calendar`                      | `fantasy:read`        |
-| `get_league`                        | `fantasy:read`        |
-| `get_rosters`                       | `fantasy:read`        |
-| `search_players`                    | `fantasy:read`        |
-| `get_players`                       | `fantasy:read`        |
-| `get_matchups`                      | `fantasy:read`        |
-| `get_team_summary`                  | `fantasy:read`        |
-| `get_transactions`                  | `fantasy:read`        |
-| `generate_transaction_review_links` | `transactions:review` |
-| `set_lineup`                        | `lineups:write`       |
-| `get_lineup_runs`                   | `lineups:write`       |
-| `set_team_automation`               | `teams:manage`        |
-| `submit_feedback`                   | `connections:read`    |
-| `list_feedback`                     | `connections:read`    |
-| `triage_feedback`                   | `feedback:manage`     |
+| Tool                                  | Required scope        |
+| ------------------------------------- | --------------------- |
+| `list_connections`                    | `connections:read`    |
+| `list_teams`                          | `fantasy:read`        |
+| `get_calendar`                        | `fantasy:read`        |
+| `get_league`                          | `fantasy:read`        |
+| `get_rosters`                         | `fantasy:read`        |
+| `search_players`                      | `fantasy:read`        |
+| `get_players`                         | `fantasy:read`        |
+| `get_matchups`                        | `fantasy:read`        |
+| `get_team_summary`                    | `fantasy:read`        |
+| `get_transactions`                    | `fantasy:read`        |
+| `generate_transaction_review_links`   | `transactions:review` |
+| `propose_transactions`                | `transactions:review` |
+| `get_transaction_proposal_set`        | `transactions:review` |
+| `revalidate_transaction_proposal_set` | `transactions:review` |
+| `get_pending_trade_offers`            | `fantasy:read`        |
+| `set_lineup`                          | `lineups:write`       |
+| `get_lineup_runs`                     | `lineups:write`       |
+| `set_team_automation`                 | `teams:manage`        |
+| `submit_feedback`                     | `connections:read`    |
+| `list_feedback`                       | `connections:read`    |
+| `triage_feedback`                     | `feedback:manage`     |
 
 A scope-coverage test derives this table from the tool declarations, so a tool that omits a
 scope fails the test suite instead of becoming an open endpoint.

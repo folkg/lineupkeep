@@ -792,6 +792,23 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
         team: randomUUID(),
         intents: [{ kind: "add", add: "r1.acceptance" }],
       };
+    case "propose_transactions":
+      return {
+        items: [
+          {
+            team: randomUUID(),
+            kind: "drop",
+            adds: [],
+            drops: ["r1.acceptance"],
+            reason: "The acceptance command checks the proposal scope boundary.",
+          },
+        ],
+      };
+    case "get_transaction_proposal_set":
+    case "revalidate_transaction_proposal_set":
+      return { set: randomUUID() };
+    case "get_pending_trade_offers":
+      return { team: randomUUID() };
     case "set_lineup":
       return {
         requestId: randomUUID(),

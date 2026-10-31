@@ -18,6 +18,7 @@ const ProviderOperation = Schema.Literals([
   "search_players",
   "read_matchups",
   "read_transactions",
+  "read_pending_trades",
   "read_draft_results",
   "read_league_teams",
   "build_review_link",
@@ -269,6 +270,13 @@ export type ProviderShape = {
       readonly limit: number;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderTransaction>, ProviderReadFailure>;
+
+  readonly readPendingTrades: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKey: string;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderPendingTrade>, ProviderReadFailure>;
 
   readonly readDraftResults: (
     input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
@@ -646,7 +654,7 @@ export type ProviderTransactionMovement = {
   readonly to: ProviderTransactionTeam | undefined;
 };
 
-type ProviderTransactionPlayer = {
+export type ProviderTransactionPlayer = {
   readonly providerPlayerKey: string;
   readonly movement: ProviderTransactionMovement;
   readonly name: string | undefined;
@@ -693,6 +701,18 @@ export type ProviderTransaction = {
   readonly incomplete: ProviderTransactionIncomplete | undefined;
 };
 
+export type ProviderPendingTrade = {
+  readonly proposedAt: string;
+  readonly note: string | undefined;
+  readonly canRespond: boolean;
+  readonly proposer: ProviderTransactionTeam | undefined;
+  readonly receiver: ProviderTransactionTeam | undefined;
+  readonly unusedRosterSpots: number | undefined;
+  readonly players: ReadonlyArray<ProviderTransactionPlayer>;
+  readonly picks: ReadonlyArray<ProviderTransactionPick>;
+  readonly incomplete: ProviderTransactionIncomplete | undefined;
+};
+
 export type ProviderDraftPick = {
   readonly round: number;
   readonly pick: number;
@@ -715,6 +735,7 @@ export type ProviderLeagueTeam = {
   readonly providerLeagueKey: string;
   readonly name: string;
   readonly acquisitionUsage: ProviderAcquisitionUsage;
+  readonly remainingBudget?: number | undefined;
 };
 
 export type ProviderReviewIntent =

@@ -60,6 +60,14 @@ export type QueryTokensShape = {
     readonly refs: ReadonlyArray<PlayerRef>;
   }) => Effect.Effect<ReadonlyArray<string | undefined>>;
 
+  readonly openPlayerRefGroups: (input: {
+    readonly userId: UserId;
+    readonly groups: ReadonlyArray<{
+      readonly leagueKey: string;
+      readonly refs: ReadonlyArray<PlayerRef>;
+    }>;
+  }) => Effect.Effect<ReadonlyArray<ReadonlyArray<string | undefined>>>;
+
   readonly sealCounterpartyRef: (input: {
     readonly userId: UserId;
     readonly leagueKey: string;
@@ -158,6 +166,20 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
           Promise.all(
             refs.map((ref) =>
               openReference(keys.aes, "player", userId, leagueKey, ref).catch(() => undefined),
+            ),
+          ),
+        ),
+      openPlayerRefGroups: ({ userId, groups }) =>
+        Effect.promise(() =>
+          Promise.all(
+            groups.map((group) =>
+              Promise.all(
+                group.refs.map((ref) =>
+                  openReference(keys.aes, "player", userId, group.leagueKey, ref).catch(
+                    () => undefined,
+                  ),
+                ),
+              ),
             ),
           ),
         ),

@@ -57,6 +57,13 @@ function yahooResponse(url: URL): unknown {
   if (roster !== null && roster[1] !== undefined) {
     return rosterPayload(roster[1]);
   }
+  const pendingTrades =
+    /^\/fantasy\/v2\/league\/([^/]+)\/transactions;type=pending_trade;team_key=([^/;]+)$/u.exec(
+      url.pathname,
+    );
+  if (pendingTrades?.[1] !== undefined && pendingTrades[2] !== undefined) {
+    return pendingTradesPayload(pendingTrades[1], pendingTrades[2]);
+  }
   return undefined;
 }
 
@@ -152,6 +159,95 @@ function rosterPayload(teamKey: string): unknown {
             week: 6,
             is_prescoring: 0,
             is_editable: 1,
+          },
+        },
+      ],
+    },
+  };
+}
+
+function pendingTradesPayload(leagueKey: string, teamKey: string): unknown {
+  const game = leagueKey.split(".")[0] ?? "461";
+  const rivalKey = `${leagueKey}.t.1`;
+  return {
+    fantasy_content: {
+      league: [
+        {
+          league_key: leagueKey,
+          league_id: leagueKey.slice(leagueKey.lastIndexOf(".l.") + 3),
+          name: "Synthetic League",
+          url: "https://hockey.fantasysports.yahoo.com/hockey/9100",
+        },
+        {
+          transactions: {
+            "0": {
+              transaction: [
+                {
+                  transaction_key: `${leagueKey}.pt.7`,
+                  type: "pending_trade",
+                  status: "proposed",
+                  trader_team_key: rivalKey,
+                  trader_team_name: "Synthetic Rival",
+                  tradee_team_key: teamKey,
+                  tradee_team_name: "Hosted Hockey Team",
+                  trade_proposed_time: "1791000000",
+                  tradee_unused_roster_spots: "0",
+                  current_login_can_respond: "1",
+                  trade_roster_reflect_key: `${leagueKey}.tr.1`,
+                  trade_note: "An offer for the hosted team.",
+                },
+                {
+                  picks: [
+                    {
+                      pick: {
+                        source_team_key: rivalKey,
+                        source_team_name: "Synthetic Rival",
+                        destination_team_key: teamKey,
+                        destination_team_name: "Hosted Hockey Team",
+                        original_team_key: teamKey,
+                        original_team_name: "Hosted Hockey Team",
+                        round: "3",
+                      },
+                    },
+                  ],
+                },
+                {
+                  players: {
+                    "0": {
+                      player: [
+                        [
+                          { player_key: `${game}.p.95001` },
+                          { player_id: "95001" },
+                          {
+                            name: {
+                              full: "Synthetic Incoming",
+                              first: "Synthetic",
+                              last: "Incoming",
+                            },
+                          },
+                          { editorial_team_abbr: "SYN" },
+                          { display_position: "C" },
+                          { position_type: "O" },
+                        ],
+                        {
+                          transaction_data: {
+                            type: "pending_trade",
+                            source_type: "team",
+                            source_team_key: rivalKey,
+                            source_team_name: "Synthetic Rival",
+                            destination_type: "team",
+                            destination_team_key: teamKey,
+                            destination_team_name: "Hosted Hockey Team",
+                          },
+                        },
+                      ],
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            },
+            count: 1,
           },
         },
       ],

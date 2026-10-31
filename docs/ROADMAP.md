@@ -366,13 +366,21 @@ before a browser sees it. No link we construct survives either.
 
 ### H2 — Proposals and the tool
 
-- [ ] One call covers every team: a list of proposals, each naming a team, the players to add or drop, an
+- [x] One call covers every team: a list of proposals, each naming a team, the players to add or drop, an
       optional FAAB bid, and a required short reason. One link back, to one review screen.
-- [ ] Proposing writes nothing to the provider.
-- [ ] Re-validate before anything is executable: the player is still available, the roster is still legal,
+- [x] Proposing writes nothing to the provider.
+- [x] Re-validate before anything is executable: the player is still available, the roster is still legal,
       the period is still open. A stale item states why rather than failing at submit.
-- [ ] Carry its own threat model, because this is the first surface where an authorization mistake means
+- [x] Carry its own threat model, because this is the first surface where an authorization mistake means
       writing to somebody else's team.
+
+Shipped 2026-10-31. `propose_transactions` stores the set (every owned team, grouped, with the
+proposer and surface, expiring after 24 hours) and `revalidate_transaction_proposal_set` re-reads one
+batched team state per team and marks each item current or stale with a reason.
+`get_pending_trade_offers` reads the provider's own pending offers for a team, read-only. Every read and
+write filters by owner, player references are sealed to the owner and league, no tool submits or spends
+anything, and the 24-hour window makes an expired set refuse re-validation instead of executing stale
+facts. The review screen and execution remain H3 and H4.
 
 **Verify**: an account-wide proposal set read back from storage, with a stale item marked and nothing
 written upstream. `M`

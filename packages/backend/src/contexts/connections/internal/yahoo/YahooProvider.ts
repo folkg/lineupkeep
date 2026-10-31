@@ -42,6 +42,7 @@ import type {
   ProviderScoringWeek,
   ProviderCoverageKind,
   ProviderPeriodWindow,
+  ProviderPendingTrade,
   ProviderScoreRequest,
   ProviderTradeRatification,
   ProviderPlayerDetail,
@@ -72,6 +73,7 @@ import type {
   ProviderTransactionMovement,
   ProviderTransactionParties,
   ProviderTransactionParty,
+  ProviderTransactionPlayer,
   ProviderTransactionTeam,
   ProviderTransactionTrend,
   ProviderShape,
@@ -773,6 +775,40 @@ export const yahooProvider = Effect.gen(function* () {
     return transactions;
   });
 
+  const readPendingTrades = Effect.fn("YahooProvider.readPendingTrades")(function* (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKey: string;
+    },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_pending_trades");
+    const cookie = yield* sessionCookie(input, "read_pending_trades");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_pending_trades");
+    const teamFilter = yield* ValidLeagueTeamKey(
+      input.providerTeamKey,
+      leagueKey,
+      "read_pending_trades",
+    );
+    const payload = yield* readJson(internet, {
+      operation: "read_pending_trades",
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${leagueKey}/transactions;type=pending_trade${teamFilter}`,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(PendingTradesPayload, payload, "read_pending_trades");
+    if (decoded.league.league_key !== leagueKey) {
+      return yield* responseMismatch({
+        operation: "read_pending_trades",
+        field: "league.league_key",
+      });
+    }
+    const offers = yield* decodePendingTrades(decoded.league.transactions, leagueKey);
+    yield* Effect.annotateCurrentSpan("provider.pending_trade_count", offers.length);
+    return offers;
+  });
+
   const readDraftResults = Effect.fn("YahooProvider.readDraftResults")(function* (
     input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
   ) {
@@ -832,6 +868,7 @@ export const yahooProvider = Effect.gen(function* () {
       providerLeagueKey: leagueKey,
       name: team.name,
       acquisitionUsage: acquisitionUsageOf(team.number_of_moves, team.roster_adds),
+      ...(team.faab_balance === undefined ? {} : { remainingBudget: team.faab_balance }),
     }));
   });
 
@@ -885,6 +922,7 @@ export const yahooProvider = Effect.gen(function* () {
     searchPlayers,
     readMatchups,
     readTransactions,
+    readPendingTrades,
     readDraftResults,
     readLeagueTeams,
     buildReviewLink,
@@ -2692,6 +2730,90 @@ function decodeTransactions(
   });
 }
 
+function decodePendingTrades(
+  transactions: ReadonlyArray<typeof PendingTradePayload.Type>,
+  leagueKey: string,
+): Effect.Effect<ReadonlyArray<ProviderPendingTrade>, ProviderResponseInvalid> {
+  return Effect.gen(function* () {
+    const offers: Array<ProviderPendingTrade> = [];
+    for (const transaction of transactions) {
+      if (transaction.type !== "pending_trade") {
+        return yield* responseMismatch({ operation: "read_pending_trades", field: "type" });
+      }
+      const proposer = transactionTeam(transaction.trader_team_key, transaction.trader_team_name);
+      const receiver = transactionTeam(transaction.tradee_team_key, transaction.tradee_team_name);
+      for (const team of [proposer, receiver]) {
+        if (team !== undefined && providerLeagueKey(team.providerTeamKey) !== leagueKey) {
+          return yield* responseMismatch({
+            operation: "read_pending_trades",
+            field: "team_key",
+          });
+        }
+      }
+      const players = (transaction.players ?? []).map((player) => ({
+        providerPlayerKey: player.player_key,
+        movement: playerMovement(player.transaction_data),
+        name: optionalNonEmpty(player.name?.full ?? ""),
+        primaryPosition: optionalNonEmpty(player.primary_position ?? ""),
+        displayPosition: optionalNonEmpty(player.display_position ?? ""),
+        eligiblePositions:
+          player.eligible_positions === undefined
+            ? undefined
+            : player.eligible_positions.map(({ position }) => position),
+        proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
+      }));
+      const picks = (transaction.picks ?? []).map(({ pick }) => ({
+        round: pick.round,
+        from: transactionTeam(pick.source_team_key, pick.source_team_name),
+        to: transactionTeam(pick.destination_team_key, pick.destination_team_name),
+        original: transactionTeam(pick.original_team_key, pick.original_team_name),
+      }));
+      offers.push({
+        proposedAt: yield* providerInstant(transaction.trade_proposed_time, "read_pending_trades"),
+        note: optionalNonEmpty(transaction.trade_note ?? ""),
+        canRespond: optionalFlag(transaction.current_login_can_respond) ?? false,
+        proposer,
+        receiver,
+        unusedRosterSpots: transaction.tradee_unused_roster_spots,
+        players,
+        picks,
+        incomplete: incompletePendingTrade(players, picks),
+      });
+    }
+    return offers;
+  });
+}
+
+function incompletePendingTrade(
+  players: ReadonlyArray<ProviderTransactionPlayer>,
+  picks: ReadonlyArray<ProviderPendingTrade["picks"][number]>,
+): ProviderTransactionIncomplete | undefined {
+  if (players.length === 0 && picks.length === 0) {
+    return {
+      code: "no_movements",
+      detail:
+        "The provider published this offer with no player movements and no traded picks, so neither side can be shown.",
+    };
+  }
+  for (const player of players) {
+    if (player.movement.from === undefined || player.movement.to === undefined) {
+      return {
+        code: "movement_missing_party",
+        detail: `The provider published an offer movement for ${playerLabel(player)} without both the team it left and the team it joined.`,
+      };
+    }
+  }
+  for (const pick of picks) {
+    if (pick.from === undefined || pick.to === undefined) {
+      return {
+        code: "movement_missing_party",
+        detail: `The provider published a round ${String(pick.round)} draft pick without both the team that sent it and the team that received it.`,
+      };
+    }
+  }
+  return undefined;
+}
+
 function transactionType(type: string): ProviderTransaction["type"] {
   switch (type) {
     case "add":
@@ -2923,9 +3045,12 @@ function providerNumber(value: number | string | null | undefined): number | nul
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function providerInstant(timestamp: number): Effect.Effect<string, ProviderResponseInvalid> {
+function providerInstant(
+  timestamp: number,
+  operation: ProviderOperation = "read_transactions",
+): Effect.Effect<string, ProviderResponseInvalid> {
   return Option.match(DateTime.make(timestamp * 1_000), {
-    onNone: () => responseMismatch({ operation: "read_transactions" }),
+    onNone: () => responseMismatch({ operation }),
     onSome: (instant) => Effect.succeed(DateTime.formatIso(instant)),
   });
 }
@@ -3245,6 +3370,7 @@ const TeamPayload = Schema.Struct({
   name: Schema.NonEmptyString,
   number_of_moves: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
   roster_adds: Schema.optional(AcquisitionPayload),
+  faab_balance: Schema.optional(IntFromStringOrNumber),
 });
 
 const GamePayload = Schema.Struct({
@@ -3702,6 +3828,28 @@ const TransactionsPayload = Schema.Struct({
   league: Schema.Struct({
     league_key: LeagueKey,
     transactions: Schema.Array(TransactionPayload),
+  }),
+});
+
+const PendingTradePayload = Schema.Struct({
+  type: Schema.NonEmptyString,
+  status: Schema.optional(Schema.String),
+  trader_team_key: Schema.optional(TeamKey),
+  trader_team_name: Schema.optional(Schema.String),
+  tradee_team_key: Schema.optional(TeamKey),
+  tradee_team_name: Schema.optional(Schema.String),
+  trade_proposed_time: IntFromStringOrNumber,
+  tradee_unused_roster_spots: Schema.optional(IntFromStringOrNumber),
+  current_login_can_respond: Schema.optional(IntFromStringOrNumber),
+  trade_note: Schema.optional(Schema.String),
+  picks: Schema.optional(Schema.Array(TransactionPickPayload)),
+  players: Schema.optional(Schema.Array(TransactionPlayerPayload)),
+});
+
+const PendingTradesPayload = Schema.Struct({
+  league: Schema.Struct({
+    league_key: LeagueKey,
+    transactions: Schema.Array(PendingTradePayload),
   }),
 });
 

@@ -7,6 +7,6 @@ export const fantasyQueryScopes = {
   reviewTransactions: {
     name: "transactions:review",
     description:
-      "Generate human-review links for proposed add, drop, and trade transactions. This does not submit transactions or guarantee eligibility.",
+      "Propose player transactions for your own review, read your proposal sets back, and revalidate them against current provider state, and generate human-review links for add, drop, and trade intents. This stores proposals and reads provider state; it never submits a transaction, never executes a proposal, and never guarantees eligibility.",
   },
 } as const;

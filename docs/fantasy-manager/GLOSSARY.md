@@ -224,3 +224,39 @@ Choosing roster-slot assignments according to an objective while respecting the 
 
 **Transaction review link**:
 A link to a provider's human-facing page with a proposed player transaction prefilled for review. Opening the link does not authorize this application to submit that transaction.
+
+**Transaction proposal set**:
+One agent or person's proposed player transactions across any of their own teams, created by one call, grouped by team, and reviewed together. It covers every team the account has at creation, including teams with nothing proposed, records who proposed it, the surface and optional client label, and when, and expires 24 hours after creation.
+_Avoid_: Proposal when the whole set is meant, batch, review queue
+
+**Proposal item**:
+One team's proposed transaction inside a proposal set: the players to add, the players to drop, an optional FAAB bid, a required reason, the provider player references, and its state and staleness. A proposal set holds one item per distinct move.
+_Avoid_: Proposal when one item is meant, transaction when it is not yet executed
+
+**Proposal item kind**:
+Which executable shape a proposal item takes: a free-agent add (players added, no bid), a waiver claim (players added with a FAAB bid), or a drop (players dropped only). A waiver claim is the only kind that spends a budget, so it is never presented as a free-agent add.
+_Avoid_: Claim when the bid is not part of it, move, action
+
+**Proposal item state**:
+Where a proposal item sits in its lifecycle: proposed (its initial state), approved (a person decided to include it), executed (the provider accepted it), failed (an attempt was made and did not succeed), or skipped (a person left it out of the review). Staleness is not a state: a stale item keeps its state and carries the reason it no longer matches current state.
+_Avoid_: Stale as a state, rejected when no attempt was made
+
+**Proposal staleness**:
+Whether a proposal item still matches current provider state, recorded as unchecked before any re-validation, current when it does, or stale with one or more reasons. A stale item is never treated as failed and never executes; re-validation marks it again after the state changes.
+_Avoid_: Expired when the provider state changed, failed, invalid
+
+**Proposal stale reason**:
+The named cause a proposal item is stale: the added player is no longer available in the pool, a dropped player is no longer on the roster, the roster would exceed its declared capacity, the league's period has closed, the bid exceeds the team's remaining FAAB budget, the league does not use a FAAB budget, or the team's current state could not be read. Each carries a readable detail and, where it names a player, that player's reference.
+_Avoid_: Error, failure, conflict
+
+**Proposal set expiry**:
+The 24-hour window after a proposal set is created within which it may be re-validated. An expired set refuses re-validation rather than re-checking or executing, and a person proposes the transactions again to create a fresh set.
+_Avoid_: Timeout, TTL, stale set when the window is meant
+
+**Proposal review**:
+The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and staleness, and a quiet section for a team with nothing proposed. A person decides there; this product does not execute from it yet.
+_Avoid_: Approvals, cart, confirmation screen
+
+**Pending trade offer**:
+A trade the provider reports as proposed and awaiting a response on a team the account manages, carrying both parties, both ends of every player, any traded draft picks, and whether this session can respond. It is read-only in this product, and another manager's offer is never visible.
+_Avoid_: Pending trade when no offer awaits a response, proposal when the provider's own offer is meant
