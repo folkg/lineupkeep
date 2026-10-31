@@ -238,8 +238,8 @@ Which executable shape a proposal item takes: a free-agent add (players added, n
 _Avoid_: Claim when the bid is not part of it, move, action
 
 **Proposal item state**:
-Where a proposal item sits in its lifecycle: proposed (its initial state), approved (a person decided to include it), executed (the provider accepted it), failed (an attempt was made and did not succeed), or skipped (a person left it out of the review). Staleness is not a state: a stale item keeps its state and carries the reason it no longer matches current state.
-_Avoid_: Stale as a state, rejected when no attempt was made
+Where a proposal item sits in its lifecycle: proposed (its initial state), executed (the provider accepted the whole move), pending (a waiver claim the provider has not processed yet), failed (an attempt was made and did not succeed), skipped (a person left it out, it was stale at submit, or an earlier move stopped its team), or unknown (a request that may or may not have applied). Staleness is not a state: a stale item keeps its state and carries the reason it no longer matches current state.
+_Avoid_: Stale as a state, rejected when no attempt was made, done when a waiver is still pending
 
 **Proposal staleness**:
 Whether a proposal item still matches current provider state, recorded as unchecked before any re-validation, current when it does, or stale with one or more reasons. A stale item is never treated as failed and never executes; re-validation marks it again after the state changes.
@@ -253,8 +253,20 @@ _Avoid_: Error, failure, conflict
 The 24-hour window after a proposal set is created within which it may be re-validated. An expired set refuses re-validation rather than re-checking or executing, and a person proposes the transactions again to create a fresh set.
 _Avoid_: Timeout, TTL, stale set when the window is meant
 
+**Proposal submission**:
+One person's once-only decision to execute the included items of a proposal set. It records who submitted and when, re-checks current state immediately before writing, writes one provider transaction per item, and records the outcome of every item and step. The database claims the submission atomically, so a set cannot be submitted twice; afterwards the set is an audit record.
+_Avoid_: Approval, retry, batch, execution queue
+
+**Proposal outcome**:
+The result recorded for a proposal item or one of its steps: executed, pending on waivers, failed, skipped, or unknown. A waiver claim is pending until the provider processes it, never executed early. An unknown request may or may not have applied and is never retried automatically. A partial failure is recorded per step, so a reserve move that succeeded is not collapsed into an add that failed.
+_Avoid_: Success, done when a claim is pending, error when no attempt was made
+
+**Execution step**:
+One recorded action inside a proposal item: an optional reserve move that frees a roster spot, then the add or drop movement sent in the provider transaction. Each step carries its own outcome and the provider's wording when it failed, so a swap cannot half-apply without being reported.
+_Avoid_: Sub-transaction, retry, hidden precondition
+
 **Proposal review**:
-The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and staleness, and a quiet section for a team with nothing proposed. A person decides there; this product does not execute from it yet.
+The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and staleness, and a quiet section for a team with nothing proposed. A signed-in person decides there, selects the current items, and submits them once; after submission it shows each item's and step's outcome in place.
 _Avoid_: Approvals, cart, confirmation screen
 
 **Pending trade offer**:

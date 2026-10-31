@@ -75,6 +75,7 @@ type FakeProviderState = {
   readonly standings: ProviderStandings | undefined;
   readonly standingsFailure: ProviderResponseInvalid | undefined;
   readonly roster: ProviderRoster | undefined;
+  readonly teamRosters: Readonly<Record<string, ProviderRoster>>;
   readonly rosterAfterNextRead: ProviderRoster | undefined;
   readonly rosterPeriods: ReadonlyArray<ProviderRosterCoverage | undefined>;
   readonly schedule: ProviderRosterSchedule | undefined;
@@ -100,6 +101,13 @@ type FakeProviderState = {
   readonly explicitAfter: ProviderRoster | undefined;
   readonly explicitRequests: ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>;
   readonly explicitCalls: number;
+  readonly transactionAction: FakeWriteAction;
+  readonly transactionDetail: string | undefined;
+  readonly teamTransactionActions: Readonly<Record<string, FakeWriteAction>>;
+  readonly transactionRequests: ReadonlyArray<FakeTransactionRequest>;
+  readonly reserveAction: FakeWriteAction;
+  readonly reserveDetail: string | undefined;
+  readonly reserveRequests: ReadonlyArray<FakeReserveMoveRequest>;
   readonly planRefusal: FakePlanRefusal | undefined;
 };
 
@@ -117,6 +125,7 @@ export type FakeProviderWorldShape = {
   readonly setStandings: (standings: ProviderStandings | undefined) => Effect.Effect<void>;
   readonly failStandings: (failure: ProviderResponseInvalid | undefined) => Effect.Effect<void>;
   readonly setRoster: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
+  readonly setTeamRoster: (teamKey: string, roster: ProviderRoster) => Effect.Effect<void>;
   readonly setRosterAfterNextRead: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly rosterPeriods: Effect.Effect<ReadonlyArray<ProviderRosterCoverage | undefined>>;
   readonly setSchedule: (schedule: ProviderRosterSchedule | undefined) => Effect.Effect<void>;
@@ -148,6 +157,14 @@ export type FakeProviderWorldShape = {
   readonly setExplicitAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly explicitRequests: Effect.Effect<ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>>;
   readonly explicitCallCount: Effect.Effect<number>;
+  readonly setTransactionAction: (action: FakeWriteAction, detail?: string) => Effect.Effect<void>;
+  readonly setTeamTransactionAction: (
+    teamKey: string,
+    action: FakeWriteAction,
+  ) => Effect.Effect<void>;
+  readonly transactionRequests: Effect.Effect<ReadonlyArray<FakeTransactionRequest>>;
+  readonly setReserveAction: (action: FakeWriteAction, detail?: string) => Effect.Effect<void>;
+  readonly reserveRequests: Effect.Effect<ReadonlyArray<FakeReserveMoveRequest>>;
   readonly setPlanRefusal: (refusal: FakePlanRefusal | undefined) => Effect.Effect<void>;
 };
 
@@ -176,6 +193,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         standings: undefined,
         standingsFailure: undefined,
         roster: undefined,
+        teamRosters: {},
         rosterAfterNextRead: undefined,
         rosterPeriods: [],
         schedule: undefined,
@@ -201,6 +219,13 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         explicitAfter: undefined,
         explicitRequests: [],
         explicitCalls: 0,
+        transactionAction: "accept",
+        transactionDetail: undefined,
+        teamTransactionActions: {},
+        transactionRequests: [],
+        reserveAction: "accept",
+        reserveDetail: undefined,
+        reserveRequests: [],
         planRefusal: undefined,
       });
       const modify = (
@@ -236,6 +261,11 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         failStandings: (standingsFailure) =>
           modify((current) => ({ ...current, standingsFailure })),
         setRoster: (roster) => modify((current) => ({ ...current, roster })),
+        setTeamRoster: (teamKey, roster) =>
+          modify((current) => ({
+            ...current,
+            teamRosters: { ...current.teamRosters, [teamKey]: roster },
+          })),
         setRosterAfterNextRead: (rosterAfterNextRead) =>
           modify((current) => ({ ...current, rosterAfterNextRead })),
         rosterPeriods: Effect.map(Ref.get(state), (current) => current.rosterPeriods),
@@ -267,6 +297,17 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setExplicitAfter: (explicitAfter) => modify((current) => ({ ...current, explicitAfter })),
         explicitRequests: Effect.map(Ref.get(state), (current) => current.explicitRequests),
         explicitCallCount: Effect.map(Ref.get(state), (current) => current.explicitCalls),
+        setTransactionAction: (transactionAction, transactionDetail) =>
+          modify((current) => ({ ...current, transactionAction, transactionDetail })),
+        setTeamTransactionAction: (teamKey, action) =>
+          modify((current) => ({
+            ...current,
+            teamTransactionActions: { ...current.teamTransactionActions, [teamKey]: action },
+          })),
+        transactionRequests: Effect.map(Ref.get(state), (current) => current.transactionRequests),
+        setReserveAction: (reserveAction, reserveDetail) =>
+          modify((current) => ({ ...current, reserveAction, reserveDetail })),
+        reserveRequests: Effect.map(Ref.get(state), (current) => current.reserveRequests),
         setPlanRefusal: (planRefusal) => modify((current) => ({ ...current, planRefusal })),
       } satisfies FakeProviderWorldShape;
     }),
@@ -377,13 +418,14 @@ const providerFake = Effect.gen(function* () {
         ...state,
         rosterPeriods: [...state.rosterPeriods, input.period],
       }));
-      if (current.roster === undefined) {
+      const configured = current.teamRosters[input.providerTeamKey] ?? current.roster;
+      if (configured === undefined) {
         return yield* ProviderOperationUnsupported.make({
           operation: "read_roster",
           reason: "No roster is configured for the fake provider.",
         });
       }
-      if (current.roster.providerTeamKey !== input.providerTeamKey) {
+      if (configured.providerTeamKey !== input.providerTeamKey) {
         return yield* ProviderResponseInvalid.make({ operation: "read_roster" });
       }
       const gate = Option.getOrUndefined(current.rosterReadGate);
@@ -395,7 +437,7 @@ const providerFake = Effect.gen(function* () {
           rosterReadGate: Option.none(),
         }));
       }
-      const coverage = current.roster.coverage;
+      const coverage = configured.coverage;
       if (
         input.period !== undefined &&
         (input.period.type !== coverage.type ||
@@ -419,7 +461,7 @@ const providerFake = Effect.gen(function* () {
           rosterAfterNextRead: undefined,
         }));
       }
-      return current.roster;
+      return configured;
     }),
     readRosterSchedule: Effect.fn("FakeProvider.readRosterSchedule")(function* (input) {
       const current = yield* prepare(input, "read_roster_schedule");
@@ -498,6 +540,59 @@ const providerFake = Effect.gen(function* () {
         yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));
       }
       return result;
+    }),
+    applyTransaction: Effect.fn("FakeProvider.applyTransaction")(function* (input) {
+      const current = yield* prepare(input, "apply_transaction").pipe(
+        Effect.mapError((error) =>
+          error._tag === "provider.session_rejected"
+            ? error
+            : ProviderResponseInvalid.make({ operation: "apply_transaction" }),
+        ),
+      );
+      yield* Ref.update(world.state, (state) => ({
+        ...state,
+        transactionRequests: [
+          ...state.transactionRequests,
+          {
+            providerLeagueKey: input.providerLeagueKey,
+            providerTeamKey: input.providerTeamKey,
+            adds: input.adds,
+            drops: input.drops,
+            faabBid: input.faabBid,
+          },
+        ],
+      }));
+      const action =
+        current.teamTransactionActions[input.providerTeamKey] ?? current.transactionAction;
+      if (action === "invalid") {
+        return yield* ProviderResponseInvalid.make({ operation: "apply_transaction" });
+      }
+      return writeResult(action, current.transactionDetail);
+    }),
+    applyReserveMove: Effect.fn("FakeProvider.applyReserveMove")(function* (input) {
+      const current = yield* prepare(input, "apply_reserve_move").pipe(
+        Effect.mapError((error) =>
+          error._tag === "provider.session_rejected"
+            ? error
+            : ProviderResponseInvalid.make({ operation: "apply_reserve_move" }),
+        ),
+      );
+      yield* Ref.update(world.state, (state) => ({
+        ...state,
+        reserveRequests: [
+          ...state.reserveRequests,
+          {
+            providerTeamKey: input.providerTeamKey,
+            coverage: input.coverage,
+            providerPlayerKey: input.providerPlayerKey,
+            slot: input.slot,
+          },
+        ],
+      }));
+      if (current.reserveAction === "invalid") {
+        return yield* ProviderResponseInvalid.make({ operation: "apply_reserve_move" });
+      }
+      return writeResult(current.reserveAction, current.reserveDetail);
     }),
     readPlayerDetails: Effect.fn("FakeProvider.readPlayerDetails")(function* (input) {
       const current = yield* prepare(input, "read_player_details");
@@ -885,18 +980,30 @@ function fakeDayCount(start: string, end: string): number {
   return (to - from) / 86_400_000 + 1;
 }
 
-function writeResult(action: FakeWriteAction): ProviderWriteResult {
+function writeResult(action: FakeWriteAction, detail?: string): ProviderWriteResult {
   switch (action) {
     case "accept":
       return { status: "accepted" };
     case "lost_response":
       return { status: "unknown" };
     case "unavailable":
-      return { status: "not_sent", reason: "request_failed" };
+      return {
+        status: "not_sent",
+        reason: "request_failed",
+        ...(detail === undefined ? {} : { detail }),
+      };
     case "reject":
-      return { status: "rejected", reason: "invalid_request" };
+      return {
+        status: "rejected",
+        reason: "invalid_request",
+        ...(detail === undefined ? {} : { detail }),
+      };
     case "invalid":
-      return { status: "rejected", reason: "invalid_request" };
+      return {
+        status: "rejected",
+        reason: "invalid_request",
+        ...(detail === undefined ? {} : { detail }),
+      };
   }
 }
 
@@ -932,5 +1039,20 @@ function requestFailure(
       return Effect.void;
   }
 }
+
+type FakeTransactionRequest = {
+  readonly providerLeagueKey: string;
+  readonly providerTeamKey: string;
+  readonly adds: ReadonlyArray<string>;
+  readonly drops: ReadonlyArray<string>;
+  readonly faabBid: number | undefined;
+};
+
+type FakeReserveMoveRequest = {
+  readonly providerTeamKey: string;
+  readonly coverage: ProviderRosterCoverage;
+  readonly providerPlayerKey: string;
+  readonly slot: string;
+};
 
 type FakeRequestFailure = "unavailable" | "invalid_response";

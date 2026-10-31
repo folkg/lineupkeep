@@ -17,6 +17,7 @@ import {
   ProposalItemId,
   ProposalItemKind,
   ProposalItemState,
+  ProposalOutcome,
   ProposalSetId,
   ProposalStalenessStatus,
 } from "#contexts/connections/TransactionProposals.ts";
@@ -24,6 +25,7 @@ import {
 import {
   ProposalItemRecord,
   ProposalSetRecord,
+  ProposalStepRecord,
   StoredProposalPlayer,
   StoredProposalStaleReason,
 } from "./TransactionProposalRecord.ts";
@@ -39,6 +41,9 @@ export const transactionProposalSets = pgTable(
     clientLabel: text("client_label"),
     fingerprint: text("fingerprint").notNull(),
     teams: jsonb("teams").notNull(),
+    submittedByUserId: text("submitted_by_user_id"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -66,11 +71,16 @@ export const transactionProposalItems = pgTable(
     bid: integer("bid"),
     reason: text("reason").notNull(),
     state: text("state", {
-      enum: ["proposed", "approved", "executed", "failed", "skipped"],
+      enum: ["proposed", "executed", "pending", "failed", "skipped", "unknown"],
     }).notNull(),
     staleness: text("staleness", { enum: ["unchecked", "current", "stale"] }).notNull(),
     staleReasons: jsonb("stale_reasons").notNull(),
     checkedAt: timestamp("checked_at", { withTimezone: true }),
+    outcome: text("outcome", {
+      enum: ["executed", "pending", "failed", "skipped", "unknown"],
+    }),
+    outcomeDetail: text("outcome_detail"),
+    outcomeAt: timestamp("outcome_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -84,6 +94,31 @@ export const transactionProposalItems = pgTable(
   ],
 );
 
+export const transactionProposalSteps = pgTable(
+  "transaction_proposal_steps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    setId: uuid("set_id").notNull(),
+    itemId: uuid("item_id").notNull(),
+    userId: text("user_id").notNull(),
+    position: integer("position").notNull(),
+    kind: text("kind", { enum: ["reserve_move", "add", "drop"] }).notNull(),
+    playerKey: text("player_key").notNull(),
+    playerName: text("player_name"),
+    fromSlot: text("from_slot"),
+    toSlot: text("to_slot"),
+    outcome: text("outcome", {
+      enum: ["executed", "pending", "failed", "skipped", "unknown"],
+    }).notNull(),
+    detail: text("detail"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("transaction_proposal_steps_item_id_position_idx").on(table.itemId, table.position),
+    index("transaction_proposal_steps_user_id_set_id_idx").on(table.userId, table.setId),
+  ],
+);
+
 const ProposalSetSelect = createSelectSchema(transactionProposalSets, {
   id: ProposalSetId,
   userId: UserId,
@@ -93,6 +128,9 @@ const ProposalSetSelect = createSelectSchema(transactionProposalSets, {
   clientLabel: Schema.NullOr(Schema.NonEmptyString),
   fingerprint: Schema.NonEmptyString,
   teams: Schema.Unknown,
+  submittedByUserId: Schema.NullOr(UserId),
+  submittedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  completedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   createdAt: Schema.DateTimeUtcFromDate,
   expiresAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
@@ -116,6 +154,9 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             },
             fingerprint: row.fingerprint,
             teams,
+            ...(row.submittedByUserId === null ? {} : { submittedBy: row.submittedByUserId }),
+            ...(row.submittedAt === null ? {} : { submittedAt: row.submittedAt }),
+            ...(row.completedAt === null ? {} : { completedAt: row.completedAt }),
             createdAt: row.createdAt,
             expiresAt: row.expiresAt,
             updatedAt: row.updatedAt,
@@ -133,6 +174,9 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             clientLabel: record.proposedBy.client ?? null,
             fingerprint: record.fingerprint,
             teams,
+            submittedByUserId: record.submittedBy ?? null,
+            submittedAt: record.submittedAt ?? null,
+            completedAt: record.completedAt ?? null,
             createdAt: record.createdAt,
             expiresAt: record.expiresAt,
             updatedAt: record.updatedAt,
@@ -157,6 +201,9 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   staleness: ProposalStalenessStatus,
   staleReasons: Schema.Unknown,
   checkedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  outcome: Schema.NullOr(ProposalOutcome),
+  outcomeDetail: Schema.NullOr(Schema.NonEmptyString),
+  outcomeAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   createdAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
 });
@@ -208,6 +255,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
               ...(row.checkedAt === null ? {} : { checkedAt: row.checkedAt }),
               reasons,
             },
+            ...(row.outcome === null ? {} : { outcome: row.outcome }),
+            ...(row.outcomeDetail === null ? {} : { outcomeDetail: row.outcomeDetail }),
+            ...(row.outcomeAt === null ? {} : { outcomeAt: row.outcomeAt }),
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
           };
@@ -238,10 +288,67 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             staleness: record.staleness.status,
             staleReasons: reasons,
             checkedAt: record.staleness.checkedAt ?? null,
+            outcome: record.outcome ?? null,
+            outcomeDetail: record.outcomeDetail ?? null,
+            outcomeAt: record.outcomeAt ?? null,
             createdAt: record.createdAt,
             updatedAt: record.updatedAt,
           };
         }),
+    }),
+  ),
+);
+
+const ProposalStepSelect = createSelectSchema(transactionProposalSteps, {
+  id: Schema.String.pipe(Schema.check(Schema.isUUID())),
+  setId: ProposalSetId,
+  itemId: ProposalItemId,
+  userId: UserId,
+  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  kind: Schema.Literals(["reserve_move", "add", "drop"]),
+  playerKey: Schema.NonEmptyString,
+  playerName: Schema.NullOr(Schema.NonEmptyString),
+  fromSlot: Schema.NullOr(Schema.NonEmptyString),
+  toSlot: Schema.NullOr(Schema.NonEmptyString),
+  outcome: ProposalOutcome,
+  detail: Schema.NullOr(Schema.NonEmptyString),
+  decidedAt: Schema.DateTimeUtcFromDate,
+});
+
+export const ProposalStepRow = ProposalStepSelect.pipe(
+  Schema.decodeTo(
+    ProposalStepRecord,
+    SchemaTransformation.transform<ProposalStepRecord, typeof ProposalStepSelect.Type>({
+      decode: (row) => ({
+        id: row.id,
+        setId: row.setId,
+        itemId: row.itemId,
+        userId: row.userId,
+        position: row.position,
+        kind: row.kind,
+        playerKey: row.playerKey,
+        ...(row.playerName === null ? {} : { playerName: row.playerName }),
+        ...(row.fromSlot === null ? {} : { fromSlot: row.fromSlot }),
+        ...(row.toSlot === null ? {} : { toSlot: row.toSlot }),
+        outcome: row.outcome,
+        ...(row.detail === null ? {} : { detail: row.detail }),
+        decidedAt: row.decidedAt,
+      }),
+      encode: (record) => ({
+        id: record.id,
+        setId: record.setId,
+        itemId: record.itemId,
+        userId: record.userId,
+        position: record.position,
+        kind: record.kind,
+        playerKey: record.playerKey,
+        playerName: record.playerName ?? null,
+        fromSlot: record.fromSlot ?? null,
+        toSlot: record.toSlot ?? null,
+        outcome: record.outcome,
+        detail: record.detail ?? null,
+        decidedAt: record.decidedAt,
+      }),
     }),
   ),
 );

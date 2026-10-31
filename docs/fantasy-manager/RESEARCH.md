@@ -1730,8 +1730,74 @@ What the read-only pass does establish about the write path:
 - `OPTIONS` on the transactions collection and on the roster resource answered 200 on both hosts
   with no `Allow` header, so it says nothing either way about which methods are served.
 
-So the documented write surface is reachable in principle, but "the API can propose a trade" is not
-an observed fact. It stays untried until someone deliberately sends one proposal.
+So the documented trade write surface is reachable in principle, but "the API can propose a trade" is
+not an observed fact. It stays untried until someone deliberately sends one proposal.
+
+### Player add/drop and reserve moves (2026-10-31)
+
+No live provider write was performed: no disposable league was available, so the request shapes
+below are recorded from the adapter's fake-provider tests and the reference implementation's working
+add/drop writer. They are the shapes the application sends; whether this provider accepts them on a
+given league remains a live-acceptance item.
+
+One item is one provider transaction. A swap carries the add and the drop together, with the add
+before the drop, and a single-player move uses `<player>` directly rather than a `<players>` wrapper:
+
+```xml
+<fantasy_content>
+  <transaction>
+    <type>add/drop</type>
+    <players>
+      <player>
+        <player_key>{add}</player_key>
+        <transaction_data>
+          <type>add</type>
+          <destination_team_key>{team}</destination_team_key>
+        </transaction_data>
+      </player>
+      <player>
+        <player_key>{drop}</player_key>
+        <transaction_data>
+          <type>drop</type>
+          <source_team_key>{team}</source_team_key>
+        </transaction_data>
+      </player>
+    </players>
+  </transaction>
+</fantasy_content>
+```
+
+`type` is `add`, `drop`, or `add/drop` from which movements are present. A waiver claim adds the
+claim's bid as `<faab_bid>{bid}</faab_bid>` before the players; a free-agent add sends no bid. The
+request is `POST https://pub-api-rw.fantasysports.yahoo.com/fantasy/v2/league/{league_key}/transactions`
+with `format=json_f` and the session crumb.
+
+A reserve move is a separate request, before the add, against the roster resource:
+
+```xml
+<fantasy_content>
+  <roster>
+    <coverage_type>date</coverage_type>
+    <date>2026-10-31</date>
+    <players>
+      <player>
+        <player_key>{player}</player_key>
+        <position>IR</position>
+      </player>
+    </players>
+  </roster>
+</fantasy_content>
+```
+
+It is `PUT .../team/{team_key}/roster` with the same `format=json_f` and crumb. A week-covered league
+sends `<coverage_type>week</coverage_type><week>{week}</week>` instead. One item opens at most one
+reserve slot; more than one needed spot is refused as stale rather than guessed.
+
+Outcomes are mapped once, with no retry: 2xx is accepted; 400 is rejected with the provider's
+`<description>` (or JSON `error.description`) surfaced to the person; 404 is `not_found`; 408/429 are
+`not_sent`; 401/403 reject the session; 5xx and transport timeouts are `unknown` because the request
+may have applied. The spans record the operation and outcome, never the crumb, cookie, or provider
+body.
 
 ### League trade rules
 

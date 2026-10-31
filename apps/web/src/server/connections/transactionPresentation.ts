@@ -30,6 +30,16 @@ export function toTransactionReviewView(review: ProposalSetReview): TransactionR
       createdAt: DateTime.formatIso(review.set.createdAt),
       expiresAt: DateTime.formatIso(review.set.expiresAt),
       expired: review.set.expired,
+      ...(review.set.submission === undefined
+        ? {}
+        : {
+            submission: {
+              submittedAt: DateTime.formatIso(review.set.submission.submittedAt),
+              ...(review.set.submission.completedAt === undefined
+                ? {}
+                : { completedAt: DateTime.formatIso(review.set.submission.completedAt) }),
+            },
+          }),
     },
     teams: review.teams.map(toTeamView),
   };
@@ -64,6 +74,7 @@ function toItemView(
     drops: item.drops.map(toPlayerView),
     ...(item.bid === undefined ? {} : { bid: item.bid }),
     reason: item.reason,
+    state: item.state,
     staleness: {
       status: item.staleness.status,
       ...(item.staleness.checkedAt === undefined
@@ -71,6 +82,35 @@ function toItemView(
         : { checkedAt: DateTime.formatIso(item.staleness.checkedAt) }),
       reasons: item.staleness.reasons.map(toStaleReasonView),
     },
+    ...(item.execution === undefined
+      ? {}
+      : {
+          execution: {
+            outcome: item.execution.outcome,
+            ...(item.execution.detail === undefined ? {} : { detail: item.execution.detail }),
+            decidedAt: DateTime.formatIso(item.execution.decidedAt),
+            steps: item.execution.steps.map((step) => ({
+              kind: step.kind,
+              ...(step.player.name === undefined ? {} : { playerName: step.player.name }),
+              ...(step.fromSlot === undefined ? {} : { fromSlot: step.fromSlot }),
+              ...(step.toSlot === undefined ? {} : { toSlot: step.toSlot }),
+              outcome: step.outcome,
+              ...(step.detail === undefined ? {} : { detail: step.detail }),
+              decidedAt: DateTime.formatIso(step.decidedAt),
+            })),
+          },
+        }),
+    ...(item.reserveMove === undefined
+      ? {}
+      : {
+          reserveMove: {
+            ...(item.reserveMove.player.name === undefined
+              ? {}
+              : { playerName: item.reserveMove.player.name }),
+            fromSlot: item.reserveMove.fromSlot,
+            toSlot: item.reserveMove.toSlot,
+          },
+        }),
   };
 }
 
@@ -104,6 +144,9 @@ export function mapTransactionReviewError(
   | "transactions.persistence_failed"
   | "transactions.unavailable"
   | "transactions.input_invalid"
+  | "transactions.set_expired"
+  | "transactions.already_submitted"
+  | "transactions.nothing_included"
 > {
   switch (error._tag) {
     case "proposal.set_not_found":
@@ -111,7 +154,12 @@ export function mapTransactionReviewError(
     case "proposal.content_invalid":
     case "proposal.nothing_accepted":
       return { type: "transactions.input_invalid", outcome: "rejected" };
+    case "proposal.nothing_included":
+      return { type: "transactions.nothing_included", outcome: "rejected" };
     case "proposal.set_expired":
+      return { type: "transactions.set_expired", outcome: "rejected" };
+    case "proposal.already_submitted":
+      return { type: "transactions.already_submitted", outcome: "conflict" };
     case "proposal.team_not_found":
     case "proposal.connection_not_ready":
     case "proposal.provider_unavailable":

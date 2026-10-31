@@ -39,7 +39,7 @@ A league/opponent read requires verified access through the user's connection; i
 
 Inputs: explicit owned team references and validated target periods, plus stable request identity. MCP's protocol request ID is not assumed to be a durable retry identity. Decide one stable client request field with clear same-key/different-intent rejection.
 
-Phase 1 uses the provider's native lineup action; Phase 2 uses the custom optimizer after direct cutover. No transaction execution or provider-premium optimization.
+Phase 1 uses the provider's native lineup action; Phase 2 uses the custom optimizer after direct cutover. No MCP-initiated transaction execution and no provider-premium optimization: a signed-in person may submit a reviewed transaction set from the web review page.
 
 Response includes per-team run reference, status, implementation, target period, observation time, and safe change/no-op/blocked/pending explanations. A bounded wait may return pending work; `get_lineup_runs` retrieves the result later. Do not report success merely because work was queued or a provider returned HTTP 200 with invalid coverage.
 
@@ -587,18 +587,28 @@ recorded beside the item's state and is never a failure; an item stays `proposed
 state cannot be read marks only its own items, and the review reports the failure beside that team.
 An expired set refuses re-validation instead of re-checking or executing, so a set that sat overnight
 cannot be executed from facts nobody re-checked. `get_transaction_proposal_set` reads the set back
-with every team, including the teams that had nothing proposed, each item's state and last staleness
-check, and the same review link. Another account's set is reported as not found.
+with every team, including the teams that had nothing proposed, each item's state, last staleness
+check, and any recorded submission and step outcomes, and the same review link. Another account's set
+is reported as not found.
 
-The item state vocabulary is `proposed`, `approved`, `executed`, `failed`, and `skipped`. Nothing in
-this change reaches `approved` or later: execution is a later slice, and no tool in this set submits,
-accepts, or spends anything.
+The item state vocabulary is `proposed`, `executed`, `pending`, `failed`, `skipped`, and `unknown`.
+No MCP tool submits, accepts, or spends anything. Execution happens only when a signed-in owner
+submits the included items from the review page. Submission claims the set once in the database,
+re-runs the same revalidation immediately before writing, and skips an item that went stale with its
+reason rather than attempting it. Each item is one provider transaction carrying its add and drop
+together, sent once with no retry; an optional reserve move is its own recorded step before the add.
+A waiver claim is `pending` until the provider processes it, and `unknown` means a request may or may
+not have applied and is never retried automatically. The set records who submitted, when, and the
+outcome of every item and step; after submission it is an audit record and cannot be submitted again.
+A failed, unknown, or pending item stops the later items for that team only, because their checks no
+longer describe the roster; other teams continue. Trades remain read-only: review links and pending
+offers are never submitted by any tool or by the review page.
 
 ## Review-link safety
 
 Generate links from typed domain intents and verified relationships. Users may choose players/counterparty, not origins, endpoint stages, or submission parameters. Validate provider, league, owning team, membership, and numeric-ID mapping privately.
 
-Return a clear human-review instruction and no guarantee of add/drop/trade eligibility. No POST/PUT execution, final confirmation automation, waivers/bid submission, or multi-add/drop behavior not validated by the adapter.
+Return a clear human-review instruction and no guarantee of add/drop/trade eligibility. Review links never carry a submission, confirmation automation, waiver/bid submission, or multi-add/drop behavior the adapter has not validated. They are for a person to inspect in the provider's own interface.
 
 Every result carries `linkTemplate: { provider, version }`, so a client can detect a stale link
 template after an upgrade without guessing from URL shape. The Yahoo template

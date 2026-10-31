@@ -58,9 +58,14 @@ it("renders a two-team proposal, a quiet team, and one disabled action", async (
   await expect.element(page.getByRole("checkbox", { name: /Add Sam Rivers/u })).toBeChecked();
   await expect
     .element(page.getByRole("button", { name: "Submit 3 moves" }))
-    .toHaveAttribute("aria-disabled", "true");
+    .not.toHaveAttribute("aria-disabled");
   await expect
     .element(page.getByText("3 of 4 moves included. 1 waiver claim spends 25 FAAB."))
+    .toBeVisible();
+  await expect
+    .element(
+      page.getByText(/One provider transaction per move, sent in this order, with no retries/u),
+    )
     .toBeVisible();
 });
 
@@ -93,13 +98,13 @@ it("updates the tally when a person leaves out a current move", async () => {
   await expect.element(page.getByText("2 of 4 moves included. No FAAB is spent.")).toBeVisible();
   await expect
     .element(page.getByRole("button", { name: "Submit 2 moves" }))
-    .toHaveAttribute("aria-disabled", "true");
+    .not.toHaveAttribute("aria-disabled");
 
   await waiver.click();
   await expect.element(waiver).toBeChecked();
   await expect
     .element(page.getByRole("button", { name: "Submit 3 moves" }))
-    .toHaveAttribute("aria-disabled", "true");
+    .not.toHaveAttribute("aria-disabled");
 });
 
 it("toggles a move from the keyboard", async () => {
@@ -209,6 +214,7 @@ function waiverItem(): TransactionReviewItemView {
     drops: [player("Alex Vance", "RB", "SF", "Out")],
     bid: 25,
     reason: "Cover the receiver spot before Sunday.",
+    state: "proposed",
     staleness: { status: "current", checkedAt: now, reasons: [] },
   };
 }
@@ -220,6 +226,7 @@ function staleItem(): TransactionReviewItemView {
     adds: [player("Jordan Lee", "C", "BOS", "Free agent")],
     drops: [],
     reason: "Add a center for the light night.",
+    state: "proposed",
     staleness: {
       status: "stale",
       checkedAt: now,
@@ -241,6 +248,7 @@ function freeAgentItem(): TransactionReviewItemView {
     adds: [player("Mika Olsen", "LW", "NYR", "Free agent")],
     drops: [player("Tomas Berg", "RW", "BOS")],
     reason: "Take the better wing before the weekend.",
+    state: "proposed",
     staleness: { status: "current", checkedAt: now, reasons: [] },
   };
 }
@@ -252,6 +260,7 @@ function dropItem(): TransactionReviewItemView {
     adds: [],
     drops: [player("Riley Chen", "LW", "NYR")],
     reason: "Open a roster spot.",
+    state: "proposed",
     staleness: { status: "current", checkedAt: now, reasons: [] },
   };
 }
@@ -269,6 +278,117 @@ function player(
     ...(availability === undefined ? {} : { availability }),
   };
 }
+
+it("shows the reserve move that makes room before an add", async () => {
+  const base = reviewFixture();
+  const reservation: TransactionReviewItemView = {
+    ...waiverItem(),
+    reserveMove: { playerName: "Casey Moss", fromSlot: "BN", toSlot: "IR" },
+  };
+  using _app = setupReviewPage({
+    ...base,
+    teams: [
+      teamFixture(alphaId, "Alpha", "nfl", "football", [reservation]),
+      ...base.teams.slice(1),
+    ],
+  });
+
+  await expect.element(page.getByText("Makes room first")).toBeVisible();
+  await expect.element(page.getByText(/Move Casey Moss from BN to IR/u)).toBeVisible();
+});
+
+it("submits the included moves once, keeps the action visible on a phone, and shows every result in place", async () => {
+  let resolveSubmit: ((review: TransactionReviewView) => void) | undefined;
+  const pendingSubmission = new Promise<TransactionReviewView>((resolve) => {
+    resolveSubmit = resolve;
+  });
+  using _app = setupReviewPage(reviewFixture(), {
+    submit: () => pendingSubmission,
+  });
+
+  await page.viewport(390, 844);
+  try {
+    await page.getByRole("button", { name: "Submit 3 moves" }).click();
+
+    await expect
+      .element(page.getByRole("button", { name: "Submitting 3 moves…" }))
+      .toHaveAttribute("aria-busy", "true");
+    await expect.element(page.getByText(/Sending to the provider now/u)).toBeVisible();
+    await expect
+      .element(page.getByText(/3 of 4 moves included. 1 waiver claim spends 25 FAAB./u))
+      .toBeVisible();
+    await expect.element(page.getByRole("checkbox", { name: /Add Sam Rivers/u })).toBeDisabled();
+
+    const panel = document.getElementById("submission-panel");
+    expect(panel, "the submission panel").not.toBeNull();
+    expect(getComputedStyle(panel ?? document.body).position).toBe("fixed");
+    const bounds = panel?.getBoundingClientRect();
+    expect(bounds?.top ?? -1).toBeGreaterThanOrEqual(0);
+    expect(bounds?.bottom ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(844);
+
+    await captureViewport("submitting-390-light");
+    document.documentElement.classList.add("dark");
+    await captureViewport("submitting-390-dark");
+    document.documentElement.classList.remove("dark");
+
+    resolveSubmit?.(resultFixture());
+
+    await expect.element(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
+    await expect
+      .element(
+        page.getByText("1 executed · 1 pending on waivers · 1 failed · 1 unknown · 2 skipped."),
+      )
+      .toBeVisible();
+    await expect
+      .element(page.getByText(/The provider will process this claim later/u))
+      .toBeVisible();
+    await expect.element(page.getByText(/It was attempted once and not retried/u)).toBeVisible();
+    await expect
+      .element(page.getByText(/This request may or may not have applied. It was not retried/u))
+      .toBeVisible();
+    await expect.element(page.getByText("Left out of this submission.")).toBeVisible();
+    await expect
+      .element(page.getByText("That player is no longer available.", { exact: true }))
+      .toBeVisible();
+    await expect.element(page.getByText("Drop Riley Chen", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Executed", { exact: true }).first()).toBeVisible();
+    expect(page.getByRole("button", { name: /Submit/u }).elements()).toHaveLength(0);
+    expect(page.getByRole("checkbox").elements()).toHaveLength(0);
+    await expect.element(page.getByText(/cannot be submitted again/u)).toBeVisible();
+    expect(document.activeElement).toBe(document.getElementById("submission-result"));
+
+    await captureViewport("result-390-light");
+    document.documentElement.classList.add("dark");
+    await captureViewport("result-390-dark");
+    document.documentElement.classList.remove("dark");
+  } finally {
+    document.documentElement.classList.remove("dark");
+    await page.viewport(1280, 720);
+  }
+});
+
+it("does not send a submission when every move is left out", async () => {
+  let submissions = 0;
+  using _app = setupReviewPage(reviewFixture(), {
+    submit: () => {
+      submissions += 1;
+      return Promise.resolve(resultFixture());
+    },
+  });
+
+  await page
+    .getByRole("checkbox", { name: /Include: Add Sam Rivers and drop Alex Vance/u })
+    .click();
+  await page
+    .getByRole("checkbox", { name: /Include: Add Mika Olsen and drop Tomas Berg/u })
+    .click();
+  await page.getByRole("checkbox", { name: /Include: Drop Riley Chen/u }).click();
+  await expect.element(page.getByText("0 of 4 moves included. No FAAB is spent.")).toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: "Submit moves" }))
+    .toHaveAttribute("aria-disabled", "true");
+  expect(submissions).toBe(0);
+});
 
 it("captures the review for visual inspection", async () => {
   using _app = setupReviewPage(reviewFixture());
@@ -301,10 +421,173 @@ it("captures the review for visual inspection", async () => {
   }
 });
 
-function setupReviewPage(review: TransactionReviewView): { [Symbol.dispose](): void } {
+async function captureViewport(name: string): Promise<void> {
+  const options = { target: "page" } satisfies Parameters<typeof page.screenshot>[0] & {
+    readonly target: "page";
+  };
+  await page.screenshot({
+    ...options,
+    path: `../../../../../.artifacts/transactions-review/${name}.png`,
+  });
+}
+
+function resultFixture(): TransactionReviewView {
+  return {
+    ...reviewFixture(),
+    set: {
+      ...reviewFixture().set,
+      submission: { submittedAt: now, completedAt: now },
+    },
+    teams: [
+      teamFixture(alphaId, "Alpha", "nfl", "football", [
+        pendingWaiverItem(),
+        skippedStaleItem(),
+        failedAddItem(),
+        unknownDropItem(),
+        excludedDropItem(),
+      ]),
+      teamFixture(betaId, "Beta", "nhl", "hockey", [executedDropItem()]),
+      teamFixture(gammaId, "Gamma", "nhl", "hockey", []),
+    ],
+  };
+}
+
+function pendingWaiverItem(): TransactionReviewItemView {
+  return {
+    ...waiverItem(),
+    state: "pending",
+    execution: {
+      outcome: "pending",
+      detail:
+        "The provider has not processed this waiver claim yet. It may still be awarded or lost, so this move is pending rather than done.",
+      decidedAt: now,
+      steps: [
+        {
+          kind: "add",
+          playerName: "Sam Rivers",
+          outcome: "pending",
+          detail: "The provider has not processed this waiver claim yet.",
+          decidedAt: now,
+        },
+        {
+          kind: "drop",
+          playerName: "Alex Vance",
+          outcome: "pending",
+          detail: "The provider has not processed this waiver claim yet.",
+          decidedAt: now,
+        },
+      ],
+    },
+  };
+}
+
+function skippedStaleItem(): TransactionReviewItemView {
+  return {
+    ...staleItem(),
+    state: "skipped",
+    execution: {
+      outcome: "skipped",
+      detail: "Jordan Lee is already rostered in this league, so the add can no longer be made.",
+      decidedAt: now,
+      steps: [],
+    },
+  };
+}
+
+function failedAddItem(): TransactionReviewItemView {
+  return {
+    ...freeAgentItem(),
+    state: "failed",
+    execution: {
+      outcome: "failed",
+      detail: "That player is no longer available.",
+      decidedAt: now,
+      steps: [
+        {
+          kind: "add",
+          playerName: "Mika Olsen",
+          outcome: "failed",
+          detail: "That player is no longer available.",
+          decidedAt: now,
+        },
+      ],
+    },
+  };
+}
+
+function unknownDropItem(): TransactionReviewItemView {
+  return {
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b5",
+    kind: "drop",
+    adds: [],
+    drops: [player("Owen Park", "D", "TOR")],
+    reason: "This response was lost.",
+    state: "unknown",
+    staleness: { status: "current", checkedAt: now, reasons: [] },
+    execution: {
+      outcome: "unknown",
+      detail:
+        "The provider did not confirm the transaction; it may or may not have applied. It was not retried.",
+      decidedAt: now,
+      steps: [
+        {
+          kind: "drop",
+          playerName: "Owen Park",
+          outcome: "unknown",
+          detail:
+            "The provider did not confirm the transaction; it may or may not have applied. It was not retried.",
+          decidedAt: now,
+        },
+      ],
+    },
+  };
+}
+
+function excludedDropItem(): TransactionReviewItemView {
+  return {
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b6",
+    kind: "drop",
+    adds: [],
+    drops: [player("Nate Cole", "G", "VGK")],
+    reason: "Left out on purpose.",
+    state: "skipped",
+    staleness: { status: "current", checkedAt: now, reasons: [] },
+    execution: {
+      outcome: "skipped",
+      detail: "Left out of this submission.",
+      decidedAt: now,
+      steps: [],
+    },
+  };
+}
+
+function executedDropItem(): TransactionReviewItemView {
+  return {
+    ...dropItem(),
+    state: "executed",
+    execution: {
+      outcome: "executed",
+      decidedAt: now,
+      steps: [
+        {
+          kind: "drop",
+          playerName: "Riley Chen",
+          outcome: "executed",
+          decidedAt: now,
+        },
+      ],
+    },
+  };
+}
+
+function setupReviewPage(
+  review: TransactionReviewView,
+  options: { readonly submit?: TransactionRemote["submit"] } = {},
+): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TransactionRemote = {
     read: () => Promise.resolve(review),
+    submit: options.submit ?? (() => Promise.resolve(review)),
   };
   const reviewQuery = transactionQueries.review(remote, review.set.id);
   queryClient.setQueryData(reviewQuery.queryKey, review);
@@ -322,7 +605,9 @@ function setupReviewPage(review: TransactionReviewView): { [Symbol.dispose](): v
   const reviewRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/transactions/$setId",
-    component: () => <TransactionReviewPage reviewQuery={() => reviewQuery} />,
+    component: () => (
+      <TransactionReviewPage reviewQuery={() => reviewQuery} remote={() => remote} />
+    ),
   });
   const teamRoute = createRoute({
     getParentRoute: () => rootRoute,

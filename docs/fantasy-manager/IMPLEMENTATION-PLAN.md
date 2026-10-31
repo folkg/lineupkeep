@@ -30,7 +30,7 @@ Status: product grilling and independent Lineupkeep repository/brand preparation
 
 Fresh Effect domain implementation on a stable approved rush-hour baseline. Borrow API knowledge and lessons, not AutoCoach implementation code. Never migrate users, history, preferences, credentials, or secrets. Leave the old application intact.
 
-No server LLM, agent-code runner, transaction execution, custom query language, arbitrary URL proxy, provider recommendations/premium optimization, or general-purpose hosted browser infrastructure. The scoped, owner-bound provider login browser in ARCHITECTURE §9 is the exception; it is not a proxy or CDP service. Transaction suggestions are roadmap only: use MCP as an agent experimentation ground first, then decide whether a demonstrated useful workflow belongs in the product.
+No server LLM, agent-code runner, MCP-initiated transaction execution, trade writes, custom query language, arbitrary URL proxy, provider recommendations/premium optimization, or general-purpose hosted browser infrastructure. The scoped, owner-bound provider login browser in ARCHITECTURE §9 is the exception; it is not a proxy or CDP service. Agent-proposed player transactions are reviewed and submitted once by a signed-in person on the web; no MCP tool executes, accepts, or spends anything.
 
 ### Generic contracts and data
 
@@ -100,7 +100,7 @@ These implement the accepted rules but have not been separately approved:
 | 5     | Minimal UI, hourly scheduling, action-required email, retention         |
 | 6     | Separately authorized Cloud Run/Neon acceptance and Phase 1 launch      |
 | 7     | Pure policy/solver with independent proof and explicit-write acceptance |
-| 8     | Direct Phase 2 cutover; no transaction suggestions/execution            |
+| 8     | Direct Phase 2 cutover; reviewed web submission remains the only write  |
 
 See DELIVERY-PLAN.md for each stage's tasks and acceptance evidence.
 

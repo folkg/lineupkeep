@@ -24,6 +24,8 @@ const ProviderOperation = Schema.Literals([
   "build_review_link",
   "apply_native_action",
   "apply_explicit_assignments",
+  "apply_transaction",
+  "apply_reserve_move",
 ]);
 export type ProviderOperation = typeof ProviderOperation.Type;
 
@@ -239,6 +241,25 @@ export type ProviderShape = {
     },
   ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
 
+  readonly applyTransaction: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKey: string;
+      readonly adds: ReadonlyArray<string>;
+      readonly drops: ReadonlyArray<string>;
+      readonly faabBid: number | undefined;
+    },
+  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
+
+  readonly applyReserveMove: (
+    input: ProviderSessionMaterial & {
+      readonly providerTeamKey: string;
+      readonly coverage: ProviderNativeTarget;
+      readonly providerPlayerKey: string;
+      readonly slot: string;
+    },
+  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
+
   readonly readPlayerDetails: (
     input: ProviderSessionMaterial & ProviderPlayerReadInput,
   ) => Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure>;
@@ -404,8 +425,13 @@ export type ProviderWriteResult =
   | {
       readonly status: "rejected";
       readonly reason: "invalid_request" | "not_found" | "premium_required";
+      readonly detail?: string;
     }
-  | { readonly status: "not_sent"; readonly reason: "session_incomplete" | "request_failed" }
+  | {
+      readonly status: "not_sent";
+      readonly reason: "session_incomplete" | "request_failed";
+      readonly detail?: string;
+    }
   | { readonly status: "unknown" };
 
 export const ProviderStartingLineup = Schema.Literals([

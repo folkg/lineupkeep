@@ -31,13 +31,21 @@ export const BackendRuntime = {
 };
 
 function yahooResponse(url: URL): unknown {
-  if (url.origin !== "https://pub-api-ro.fantasysports.yahoo.com") {
-    if (
-      url.origin === "https://pub-api.fantasysports.yahoo.com" &&
-      url.pathname === "/fantasy/v3/getCrumb"
-    ) {
-      return { service: { crumb: "e2e-fake-crumb" } };
+  if (url.origin === "https://pub-api.fantasysports.yahoo.com") {
+    return url.pathname === "/fantasy/v3/getCrumb"
+      ? { service: { crumb: "e2e-fake-crumb" } }
+      : undefined;
+  }
+  if (url.origin === "https://pub-api-rw.fantasysports.yahoo.com") {
+    if (url.pathname.startsWith("/fantasy/v2/league/") && url.pathname.endsWith("/transactions")) {
+      return { fantasy_content: { transaction: { status: "successful" } } };
     }
+    if (/^\/fantasy\/v2\/team\/[^/]+\/roster$/u.test(url.pathname)) {
+      return { fantasy_content: { roster: { status: "success" } } };
+    }
+    return undefined;
+  }
+  if (url.origin !== "https://pub-api-ro.fantasysports.yahoo.com") {
     return undefined;
   }
   if (url.pathname === "/fantasy/v2/users;use_login=1") {

@@ -139,7 +139,11 @@ const maximumHistoryPlayers = 200;
 const maximumUpstreamLimit = 50;
 
 type ReadOperation = ProviderOperation;
-type WriteOperation = "apply_native_action" | "apply_explicit_assignments";
+type WriteOperation =
+  | "apply_native_action"
+  | "apply_explicit_assignments"
+  | "apply_transaction"
+  | "apply_reserve_move";
 
 export const yahooProvider = Effect.gen(function* () {
   const internet = yield* PublicInternet;
@@ -402,14 +406,82 @@ export const yahooProvider = Effect.gen(function* () {
       );
     });
 
+  const applyTransaction: ProviderShape["applyTransaction"] = Effect.fn(
+    "YahooProvider.applyTransaction",
+  )(function* (input) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "apply_transaction");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "apply_transaction");
+    yield* ValidTeamKey(input.providerTeamKey, "apply_transaction");
+    const adds = yield* ValidTransactionPlayerKeys(input.adds);
+    const drops = yield* ValidTransactionPlayerKeys(input.drops);
+    if (adds.length + drops.length === 0 || adds.length + drops.length > 2) {
+      return yield* ProviderResponseInvalid.make({ operation: "apply_transaction" });
+    }
+    yield* Effect.annotateCurrentSpan({
+      "provider.add_count": adds.length,
+      "provider.drop_count": drops.length,
+      "provider.faab_bid": input.faabBid === undefined ? "not_sent" : "sent",
+    });
+    return yield* writeToProvider(
+      input,
+      "apply_transaction",
+      "POST",
+      `/fantasy/v2/league/${leagueKey}/transactions`,
+      transactionBody({
+        providerTeamKey: input.providerTeamKey,
+        adds,
+        drops,
+        faabBid: input.faabBid,
+      }),
+    );
+  });
+
+  const applyReserveMove: ProviderShape["applyReserveMove"] = Effect.fn(
+    "YahooProvider.applyReserveMove",
+  )(function* (input) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "apply_reserve_move");
+    const teamKey = yield* ValidTeamKey(input.providerTeamKey, "apply_reserve_move");
+    const target = yield* ValidNativeTarget(input.coverage, "apply_reserve_move");
+    const playerKey = yield* ValidTransactionPlayerKey(
+      input.providerPlayerKey,
+      "apply_reserve_move",
+    );
+    const slot = yield* ValidSlot(input.slot);
+    yield* Effect.annotateCurrentSpan("provider.reserve_slot", slot);
+    return yield* writeToProvider(
+      input,
+      "apply_reserve_move",
+      "PUT",
+      `/fantasy/v2/team/${teamKey}/roster`,
+      reserveMoveBody(target, playerKey, slot),
+    );
+  });
+
   const writeRoster = (
     input: ProviderSessionMaterial & { readonly providerTeamKey: string },
     operation: WriteOperation,
     body: string,
   ): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
     Effect.gen(function* () {
-      const cookie = yield* sessionCookie(input, operation);
       const teamKey = yield* ValidTeamKey(input.providerTeamKey, operation);
+      return yield* writeToProvider(
+        input,
+        operation,
+        "PUT",
+        `/fantasy/v2/team/${teamKey}/roster`,
+        body,
+      );
+    });
+
+  const writeToProvider = (
+    input: ProviderSessionMaterial,
+    operation: WriteOperation,
+    method: "POST" | "PUT",
+    path: string,
+    body: string,
+  ): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
+    Effect.gen(function* () {
+      const cookie = yield* sessionCookie(input, operation);
       const crumb = yield* Effect.result(readCrumb(input, operation));
       if (crumb._tag === "Failure") {
         if (crumb.failure._tag === "provider.session_rejected") {
@@ -421,15 +493,12 @@ export const yahooProvider = Effect.gen(function* () {
           ? { status: "not_sent" as const, reason: "session_incomplete" as const }
           : { status: "not_sent" as const, reason: "request_failed" as const };
       }
-      const url = yahooWriteUrl(
-        `/fantasy/v2/team/${teamKey}/roster`,
-        Redacted.value(crumb.success.crumb),
-      );
+      const url = yahooWriteUrl(path, Redacted.value(crumb.success.crumb));
       const response = yield* Effect.scoped(
         internet
           .request(
             new Request(url, {
-              method: "PUT",
+              method,
               headers: {
                 accept: "application/json",
                 "content-type": "application/xml",
@@ -442,38 +511,43 @@ export const yahooProvider = Effect.gen(function* () {
               maxResponseBytes: yahooWriteResponseLimitBytes,
             },
           )
-          .pipe(
-            Effect.flatMap((result) => discardBody(result).pipe(Effect.as(result.status))),
-            Effect.catchTag("PublicInternetUnavailable", () => Effect.void),
-          ),
+          .pipe(Effect.catchTag("PublicInternetUnavailable", () => Effect.void)),
       );
       if (response === undefined) {
         yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
         return { status: "unknown" as const };
       }
-      yield* Effect.annotateCurrentSpan("http.response.status_code", response);
-      if (response === 401 || response === 403) {
+      yield* Effect.annotateCurrentSpan("http.response.status_code", response.status);
+      if (response.status === 401 || response.status === 403) {
+        yield* discardBody(response);
         yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
         return yield* ProviderSessionRejected.make({ operation });
       }
-      if (response === 404) {
+      if (response.ok) {
+        yield* discardBody(response);
+        yield* Effect.annotateCurrentSpan("provider.outcome", "accepted");
+        return { status: "accepted" as const };
+      }
+      const detail = yield* providerErrorDetail(response);
+      if (response.status === 404) {
         yield* Effect.annotateCurrentSpan("provider.outcome", "rejected");
-        return { status: "rejected" as const, reason: "not_found" as const };
+        return { status: "rejected" as const, reason: "not_found" as const, ...detail };
       }
-      if (response === 408 || response === 429) {
+      if (response.status === 408 || response.status === 429) {
         yield* Effect.annotateCurrentSpan("provider.outcome", "not_sent");
-        return { status: "not_sent" as const, reason: "request_failed" as const };
+        return { status: "not_sent" as const, reason: "request_failed" as const, ...detail };
       }
-      if (response >= 500) {
+      if (response.status >= 500) {
+        yield* discardBody(response);
         yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
         return { status: "unknown" as const };
       }
-      if (response >= 400) {
-        yield* Effect.annotateCurrentSpan("provider.outcome", "rejected");
-        return { status: "rejected" as const, reason: "invalid_request" as const };
-      }
-      yield* Effect.annotateCurrentSpan("provider.outcome", "accepted");
-      return { status: "accepted" as const };
+      yield* Effect.annotateCurrentSpan("provider.outcome", "rejected");
+      return {
+        status: "rejected" as const,
+        reason: /premium/iu.test(detail.detail ?? "") ? "premium_required" : "invalid_request",
+        ...detail,
+      };
     });
 
   const readPlayerPeriod = Effect.fnUntraced(function* (input: {
@@ -917,6 +991,8 @@ export const yahooProvider = Effect.gen(function* () {
     readRosterSchedule,
     applyNativeAction,
     applyExplicitAssignments,
+    applyTransaction,
+    applyReserveMove,
     readPlayerDetails,
     readPlayerHistory,
     searchPlayers,
@@ -975,7 +1051,12 @@ class YahooCrumbUnavailable extends Schema.TaggedError<
   YahooCrumbUnavailable,
   { readonly brand: unique symbol }
 >()("provider.crumb_unavailable", {
-  operation: Schema.Literals(["apply_native_action", "apply_explicit_assignments"]),
+  operation: Schema.Literals([
+    "apply_native_action",
+    "apply_explicit_assignments",
+    "apply_transaction",
+    "apply_reserve_move",
+  ]),
 }) {}
 
 function sessionCookie(
@@ -1143,6 +1224,116 @@ function ValidAssignments(
     return ProviderResponseInvalid.make({ operation: "apply_explicit_assignments" });
   }
   return Effect.succeed(assignments);
+}
+
+function ValidTransactionPlayerKeys(
+  keys: ReadonlyArray<string>,
+): Effect.Effect<ReadonlyArray<string>, ProviderResponseInvalid> {
+  const unique = new Set(keys);
+  if (unique.size !== keys.length || !keys.every(isTransactionPlayerKey) || keys.length > 1) {
+    return ProviderResponseInvalid.make({ operation: "apply_transaction" });
+  }
+  return Effect.succeed(keys);
+}
+
+function ValidTransactionPlayerKey(
+  key: string,
+  operation: ProviderOperation,
+): Effect.Effect<string, ProviderResponseInvalid> {
+  return isTransactionPlayerKey(key)
+    ? Effect.succeed(key)
+    : ProviderResponseInvalid.make({ operation });
+}
+
+function isTransactionPlayerKey(key: string): boolean {
+  return /^[0-9]+\.p\.[0-9]+$/u.test(key);
+}
+
+function ValidSlot(slot: string): Effect.Effect<string, ProviderResponseInvalid> {
+  return /^[A-Za-z0-9/+_-]{1,16}$/u.test(slot)
+    ? Effect.succeed(slot)
+    : ProviderResponseInvalid.make({ operation: "apply_reserve_move" });
+}
+
+function transactionBody(input: {
+  readonly providerTeamKey: string;
+  readonly adds: ReadonlyArray<string>;
+  readonly drops: ReadonlyArray<string>;
+  readonly faabBid: number | undefined;
+}): string {
+  const players = [
+    ...input.adds.map((key) => transactionPlayerBody(key, "add", input.providerTeamKey)),
+    ...input.drops.map((key) => transactionPlayerBody(key, "drop", input.providerTeamKey)),
+  ];
+  const type =
+    input.adds.length > 0 && input.drops.length > 0
+      ? "add/drop"
+      : input.adds.length > 0
+        ? "add"
+        : "drop";
+  const bid = input.faabBid === undefined ? "" : `<faab_bid>${String(input.faabBid)}</faab_bid>`;
+  const roster =
+    players.length === 1 ? (players[0] ?? "") : `<players>${players.join("")}</players>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>${type}</type>${bid}${roster}</transaction></fantasy_content>`;
+}
+
+function transactionPlayerBody(
+  playerKey: string,
+  movement: "add" | "drop",
+  providerTeamKey: string,
+): string {
+  const team = movement === "add" ? "destination_team_key" : "source_team_key";
+  return `<player><player_key>${playerKey}</player_key><transaction_data><type>${movement}</type><${team}>${providerTeamKey}</${team}></transaction_data></player>`;
+}
+
+function reserveMoveBody(target: ProviderNativeTarget, playerKey: string, slot: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster>${coverageBody(target)}<players><player><player_key>${playerKey}</player_key><position>${slot}</position></player></players></roster></fantasy_content>`;
+}
+
+function providerErrorDetail(
+  response: Response,
+): Effect.Effect<{ readonly detail?: string }, never> {
+  return Effect.tryPromise({ try: () => response.text(), catch: () => undefined }).pipe(
+    Effect.map((text) => {
+      const description = providerDescription(text);
+      return description === undefined ? {} : { detail: description };
+    }),
+    Effect.orElseSucceed(() => ({})),
+  );
+}
+
+function providerDescription(text: string): string | undefined {
+  const xml = /<description>([\s\S]*?)<\/description>/iu.exec(text)?.[1];
+  const json = (() => {
+    try {
+      const payload: unknown = JSON.parse(text);
+      if (typeof payload !== "object" || payload === null) {
+        return undefined;
+      }
+      const error: unknown = Reflect.get(payload, "error");
+      if (typeof error !== "object" || error === null) {
+        return undefined;
+      }
+      const description: unknown = Reflect.get(error, "description");
+      return typeof description === "string" ? description : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const raw = xml ?? json;
+  if (raw === undefined) {
+    return undefined;
+  }
+  const cleaned = raw
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/&amp;/gu, "&")
+    .replace(/&lt;/gu, "<")
+    .replace(/&gt;/gu, ">")
+    .replace(/&quot;/gu, '"')
+    .replace(/&#39;/gu, "'")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return cleaned.length === 0 ? undefined : cleaned.slice(0, 300);
 }
 
 function nativeStartActiveBody(target: ProviderNativeTarget): string {

@@ -25,12 +25,22 @@ export type ProposalItemKind = typeof ProposalItemKind.Type;
 
 export const ProposalItemState = Schema.Literals([
   "proposed",
-  "approved",
   "executed",
+  "pending",
   "failed",
   "skipped",
+  "unknown",
 ]);
 export type ProposalItemState = typeof ProposalItemState.Type;
+
+export const ProposalOutcome = Schema.Literals([
+  "executed",
+  "pending",
+  "failed",
+  "skipped",
+  "unknown",
+]);
+export type ProposalOutcome = typeof ProposalOutcome.Type;
 
 export const ProposalStalenessStatus = Schema.Literals(["unchecked", "current", "stale"]);
 export type ProposalStalenessStatus = typeof ProposalStalenessStatus.Type;
@@ -61,6 +71,38 @@ const ProposalPlayer = Schema.Struct({
 });
 type ProposalPlayer = typeof ProposalPlayer.Type;
 
+const ProposalStepPlayer = Schema.Struct({
+  ref: PlayerRef,
+  name: Schema.optional(Schema.NonEmptyString),
+});
+type ProposalStepPlayer = typeof ProposalStepPlayer.Type;
+
+const ProposalExecutionStep = Schema.Struct({
+  kind: Schema.Literals(["reserve_move", "add", "drop"]),
+  player: ProposalStepPlayer,
+  fromSlot: Schema.optional(Schema.NonEmptyString),
+  toSlot: Schema.optional(Schema.NonEmptyString),
+  outcome: ProposalOutcome,
+  detail: Schema.optional(Schema.NonEmptyString),
+  decidedAt: Schema.DateTimeUtc,
+});
+export type ProposalExecutionStep = typeof ProposalExecutionStep.Type;
+
+const ProposalItemExecution = Schema.Struct({
+  outcome: ProposalOutcome,
+  detail: Schema.optional(Schema.NonEmptyString),
+  decidedAt: Schema.DateTimeUtc,
+  steps: Schema.Array(ProposalExecutionStep),
+});
+type ProposalItemExecution = typeof ProposalItemExecution.Type;
+
+const ProposalReserveMove = Schema.Struct({
+  player: ProposalStepPlayer,
+  fromSlot: Schema.NonEmptyString,
+  toSlot: Schema.NonEmptyString,
+});
+type ProposalReserveMove = typeof ProposalReserveMove.Type;
+
 const ProposalStaleReason = Schema.Struct({
   code: ProposalStaleCode,
   player: Schema.optional(PlayerRef),
@@ -85,6 +127,8 @@ export const ProposalItem = Schema.Struct({
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
   staleness: ProposalStaleness,
+  execution: Schema.optional(ProposalItemExecution),
+  reserveMove: Schema.optional(ProposalReserveMove),
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
 });
@@ -118,12 +162,19 @@ export const ProposalSetProvenance = Schema.Struct({
 });
 export type ProposalSetProvenance = typeof ProposalSetProvenance.Type;
 
+export const ProposalSubmission = Schema.Struct({
+  submittedAt: Schema.DateTimeUtc,
+  completedAt: Schema.optional(Schema.DateTimeUtc),
+});
+export type ProposalSubmission = typeof ProposalSubmission.Type;
+
 export const ProposalSet = Schema.Struct({
   id: ProposalSetId,
   proposedBy: ProposalSetProvenance,
   createdAt: Schema.DateTimeUtc,
   expiresAt: Schema.DateTimeUtc,
   expired: Schema.Boolean,
+  submission: Schema.optional(ProposalSubmission),
   reviewPath: Schema.NonEmptyString,
 });
 export type ProposalSet = typeof ProposalSet.Type;
@@ -204,6 +255,14 @@ export type ProposeTransactionsResult = typeof ProposeTransactionsResult.Type;
 export const ProposalSetInput = Schema.Struct({ set: ProposalSetId });
 export type ProposalSetInput = typeof ProposalSetInput.Type;
 
+export const SubmitTransactionProposalInput = Schema.Struct({
+  set: ProposalSetId,
+  include: Schema.Array(ProposalItemId).pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(20)),
+  ),
+});
+export type SubmitTransactionProposalInput = typeof SubmitTransactionProposalInput.Type;
+
 const PendingTradeRefusal = Schema.Struct({
   code: Schema.Literals(["no_movements", "movement_missing_party"]),
   detail: Schema.NonEmptyString,
@@ -281,6 +340,11 @@ export type TransactionProposalsShape = {
     input: ProposalSetInput,
   ) => Effect.Effect<ProposalSetReview, ProposalError>;
 
+  readonly submit: (
+    userId: UserId,
+    input: SubmitTransactionProposalInput,
+  ) => Effect.Effect<ProposalSetReview, ProposalError>;
+
   readonly readPendingOffers: (
     userId: UserId,
     input: PendingTradeOffersInput,
@@ -290,8 +354,10 @@ export type TransactionProposalsShape = {
 export type ProposalError =
   | ProposalContentInvalid
   | ProposalNothingAccepted
+  | ProposalNothingIncluded
   | ProposalSetNotFound
   | ProposalSetExpired
+  | ProposalSetAlreadySubmitted
   | ProposalTeamNotFound
   | ProposalConnectionNotReady
   | ProposalProviderUnavailable
@@ -310,6 +376,21 @@ export class ProposalNothingAccepted extends Schema.TaggedError<
 >()("proposal.nothing_accepted", {
   refusals: Schema.Array(ProposalItemRefused),
   detail: Schema.NonEmptyString,
+}) {}
+
+export class ProposalNothingIncluded extends Schema.TaggedError<
+  ProposalNothingIncluded,
+  { readonly brand: unique symbol }
+>()("proposal.nothing_included", {
+  detail: Schema.NonEmptyString,
+}) {}
+
+export class ProposalSetAlreadySubmitted extends Schema.TaggedError<
+  ProposalSetAlreadySubmitted,
+  { readonly brand: unique symbol }
+>()("proposal.already_submitted", {
+  set: ProposalSetId,
+  submittedAt: Schema.DateTimeUtc,
 }) {}
 
 export class ProposalTeamNotFound extends Schema.TaggedError<

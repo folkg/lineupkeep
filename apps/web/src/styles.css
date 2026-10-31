@@ -48,6 +48,11 @@
     cursor: pointer;
   }
 
+  button[data-pending="true"] {
+    cursor: progress;
+    opacity: 1 !important;
+  }
+
   button,
   a {
     -webkit-tap-highlight-color: transparent;

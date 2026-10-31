@@ -35,6 +35,7 @@ export function Button(props: ButtonProps): JSX.Element {
       {...rest}
       type={props.type ?? "button"}
       class={buttonClass(props)}
+      data-pending={props.pending === true ? "true" : undefined}
       aria-busy={props.pending === true ? "true" : undefined}
       aria-disabled={props.pending === true || props.disabled === true ? "true" : undefined}
       onClick={handleClick}

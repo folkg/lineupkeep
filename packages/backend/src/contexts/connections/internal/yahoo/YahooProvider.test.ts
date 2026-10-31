@@ -308,8 +308,252 @@ it.effect("reports an explicit assignment rejection without retrying a different
       assignments: [{ providerPlayerKey: "461.p.10001", slot: "RB" }],
     });
 
-    assert.deepStrictEqual(result, { status: "rejected", reason: "invalid_request" });
+    assert.deepStrictEqual(result, {
+      status: "rejected",
+      reason: "invalid_request",
+      detail: "That position has already been filled.",
+    });
   }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("posts a swap as one transaction with the add before the drop", () => {
+  const calls: Array<{
+    url: URL;
+    method: string;
+    body: string;
+    headers: Record<string, string>;
+  }> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.promise(async () => {
+        const body = request.body === null ? "" : await request.clone().text();
+        calls.push({
+          url: new URL(request.url),
+          method: request.method,
+          body,
+          headers: Object.fromEntries(request.headers.entries()),
+        });
+        return request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : jsonResponse({ fantasy_content: { transaction: { status: "success" } } });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      adds: ["461.p.10001"],
+      drops: ["461.p.10002"],
+      faabBid: undefined,
+    });
+
+    assert.deepStrictEqual(result, { status: "accepted" });
+    assert.strictEqual(calls.length, 2);
+    const write = calls[1];
+    assert.isDefined(write);
+    assert.strictEqual(write.method, "POST");
+    assert.strictEqual(write.url.origin, "https://pub-api-rw.fantasysports.yahoo.com");
+    assert.strictEqual(write.url.pathname, "/fantasy/v2/league/461.l.1000/transactions");
+    assert.strictEqual(write.url.searchParams.get("format"), "json_f");
+    assert.strictEqual(write.url.searchParams.get("crumb"), "canary-crumb-value");
+    assert.strictEqual(write.headers["content-type"], "application/xml");
+    assert.strictEqual(write.headers["cookie"], Redacted.value(sessionInput.session));
+    assert.strictEqual(
+      write.body,
+      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>add/drop</type><players><player><player_key>461.p.10001</player_key><transaction_data><type>add</type><destination_team_key>461.l.1000.t.1</destination_team_key></transaction_data></player><player><player_key>461.p.10002</player_key><transaction_data><type>drop</type><source_team_key>461.l.1000.t.1</source_team_key></transaction_data></player></players></transaction></fantasy_content>',
+    );
+    assert.isBelow(write.body.indexOf("<type>add</type>"), write.body.indexOf("<type>drop</type>"));
+    assert.notInclude(write.body, "faab_bid");
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("sends a waiver claim with its FAAB bid", () => {
+  const calls: Array<{ readonly url: URL; readonly body: string }> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.promise(async () => {
+        calls.push({
+          url: new URL(request.url),
+          body: request.body === null ? "" : await request.clone().text(),
+        });
+        return request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : jsonResponse({ fantasy_content: { transaction: { status: "pending" } } });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      adds: ["461.p.10003"],
+      drops: [],
+      faabBid: 25,
+    });
+
+    assert.deepStrictEqual(result, { status: "accepted" });
+    const write = calls[1];
+    assert.isDefined(write);
+    assert.strictEqual(
+      write.body,
+      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>add</type><faab_bid>25</faab_bid><player><player_key>461.p.10003</player_key><transaction_data><type>add</type><destination_team_key>461.l.1000.t.1</destination_team_key></transaction_data></player></transaction></fantasy_content>',
+    );
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("moves a player to a reserve slot through the roster endpoint", () => {
+  const calls: Array<{ readonly url: URL; readonly method: string; readonly body: string }> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.promise(async () => {
+        calls.push({
+          url: new URL(request.url),
+          method: request.method,
+          body: request.body === null ? "" : await request.clone().text(),
+        });
+        return request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : jsonResponse({ fantasy_content: { roster: { status: "success" } } });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const result = yield* provider.applyReserveMove({
+      ...sessionInput,
+      providerTeamKey: "461.l.1000.t.1",
+      coverage: { type: "week", week: 7 },
+      providerPlayerKey: "461.p.10004",
+      slot: "IR",
+    });
+
+    assert.deepStrictEqual(result, { status: "accepted" });
+    const write = calls[1];
+    assert.isDefined(write);
+    assert.strictEqual(write.method, "PUT");
+    assert.strictEqual(write.url.origin, "https://pub-api-rw.fantasysports.yahoo.com");
+    assert.strictEqual(write.url.pathname, "/fantasy/v2/team/461.l.1000.t.1/roster");
+    assert.strictEqual(
+      write.body,
+      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster><coverage_type>week</coverage_type><week>7</week><players><player><player_key>461.p.10004</player_key><position>IR</position></player></players></roster></fantasy_content>',
+    );
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("returns the provider's own wording for a rejected transaction", () => {
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.succeed(
+        request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : new Response(
+              "<error><description>There is no room on the roster.</description></error>",
+              { status: 400 },
+            ),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      adds: ["461.p.10001"],
+      drops: [],
+      faabBid: undefined,
+    });
+    assert.deepStrictEqual(result, {
+      status: "rejected",
+      reason: "invalid_request",
+      detail: "There is no room on the roster.",
+    });
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("treats a server failure as unknown without retrying", () => {
+  const calls: Array<string> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.sync(() => {
+        calls.push(request.url);
+        return request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : new Response("server failed", { status: 503 });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      adds: [],
+      drops: ["461.p.10001"],
+      faabBid: undefined,
+    });
+    assert.deepStrictEqual(result, { status: "unknown" });
+    assert.strictEqual(calls.length, 2);
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("records a transaction write with its outcome and no credential in the span", () => {
+  const spans: Array<Tracer.NativeSpan> = [];
+  const tracer = EffectTracer.make({
+    span(options) {
+      const span = new EffectTracer.NativeSpan(options);
+      spans.push(span);
+      return span;
+    },
+  });
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.succeed(
+        request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : new Response("<error><description>Private provider detail.</description></error>", {
+              status: 400,
+            }),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      adds: ["461.p.10001"],
+      drops: [],
+      faabBid: undefined,
+    });
+    const exported = spans
+      .flatMap((span) => [span.name, ...[...span.attributes].flat().map(String)])
+      .join("\n");
+    assert.include(spans.map((span) => span.name).join("\n"), "YahooProvider.applyTransaction");
+    assert.include(exported, "provider.outcome");
+    assert.include(exported, "rejected");
+    for (const secret of [
+      Redacted.value(sessionInput.session),
+      "canary-crumb-value",
+      "Private provider detail.",
+    ]) {
+      assert.notInclude(exported, secret);
+    }
+  }).pipe(
+    Effect.provide(yahooLayer(layer)),
+    Effect.withSpan("provider.test"),
+    Effect.withTracer(tracer),
+  );
 });
 
 it.effect("rejects rejected sessions without exposing the cookie or response body", () => {

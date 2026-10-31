@@ -1321,6 +1321,7 @@ const unavailableProposals: TransactionProposalsShape = {
   propose: () => Effect.die(new Error("proposals unavailable")),
   revalidate: () => Effect.die(new Error("proposals unavailable")),
   read: () => Effect.die(new Error("proposals unavailable")),
+  submit: () => Effect.die(new Error("proposals unavailable")),
   readPendingOffers: () => Effect.die(new Error("proposals unavailable")),
 };
 const unavailableLineups: LineupRunsShape = {

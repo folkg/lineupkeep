@@ -398,18 +398,28 @@ item both behaving correctly. `M`
 
 ### H4 — Execution
 
-- [ ] Writes through the provider's transaction endpoint, using the session and crumb the lineup writer
+- [x] Writes through the provider's transaction endpoint, using the session and crumb the lineup writer
       already uses.
-- [ ] Per-item outcome, recorded. No silent retry: a retried add can drop the wrong player.
-- [ ] Move a player to a reserve list as an executable move, so an add can free a roster slot without
+- [x] Per-item outcome, recorded. No silent retry: a retried add can drop the wrong player.
+- [x] Move a player to a reserve list as an executable move, so an add can free a roster slot without
       dropping an injured player, under the same per-item outcome and re-validation rules.
-- [ ] One team failing never hides the others.
-- [ ] **decide** whether originating a trade can be staged at all: the provider publishes no parameterized
-      trade proposal page, and its write shape is unproven, so a staged trade currently has no review
-      link that can act on it. Incoming offers stay read-only until then.
+- [x] One team failing never hides the others.
+- [x] **decide** trade staging: no. The provider publishes no parameterized trade proposal page, its
+      write shape is unproven, and a staged trade has no review link that can act on it. Trades stay
+      read-only and link out; incoming offers stay read-only.
+
+Shipped 2026-10-31: a signed-in person submits the included items from `/transactions/{setId}`.
+The database claims the set once, submission re-runs revalidation immediately before writing, and
+one provider transaction per item carries the add and drop together. An optional reserve move is a
+separate recorded step before the add. Outcomes are `executed`, `pending` on waivers, `failed`,
+`skipped`, and `unknown`; a failed, unknown, or pending item stops only its own team, and unknown is
+never retried. No MCP tool executes anything. The request shapes and out-of-scope notes are in
+[RESEARCH.md](fantasy-manager/RESEARCH.md#player-adddrop-and-reserve-moves-2026-10-31).
 
 **Verify**: a real add and drop on a disposable league, with per-item outcomes and the provider's own
-transaction feed agreeing. `M`
+transaction feed agreeing. `M` — **live acceptance outstanding**: no disposable league was available,
+so the adapter is verified against the fake provider and the recorded request shapes, not a real
+transaction feed. The end-to-end suite exercises the web submit path against that fake.
 
 ## I. Foldkit migration
 

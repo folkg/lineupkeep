@@ -24,6 +24,7 @@ function TransactionReviewRoute(): JSX.Element {
   return (
     <TransactionReviewPage
       reviewQuery={() => transactionQueries.review(transactionRemote, params().setId)}
+      remote={() => transactionRemote}
     />
   );
 }

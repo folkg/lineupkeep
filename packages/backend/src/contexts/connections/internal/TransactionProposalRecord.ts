@@ -7,6 +7,7 @@ import {
   ProposalItemId,
   ProposalItemKind,
   ProposalItemState,
+  ProposalOutcome,
   ProposalSetId,
   ProposalSetProvenance,
   ProposalStaleCode,
@@ -16,6 +17,9 @@ import {
 export const StoredProposalPlayer = Schema.Struct({
   key: Schema.NonEmptyString,
   name: Schema.optional(Schema.NonEmptyString),
+  position: Schema.optional(Schema.NonEmptyString),
+  proTeam: Schema.optional(Schema.NonEmptyString),
+  availability: Schema.optional(Schema.NonEmptyString),
 }).pipe(Schema.toType);
 export type StoredProposalPlayer = typeof StoredProposalPlayer.Type;
 
@@ -39,6 +43,9 @@ export const ProposalSetRecord = Schema.Struct({
   proposedBy: ProposalSetProvenance,
   fingerprint: Schema.NonEmptyString,
   teams: Schema.Array(TeamId),
+  submittedBy: Schema.optional(UserId),
+  submittedAt: Schema.optional(Schema.DateTimeUtc),
+  completedAt: Schema.optional(Schema.DateTimeUtc),
   createdAt: Schema.DateTimeUtc,
   expiresAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
@@ -58,10 +65,37 @@ export const ProposalItemRecord = Schema.Struct({
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
   staleness: StoredProposalStaleness,
+  outcome: Schema.optional(ProposalOutcome),
+  outcomeDetail: Schema.optional(Schema.NonEmptyString),
+  outcomeAt: Schema.optional(Schema.DateTimeUtc),
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
 }).pipe(Schema.toType);
 export type ProposalItemRecord = typeof ProposalItemRecord.Type;
+
+export const ProposalStepRecord = Schema.Struct({
+  id: Schema.String,
+  setId: ProposalSetId,
+  itemId: ProposalItemId,
+  userId: UserId,
+  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  kind: Schema.Literals(["reserve_move", "add", "drop"]),
+  playerKey: Schema.NonEmptyString,
+  playerName: Schema.optional(Schema.NonEmptyString),
+  fromSlot: Schema.optional(Schema.NonEmptyString),
+  toSlot: Schema.optional(Schema.NonEmptyString),
+  outcome: ProposalOutcome,
+  detail: Schema.optional(Schema.NonEmptyString),
+  decidedAt: Schema.DateTimeUtc,
+}).pipe(Schema.toType);
+export type ProposalStepRecord = typeof ProposalStepRecord.Type;
+
+export type StoredReserveMove = {
+  readonly playerKey: string;
+  readonly playerName?: string;
+  readonly fromSlot: string;
+  readonly toSlot: string;
+};
 
 export type ProposalTeamRecord = {
   readonly id: TeamId;

@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
@@ -8,6 +8,7 @@ import { FantasyLeague, FantasySport, TeamId } from "#contexts/connections/Fanta
 import {
   ProposalItemId,
   ProposalItemKind,
+  ProposalOutcome,
   ProposalPersistenceFailed,
   ProposalSetId,
   ProposalSetProvenance,
@@ -21,15 +22,19 @@ import { providerTeams } from "./ConnectionTables.ts";
 import type {
   ProposalItemRecord,
   ProposalSetRecord,
+  ProposalStepRecord,
   ProposalTeamRecord,
   StoredProposalPlayer,
   StoredProposalStaleness,
+  StoredReserveMove,
 } from "./TransactionProposalRecord.ts";
 import {
   ProposalItemRow,
   ProposalSetRow,
+  ProposalStepRow,
   transactionProposalItems,
   transactionProposalSets,
+  transactionProposalSteps,
 } from "./TransactionProposalTables.ts";
 
 export type ProposalItemCommand = {
@@ -44,6 +49,7 @@ export type ProposalItemCommand = {
 type LoadedProposalSet = {
   readonly set: ProposalSetRecord;
   readonly items: ReadonlyArray<ProposalItemRecord>;
+  readonly steps: ReadonlyArray<ProposalStepRecord>;
   readonly created: boolean;
 };
 
@@ -52,6 +58,26 @@ export type ProposalItemChange = {
   readonly staleness: StoredProposalStaleness;
   readonly adds: ReadonlyArray<StoredProposalPlayer>;
   readonly drops: ReadonlyArray<StoredProposalPlayer>;
+  readonly reserveMove?: StoredReserveMove;
+};
+
+export type ProposalStepCommand = {
+  readonly kind: "reserve_move" | "add" | "drop";
+  readonly playerKey: string;
+  readonly playerName?: string;
+  readonly fromSlot?: string;
+  readonly toSlot?: string;
+  readonly outcome: ProposalOutcome;
+  readonly detail?: string;
+  readonly decidedAt: DateTime.Utc;
+};
+
+export type ProposalOutcomeCommand = {
+  readonly itemId: ProposalItemId;
+  readonly outcome: ProposalOutcome;
+  readonly detail: string | undefined;
+  readonly at: DateTime.Utc;
+  readonly steps: ReadonlyArray<ProposalStepCommand>;
 };
 
 export class TransactionProposalRepository extends Context.Service<TransactionProposalRepository>()(
@@ -147,6 +173,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                   }
                   return item;
                 }),
+                steps: [],
                 created: true,
               };
             }),
@@ -183,7 +210,11 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
           .orderBy(asc(transactionProposalItems.position))
           .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
         const items = yield* Effect.forEach(itemRows, decodeItem);
-        return { set, items };
+        const steps = yield* loadSteps(
+          userId,
+          items.map((item) => item.id),
+        );
+        return { set, items, steps };
       });
 
       const saveChecks = Effect.fn("TransactionProposalRepository.saveChecks")(function* (input: {
@@ -258,7 +289,171 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         return yield* decodeTeams(rows);
       });
 
-      return { create, load, listTeams, loadTeams, saveChecks };
+      const claimSubmission = Effect.fn("TransactionProposalRepository.claimSubmission")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly setId: ProposalSetId;
+          readonly at: DateTime.Utc;
+        }) {
+          const at = DateTime.toDateUtc(input.at);
+          const claimed = yield* database
+            .update(transactionProposalSets)
+            .set({ submittedByUserId: input.userId, submittedAt: at, updatedAt: at })
+            .where(
+              and(
+                eq(transactionProposalSets.userId, input.userId),
+                eq(transactionProposalSets.id, input.setId),
+                isNull(transactionProposalSets.submittedAt),
+                gt(transactionProposalSets.expiresAt, at),
+              ),
+            )
+            .returning({ id: transactionProposalSets.id })
+            .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+          return claimed.length === 1;
+        },
+      );
+
+      const recordItemOutcomes = Effect.fn("TransactionProposalRepository.recordItemOutcomes")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly setId: ProposalSetId;
+          readonly outcomes: ReadonlyArray<ProposalOutcomeCommand>;
+        }) {
+          const outcomes = [...input.outcomes];
+          if (!Array.isArrayNonEmpty(outcomes)) {
+            return;
+          }
+          const outcomeById = new Map(
+            outcomes.map((outcome) => [outcome.itemId, outcome] as const),
+          );
+          const ids = [...outcomeById.keys()];
+          if (!Array.isArrayNonEmpty(ids)) {
+            return;
+          }
+          const stepCount = outcomes.reduce((total, outcome) => total + outcome.steps.length, 0);
+          const stepIds = yield* Effect.replicateEffect(stepCount)(newId);
+          let stepOffset = 0;
+          return yield* database
+            .transaction((tx) =>
+              Effect.gen(function* () {
+                const updated = yield* mutateRows(tx, transactionProposalItems, {
+                  where: and(
+                    eq(transactionProposalItems.userId, input.userId),
+                    eq(transactionProposalItems.setId, input.setId),
+                  ),
+                  ids,
+                  codec: ProposalItemRow,
+                  plan: (locked) =>
+                    Effect.sync(() => {
+                      const planned: Array<ProposalItemRecord> = [];
+                      for (const [itemId, outcome] of outcomeById) {
+                        const record = locked.get(itemId);
+                        if (record === undefined) {
+                          continue;
+                        }
+                        planned.push({
+                          ...record,
+                          state: outcome.outcome,
+                          outcome: outcome.outcome,
+                          outcomeDetail: outcome.detail,
+                          outcomeAt: outcome.at,
+                          updatedAt: outcome.at,
+                        });
+                      }
+                      return planned;
+                    }),
+                });
+                if (updated.length !== outcomes.length) {
+                  return yield* ProposalPersistenceFailed.make({
+                    cause: new Error("A proposal item outcome was recorded for a missing item"),
+                  });
+                }
+                const rows = outcomes.flatMap((outcome) =>
+                  outcome.steps.map((step, index) => ({
+                    id: Schema.decodeSync(ProposalItemId)(Array.getUnsafe(stepIds, stepOffset++)),
+                    setId: input.setId,
+                    itemId: outcome.itemId,
+                    userId: input.userId,
+                    position: index,
+                    kind: step.kind,
+                    playerKey: step.playerKey,
+                    playerName: step.playerName ?? null,
+                    fromSlot: step.fromSlot ?? null,
+                    toSlot: step.toSlot ?? null,
+                    outcome: step.outcome,
+                    detail: step.detail ?? null,
+                    decidedAt: DateTime.toDateUtc(step.decidedAt),
+                  })),
+                );
+                if (rows.length > 0) {
+                  yield* chunked(rows, maxInsertRows(transactionProposalSteps), (chunk) =>
+                    tx
+                      .insert(transactionProposalSteps)
+                      .values([...chunk])
+                      .returning(),
+                  );
+                }
+              }),
+            )
+            .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        },
+      );
+
+      const completeSubmission = Effect.fn("TransactionProposalRepository.completeSubmission")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly setId: ProposalSetId;
+          readonly at: DateTime.Utc;
+        }) {
+          const at = DateTime.toDateUtc(input.at);
+          yield* database
+            .update(transactionProposalSets)
+            .set({ completedAt: at, updatedAt: at })
+            .where(
+              and(
+                eq(transactionProposalSets.userId, input.userId),
+                eq(transactionProposalSets.id, input.setId),
+                isNull(transactionProposalSets.completedAt),
+              ),
+            )
+            .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        },
+      );
+
+      function loadSteps(
+        userId: UserId,
+        itemIds: ReadonlyArray<ProposalItemId>,
+      ): Effect.Effect<ReadonlyArray<ProposalStepRecord>, ProposalPersistenceFailed> {
+        const ids = [...new Set(itemIds)];
+        if (!Array.isArrayNonEmpty(ids)) {
+          return Effect.succeed([]);
+        }
+        return database
+          .select()
+          .from(transactionProposalSteps)
+          .where(
+            and(
+              eq(transactionProposalSteps.userId, userId),
+              anyOf(transactionProposalSteps.itemId, ids),
+            ),
+          )
+          .orderBy(asc(transactionProposalSteps.itemId), asc(transactionProposalSteps.position))
+          .pipe(
+            Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+            Effect.flatMap((rows) => Effect.forEach(rows, decodeStep)),
+          );
+      }
+
+      return {
+        create,
+        load,
+        listTeams,
+        loadTeams,
+        saveChecks,
+        claimSubmission,
+        recordItemOutcomes,
+        completeSubmission,
+      };
 
       function loadByFingerprint(
         tx: Parameters<Parameters<typeof database.transaction>[0]>[0],
@@ -294,7 +489,11 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
             )
             .orderBy(asc(transactionProposalItems.position));
           const items = yield* Effect.forEach(itemRows, decodeItem);
-          return { set, items, created: false };
+          const steps = yield* loadSteps(
+            userId,
+            items.map((item) => item.id),
+          );
+          return { set, items, steps, created: false };
         });
       }
     }),
@@ -356,6 +555,14 @@ function decodeItem(
   row: typeof transactionProposalItems.$inferSelect,
 ): Effect.Effect<ProposalItemRecord, ProposalPersistenceFailed> {
   return Schema.decodeEffect(ProposalItemRow)(row).pipe(
+    Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+  );
+}
+
+function decodeStep(
+  row: typeof transactionProposalSteps.$inferSelect,
+): Effect.Effect<ProposalStepRecord, ProposalPersistenceFailed> {
+  return Schema.decodeEffect(ProposalStepRow)(row).pipe(
     Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
   );
 }

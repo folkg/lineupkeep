@@ -4,12 +4,15 @@ import type { Accessor } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
-import type { RecoveryAction } from "#browser/shared-ui/ActionFeedback.tsx";
+import type { ActionFeedbackState, RecoveryAction } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Box } from "#browser/shared-ui/Box.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { CheckboxField } from "#browser/shared-ui/CheckboxField.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
+import { Dock, DockSpacer } from "#browser/shared-ui/Dock.tsx";
+import { FocusRegion } from "#browser/shared-ui/FocusRegion.tsx";
+import { Form } from "#browser/shared-ui/Form.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
@@ -23,8 +26,10 @@ import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
 import type {
+  TransactionReviewExecutionView,
   TransactionReviewItemView,
   TransactionReviewPlayerView,
+  TransactionReviewStepView,
   TransactionReviewTeamView,
   TransactionReviewView,
 } from "#contracts/connections/transactionContract.ts";
@@ -34,11 +39,18 @@ import {
   TransactionReviewFailure,
 } from "./transactionFailure";
 import type { TransactionReviewQueryOptions } from "./transactionQueries";
-import { useTransactionReviewPage } from "./useTransactionReviewPage";
-import type { TransactionReviewModel } from "./useTransactionReviewPage";
+import type { TransactionRemote } from "./transactionRemote";
+import { resultSummaryId, useTransactionReviewPage } from "./useTransactionReviewPage";
+import type {
+  TransactionReviewModel,
+  TransactionReviewModelOutcome,
+} from "./useTransactionReviewPage";
 
 export function TransactionReviewPage(props: TransactionReviewPageProps): JSX.Element {
-  const page = useTransactionReviewPage({ reviewQuery: () => props.reviewQuery() });
+  const page = useTransactionReviewPage({
+    reviewQuery: () => props.reviewQuery(),
+    remote: () => props.remote(),
+  });
 
   return (
     <AppShell>
@@ -55,9 +67,12 @@ export function TransactionReviewPage(props: TransactionReviewPageProps): JSX.El
           >
             {(model) => (
               <Review
+                feedback={page.feedback()}
                 isItemIncluded={page.isItemIncluded}
                 model={model()}
+                onSubmit={page.submit}
                 onToggle={page.toggleItem}
+                submitting={page.submitting()}
               />
             )}
           </Show>
@@ -115,17 +130,32 @@ function isNotFoundFailure(error: unknown): boolean {
 }
 
 function Review(props: ReviewProps): JSX.Element {
+  const submitted = (): boolean => props.model.submitted;
   return (
     <Stack gap="xl">
       <Stack gap="sm">
-        <ProposalSummary
-          checkedAt={props.model.checkedAt}
-          review={props.model.review}
-          staleCount={props.model.staleCount}
-          total={props.model.total}
-          teamCount={props.model.teamsWithItems.length}
-        />
-        <Show when={props.model.review.set.expired}>
+        <Show
+          fallback={
+            <ProposalSummary
+              checkedAt={props.model.checkedAt}
+              review={props.model.review}
+              staleCount={props.model.staleCount}
+              total={props.model.total}
+              teamCount={props.model.teamsWithItems.length}
+            />
+          }
+          when={props.model.review.set.submission}
+        >
+          {(submission) => (
+            <SubmittedSummary
+              counts={props.model.counts}
+              finished={props.model.finished}
+              review={props.model.review}
+              submittedAt={submission().submittedAt}
+            />
+          )}
+        </Show>
+        <Show when={props.model.review.set.expired && !submitted()}>
           <ExpiredNotice expiresAt={props.model.review.set.expiresAt} />
         </Show>
       </Stack>
@@ -138,25 +168,35 @@ function Review(props: ReviewProps): JSX.Element {
         }
         when={props.model.total > 0}
       >
-        <For each={props.model.teamsWithItems}>
-          {(team) => (
-            <TeamProposal
-              expired={props.model.review.set.expired}
-              isItemIncluded={props.isItemIncluded}
-              team={team}
-              onToggle={props.onToggle}
-            />
-          )}
-        </For>
-        <Show when={props.model.quietTeams.length > 0}>
-          <QuietTeams teams={props.model.quietTeams} />
-        </Show>
-        <Show when={!props.model.review.set.expired}>
+        <DockSpacer active={!submitted()}>
+          <Stack gap="xl">
+            <For each={props.model.teamsWithItems}>
+              {(team) => (
+                <TeamProposal
+                  expired={props.model.review.set.expired}
+                  submitted={submitted()}
+                  submitting={props.submitting}
+                  isItemIncluded={props.isItemIncluded}
+                  team={team}
+                  onToggle={props.onToggle}
+                />
+              )}
+            </For>
+            <Show when={props.model.quietTeams.length > 0}>
+              <QuietTeams teams={props.model.quietTeams} />
+            </Show>
+          </Stack>
+        </DockSpacer>
+        <Show when={!props.model.review.set.expired && !submitted()}>
           <SubmissionPanel
             faab={props.model.includedFaab}
+            feedback={props.feedback}
             included={props.model.includedCount}
+            staleCount={props.model.staleCount}
+            submitting={props.submitting}
             total={props.model.total}
             waivers={props.model.includedWaivers}
+            onSubmit={props.onSubmit}
           />
         </Show>
       </Show>
@@ -196,7 +236,7 @@ function ProposalSummary(props: ProposalSummaryProps): JSX.Element {
             .
           </Show>
         </Text>
-        <Show when={!props.review.set.expired && props.staleCount > 0}>
+        <Show when={props.staleCount > 0}>
           <Text size="caption" tone="danger" weight="semibold">
             {props.staleCount} of {props.total === 1 ? "1 move" : `${String(props.total)} moves`} no
             longer {props.staleCount === 1 ? "matches" : "match"} current state and{" "}
@@ -205,6 +245,55 @@ function ProposalSummary(props: ProposalSummaryProps): JSX.Element {
         </Show>
       </Stack>
     </Box>
+  );
+}
+
+function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
+  return (
+    <FocusRegion id={resultSummaryId} labelledBy="submitted-title">
+      <Box rule="bottom" space="lg">
+        <Stack gap="sm">
+          <Inline gap="sm" align="baseline">
+            <Heading id="submitted-title" level={2} size="section">
+              Submitted
+            </Heading>
+            <Badge tone="accent">Audit record</Badge>
+          </Inline>
+          <Text size="body" weight="semibold" live="polite">
+            {outcomeSummary(props.counts)}
+          </Text>
+          <Text size="caption" tone="muted">
+            Submitted by you{" "}
+            <Time datetime={props.submittedAt}>{formatReaderTime(props.submittedAt)}</Time>.{" "}
+            <Show
+              fallback={
+                <>
+                  The submission did not finish recording outcomes, so the results below are
+                  incomplete. Nothing is retried automatically.
+                </>
+              }
+              when={props.finished}
+            >
+              Every included move has a recorded outcome below.
+            </Show>
+          </Text>
+          <Show when={props.counts.failed + props.counts.unknown > 0}>
+            <Notice
+              tone="danger"
+              title={`${String(props.counts.failed + props.counts.unknown)} ${props.counts.failed + props.counts.unknown === 1 ? "move needs" : "moves need"} your attention`}
+            >
+              <Text size="caption" tone="danger">
+                Read the outcome beside each move before making another change. A move that may have
+                applied is never retried automatically.
+              </Text>
+            </Notice>
+          </Show>
+          <Text size="caption" tone="faint">
+            This set cannot be submitted again. Propose a new set for another move.
+          </Text>
+        </Stack>
+      </Box>
+    </FocusRegion>
   );
 }
 
@@ -259,6 +348,8 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
           {(item) => (
             <ProposalItem
               expired={props.expired}
+              submitted={props.submitted}
+              submitting={props.submitting}
               included={props.isItemIncluded(item)}
               item={item}
               onToggle={(includedNow) => props.onToggle(item.id, includedNow)}
@@ -272,13 +363,16 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
 
 function ProposalItem(props: ProposalItemProps): JSX.Element {
   const stale = (): boolean => props.item.staleness.status === "stale";
+  const result = (): TransactionReviewExecutionView | undefined => props.item.execution;
   const staleId = (): string => `stale-${props.item.id}`;
   return (
-    <RuleListItem layout={props.expired ? "stack" : "leading"}>
-      <Show when={!props.expired}>
+    <RuleListItem
+      layout={props.submitted || props.item.staleness.status === "stale" ? "stack" : "leading"}
+    >
+      <Show when={!props.submitted && !props.expired}>
         <CheckboxField
           checked={props.included}
-          disabled={stale()}
+          disabled={stale() || props.submitting}
           label={stale() ? "Stale, not included" : "Include"}
           ariaLabel={`${stale() ? "Stale, not included" : "Include"}: ${moveSummary(props.item)}`}
           describedBy={stale() ? staleId() : undefined}
@@ -291,6 +385,13 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           <Badge tone={props.item.kind === "waiver_claim" ? "accent" : "neutral"}>
             {kindLabel(props.item.kind)}
           </Badge>
+          <Show when={result()}>
+            {(execution) => (
+              <Badge tone={isAttention(execution().outcome) ? "neutral" : "accent"}>
+                {outcomeLabel(execution().outcome)}
+              </Badge>
+            )}
+          </Show>
           <Text as="span" size="caption" tone="muted">
             {consequenceLine(props.item)}
           </Text>
@@ -305,6 +406,17 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           </Show>
         </Split>
 
+        <Show when={!stale() && result() === undefined && props.item.reserveMove}>
+          {(move) => (
+            <Notice tone="neutral" title="Makes room first">
+              <Text size="caption" tone="muted">
+                Move {move().playerName ?? "this player"} from {move().fromSlot} to {move().toSlot}{" "}
+                before the add. That reserve move is reported as its own step.
+              </Text>
+            </Notice>
+          )}
+        </Show>
+
         <Quote label="Reason">
           <Text size="body">{props.item.reason}</Text>
         </Quote>
@@ -317,8 +429,81 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
             items={props.item.staleness.reasons.map((reason) => reason.detail)}
           />
         </Show>
+
+        <Show when={result()}>{(execution) => <ExecutionResult execution={execution()} />}</Show>
       </Stack>
     </RuleListItem>
+  );
+}
+
+function ExecutionResult(props: {
+  readonly execution: TransactionReviewExecutionView;
+}): JSX.Element {
+  return (
+    <Stack gap="sm">
+      <Show when={props.execution.steps.length > 0}>
+        <RuleList>
+          <For each={props.execution.steps}>
+            {(step) => (
+              <RuleListItem layout="stack">
+                <Inline gap="sm" align="baseline">
+                  <Text size="caption" weight="semibold">
+                    {stepLabel(step)}
+                  </Text>
+                  <Text size="caption" tone={isAttention(step.outcome) ? "danger" : "muted"}>
+                    {outcomeLabel(step.outcome)}
+                  </Text>
+                </Inline>
+                <Show when={step.detail}>
+                  {(detail) => (
+                    <Text size="caption" tone="muted">
+                      {detail()}
+                    </Text>
+                  )}
+                </Show>
+              </RuleListItem>
+            )}
+          </For>
+        </RuleList>
+      </Show>
+      <Show when={props.execution.steps.length === 0 && props.execution.detail}>
+        {(detail) => (
+          <Text size="caption" tone="muted">
+            {detail()}
+          </Text>
+        )}
+      </Show>
+      <Show when={props.execution.outcome === "failed"}>
+        <Notice tone="danger" title="This move failed">
+          <Text size="caption" tone="danger">
+            It was attempted once and not retried. Read the provider's wording above before
+            proposing it again.
+          </Text>
+        </Notice>
+      </Show>
+      <Show when={props.execution.outcome === "unknown"}>
+        <Notice tone="danger" title="Not confirmed">
+          <Text size="caption" tone="danger">
+            This request may or may not have applied. It was not retried. Check the team before
+            proposing another move.
+          </Text>
+        </Notice>
+      </Show>
+      <Show when={props.execution.outcome === "pending"}>
+        <Notice tone="neutral" title="Pending on waivers">
+          <Text size="caption" tone="muted">
+            The provider will process this claim later. It is not done, and it is not a failure.
+          </Text>
+        </Notice>
+      </Show>
+      <Show when={props.execution.outcome === "skipped" && props.execution.steps.length > 0}>
+        <Notice tone="neutral" title="Skipped">
+          <Text size="caption" tone="muted">
+            This move was left out or stopped before it could be sent. The reason is above.
+          </Text>
+        </Notice>
+      </Show>
+    </Stack>
   );
 }
 
@@ -363,26 +548,50 @@ function QuietTeams(props: QuietTeamsProps): JSX.Element {
 
 function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
   return (
-    <Box rule="top" space="lg">
-      <Stack as="section" gap="sm" labelledBy="submission-title">
-        <Heading id="submission-title" level={2} size="section">
-          Submission
-        </Heading>
-        <Inline gap="lg" justify="between" collapse>
-          <Stack gap="xs">
-            <Text size="body" weight="semibold" live="polite">
-              {includedTally(props.included, props.total, props.waivers, props.faab)}
-            </Text>
-            <Text id="submission-not-open" size="caption" tone="muted">
-              Submission is not open yet. Nothing will be sent to the provider.
-            </Text>
+    <Dock id="submission-panel">
+      <Box rule="top" space="lg">
+        <Form gap="sm" onSubmit={props.onSubmit}>
+          <Stack as="section" gap="sm" labelledBy="submission-title">
+            <Heading id="submission-title" level={2} size="section">
+              Submit
+            </Heading>
+            <Inline gap="lg" justify="between" collapse>
+              <Stack gap="xs">
+                <Text size="body" weight="semibold" live="polite">
+                  {includedTally(
+                    props.included,
+                    props.total,
+                    props.waivers,
+                    props.faab,
+                    props.submitting,
+                  )}
+                </Text>
+                <Text id="submission-note" size="caption" tone="muted">
+                  One provider transaction per move, sent in this order, with no retries. Waiver
+                  claims stay pending until the provider processes them.
+                </Text>
+                <Show when={props.staleCount > 0}>
+                  <Text size="caption" tone="muted">
+                    {props.staleCount} stale {props.staleCount === 1 ? "move is" : "moves are"}{" "}
+                    excluded.
+                  </Text>
+                </Show>
+              </Stack>
+              <Button
+                type="submit"
+                pending={props.submitting}
+                pendingLabel={submittingLabel(props.included)}
+                disabled={props.included === 0 || props.submitting}
+                aria-describedby="submission-note"
+              >
+                {submitLabel(props.included)}
+              </Button>
+            </Inline>
+            <ActionFeedback feedback={props.feedback} />
           </Stack>
-          <Button variant="secondary" disabled aria-describedby="submission-not-open">
-            {submitLabel(props.included)}
-          </Button>
-        </Inline>
-      </Stack>
-    </Box>
+        </Form>
+      </Box>
+    </Dock>
   );
 }
 
@@ -445,12 +654,19 @@ function consequenceLine(item: TransactionReviewItemView): string {
   return `Spends ${String(bid)} FAAB and cannot be undone.`;
 }
 
-function includedTally(included: number, total: number, waivers: number, faab: number): string {
+function includedTally(
+  included: number,
+  total: number,
+  waivers: number,
+  faab: number,
+  submitting: boolean,
+): string {
   const base = `${String(included)} of ${String(total)} ${total === 1 ? "move" : "moves"} included.`;
-  if (waivers === 0) {
-    return `${base} No FAAB is spent.`;
-  }
-  return `${base} ${String(waivers)} waiver ${waivers === 1 ? "claim spends" : "claims spend"} ${String(faab)} FAAB.`;
+  const spending =
+    waivers === 0
+      ? "No FAAB is spent."
+      : `${String(waivers)} waiver ${waivers === 1 ? "claim spends" : "claims spend"} ${String(faab)} FAAB.`;
+  return submitting ? `${base} ${spending} Sending to the provider now.` : `${base} ${spending}`;
 }
 
 function submitLabel(included: number): string {
@@ -458,6 +674,53 @@ function submitLabel(included: number): string {
     return "Submit moves";
   }
   return `Submit ${String(included)} ${included === 1 ? "move" : "moves"}`;
+}
+
+function submittingLabel(included: number): string {
+  return `Submitting ${String(included)} ${included === 1 ? "move" : "moves"}…`;
+}
+
+function outcomeLabel(outcome: TransactionReviewModelOutcome): string {
+  switch (outcome) {
+    case "executed":
+      return "Executed";
+    case "pending":
+      return "Pending on waivers";
+    case "failed":
+      return "Failed";
+    case "skipped":
+      return "Skipped";
+    case "unknown":
+      return "Unknown, may have applied";
+  }
+}
+
+function isAttention(outcome: TransactionReviewModelOutcome): boolean {
+  return outcome === "failed" || outcome === "unknown";
+}
+
+function stepLabel(step: TransactionReviewStepView): string {
+  switch (step.kind) {
+    case "reserve_move":
+      return `Move ${step.playerName ?? "player"} to ${step.toSlot ?? "reserve"}${
+        step.fromSlot === undefined ? "" : ` from ${step.fromSlot}`
+      }`;
+    case "add":
+      return `Add ${step.playerName ?? "player"}`;
+    case "drop":
+      return `Drop ${step.playerName ?? "player"}`;
+  }
+}
+
+function outcomeSummary(counts: TransactionReviewModel["counts"]): string {
+  const parts = [
+    counts.executed > 0 ? `${String(counts.executed)} executed` : undefined,
+    counts.pending > 0 ? `${String(counts.pending)} pending on waivers` : undefined,
+    counts.failed > 0 ? `${String(counts.failed)} failed` : undefined,
+    counts.unknown > 0 ? `${String(counts.unknown)} unknown` : undefined,
+    counts.skipped > 0 ? `${String(counts.skipped)} skipped` : undefined,
+  ].flatMap((part) => (part === undefined ? [] : [part]));
+  return parts.length === 0 ? "No outcome was recorded." : `${parts.join(" · ")}.`;
 }
 
 function proposerLabel(kind: TransactionReviewView["set"]["proposedBy"]["kind"]): string {
@@ -482,12 +745,16 @@ function sportLabel(sport: TransactionReviewTeamView["team"]["sport"]): string {
 
 type TransactionReviewPageProps = {
   readonly reviewQuery: Accessor<TransactionReviewQueryOptions>;
+  readonly remote: Accessor<TransactionRemote>;
 };
 
 type ReviewProps = {
   readonly model: TransactionReviewModel;
   readonly isItemIncluded: (item: TransactionReviewItemView) => boolean;
   readonly onToggle: (item: string, included: boolean) => void;
+  readonly onSubmit: () => void;
+  readonly submitting: boolean;
+  readonly feedback: ActionFeedbackState | undefined;
 };
 
 type ReviewFailureProps = {
@@ -504,6 +771,13 @@ type ProposalSummaryProps = {
   readonly teamCount: number;
 };
 
+type SubmittedSummaryProps = {
+  readonly review: TransactionReviewView;
+  readonly submittedAt: string;
+  readonly finished: boolean;
+  readonly counts: TransactionReviewModel["counts"];
+};
+
 type ExpiredNoticeProps = {
   readonly expiresAt: string;
 };
@@ -511,6 +785,8 @@ type ExpiredNoticeProps = {
 type TeamProposalProps = {
   readonly team: TransactionReviewTeamView;
   readonly expired: boolean;
+  readonly submitted: boolean;
+  readonly submitting: boolean;
   readonly isItemIncluded: (item: TransactionReviewItemView) => boolean;
   readonly onToggle: (item: string, included: boolean) => void;
 };
@@ -518,6 +794,8 @@ type TeamProposalProps = {
 type ProposalItemProps = {
   readonly item: TransactionReviewItemView;
   readonly expired: boolean;
+  readonly submitted: boolean;
+  readonly submitting: boolean;
   readonly included: boolean;
   readonly onToggle: (included: boolean) => void;
 };
@@ -536,4 +814,8 @@ type SubmissionPanelProps = {
   readonly total: number;
   readonly waivers: number;
   readonly faab: number;
+  readonly staleCount: number;
+  readonly submitting: boolean;
+  readonly feedback: ActionFeedbackState | undefined;
+  readonly onSubmit: () => void;
 };

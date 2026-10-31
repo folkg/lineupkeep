@@ -26,11 +26,11 @@ Brief desktop and mobile checks around games, sometimes in bright daylight and s
 
 ## Capabilities and Constraints
 
-Implemented Phase 1: passwordless email-code sign-in, hosted browser linking with a local-helper fallback, owner-scoped encrypted Yahoo connections, team discovery, connection and team controls, bounded provider queries, native `set_lineup`, hourly current-period automation, reconnect email, and owner-scoped feedback from the app and MCP clients.
+Implemented Phase 1: passwordless email-code sign-in, hosted browser linking with a local-helper fallback, owner-scoped encrypted Yahoo connections, team discovery, connection and team controls, bounded provider queries, native `set_lineup`, hourly current-period automation, reconnect email, owner-scoped feedback from the app and MCP clients, and agent-proposed transactions that a signed-in person reviews and submits once from the web.
 
-Deferred to Phase 2: a ground-up pure lineup optimizer, legal same-roster reserve movement, and direct cutover after acceptance. No transactions, server-side LLM, premium entitlement bypass, or user scoring controls.
+Deferred to Phase 2: a ground-up pure lineup optimizer, legal same-roster reserve movement, and direct cutover after acceptance. No MCP-initiated transaction execution, trade writes, server-side LLM, premium entitlement bypass, or user scoring controls.
 
-These describe implemented behavior and deferred scope. Do not claim an accuracy guarantee, projection, transaction execution, custom scoring, or a provider that is not connected.
+These describe implemented behavior and deferred scope. Do not claim an accuracy guarantee, projection, trade execution, custom scoring, or a provider that is not connected.
 
 ## Evidence on Hand
 

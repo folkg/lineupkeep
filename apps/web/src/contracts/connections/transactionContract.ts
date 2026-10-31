@@ -1,6 +1,8 @@
 import type { FantasyLeague, FantasySport } from "@lineupkeep/backend/connections/FantasyTeam";
 import type {
   ProposalItemKind,
+  ProposalItemState,
+  ProposalOutcome,
   ProposalStalenessStatus,
 } from "@lineupkeep/backend/connections/TransactionProposals";
 
@@ -19,6 +21,29 @@ export type TransactionReviewStaleReasonView = {
   readonly detail: string;
 };
 
+export type TransactionReviewStepView = {
+  readonly kind: "reserve_move" | "add" | "drop";
+  readonly playerName?: string;
+  readonly fromSlot?: string;
+  readonly toSlot?: string;
+  readonly outcome: ProposalOutcome;
+  readonly detail?: string;
+  readonly decidedAt: string;
+};
+
+export type TransactionReviewExecutionView = {
+  readonly outcome: ProposalOutcome;
+  readonly detail?: string;
+  readonly decidedAt: string;
+  readonly steps: ReadonlyArray<TransactionReviewStepView>;
+};
+
+type TransactionReviewReserveMoveView = {
+  readonly playerName?: string;
+  readonly fromSlot: string;
+  readonly toSlot: string;
+};
+
 export type TransactionReviewItemView = {
   readonly id: string;
   readonly kind: ProposalItemKind;
@@ -26,11 +51,14 @@ export type TransactionReviewItemView = {
   readonly drops: ReadonlyArray<TransactionReviewPlayerView>;
   readonly bid?: number;
   readonly reason: string;
+  readonly state: ProposalItemState;
   readonly staleness: {
     readonly status: ProposalStalenessStatus;
     readonly checkedAt?: string;
     readonly reasons: ReadonlyArray<TransactionReviewStaleReasonView>;
   };
+  readonly execution?: TransactionReviewExecutionView;
+  readonly reserveMove?: TransactionReviewReserveMoveView;
 };
 
 export type TransactionReviewTeamView = {
@@ -58,6 +86,10 @@ export type TransactionReviewView = {
     readonly createdAt: string;
     readonly expiresAt: string;
     readonly expired: boolean;
+    readonly submission?: {
+      readonly submittedAt: string;
+      readonly completedAt?: string;
+    };
   };
   readonly teams: ReadonlyArray<TransactionReviewTeamView>;
 };
@@ -71,7 +103,10 @@ export type TransactionReviewError = {
     | "transactions.set_not_found"
     | "transactions.persistence_failed"
     | "transactions.unavailable"
-    | "transactions.input_invalid";
+    | "transactions.input_invalid"
+    | "transactions.set_expired"
+    | "transactions.already_submitted"
+    | "transactions.nothing_included";
 };
 
 export type TransactionReviewRequestResult<A> =

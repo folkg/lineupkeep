@@ -38,7 +38,7 @@ type ProposalReview = typeof ProposalReview.Type;
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Propose one set of player transactions across any of this account's teams for a person to review, and return the set id and one review link. Proposing writes nothing to the provider: it stores the set and returns per-item state, and no transaction is submitted. Each item names one team, a kind, the players to add and drop, an optional FAAB bid, and a required reason. `free_agent_add` adds players with no bid, `waiver_claim` adds players with a bid of 0 or more, and `drop` only drops; a drop item cannot add or bid, and a free-agent add cannot bid. Teams with nothing proposed still appear on the review, so the set covers every team this account has. Player references must come from a read of that team's league; a reference from another account or league, a team this account does not have, a player named in both adds and drops, or the same move repeated is refused and named by its position. Repeating the identical set returns the existing set instead of creating a duplicate. A set expires 24 hours after it is created, and the review re-reads current state before anyone decides: use `revalidate_transaction_proposal_set` for that, and `get_transaction_proposal_set` to read the set back.",
+      "Propose one set of player transactions across any of this account's teams for a person to review, and return the set id and one review link. Proposing writes nothing to the provider: it stores the set and returns per-item state, and no transaction is submitted. Each item names one team, a kind, the players to add and drop, an optional FAAB bid, and a required reason. `free_agent_add` adds players with no bid, `waiver_claim` adds players with a bid of 0 or more, and `drop` only drops; a drop item cannot add or bid, and a free-agent add cannot bid. Teams with nothing proposed still appear on the review, so the set covers every team this account has. Player references must come from a read of that team's league; a reference from another account or league, a team this account does not have, a player named in both adds and drops, or the same move repeated is refused and named by its position. Repeating the identical set returns the existing set instead of creating a duplicate. A set expires 24 hours after it is created, and the review re-reads current state before anyone decides: use `revalidate_transaction_proposal_set` for that, and `get_transaction_proposal_set` to read the set back. No tool submits, executes, or spends anything: only a signed-in person can submit the included moves from the review page.",
     parameters: ProposeTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -51,7 +51,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_proposal_set", {
     description:
-      "Read one transaction proposal set owned by this account: the set, every item grouped by its team, teams that had nothing proposed, and each item's state (proposed, approved, executed, failed, or skipped) with its last staleness check and reasons. The review link is returned beside it. This reads stored proposals only and contacts no provider; use `revalidate_transaction_proposal_set` to re-read current roster, pool, period, and budget state before anyone decides. Another account's set is reported as not found.",
+      "Read one transaction proposal set owned by this account: the set, every item grouped by its team, teams that had nothing proposed, and each item's state (proposed, executed, pending on waivers, failed, skipped, or unknown) with its last staleness check and reasons. A submitted set also carries who submitted it, when, and the outcome of every step, and cannot be submitted again. The review link is returned beside it. This reads stored proposals only and contacts no provider; use `revalidate_transaction_proposal_set` to re-read current roster, pool, period, and budget state before anyone decides. Another account's set is reported as not found.",
     parameters: ProposalSetInput,
     success: Schema.toCodecJson(ProposalReview),
     failure: ToolFailure,
@@ -149,6 +149,13 @@ function mapFailure<A>(
       switch (error._tag) {
         case "proposal.content_invalid":
           return reject("content_invalid", error.detail);
+        case "proposal.nothing_included":
+          return reject("nothing_included", error.detail);
+        case "proposal.already_submitted":
+          return reject(
+            "already_submitted",
+            "This proposal set was already submitted. It is an audit record now and cannot be submitted again; propose a fresh set for a new move.",
+          );
         case "proposal.nothing_accepted":
           return reject(
             "nothing_accepted",

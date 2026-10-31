@@ -2,7 +2,7 @@ import { Schema } from "effect";
 
 import { expect, signUp, test } from "./support";
 
-test("reviews a proposed transaction set across the owner's teams", async ({
+test("reviews and submits a proposed transaction set across the owner's teams", async ({
   page,
   services,
   mcp,
@@ -74,23 +74,40 @@ test("reviews a proposed transaction set across the owner's teams", async ({
 
   const checkbox = page.getByRole("checkbox", { name: /Drop Riverside Receiver/u });
   await expect(checkbox).toBeChecked();
-  await expect(page.getByRole("button", { name: "Submit 1 move" })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: "Submit 1 move" })).not.toHaveAttribute(
     "aria-disabled",
-    "true",
   );
   await expect(
-    page.getByText("Submission is not open yet. Nothing will be sent to the provider."),
+    page.getByText(/One provider transaction per move, sent in this order, with no retries./u),
   ).toBeVisible();
 
-  await checkbox.click();
-  await expect(checkbox).not.toBeChecked();
-  await expect(page.getByText("0 of 1 move included. No FAAB is spent.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Submit moves" })).toHaveAttribute(
-    "aria-disabled",
-    "true",
-  );
+  await page.getByRole("button", { name: "Submit 1 move" }).click();
+
+  await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
+  await expect(page.getByText("1 executed.")).toBeVisible();
+  await expect(page.getByText("Submitted by you", { exact: false })).toBeVisible();
+  await expect(page.getByText("Executed", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Submit/u })).toHaveCount(0);
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.getByText(/cannot be submitted again/u)).toBeVisible();
 
   const content = await page.content();
   expect(content).not.toContain("461.p.90001");
   expect(content).not.toContain("461.l.9000.t.1");
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
+  await expect(page.getByText("1 executed.")).toBeVisible();
+  await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Submit/u })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: ".artifacts/transactions-review/e2e-result-390-light.png",
+  });
+  await page.getByRole("button", { name: "Switch to dark theme" }).click();
+  await page.screenshot({
+    path: ".artifacts/transactions-review/e2e-result-390-dark.png",
+  });
 });
