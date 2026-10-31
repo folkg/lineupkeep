@@ -86,7 +86,7 @@ failed run raises the alert. `S`
 
 Shipped and deployed: spans export as structured JSON with Cloud Run's trace id, and the alert policy
 `Lineupkeep failed or uncertain lineup runs` is enabled. Reading the result showed the shape is wrong, so
-group D replaces the span-per-line writer with real traces and one wide event per unit of work.
+group D replaced the span-per-line writer with real traces and one wide event per unit of work.
 
 ---
 
@@ -343,43 +343,12 @@ that prevents data loss, security, accessibility, or anything explicitly request
 
 ---
 
-## H. Foldkit migration
+## H. Transactions review
 
-The preview is already merged into the rush-hour starter, so the shape is proven. The final release is
-expected shortly; adopt it when it lands. This removes the TanStack advisory entirely, which is the
-current publication blocker.
-
-### H1 — Adopt in the sample app and evaluate
-
-- [ ] Bring the rush-hour sample onto the released version and record what is better and worse in practice.
-- [ ] Code splitting: what the bundle looks like without it, and whether it can be recovered.
-- [ ] Rendering: virtual DOM against signals, measured on a list-heavy screen rather than argued.
-
-**Verify**: a running sample with feature parity, plus numbers on both concerns and a recommendation.
-`M`, blocked on the final release.
-
-### H2 — Migrate Lineupkeep
-
-- [ ] Migrate in slices, keeping the product working throughout.
-- [ ] Preserve the provider boundary, the MCP surface and every acceptance test.
-
-**Verify**: full end-to-end parity plus the measured bundle and interaction numbers from H1. `XL`, split
-before delegating.
-
-### H3 — Close the publication gate
-
-- [ ] Remove the temporary backport once the framework no longer carries the vulnerable transport.
-- [ ] Update [release-readiness.md](release-readiness.md) and the README gate.
-
-**Verify**: the built-app regression test that reproduces the advisory no longer applies, and no vulnerable
-`start-server-core` remains installed. `S`, depends on H2.
-
----
-
-## I. Transactions review
-
-The whole group sits after the Foldkit migration, deliberately: it is the largest new surface in the product
-and building it before the migration means building it twice.
+This is the largest new surface in the product and the first one that writes on a person's behalf. It sits
+ahead of the framework migration because the migration is waiting on a release that keeps moving, and this
+group cannot wait forever. If the release lands mid-build, the backend half is framework-independent and the
+screen migrates with everything else.
 
 The current review links do not work. Yahoo's add page ends in a form submission a deep link cannot perform,
 so it lands on a page whose only working action is Cancel, and the Yahoo app claims `*.yahoo.com` on mobile
@@ -387,7 +356,7 @@ before a browser sees it. No link we construct survives either.
 
 **What it is:** the agent proposes, a person decides, the server writes.
 
-### I1 — Trade probe
+### H1 — Trade probe
 
 - [ ] Read-only: does the league transaction feed publish pending trade proposals, and what does the trade
       review setting actually permit.
@@ -395,7 +364,7 @@ before a browser sees it. No link we construct survives either.
 
 **Verify**: a written finding with the request shapes tried. `S`
 
-### I2 — Proposals and the tool
+### H2 — Proposals and the tool
 
 - [ ] One call covers every team: a list of proposals, each naming a team, the players to add or drop, an
       optional FAAB bid, and a required short reason. One link back, to one review screen.
@@ -408,7 +377,7 @@ before a browser sees it. No link we construct survives either.
 **Verify**: an account-wide proposal set read back from storage, with a stale item marked and nothing
 written upstream. `M`
 
-### I3 — The screen
+### H3 — The screen
 
 - [ ] Grouped by team, with a quiet section for teams that have nothing proposed.
 - [ ] The reason beside each move, and the drop beside the add so a swap reads as one decision.
@@ -419,7 +388,7 @@ written upstream. `M`
 **Verify**: a six-team proposal set reviewed on a phone-sized viewport, with a stale item and an excluded
 item both behaving correctly. `M`
 
-### I4 — Execution
+### H4 — Execution
 
 - [ ] Writes through the provider's transaction endpoint, using the session and crumb the lineup writer
       already uses.
@@ -428,6 +397,39 @@ item both behaving correctly. `M`
 
 **Verify**: a real add and drop on a disposable league, with per-item outcomes and the provider's own
 transaction feed agreeing. `M`
+
+## I. Foldkit migration
+
+The preview is already merged into the rush-hour starter, so the shape is proven. The final release is
+expected shortly; adopt it when it lands. This removes the TanStack advisory entirely, which is the
+current publication blocker.
+
+### I1 — Adopt in the sample app and evaluate
+
+- [ ] Bring the rush-hour sample onto the released version and record what is better and worse in practice.
+- [ ] Code splitting: what the bundle looks like without it, and whether it can be recovered.
+- [ ] Rendering: virtual DOM against signals, measured on a list-heavy screen rather than argued.
+
+**Verify**: a running sample with feature parity, plus numbers on both concerns and a recommendation.
+`M`, blocked on the final release.
+
+### I2 — Migrate Lineupkeep
+
+- [ ] Migrate in slices, keeping the product working throughout.
+- [ ] Preserve the provider boundary, the MCP surface and every acceptance test.
+
+**Verify**: full end-to-end parity plus the measured bundle and interaction numbers from I1. `XL`, split
+before delegating.
+
+### I3 — Close the publication gate
+
+- [ ] Remove the temporary backport once the framework no longer carries the vulnerable transport.
+- [ ] Update [release-readiness.md](release-readiness.md) and the README gate.
+
+**Verify**: the built-app regression test that reproduces the advisory no longer applies, and no vulnerable
+`start-server-core` remains installed. `S`, depends on I2.
+
+---
 
 ## J. Security and privacy audit
 
@@ -615,9 +617,10 @@ why anything is declined. Currently zero open.
 | D8  | Reserve-slot eligibility: per-player, or per reserve position        | A7     |
 | D9  | Passkeys as a sign-in option                                         | future |
 
-Ruled already, recorded so they are not reopened: Foldkit before any redesign; the transactions review as
-one group after Foldkit, not split around it; the rename before the redesign; the visual redesign is
-exploration rather than committed work; "phase 2 with the solver" is complete and is not roadmap work.
+Ruled already, recorded so they are not reopened: the transactions review is one group and comes before the
+framework migration, which is waiting on a release; Foldkit before any redesign; the rename before the
+redesign; the visual redesign is exploration rather than committed work; "phase 2 with the solver" is
+complete and is not roadmap work.
 
 ## Known non-goals
 
