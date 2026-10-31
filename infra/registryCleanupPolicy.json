@@ -2,7 +2,7 @@
   {
     "name": "keep-deployed-images",
     "action": { "type": "Keep" },
-    "mostRecentVersions": { "keepCount": 2 }
+    "mostRecentVersions": { "keepCount": 1 }
   },
   {
     "name": "delete-superseded-images",
