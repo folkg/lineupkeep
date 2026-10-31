@@ -1,0 +1,12 @@
+[
+  {
+    "name": "keep-deployed-images",
+    "action": { "type": "Keep" },
+    "mostRecentVersions": { "keepCount": 2 }
+  },
+  {
+    "name": "delete-superseded-images",
+    "action": { "type": "Delete" },
+    "condition": { "tagState": "any" }
+  }
+]

@@ -44,7 +44,7 @@ are the same URL; the provisioned environment file now owns that value.
 | Registry                          | `us-east1-docker.pkg.dev/lineupkeep-prod/lineupkeepweb-registry-cloud-run-u4rplfecdzi27v3w` — `web:*` and `browser:*` images; the browser image is about 853 MB expanded and replaces the Chromium headless deployment on every content change                                                            |
 | Application database              | Alchemy-managed `LineupkeepDatabase` / `production` Neon Free project, independent of protected state                                                                                                                                                                                                     |
 | Secret Manager                    | `lineupkeepweb-secret-better-auth-secret-cloud-run-zz7b4zbcg2rfo5fb`, `…-connection-encryption-key-cloud-run-ec7zelts3e7mtrtt`, `…-resend-api-key-cloud-run-6daiaqee2uvf6llx`, `…-database-url-cloud-run-2zpqgtvdba7gierc`, `…-hosted-browser-descriptor-key-cloud-run-ifx5uoc5omsxeu74`                  |
-| Secret versions                   | The web and browser revisions pin immutable versions; on 2026-10-31 the live revisions pin descriptor key version 12 and database URL version 44. Keep only pinned versions after a rollback window.                                                                                                      |
+| Secret versions                   | The web and browser revisions pin immutable versions; on 2026-10-31 each secret has exactly one active version (better auth 15, connection key 15, Resend 15, database URL 46, descriptor key 13), kept by `Retain-<name>-Version` in [cloudRun.ts](../infra/hosts/cloudRun.ts).                          |
 
 **First plan review (2026-10-25):** the `cloud-run` plan proposed 26 resources,
 all creates — four secrets with their access bindings and immutable versions,
@@ -81,19 +81,21 @@ web digest, and hosted browser `lineupkeep-hb-00010-6db` on browser digest
 The plan for that deploy reported 12 updates and no creates or deletions. The
 web and browser revisions pin descriptor key version 6.
 
-Current revisions after the cost-settings deploy (2026-10-31): web
-`lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-00043-4c8` and worker
-`lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y-00044-z9g` on web digest
-`sha256:b77e051ae741ab8147f887be10d60c0394dcc0d2a2036cbc1ceb8581851f9958`, and
-hosted browser `lineupkeep-hb-00018-k2f` on browser digest
+Current revisions after the retention deploy (2026-10-31): web
+`lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-00045-gmq` and worker
+`lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y-00046-vlb` on web digest
+`sha256:f0a6bc31592478f6724f4dfaf8ce845d6ab4d6a2afcbfd58f0176de2c05f7117`, and
+hosted browser `lineupkeep-hb-00019-b9p` on browser digest
 `sha256:a38ebae1366223b286941345f1194b8f3e5e09a3c0bbc6dab7357046d3bef503`.
-The plan reported 16 updates and no creates or deletions: the worker timeout
-(900 s → 300 s), the scheduler schedule (`0 * * * *` → `55 * * * *`, declared
-but not yet applied), two image builds and publishes, the migration run, the
-three services, and five secret versions. The live revisions pin descriptor key
-version 12 and database URL version 44, and the scheduler is `55 * * * *` UTC.
-A manual scheduler run returned `200` in 13.4 s on the new worker revision, and
-`GET /` answered `200` on the new web revision in 0.29 s.
+That deploy reported five creates — the registry cleanup policy and the five
+`Retain-<name>-Version` steps — and twelve updates, and published new versions
+only because the publishing step had just been changed. Its first attempt failed
+at the retention step and nothing else was left half-applied: all three services
+reached Ready and answered before the retry. Before it, the 2026-10-31
+cost-settings deploy (worker timeout 900 s → 300 s and the scheduler
+`0 * * * *` → `55 * * * *`) reported 16 updates with no creates or deletions on
+revisions `…-00043-4c8`, `…-00044-z9g` and `lineupkeep-hb-00018-k2f` on web digest
+`sha256:b77e051ae741ab8147f887be10d60c0394dcc0d2a2036cbc1ceb8581851f9958`.
 
 The deterministic alias
 `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-602042678335.us-east1.run.app`
@@ -101,27 +103,27 @@ also resolves, but the canonical URL above is the auth origin. Do not configure
 callbacks or clients against the alias unless `BETTER_AUTH_URL` is changed and
 redeployed.
 
-Every deploy publishes a secret version because the version command is not
-memoized. Secret Manager includes six active versions per billing account before
-per-version charges; keep the version pinned by the live revisions, then
-deliberately destroy superseded versions after a rollback window. Do not disable
-a version that the current web or worker revision references.
+A version is published only when its value changes, and `Retain-<name>-Version`
+destroys the superseded ones, so the count does not grow with deploys; see
+[retention](#retention-and-the-zero-bill). Do not disable a version that the
+current web or worker revision references, and do not raise
+`retainedSecretVersions` without reading what the rollback window costs.
 
 ### Cost expectation
 
 Planning estimate for one owner and five teams, not a measured invoice or a
 zero-cost promise. The budget is a CAD 5/month alerting budget, not a hard cap.
 
-| Dimension         | Expectation                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cloud Run         | Hourly ticks, a few user requests, and month-end runs should stay inside the request-billed free allowances (2M requests, 180k vCPU-s, 360k GiB-s). Cold starts count.                                                                                                                                                                                                                                                                            |
-| Hosted browser    | One link is roughly 1–3 minutes of 1 vCPU / 2 GiB, about CAD 0.003–0.01 before free allowances; 120 vCPU-s and 240 GiB-s per two-minute session means roughly 1,500 sessions/month fit inside the 180k vCPU-s free allowance. Idle cost is zero at min 0. Two concurrent sessions are the configured ceiling.                                                                                                                                     |
-| Cloud Tasks       | One small message per run plus retries; inside the free 1M operations.                                                                                                                                                                                                                                                                                                                                                                            |
-| Cloud Scheduler   | One job; inside the free three jobs per billing account unless other projects consume them, then $0.10/job/month.                                                                                                                                                                                                                                                                                                                                 |
-| Secret Manager    | 98 active versions on 2026-10-31 — database URL 44, the other three runtime secrets 14 each, descriptor key 12 — against six free per billing account; automatic replication bills as one location, so 92 × $0.06 ≈ $5.52/month. That is the largest single item on this account and larger than the whole CAD 5 budget, and every deploy adds five. Keep only the versions that the live and rollback-target revisions pin and destroy the rest. |
-| Artifact Registry | The web image plus the ~853 MB expanded browser image (compressed layers are smaller). The repository may exceed the 0.5 GiB free allowance; storage is about CAD 0.10/GB-month, so the current pair is on the order of a few cents per month.                                                                                                                                                                                                    |
-| Neon              | Free-plan quotas (100 CU-hours, 1 GB per project); hourly bursts must actually suspend to remain inside them.                                                                                                                                                                                                                                                                                                                                     |
-| Resend            | Test sender only until a domain is verified; free 100/day and 3,000/month.                                                                                                                                                                                                                                                                                                                                                                        |
+| Dimension         | Expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloud Run         | Hourly ticks, a few user requests, and month-end runs should stay inside the request-billed free allowances (2M requests, 180k vCPU-s, 360k GiB-s). Cold starts count.                                                                                                                                                                                                                                                                                                                                                                                          |
+| Hosted browser    | One link is roughly 1–3 minutes of 1 vCPU / 2 GiB, about CAD 0.003–0.01 before free allowances; 120 vCPU-s and 240 GiB-s per two-minute session means roughly 1,500 sessions/month fit inside the 180k vCPU-s free allowance. Idle cost is zero at min 0. Two concurrent sessions are the configured ceiling.                                                                                                                                                                                                                                                   |
+| Cloud Tasks       | One small message per run plus retries; inside the free 1M operations.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Cloud Scheduler   | One job; inside the free three jobs per billing account unless other projects consume them, then $0.10/job/month.                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Secret Manager    | One active version per secret (five), against six free per billing account, so nothing is charged. [cloudRun.ts](../infra/hosts/cloudRun.ts) publishes a version only when its value changes and `Retain-<name>-Version` destroys the rest after the revision that pins the kept one is ready. It reached 98 versions and about $5.52/month before that: every deploy republished identical values.                                                                                                                                                             |
+| Artifact Registry | Two web images and two browser images, about 0.83 GB at the measured 85 MB and 331 MB averages. `RegistryCleanupPolicy` in [cloudRun.ts](../infra/hosts/cloudRun.ts) applies [registryCleanupPolicy.json](../infra/registryCleanupPolicy.json): keep the two most recent versions per package, delete the rest. The repository held 59 images and 7.49 GB before the policy; storage is $0.10/GB-month beyond the account's 0.5 GiB free, and `auto-gm-372620` holds another 5.27 GB on the same account, about $0.53/month that this repository cannot remove. |
+| Neon              | Free-plan quotas (100 CU-hours, 1 GB per project); hourly bursts must actually suspend to remain inside them.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Resend            | Test sender only until a domain is verified; free 100/day and 3,000/month.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 Budget alerts fire at 50 %, 90 % and 100 % of CAD 5. Review actual usage before
 adding users, teams or a sending domain.
@@ -246,6 +248,44 @@ done
 Presence well above billable seconds is the idle window; presence equal to
 billable seconds would mean instance-based billing or minimum instances have
 crept back.
+
+### Retention and the zero bill
+
+Two Google Cloud line items grew without bound before 2026-10-31, and both are
+now owned by the stack instead of by memory:
+
+- **Secret versions.** Publishing was once per deploy rather than once per value,
+  so identical values accumulated: 98 active versions, 92 over the six free,
+  about $5.52/month — the largest item on the account and more than the whole
+  budget. `runtimeSecret` now memoizes the version command on its inputs
+  (`memo: { include: [] }`), so an unchanged value publishes nothing, and
+  `Retain-<name>-Version` runs after the web revision that pins the version is
+  ready and destroys every other active version. Five secrets, five versions,
+  no charge. One-off note: the 83 superseded versions present at the change were
+  destroyed by hand before the step existed; the retained set was the versions
+  the live and two previous revisions pinned, and every pinned version survived.
+- **Images.** Every deploy pushes a new web and browser digest, because the
+  publish step is deliberately not memoized. `RegistryCleanupPolicy` applies
+  [registryCleanupPolicy.json](../infra/registryCleanupPolicy.json) — keep the
+  two most recent versions of each package, delete everything else — with
+  `--no-dry-run`. Artifact Registry owns the deletions on a background job, so
+  they land within about a day of the policy or a push. Before the policy the
+  repository held 59 images and 7.49 GB; the ceiling is now two web images and
+  two browser images, about 0.83 GB.
+
+What that costs and what it gives up:
+
+| Setting                                                                            | Cost                                       | Trade                                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `retainedSecretVersions = 1` ([cloudRun.ts](../infra/hosts/cloudRun.ts))           | $0 — five versions are inside the six free | A traffic rollback across a _value_ change cannot start, because the previous value's version is gone. Roll back by redeploying the previous value, which republishes it. Code-only reverse deploys are unaffected: versions are published per value, so revisions from before the change pin the same version. |
+| `keepCount: 2` ([registryCleanupPolicy.json](../infra/registryCleanupPolicy.json)) | About $0.03/month for the two extra images | The previous deploy's image survives, so `update-traffic` can still roll back. `keepCount: 1` saves the $0.03 and makes a rollback rebuild instead.                                                                                                                                                             |
+
+Secret version numbers are resolved against the CLI's active project, which is
+not this one, so every command in `Retain-<name>-Version` uses the fully
+qualified `projects/<project>/secrets/<name>` and
+`projects/<project>/secrets/<name>/versions/<n>` forms. `--secret=<id>` alone
+resolves against whatever project gcloud currently points at and fails with a
+404 that names the wrong project.
 
 ### Redeploy and rollback
 

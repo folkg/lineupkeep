@@ -13,6 +13,8 @@ import { buildNodeImage } from "#infra/build/node.ts";
 import { HostDeployment } from "#infra/services/HostDeployment.ts";
 import type { HostEnvironment } from "#infra/services/HostDeployment.ts";
 
+const retainedSecretVersions = 1;
+
 export function cloudRunHost(
   environment: HostEnvironment,
 ): Layer.Layer<
@@ -30,6 +32,14 @@ export function cloudRunHost(
       const registry = yield* GCP.ArtifactRegistry.Repository("Registry", {
         location: region,
         format: "DOCKER",
+      });
+      yield* Command.Exec("RegistryCleanupPolicy", {
+        cwd: new URL("../../", import.meta.url).pathname,
+        command: `gcloud artifacts repositories set-cleanup-policies "$REPOSITORY" --location="$LOCATION" --policy=infra/registryCleanupPolicy.json --no-dry-run --quiet`,
+        shell: true,
+        env: { REPOSITORY: registry.name, LOCATION: region },
+        memo: { include: ["infra/registryCleanupPolicy.json"] },
+        timeout: "1 minute",
       });
       const account = yield* GCP.IAM.ServiceAccount("Runtime", {
         displayName: "Lineupkeep web runtime",
@@ -257,6 +267,11 @@ export function cloudRunHost(
           ],
         },
       });
+      yield* Effect.forEach(
+        [...secretEntries, descriptorSecret],
+        (secret) => pruneSecretVersions(secret, service.latestReadyRevision),
+        { concurrency: 1 },
+      );
       return {
         url: service.uri,
         healthUrl: service.uri,
@@ -385,16 +400,47 @@ function publishImage(
   });
 }
 
+type RuntimeSecret = {
+  readonly name: string;
+  readonly secret: GCP.SecretManager.Secret;
+  readonly version: Output.Output<string>;
+};
+
+function pruneSecretVersions(
+  entry: RuntimeSecret,
+  deployedRevision: Output.Output<string | undefined>,
+): Effect.Effect<void, never, import("alchemy").Provider<Command.Exec>> {
+  return Command.Exec(`Retain-${entry.name}-Version`, {
+    cwd: new URL("../../", import.meta.url).pathname,
+    command: [
+      "set -e",
+      'echo "retaining the newest $RETAINED_VERSIONS version(s) of $SECRET_NAME behind $DEPLOYED_REVISION"',
+      'versions=$(gcloud secrets versions list "$SECRET_NAME" --filter="state!=DESTROYED" --format="value(name)" --sort-by=~createTime)',
+      "count=0",
+      "for version in $versions; do",
+      "  count=$((count + 1))",
+      '  if [ "$count" -gt "$RETAINED_VERSIONS" ]; then',
+      '    gcloud secrets versions destroy "$SECRET_NAME/versions/$version" --quiet',
+      "  fi",
+      "done",
+    ].join("\n"),
+    shell: true,
+    env: {
+      SECRET_NAME: entry.secret.name,
+      RETAINED_VERSIONS: String(retainedSecretVersions),
+      DEPLOYED_REVISION: deployedRevision,
+    },
+    memo: false,
+    timeout: "2 minutes",
+  });
+}
+
 function runtimeSecret(
   name: string,
   value: Input<string | Redacted.Redacted<string>>,
   readers: ReadonlyArray<SecretReader>,
 ): Effect.Effect<
-  {
-    name: string;
-    secret: GCP.SecretManager.Secret;
-    version: Output.Output<string, never>;
-  },
+  RuntimeSecret,
   never,
   import("alchemy").Provider<Command.Build> | GCP.Providers | Stage
 > {
@@ -421,6 +467,7 @@ function runtimeSecret(
         VERSION_FILE: new URL("version", directory).pathname,
       },
       outdir: directory.pathname,
+      memo: { include: [] },
       timeout: "1 minute",
     });
     const version = Output.all(published.outdir, ...accesses.map((access) => access.member)).pipe(
