@@ -676,6 +676,47 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect(
+  "publishes an unverified roster slot with its raw value in roster and summary reads",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      const base = rosterFixture({ count: 2 });
+      const unverified = {
+        status: "unverified" as const,
+        rawValue: "",
+        reason:
+          "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
+      };
+      const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+        roster: {
+          ...base,
+          players: base.players.map((player, index) =>
+            index === 0 ? { ...player, slot: unverified } : player,
+          ),
+        },
+      });
+      const teamId = Array.getUnsafe(seeded, 0).id;
+
+      const read = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
+      assert.strictEqual(read.status, "ok");
+      if (read.status !== "ok") {
+        return;
+      }
+      assert.deepStrictEqual(read.players[0]?.slot, unverified);
+      assert.deepStrictEqual(read.players[1]?.slot, { status: "verified", slot: "BN" });
+
+      const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
+      assert.strictEqual(summary.status, "ok");
+      if (summary.status !== "ok") {
+        return;
+      }
+      assert.deepStrictEqual(summary.roster?.[0]?.slot, unverified);
+      assert.deepStrictEqual(summary.roster?.[1]?.slot, { status: "verified", slot: "BN" });
+    }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("rejects a blank player search query with the remedy instead of a generic failure", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -4384,7 +4425,7 @@ function rosterFixture(input: {
       positionType: "O",
       proTeamAbbreviation: index === 0 ? "SYN" : undefined,
       eligiblePositions: ["QB"],
-      slot: index === 0 ? "QB" : "BN",
+      slot: { status: "verified", slot: index === 0 ? "QB" : "BN" },
       isEditable: true,
       injuryCode: index === 1 ? "O" : undefined,
       injuryDetail: index === 1 ? "Out" : undefined,

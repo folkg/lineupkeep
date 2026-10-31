@@ -16,6 +16,7 @@ import {
   QueryPeriod,
   QueryStatus,
   QueryTeam,
+  RosterSlot,
   StatPeriod,
   StatPeriodPreset,
   StatRef,
@@ -537,7 +538,7 @@ const PlayerTransactionTrend = Schema.Union([
 export const RosterPlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
-  slot: Schema.NonEmptyString,
+  slot: RosterSlot,
   primaryPosition: Schema.NonEmptyString,
   displayPosition: Schema.NonEmptyString,
   proTeam: Schema.NullOr(Schema.NonEmptyString),
@@ -1372,7 +1373,7 @@ const SummarySchedule = Schema.Union([
 const SummaryRosterPlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
-  slot: Schema.NonEmptyString,
+  slot: RosterSlot,
   primaryPosition: Schema.NonEmptyString,
   proTeam: Schema.NullOr(Schema.NonEmptyString),
   injury: Schema.Struct({

@@ -2956,11 +2956,19 @@ export const yahooNhlRotoStandings = standingsPayload("466.l.4003", "Synthetic N
   }),
 ]);
 
+type NhlMatchupStat = { readonly stat_id: string; readonly value: string | null };
+
+const nhlMatchupStats: ReadonlyArray<NhlMatchupStat> = [
+  { stat_id: "1", value: "6" },
+  { stat_id: "2", value: "9" },
+];
+
 function nhlMatchupTeam(
   key: string,
   name: string,
   total: string,
   remaining: { readonly completed: number; readonly live: number; readonly remaining: number },
+  stats: ReadonlyArray<NhlMatchupStat> = nhlMatchupStats,
 ): unknown[] {
   return [
     [
@@ -2991,9 +2999,8 @@ function nhlMatchupTeam(
           coverage_type: "week",
           week: "4",
           stats: {
-            "0": { stat: { stat_id: "1", value: "6" } },
-            "1": { stat: { stat_id: "2", value: "9" } },
-            count: 2,
+            ...Object.fromEntries(stats.map((stat, index) => [String(index), { stat }])),
+            count: stats.length,
           },
         },
       },
@@ -3001,67 +3008,86 @@ function nhlMatchupTeam(
   ];
 }
 
-export const yahooNhlMatchupsWithGames = {
-  fantasy_content: {
-    "xml:lang": "en-US",
-    league: [
-      {
-        league_key: "466.l.4002",
-        league_id: "4002",
-        name: "Synthetic NHL Categories",
-        url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
-        current_week: 4,
-        start_week: "1",
-        end_week: "24",
-        season: "2026",
-      },
-      {
-        scoreboard: {
-          week: "4",
-          "0": {
-            matchups: {
-              "0": {
-                matchup: {
-                  "0": {
-                    teams: {
-                      "0": {
-                        team: nhlMatchupTeam("466.l.4002.t.3", "Synthetic NHL Team", "12", {
-                          completed: 51,
-                          live: 3,
-                          remaining: 0,
-                        }),
+function nhlMatchupsWithStats(input: {
+  readonly home: ReadonlyArray<NhlMatchupStat>;
+  readonly away: ReadonlyArray<NhlMatchupStat>;
+}): { fantasy_content: Record<string, unknown> } {
+  return {
+    fantasy_content: {
+      "xml:lang": "en-US",
+      league: [
+        {
+          league_key: "466.l.4002",
+          league_id: "4002",
+          name: "Synthetic NHL Categories",
+          url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
+          current_week: 4,
+          start_week: "1",
+          end_week: "24",
+          season: "2026",
+        },
+        {
+          scoreboard: {
+            week: "4",
+            "0": {
+              matchups: {
+                "0": {
+                  matchup: {
+                    "0": {
+                      teams: {
+                        "0": {
+                          team: nhlMatchupTeam(
+                            "466.l.4002.t.3",
+                            "Synthetic NHL Team",
+                            "12",
+                            { completed: 51, live: 3, remaining: 0 },
+                            input.home,
+                          ),
+                        },
+                        "1": {
+                          team: nhlMatchupTeam(
+                            "466.l.4002.t.4",
+                            "Synthetic Rival",
+                            "9",
+                            { completed: 48, live: 2, remaining: 4 },
+                            input.away,
+                          ),
+                        },
+                        count: 2,
                       },
-                      "1": {
-                        team: nhlMatchupTeam("466.l.4002.t.4", "Synthetic Rival", "9", {
-                          completed: 48,
-                          live: 2,
-                          remaining: 4,
-                        }),
-                      },
-                      count: 2,
                     },
+                    week: "4",
+                    week_start: "2026-10-19",
+                    week_end: "2026-10-25",
+                    status: "midevent",
+                    is_playoffs: "1",
+                    is_consolation: "0",
+                    is_tied: 0,
+                    stat_winners: [
+                      { stat_winner: { stat_id: "1", winner_team_key: "466.l.4002.t.3" } },
+                      { stat_winner: { stat_id: "2", is_tied: "1" } },
+                    ],
                   },
-                  week: "4",
-                  week_start: "2026-10-19",
-                  week_end: "2026-10-25",
-                  status: "midevent",
-                  is_playoffs: "1",
-                  is_consolation: "0",
-                  is_tied: 0,
-                  stat_winners: [
-                    { stat_winner: { stat_id: "1", winner_team_key: "466.l.4002.t.3" } },
-                    { stat_winner: { stat_id: "2", is_tied: "1" } },
-                  ],
                 },
+                count: 1,
               },
-              count: 1,
             },
           },
         },
-      },
-    ],
-  },
-};
+      ],
+    },
+  };
+}
+
+export const yahooNhlMatchupsWithGames = nhlMatchupsWithStats({
+  home: nhlMatchupStats,
+  away: nhlMatchupStats,
+});
+
+export const yahooNhlMatchupsWithMissingStatValue = nhlMatchupsWithStats({
+  home: [...nhlMatchupStats, { stat_id: "26", value: null }],
+  away: nhlMatchupStats,
+});
 
 export const yahooNflPlayerDetailsWithPopulatedCut = playerDetailsPayload({
   leagueKey: "466.l.4000",

@@ -92,7 +92,7 @@ it.effect("round-trips delivery and write-intent rows", () =>
         {
           key: "461.p.10001",
           name: "Locked Starter",
-          slot: "QB",
+          slot: { status: "verified", slot: "QB" },
           editable: false,
           scheduled: true,
           startingLineup: "confirmed-starting",

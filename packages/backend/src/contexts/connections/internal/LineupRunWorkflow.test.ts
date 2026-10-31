@@ -210,7 +210,7 @@ const observation = {
       {
         key: "461.p.10001",
         name: "Locked Starter",
-        slot: "QB",
+        slot: { status: "verified" as const, slot: "QB" },
         editable: false,
         scheduled: true,
         startingLineup: "confirmed-starting" as const,
@@ -218,7 +218,7 @@ const observation = {
       {
         key: "461.p.10002",
         name: "Movable Bench",
-        slot: "BN",
+        slot: { status: "verified" as const, slot: "BN" },
         editable: true,
         scheduled: false,
         startingLineup: "unconfirmed" as const,

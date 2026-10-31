@@ -314,6 +314,62 @@ it.effect("writes a reserve transit instead of blocking the team", () =>
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
+it.effect("never writes a player whose slot is unverified and does not mismatch on readback", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* fake.setLeague(customLeague);
+    yield* fake.setRoster({
+      ...customRoster,
+      players: [
+        customPlayer("461.p.20001", "QB One", "QB", "QB"),
+        customPlayer("461.p.20002", "RB One", "RB", "RB"),
+        {
+          ...customPlayer("461.p.20003", "RB Two", "RB", "BN"),
+          slot: {
+            status: "unverified",
+            rawValue: "",
+            reason: "Synthetic unverified slot.",
+          },
+        },
+        customPlayer("461.p.20004", "QB Two", "QB", "BN"),
+      ],
+    });
+    yield* fake.setPlayerScores([
+      { providerPlayerKey: "461.p.20001", score: 1, availability: "will-play" },
+      { providerPlayerKey: "461.p.20002", score: 5, availability: "will-play" },
+      { providerPlayerKey: "461.p.20003", score: 30, availability: "will-play" },
+      { providerPlayerKey: "461.p.20004", score: 10, availability: "will-play" },
+    ]);
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.status, "completed");
+    assert.strictEqual(run.state._tag, "Completed");
+    if (run.state._tag !== "Completed") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.kind, "changed");
+    assert.strictEqual(run.state.outcome.verified, true);
+    assert.deepStrictEqual(
+      run.state.outcome.changes.map((change) => [change.name, change.from, change.to]),
+      [
+        ["QB One", "QB", "BN"],
+        ["QB Two", "BN", "QB"],
+      ],
+    );
+    const requests = yield* fake.explicitRequests;
+    assert.deepStrictEqual(
+      requests[0]?.map((assignment) => assignment.providerPlayerKey).toSorted(),
+      ["461.p.20001", "461.p.20004"],
+    );
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
 it.effect("benches a player once a games-limited position's projection fills it", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;
@@ -1219,7 +1275,7 @@ function customPlayer(
     positionType: "O",
     proTeamAbbreviation: undefined,
     eligiblePositions: [position],
-    slot,
+    slot: { status: "verified", slot },
     isEditable: true,
     injuryCode: undefined,
     injuryDetail: undefined,
@@ -1512,7 +1568,7 @@ const roster: ProviderRoster = {
       positionType: "O",
       proTeamAbbreviation: undefined,
       eligiblePositions: ["QB"],
-      slot: "QB",
+      slot: { status: "verified", slot: "QB" },
       isEditable: false,
       injuryCode: undefined,
       injuryDetail: undefined,
@@ -1533,7 +1589,7 @@ const roster: ProviderRoster = {
       positionType: "O",
       proTeamAbbreviation: undefined,
       eligiblePositions: ["QB"],
-      slot: "BN",
+      slot: { status: "verified", slot: "BN" },
       isEditable: true,
       injuryCode: undefined,
       injuryDetail: undefined,
@@ -1553,7 +1609,7 @@ const nativeAfter: ProviderRoster = {
   ...roster,
   players: roster.players.map((player, index) => ({
     ...player,
-    slot: index === 0 ? "BN" : "QB",
+    slot: { status: "verified", slot: index === 0 ? "BN" : "QB" },
   })),
 };
 

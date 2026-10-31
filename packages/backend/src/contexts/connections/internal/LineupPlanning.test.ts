@@ -31,6 +31,40 @@ describe("provider-neutral lineup placement", () => {
     ]);
   });
 
+  it("leaves an unverified slot out of the plan and never moves that player", () => {
+    const result = planned(
+      planAssignments({
+        gamesPlayed: [],
+        league: league([
+          { position: "QB", kind: "starting", count: 1, eligibility: ["QB"] },
+          { position: "BN", kind: "bench", count: 2, eligibility: [] },
+        ]),
+        roster: roster([
+          member("p1", "QB", "BN", ["QB"]),
+          {
+            ...member("p2", "QB", "BN", ["QB"]),
+            slot: {
+              status: "unverified",
+              rawValue: "",
+              reason: "Synthetic unverified slot.",
+            },
+          },
+          member("p3", "QB", "QB", ["QB"]),
+        ]),
+        values: values([
+          ["p1", 900],
+          ["p2", 1800],
+          ["p3", 100],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([
+      { providerPlayerKey: "p1", slot: "QB" },
+      { providerPlayerKey: "p3", slot: "BN" },
+    ]);
+  });
+
   it("sends only the changed assignments and covers every roster member", () => {
     const result = planned(
       planAssignments({
@@ -620,7 +654,7 @@ function member(
     positionType: undefined,
     proTeamAbbreviation: undefined,
     eligiblePositions,
-    slot,
+    slot: { status: "verified", slot },
     isEditable: true,
     injuryCode: undefined,
     injuryDetail: undefined,
@@ -652,9 +686,12 @@ function applyAssignments(
   const slots = new Map(assignments.map((entry) => [entry.providerPlayerKey, entry.slot]));
   return {
     ...current,
-    players: current.players.map((player) => ({
-      ...player,
-      slot: slots.get(player.providerPlayerKey) ?? player.slot,
-    })),
+    players: current.players.map((player) => {
+      const assigned = slots.get(player.providerPlayerKey);
+      return {
+        ...player,
+        slot: assigned === undefined ? player.slot : { status: "verified", slot: assigned },
+      };
+    }),
   };
 }

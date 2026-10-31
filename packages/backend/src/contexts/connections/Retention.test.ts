@@ -191,7 +191,7 @@ const roster: ProviderRoster = {
       positionType: "O",
       proTeamAbbreviation: undefined,
       eligiblePositions: ["QB"],
-      slot: "QB",
+      slot: { status: "verified", slot: "QB" },
       isEditable: false,
       injuryCode: undefined,
       injuryDetail: undefined,
@@ -212,7 +212,7 @@ const roster: ProviderRoster = {
       positionType: "O",
       proTeamAbbreviation: undefined,
       eligiblePositions: ["QB"],
-      slot: "BN",
+      slot: { status: "verified", slot: "BN" },
       isEditable: true,
       injuryCode: undefined,
       injuryDetail: undefined,
@@ -232,7 +232,7 @@ const nativeAfter: ProviderRoster = {
   ...roster,
   players: roster.players.map((player, index) => ({
     ...player,
-    slot: index === 0 ? "BN" : "QB",
+    slot: { status: "verified", slot: index === 0 ? "BN" : "QB" },
   })),
 };
 

@@ -104,7 +104,9 @@ read the number without a dictionary call, `scoring` says whether the league sco
 category the provider tracks but publishes no value for is stated, never returned as a silent null
 and never flattened to zero. A configured category the provider omits from a totals or points array
 entirely is still listed, with an explicit not-published status, so a reader never has to infer
-"absent" from a category that vanished. A provider stat id with no league scoring definition cannot
+"absent" from a category that vanished. A present stat whose provider value is `null` is the same
+case: the adapter accepts the published null, keeps the category, and publishes it as not published
+instead of failing the read that contained it. A provider stat id with no league scoring definition cannot
 be labelled, so it is omitted from both category arrays and counted in the section-level
 `omittedCategories` declaration. The `categoryTotals`/`categoryPoints` coverage states whether any
 value was published, so an empty array is never read as zero.
@@ -145,6 +147,17 @@ per-player schedule boundary instead of an empty list, and `get_team_summary`'s 
 publishes the games themselves. `search_players` reports provider ownership/started percentages
 without inventing either, and publishes the player's professional team as `proTeam`, the same
 abbreviation a roster entry carries, so a pool player joins a schedule without another read.
+
+Every roster row carries `slot` as a marked value rather than a bare string: `{ status:
+"verified", slot }` when the provider published a slot, or `{ status: "unverified", rawValue,
+reason }` when it published a value — such as an empty selected position — that names no slot the
+league declares. The unverified form keeps exactly what the provider sent, says why it could not be
+verified, and is published in both `get_rosters` and the summary's roster group instead of failing
+the read. A slot decides position eligibility, so an unverified slot is never treated as any known
+position and is excluded from value and scoring decisions. A player whose slot is unverified is left
+where they are: lineup planning skips them, and no explicit assignment is ever written for them,
+because a guess could move a player out of a slot the provider never named. One such row does not
+affect any other row or any other roster read.
 
 `search_players` and the `get_team_summary` roster publish `transactionTrend` where a player row
 carries it. A published trend is `{ status: "published", adds, drops, window: "provider_current_day" }`:
@@ -409,6 +422,27 @@ to `injured_reserve`. A boolean `status` seen in a search payload belongs to `is
 the player's injury status, so a row with no injury simply omits `status` and reads healthy for the
 right reason. A player-level boolean is still decoded conservatively: `false` is healthy and `true`
 is `unknown`, never healthy.
+
+### Live roster and category evidence (2026-10-31)
+
+A read-only pass over the owner's date-scoped hockey league found the two shapes that had
+previously failed whole collections. Counts and field shapes only; no team or player identifiers
+were retained.
+
+- The week-scoped roster row for a player the provider had not placed carried
+  `selected_position.position: ""` (and `is_flex: ""`). The decoder required a non-empty string, so
+  one row failed `team.roster.entries.0.players.15.selected_position.position` and took the whole
+  roster read, the summary roster group, and every analysis that needed the roster with it. The
+  adapter now accepts the published empty value, marks the row's slot `unverified`, keeps the raw
+  `""`, and states the reason; the other 20 rows in that read were unaffected. The current-date
+  roster published 19 players with no empty slot, and `get_rosters` and the summary roster group
+  returned every one of them with no failures. The league is date-scoped, so a requested week is
+  served by the provider as a date roster and the tool falls back to the date roster rather than
+  presenting the week view.
+- The same league's scoreboard published `stat.value: null` for one configured category. The stat
+  entry previously required a finite number or a string, so that single null failed the whole
+  matchups read. The adapter now reads a null value as no value and publishes the category entry as
+  not published; a fixture pins the shape and the other categories still arrive.
 
 ### Games-played read shapes tried (2026-10-30, round 9)
 

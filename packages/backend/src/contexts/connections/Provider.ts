@@ -417,7 +417,7 @@ export type ProviderRosterPlayer = {
   readonly positionType: string | undefined;
   readonly proTeamAbbreviation: string | undefined;
   readonly eligiblePositions: ReadonlyArray<string>;
-  readonly slot: string;
+  readonly slot: ProviderRosterSlot;
   readonly isEditable: boolean | null;
   readonly injuryCode: string | undefined;
   readonly injuryDetail: string | undefined;
@@ -434,6 +434,10 @@ export type ProviderRoster = {
   readonly coverage: ProviderRosterCoverage;
   readonly players: ReadonlyArray<ProviderRosterPlayer>;
 };
+
+export type ProviderRosterSlot =
+  | { readonly status: "verified"; readonly slot: string }
+  | { readonly status: "unverified"; readonly rawValue: string; readonly reason: string };
 
 export type ProviderSchedulePeriod =
   | { readonly type: "week"; readonly week: number }

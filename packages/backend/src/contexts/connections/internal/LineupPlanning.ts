@@ -47,8 +47,10 @@ export function planAssignments(input: PlanAssignmentsInput): PlanAssignmentsRes
     rosterSlots(position, limits, lockedBySlot.get(position.position) ?? 0),
   );
   const values = new Map(input.values.map((value) => [value.providerPlayerKey, value]));
-  const players = input.roster.players.map((player) =>
-    rosterPlayer(player, values.get(player.providerPlayerKey), slots),
+  const players = input.roster.players.flatMap((player) =>
+    player.slot.status === "verified"
+      ? [rosterPlayer(player, player.slot.slot, values.get(player.providerPlayerKey), slots)]
+      : [],
   );
   const solved = solveLineup({
     selectionBasis,
@@ -71,8 +73,11 @@ function assignments(
   );
   const changed: Array<ProviderLineupAssignment> = [];
   for (const player of roster.players) {
+    if (player.slot.status !== "verified") {
+      continue;
+    }
     const targetSlot = plannedSlots.get(player.providerPlayerKey);
-    if (targetSlot === undefined || targetSlot === player.slot) {
+    if (targetSlot === undefined || targetSlot === player.slot.slot) {
       continue;
     }
     changed.push({ providerPlayerKey: player.providerPlayerKey, slot: targetSlot });
@@ -82,6 +87,7 @@ function assignments(
 
 function rosterPlayer(
   player: ProviderRoster["players"][number],
+  slot: string,
   value: ProviderPlayerScore | undefined,
   slots: ReadonlyArray<RosterSlot>,
 ): RosterPlayer {
@@ -97,10 +103,8 @@ function rosterPlayer(
     reserveEligible: slots.some(
       (slot) => slot.kind === "reserve" && slotAccepts(slot.eligibility, eligibility),
     ),
-    lockedSlotId: player.isEditable === true ? undefined : makeSlotId(player.slot),
-    currentSlotId: slots.some((slot) => String(slot.id) === player.slot)
-      ? makeSlotId(player.slot)
-      : undefined,
+    lockedSlotId: player.isEditable === true ? undefined : makeSlotId(slot),
+    currentSlotId: slots.some((entry) => String(entry.id) === slot) ? makeSlotId(slot) : undefined,
   };
 }
 
@@ -113,8 +117,8 @@ function selection(score: number | null): PlayerSelection {
 function lockedCounts(roster: ProviderRoster): ReadonlyMap<string, number> {
   const counts = new Map<string, number>();
   for (const player of roster.players) {
-    if (player.isEditable !== true) {
-      counts.set(player.slot, (counts.get(player.slot) ?? 0) + 1);
+    if (player.isEditable !== true && player.slot.status === "verified") {
+      counts.set(player.slot.slot, (counts.get(player.slot.slot) ?? 0) + 1);
     }
   }
   return counts;

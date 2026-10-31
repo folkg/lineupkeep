@@ -395,7 +395,7 @@ it("shows a player's day-window trends and states when none are published", asyn
         players: [
           {
             name: "Moving Skater",
-            slot: "QB",
+            slot: { status: "verified", slot: "QB" },
             primaryPosition: "QB",
             displayPosition: "QB",
             proTeam: "SYN",
@@ -404,7 +404,7 @@ it("shows a player's day-window trends and states when none are published", asyn
           },
           {
             name: "Uncounted Skater",
-            slot: "BN",
+            slot: { status: "verified", slot: "BN" },
             primaryPosition: "WR",
             displayPosition: "WR",
             proTeam: null,
@@ -427,6 +427,42 @@ it("shows a player's day-window trends and states when none are published", asyn
     .element(
       page.getByText(
         "Trends not published. The provider published no add and drop counts for this player.",
+      ),
+    )
+    .toBeVisible();
+});
+
+it("states when a player's lineup slot cannot be verified", async () => {
+  using _app = setupTeamDetailPage(team, {
+    readRoster: () =>
+      Promise.resolve({
+        status: "ok",
+        players: [
+          {
+            name: "Unplaced Skater",
+            slot: {
+              status: "unverified",
+              rawValue: "",
+              reason:
+                "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
+            },
+            primaryPosition: "C",
+            displayPosition: "C",
+            proTeam: "SYN",
+            injury: { reported: false },
+            trend: { status: "not_published", reason: "Synthetic absence." },
+          },
+        ],
+        observedAt: "2026-10-30T12:00:00.000Z",
+      }),
+  });
+
+  await expect.element(page.getByText("Unplaced Skater")).toBeVisible();
+  await expect.element(page.getByText("Slot unverified")).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
       ),
     )
     .toBeVisible();

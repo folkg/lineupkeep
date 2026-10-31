@@ -83,12 +83,19 @@ function RosterEntry(props: { readonly player: TeamRosterPlayerView }): JSX.Elem
       <Inline gap="sm" justify="between">
         <Text>{props.player.name}</Text>
         <Text size="caption" tone="faint">
-          {props.player.slot}
+          {props.player.slot.status === "verified" ? props.player.slot.slot : "Slot unverified"}
         </Text>
       </Inline>
       <Text size="caption" tone="muted">
         {positionLine(props.player)}
       </Text>
+      <Show when={props.player.slot.status === "unverified" ? props.player.slot : undefined}>
+        {(slot) => (
+          <Text size="caption" tone="muted">
+            {slot().reason}
+          </Text>
+        )}
+      </Show>
       <Show when={props.player.injury.reported}>
         <Text size="caption" tone="muted">
           {injuryLine(props.player)}

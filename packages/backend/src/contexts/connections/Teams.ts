@@ -12,6 +12,7 @@ import {
 } from "./FantasyTeam.ts";
 import { LineupRun } from "./LineupRun.ts";
 import type { ProviderReadFailure } from "./Provider.ts";
+import { RosterSlot } from "./QueryValues.ts";
 
 export const TeamSummary = Schema.Struct({
   team: FantasyTeam,
@@ -68,7 +69,7 @@ export type TeamNoteSaved = typeof TeamNoteSaved.Type;
 
 const TeamRosterPlayer = Schema.Struct({
   name: Schema.NonEmptyString,
-  slot: Schema.NonEmptyString,
+  slot: RosterSlot,
   primaryPosition: Schema.NonEmptyString,
   displayPosition: Schema.NonEmptyString,
   proTeam: Schema.NullOr(Schema.NonEmptyString),

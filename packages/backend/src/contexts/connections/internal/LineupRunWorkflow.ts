@@ -1,5 +1,5 @@
 import { Machine } from "@typeonce/effect-machine";
-import { Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
@@ -13,6 +13,7 @@ import {
   LineupUuid,
 } from "#contexts/connections/LineupRun.ts";
 import { ProviderStartingLineup } from "#contexts/connections/Provider.ts";
+import { RosterSlot } from "#contexts/connections/QueryValues.ts";
 
 export const LineupLeaseRef = Schema.Struct({
   token: LineupUuid,
@@ -20,10 +21,20 @@ export const LineupLeaseRef = Schema.Struct({
 });
 export type LineupLeaseRef = typeof LineupLeaseRef.Type;
 
+const LineupObservedSlot = Schema.Union([RosterSlot, Schema.NonEmptyString]).pipe(
+  Schema.decodeTo(
+    RosterSlot,
+    SchemaTransformation.transform({
+      decode: (value) => (typeof value === "string" ? { status: "verified", slot: value } : value),
+      encode: (value) => value,
+    }),
+  ),
+);
+
 export const LineupObservedPlayer = Schema.Struct({
   key: Schema.NonEmptyString,
   name: Schema.NonEmptyString,
-  slot: Schema.NonEmptyString,
+  slot: LineupObservedSlot,
   editable: Schema.Boolean,
   scheduled: Schema.Boolean,
   startingLineup: ProviderStartingLineup,

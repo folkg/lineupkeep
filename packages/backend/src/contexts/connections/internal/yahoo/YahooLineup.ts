@@ -347,7 +347,7 @@ function limitOf(
   player: ProviderRosterPlayer,
   limits: ReadonlyMap<string, ProviderGamesPlayed>,
 ): ProviderGamesPlayed | undefined {
-  const current = limits.get(player.slot);
+  const current = player.slot.status === "verified" ? limits.get(player.slot.slot) : undefined;
   if (current !== undefined) {
     return current;
   }

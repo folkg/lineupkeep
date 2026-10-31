@@ -85,6 +85,7 @@ import {
   yahooNflStandingsWithAcquisitionUsage,
   yahooNhlCategoryStandings,
   yahooNhlMatchupsWithGames,
+  yahooNhlMatchupsWithMissingStatValue,
   yahooNhlRotoStandings,
 } from "./YahooPayloadFixturesTest.ts";
 import { yahooNhlDatePlayerDetails } from "./YahooPayloadFixturesTest.ts";
@@ -870,7 +871,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         positionType: "O",
         proTeamAbbreviation: "SYN",
         eligiblePositions: ["QB", "W/R"],
-        slot: "QB",
+        slot: { status: "verified", slot: "QB" },
         isEditable: true,
         injuryCode: undefined,
         injuryDetail: undefined,
@@ -893,7 +894,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         positionType: "O",
         proTeamAbbreviation: "SYN",
         eligiblePositions: ["WR"],
-        slot: "BN",
+        slot: { status: "verified", slot: "BN" },
         isEditable: false,
         injuryCode: "O",
         injuryDetail: "Synthetic injury note",
@@ -906,6 +907,67 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
           reason: "The provider published no add and drop counts for this player.",
         },
       },
+    ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect(
+  "reads team.roster.entries.0.players.15.selected_position.position when that slot is empty",
+  () => {
+    const internet = recordingInternet(() =>
+      jsonResponse(
+        yahooNhlDatedRoster({
+          date: "2026-10-30",
+          players: globalThis.Array.from({ length: 16 }, (_, index) => ({
+            key: `466.p.40${String(100 + index)}`,
+            name: `Synthetic Player ${String(index)}`,
+            proTeam: "TOR",
+            opponent: null,
+            slot: index === 15 ? "" : "C",
+          })),
+        }),
+      ),
+    );
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+
+      const roster = yield* provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "466.l.4002.t.3",
+        period: undefined,
+      });
+
+      assert.lengthOf(roster.players, 16);
+      assert.deepStrictEqual(roster.players[15]?.slot, {
+        status: "unverified",
+        rawValue: "",
+        reason:
+          "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
+      });
+      assert.deepStrictEqual(
+        roster.players.slice(0, 15).map((player) => player.slot),
+        globalThis.Array.from({ length: 15 }, () => ({ status: "verified" as const, slot: "C" })),
+      );
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
+
+it.effect("keeps a matchup whose published category value is null", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlMatchupsWithMissingStatValue));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const matchups = yield* provider.readMatchups({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4002",
+      period: { week: 4 },
+    });
+
+    const matchup = Array.getUnsafe(matchups, 0);
+    assert.deepStrictEqual(matchup.home.categoryTotals, [
+      { statId: 1, value: 6 },
+      { statId: 2, value: 9 },
+      { statId: 26, value: null },
     ]);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -925,7 +987,7 @@ it.effect("reads a week-scoped roster container from a captured payload", () => 
     assert.deepStrictEqual(
       roster.players.map((player) => [
         player.name,
-        player.slot,
+        player.slot.status === "verified" ? player.slot.slot : player.slot.status,
         player.isEditable,
         player.injuryCode,
       ]),
@@ -1028,7 +1090,11 @@ it.effect("reads a date-scoped roster from a captured payload", () => {
 
     assert.deepStrictEqual(roster.coverage, { type: "date", date: "2026-10-25" });
     assert.deepStrictEqual(
-      roster.players.map((player) => [player.name, player.slot, player.eligiblePositions]),
+      roster.players.map((player) => [
+        player.name,
+        player.slot.status === "verified" ? player.slot.slot : player.slot.status,
+        player.eligiblePositions,
+      ]),
       [
         ["Synthetic Skater", "C", ["C", "LW"]],
         ["Synthetic Goalie", "BN", ["G"]],
@@ -3313,7 +3379,7 @@ function rosterMember(
     positionType: "O",
     proTeamAbbreviation: undefined,
     eligiblePositions,
-    slot,
+    slot: { status: "verified", slot },
     isEditable: true,
     injuryCode: undefined,
     injuryDetail: undefined,

@@ -26,6 +26,7 @@ import type {
   ProviderResponseInvalid,
   ProviderRoster,
   ProviderRosterCoverage,
+  ProviderRosterSlot,
   ProviderScoreOutcome,
   ProviderSessionRejected,
   ProviderWriteResult,
@@ -1133,7 +1134,7 @@ function compare(
   before: ReadonlyArray<{
     readonly key: string;
     readonly name: string;
-    readonly slot: string;
+    readonly slot: ProviderRosterSlot;
     readonly editable: boolean;
     readonly scheduled: boolean;
   }>,
@@ -1159,8 +1160,12 @@ function compare(
     if (old === undefined) {
       return undefined;
     }
-    if (old.slot !== player.slot) {
-      changes.push({ name: player.name, from: old.slot, to: player.slot });
+    if (!sameSlot(old.slot, player.slot)) {
+      changes.push({
+        name: player.name,
+        from: slotLabel(old.slot),
+        to: slotLabel(player.slot),
+      });
     }
   }
   return {
@@ -1308,7 +1313,7 @@ function sameLineup(observed: LineupObservation["players"], roster: ProviderRost
     const previous = slots.get(player.providerPlayerKey);
     return (
       previous !== undefined &&
-      previous.slot === player.slot &&
+      sameSlot(previous.slot, player.slot) &&
       previous.editable === (player.isEditable === true)
     );
   });
@@ -1319,16 +1324,38 @@ function assignmentDifferences(
   assignments: ReadonlyArray<{ readonly playerKey: string; readonly slot: string }>,
   roster: ProviderRoster,
 ): ReadonlyArray<LineupRunDifference> {
-  const expected = new Map(before.map((player) => [player.key, player.slot]));
+  const expected = new Map<string, ProviderRosterSlot>(
+    before.map((player) => [player.key, player.slot]),
+  );
   for (const assignment of assignments) {
-    expected.set(assignment.playerKey, assignment.slot);
+    expected.set(assignment.playerKey, { status: "verified", slot: assignment.slot });
   }
   return roster.players.flatMap((player) => {
     const expectedSlot = expected.get(player.providerPlayerKey);
-    return expectedSlot === undefined || expectedSlot === player.slot
+    return expectedSlot === undefined || sameSlot(expectedSlot, player.slot)
       ? []
-      : [{ name: player.name, expected: expectedSlot, actual: player.slot }];
+      : [
+          {
+            name: player.name,
+            expected: slotLabel(expectedSlot),
+            actual: slotLabel(player.slot),
+          },
+        ];
   });
+}
+
+function sameSlot(left: ProviderRosterSlot, right: ProviderRosterSlot): boolean {
+  if (left.status === "verified" && right.status === "verified") {
+    return left.slot === right.slot;
+  }
+  if (left.status === "unverified" && right.status === "unverified") {
+    return left.rawValue === right.rawValue;
+  }
+  return false;
+}
+
+function slotLabel(slot: ProviderRosterSlot): string {
+  return slot.status === "verified" ? slot.slot : `unverified (${JSON.stringify(slot.rawValue)})`;
 }
 
 function nativeSummary(plan: LineupPlan | undefined, changeCount: number): string {

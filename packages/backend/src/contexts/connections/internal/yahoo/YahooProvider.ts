@@ -55,6 +55,7 @@ import type {
   ProviderRoster,
   ProviderRosterCoverage,
   ProviderRosterPlayer,
+  ProviderRosterSlot,
   ProviderReviewIntent,
   ProviderReviewLinkInput,
   ProviderSchedulePeriod,
@@ -1658,7 +1659,7 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
     positionType: optionalNonEmpty(player.position_type),
     proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr ?? ""),
     eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
-    slot: player.selected_position.position,
+    slot: rosterSlotOf(player.selected_position.position),
     isEditable: player.is_editable ?? null,
     injuryCode: optionalNonEmpty(player.status),
     injuryDetail: optionalNonEmpty(player.injury_note) ?? optionalNonEmpty(player.status_full),
@@ -1672,6 +1673,17 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
 
 function scheduledIn(opponent: string | null): boolean {
   return scheduledOpponent(opponent) !== undefined;
+}
+
+function rosterSlotOf(rawValue: string): ProviderRosterSlot {
+  return rawValue === ""
+    ? {
+        status: "unverified",
+        rawValue,
+        reason:
+          "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
+      }
+    : { status: "verified", slot: rawValue };
 }
 
 function scheduledOpponent(
@@ -2817,11 +2829,11 @@ function availabilityOf(
   return rosterStatusOf(ownershipType);
 }
 
-function providerNumber(value: number | string | undefined): number | null {
+function providerNumber(value: number | string | null | undefined): number | null {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
-  if (value === undefined || value.trim() === "" || value.trim() === "-") {
+  if (value === undefined || value === null || value.trim() === "" || value.trim() === "-") {
     return null;
   }
   const parsed = Number(value);
@@ -3289,7 +3301,7 @@ const RosterPlayerPayload = Schema.Struct({
     coverage_type: Schema.NonEmptyString,
     week: Schema.optional(IntFromStringOrNumber),
     date: Schema.optional(Schema.String),
-    position: Schema.NonEmptyString,
+    position: Schema.Union([Schema.NonEmptyString, Schema.Literal("")]),
     is_flex: Schema.optional(Flag),
   }),
   is_editable: Schema.optional(Flag),
@@ -3344,7 +3356,7 @@ const PercentOwned = Schema.Struct({
 const StatEntry = Schema.Struct({
   stat: Schema.Struct({
     stat_id: IntFromStringOrNumber,
-    value: Schema.Union([Schema.Finite, Schema.String]),
+    value: Schema.Union([Schema.Finite, Schema.String, Schema.Null]),
   }),
 });
 

@@ -896,10 +896,13 @@ function applyAssignments(
   );
   return {
     ...roster,
-    players: roster.players.map((player) => ({
-      ...player,
-      slot: slots.get(player.providerPlayerKey) ?? player.slot,
-    })),
+    players: roster.players.map((player) => {
+      const assigned = slots.get(player.providerPlayerKey);
+      return {
+        ...player,
+        slot: assigned === undefined ? player.slot : { status: "verified", slot: assigned },
+      };
+    }),
   };
 }
 

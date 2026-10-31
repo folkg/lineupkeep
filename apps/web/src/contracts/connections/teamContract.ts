@@ -149,9 +149,13 @@ export type TeamRosterTrendView =
     }
   | { readonly status: "not_published"; readonly reason: string };
 
+type TeamRosterSlotView =
+  | { readonly status: "verified"; readonly slot: string }
+  | { readonly status: "unverified"; readonly rawValue: string; readonly reason: string };
+
 export type TeamRosterPlayerView = {
   readonly name: string;
-  readonly slot: string;
+  readonly slot: TeamRosterSlotView;
   readonly primaryPosition: string;
   readonly displayPosition: string;
   readonly proTeam: string | null;

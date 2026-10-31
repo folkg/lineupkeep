@@ -51,6 +51,13 @@ The players held by a fantasy team, including starters, bench players, and reser
 The assignment of a fantasy team's rostered players to its roster slots for a particular period.
 _Avoid_: Roster when referring only to assignments
 
+**Unverified slot**:
+A roster row whose provider-published lineup slot names no slot the league declares, such as an
+empty selected position. It keeps the provider's raw value and a readable reason, is never treated
+as a known position for eligibility or value, and is never moved by lineup planning or a lineup
+write.
+_Avoid_: Unknown slot when the raw value is retained, default slot, bench when the slot is unverified
+
 **Provider connection**:
 A user's linked access to an account on a fantasy provider. Multiple fantasy teams may be accessible through one connection.
 _Avoid_: User account when referring to provider access

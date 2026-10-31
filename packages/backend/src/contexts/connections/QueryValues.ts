@@ -155,6 +155,24 @@ export const TeamListRow = Schema.Struct({
 });
 export type TeamListRow = typeof TeamListRow.Type;
 
+export const RosterSlot = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("verified"),
+    slot: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unverified"),
+    rawValue: Schema.String,
+    reason: Schema.NonEmptyString,
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "Where this player sits in the lineup. `verified` carries the provider's slot, which establishes the player's position eligibility. `unverified` means the provider published a value that names no declared slot: `rawValue` is exactly what it published and `reason` says why the slot could not be verified. An unverified player is left where they are and is never moved by lineup planning or a lineup write, because an unknown slot cannot be treated as a known position or as a default.",
+  }),
+);
+export type RosterSlot = typeof RosterSlot.Type;
+
 export const NarrowingResult = Schema.Struct({
   status: Schema.Literal("narrowing_required"),
   resource: Schema.NonEmptyString,
