@@ -3,6 +3,25 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — unreadable team state
+
+- A stored team now carries the provider's own read state, observed at a time: `{status: "available"}`
+  or `{status: "unavailable", reason, detail, observedAt}`. `provider_refused` keeps the provider's
+  own wording, `not_listed` means the account's own team list no longer includes the team, and
+  `connection_unavailable` means the connection cannot be used. Team discovery now reads each held
+  league as well as the account's own team list, so linking and refresh record whether the team can
+  actually be read instead of assuming it from the listing. A team is never deleted because a read
+  failed, and a transient provider failure records nothing.
+- `list_teams` rows report that state, and every per-team tool refuses an unavailable team with
+  `team_unavailable`, the recorded reason, and its observation time instead of making a provider
+  read that would be refused. `set_lineup` refuses it with `lineup.selection_invalid` and the same
+  reason without creating a run. Scheduled checks already skip it, and a run that reaches an
+  unavailable team blocks with the reason rather than failing.
+- The team list and team page say plainly that Lineupkeep cannot read the team, repeat the
+  provider's wording, name when it was observed, and offer **Check this team again**, which re-reads
+  the account's team list and that league for the team's connection. A provider refusal is now
+  distinct from an owner's pause, which is unchanged.
+
 ## Unreleased — round-9 MCP fixes (schedule window, roster key, search team)
 
 - `get_team_summary` accepts a `window` of inclusive dates or a `days` count for the `schedule`

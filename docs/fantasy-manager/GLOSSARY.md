@@ -42,7 +42,13 @@ A provider's stable identifier for a fantasy team within one provider connection
 A provider's stable identifier for the league that contains a fantasy team.
 
 **Team availability**:
-Whether the provider still reports a discovered fantasy team through its connection. An unavailable team keeps its configuration and is not treated as deleted.
+Whether the provider currently lets a stored fantasy team be read through its connection, as one
+observed fact with its time. A team is available when the last check read it; it is unavailable when
+the provider refused the read, the account's own team list no longer includes it, or its connection
+cannot be used, and the recorded reason and the provider's own wording are kept. An unavailable team
+keeps its configuration, note, and runs, is skipped by automation, and is never treated as deleted.
+It is separate from a paused team, which the owner suspended.
+_Avoid_: Connection status when the team's own read state is meant; paused when the provider refused
 
 **Roster**:
 The players held by a fantasy team, including starters, bench players, and reserve players.

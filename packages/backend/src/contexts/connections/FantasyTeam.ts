@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { DateTime, Schema } from "effect";
 
 import { ConnectionId, ProviderKey } from "./Connection.ts";
 
@@ -12,8 +12,29 @@ export type FantasyLeague = typeof FantasyLeague.Type;
 export const FantasySport = Schema.Literals(["football", "hockey", "baseball", "basketball"]);
 export type FantasySport = typeof FantasySport.Type;
 
-export const TeamAvailability = Schema.Literals(["available", "unavailable"]);
+export const TeamUnavailabilityReason = Schema.Literals([
+  "provider_refused",
+  "not_listed",
+  "connection_unavailable",
+]);
+export type TeamUnavailabilityReason = typeof TeamUnavailabilityReason.Type;
+
+export const TeamAvailability = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("available") }),
+  Schema.Struct({
+    status: Schema.Literal("unavailable"),
+    reason: TeamUnavailabilityReason,
+    detail: Schema.NonEmptyString,
+    observedAt: Schema.DateTimeUtc,
+  }),
+]);
 export type TeamAvailability = typeof TeamAvailability.Type;
+
+export function describeUnavailableTeam(
+  availability: Extract<TeamAvailability, { readonly status: "unavailable" }>,
+): string {
+  return `${availability.detail} Observed ${DateTime.formatIso(availability.observedAt)}.`;
+}
 
 export const TeamAutomationStatus = Schema.Literals([
   "disabled",

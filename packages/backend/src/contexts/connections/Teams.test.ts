@@ -47,7 +47,7 @@ it.effect("discovers multiple teams in one league and persists them disabled", (
     assert.isTrue(discovered.every((row) => row.league === "nhl"));
     assert.isTrue(discovered.every((row) => row.providerLeagueKey === "nhl"));
     assert.isTrue(discovered.every((row) => row.automation.status === "disabled"));
-    assert.isTrue(discovered.every((row) => row.availability === "available"));
+    assert.isTrue(discovered.every((row) => row.availability.status === "available"));
     assert.deepStrictEqual(yield* connections.listTeams(owner), discovered);
     assert.deepStrictEqual(yield* connections.listTeams(other), []);
   }).pipe(Effect.provide(ConnectionsTestLayer)),
@@ -88,17 +88,21 @@ it.effect("refreshes availability, restores teams, and preserves configuration",
 
     assert.strictEqual(renamed.name, "Renamed Skate");
     assert.strictEqual(renamed.id, originalId);
-    assert.strictEqual(renamed.availability, "available");
+    assert.strictEqual(renamed.availability.status, "available");
     assert.strictEqual(renamed.automation.status, "enabled");
     assert.strictEqual(unavailable.name, "Second Skate");
-    assert.strictEqual(unavailable.availability, "unavailable");
+    assert.deepInclude(unavailable.availability, {
+      status: "unavailable",
+      reason: "not_listed",
+      detail: "The provider no longer lists this team through its connection.",
+    });
     assert.strictEqual(unavailable.automation.status, "disabled");
 
     const third = team("nhl.l.1.t.3", "Third Skate");
     yield* fake.setTeams([first, second, third]);
     const restored = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
 
-    assert.isTrue(restored.every((row) => row.availability === "available"));
+    assert.isTrue(restored.every((row) => row.availability.status === "available"));
     assert.strictEqual(findTeam(restored, first.providerTeamKey).automation.status, "enabled");
     assert.strictEqual(findTeam(restored, third.providerTeamKey).automation.status, "disabled");
   }).pipe(Effect.provide(ConnectionsTestLayer)),
@@ -121,7 +125,12 @@ it.effect("requires a new credential generation after the provider rejects disco
     assert.strictEqual(reconnectRequired.status, "reconnect-required");
     assert.strictEqual(reconnectRequired.credentialGeneration, 1);
     assert.strictEqual(retained.length, 1);
-    assert.strictEqual(Array.getUnsafe(retained, 0).availability, "unavailable");
+    assert.deepInclude(Array.getUnsafe(retained, 0).availability, {
+      status: "unavailable",
+      reason: "connection_unavailable",
+      detail:
+        "The provider rejected this connection's sign-in, so Lineupkeep cannot read this team.",
+    });
 
     yield* fake.rejectSession(false);
     const recovered = Array.getUnsafe(
@@ -134,7 +143,72 @@ it.effect("requires a new credential generation after the provider rejects disco
 
     assert.strictEqual(recovered.status, "ready");
     assert.strictEqual(recovered.credentialGeneration, 2);
-    assert.strictEqual(Array.getUnsafe(rediscovered, 0).availability, "available");
+    assert.strictEqual(Array.getUnsafe(rediscovered, 0).availability.status, "available");
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("records a provider refusal with its wording and keeps the team", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    const refusedTeam = team("nhl.l.1.t.1", "First Skate");
+    yield* fake.setTeams([refusedTeam]);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    const stored = findTeam(yield* connections.listTeams(owner), refusedTeam.providerTeamKey);
+    yield* database
+      .update(providerTeams)
+      .set({ ownerNote: "Keeper league: hold the second-round pick." })
+      .where(eq(providerTeams.id, stored.id));
+    const checkedAt = yield* DateTime.now;
+
+    yield* fake.refuseLeague("nhl", refusal);
+    const checked = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    const refused = findTeam(checked, refusedTeam.providerTeamKey);
+
+    assert.strictEqual(checked.length, 1);
+    assert.strictEqual(refused.id, stored.id);
+    assert.strictEqual(refused.ownerNote, "Keeper league: hold the second-round pick.");
+    assert.strictEqual(refused.availability.status, "unavailable");
+    if (refused.availability.status === "unavailable") {
+      assert.strictEqual(refused.availability.reason, "provider_refused");
+      assert.strictEqual(refused.availability.detail, refusal);
+      assert.isAtLeast(
+        DateTime.toEpochMillis(refused.availability.observedAt),
+        DateTime.toEpochMillis(checkedAt),
+      );
+    }
+    assert.deepInclude(yield* connections.listTeams(owner), refused);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("returns a refused team to available when the provider's refusal clears", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    const target = team("nhl.l.1.t.1", "First Skate");
+    yield* fake.setTeams([target]);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    const stored = findTeam(yield* connections.listTeams(owner), target.providerTeamKey);
+    yield* database
+      .update(providerTeams)
+      .set({ ownerNote: "Hold the second-round pick." })
+      .where(eq(providerTeams.id, stored.id));
+    yield* fake.refuseLeague("nhl", refusal);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+
+    yield* fake.refuseLeague("nhl", undefined);
+    const recovered = findTeam(
+      yield* connections.discoverTeams(owner, [{ id: ready.id }]),
+      target.providerTeamKey,
+    );
+
+    assert.deepStrictEqual(recovered.availability, { status: "available" });
+    assert.strictEqual(recovered.ownerNote, "Hold the second-round pick.");
+    assert.strictEqual(recovered.id, stored.id);
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
@@ -160,7 +234,11 @@ it.effect("marks teams unavailable when their connection is disconnected", () =>
     yield* connections.disconnect(owner, [{ id: ready.id }]);
     const teams = yield* connections.listTeams(owner);
 
-    assert.strictEqual(Array.getUnsafe(teams, 0).availability, "unavailable");
+    assert.deepInclude(Array.getUnsafe(teams, 0).availability, {
+      status: "unavailable",
+      reason: "connection_unavailable",
+      detail: "The connection is disconnected, so Lineupkeep cannot read this team.",
+    });
     assert.strictEqual(Array.getUnsafe(teams, 0).automation.status, "disabled");
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
@@ -196,7 +274,7 @@ it.effect("leaves stored teams unchanged when the provider is unavailable", () =
     const teams = yield* connections.listTeams(owner);
 
     assert.instanceOf(error, ConnectionProviderUnavailable);
-    assert.strictEqual(Array.getUnsafe(teams, 0).availability, "available");
+    assert.strictEqual(Array.getUnsafe(teams, 0).availability.status, "available");
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
@@ -241,6 +319,7 @@ function ConnectionsLayerFor(
   );
 }
 
+const refusal = "You are not allowed to view this page because you are not in this league.";
 const owner = decodeUserId("owner");
 const other = decodeUserId("other");
 const session = Redacted.make("A1=test-session-cookie");

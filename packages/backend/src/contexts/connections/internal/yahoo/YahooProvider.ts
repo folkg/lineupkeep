@@ -30,6 +30,7 @@ import type {
   ProviderCategoryWinner,
   ProviderFantasyDay,
   ProviderGamesPlayed,
+  ProviderLeagueAccess,
   ProviderLeagueSettings,
   ProviderLineupAssignment,
   ProviderPeriodSupport,
@@ -51,6 +52,7 @@ import type {
   ProviderPlayerSearchResult,
   ProviderPlayerSearchSort,
   ProviderPlayerStatus,
+  ProviderFailure,
   ProviderReadFailure,
   ProviderRemainingGames,
   ProviderRoster,
@@ -192,6 +194,24 @@ export const yahooProvider = Effect.gen(function* () {
     }
     yield* Effect.annotateCurrentSpan("provider.team_count", teams.length);
     return teams;
+  });
+
+  const checkLeagueAccess = Effect.fn("YahooProvider.checkLeagueAccess")(function* (
+    input: ProviderSessionMaterial & { readonly providerLeagueKeys: ReadonlyArray<string> },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "check_league_access");
+    const cookie = yield* sessionCookie(input, "check_league_access");
+    const results: ProviderLeagueAccess[] = [];
+    for (const leagueKey of input.providerLeagueKeys) {
+      const valid = yield* ValidLeagueKey(leagueKey, "check_league_access");
+      results.push(yield* readLeagueAccess(internet, cookie, valid));
+    }
+    yield* Effect.annotateCurrentSpan({
+      "provider.league_count": results.length,
+      "provider.league_refused_count": results.filter((result) => result.status === "refused")
+        .length,
+    });
+    return results;
   });
 
   const readCrumb = Effect.fn("YahooProvider.readCrumb")(function* (
@@ -985,6 +1005,7 @@ export const yahooProvider = Effect.gen(function* () {
     reviewLinkTemplate,
     validateSession,
     discoverTeams,
+    checkLeagueAccess,
     readLeague,
     readStandings,
     readRoster,
@@ -1131,6 +1152,105 @@ function readJson(
       return request.normalize ? normalizeYahooJson(payload) : payload;
     }),
   );
+}
+
+function readLeagueAccess(
+  internet: PublicInternet["Service"],
+  cookie: string,
+  leagueKey: string,
+): Effect.Effect<ProviderLeagueAccess, ProviderFailure> {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const url = yahooUrl(readOrigin, `/fantasy/v2/league/${leagueKey}/teams`, { format: "json" });
+      const response = yield* internet
+        .request(
+          new Request(url, {
+            method: "GET",
+            headers: { accept: "application/json", cookie },
+          }),
+          {
+            timeoutMs: yahooReadDeadlineMillis,
+            maxResponseBytes: yahooReadResponseLimitBytes,
+          },
+        )
+        .pipe(
+          Effect.mapError(() => ProviderRequestFailed.make({ operation: "check_league_access" })),
+        );
+      if (response.status === 401) {
+        yield* discardBody(response);
+        return yield* ProviderSessionRejected.make({ operation: "check_league_access" });
+      }
+      if (response.status === 403) {
+        const detail = yield* refusalDetail(response);
+        return {
+          status: "refused",
+          providerLeagueKey: leagueKey,
+          detail: detail ?? refusalWithoutWording(response.status),
+        } satisfies ProviderLeagueAccess;
+      }
+      if (!response.ok) {
+        yield* discardBody(response);
+        return yield* ProviderRequestFailed.make({
+          operation: "check_league_access",
+          status: response.status,
+        });
+      }
+      const text = yield* Effect.tryPromise({
+        try: () => response.text(),
+        catch: () => ProviderRequestFailed.make({ operation: "check_league_access" }),
+      });
+      const payload = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+        Effect.catchTag("SchemaError", () =>
+          responseMismatch({ operation: "check_league_access" }),
+        ),
+      );
+      const decoded = yield* decodePayload(
+        LeagueTeamsPayload,
+        normalizeYahooJson(payload),
+        "check_league_access",
+      );
+      if (decoded.league.league_key !== leagueKey) {
+        return yield* responseMismatch({
+          operation: "check_league_access",
+          field: "league.league_key",
+        });
+      }
+      return { status: "listed", providerLeagueKey: leagueKey } satisfies ProviderLeagueAccess;
+    }),
+  );
+}
+
+function refusalDetail(response: Response): Effect.Effect<string | undefined> {
+  return Effect.gen(function* () {
+    const text = yield* Effect.tryPromise({
+      try: () => response.text(),
+      catch: () => "unreadable" as const,
+    });
+    const payload = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
+    const decoded = Schema.decodeUnknownOption(ProviderErrorPayload)(payload);
+    if (Option.isNone(decoded) || decoded.value.error?.description === undefined) {
+      return undefined;
+    }
+    const cleaned = singleLineText(decoded.value.error.description);
+    return cleaned.length === 0 ? undefined : cleaned.slice(0, 300);
+  }).pipe(Effect.orElseSucceed(() => undefined));
+}
+
+function singleLineText(value: string): string {
+  let printable = "";
+  for (const character of value) {
+    const code = character.codePointAt(0);
+    if (code !== undefined && code >= 0x20 && code !== 0x7f) {
+      printable += character;
+    }
+  }
+  return printable.replaceAll(/\s+/gu, " ").trim();
+}
+
+function refusalWithoutWording(status: number): string {
+  return `The provider refused to read this team's league (HTTP ${String(status)}) without publishing a reason.`;
 }
 
 function discardBody(response: Response): Effect.Effect<void> {
@@ -3588,6 +3708,14 @@ const TeamsPayload = Schema.Struct({
   users: Schema.Array(
     Schema.Struct({
       games: Schema.Array(GamePayload),
+    }),
+  ),
+});
+
+const ProviderErrorPayload = Schema.Struct({
+  error: Schema.optional(
+    Schema.Struct({
+      description: Schema.optional(Schema.String),
     }),
   ),
 });

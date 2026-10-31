@@ -34,7 +34,7 @@ import type {
   CompleteLinkingCommand,
   ReadyCredential,
   ReconnectCommand,
-  TeamDiscovery,
+  TeamCheck,
 } from "./ConnectionRepository.ts";
 
 export const ConnectionsLive = Layer.effect(
@@ -266,22 +266,22 @@ export const ConnectionsLive = Layer.effect(
           }
         }
         const at = yield* DateTime.now;
-        const discoveries = yield* Effect.forEach(
+        const checks = yield* Effect.forEach(
           credentials,
-          (credential) => discoverConnection(userId, credential, at),
+          (credential) => checkConnection(userId, credential, at),
           { concurrency: 1 },
         );
-        yield* repository.recordDiscoveries(userId, discoveries, at);
+        yield* repository.recordTeamCheck(userId, checks, at);
         const teams = yield* repository.listTeamsForConnections(userId, ids);
         yield* Effect.annotateCurrentSpan("connections.team_count", teams.length);
         return teams;
       });
 
-    const discoverConnection = (
+    const checkConnection = (
       userId: UserId,
       credential: ReadyCredential,
       at: DateTime.Utc,
-    ): Effect.Effect<TeamDiscovery, ConnectionError> =>
+    ): Effect.Effect<TeamCheck, ConnectionError> =>
       Effect.gen(function* () {
         const session = yield* encryption
           .decrypt({
@@ -294,40 +294,52 @@ export const ConnectionsLive = Layer.effect(
         const provider = yield* registry
           .requireProvider(credential.provider)
           .pipe(Effect.mapError(() => credentialPersistenceFailure()));
-        const teams = yield* provider
-          .discoverTeams({ provider: credential.provider, session })
-          .pipe(
-            Effect.catch((error) => {
-              if (error._tag !== "provider.session_rejected") {
-                return Effect.fail(connectionProviderError(credential.connectionId, error));
-              }
-              return Effect.gen(function* () {
-                const marked = yield* Effect.result(
-                  repository.markReconnectRequired(userId, [
-                    {
-                      id: credential.connectionId,
-                      expectedGeneration: credential.generation,
-                    },
-                  ]),
-                );
-                if (marked._tag === "Failure") {
-                  if (marked.failure._tag !== "connection.credential_generation_stale") {
-                    return yield* marked.failure;
-                  }
-                  return yield* ConnectionProviderRejected.make({
-                    id: credential.connectionId,
-                  });
-                }
-                yield* repository.recordDiscoveries(
-                  userId,
-                  [{ connectionId: credential.connectionId, teams: [] }],
-                  at,
-                );
-                return yield* ConnectionProviderRejected.make({ id: credential.connectionId });
-              });
-            }),
-          );
-        return { connectionId: credential.connectionId, teams };
+        const material = { provider: credential.provider, session };
+        const checked = yield* Effect.result(
+          Effect.gen(function* () {
+            const teams = yield* provider.discoverTeams(material);
+            const providerLeagueKeys = [...new Set(teams.map((team) => team.providerLeagueKey))];
+            const access =
+              providerLeagueKeys.length === 0
+                ? []
+                : yield* provider.checkLeagueAccess({ ...material, providerLeagueKeys });
+            return { teams, access };
+          }),
+        );
+        if (checked._tag === "Success") {
+          return { connectionId: credential.connectionId, ...checked.success };
+        }
+        const error = checked.failure;
+        if (error._tag !== "provider.session_rejected") {
+          return yield* connectionProviderError(credential.connectionId, error);
+        }
+        const marked = yield* Effect.result(
+          repository.markReconnectRequired(userId, [
+            {
+              id: credential.connectionId,
+              expectedGeneration: credential.generation,
+            },
+          ]),
+        );
+        if (marked._tag === "Failure") {
+          if (marked.failure._tag !== "connection.credential_generation_stale") {
+            return yield* marked.failure;
+          }
+          return yield* ConnectionProviderRejected.make({
+            id: credential.connectionId,
+          });
+        }
+        yield* repository.markTeamsUnavailable(
+          userId,
+          {
+            connectionIds: [credential.connectionId],
+            reason: "connection_unavailable",
+            detail:
+              "The provider rejected this connection's sign-in, so Lineupkeep cannot read this team.",
+          },
+          at,
+        );
+        return yield* ConnectionProviderRejected.make({ id: credential.connectionId });
       });
 
     return Connections.of({

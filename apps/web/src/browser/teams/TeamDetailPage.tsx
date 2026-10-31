@@ -77,7 +77,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           <Text size="caption" tone="muted">
             {teamContextLabel(props.team.team)}
           </Text>
-          <TeamAttention team={props.team} />
+          <TeamAttention remote={props.remote} team={props.team} />
         </Stack>
         <TeamControls team={props.team} remote={props.remote} />
         <TextLink search={{ surface: "team", team: props.team.team.id }} to="/feedback">
@@ -86,7 +86,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       </Stack>
 
       <TeamNote note={note} />
-      <TeamRoster remote={props.remote} teamId={props.team.team.id} />
+      <TeamRoster remote={props.remote} team={props.team} />
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
         <Heading id="team-activity-title" level={2} size="section">

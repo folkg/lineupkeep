@@ -774,6 +774,10 @@ export const TransactionProposalsLive = Layer.effect(
         switch (loaded.failure._tag) {
           case "query.team_not_found":
             return yield* ProposalTeamNotFound.make({ team: input.team });
+          case "query.team_unavailable":
+            return yield* ProposalProviderUnavailable.make({
+              detail: `${loaded.failure.detail} Lineupkeep observed this at ${DateTime.formatIso(loaded.failure.observedAt)}.`,
+            });
           case "query.connection_not_ready":
             return yield* ProposalConnectionNotReady.make({
               team: input.team,
@@ -1390,6 +1394,8 @@ function queryFailureDetail(failure: QueryError): string {
   switch (failure._tag) {
     case "query.team_not_found":
       return "this team is not available to the account.";
+    case "query.team_unavailable":
+      return failure.detail;
     case "query.connection_not_ready":
       return `the team's connection is ${failure.status}.`;
     case "query.cursor_invalid":

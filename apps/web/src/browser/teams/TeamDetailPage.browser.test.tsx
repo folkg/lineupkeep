@@ -103,7 +103,7 @@ const team: TeamSummaryView = {
     sport: "football",
     season: 2026,
     name: "Alpha",
-    availability: "available",
+    availability: { status: "available" },
     automation: {
       status: "enabled",
       changedAt: threeDaysAgo,
@@ -170,6 +170,33 @@ it("names the pause in reader-local time", async () => {
       ),
     )
     .toBeVisible();
+});
+
+it("says a team cannot be read, with the provider's wording, and offers a check", async () => {
+  const refused: TeamSummaryView = {
+    ...team,
+    team: {
+      ...team.team,
+      availability: {
+        status: "unavailable",
+        reason: "provider_refused",
+        detail: "You are not allowed to view this page because you are not in this league.",
+        observedAt: "2026-10-31T16:20:00.000Z",
+      },
+    },
+  };
+  using _app = setupTeamDetailPage(refused);
+
+  await expect.element(page.getByText("Lineupkeep cannot read this team.")).toBeVisible();
+  await expect
+    .element(
+      page.getByText("You are not allowed to view this page because you are not in this league."),
+    )
+    .toBeVisible();
+  await expect
+    .element(page.getByText(/Observed .*Lineup checks skip it until it can be read\./))
+    .toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Check this team again" })).toBeVisible();
 });
 
 it("folds consecutive checks that changed nothing and keeps the rest on their own", async () => {
@@ -387,6 +414,19 @@ it("confirms before navigation discards an unsaved note", async () => {
     .toHaveValue("Unsaved keeper note");
 });
 
+it("keeps the page usable when the roster read is refused", async () => {
+  using _app = setupTeamDetailPage(team, {
+    readRoster: () => Promise.reject(new Error("team.roster_unavailable")),
+  });
+
+  await expect.element(page.getByRole("heading", { name: "Alpha", level: 1 })).toBeVisible();
+  await expect
+    .element(
+      page.getByText("We could not read this roster from the provider. Try again in a moment."),
+    )
+    .toBeVisible();
+});
+
 it("shows a player's day-window trends and states when none are published", async () => {
   using _app = setupTeamDetailPage(team, {
     readRoster: () =>
@@ -483,6 +523,7 @@ function setupTeamDetailPage(
   const remote: TeamRemote = {
     list: () => Promise.resolve([teamSummary]),
     refresh: () => Promise.resolve({ teams: [teamSummary] }),
+    check: () => Promise.resolve({ teams: [teamSummary] }),
     control: () => Promise.resolve({ changed: [], teams: [teamSummary] }),
     readRun: () => Promise.reject(new Error("Unexpected run read")),
     saveNote:

@@ -6,7 +6,7 @@ import {
   TransactionReviewInput,
   TransactionReviews,
 } from "@lineupkeep/backend/connections/TransactionReview";
-import { Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import type { Layer } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -58,6 +58,11 @@ function mapOutcome<A>(
           return reject(
             "team_not_found",
             "The selected team is not available to this account. List your teams again.",
+          );
+        case "query.team_unavailable":
+          return reject(
+            "team_unavailable",
+            `Lineupkeep cannot read this team, so no review link was generated. ${error.detail} The provider's state was observed at ${DateTime.formatIso(error.observedAt)}; check the team again to refresh it.`,
           );
         case "query.connection_not_ready":
           return reject(

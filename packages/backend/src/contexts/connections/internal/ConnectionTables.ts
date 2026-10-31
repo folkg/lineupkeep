@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { Effect, Schema, SchemaParser, SchemaTransformation, Struct } from "effect";
+import { DateTime, Effect, Schema, SchemaParser, SchemaTransformation, Struct } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
 import {
@@ -25,6 +25,7 @@ import {
   TeamAutomationStatus,
   TeamAvailability,
   TeamId,
+  TeamUnavailabilityReason,
 } from "#contexts/connections/FantasyTeam.ts";
 
 import { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
@@ -86,6 +87,11 @@ export const providerTeams = pgTable(
     availability: text("availability", { enum: ["available", "unavailable"] })
       .notNull()
       .default("available"),
+    unavailableReason: text("unavailable_reason", {
+      enum: ["provider_refused", "not_listed", "connection_unavailable"],
+    }),
+    unavailableDetail: text("unavailable_detail"),
+    availabilityObservedAt: timestamp("availability_observed_at", { withTimezone: true }),
     automationState: jsonb("automation_state").notNull(),
     automationStatus: text("automation_status", {
       enum: ["disabled", "enabled", "paused-until-fantasy-day-end"],
@@ -108,6 +114,27 @@ export const providerTeams = pgTable(
   ],
 );
 
+export function teamAvailabilityColumns(availability: TeamAvailability): {
+  readonly availability: "available" | "unavailable";
+  readonly unavailableReason: TeamUnavailabilityReason | null;
+  readonly unavailableDetail: string | null;
+  readonly availabilityObservedAt: Date | null;
+} {
+  return availability.status === "available"
+    ? {
+        availability: "available",
+        unavailableReason: null,
+        unavailableDetail: null,
+        availabilityObservedAt: null,
+      }
+    : {
+        availability: "unavailable",
+        unavailableReason: availability.reason,
+        unavailableDetail: availability.detail,
+        availabilityObservedAt: DateTime.toDateUtc(availability.observedAt),
+      };
+}
+
 const FantasyTeamSelect = createSelectSchema(providerTeams, {
   id: TeamId,
   connectionId: ConnectionId,
@@ -119,7 +146,10 @@ const FantasyTeamSelect = createSelectSchema(providerTeams, {
   sport: FantasySport,
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
   name: Schema.NonEmptyString,
-  availability: TeamAvailability,
+  availability: Schema.Literals(["available", "unavailable"]),
+  unavailableReason: Schema.NullOr(TeamUnavailabilityReason),
+  unavailableDetail: Schema.NullOr(Schema.String),
+  availabilityObservedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   automationState: Schema.Unknown,
   automationStatus: TeamAutomationStatus,
   ownerNote: Schema.NullOr(Schema.NonEmptyString),
@@ -172,7 +202,7 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
             sport: row.sport,
             season: row.season,
             name: row.name,
-            availability: row.availability,
+            availability: availabilityView(row),
             automation: automationView(state),
             ownerNote: row.ownerNote,
             ownerNoteUpdatedAt: row.ownerNoteUpdatedAt,
@@ -189,6 +219,13 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
           )(state);
           return {
             ...team,
+            availability: team.availability.status,
+            unavailableReason:
+              team.availability.status === "unavailable" ? team.availability.reason : null,
+            unavailableDetail:
+              team.availability.status === "unavailable" ? team.availability.detail : null,
+            availabilityObservedAt:
+              team.availability.status === "unavailable" ? team.availability.observedAt : null,
             automationState,
             automationStatus: teamAutomationStateStatus(state),
           };
@@ -196,6 +233,37 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
     }),
   ),
 );
+
+function availabilityView(row: {
+  readonly availability: "available" | "unavailable";
+  readonly unavailableReason: TeamUnavailabilityReason | null;
+  readonly unavailableDetail: string | null;
+  readonly availabilityObservedAt: DateTime.Utc | null;
+}): TeamAvailability {
+  if (row.availability === "available") {
+    if (
+      row.unavailableReason !== null ||
+      row.unavailableDetail !== null ||
+      row.availabilityObservedAt !== null
+    ) {
+      throw new Error("An available team carries an unavailable reason");
+    }
+    return { status: "available" };
+  }
+  if (
+    row.unavailableReason === null ||
+    row.unavailableDetail === null ||
+    row.availabilityObservedAt === null
+  ) {
+    throw new Error("An unavailable team is missing the reason it was observed");
+  }
+  return {
+    status: "unavailable",
+    reason: row.unavailableReason,
+    detail: row.unavailableDetail,
+    observedAt: row.availabilityObservedAt,
+  };
+}
 
 function teamAutomationStateStatus(state: TeamAutomationState): TeamAutomationStatus {
   switch (state._tag) {

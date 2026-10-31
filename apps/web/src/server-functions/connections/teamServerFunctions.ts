@@ -70,6 +70,46 @@ export const refreshTeamsServerFn = createServerFn({ method: "POST" }).handler((
   );
 });
 
+export const checkTeamServerFn = createServerFn({ method: "POST" })
+  .validator((raw: { readonly team: string }) =>
+    Schema.decodeResult(Schema.Struct({ team: TeamId }))(raw),
+  )
+  .handler(({ data }) => {
+    const request = getRequest();
+    return runUseCase(
+      request,
+      "teams.check",
+      (userId) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.fromResult(data).pipe(
+            Effect.mapError(() => TeamInputInvalid.make({})),
+          );
+          const connections = yield* Connections;
+          const stored = (yield* connections.listTeams(userId)).find(
+            (team) => team.id === input.team,
+          );
+          if (stored === undefined) {
+            return yield* TeamNotFound.make({ team: input.team });
+          }
+          const ready = (yield* connections.list(userId)).filter(
+            (connection) => connection.id === stored.connectionId && connection.status === "ready",
+          );
+          if (ready.length > 0) {
+            yield* connections.discoverTeams(
+              userId,
+              ready.map((connection) => ({ id: connection.id })),
+            );
+          }
+          const all = yield* Teams.use((teams) => teams.list(userId));
+          return { teams: all.map(toTeamSummaryView) } satisfies TeamRefreshView;
+        }),
+      (error) =>
+        error._tag === "TeamInputInvalid"
+          ? { type: "team.input_invalid", outcome: "rejected" }
+          : mapTeamRefreshError(error),
+    );
+  });
+
 export const controlTeamServerFn = createServerFn({ method: "POST" })
   .validator((raw: typeof TeamControlInput.Encoded) => Schema.decodeResult(TeamControlInput)(raw))
   .handler(({ data }) => {

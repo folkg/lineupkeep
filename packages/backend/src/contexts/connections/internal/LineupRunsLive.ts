@@ -1,6 +1,7 @@
 import { DateTime, Duration, Effect, Layer, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import { describeUnavailableTeam } from "#contexts/connections/FantasyTeam.ts";
 import type {
   GetLineupRunsInput,
   LineupError,
@@ -168,9 +169,9 @@ function validateTeams(
       if (entry === undefined) {
         return yield* LineupTeamNotFound.make({ team: request.team });
       }
-      if (entry.team.availability !== "available") {
+      if (entry.team.availability.status !== "available") {
         return yield* LineupSelectionInvalid.make({
-          detail: "The selected team is not currently available from its connection.",
+          detail: `Lineupkeep cannot read this team, so this run was not started. ${describeUnavailableTeam(entry.team.availability)}`,
         });
       }
       selected.push({ owned: entry, request });

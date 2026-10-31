@@ -20,7 +20,7 @@ import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
-import { providerTeams } from "./internal/ConnectionTables.ts";
+import { providerTeams, teamAvailabilityColumns } from "./internal/ConnectionTables.ts";
 import { LineupDeliveryLocal } from "./internal/LineupDeliveryLocal.ts";
 import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
@@ -154,7 +154,14 @@ it.effect("excludes disabled, paused, unavailable, and reconnecting teams", () =
     yield* teams.control(owner, [{ team: paused, action: "pause-today" }]);
     yield* database
       .update(providerTeams)
-      .set({ availability: "unavailable" })
+      .set(
+        teamAvailabilityColumns({
+          status: "unavailable",
+          reason: "provider_refused",
+          detail: "You are not allowed to view this page because you are not in this league.",
+          observedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
+        }),
+      )
       .where(eq(providerTeams.id, unavailable));
 
     const summary = yield* automation.run(10);
@@ -163,6 +170,33 @@ it.effect("excludes disabled, paused, unavailable, and reconnecting teams", () =
     assert.strictEqual(summary.scheduledRuns, 0);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
     assert.notStrictEqual(disabled, paused);
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("skips a team the provider refuses and records the refusal", () =>
+  Effect.gen(function* () {
+    const automation = yield* Automation;
+    const connections = yield* Connections;
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+    yield* teams.control(owner, [{ team, action: "enable" }]);
+    const connection = Array.getUnsafe(yield* connections.list(owner), 0);
+
+    yield* fake.refuseLeague("461.l.1000", refusal);
+    const checked = yield* connections.discoverTeams(owner, [{ id: connection.id }]);
+    const summary = yield* automation.run(10);
+
+    assert.lengthOf(checked, 1);
+    assert.deepInclude(Array.getUnsafe(checked, 0).availability, {
+      status: "unavailable",
+      reason: "provider_refused",
+      detail: refusal,
+    });
+    assert.strictEqual(summary.eligibleTeams, 0);
+    assert.strictEqual(summary.scheduledRuns, 0);
+    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    assert.strictEqual((yield* teams.get(owner, team)).team.automation.status, "enabled");
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
@@ -357,6 +391,8 @@ beforeEach(() => {
   ownerSerial += 1;
   owner = decodeUserId(`automation-tick-owner-${String(ownerSerial)}`);
 });
+
+const refusal = "You are not allowed to view this page because you are not in this league.";
 
 const teamFixture: ProviderTeam = {
   provider: decodeProviderKey("yahoo"),

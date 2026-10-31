@@ -9,6 +9,7 @@ import type {
   TeamSummaryView,
 } from "#contracts/connections/teamContract.ts";
 import {
+  checkTeamServerFn,
   controlTeamServerFn,
   listTeamsServerFn,
   readLineupRunServerFn,
@@ -27,6 +28,7 @@ import {
 export const teamRemote: TeamRemote = {
   list: (options) => listTeamsServerFn({ signal: options.signal }).then(requireTeamSuccess),
   refresh: () => refreshTeamsServerFn().then(requireTeamSuccess),
+  check: (input) => checkTeamServerFn({ data: input }).then(requireTeamSuccess),
   control: (input) => controlTeamServerFn({ data: input }).then(requireTeamSuccess),
   readRun: (input) => readLineupRunServerFn({ data: input }).then(requireRunSuccess),
   saveNote: (input) => saveTeamNoteServerFn({ data: input }).then(requireNoteSuccess),
@@ -36,6 +38,7 @@ export const teamRemote: TeamRemote = {
 export type TeamRemote = {
   readonly list: (options: TeamListRequestOptions) => Promise<ReadonlyArray<TeamSummaryView>>;
   readonly refresh: () => Promise<TeamRefreshView>;
+  readonly check: (input: { readonly team: string }) => Promise<TeamRefreshView>;
   readonly control: (input: TeamControlData) => Promise<TeamChangeView>;
   readonly readRun: (input: { readonly run: string }) => Promise<LineupRunData>;
   readonly saveNote: (input: TeamNoteData) => Promise<TeamNoteSaveResult>;

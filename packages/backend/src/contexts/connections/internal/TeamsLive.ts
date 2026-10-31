@@ -2,6 +2,7 @@ import { DateTime, Effect, Layer } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { currentFantasyDayStart } from "#contexts/connections/FantasyDay.ts";
+import { describeUnavailableTeam } from "#contexts/connections/FantasyTeam.ts";
 import type { TeamAutomation } from "#contexts/connections/FantasyTeam.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupRun } from "#contexts/connections/LineupRun.ts";
@@ -13,6 +14,7 @@ import {
   TeamNotFound,
   TeamPersistenceFailed,
   TeamNoteRejected,
+  TeamUnavailable,
   Teams,
 } from "#contexts/connections/Teams.ts";
 import type {
@@ -105,7 +107,8 @@ export const TeamsLive = Layer.effect(
         "automation.rejected": countOutcome(results, "rejected"),
         "automation.not_found": countOutcome(results, "not_found"),
         "automation.unavailable": results.filter(
-          (result) => result.outcome !== "not_found" && result.availability === "unavailable",
+          (result) =>
+            result.outcome !== "not_found" && result.availability.status === "unavailable",
         ).length,
       });
       return results;
@@ -136,6 +139,14 @@ export const TeamsLive = Layer.effect(
     const readRoster: TeamsShape["readRoster"] = (userId, team) =>
       Effect.gen(function* () {
         const access = yield* teams.loadProviderAccess(userId, team);
+        if (access.team.availability.status === "unavailable") {
+          return yield* TeamUnavailable.make({
+            team,
+            reason: access.team.availability.reason,
+            detail: access.team.availability.detail,
+            observedAt: access.team.availability.observedAt,
+          });
+        }
         const provider = registry.get(access.connection.provider);
         if (provider === undefined) {
           return yield* TeamPersistenceFailed.make({
@@ -225,8 +236,8 @@ function controlDetail(
 ): string {
   const automation = record.teamState.automation;
   const detail = controlOutcomeDetail(record, automation);
-  return record.teamState.availability === "unavailable"
-    ? `${detail} The provider currently reports this team unavailable, so scheduled checks skip it until it is available again.`
+  return record.teamState.availability.status === "unavailable"
+    ? `${detail} Lineupkeep cannot read this team, so scheduled checks skip it until it can. ${describeUnavailableTeam(record.teamState.availability)}`
     : detail;
 }
 

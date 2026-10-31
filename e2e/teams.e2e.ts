@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+
+import { Schema } from "effect";
+
 import { expect, signUp, test } from "./support";
 import { captureCheckpoint } from "./verify/capture";
 
@@ -69,7 +73,10 @@ test("saves an owner note on the team page and reads it back over MCP", async ({
   await page.goto("/teams");
   await page.getByRole("link", { name: "Embedded Browser Team" }).click();
   const teamId = new URL(page.url()).pathname.split("/").at(-1);
-  expect(teamId).toBeTruthy();
+  expect(teamId, "the team page names its team").toBeTruthy();
+  if (teamId === undefined) {
+    return;
+  }
 
   await test.step("Baseline: the team page shows the roster counts the provider published", async () => {
     await expect(page.getByText("37 adds and 3 drops today")).toBeVisible();
@@ -96,7 +103,7 @@ test("saves an owner note on the team page and reads it back over MCP", async ({
   });
 
   await test.step("Result: [owner] reads the note over MCP as owner context", async () => {
-    const client = await mcp(["fantasy:read"], page);
+    const client = await mcp(["fantasy:read lineups:write"], page);
     const summary = await client.callTool("get_team_summary", {
       team: teamId,
       groups: ["league"],
@@ -108,6 +115,76 @@ test("saves an owner note on the team page and reads it back over MCP", async ({
         text: "Dynasty league. Keep both goalies; cost rises by five each season.",
       },
     });
+  });
+});
+
+test("reports a refused team as unreadable and re-checks it without pretending it works", async ({
+  page,
+  services,
+  mcp,
+}) => {
+  await signUp(page);
+  await services.exercise(
+    page,
+    "link a provider session whose league reads the provider refuses",
+    "connectRefusedYahooAndDiscoverTeams",
+    {},
+  );
+
+  await test.step("Baseline: [owner] sees the provider's own refusal in place of a healthy team", async () => {
+    await page.goto("/teams");
+    const row = page.getByRole("listitem").filter({ hasText: "Embedded Browser Team" });
+    await expect(row.getByText("Lineupkeep cannot read this team.")).toBeVisible();
+    await expect(
+      row.getByText("You are not allowed to view this page because you are not in this league."),
+    ).toBeVisible();
+    await expect(row.getByText(/Lineup checks skip it until it can be read\.$/u)).toBeVisible();
+  });
+
+  await page.getByRole("link", { name: "Embedded Browser Team" }).click();
+  const teamId = new URL(page.url()).pathname.split("/").at(-1);
+  expect(teamId, "the team page names its team").toBeTruthy();
+  if (teamId === undefined) {
+    return;
+  }
+
+  await test.step("Baseline: the team page keeps the roster behind the same honest state", async () => {
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Embedded Browser Team" }),
+    ).toBeVisible();
+    await expect(page.getByText("Lineupkeep cannot read this team.")).toBeVisible();
+    await expect(page.getByText("Roster unavailable.")).toBeVisible();
+    await expect(page.getByLabel("Note for this team")).toBeVisible();
+  });
+
+  await test.step("Action: [owner] checks the team again while the provider still refuses", async () => {
+    await page.getByRole("button", { name: "Check this team again" }).click();
+    await expect(
+      page.getByText(
+        /^Checked\. Lineupkeep still cannot read this team\. You are not allowed to view this page because you are not in this league\./u,
+      ),
+    ).toBeVisible();
+    await expect(page.getByText("Lineupkeep cannot read this team.")).toBeVisible();
+  });
+
+  await test.step("Result: [owner] reads the same refusal over MCP instead of an empty read", async () => {
+    const client = await mcp(["fantasy:read lineups:write"], page);
+    const listed = await client.callTool("list_teams", {});
+    expect(listed.isError).toBe(false);
+    const availability = teamAvailability(listed, teamId);
+    expect(availability).toMatchObject({
+      status: "unavailable",
+      reason: "provider_refused",
+      detail: "You are not allowed to view this page because you are not in this league.",
+    });
+    expect(availability.observedAt).toEqual(expect.any(String));
+
+    const lineup = await client.callTool("set_lineup", {
+      requestId: randomUUID(),
+      teams: [{ team: teamId, period: { coverage: "week", week: 3 } }],
+    });
+    expect(lineup.isError).toBe(true);
+    expect(JSON.stringify(lineup)).toContain("cannot read this team");
   });
 });
 
@@ -161,4 +238,30 @@ for (const viewport of [
       ratio: 1,
     });
   });
+}
+
+const ListedTeams = Schema.Struct({
+  teams: Schema.Array(
+    Schema.Struct({
+      team: Schema.String,
+      availability: Schema.Struct({
+        status: Schema.String,
+        reason: Schema.optional(Schema.String),
+        detail: Schema.optional(Schema.String),
+        observedAt: Schema.optional(Schema.String),
+      }),
+    }),
+  ),
+});
+
+function teamAvailability(
+  response: { readonly structuredContent?: { readonly [x: string]: unknown } | undefined },
+  team: string,
+): (typeof ListedTeams.Type.teams)[number]["availability"] {
+  const listed = Schema.decodeUnknownSync(ListedTeams)(response.structuredContent);
+  const entry = listed.teams.find((candidate) => candidate.team === team);
+  if (entry === undefined) {
+    throw new Error(`list_teams did not return ${team}`);
+  }
+  return entry.availability;
 }

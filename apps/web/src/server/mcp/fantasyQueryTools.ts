@@ -22,7 +22,7 @@ import {
 } from "@lineupkeep/backend/connections/QueryResults";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import type { QueryError } from "@lineupkeep/backend/connections/QueryValues";
-import { Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import type { Layer } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -33,7 +33,7 @@ const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String 
 export const fantasyQueryTools = Toolkit.make(
   Tool.make("list_teams", {
     description:
-      "List your linked fantasy teams with stable paging and optional sport, season, or connection filters. Each row carries a private team id for the other query tools, its current automation status, and the pause expiry when one is active; provider keys are never returned.",
+      'List your linked fantasy teams with stable paging and optional sport, season, or connection filters. Each row carries a private team id for the other query tools, its current automation status, and the pause expiry when one is active; provider keys are never returned. Each row also carries the recorded provider read state: `availability: {status: "available"}` when the last check read the team, or `availability: {status: "unavailable", reason, detail, observedAt}` when it could not, where `reason` is `provider_refused` (the provider declined and `detail` repeats its own wording), `not_listed` (the account\'s own team list no longer includes the team), or `connection_unavailable` (the connection cannot be used). An unavailable team keeps its configuration, note, and runs and is never reported as deleted; it is distinct from a team the owner paused. The per-team tools refuse an unavailable team with `team_unavailable` and its recorded reason instead of attempting a provider read that will be refused.',
     parameters: ListTeamsInput,
     success: Schema.toCodecJson(ListTeamsResult),
     failure: ToolFailure,
@@ -181,6 +181,11 @@ function mapOutcome<A>(
           return reject(
             "team_not_found",
             "The selected team is not available to this account. List your teams again.",
+          );
+        case "query.team_unavailable":
+          return reject(
+            "team_unavailable",
+            `Lineupkeep cannot read this team, so no provider work was attempted. ${error.detail} The provider's state was observed at ${DateTime.formatIso(error.observedAt)}; check the team again to refresh it.`,
           );
         case "query.connection_not_ready":
           return reject(

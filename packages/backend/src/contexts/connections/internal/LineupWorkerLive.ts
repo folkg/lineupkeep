@@ -2,6 +2,7 @@ import { DateTime, Effect, Layer, Option } from "effect";
 import type { Redacted } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import { describeUnavailableTeam } from "#contexts/connections/FantasyTeam.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type {
   LineupImplementation,
@@ -111,11 +112,11 @@ export const LineupWorkerLive = Layer.effect(
           "The selected team or its connection is not available for this run.",
         );
       }
-      if (context.team.availability !== "available") {
+      if (context.team.availability.status !== "available") {
         return yield* block(
           run,
           "team_unavailable",
-          "The provider no longer reports this team as available.",
+          `The provider cannot be read for this team, so nothing was attempted. ${describeUnavailableTeam(context.team.availability)}`,
         );
       }
       const provider = yield* providerOf(run, context);

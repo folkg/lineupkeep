@@ -713,6 +713,39 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("refuses a team the provider will not read instead of calling it", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const connection = Array.getUnsafe(yield* connections.list(owner), 0);
+    const refusal = "You are not allowed to view this page because you are not in this league.";
+
+    yield* fake.refuseLeague("461.l.1000", refusal);
+    yield* connections.discoverTeams(owner, [{ id: connection.id }]);
+    const readsBefore = (yield* fake.rosterPeriods).length;
+    const failure = yield* Effect.flip(queries.getRosters(owner, { team: teamId }));
+
+    assert.strictEqual(failure._tag, "query.team_unavailable");
+    if (failure._tag === "query.team_unavailable") {
+      assert.strictEqual(failure.reason, "provider_refused");
+      assert.strictEqual(failure.detail, refusal);
+    }
+    assert.strictEqual((yield* fake.rosterPeriods).length, readsBefore);
+    const listed = yield* queries.listTeams(owner, {});
+    assert.strictEqual(listed.status, "ok");
+    if (listed.status === "ok") {
+      assert.deepInclude(Array.getUnsafe(listed.teams, 0).availability, {
+        status: "unavailable",
+        reason: "provider_refused",
+        detail: refusal,
+      });
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect(
   "publishes an unverified roster slot with its raw value in roster and summary reads",
   () =>

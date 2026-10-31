@@ -57,6 +57,13 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         readonly season: number;
         readonly name: string;
         readonly availability: "available" | "unavailable";
+        readonly unavailableReason:
+          | "provider_refused"
+          | "not_listed"
+          | "connection_unavailable"
+          | null;
+        readonly unavailableDetail: string | null;
+        readonly availabilityObservedAt: Date | null;
         readonly automationState: unknown;
         readonly automationStatus: "disabled" | "enabled" | "paused-until-fantasy-day-end";
         readonly ownerNote: string | null;
@@ -122,6 +129,9 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
             season: providerTeams.season,
             name: providerTeams.name,
             availability: providerTeams.availability,
+            unavailableReason: providerTeams.unavailableReason,
+            unavailableDetail: providerTeams.unavailableDetail,
+            availabilityObservedAt: providerTeams.availabilityObservedAt,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
             ownerNote: providerTeams.ownerNote,
@@ -208,6 +218,9 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
             season: providerTeams.season,
             name: providerTeams.name,
             availability: providerTeams.availability,
+            unavailableReason: providerTeams.unavailableReason,
+            unavailableDetail: providerTeams.unavailableDetail,
+            availabilityObservedAt: providerTeams.availabilityObservedAt,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
             ownerNote: providerTeams.ownerNote,

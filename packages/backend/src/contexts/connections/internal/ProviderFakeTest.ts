@@ -16,6 +16,7 @@ import type {
   ProviderCapabilities,
   ProviderDraftPick,
   ProviderGamesPlayed,
+  ProviderLeagueAccess,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderLineupAssignment,
@@ -90,6 +91,7 @@ type FakeProviderState = {
   readonly pendingTrades: ReadonlyArray<ProviderPendingTrade>;
   readonly draftResults: ReadonlyArray<ProviderDraftPick>;
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
+  readonly refusedLeagues: Readonly<Record<string, string>>;
   readonly unsupported: ReadonlySet<ProviderOperation>;
   readonly reviewLinkFailure: ProviderReviewLinkInvalid | undefined;
   readonly reviewLinkUrl: string | undefined;
@@ -144,6 +146,7 @@ export type FakeProviderWorldShape = {
   readonly setPendingTrades: (trades: ReadonlyArray<ProviderPendingTrade>) => Effect.Effect<void>;
   readonly setDraftResults: (picks: ReadonlyArray<ProviderDraftPick>) => Effect.Effect<void>;
   readonly setLeagueTeams: (teams: ReadonlyArray<ProviderLeagueTeam>) => Effect.Effect<void>;
+  readonly refuseLeague: (leagueKey: string, detail: string | undefined) => Effect.Effect<void>;
   readonly unsupportedOperations: (
     operations: ReadonlyArray<ProviderOperation>,
   ) => Effect.Effect<void>;
@@ -208,6 +211,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         pendingTrades: [],
         draftResults: [],
         leagueTeams: [],
+        refusedLeagues: {},
         unsupported: new Set(),
         reviewLinkFailure: undefined,
         reviewLinkUrl: undefined,
@@ -283,6 +287,16 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setPendingTrades: (pendingTrades) => modify((current) => ({ ...current, pendingTrades })),
         setDraftResults: (draftResults) => modify((current) => ({ ...current, draftResults })),
         setLeagueTeams: (leagueTeams) => modify((current) => ({ ...current, leagueTeams })),
+        refuseLeague: (leagueKey, detail) =>
+          modify((current) => {
+            const refusedLeagues = { ...current.refusedLeagues };
+            if (detail === undefined) {
+              delete refusedLeagues[leagueKey];
+            } else {
+              refusedLeagues[leagueKey] = detail;
+            }
+            return { ...current, refusedLeagues };
+          }),
         unsupportedOperations: (operations) =>
           modify((current) => ({ ...current, unsupported: new Set(operations) })),
         failReviewLinks: (reviewLinkFailure) =>
@@ -369,6 +383,20 @@ const providerFake = Effect.gen(function* () {
       }
       const latest = yield* Ref.get(world.state);
       return latest.teams;
+    }),
+    checkLeagueAccess: Effect.fn("FakeProvider.checkLeagueAccess")(function* (input) {
+      yield* validate(input, "check_league_access");
+      const current = yield* Ref.get(world.state);
+      if (current.sessionRejected) {
+        return yield* ProviderSessionRejected.make({ operation: "check_league_access" });
+      }
+      yield* requestFailure(current, "check_league_access");
+      return input.providerLeagueKeys.map((providerLeagueKey): ProviderLeagueAccess => {
+        const detail = current.refusedLeagues[providerLeagueKey];
+        return detail === undefined
+          ? { status: "listed", providerLeagueKey }
+          : { status: "refused", providerLeagueKey, detail };
+      });
     }),
     readLeague: Effect.fn("FakeProvider.readLeague")(function* (input) {
       const current = yield* prepare(input, "read_league");

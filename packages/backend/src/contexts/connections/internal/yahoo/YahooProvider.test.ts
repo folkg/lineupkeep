@@ -3650,6 +3650,63 @@ it.effect("rejects league membership that names another league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect(
+  "distinguishes a readable league from a refused one and keeps the provider's wording",
+  () => {
+    const refusal = "You are not allowed to view this page because you are not in this league.";
+    const internet = recordingInternet((request) =>
+      request.url.pathname.includes("470.l.918636")
+        ? jsonResponse({ error: { description: `  ${refusal}\n` } }, 403)
+        : jsonResponse(yahooNflLeagueTeams),
+    );
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+
+      const access = yield* provider.checkLeagueAccess({
+        ...sessionInput,
+        providerLeagueKeys: ["466.l.4000", "470.l.918636"],
+      });
+
+      assert.deepStrictEqual(access, [
+        { status: "listed", providerLeagueKey: "466.l.4000" },
+        { status: "refused", providerLeagueKey: "470.l.918636", detail: refusal },
+      ]);
+      assert.deepStrictEqual(
+        internet.calls.map((call) => call.url.pathname),
+        ["/fantasy/v2/league/466.l.4000/teams", "/fantasy/v2/league/470.l.918636/teams"],
+      );
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
+
+it.effect("treats an unauthenticated league read as a session rejection, not a refusal", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse({ error: { description: "Sign in required" } }, 401),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.checkLeagueAccess({ ...sessionInput, providerLeagueKeys: ["466.l.4000"] }),
+    );
+
+    assert.instanceOf(error, ProviderSessionRejected);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("fails a league check it cannot classify instead of calling it a refusal", () => {
+  const internet = recordingInternet(() => jsonResponse({}, 503));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.checkLeagueAccess({ ...sessionInput, providerLeagueKeys: ["466.l.4000"] }),
+    );
+
+    assert.instanceOf(error, ProviderRequestFailed);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect.each([
   {
     sport: "football" as const,

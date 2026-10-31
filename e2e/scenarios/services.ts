@@ -6,22 +6,30 @@ import { Array, DateTime, Effect, Redacted, Schema } from "effect";
 
 import type { ServiceProgram } from "#e2e/serviceContract.ts";
 
-export const connectYahooAndDiscoverTeams: ServiceProgram = (user, arguments_) =>
-  Effect.gen(function* () {
-    yield* Schema.decodeUnknownEffect(Schema.Struct({}))(arguments_);
-    const connections = yield* Connections;
-    const linked = Array.getUnsafe(
-      yield* connections.link(user.id, [
-        {
-          provider: decodeProviderKey("yahoo"),
-          session: Redacted.make("A1=e2e-provider-session"),
-        },
-      ]),
-      0,
-    );
-    const teams = yield* connections.discoverTeams(user.id, [{ id: linked.id }]);
-    return teams.map(observeTeam);
-  });
+export const connectYahooAndDiscoverTeams: ServiceProgram = connectYahoo("A1=e2e-provider-session");
+
+export const connectRefusedYahooAndDiscoverTeams: ServiceProgram = connectYahoo(
+  "A1=e2e-refused-league-session",
+);
+
+function connectYahoo(session: string): ServiceProgram {
+  return (user, arguments_) =>
+    Effect.gen(function* () {
+      yield* Schema.decodeUnknownEffect(Schema.Struct({}))(arguments_);
+      const connections = yield* Connections;
+      const linked = Array.getUnsafe(
+        yield* connections.link(user.id, [
+          {
+            provider: decodeProviderKey("yahoo"),
+            session: Redacted.make(session),
+          },
+        ]),
+        0,
+      );
+      const teams = yield* connections.discoverTeams(user.id, [{ id: linked.id }]);
+      return teams.map(observeTeam);
+    });
+}
 
 export const readConnections: ServiceProgram = (user, arguments_) =>
   Effect.gen(function* () {
@@ -46,7 +54,7 @@ function observeTeam(team: FantasyTeam): ObservedTeam {
   return {
     id: team.id,
     name: team.name,
-    availability: team.availability,
+    availability: team.availability.status,
     automation: {
       status: team.automation.status,
       ...(team.automation.resumesAt === undefined
@@ -78,7 +86,7 @@ function observeConnection(connection: ProviderConnection): ObservedConnection {
 type ObservedTeam = {
   readonly id: string;
   readonly name: string;
-  readonly availability: FantasyTeam["availability"];
+  readonly availability: FantasyTeam["availability"]["status"];
   readonly automation: {
     readonly status: FantasyTeam["automation"]["status"];
     readonly resumesAt?: string;

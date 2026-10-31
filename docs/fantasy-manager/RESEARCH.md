@@ -1765,6 +1765,33 @@ for the counterparty to respond to. And the refusal is silent to the league, whi
 failure mode for a write probe: the door did not open, so nothing was left in front of another
 person.
 
+### The refusal belonged to the other connection, not to the stored team (2026-10-31)
+
+The paragraph above is right about what the probe's session saw, and wrong about which connection
+that session was. Re-reading the same league through each connection's own stored, encrypted session
+settles it. No write was issued; every request was a `GET`.
+
+| Stored connection | Linked     | `470.l.918636` reads                                                                                                                                                               |
+| ----------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| first             | 2026-10-25 | 403 `You are not allowed to view this page because you are not in this league.` on `teams`, `settings`, `standings`, `scoreboard`, `team/{key}/roster`, and the pending-trade read |
+| second            | 2026-10-28 | 200 on all six of the same reads, listing `470.l.918636.t.5` in both the league's teams and `users;use_login=1/games;game_keys=nfl/teams`                                          |
+
+The probe's browser session was the first connection's account. The team the authorisation named
+belongs to the second connection, so the refusal was an account-membership fact about the probe,
+not a fact about the stored team. `470.l.918636.t.5` is readable by the connection that stores it,
+and the second connection also answers `settings`, `standings`, and `scoreboard` for that league.
+
+Two consequences. A refusal must be recorded against the team and connection that produced it, with
+the provider's own wording, because the same league can be refused for one linked account and
+readable for another. And `403` on a league or team read is not a session rejection: the session
+proved itself on `users;use_login=1`, so treating the refusal as an expired sign-in would ask the
+owner to reconnect a connection that is working.
+
+The stored row also showed the product's own gap: it said `available` from the moment it was linked,
+because discovery only proves the account lists the team, and it had never been re-read. Discovery
+now also reads each held league and records the team as readable or as unreadable with the reason
+and the time, so a team that changes from readable to refused is visible rather than assumed.
+
 ### Player add/drop and reserve moves (2026-10-31)
 
 No live provider write was performed: no disposable league was available, so the request shapes
