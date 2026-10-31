@@ -114,6 +114,17 @@ the exporter accepted silently. Three more applies carried review-free refinemen
 to the wide event's attribute merge, the exceptional-error logger, and one
 unused record field; each reported 17 updates.
 
+Current revisions after the cold-start deploy (2026-10-31): web
+`lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-00054-jkl` and worker
+`lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y-00055-l8b` on web digest
+`sha256:f4bb6b11cbc62b288132c8d6fb194a1454fc7645d153dab5ea630d34d7a06fbf`; the
+hosted browser stayed on `lineupkeep-hb-00019-b9p`. The plan reported 17 updates
+and no creates or deletions: both images, both services, the migration step,
+the scheduler job, the retention steps, and one `DATABASE_URL` version. The web
+container now probes every second; the worker and hosted browser keep five
+seconds. [The cold-start section](#cold-start-and-the-waking-shell-2026-10-31)
+records the before and after.
+
 The deterministic alias
 `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-602042678335.us-east1.run.app`
 also resolves, but the canonical URL above is the auth origin. Do not configure
@@ -265,6 +276,103 @@ done
 Presence well above billable seconds is the idle window; presence equal to
 billable seconds would mean instance-based billing or minimum instances have
 crept back.
+
+### Cold start and the waking shell (2026-10-31)
+
+The web service scales to zero, so the first request after a quiet period pays for the container.
+Cloud Run holds a request until the instance's startup probe succeeds, and its frontend neither caches
+nor serves static files. Nothing served from inside the container can therefore paint before the
+container starts; an edge cache is the only way past that floor, and this origin has none. The shell
+below covers the wait after the container is reachable, which is where a suspended database or a stalled
+provider call used to leave a blank tab.
+
+**Where the wait went.** Sixteen web instances from the 2026-10-31 logs, decoded from
+`cloud_run_revision` entries:
+
+| Segment                               | Time                       | Log evidence                                    |
+| ------------------------------------- | -------------------------- | ----------------------------------------------- |
+| Instance start → app listening        | 2.1 s median (1.4–3.8 s)   | `Starting new instance` → `Listening on`        |
+| Listening → startup probe succeeds    | 3.7 s median (2.5–4.2 s)   | `Listening on` → `STARTUP HTTP probe succeeded` |
+| First cold render (the probe request) | 230 ms median (209–289 ms) | the probe's `GET / ok …ms`                      |
+| Network round trip and transfer       | ~0.2–0.4 s                 | client TTFB minus the server's request duration |
+
+The middle row was not work: `startupProbe.periodSeconds` was 5, so a server that listened after 2.1 s
+waited for the next probe before Cloud Run routed anything. `webContainer()` now probes every second,
+with a sixty-failure budget for the same sixty-second startup allowance. The worker and hosted browser
+keep their five-second probes, where cold-start latency is not the first impression.
+
+**Measured cold start, before and after.** `scripts/coldStart.ts` with a fresh browser context per
+sample, a 390×844 phone viewport and no service worker, after sixteen idle minutes:
+
+| Sample          | Revision      | TTFB   | First paint | First contentful paint | Load    |
+| --------------- | ------------- | ------ | ----------- | ---------------------- | ------- |
+| Landing, cold   | `…-00053-st6` | 6.45 s | 6.67 s      | 6.67 s                 | 6.89 s  |
+| Team page, cold | `…-00053-st6` | 6.53 s | 6.93 s      | 6.93 s                 | 7.26 s  |
+| Landing, cold   | `…-00053-st6` | 6.57 s | 6.81 s      | 6.81 s                 | 7.14 s  |
+| Team page, cold | `…-00053-st6` | 6.26 s | 6.64 s      | 6.64 s                 | 12.72 s |
+| Landing, cold   | `…-00054-jkl` | 3.41 s | 3.65 s      | 3.65 s                 | 3.85 s  |
+| Team page, cold | `…-00054-jkl` | 3.37 s | 3.76 s      | 3.76 s                 | 4.01 s  |
+| Landing, cold   | `…-00054-jkl` | 3.22 s | 3.42 s      | 3.42 s                 | 3.69 s  |
+| Team page, cold | `…-00054-jkl` | 3.25 s | 3.64 s      | 3.64 s                 | 3.87 s  |
+
+Median TTFB fell from 6.53 s to 3.37 s and median first contentful paint from 6.81 s to 3.65 s.
+Cloud Run's own `container/startup_latencies` agrees: the previous revision measured 5.72–5.85 s
+(p50 5.79 s, p95 5.85 s, plus one 11.2 s start) on this day, and the new one 2.57–2.77 s across the five
+cold starts above (p50 2.60 s, p95 2.77 s).
+
+The instance timeline behind those samples: instance start → listening 1.4–1.7 s, listening → probe
+success 1.3–1.4 s, and the probe's own `/` render 131–152 ms. Before the change the same segments were
+1.8–2.4 s and 3.7–4.0 s, with the probe's render at 216–230 ms. The probe warms the route, so the
+visitor's own render is 15–22 ms. A warm request returned in 0.37 s TTFB and 0.74 s first paint both
+before and after, so the cold samples carry the container and probe wait, not a rendering regression.
+
+**The waking shell.** A document navigation whose render has not started within two seconds is answered
+with a complete static document instead: the wordmark, "Lineupkeep is waking", a `role="status"` line
+that says nothing has been read yet, and a **Try again** link to the same path. It carries
+`x-lineupkeep-waking: 1`, `Cache-Control: no-store` and `noindex, nofollow`, so neither a browser nor a
+crawler can keep or replay it as a page. It reloads itself once; a second stall within ten seconds
+becomes "taking longer than usual" with the same retry link. It shows no navigation, teams or other data,
+takes no focus, and has no animation to wait on. Healthy renders return in tens of milliseconds, so the
+shell appears only when a dependency is stuck.
+
+**Reproducing a cold start without keeping an instance warm.** Cloud Run keeps a scaled-to-zero instance
+for at most fifteen minutes after its last request, and no request may reach it in that window. The
+script reads the service's newest request from Cloud Logging, waits out the window itself, then samples:
+
+```sh
+# The newest request the service handled; 16 minutes later the instance is gone.
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc" AND logName:"run.googleapis.com%2Frequests"' \
+  --project=lineupkeep-prod --limit=1 --format=value(timestamp)
+
+# Sample a landing page and an anonymous team page; frames, timings and samples.json
+# land in .artifacts/cold-start/<timestamp>-<label>/.
+node scripts/coldStart.ts before \
+  https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-hcfc7y3kha-ue.a.run.app \
+  lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-00053-st6 \
+  lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc / /teams
+```
+
+`COLD_START_IDLE_MINUTES` can raise the wait; the script refuses anything below sixteen minutes. The
+`/teams` sample is anonymous, so the server answers the cold request with the `/auth` redirect and the
+browser paints the sign-in page on the same instance; it measures the cold first byte, not a signed-in
+team roster. Nothing keeps an instance warm, and no minimum instance count is set.
+
+**Reproducing the breakdown.** Match each instance's three lifecycle entries, then read the probe
+request's own duration:
+
+```sh
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc" AND (textPayload:"Starting new instance" OR textPayload:"Listening on" OR textPayload:"STARTUP HTTP probe succeeded")' \
+  --project=lineupkeep-prod --limit=200 --format="table(timestamp,labels.instanceId,textPayload)" --freshness=1d
+```
+
+`samples.json` records client TTFB, paint entries, LCP, load and the frames captured by the browser's
+screencast. A page that has not painted cannot be captured with a screenshot, so the 200 ms and 1 s
+frames are the unchanged frame from before the navigation: that is what the blank first impression is.
+
+On 2026-10-31 the owner chose to keep the Cloud Run origin and accept the
+container-bound first paint rather than add an edge cache. Revisit that only
+with a registered domain and measured traffic that makes the edge worth its
+cost and the auth-origin change.
 
 ### Retention and the zero bill
 

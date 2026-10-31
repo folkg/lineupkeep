@@ -11,6 +11,7 @@ import {
   hostedBrowserContainer,
   hostedBrowserTemplate,
   partitionEnvironment,
+  webContainer,
 } from "./hosts/cloudRun.ts";
 import { containerRelayNetwork } from "./hosts/localContainer.ts";
 import { DatabaseDeployment } from "./services/DatabaseDeployment.ts";
@@ -71,6 +72,15 @@ it("keeps Cloud Run request-billed with CPU allocated only during requests", () 
   const container = cloudRunContainer();
 
   expect(container.resources.cpuIdle).toBe(true);
+});
+
+it("probes the web service every second so readiness is not delayed by a probe cycle", () => {
+  expect(webContainer().startupProbe).toEqual({
+    httpGet: { path: "/", port: 8080 },
+    periodSeconds: 1,
+    failureThreshold: 60,
+  });
+  expect(cloudRunContainer().startupProbe.periodSeconds).toBe(5);
 });
 
 it("runs one hosted browser per instance inside Cloud Run IAM", () => {

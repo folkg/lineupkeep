@@ -13,6 +13,7 @@ export default ({ production }: { readonly production?: boolean }): KnipConfig =
       playwright: false,
       entry: [
         ".dependency-cruiser.ts!",
+        "scripts/coldStart.ts!",
         "e2e/playwright.config.ts",
         "e2e/mcpAccept.config.ts",
         "e2e/mcpAccept.local.ts",

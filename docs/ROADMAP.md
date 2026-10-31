@@ -247,13 +247,20 @@ wrote 377 span lines before and writes six wide events now.
 
 ### E1 — Cold start is a white page
 
-The first paint waits for the container because everything is server-rendered.
+Shipped 2026-10-31. [The runbook](deployment.md#cold-start-and-the-waking-shell-2026-10-31) owns the
+numbers and the reproduction. Most of the wait was a five-second startup-probe interval, not rendering:
+the web container now probes every second, and a render that stalls past two seconds answers with a static
+waking document instead of a blank tab. Median cold TTFB fell from 6.53 s to 3.37 s and first contentful
+paint from 6.81 s to 3.65 s. The residue is Cloud Run's container start plus the network round trip; the
+owner kept the Cloud Run origin rather than adding an edge cache, so a genuinely cold visit still cannot
+paint before the container starts.
 
-- [ ] Measure cold start, p50 and p95, from a cold revision and after scale-to-zero.
-- [ ] Render a static shell immediately with an honest "waking" state, rather than a blank page or a
+- [x] Measure cold start, p50 and p95, from a cold revision and after scale-to-zero.
+- [x] Render a static shell immediately with an honest "waking" state, rather than a blank page or a
       spinner that never resolves.
-- [ ] Consider showing the last read from local storage while waiting, marked as stale rather than
-      presented as current.
+- [x] Consider showing the last read from local storage while waiting, marked as stale rather than
+      presented as current. Rejected: local storage is empty on a first visit, which is the case that
+      matters, and a roster read shown beside a live action would compete with the action it describes.
 
 **Verify**: measured time to first paint from a genuinely cold state, and the shell never claims data it
 cannot substantiate. `M`

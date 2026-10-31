@@ -280,7 +280,7 @@ export function cloudRunHost(
           serviceAccount: account.email,
           containers: [
             {
-              ...cloudRunContainer(),
+              ...webContainer(),
               image,
               env: [
                 ...runtimeEnv,
@@ -349,6 +349,14 @@ export function hostedBrowserTemplate(): {
     timeout: "780s",
     maxInstanceRequestConcurrency: 1,
     scaling: { minInstanceCount: 0, maxInstanceCount: 2 },
+  };
+}
+
+export function webContainer(): ReturnType<typeof cloudRunContainer> {
+  const container = cloudRunContainer();
+  return {
+    ...container,
+    startupProbe: { ...container.startupProbe, periodSeconds: 1, failureThreshold: 60 },
   };
 }
 
