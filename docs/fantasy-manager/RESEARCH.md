@@ -1578,3 +1578,230 @@ so a team's roster and its trends still cost one provider read. Search already r
 page and adds `transactions` to the same request. No second trend request exists, because the
 provider rejects the dedicated resource and the node is available beside the rows the product
 already reads.
+
+## Live trade probes (2026-10-31)
+
+A read-only pass asked whether the provider's own API can carry a trade: whether the published feed
+carries proposals, what an accepted trade looks like in it, whether a proposal can be made through
+the API, what each owner league's rules are, and who has to act. Every request below was a `GET`
+against the stored session of the owner's linked account, issued through the application's
+credential service and `PublicInternet`. **No `POST`, `PUT`, `PATCH`, or `DELETE` was sent to the
+provider.** The only non-`GET` method used was `OPTIONS`, which changes nothing. The five owner
+leagues are named by sport and rule rather than by key; no league key, team key, player key, player
+name, manager name, transaction key, or crumb is retained here.
+
+### The feed carries proposals, but only for the manager's own teams
+
+`pending_trade` is a real transaction type the provider publishes, and the plain league feed never
+includes it. In the one league that had a live offer, `transactions;count=50` returned 50 rows and
+none of them was a `pending_trade`; the offer appeared only when the read asked for that type and
+scoped it to the owner's own team.
+
+| Request shape                                                            | Host | Status | Result                                                           |
+| ------------------------------------------------------------------------ | ---- | ------ | ---------------------------------------------------------------- |
+| `league/{league}/transactions;count=50`                                  | ro   | 200    | 50 rows; `add`, `add/drop`, `drop`, and in one league `trade`    |
+| `league/{league}/transactions;type=trade;count=50`                       | ro   | 200    | trades only (10 in the trading league, 0 in the other four)      |
+| `league/{league}/transactions;types=trade;count=50`                      | ro   | 200    | the same rows as `type=trade`; only the echoed URI differs       |
+| `league/{league}/transactions;type=add;count=50`                         | ro   | 200    | the add/drop family, trades excluded; not a strict single type   |
+| `league/{league}/transactions;type=bogus`                                | ro   | 200    | zero rows; an unknown type is accepted and matches nothing       |
+| `league/{league}/transactions;type=pending_trade`                        | ro   | 400    | `Team key must be specified to view pending_trade transactions.` |
+| `league/{league}/transactions;types=pending_trade`                       | ro   | 400    | same refusal                                                     |
+| `league/{league}/transactions;type=pending_trade;team_key={own}`         | ro   | 200    | **one row: the live offer, status `proposed`**                   |
+| `league/{league}/transactions;types=pending_trade;team_key={own}`        | ro   | 200    | identical                                                        |
+| `league/{league}/transactions;types=waiver,pending_trade;team_key={own}` | ro   | 200    | identical; no pending waiver claim was open                      |
+| `league/{league}/transactions;type=pending_trade;team_key={proposer}`    | ro   | 400    | `You are not a manager of this team.`                            |
+| `league/{league}/transactions;type=trade;team_key={own};count=50`        | ro   | 200    | zero rows in the trading league; the owner is in none of its ten |
+| `league/{league}/transactions;type=trade;team_key={other trader}`        | ro   | 200    | 6 rows, including the trade that team is party to                |
+| `transaction/{transaction_key}` for the proposal                         | ro   | 200    | the same record as the collection row                            |
+| `transaction/{transaction_key}` for a completed trade                    | ro   | 200    | the same record as the collection row                            |
+
+Two consequences follow. A proposal is visible to the account that manages one of its two teams, and
+to nobody else: the same request against the proposer's team was refused with `You are not a manager
+of this team.` An owner-scoped product therefore sees its own offers and can never see the league's
+other pending trade traffic. That is the correct scope for us, but it means a "league trade wire" is
+not available. Only the incoming direction was observed; the read is scoped to the owner's team, so
+an offer the owner proposed should appear through the same request, but that is unproven.
+
+### What a proposal looks like
+
+The proposal record is not a completed transaction with a different status. It is a distinct shape:
+
+```text
+transaction_key (string), type: pending_trade, status: proposed,
+trader_team_key, trader_team_name, tradee_team_key, tradee_team_name,
+trade_proposed_time (epoch seconds as a string), tradee_unused_roster_spots (number),
+current_login_can_respond (number), trade_roster_reflect_key (string), trade_note (string),
+picks[] { pick { source_team_key, source_team_name, destination_team_key,
+                 destination_team_name, original_team_key, original_team_name, round } },
+players[] { player_key, player_id, name, editorial_team_abbr, display_position, position_type,
+            transaction_data { type: pending_trade, source_type: team, source_team_key,
+                               source_team_name, destination_type: team,
+                               destination_team_key, destination_team_name } }
+```
+
+The observed offer was two players and two draft picks, each with a source and a destination team,
+proposed to the owner's team (the owner is `tradee`), sixteen and a half hours old, with
+`current_login_can_respond: 1` and `tradee_unused_roster_spots: 0`. Its `trade_note` was empty.
+
+Three differences from a completed transaction matter for decoding. A proposal carries no
+`timestamp` and no `transaction_id`; the time is `trade_proposed_time`. Its movements and its
+transaction type are both `pending_trade`, not `trade`. And `transaction_key` uses the `pt` form
+(`{game}.l.{league}.pt.{id}`), which is the key the documented accept, reject, and cancel calls take.
+
+### What an accepted trade looks like
+
+The trading league published ten completed trades. Every one carried `type: trade`,
+`status: successful`, a `timestamp`, and both `trader_team_key` and `tradee_team_key` with inline
+names. Every movement was `transaction_data.type: trade` with a source team and a destination team,
+so both ends of each player are published and no direction has to be inferred. The ten trades by
+players and picks:
+
+| Players | Picks | Count |
+| ------- | ----- | ----- |
+| 6       | 6     | 1     |
+| 4       | 4     | 1     |
+| 2       | 2     | 5     |
+| 2       | 4     | 1     |
+| 1       | 2     | 1     |
+| 0       | 4     | 1     |
+
+Draft picks are published as `picks`, never as player movements: one trade moved four picks and no
+players at all, and another moved one player for two picks. A pick carries `round` and the source,
+destination, and original team keys and names. There is no draft year and no overall pick number, so
+a traded pick cannot be identified beyond its round and the teams involved. This confirms the
+accepted-trade decoding already in the adapter, including that a pick-only trade is complete.
+
+The plain `count=50` window held only five of those ten trades, because it mixes all types. Reading
+trades therefore needs the `type=trade` filter, and the filter's window is independent of the
+all-types window.
+
+### The write surface is documented, and untried
+
+The provider's current published documentation describes a full trade write surface on the same v2
+API the read path uses. None of it was exercised, because every one of these calls would write.
+
+| Documented call               | Method and resource                                                          | Tried |
+| ----------------------------- | ---------------------------------------------------------------------------- | ----- |
+| Propose                       | `POST /fantasy/v2/league/{league_key}/transactions`                          | no    |
+| Accept                        | `PUT /fantasy/v2/transaction/{key}`, `action=accept`                         | no    |
+| Reject                        | `PUT /fantasy/v2/transaction/{key}`, `action=reject`                         | no    |
+| Commissioner allow / disallow | `PUT /fantasy/v2/transaction/{key}`, `action=allow` or `action=disallow`     | no    |
+| Vote against                  | `PUT /fantasy/v2/transaction/{key}`, `action=vote_against`, `voter_team_key` | no    |
+| Cancel                        | `DELETE /fantasy/v2/transaction/{key}`, only before acceptance               | no    |
+
+The documented proposal body, with one `<player>` per asset:
+
+```xml
+<fantasy_content>
+  <transaction>
+    <type>pending_trade</type>
+    <trader_team_key>{team}</trader_team_key>
+    <tradee_team_key>{team}</tradee_team_key>
+    <trade_note>{note}</trade_note>
+    <players>
+      <player>
+        <player_key>{player}</player_key>
+        <transaction_data>
+          <type>pending_trade</type>
+          <source_team_key>{team}</source_team_key>
+          <destination_team_key>{team}</destination_team_key>
+        </transaction_data>
+      </player>
+    </players>
+  </transaction>
+</fantasy_content>
+```
+
+The responding calls `PUT` the pending trade's own key with `<action>accept</action>` (or `reject`,
+`allow`, `disallow`, `vote_against`) and an optional `trade_note`.
+
+That body carries players only. It has no `picks` element and no documented way to name a draft
+pick, so a pick-inclusive proposal — every one of the ten completed trades above moved at least one
+pick — has no published request shape at all.
+
+What the read-only pass does establish about the write path:
+
+- The write host (`pub-api-rw`) serves the same transactions collection. For `count=50`,
+  `type=trade`, and `type=pending_trade;team_key={own}` in every league the two hosts returned the
+  same bodies, differing only in the provider's per-request `time` field, which varies on every
+  call. A trade read and a trade write can share one origin.
+- The session can mint a crumb: `GET /fantasy/v3/getCrumb` on the service host answered 200 with a
+  non-empty `service.crumb`. That is the same prerequisite the working lineup write already uses.
+- `OPTIONS` on the transactions collection and on the roster resource answered 200 on both hosts
+  with no `Allow` header, so it says nothing either way about which methods are served.
+
+So the documented write surface is reachable in principle, but "the API can propose a trade" is not
+an observed fact. It stays untried until someone deliberately sends one proposal.
+
+### League trade rules
+
+`GET /fantasy/v2/league/{league}/settings` publishes the three trade fields in every owner league.
+All five are inside their trading window on 2026-10-31.
+
+| League             | `trade_end_date` | `trade_ratify_type` | `trade_reject_time` |
+| ------------------ | ---------------- | ------------------- | ------------------- |
+| football           | 2026-11-28       | `vote`              | 2                   |
+| hockey, vote       | 2027-03-03       | `vote`              | 2                   |
+| hockey, none       | 2027-03-03       | `none`              | 0                   |
+| hockey, commish #1 | 2027-03-03       | `commish`           | 2                   |
+| hockey, commish #2 | 2027-03-03       | `commish`           | 2                   |
+
+`none` is a published value meaning no ratification step. It is the only owner league with completed
+trades in the window, and the league where the live offer is waiting. The adapter currently maps it
+to `unknown`, which reads as "a rule this server cannot name" rather than "no review". That is a
+decode gap to close, not a missing field.
+
+### The website routes a person uses
+
+The league web page links three trade routes per league, which are the only verified trade
+destinations the provider publishes:
+
+| Route                                  | Purpose                                |
+| -------------------------------------- | -------------------------------------- |
+| `/{sport}/{league_id}/trade_hub`       | propose, review, and respond to trades |
+| `/{sport}/{league_id}/playertrades`    | completed player trades                |
+| `/{sport}/{league_id}/showtradedpicks` | traded draft picks                     |
+
+None is parameterized by player, counterparty, or pending trade, so none can prefill a proposal. A
+link can open the hub; it cannot open a filled-in offer.
+
+### What this contradicts
+
+`MCP.md` states that the provider publishes no proposals resource and that pending trade offers are
+not available to any client. That is no longer true of the provider: a `pending_trade` row is
+published to the managing account, with the parties, both ends of every movement, the picks, and the
+key the respond calls take. It remains true of our tools, which do not request the type. The
+sentence has to be corrected when proposals are implemented rather than left to mislead the next
+reader.
+
+### Verdict
+
+**Partially supported with a person completing it.**
+
+Reading is supported and observed: proposals and accepted trades are both published, with two-sided
+movements, teams, and picks, and the proposal record carries the key the respond calls take. Writing
+is documented but unproven, and even if proposing works, the other manager must accept it in their
+own provider session, which no design of ours can perform. A pick-inclusive proposal has no
+documented write shape at all. Our app can therefore carry a trade up to the point where a person
+acts, and cannot carry one past it.
+
+### What the review screen should offer for trades
+
+Offer, in this order:
+
+1. **Read the owner's own proposals.** A bounded `type=pending_trade;team_key={own}` read beside the
+   existing completed-trade read, decoded into the same two-sided movement and pick vocabulary, with
+   `status`, `trade_proposed_time`, the two parties, and whether this session can respond. This is
+   proven and is the part that makes agent-proposed trades reviewable at all.
+2. **Show the league's rules beside the offer.** Ratification (`vote`, `commissioner`, or none), the
+   objection window in days, and the trade end date, so the screen can say who acts next and whether
+   trading is still open. `none` must read as "no review", not `unknown`.
+3. **Open the league trade hub.** A verified, league-scoped link with no query parameters, labelled
+   as the place to act. It cannot prefill, and the screen must say so.
+4. **State the handoff plainly.** For an incoming offer, the owner accepts or rejects on the
+   provider; for an offer the owner makes, the counterparty does. The screen tracks the offer's
+   status; it does not claim to complete it.
+
+Do not build: an accept, reject, cancel, or vote button; a "propose" action that depends on the
+undocumented write path; pick selection in a proposal form; or any league-wide trade feed. Each
+either writes unproven, or promises data the provider will not show us.
