@@ -1,9 +1,8 @@
-import { fileURLToPath } from "node:url";
-
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import { Context, Effect, Layer } from "effect";
+
+import { migratedDatabaseImage } from "#database/internal/DatabaseTest.ts";
 
 import { AuthDatabase } from "./AuthDatabase.ts";
 import { authRelations } from "./AuthDatabase.ts";
@@ -15,13 +14,12 @@ export class AuthDatabaseStatements extends Context.Service<
 
 export const AuthDatabaseTest = Layer.effectContext(
   Effect.gen(function* () {
+    const loadDataDir = yield* Effect.promise(() => migratedDatabaseImage);
     const client = yield* Effect.acquireRelease(
-      Effect.sync(() => new PGlite()),
+      Effect.sync(() => new PGlite({ loadDataDir })),
       (client) => Effect.promise(() => client.close()),
     );
-    yield* Effect.promise(() =>
-      migrate(drizzle({ client }), { migrationsFolder: migrationsFolderPath }),
-    );
+    yield* Effect.promise(() => client.waitReady);
     const statements: Array<string> = [];
     const database = drizzle({
       client,
@@ -37,5 +35,3 @@ export const AuthDatabaseTest = Layer.effectContext(
     );
   }),
 );
-
-const migrationsFolderPath = fileURLToPath(new URL("../../../../migrations", import.meta.url));
