@@ -84,7 +84,38 @@ instrumentation.
 **Verify**: a known run id is found in Logs Explorer with its provider operations, and a deliberately
 failed run raises the alert. `S`
 
+Shipped and deployed: spans export as structured JSON with Cloud Run's trace id, and the alert policy
+`Lineupkeep failed or uncertain lineup runs` is enabled. Reading the result showed the shape is wrong, so
+group D replaces the span-per-line writer with real traces and one wide event per unit of work.
+
 ---
+
+### A6 — Round 9 follow-ups
+
+What the client filed after retesting the deploy, minus the emergency handled separately.
+
+- [ ] Populate the roster transaction deadline for every league. Two of the owner's leagues report
+      `intraday`; three report `not_set` where the provider does have a value, so the decode is incomplete.
+- [ ] Interpret it into a provider-neutral rule, `same_day | next_day | weekly_lock`, so a client does not
+      need provider folklore to know that `intraday` means same-day.
+- [ ] Look at dating a pool candidate's schedule. Our schedule read is roster-scoped, so a free agent whose
+      professional team has no rostered player cannot be dated. Find out whether any request shape covers it
+      and record the verdict either way.
+- [ ] Reduce the ordinary summary group set so a six-group call fits instead of narrowing.
+
+**Verify**: every owner league reports a timing rule, and the schedule verdict is written down. `S`
+
+### A7 — Reserve-slot eligibility
+
+The client wants to find an injured player sitting in an active slot while a reserve slot stands open, which
+is a free roster spot.
+
+- [ ] **decide** how eligibility is expressed: per-player eligibility on roster rows, or accepted status codes
+      per reserve position in the roster rules. Their proposal is either; ours should be one, not both.
+- [ ] Publish it, so a client can tell that a day-to-day player qualifies for one reserve type and not
+      another, and check it against the owner's real cases.
+
+**Verify**: the owner's four known cases classify correctly, including the one that must not qualify. `M`
 
 ## B. GCP configuration and cost
 
@@ -111,7 +142,7 @@ work.
 - [ ] Record a skipped outcome with its reason.
 
 **Verify**: a fixture whose game moves into today after the sweep proves the run happens, because a wrong
-skip is worse than a wasted read. Measure the request saving over a real week. `M`, depends on E1.
+skip is worse than a wasted read. Measure the request saving over a real week. `M`, depends on F1.
 
 ---
 
@@ -134,17 +165,65 @@ approval. `M`
 
 Every chunk pays this, currently two to four minutes.
 
-- [ ] Measure per-project and per-file timings and name the long poles.
+- [ ] Measure per-project and per-file timings and name the long poles. A first attempt restructured the
+      entry point into parallel steps without changing what dominates; it measured 142 s against a 128 s
+      baseline and was reverted. The test step is roughly 124 s of that, so the work is inside the suite.
 - [ ] Cut what is measurable: redundant builds, repeated setup, work that could parallelise.
 - [ ] Keep the discipline: no retries, no skips, no inflated timeouts.
 
-**Verify**: measured before and after, same suites, same counts. `M`
+**Verify**: measured before and after, same suites, same counts. `M`. Note that the entry-point work is
+already done and did not help; the remaining gain has to come from the node project itself.
 
 ---
 
-## D. Cold start and the edge question
+## D. Wide events and real traces
 
-### D1 — Cold start is a white page
+The owner read the production logs and found them fragmented: a request arrives as dozens of separate
+single-line entries instead of one wide event. That is a fair reading of what we shipped. Each completed span
+was written as its own log line, so the shape is span-per-line rather than one event per unit of work, and
+nothing reached Cloud Trace as a trace.
+
+The intended shape is a canonical wide event per request and per lineup run, with every attribute the work
+touched inside it, plus real spans in Cloud Trace for the parts worth a waterfall.
+
+### D1 — Send spans to Cloud Trace, not to the log
+
+- [ ] Export through OTLP to Google Cloud's Telemetry API rather than hand-writing span lines to stdout.
+      Cloud Trace accepts OTLP directly, so this removes our bespoke writer instead of adding to it.
+- [ ] Keep the existing Effect spans and attributes as the source; this changes the exporter, not the
+      instrumentation.
+- [ ] Confirm a request appears as one trace with a service waterfall, and that a lineup run's provider
+      calls appear as child spans of the run.
+- [ ] Check what Alchemy already provides before writing an exporter by hand; if the stack can inject the
+      telemetry configuration, prefer that over application code that hard-codes endpoints.
+
+**Verify**: a real request and a real lineup run viewed as traces in Cloud Trace, with the provider children
+attached. `M`
+
+### D2 — One wide event per request and per run
+
+- [ ] Emit a single structured log entry per HTTP request and per lineup run, carrying the request id, the
+      route or tool, the actor, the connection and team, the counts that matter, the durations, the outcome,
+      and the trace id, so a person reading logs sees one line per unit of work instead of a dozen.
+- [ ] Keep the existing redaction and suppression rules; a wide event must never carry a token, cookie,
+      crumb, note body, email address or provider payload.
+- [ ] Decide what stays a separate line: genuinely exceptional errors, and anything outside a request, such
+      as startup and shutdown.
+- [ ] Keep the failed-run alert working from the wide event rather than from a span line.
+
+**Verify**: one grep for a request id returns exactly one log entry, and its trace id opens the correct trace.
+`M`
+
+### D3 — Retire what this replaces
+
+- [ ] Remove the bespoke span-to-stdout writer and the tests that pin its shape.
+- [ ] Update the runbook queries, which currently describe span lines.
+
+**Verify**: no span-shaped log line remains, and the runbook's queries still find a run. `S`
+
+## E. Cold start and the edge question
+
+### E1 — Cold start is a white page
 
 The first paint waits for the container because everything is server-rendered.
 
@@ -157,7 +236,7 @@ The first paint waits for the container because everything is server-rendered.
 **Verify**: measured time to first paint from a genuinely cold state, and the shell never claims data it
 cannot substantiate. `M`
 
-### D2 — Evaluate a Cloudflare split
+### E2 — Evaluate a Cloudflare split
 
 Separate from the GCP settings wins above, because it is a real project with real complexity.
 
@@ -171,22 +250,22 @@ Separate from the GCP settings wins above, because it is a real project with rea
 **Verify**: one read path served from the edge, with measured latency and a cost comparison against B1's
 numbers. `M`, depends on C1.
 
-### D3 — Alchemy idiom audit
+### E3 — Alchemy idiom audit
 
 - [ ] Review the stacks against how Alchemy expects resources, outputs and state to be expressed.
-- [ ] Fix what is not idiomatic, particularly anything that would make D2 awkward.
+- [ ] Fix what is not idiomatic, particularly anything that would make E2 awkward.
 - [ ] Keep the state-database rules from the deployment runbook intact.
 
 **Verify**: a review with each deviation fixed or justified, and a clean deploy with no drift. `M`
 
 ---
 
-## E. Schedule cache
+## F. Schedule cache
 
 The provider publishes no season or team schedule; the only schedule fact is one opponent per rostered
 player per date or scoring week.
 
-### E1 — Cache the professional-team calendar
+### F1 — Cache the professional-team calendar
 
 - [ ] **decide** the source: derive from our own roster reads, or add an external schedule for a whole
       season with start times. Recommendation: derive first, add an external source only when a feature
@@ -207,9 +286,9 @@ opponents and home or away; a postponed game stays unresolved until an observed 
 
 ---
 
-## F. Provider boundary and simplification
+## G. Provider boundary and simplification
 
-### F1 — Stop provider-shaped ideas leaking into generic code
+### G1 — Stop provider-shaped ideas leaking into generic code
 
 Weekly versus daily coverage, league types, waiver shapes and stat quirks are provider facts. A second
 provider must not require editing generic modules.
@@ -222,7 +301,7 @@ provider must not require editing generic modules.
 **Verify**: a deliberate violation is rejected, and adding a fake provider with different coverage and
 league types requires no edit outside the provider. `M`
 
-### F2 — Ponytail discipline
+### G2 — Ponytail discipline
 
 The owner's standing instruction, applied as ongoing practice rather than a one-off pass: the smallest
 change that fully solves the task, delete before adding, no speculative abstraction, no option nobody
@@ -235,13 +314,13 @@ that prevents data loss, security, accessibility, or anything explicitly request
 
 ---
 
-## G. Foldkit migration
+## H. Foldkit migration
 
 The preview is already merged into the rush-hour starter, so the shape is proven. The final release is
 expected shortly; adopt it when it lands. This removes the TanStack advisory entirely, which is the
 current publication blocker.
 
-### G1 — Adopt in the sample app and evaluate
+### H1 — Adopt in the sample app and evaluate
 
 - [ ] Bring the rush-hour sample onto the released version and record what is better and worse in practice.
 - [ ] Code splitting: what the bundle looks like without it, and whether it can be recovered.
@@ -250,25 +329,25 @@ current publication blocker.
 **Verify**: a running sample with feature parity, plus numbers on both concerns and a recommendation.
 `M`, blocked on the final release.
 
-### G2 — Migrate Lineupkeep
+### H2 — Migrate Lineupkeep
 
 - [ ] Migrate in slices, keeping the product working throughout.
 - [ ] Preserve the provider boundary, the MCP surface and every acceptance test.
 
-**Verify**: full end-to-end parity plus the measured bundle and interaction numbers from G1. `XL`, split
+**Verify**: full end-to-end parity plus the measured bundle and interaction numbers from H1. `XL`, split
 before delegating.
 
-### G3 — Close the publication gate
+### H3 — Close the publication gate
 
 - [ ] Remove the temporary backport once the framework no longer carries the vulnerable transport.
 - [ ] Update [release-readiness.md](release-readiness.md) and the README gate.
 
 **Verify**: the built-app regression test that reproduces the advisory no longer applies, and no vulnerable
-`start-server-core` remains installed. `S`, depends on G2.
+`start-server-core` remains installed. `S`, depends on H2.
 
 ---
 
-## H. Transactions review
+## I. Transactions review
 
 The whole group sits after the Foldkit migration, deliberately: it is the largest new surface in the product
 and building it before the migration means building it twice.
@@ -279,7 +358,7 @@ before a browser sees it. No link we construct survives either.
 
 **What it is:** the agent proposes, a person decides, the server writes.
 
-### H1 — Trade probe
+### I1 — Trade probe
 
 - [ ] Read-only: does the league transaction feed publish pending trade proposals, and what does the trade
       review setting actually permit.
@@ -287,7 +366,7 @@ before a browser sees it. No link we construct survives either.
 
 **Verify**: a written finding with the request shapes tried. `S`
 
-### H2 — Proposals and the tool
+### I2 — Proposals and the tool
 
 - [ ] One call covers every team: a list of proposals, each naming a team, the players to add or drop, an
       optional FAAB bid, and a required short reason. One link back, to one review screen.
@@ -300,7 +379,7 @@ before a browser sees it. No link we construct survives either.
 **Verify**: an account-wide proposal set read back from storage, with a stale item marked and nothing
 written upstream. `M`
 
-### H3 — The screen
+### I3 — The screen
 
 - [ ] Grouped by team, with a quiet section for teams that have nothing proposed.
 - [ ] The reason beside each move, and the drop beside the add so a swap reads as one decision.
@@ -311,7 +390,7 @@ written upstream. `M`
 **Verify**: a six-team proposal set reviewed on a phone-sized viewport, with a stale item and an excluded
 item both behaving correctly. `M`
 
-### H4 — Execution
+### I4 — Execution
 
 - [ ] Writes through the provider's transaction endpoint, using the session and crumb the lineup writer
       already uses.
@@ -321,7 +400,7 @@ item both behaving correctly. `M`
 **Verify**: a real add and drop on a disposable league, with per-item outcomes and the provider's own
 transaction feed agreeing. `M`
 
-## I. Security and privacy audit
+## J. Security and privacy audit
 
 Distinct from the dependency audit, which is done.
 
@@ -338,11 +417,11 @@ Distinct from the dependency audit, which is done.
 
 ---
 
-## J. MCP client contract
+## K. MCP client contract
 
 Standing friction with the external client, and the verification gap that let it persist.
 
-### J1 — An MCP acceptance command
+### K1 — An MCP acceptance command
 
 Scope problems have been argued from two sides without a shared test. Make them testable.
 
@@ -356,7 +435,7 @@ Scope problems have been argued from two sides without a shared test. Make them 
 **Verify**: the command exercised against a local instance and the deployed origin, with a recorded pass
 for a full grant and for a reduced grant. `M`
 
-### J2 — Reduce the scope set
+### K2 — Reduce the scope set
 
 Seven scopes is more than the product needs, and a client holding a subset has hit repeated friction.
 
@@ -368,10 +447,10 @@ Seven scopes is more than the product needs, and a client holding a subset has h
       authorization-server document lists it.
 - [ ] Document the resulting set for client authors.
 
-**Verify**: J1's command passes for the reduced set, and each tool's required scope is unchanged in
-practice or weaker with a stated reason. `M`, depends on J1.
+**Verify**: K1's command passes for the reduced set, and each tool's required scope is unchanged in
+practice or weaker with a stated reason. `M`, depends on K1.
 
-### J3 — Grants should survive a deploy
+### K3 — Grants should survive a deploy
 
 The client reports reconnecting after every deployment. That should not be necessary: signing keys are
 persisted, so access tokens survive a revision change.
@@ -385,7 +464,7 @@ persisted, so access tokens survive a revision change.
 
 ---
 
-## K. Onboarding
+## L. Onboarding
 
 - [ ] Map the first-run path from landing to a connected, enabled team and count the steps.
 - [ ] Place the Google-account workaround where someone actually gets stuck, not only on the connections
@@ -398,16 +477,16 @@ after. `M`
 
 ---
 
-## L. Solver and product expansion
+## M. Solver and product expansion
 
-### L1 — Positional scarcity
+### M1 — Positional scarcity
 
 - [ ] Compute a league-wide scarcity measure periodically rather than per run, provider-neutrally.
 - [ ] Use it as the foundation for transaction proposals, not as a score multiplier.
 
 **Verify**: a fixture league where a thin position changes the recommendation for a documented reason. `M`
 
-### L2 — Category-aware objective
+### M2 — Category-aware objective
 
 **decide**: whether the objective should be expected categories won rather than the current community start
 rate. A product choice, not a defect.
@@ -415,25 +494,25 @@ rate. A product choice, not a defect.
 **Verify**: a league where the two objectives recommend different lineups, with the difference explained.
 `L`
 
-### L3 — Baseball and basketball
+### M3 — Baseball and basketball
 
 Starting-lineup rules for all four sports are declared and tested; stat categories, games and innings limits,
 and provider request shapes are not built.
 
 **Verify**: a real league in each sport, read and planned correctly. `L`
 
-### L4 — Second provider
+### M4 — Second provider
 
-The seam supports it; none is planned. Adding one is an adapter plus a registry entry, provided F1 is done.
+The seam supports it; none is planned. Adding one is an adapter plus a registry entry, provided G1 is done.
 
 **Verify**: a second adapter reading and planning one league without touching generic modules. `L`,
-depends on F1.
+depends on G1.
 
 ---
 
-## M. Operations and compliance
+## N. Operations and compliance
 
-### M1 — Restore policy
+### N1 — Restore policy
 
 The drill proved point-in-time restore produces a usable database. What remains is policy.
 
@@ -442,14 +521,14 @@ The drill proved point-in-time restore produces a usable database. What remains 
 
 **Verify**: the written policy plus one rehearsal that follows it end to end. `S`
 
-### M2 — Domain and production email
+### N2 — Domain and production email
 
 - [ ] Acquire a domain and move the sender off the Resend test address.
 - [ ] Verify delivery to a non-owner address and the action-required path.
 
 **Verify**: a real reminder delivered to a real inbox that is not the owner's. `S`
 
-### M3 — Muse acceptance against the deployed origin
+### N3 — Muse acceptance against the deployed origin
 
 - [ ] Run the client's rounds against the deployed server rather than a local instance.
 - [ ] Confirm paging, cursors, scope enforcement and pending outcomes behave the same there.
@@ -458,9 +537,9 @@ The drill proved point-in-time restore produces a usable database. What remains 
 
 ---
 
-## N. Naming
+## O. Naming
 
-### N1 — Rename to lineupgrade
+### O1 — Rename to lineupgrade
 
 Deferred by the owner, but placed deliberately: immediately before the redesign, while nothing is public
 and no domain exists.
@@ -471,7 +550,7 @@ and no domain exists.
 
 ---
 
-## O. Redesign exploration
+## P. Redesign exploration
 
 Later by the owner's choice, and after the framework migration so it is not done twice.
 
@@ -484,9 +563,9 @@ to explore, `L` to apply.
 
 ---
 
-## P. Standing loops
+## Q. Standing loops
 
-### P1 — Client feedback
+### Q1 — Client feedback
 
 Not a project. External clients file findings through the product; triage them, fix what is real, and record
 why anything is declined. Currently zero open.
@@ -498,13 +577,14 @@ why anything is declined. Currently zero open.
 | ID  | Decision                                                             | Blocks |
 | --- | -------------------------------------------------------------------- | ------ |
 | D1  | Staging model for CI: long-lived or per-branch                       | C1     |
-| D2  | Cloudflare split, or make GCP cold start good enough                 | D2     |
-| D3  | Schedule cache source: derived from our reads, or external           | E1     |
-| D4  | Retention, RPO/RTO and recovery owner                                | M1     |
-| D5  | Rename to lineupgrade, and when                                      | N1     |
-| D6  | Solver direction: positional scarcity first, or category-aware first | L1, L2 |
-| D7  | ~~Transactions read-only or executed~~ settled: H owns it            | —      |
-| D8  | Passkeys as a sign-in option                                         | future |
+| D2  | Cloudflare split, or make GCP cold start good enough                 | E2     |
+| D3  | Schedule cache source: derived from our reads, or external           | F1     |
+| D4  | Retention, RPO/RTO and recovery owner                                | N1     |
+| D5  | Rename to lineupgrade, and when                                      | O1     |
+| D6  | Solver direction: positional scarcity first, or category-aware first | M1, M2 |
+| D7  | ~~Transactions read-only or executed~~ settled: group I owns it      | —      |
+| D8  | Reserve-slot eligibility: per-player, or per reserve position        | A7     |
+| D9  | Passkeys as a sign-in option                                         | future |
 
 Ruled already, recorded so they are not reopened: Foldkit before any redesign; the transactions review as
 one group after Foldkit, not split around it; the rename before the redesign; the visual redesign is
