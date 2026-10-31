@@ -20,6 +20,7 @@ import { Route as ApiTelemetryRouteImport } from './routes/api/telemetry'
 import { Route as RunsRunIdRouteImport } from './routes/runs.$runId'
 import { Route as TeamsIndexRouteImport } from './routes/teams.index'
 import { Route as TeamsTeamIdRouteImport } from './routes/teams.$teamId'
+import { Route as TransactionsSetIdRouteImport } from './routes/transactions.$setId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDevProviderLoginRouteImport } from './routes/api/dev/provider-login'
 import { Route as ApiInternalLineupWorkerRouteImport } from './routes/api/internal/lineup-worker'
@@ -79,6 +80,11 @@ const TeamsTeamIdRoute = TeamsTeamIdRouteImport.update({
   path: '/teams/$teamId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TransactionsSetIdRoute = TransactionsSetIdRouteImport.update({
+  id: '/transactions/$setId',
+  path: '/transactions/$setId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/api/telemetry': typeof ApiTelemetryRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
+  '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams/': typeof TeamsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/api/telemetry': typeof ApiTelemetryRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
+  '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams': typeof TeamsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   '/api/telemetry': typeof ApiTelemetryRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
+  '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams/': typeof TeamsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/api/telemetry'
     | '/runs/$runId'
     | '/teams/$teamId'
+    | '/transactions/$setId'
     | '/teams/'
     | '/api/auth/$'
     | '/api/dev/provider-login'
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
     | '/api/telemetry'
     | '/runs/$runId'
     | '/teams/$teamId'
+    | '/transactions/$setId'
     | '/teams'
     | '/api/auth/$'
     | '/api/dev/provider-login'
@@ -189,6 +200,7 @@ export interface FileRouteTypes {
     | '/api/telemetry'
     | '/runs/$runId'
     | '/teams/$teamId'
+    | '/transactions/$setId'
     | '/teams/'
     | '/api/auth/$'
     | '/api/dev/provider-login'
@@ -206,6 +218,7 @@ export interface RootRouteChildren {
   ApiTelemetryRoute: typeof ApiTelemetryRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
   TeamsTeamIdRoute: typeof TeamsTeamIdRoute
+  TransactionsSetIdRoute: typeof TransactionsSetIdRoute
   TeamsIndexRoute: typeof TeamsIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDevProviderLoginRoute: typeof ApiDevProviderLoginRoute
@@ -291,6 +304,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof TeamsTeamIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/transactions/$setId': {
+      id: '/transactions/$setId'
+      path: '/transactions/$setId'
+      fullPath: '/transactions/$setId'
+      preLoaderRoute: typeof TransactionsSetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -326,6 +346,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTelemetryRoute: ApiTelemetryRoute,
   RunsRunIdRoute: RunsRunIdRoute,
   TeamsTeamIdRoute: TeamsTeamIdRoute,
+  TransactionsSetIdRoute: TransactionsSetIdRoute,
   TeamsIndexRoute: TeamsIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDevProviderLoginRoute: ApiDevProviderLoginRoute,

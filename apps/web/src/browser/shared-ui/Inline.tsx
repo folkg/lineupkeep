@@ -11,7 +11,11 @@ export function Inline(props: InlineProps): JSX.Element {
       class={cx(
         "flex flex-wrap",
         gapClass[props.gap],
-        "items-center",
+        props.align === "start"
+          ? "items-start"
+          : props.align === "baseline"
+            ? "items-baseline"
+            : "items-center",
         props.justify === "between" && "justify-between",
         props.collapse === true && "max-sm:grid max-sm:[&>*]:w-full",
       )}
@@ -23,6 +27,7 @@ export function Inline(props: InlineProps): JSX.Element {
 
 type InlineProps = {
   readonly gap: Space;
+  readonly align?: "start" | "baseline";
   readonly justify?: "between";
   readonly collapse?: boolean;
   readonly children: Element;

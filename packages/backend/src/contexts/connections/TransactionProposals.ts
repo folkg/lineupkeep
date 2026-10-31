@@ -55,6 +55,9 @@ type ProposalSurface = typeof ProposalSurface.Type;
 const ProposalPlayer = Schema.Struct({
   ref: PlayerRef,
   name: Schema.optional(Schema.NonEmptyString),
+  position: Schema.optional(Schema.NonEmptyString),
+  proTeam: Schema.optional(Schema.NonEmptyString),
+  availability: Schema.optional(Schema.NonEmptyString),
 });
 type ProposalPlayer = typeof ProposalPlayer.Type;
 
@@ -63,7 +66,7 @@ const ProposalStaleReason = Schema.Struct({
   player: Schema.optional(PlayerRef),
   detail: Schema.NonEmptyString,
 });
-type ProposalStaleReason = typeof ProposalStaleReason.Type;
+export type ProposalStaleReason = typeof ProposalStaleReason.Type;
 
 const ProposalStaleness = Schema.Struct({
   status: ProposalStalenessStatus,

@@ -898,6 +898,8 @@ function playerDetail(
     name: `Player ${String(index)}`,
     primaryPosition: recordedRosterRows[index]?.slot ?? "",
     displayPosition: recordedRosterRows[index]?.slot ?? "",
+    proTeam: undefined,
+    availabilityDetail: undefined,
     eligiblePositions: undefined,
     rosterStatus: "rostered",
     actual: {

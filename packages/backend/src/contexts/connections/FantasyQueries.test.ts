@@ -1028,6 +1028,8 @@ it.effect(
             name: "Synthetic 0",
             primaryPosition: "QB",
             displayPosition: "QB",
+            proTeam: undefined,
+            availabilityDetail: undefined,
             eligiblePositions: ["QB"],
             rosterStatus: "rostered",
             actual: {
@@ -1425,6 +1427,8 @@ it.effect(
             name: "Synthetic Skater",
             primaryPosition: "C",
             displayPosition: "C",
+            proTeam: undefined,
+            availabilityDetail: undefined,
             eligiblePositions: ["C"],
             rosterStatus: "rostered",
             actual: {
@@ -4682,6 +4686,8 @@ const playerDetails = [
     name: "Synthetic 0",
     primaryPosition: "QB",
     displayPosition: "QB",
+    proTeam: undefined,
+    availabilityDetail: undefined,
     eligiblePositions: ["QB"],
     rosterStatus: "rostered" as const,
     actual: {
@@ -4697,6 +4703,8 @@ const playerDetails = [
     name: "Synthetic 1",
     primaryPosition: "QB",
     displayPosition: "QB",
+    proTeam: undefined,
+    availabilityDetail: undefined,
     eligiblePositions: ["QB"],
     rosterStatus: "rostered" as const,
     actual: {
@@ -4712,6 +4720,8 @@ const playerDetails = [
     name: "Free Agent",
     primaryPosition: "RB",
     displayPosition: "RB",
+    proTeam: undefined,
+    availabilityDetail: undefined,
     eligiblePositions: ["RB", "W/R"],
     rosterStatus: "free_agent" as const,
     actual: {

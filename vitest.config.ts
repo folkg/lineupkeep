@@ -1,4 +1,5 @@
 import solidPlugin from "@solidjs/vite-plugin";
+import tailwindcss from "@tailwindcss/vite";
 import { playwright } from "@vitest/browser-playwright";
 import Icons from "unplugin-icons/vite";
 import { defineConfig } from "vitest/config";
@@ -119,6 +120,7 @@ export default defineConfig({
               props["aria-hidden"] = "true";
             },
           }),
+          tailwindcss(),
         ],
         resolve: {
           tsconfigPaths: true,

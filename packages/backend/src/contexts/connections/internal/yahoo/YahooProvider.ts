@@ -2171,6 +2171,8 @@ function playerDetailsFromPayload(
         name: optionalNonEmpty(player.name?.full ?? ""),
         primaryPosition: optionalNonEmpty(player.primary_position ?? ""),
         displayPosition: optionalNonEmpty(player.display_position ?? ""),
+        proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
+        availabilityDetail: availabilityDetailOf(player),
         eligiblePositions:
           player.eligible_positions === undefined
             ? undefined
@@ -3291,6 +3293,18 @@ function optionalNonEmpty(value: string | undefined): string | undefined {
   return value === undefined || value.trim() === "" ? undefined : value;
 }
 
+function availabilityDetailOf(player: {
+  readonly status?: string | boolean | undefined;
+  readonly status_full?: string | undefined;
+  readonly injury_note?: string | undefined;
+}): string | undefined {
+  return (
+    optionalNonEmpty(player.injury_note) ??
+    optionalNonEmpty(player.status_full) ??
+    (typeof player.status === "string" ? optionalNonEmpty(player.status) : undefined)
+  );
+}
+
 function searchInjuryStatus(status: string | boolean | undefined): {
   readonly value: ProviderPlayerStatus;
   readonly code: string | undefined;
@@ -3615,12 +3629,16 @@ const PlayerDetailPayload = Schema.Struct({
   name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
   primary_position: Schema.optional(Schema.String),
   display_position: Schema.optional(Schema.String),
+  editorial_team_abbr: Schema.optional(Schema.String),
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   ownership: Schema.optional(PlayerOwnership),
   percent_owned: Schema.optional(PercentOwned),
   percent_started: Schema.optional(PercentStartedPayload),
   player_ranks: Schema.optional(Schema.Array(PlayerRankPayload)),
   player_stats: Schema.optional(PlayerStats),
+  status: Schema.optional(Schema.Union([Schema.String, Schema.Boolean])),
+  status_full: Schema.optional(Schema.String),
+  injury_note: Schema.optional(Schema.String),
 });
 
 const PlayerDetailsPayload = Schema.Struct({

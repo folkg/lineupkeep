@@ -1804,6 +1804,8 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
         name: "Synthetic Starter",
         primaryPosition: "QB",
         displayPosition: "QB",
+        proTeam: "SYN",
+        availabilityDetail: undefined,
         eligiblePositions: ["QB"],
         rosterStatus: "rostered",
         actual: {

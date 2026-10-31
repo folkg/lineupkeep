@@ -309,7 +309,13 @@ it.effect("marks each item current or stale with a reason in one read per team",
     assert.strictEqual(first.state, "proposed");
     assert.isDefined(first.staleness.checkedAt);
     assert.strictEqual(first.adds[0]?.name, "Pool Forward");
+    assert.strictEqual(first.adds[0]?.position, "C");
+    assert.strictEqual(first.adds[0]?.proTeam, "SYN");
+    assert.strictEqual(first.adds[0]?.availability, "Free agent");
     assert.strictEqual(first.drops[0]?.name, "Roster One");
+    assert.strictEqual(first.drops[0]?.position, "C");
+    assert.strictEqual(first.drops[0]?.proTeam, "SYN");
+    assert.strictEqual(first.drops[0]?.availability, undefined);
     assert.deepStrictEqual(yield* fake.rosterPeriods, [undefined]);
     const teamEntry = Array.getUnsafe(review.teams, 0);
     assert.deepStrictEqual(teamEntry.budget, { status: "published", remaining: 50 });
@@ -633,6 +639,8 @@ function detail(
     name,
     primaryPosition: "C",
     displayPosition: "C",
+    proTeam: "SYN",
+    availabilityDetail: undefined,
     eligiblePositions: ["C"],
     rosterStatus,
     actual: undefined,

@@ -92,6 +92,7 @@ type TeamCheck = {
   readonly team: TeamId;
   readonly budget?: ProposalBudget;
   readonly failure?: string;
+  readonly facts?: TeamFacts;
   readonly changes: ReadonlyArray<ProposalItemChange>;
 };
 
@@ -266,7 +267,7 @@ export const TransactionProposalsLive = Layer.effect(
         outcomes.push({
           index: entry.index,
           outcome: "accepted",
-          item: yield* toItem(tokens, userId, entry.team, record),
+          item: yield* toItem(tokens, userId, entry.team, record, undefined),
         });
       }
       for (const refusal of refusals) {
@@ -550,6 +551,7 @@ export const TransactionProposalsLive = Layer.effect(
         return {
           team: teamId,
           ...(budget === undefined ? {} : { budget }),
+          facts,
           changes: items.map((item) => evaluateItem(item, facts, budget, at)),
         };
       });
@@ -601,7 +603,7 @@ function buildReview(
       const check = checks?.get(teamId);
       const teamItems = [];
       for (const item of itemsByTeam.get(teamId) ?? []) {
-        teamItems.push(yield* toItem(tokens, userId, team, item));
+        teamItems.push(yield* toItem(tokens, userId, team, item, check?.facts));
       }
       reviewed.push(
         yield* Schema.decodeEffect(ProposalTeamSchema)({
@@ -738,6 +740,22 @@ function budgetOf(
 
 function currentCheck(at: DateTime.Utc): StoredProposalStaleness {
   return { status: "current", checkedAt: at, reasons: [] };
+}
+
+function addAvailability(detail: ProviderPlayerDetail): string | undefined {
+  if (detail.availabilityDetail !== undefined) {
+    return detail.availabilityDetail;
+  }
+  switch (detail.rosterStatus) {
+    case "free_agent":
+      return "Free agent";
+    case "waiver":
+      return "On waivers";
+    case "rostered":
+      return "Rostered in this league";
+    case "unknown":
+      return undefined;
+  }
 }
 
 function staleCheck(
@@ -912,6 +930,7 @@ function toItem(
   userId: UserId,
   team: ProposalTeamRecord,
   record: ProposalItemRecord,
+  facts: TeamFacts | undefined,
 ): Effect.Effect<ProposalItem, ProposalPersistenceFailed> {
   return Effect.gen(function* () {
     const leagueKey = team.providerLeagueKey;
@@ -929,19 +948,39 @@ function toItem(
       reason.playerKey === undefined ? [] : [reason.playerKey],
     );
     const reasonRefs = yield* tokens.sealPlayerRefs({ userId, leagueKey, playerKeys: reasonKeys });
+    const rostered = new Map(
+      (facts?.roster.players ?? []).map((player) => [player.providerPlayerKey, player] as const),
+    );
     let reasonOffset = 0;
     return yield* Schema.decodeEffect(ProposalItemSchema)({
       id: record.id,
       team: record.team,
       kind: record.kind,
-      adds: record.adds.map((add, index) => ({
-        ref: Array.getUnsafe(addRefs, index),
-        ...(add.name === undefined ? {} : { name: add.name }),
-      })),
-      drops: record.drops.map((drop, index) => ({
-        ref: Array.getUnsafe(dropRefs, index),
-        ...(drop.name === undefined ? {} : { name: drop.name }),
-      })),
+      adds: record.adds.map((add, index) => {
+        const detail = facts?.players.get(add.key);
+        const availability = detail === undefined ? undefined : addAvailability(detail);
+        return {
+          ref: Array.getUnsafe(addRefs, index),
+          ...(add.name === undefined ? {} : { name: add.name }),
+          ...(detail?.displayPosition === undefined ? {} : { position: detail.displayPosition }),
+          ...(detail?.proTeam === undefined ? {} : { proTeam: detail.proTeam }),
+          ...(availability === undefined ? {} : { availability }),
+        };
+      }),
+      drops: record.drops.map((drop, index) => {
+        const player = rostered.get(drop.key);
+        const availability =
+          player === undefined ? undefined : (player.injuryDetail ?? player.injuryCode);
+        return {
+          ref: Array.getUnsafe(dropRefs, index),
+          ...(drop.name === undefined ? {} : { name: drop.name }),
+          ...(player?.displayPosition === undefined ? {} : { position: player.displayPosition }),
+          ...(player?.proTeamAbbreviation === undefined
+            ? {}
+            : { proTeam: player.proTeamAbbreviation }),
+          ...(availability === undefined ? {} : { availability }),
+        };
+      }),
       ...(record.bid === undefined ? {} : { bid: record.bid }),
       reason: record.reason,
       state: record.state,

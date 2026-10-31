@@ -10,7 +10,7 @@ export function RuleList(props: { readonly children: Element }): JSX.Element {
 
 export function RuleListItem(props: {
   readonly children: Element;
-  readonly layout?: "stack" | "columns";
+  readonly layout?: "stack" | "columns" | "leading";
 }): JSX.Element {
   const Tag = dynamic(() => (props.layout === "columns" ? "li" : "li"));
   return (
@@ -19,6 +19,8 @@ export function RuleListItem(props: {
         "grid gap-2 border-b border-rule py-4",
         props.layout === "columns" &&
           "md:grid-cols-[minmax(0,1fr)_18rem] md:items-start md:gap-8 md:py-5",
+        props.layout === "leading" &&
+          "md:grid-cols-[8.5rem_minmax(0,1fr)] md:items-start md:gap-6 md:py-5",
       )}
     >
       {props.children}

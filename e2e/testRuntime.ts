@@ -50,6 +50,10 @@ function yahooResponse(url: URL): unknown {
   if (league === "nfl" || league === "nhl") {
     return teamsPayload(league);
   }
+  const settings = /^\/fantasy\/v2\/league\/([^/]+)\/settings$/u.exec(url.pathname);
+  if (settings?.[1] !== undefined) {
+    return leagueSettingsPayload(settings[1]);
+  }
   const roster =
     /^\/fantasy\/v2\/team\/([^/]+)\/roster(?:;week=\d+)?\/players(?:;out=[^/]*)?$/u.exec(
       url.pathname,
@@ -281,6 +285,80 @@ function teamsPayload(league: "nfl" | "nhl"): unknown {
         },
         count: 1,
       },
+    },
+  };
+}
+
+function leagueSettingsPayload(leagueKey: string): unknown {
+  const teamKey = leagueKey === "461.l.9000" ? "461.l.9000.t.1" : "465.l.9100.t.2";
+  return {
+    fantasy_content: {
+      league: [
+        {
+          league_key: leagueKey,
+          name: leagueKey === "461.l.9000" ? "Embedded Football League" : "Hosted Hockey League",
+          url:
+            leagueKey === "461.l.9000"
+              ? "https://football.fantasysports.yahoo.com/f1/9000"
+              : "https://hockey.fantasysports.yahoo.com/hockey/9100",
+          num_teams: 10,
+          current_week: 6,
+          start_week: 1,
+          end_week: 17,
+          start_date: "2026-09-03",
+          end_date: "2026-12-28",
+          current_date: "2026-10-31",
+          scoring_type: "head",
+          scoring_label: "H2H",
+          weekly_deadline: "",
+          edit_key: "42",
+          season: "2026",
+          draft_status: "postdraft",
+        },
+        {
+          settings: [
+            {
+              waiver_type: "FR",
+              waiver_rule: "continuous",
+              uses_faab: "0",
+              roster_positions: [
+                {
+                  roster_position: {
+                    position: "WR",
+                    position_type: "O",
+                    count: 2,
+                    is_starting_position: 1,
+                  },
+                },
+                {
+                  roster_position: {
+                    position: "BN",
+                    position_type: "B",
+                    count: 8,
+                    is_starting_position: 0,
+                  },
+                },
+              ],
+              stat_categories: {
+                stats: [
+                  {
+                    stat: {
+                      stat_id: 4,
+                      enabled: "1",
+                      name: "Receiving Yards",
+                      display_name: "Rec Yds",
+                      group: "receiving",
+                      abbr: "RECY",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          count: 1,
+          team_key: teamKey,
+        },
+      ],
     },
   };
 }

@@ -519,6 +519,8 @@ export type ProviderPlayerDetail = {
   readonly name: string | undefined;
   readonly primaryPosition: string | undefined;
   readonly displayPosition: string | undefined;
+  readonly proTeam: string | undefined;
+  readonly availabilityDetail: string | undefined;
   readonly eligiblePositions: ReadonlyArray<string> | undefined;
   readonly rosterStatus: "rostered" | "free_agent" | "waiver" | "unknown";
   readonly actual: ProviderPlayerStatGroup | undefined;
