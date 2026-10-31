@@ -159,6 +159,7 @@ export function cloudRunHost(
         alertStrategy: { notificationRateLimit: { period: "300s" } },
         documentation: {
           subject: "Lineupkeep lineup run needs attention",
+          mimeType: "text/markdown",
           content:
             "A lineup run finished failed or uncertain. Find the `LineupWorker.run` entry, then follow its trace to the provider calls. The deployment runbook lists the queries and the support boundary.",
         },
