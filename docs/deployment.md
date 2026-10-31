@@ -6,7 +6,7 @@ This runbook explains safe operation, not authorization. [The Phase 1 mandate](P
 
 Bootstrap, outside Alchemy (Alchemy has no billing-link provider, and state cannot store itself):
 
-- GCP project `lineupkeep-prod` (number `602042678335`), billing account `0139E5-D27389-43F1F2`, region `us-east1`. The gcloud CLI's active project is the unrelated `auto-gm-372620`; pass `--project=lineupkeep-prod` explicitly and do not change global config.
+- GCP project `lineupkeep-prod` (number `602042678335`), billing account `0139E5-D27389-43F1F2`, region `us-east1`. The gcloud CLI's active project is still the deleted `auto-gm-372620`, so every command needs `--project=lineupkeep-prod`; set it in the CLI if bare commands are wanted.
 - Protected Alchemy state in the owner's shared Neon project `alchemy-state` (`spring-cell-62836171`): database and role `lineupkeep_state`, direct endpoint, `sslmode=verify-full`.
 - Provisioning inputs: `~/.config/lineupkeep/infra.env` (mode 600, outside the repository) with `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, `AUTH_CLIENT_IP_HEADERS`. `ALERT_EMAIL` is optional and only attaches an email notification channel to the lineup-run alert; without it the alert policy still opens incidents in Cloud Monitoring. Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token` and never echo it.
 - Alchemy-managed: application Neon project (`database.run.ts`, stage `production`), project APIs and the CAD 5/month budget with 50/90/100% alerts (`platform.run.ts`, stage `production`), and the Cloud Run web service (`alchemy.run.ts`, stage `cloud-run`).
@@ -293,31 +293,33 @@ resolves against whatever project gcloud currently points at and fails with a
 
 ### The decommissioned project
 
-The billing account `0139E5-D27389-43F1F2` carries two projects: this one and
-`auto-gm-372620` (Fantasy AutoCoach, `877183802`). Every free allowance above is
-per billing account, so what the other project consumes is taken from this one.
-On 2026-10-31 the owner authorized removing the decommissioned resources that
-eroded those allowances. That is a one-off action outside this repository's IaC,
-because the stack does not own that project:
+The billing account `0139E5-D27389-43F1F2` shared every free allowance above
+with `auto-gm-372620` (Fantasy AutoCoach, `877183802`), so whatever it consumed
+was taken from this project. On 2026-10-31 the owner declared that project
+finished and asked for all of it to go. In order: its 5.27 GB of images (46
+`auto-coach`, 8 `gcf-artifacts`), its six Cloud Scheduler jobs — three enabled,
+one firing hourly at a Cloud Run service that reported itself not ready, and
+three paused leftovers from Firebase deployments — its two active secret
+versions (a SendGrid key and a Yahoo client secret), and then the project
+itself: two Cloud Run services, three ACTIVE first-generation Cloud Functions
+behind Firebase authentication, one Firestore database, seven storage buckets
+(about 5 MB, one of them a 55 KB Terraform state bucket), two empty secrets and
+two empty repositories.
 
-- 46 `auto-coach` images and 8 `gcf-artifacts` images, 5.27 GB of the 0.5 GiB free
-  Artifact Registry storage.
-- 6 Cloud Scheduler jobs against the free three: 3 enabled, one firing hourly at
-  a Cloud Run service that reports itself not ready, plus 3 paused leftovers from
-  Firebase deployments. Those jobs produced that project's 176 requests and
-  4,467 vCPU-seconds a week, all inside this account's shared free tier.
-- The 2 active secret versions (a SendGrid key and a Yahoo client secret)
-  against the free six: 7 active versions across the account before, 5 after.
+`auto-gm-372620` is now `DELETE_REQUESTED` with billing disabled, and the
+account carries one live project. Deletion is reversible until about
+2026-11-30 with `gcloud projects undelete auto-gm-372620`, which restores the
+project and what is still inside it, Firestore and Firebase authentication data
+included. The cleanup itself is outside this repository's IaC because the stack
+does not own that project; the durable part is that nothing here may depend on
+it again.
 
-What that leaves, and why it is not deleted: two Cloud Run services with minimum
-instances 0 (no traffic now that the jobs are gone, so no charge), three ACTIVE
-first-generation Cloud Functions behind Firebase authentication (free at rest,
-about 5 MB of source buckets), one Firestore database, a 55 KB Terraform state
-bucket that holds their infrastructure state, and the now-empty repositories and
-secret containers. None of them bills while idle. Two cautions for a future
-cleanup: the images those Cloud Run services reference are gone, so they cannot
-cold start, and the Cloud Functions carry plaintext SendGrid and Yahoo values in
-their environment, which Secret Manager does not cover.
+The same billing account also lists `gen-lang-client-0884516839` (Gemini API)
+and `final-project-380918`, both ACTIVE and billing-enabled but dormant: no
+Compute, Cloud SQL, Cloud Run, BigQuery or storage resources, and no
+`generativelanguage` generation in the last thirty days. They were left alone
+because the owner has not declared them finished. A dormant project costs
+nothing; a live one would consume these allowances first.
 
 ### Redeploy and rollback
 
