@@ -8,6 +8,7 @@ import { DateTime } from "effect";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
+import { makeTelemetryTest } from "#runtime/internal/TelemetryTest.ts";
 
 import type { ConnectionId } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
@@ -98,6 +99,102 @@ it.effect(
       assert.instanceOf(foreign, LineupRunNotFound);
     }).pipe(Effect.provide(LineupTestLayer)),
 );
+
+it.effect("emits one run span carrying the run, request, team and verified outcome", () => {
+  const telemetry = makeTelemetryTest();
+
+  return Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedCustom(fake);
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const record = yield* loadRun(repository, runId);
+    const spans = telemetry.read().spans;
+    const runSpan = spans.find((span) => span.name === "LineupWorker.run");
+    const deliverySpan = spans.find((span) => span.name === "LineupWorker.deliver");
+
+    assert.isDefined(runSpan);
+    assert.isDefined(deliverySpan);
+    assert.strictEqual(runSpan.parentSpanId, deliverySpan.spanId);
+    assert.strictEqual(stringAttribute(runSpan, "lineup.run"), runId);
+    assert.strictEqual(stringAttribute(runSpan, "lineup.request"), record.requestId);
+    assert.strictEqual(stringAttribute(runSpan, "team.id"), team.id);
+    assert.strictEqual(stringAttribute(runSpan, "app.outcome"), "success");
+    assert.strictEqual(stringAttribute(runSpan, "lineup.outcome"), "changed");
+
+    const providerSpan = spans.find((span) => span.name === "FakeProvider.readRoster");
+    assert.isDefined(providerSpan);
+    assert.strictEqual(providerSpan.parentSpanId, runSpan.spanId);
+  }).pipe(Effect.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
+});
+
+it.effect("links a domain request to the run spans it created", () => {
+  const telemetry = makeTelemetryTest();
+
+  return Effect.gen(function* () {
+    const runs = yield* LineupRuns;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedCustom(fake);
+
+    const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
+
+    const spans = telemetry.read().spans;
+    const submitSpan = spans.find((span) => span.name === "LineupRuns.submit");
+    const runSpan = spans.find((span) => span.name === "LineupWorker.run");
+
+    assert.isDefined(submitSpan);
+    assert.isDefined(runSpan);
+    assert.strictEqual(stringAttribute(submitSpan, "lineup.request"), requestId);
+    assert.strictEqual(stringAttribute(runSpan, "lineup.request"), requestId);
+    assert.strictEqual(stringAttribute(runSpan, "lineup.run"), submitted.runs[0]?.run);
+  }).pipe(Effect.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
+});
+
+it.effect("marks a failed run span so failed and uncertain runs can be alerted", () => {
+  const telemetry = makeTelemetryTest();
+
+  return Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* refuseCustomPlanning(fake);
+    yield* fake.setNativeAction("reject");
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const runSpan = telemetry.read().spans.find((span) => span.name === "LineupWorker.run");
+
+    assert.isDefined(runSpan);
+    assert.strictEqual(stringAttribute(runSpan, "app.outcome"), "failure");
+    assert.strictEqual(stringAttribute(runSpan, "lineup.outcome"), "failed");
+    assert.strictEqual(stringAttribute(runSpan, "lineup.failure_reason"), "provider_rejected");
+  }).pipe(Effect.provide(Layer.merge(LineupTestLayer, telemetry.layer)));
+});
+
+function stringAttribute(
+  span:
+    | { readonly attributes: ReadonlyArray<{ readonly key: string; readonly value: unknown }> }
+    | undefined,
+  key: string,
+): string | undefined {
+  const value = span?.attributes.find((attribute) => attribute.key === key)?.value;
+  return isStringValue(value) ? value.stringValue : undefined;
+}
+
+function isStringValue(value: unknown): value is { readonly stringValue: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "stringValue" in value &&
+    typeof value.stringValue === "string"
+  );
+}
 
 it.effect("reconciles a lost provider response only when readback proves the change", () =>
   Effect.gen(function* () {

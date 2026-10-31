@@ -67,6 +67,7 @@ export const LineupRunsLive = Layer.effect(
         .loadRuns(userId, { runs: runIds, limit: runIds.length })
         .pipe(mapRepositoryError);
       yield* Effect.annotateCurrentSpan({
+        "lineup.request": input.requestId,
         "lineup.run_count": loaded.runs.length,
         "lineup.delivery": delivery,
         "lineup.replayed": !created.created,

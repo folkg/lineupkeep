@@ -77,7 +77,7 @@ export const LineupWorkerLive = Layer.effect(
       }
     });
 
-    const processRun = Effect.fnUntraced(function* (runId: LineupRunId) {
+    const processRun = Effect.fn("LineupWorker.run")(function* (runId: LineupRunId) {
       const now = yield* DateTime.now;
       const claimed = yield* repository.claim(runId, now);
       if (Option.isNone(claimed)) {
@@ -86,6 +86,10 @@ export const LineupWorkerLive = Layer.effect(
       const run = claimed.value;
       yield* Effect.annotateCurrentSpan({
         "lineup.run": runId,
+        "lineup.request": run.record.requestId,
+        "team.id": run.record.teamId,
+        "connection.id": run.record.connectionId,
+        "lineup.trigger": run.record.trigger,
         "lineup.attempt": run.attempt,
         "lineup.status": run.record.status,
         "lineup.resumed": run.resumeVerification,
@@ -186,6 +190,10 @@ export const LineupWorkerLive = Layer.effect(
       });
       switch (started.status) {
         case "stale":
+          yield* Effect.annotateCurrentSpan({
+            "app.outcome": "success",
+            "lineup.outcome": "no_op",
+          });
           return;
         case "blocked":
           return yield* block(run, started.reason, blockDetail(started.reason));
@@ -503,11 +511,19 @@ export const LineupWorkerLive = Layer.effect(
         at,
       });
       yield* repository.markAttemptFinished(run.record.id, run.attempt, at, "completed");
+      yield* Effect.annotateCurrentSpan({
+        "app.outcome": "success",
+        "lineup.outcome": "no_op",
+      });
     });
 
     const verifyResumed = Effect.fnUntraced(function* (run: ClaimedLineupRun) {
       const state = run.record.state;
       if (state._tag !== "Applying" && state._tag !== "Verifying") {
+        yield* Effect.annotateCurrentSpan({
+          "app.outcome": "success",
+          "lineup.outcome": "no_op",
+        });
         return;
       }
       const intent = yield* repository.loadWriteIntent(state.writeIntent.id);
@@ -647,6 +663,7 @@ export const LineupWorkerLive = Layer.effect(
             at: now,
           });
           yield* repository.markAttemptFinished(run.record.id, run.attempt, now, "completed");
+          yield* Effect.annotateCurrentSpan(verifiedOutcome(comparison.changes.length));
           return;
         }
         if (differences.length === 0) {
@@ -672,6 +689,7 @@ export const LineupWorkerLive = Layer.effect(
             at: now,
           });
           yield* repository.markAttemptFinished(run.record.id, run.attempt, now, "completed");
+          yield* Effect.annotateCurrentSpan(verifiedOutcome(comparison.changes.length));
           return;
         }
         if (comparison.changes.length === 0) {
@@ -716,6 +734,7 @@ export const LineupWorkerLive = Layer.effect(
           at: now,
         });
         yield* repository.markAttemptFinished(run.record.id, run.attempt, now, "completed");
+        yield* Effect.annotateCurrentSpan(verifiedOutcome(comparison.changes.length));
         return;
       }
       if (comparison.changes.length === 0) {
@@ -745,6 +764,7 @@ export const LineupWorkerLive = Layer.effect(
         at: now,
       });
       yield* repository.markAttemptFinished(run.record.id, run.attempt, now, "completed");
+      yield* Effect.annotateCurrentSpan(verifiedOutcome(comparison.changes.length));
     });
 
     const loadContext = Effect.fnUntraced(function* (userId: UserId, teamId: TeamId) {
@@ -914,7 +934,11 @@ export const LineupWorkerLive = Layer.effect(
         },
         at,
       });
-      yield* Effect.annotateCurrentSpan({ "lineup.blocked_reason": reason });
+      yield* Effect.annotateCurrentSpan({
+        "app.outcome": "blocked",
+        "lineup.outcome": "blocked",
+        "lineup.blocked_reason": reason,
+      });
     });
 
     const fail = Effect.fnUntraced(function* (
@@ -949,7 +973,11 @@ export const LineupWorkerLive = Layer.effect(
         at,
         ...(target === undefined ? {} : { intent: { id: target.id, status: intentStatus } }),
       });
-      yield* Effect.annotateCurrentSpan({ "lineup.failure_reason": reason });
+      yield* Effect.annotateCurrentSpan({
+        "app.outcome": "failure",
+        "lineup.outcome": "failed",
+        "lineup.failure_reason": reason,
+      });
     });
 
     const retry = Effect.fnUntraced(function* (
@@ -979,7 +1007,11 @@ export const LineupWorkerLive = Layer.effect(
             }),
       });
       yield* repository.markAttemptFinished(run.record.id, run.attempt, at, "retry-wait");
-      yield* Effect.annotateCurrentSpan({ "lineup.retry_reason": reason });
+      yield* Effect.annotateCurrentSpan({
+        "app.outcome": "retry",
+        "lineup.outcome": "retry",
+        "lineup.retry_reason": reason,
+      });
     });
 
     const uncertain = Effect.fnUntraced(function* (
@@ -1010,12 +1042,26 @@ export const LineupWorkerLive = Layer.effect(
         at,
       });
       yield* repository.markAttemptFinished(run.record.id, run.attempt, at, "uncertain");
-      yield* Effect.annotateCurrentSpan({ "lineup.uncertain_reason": reason });
+      yield* Effect.annotateCurrentSpan({
+        "app.outcome": "failure",
+        "lineup.outcome": "uncertain",
+        "lineup.uncertain_reason": reason,
+      });
     });
 
     return LineupWorker.of({ deliver });
   }),
 );
+
+function verifiedOutcome(changeCount: number): {
+  readonly "app.outcome": "success";
+  readonly "lineup.outcome": "changed" | "no_op";
+} {
+  return {
+    "app.outcome": "success",
+    "lineup.outcome": changeCount > 0 ? "changed" : "no_op",
+  };
+}
 
 function rosterPeriod(target: LineupTargetPeriod): ProviderRosterCoverage | undefined {
   switch (target.coverage) {

@@ -409,8 +409,10 @@ export const yahooProvider = Effect.gen(function* () {
       const crumb = yield* Effect.result(readCrumb(input, operation));
       if (crumb._tag === "Failure") {
         if (crumb.failure._tag === "provider.session_rejected") {
+          yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
           return yield* crumb.failure;
         }
+        yield* Effect.annotateCurrentSpan("provider.outcome", "not_sent");
         return crumb.failure._tag === "provider.crumb_unavailable"
           ? { status: "not_sent" as const, reason: "session_incomplete" as const }
           : { status: "not_sent" as const, reason: "request_failed" as const };
@@ -442,24 +444,31 @@ export const yahooProvider = Effect.gen(function* () {
           ),
       );
       if (response === undefined) {
+        yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
         return { status: "unknown" as const };
       }
       yield* Effect.annotateCurrentSpan("http.response.status_code", response);
       if (response === 401 || response === 403) {
+        yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
         return yield* ProviderSessionRejected.make({ operation });
       }
       if (response === 404) {
+        yield* Effect.annotateCurrentSpan("provider.outcome", "rejected");
         return { status: "rejected" as const, reason: "not_found" as const };
       }
       if (response === 408 || response === 429) {
+        yield* Effect.annotateCurrentSpan("provider.outcome", "not_sent");
         return { status: "not_sent" as const, reason: "request_failed" as const };
       }
       if (response >= 500) {
+        yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
         return { status: "unknown" as const };
       }
       if (response >= 400) {
+        yield* Effect.annotateCurrentSpan("provider.outcome", "rejected");
         return { status: "rejected" as const, reason: "invalid_request" as const };
       }
+      yield* Effect.annotateCurrentSpan("provider.outcome", "accepted");
       return { status: "accepted" as const };
     });
 

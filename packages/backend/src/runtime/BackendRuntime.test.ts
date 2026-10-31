@@ -51,6 +51,28 @@ it.effect("creates an operation span with request context", () =>
   ),
 );
 
+it.effect("continues the Cloud Run trace context when no W3C parent is provided", () =>
+  withTestRuntime((runtime) =>
+    Effect.gen(function* () {
+      const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+      const request = new Request("http://localhost/connections", {
+        headers: {
+          "x-cloud-trace-context": `${traceId}/1234567890123456;o=1`,
+          "x-request-id": "request-1",
+        },
+      });
+
+      const operationSpan = yield* Effect.promise(() =>
+        runtime.run(Effect.currentSpan, request, "connections.list"),
+      );
+
+      assert.strictEqual(operationSpan.traceId, traceId);
+      const cloudRunSpan = operationSpan.parent.pipe(Option.getOrThrow);
+      assert.strictEqual(cloudRunSpan.spanId, "000462d53c8abac0");
+    }),
+  ),
+);
+
 it.effect("parents backend operations to the enclosing HTTP request span", () =>
   withTestRuntime((runtime) =>
     Effect.gen(function* () {

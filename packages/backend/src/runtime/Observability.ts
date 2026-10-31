@@ -4,38 +4,54 @@ import { OtlpExporter, OtlpSerialization, OtlpTracer } from "effect/observabilit
 
 import { appEnvironmentConfig, type AppEnvironment } from "#config/AppEnvironment.ts";
 
+import { makeCloudLoggingTracer } from "./CloudLoggingTracer.ts";
 import { makePrettyConsoleTracer } from "./PrettyConsoleTracer.ts";
 export const safeTracerLayer = Layer.effect(
   Tracer.Tracer,
   Effect.map(Tracer.Tracer, makeSafeTracer),
 );
 
-export const ObservabilityLive = Layer.unwrap(
-  Effect.map(loadObservabilityConfig(), (config) =>
-    Layer.merge(
-      Logger.layer([Logger.tracerLogger]),
-      safeTracerLayer.pipe(Layer.provideMerge(tracerLayer(config))),
+export function makeObservabilityLive(
+  options: ObservabilityOptions,
+): Layer.Layer<OtlpExporter.Flusher, Config.ConfigError, never> {
+  return Layer.unwrap(
+    Effect.map(loadObservabilityConfig(), (config) =>
+      Layer.merge(
+        Logger.layer([Logger.tracerLogger]),
+        safeTracerLayer.pipe(Layer.provideMerge(tracerLayer(config, options))),
+      ),
     ),
-  ),
-);
+  );
+}
 
 function loadObservabilityConfig(): Config.Config<{
   environment: "development" | "production" | "test";
+  otlpExporter: string;
   serviceName: string;
   serviceVersion: string;
   slowSpanThreshold: Duration.Duration;
 }> {
   return Config.all({
     environment: appEnvironmentConfig,
-    serviceName: Config.String("OTEL_SERVICE_NAME").pipe(Config.withDefault("lineupkeep-web")),
-    serviceVersion: Config.String("SERVICE_VERSION").pipe(Config.withDefault("development")),
+    otlpExporter: Config.String("OTEL_TRACES_EXPORTER").pipe(Config.withDefault("none")),
+    serviceName: Config.String("OTEL_SERVICE_NAME").pipe(
+      Config.orElse(() => Config.String("K_SERVICE")),
+      Config.withDefault("lineupkeep-web"),
+    ),
+    serviceVersion: Config.String("SERVICE_VERSION").pipe(
+      Config.orElse(() => Config.String("K_REVISION")),
+      Config.withDefault("development"),
+    ),
     slowSpanThreshold: Config.Duration("DEV_SLOW_SPAN_THRESHOLD").pipe(
       Config.withDefault(Duration.millis(100)),
     ),
   });
 }
 
-function tracerLayer(config: ObservabilityConfig): Layer.Layer<OtlpExporter.Flusher, never, never> {
+function tracerLayer(
+  config: ObservabilityConfig,
+  options: ObservabilityOptions,
+): Layer.Layer<OtlpExporter.Flusher, never, never> {
   if (config.environment === "development") {
     const prettyTracer = Layer.effect(
       Tracer.Tracer,
@@ -49,15 +65,35 @@ function tracerLayer(config: ObservabilityConfig): Layer.Layer<OtlpExporter.Flus
     return Layer.merge(prettyTracer, OtlpExporter.layerFlusher);
   }
 
-  return OtlpTracer.layerFromConfig({
-    resource: {
-      attributes: {
-        "deployment.environment.name": config.environment,
+  if (config.otlpExporter === "otlp") {
+    return OtlpTracer.layerFromConfig({
+      resource: {
+        attributes: {
+          "deployment.environment.name": config.environment,
+        },
+        serviceName: config.serviceName,
+        serviceVersion: config.serviceVersion,
       },
-      serviceName: config.serviceName,
-      serviceVersion: config.serviceVersion,
-    },
-  }).pipe(Layer.provide(OtlpSerialization.layerJson), Layer.provide(FetchHttpClient.layer));
+    }).pipe(Layer.provide(OtlpSerialization.layerJson), Layer.provide(FetchHttpClient.layer));
+  }
+
+  if (config.environment === "production" && options.cloudLogging) {
+    return Layer.merge(
+      Layer.effect(
+        Tracer.Tracer,
+        Effect.map(Console.Console, (console) =>
+          makeCloudLoggingTracer({
+            serviceName: config.serviceName,
+            serviceVersion: config.serviceVersion,
+            write: options.write ?? ((line) => console.log(line)),
+          }),
+        ),
+      ),
+      OtlpExporter.layerFlusher,
+    );
+  }
+
+  return OtlpExporter.layerFlusher;
 }
 
 function makeSafeTracer(tracer: Tracer.Tracer): Tracer.Tracer {
@@ -151,8 +187,14 @@ function isSuppressedAttribute(key: string, kind?: Tracer.SpanKind): boolean {
   );
 }
 
+type ObservabilityOptions = {
+  readonly cloudLogging: boolean;
+  readonly write?: (line: string) => void;
+};
+
 type ObservabilityConfig = {
   readonly environment: AppEnvironment;
+  readonly otlpExporter: string;
   readonly serviceName: string;
   readonly serviceVersion: string;
   readonly slowSpanThreshold: Duration.Duration;

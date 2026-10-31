@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Tracer } from "effect";
 import { Headers, HttpTraceContext } from "effect/http";
 import * as OtlpExporter from "effect/observability/OtlpExporter";
 
@@ -6,7 +6,6 @@ import { ApplicationLayer } from "./ApplicationLayer.ts";
 import type { BackendServices } from "./ApplicationLayer.ts";
 import type { BackendPlatform } from "./BackendPlatform.ts";
 import { BackgroundWork } from "./BackgroundWork.ts";
-import { ObservabilityLive } from "./Observability.ts";
 import {
   correlateRequestEffect,
   makeRequestContext,
@@ -21,7 +20,7 @@ type PlatformServices = BackgroundWork | OtlpExporter.Flusher;
 
 export class BackendRuntime<Services = BackendServices> {
   static make(platform: BackendPlatform): BackendRuntime<BackendServices> {
-    const processLayer = Layer.mergeAll(ObservabilityLive, platform.background);
+    const processLayer = Layer.mergeAll(platform.observability, platform.background);
     const applicationLayer = ApplicationLayer.pipe(
       Layer.provide(platform.database),
       Layer.provide(platform.publicInternet),
@@ -185,8 +184,42 @@ export class BackendRuntime<Services = BackendServices> {
   }
 }
 
-function traceParent(request: Request): import("effect/Tracer").ExternalSpan | undefined {
-  return Option.getOrUndefined(HttpTraceContext.fromHeaders(Headers.fromInput(request.headers)));
+function traceParent(request: Request): Tracer.ExternalSpan | undefined {
+  return (
+    Option.getOrUndefined(HttpTraceContext.fromHeaders(Headers.fromInput(request.headers))) ??
+    cloudRunTraceParent(request)
+  );
+}
+
+function cloudRunTraceParent(request: Request): Tracer.ExternalSpan | undefined {
+  const header = request.headers.get("x-cloud-trace-context");
+  if (header === null) {
+    return undefined;
+  }
+  const [ids, options] = header.trim().split(";", 2);
+  const [traceId, spanId] = ids?.split("/") ?? [];
+  if (traceId === undefined || spanId === undefined || !/^[0-9a-f]{32}$/iu.test(traceId.trim())) {
+    return undefined;
+  }
+  const hexadecimalSpanId = decimalSpanId(spanId.trim());
+  if (hexadecimalSpanId === undefined) {
+    return undefined;
+  }
+  return Tracer.externalSpan({
+    traceId: traceId.trim().toLowerCase(),
+    spanId: hexadecimalSpanId,
+    sampled: options?.includes("o=1") ?? true,
+  });
+}
+
+function decimalSpanId(value: string): string | undefined {
+  if (!/^[0-9]{1,20}$/u.test(value)) {
+    return undefined;
+  }
+  const parsed = BigInt(value);
+  return parsed > 0n && parsed <= 0xffffffffffffffffn
+    ? parsed.toString(16).padStart(16, "0")
+    : undefined;
 }
 
 const annotateOperationSuccess = Effect.flatMap(Effect.currentSpan, (span) =>

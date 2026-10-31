@@ -5,7 +5,7 @@ import * as GCP from "alchemy/GCP";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { Stage } from "alchemy/Stage";
-import { Config, Effect, Layer } from "effect";
+import { Config, Effect, Layer, Option } from "effect";
 import type { Redacted } from "effect";
 
 import { buildHostedBrowserImage } from "#infra/build/hostedBrowser.ts";
@@ -133,6 +133,35 @@ export function cloudRunHost(
           throw new Error("Cloud Run did not return a worker URI");
         }
         return uri;
+      });
+      const alertEmail = yield* Config.option(Config.String("ALERT_EMAIL"));
+      const alertChannel = Option.isSome(alertEmail)
+        ? yield* GCP.Monitoring.NotificationChannel("LineupRunAlerts", {
+            type: "email",
+            displayName: "Lineupkeep lineup run alerts",
+            labels: { email_address: alertEmail.value },
+          })
+        : undefined;
+      yield* GCP.Monitoring.AlertPolicy("LineupRunFailures", {
+        displayName: "Lineupkeep failed or uncertain lineup runs",
+        combiner: "OR",
+        severity: "ERROR",
+        conditions: [
+          {
+            displayName: "Failed or uncertain lineup run",
+            conditionMatchedLog: {
+              filter:
+                'resource.type="cloud_run_revision" AND jsonPayload.span.name="LineupWorker.run" AND (jsonPayload.span.attributes."app.outcome"="failure" OR jsonPayload.span.attributes."lineup.outcome"="uncertain")',
+            },
+          },
+        ],
+        ...(alertChannel === undefined ? {} : { notificationChannels: [alertChannel.name] }),
+        alertStrategy: { notificationRateLimit: { period: "300s" } },
+        documentation: {
+          subject: "Lineupkeep lineup run needs attention",
+          content:
+            "A lineup run finished failed or uncertain. Find the `LineupWorker.run` entry, then follow its trace to the provider calls. The deployment runbook lists the queries and the support boundary.",
+        },
       });
       yield* GCP.IAM.Member("WorkerInvoker", {
         kind: "run.service",

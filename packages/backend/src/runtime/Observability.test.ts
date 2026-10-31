@@ -17,7 +17,7 @@ import { HttpClient, HttpClientError } from "effect/http";
 import { ConnectionPersistenceFailed } from "#contexts/connections/Connection.ts";
 
 import { makeTelemetryTest } from "./internal/TelemetryTest.ts";
-import { ObservabilityLive } from "./Observability.ts";
+import { makeObservabilityLive } from "./Observability.ts";
 
 it.effect("exports failed SQL children without bind values or nested causes", () =>
   Effect.gen(function* () {
@@ -204,11 +204,31 @@ it.effect(
     }),
 );
 
+it.effect("keeps running when the Cloud Logging writer is unavailable", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.succeed("ok").pipe(Effect.withSpan("LineupWorker.run"));
+
+    assert.strictEqual(result, "ok");
+  }).pipe(
+    Effect.provide(
+      Layer.merge(
+        makeObservabilityLive({
+          cloudLogging: true,
+          write: () => {
+            throw new Error("private-stdout-failure");
+          },
+        }),
+        ConfigProvider.layer(ConfigProvider.fromUnknown({ APP_ENV: "production" })),
+      ),
+    ),
+  ),
+);
+
 it.effect("composes development output behind the safety boundary", () =>
   Effect.gen(function* () {
     const lines: Array<string> = [];
     const console = yield* Console.Console;
-    const layer = ObservabilityLive.pipe(
+    const layer = makeObservabilityLive({ cloudLogging: false }).pipe(
       Layer.provide([
         ConfigProvider.layer(ConfigProvider.fromUnknown({ APP_ENV: "development" })),
         Layer.succeed(Console.Console)({

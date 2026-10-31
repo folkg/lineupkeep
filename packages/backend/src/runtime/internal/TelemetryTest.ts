@@ -40,6 +40,7 @@ export function makeTelemetryTest(): {
   const exporter = OtlpTracer.layer({
     url: "https://collector.test/v1/traces",
     resource: { serviceName: "privacy-test" },
+    maxBatchSize: 1,
   }).pipe(
     Layer.provide(OtlpSerialization.layerJson),
     Layer.provide(Layer.succeed(HttpClient.HttpClient)(sink)),

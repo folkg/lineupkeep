@@ -8,7 +8,7 @@ Bootstrap, outside Alchemy (Alchemy has no billing-link provider, and state cann
 
 - GCP project `lineupkeep-prod` (number `602042678335`), billing account `0139E5-D27389-43F1F2`, region `us-east1`. The gcloud CLI's active project is the unrelated `auto-gm-372620`; pass `--project=lineupkeep-prod` explicitly and do not change global config.
 - Protected Alchemy state in the owner's shared Neon project `alchemy-state` (`spring-cell-62836171`): database and role `lineupkeep_state`, direct endpoint, `sslmode=verify-full`.
-- Provisioning inputs: `~/.config/lineupkeep/infra.env` (mode 600, outside the repository) with `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, `AUTH_CLIENT_IP_HEADERS`. Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token` and never echo it.
+- Provisioning inputs: `~/.config/lineupkeep/infra.env` (mode 600, outside the repository) with `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, `AUTH_CLIENT_IP_HEADERS`. `ALERT_EMAIL` is optional and only attaches an email notification channel to the lineup-run alert; without it the alert policy still opens incidents in Cloud Monitoring. Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token` and never echo it.
 - Alchemy-managed: application Neon project (`database.run.ts`, stage `production`), project APIs and the CAD 5/month budget with 50/90/100% alerts (`platform.run.ts`, stage `production`), and the Cloud Run web service (`alchemy.run.ts`, stage `cloud-run`).
 - Email uses Resend's test sender `onboarding@resend.dev`, which delivers only to the owner's account address; a verified domain is a launch gate for open registration.
 
@@ -430,7 +430,143 @@ Metadata retrieval must stay public-only, reject redirects, and resist DNS rebin
 
 ### Telemetry
 
-For production OTLP tracing, set `OTEL_TRACES_EXPORTER=otlp` **and** `OTEL_EXPORTER_OTLP_ENDPOINT` to the deployed collector base URL; Effect appends `/v1/traces`. Supply optional secret `OTEL_EXPORTER_OTLP_HEADERS` using URI-encoded header values where required. Set application service identity and release `SERVICE_VERSION` from CI. Only the allowlisted subset is supported, not every standard OTEL environment variable. Review actual exported data under the [observability policy](../.agents/skills/observability/SKILL.md).
+The Node target exports completed Effect spans to Google Cloud Logging as one structured JSON line per span on stdout. Cloud Run's built-in logging collects stdout, parses the line into `jsonPayload`, and uses the reserved `logging.googleapis.com/trace` / `spanId` fields to join it to the request trace. There is no Cloud Logging client library, no collector, no new IAM grant, and no log write that the application can fail on: the writer is wrapped and telemetry errors are swallowed. Cloudflare and unit tests use the no-op tracer unless the explicit OTLP override is set. OTLP remains a verification and diagnostic override, not the production path.
+
+To use OTLP instead, set `OTEL_TRACES_EXPORTER=otlp` **and** `OTEL_EXPORTER_OTLP_ENDPOINT`; Effect appends `/v1/traces`. Supply optional secret `OTEL_EXPORTER_OTLP_HEADERS` with URI-encoded values where required. `OTEL_SERVICE_NAME` and `SERVICE_VERSION` override the Cloud Run defaults (`K_SERVICE`, `K_REVISION`). Only the allowlisted subset is supported. Review actual exported data under the [observability policy](../.agents/skills/observability/SKILL.md).
+
+The tracer uses the trace id Cloud Run passes in `X-Cloud-Trace-Context`, converting its decimal span id to the 16-digit hexadecimal form Cloud Logging expects. Cloud Run's own request log and the application spans therefore share one trace; the application span records `request.id` (the Cloud Run request id) and the worker run records `lineup.request` (the domain request id that links a browser or MCP submit to every run it created).
+
+#### Span and attribute inventory
+
+| Span                                                                                                            | Carries                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http.server.request` (server)                                                                                  | `http.request.method`, `url.path`, `request.id`, `http.response.status_code`                                                                                                                                                                          |
+| Operation spans such as `teams.list`, `connections.list`, `lineup.worker`, `auth.session` (server)              | `app.operation`, `request.id`, `app.outcome`, `error.type`, `http.response.status_code`                                                                                                                                                               |
+| `LineupRuns.submit`                                                                                             | `lineup.request`, `lineup.run_count`, `lineup.delivery`, `lineup.replayed`                                                                                                                                                                            |
+| `LineupWorker.deliver` (batch)                                                                                  | `lineup.run` on a delivery failure, `lineup.delivery_count`                                                                                                                                                                                           |
+| `LineupWorker.run` (one per run)                                                                                | `lineup.run`, `lineup.request`, `team.id`, `connection.id`, `lineup.trigger`, `lineup.attempt`, `lineup.status`, `lineup.resumed`, `lineup.implementation`, `lineup.action`, `lineup.provenance`                                                      |
+| `LineupWorker.run` terminal outcome                                                                             | `app.outcome` (`success`, `failure`, `blocked`, `retry`), `lineup.outcome` (`changed`, `no_op`, `failed`, `uncertain`, `blocked`, `retry`), and `lineup.failure_reason` / `lineup.uncertain_reason` / `lineup.blocked_reason` / `lineup.retry_reason` |
+| Provider operations such as `YahooProvider.readRoster`, `YahooProvider.readLeague`, `YahooProvider.scoreRoster` | `provider.operation`, bounded counts (`provider.player_count`, `provider.team_count`, `provider.day_count`, `provider.period_count`), `provider.outcome` on writes (`accepted`, `rejected`, `not_sent`, `unknown`, `session_rejected`)                |
+| `PublicInternet.request` (client)                                                                               | `http.request.method`, `server.address`, `http.response.status_code`; no full URL, query, headers, cookies or payload                                                                                                                                 |
+| `email.send`                                                                                                    | `email.provider`, `email.purpose`, `email.provider_message_id`; no recipient or body                                                                                                                                                                  |
+| Effect SQL children                                                                                             | statement text and timing only; bind values and causes are suppressed                                                                                                                                                                                 |
+
+The hosted browser is a separate Node process with no Effect tracer. It writes a structured `hosted_browser.session` event with session id, outcome, duration, failure class, and any refused host and reason. It is not part of a lineup run trace; linking-session correlation stays on the session id.
+
+#### Sampling and volume
+
+Every span is exported; no provider read is sampled out. A provider read is already one span per call containing a bounded operation name and counts, never a response body or player list, so dropping successful reads would remove the latency record that makes a slow provider diagnosable. A normal run produces tens of entries, not one per player or row. Attribute values are capped at 512 characters, at most 32 attributes, 8 events, 4 links and 16 array items; structured values such as provider payloads are dropped rather than serialized. The [safe tracer](../packages/backend/src/runtime/Observability.ts) still filters exception, cause, header, parameter, URL-query and client-path data before the Cloud Logging tracer sees it, and the Cloud Logging writer additionally drops token, cookie, crumb, secret, email, note, body and payload keys. Redacted values render as `[REDACTED]`. Never add a per-row provider payload, a token, a crumb, a cookie, a note body or an email address to a span.
+
+Trace sampling is separate from log volume: Cloud Logging entries are still written when the incoming trace is unsampled, and `logging.googleapis.com/trace_sampled` records the upstream decision.
+
+#### Queries
+
+Use Logs Explorer or `gcloud logging read`. The worker service is
+`lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y`; the web service is
+`lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc`. Keep `resource.type` in every
+query so the request logs remain available for the same trace.
+
+Failed or uncertain run:
+
+```
+resource.type="cloud_run_revision"
+resource.labels.service_name="lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y"
+jsonPayload.span.name="LineupWorker.run"
+jsonPayload.span.attributes."lineup.outcome"=("failed" OR "uncertain")
+```
+
+`app.outcome="failure"` also matches both; `lineup.outcome` distinguishes a
+definitive failure from an uncertain write whose provider response was lost.
+
+Slow provider call (over two seconds), whether read or write:
+
+```
+resource.type="cloud_run_revision"
+jsonPayload.span.attributes."provider.operation"!=""
+jsonPayload.span.duration_ms>2000
+```
+
+One run by id:
+
+```
+resource.type="cloud_run_revision"
+jsonPayload.span.name="LineupWorker.run"
+jsonPayload.span.attributes."lineup.run"="<run id>"
+```
+
+A team's last run (sort newest first, then read `lineup.outcome` and the run id):
+
+```
+resource.type="cloud_run_revision"
+jsonPayload.span.name="LineupWorker.run"
+jsonPayload.span.attributes."team.id"="<team id>"
+```
+
+Trace for a request id. The request id shown in an error reference is
+`request.id` on the web operation span; the domain request id used to group a
+submit and its runs is `lineup.request`:
+
+```
+resource.type="cloud_run_revision"
+jsonPayload.span.attributes."request.id"="<request id>"
+```
+
+Open the result's **Trace** link, or add `jsonPayload.span.attributes."lineup.request"="<request id>"` to see the submit and every worker run for the same domain request. In the CLI, ask for the trace field directly:
+
+```sh
+gcloud logging read 'resource.type="cloud_run_revision" AND jsonPayload.span.attributes."request.id"="<request id>"' \
+  --project=lineupkeep-prod --limit=1 --format='value(trace)'
+```
+
+Recorded example. This is one real line produced by the Cloud Logging tracer
+with synthetic values; Cloud Run wraps it into a `jsonPayload` log entry. It is
+the `LineupWorker.run` entry that the failed-run and run-by-id queries above
+select, and its `logging.googleapis.com/trace` value is the trace to open:
+
+```json
+{
+  "severity": "ERROR",
+  "message": "LineupWorker.run failed 0.6ms",
+  "logging.googleapis.com/trace": "d3eebcde75f4c8c8325b38080e1b27b9",
+  "logging.googleapis.com/spanId": "d8694b642b18d752",
+  "logging.googleapis.com/trace_sampled": true,
+  "span": {
+    "name": "LineupWorker.run",
+    "kind": "internal",
+    "outcome": "failed",
+    "duration_ms": 0.64125,
+    "service": "lineupkeepworker",
+    "service_version": "lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y-00041-abc",
+    "attributes": {
+      "app.outcome": "failure",
+      "connection.id": "019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a33",
+      "error.type": "provider.request_failed",
+      "http.response.status_code": 503,
+      "lineup.attempt": 1,
+      "lineup.failure_reason": "provider_rejected",
+      "lineup.outcome": "failed",
+      "lineup.request": "req_01J9ZK3F7M2C9Q4D6H8R1T5VWX",
+      "lineup.run": "019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a11",
+      "lineup.status": "reading",
+      "provider.operation": "read_roster",
+      "team.id": "019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a22"
+    }
+  }
+}
+```
+
+#### Alerts
+
+`infra/hosts/cloudRun.ts` declares a log-based Cloud Monitoring alert policy,
+`Lineupkeep failed or uncertain lineup runs`, with this filter:
+
+```
+resource.type="cloud_run_revision"
+jsonPayload.span.name="LineupWorker.run"
+jsonPayload.span.attributes."app.outcome"="failure"
+```
+
+It also matches `lineup.outcome="uncertain"` explicitly and rate-limits notifications to one per five minutes. When `ALERT_EMAIL` is set in the provisioning environment, the same stack creates an email notification channel and attaches it. The recipe then sends a verification message; verify the channel before relying on it. Without `ALERT_EMAIL`, incidents still open in Cloud Monitoring but no email is sent. Creating the policy and channel is a deploy-plan change, not something a local check can prove.
 
 ## Provisioning and publication prerequisites
 
