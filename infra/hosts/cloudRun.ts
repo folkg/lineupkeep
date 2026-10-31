@@ -115,7 +115,7 @@ export function cloudRunHost(
         ingress: "INGRESS_TRAFFIC_ALL",
         invokerIamDisabled: false,
         template: {
-          timeout: "900s",
+          timeout: "300s",
           maxInstanceRequestConcurrency: 2,
           scaling: { minInstanceCount: 0, maxInstanceCount: 2 },
           serviceAccount: workerAccount.email,

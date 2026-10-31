@@ -36,15 +36,15 @@ are the same URL; the provisioned environment file now owns that value.
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Public origin / `BETTER_AUTH_URL` | `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-hcfc7y3kha-ue.a.run.app`                                                                                                                                                                                                                            |
 | Web service                       | `lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc` — public ingress, min 0 / max 3, concurrency 20, 1 vCPU / 512 MiB, request-based billing (`cpu-throttling=true`), startup CPU boost                                                                                                                        |
-| Worker service                    | `lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y` — min 0 / max 2, concurrency 2, timeout 900 s, request-based billing, invoker IAM enforced (unauthenticated requests return 403)                                                                                                                        |
-| Hosted browser service            | `lineupkeep-hb` — `https://lineupkeep-hb-hcfc7y3kha-ue.a.run.app`, current revision `lineupkeep-hb-00010-6db`, min 0 / max 2, concurrency 1, 1 vCPU / 2 GiB, timeout 780 s, `/healthz` startup probe, request-based billing, invoker IAM enforced; only the web runtime account holds `roles/run.invoker` |
+| Worker service                    | `lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y` — min 0 / max 2, concurrency 2, timeout 300 s, request-based billing, invoker IAM enforced (unauthenticated requests return 403)                                                                                                                        |
+| Hosted browser service            | `lineupkeep-hb` — `https://lineupkeep-hb-hcfc7y3kha-ue.a.run.app`, current revision `lineupkeep-hb-00018-k2f`, min 0 / max 2, concurrency 1, 1 vCPU / 2 GiB, timeout 780 s, `/healthz` startup probe, request-based billing, invoker IAM enforced; only the web runtime account holds `roles/run.invoker` |
 | Runtime accounts                  | Web: `alchemefdt2v24ebek3kk5bbglblvc@lineupkeep-prod.iam.gserviceaccount.com`; worker: `alchems6msjzkhxxseuglypqfudf7b@…`; queue/scheduler invoker: `alchem2r7pyg3ia7ujwxdkdpon7d5z@…`; hosted browser: `alchemgx4kg3sc7lv6v6t2vmqz6g6v@…`                                                                |
 | Queue                             | `projects/lineupkeep-prod/locations/us-east1/queues/lineupkeepweb-lineupworkerqueue-cloud-run-vhxrepebzd4sojv4` — running, 5 dispatches/s, 4 concurrent, 5 attempts with 10–300 s backoff                                                                                                                 |
-| Scheduler                         | `lineupkeepweb-lineuptick-cloud-run-ctseuiblv2wtwlwu` — `0 * * * *` UTC as deployed on 2026-10-25; the declared schedule is `55 * * * *` and applies on the next authorized deploy. OIDC to `POST /api/internal/lineup-worker` with `{action:"tick",limit:50}`, 300 s attempt deadline, 2 retries         |
+| Scheduler                         | `lineupkeepweb-lineuptick-cloud-run-ctseuiblv2wtwlwu` — `55 * * * *` UTC since the 2026-10-31 deploy. OIDC to `POST /api/internal/lineup-worker` with `{action:"tick",limit:50}`, 300 s attempt deadline, 2 retries, which is why the worker timeout is 300 s rather than 900 s                           |
 | Registry                          | `us-east1-docker.pkg.dev/lineupkeep-prod/lineupkeepweb-registry-cloud-run-u4rplfecdzi27v3w` — `web:*` and `browser:*` images; the browser image is about 853 MB expanded and replaces the Chromium headless deployment on every content change                                                            |
 | Application database              | Alchemy-managed `LineupkeepDatabase` / `production` Neon Free project, independent of protected state                                                                                                                                                                                                     |
 | Secret Manager                    | `lineupkeepweb-secret-better-auth-secret-cloud-run-zz7b4zbcg2rfo5fb`, `…-connection-encryption-key-cloud-run-ec7zelts3e7mtrtt`, `…-resend-api-key-cloud-run-6daiaqee2uvf6llx`, `…-database-url-cloud-run-2zpqgtvdba7gierc`, `…-hosted-browser-descriptor-key-cloud-run-ifx5uoc5omsxeu74`                  |
-| Secret versions                   | The web and browser revisions pin immutable versions; the descriptor key has six enabled versions and the live revisions pin version 6 on 2026-10-28. Keep only pinned versions after a rollback window.                                                                                                  |
+| Secret versions                   | The web and browser revisions pin immutable versions; on 2026-10-31 the live revisions pin descriptor key version 12 and database URL version 44. Keep only pinned versions after a rollback window.                                                                                                      |
 
 **First plan review (2026-10-25):** the `cloud-run` plan proposed 26 resources,
 all creates — four secrets with their access bindings and immutable versions,
@@ -81,6 +81,20 @@ web digest, and hosted browser `lineupkeep-hb-00010-6db` on browser digest
 The plan for that deploy reported 12 updates and no creates or deletions. The
 web and browser revisions pin descriptor key version 6.
 
+Current revisions after the cost-settings deploy (2026-10-31): web
+`lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-00043-4c8` and worker
+`lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y-00044-z9g` on web digest
+`sha256:b77e051ae741ab8147f887be10d60c0394dcc0d2a2036cbc1ceb8581851f9958`, and
+hosted browser `lineupkeep-hb-00018-k2f` on browser digest
+`sha256:a38ebae1366223b286941345f1194b8f3e5e09a3c0bbc6dab7357046d3bef503`.
+The plan reported 16 updates and no creates or deletions: the worker timeout
+(900 s → 300 s), the scheduler schedule (`0 * * * *` → `55 * * * *`, declared
+but not yet applied), two image builds and publishes, the migration run, the
+three services, and five secret versions. The live revisions pin descriptor key
+version 12 and database URL version 44, and the scheduler is `55 * * * *` UTC.
+A manual scheduler run returned `200` in 13.4 s on the new worker revision, and
+`GET /` answered `200` on the new web revision in 0.29 s.
+
 The deterministic alias
 `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-602042678335.us-east1.run.app`
 also resolves, but the canonical URL above is the auth origin. Do not configure
@@ -98,19 +112,140 @@ a version that the current web or worker revision references.
 Planning estimate for one owner and five teams, not a measured invoice or a
 zero-cost promise. The budget is a CAD 5/month alerting budget, not a hard cap.
 
-| Dimension         | Expectation                                                                                                                                                                                                                                                                                                   |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cloud Run         | Hourly ticks, a few user requests, and month-end runs should stay inside the request-billed free allowances (2M requests, 180k vCPU-s, 360k GiB-s). Cold starts count.                                                                                                                                        |
-| Hosted browser    | One link is roughly 1–3 minutes of 1 vCPU / 2 GiB, about CAD 0.003–0.01 before free allowances; 120 vCPU-s and 240 GiB-s per two-minute session means roughly 1,500 sessions/month fit inside the 180k vCPU-s free allowance. Idle cost is zero at min 0. Two concurrent sessions are the configured ceiling. |
-| Cloud Tasks       | One small message per run plus retries; inside the free 1M operations.                                                                                                                                                                                                                                        |
-| Cloud Scheduler   | One job; inside the free three jobs per billing account unless other projects consume them, then $0.10/job/month.                                                                                                                                                                                             |
-| Secret Manager    | 13 active versions after the hosted browser deploy (six free per billing account); up to about CAD 0.24/month for the excess. Destroy superseded versions after rollback windows.                                                                                                                             |
-| Artifact Registry | The web image plus the ~853 MB expanded browser image (compressed layers are smaller). The repository may exceed the 0.5 GiB free allowance; storage is about CAD 0.10/GB-month, so the current pair is on the order of a few cents per month.                                                                |
-| Neon              | Free-plan quotas (100 CU-hours, 1 GB per project); hourly bursts must actually suspend to remain inside them.                                                                                                                                                                                                 |
-| Resend            | Test sender only until a domain is verified; free 100/day and 3,000/month.                                                                                                                                                                                                                                    |
+| Dimension         | Expectation                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloud Run         | Hourly ticks, a few user requests, and month-end runs should stay inside the request-billed free allowances (2M requests, 180k vCPU-s, 360k GiB-s). Cold starts count.                                                                                                                                                                                                                                                                            |
+| Hosted browser    | One link is roughly 1–3 minutes of 1 vCPU / 2 GiB, about CAD 0.003–0.01 before free allowances; 120 vCPU-s and 240 GiB-s per two-minute session means roughly 1,500 sessions/month fit inside the 180k vCPU-s free allowance. Idle cost is zero at min 0. Two concurrent sessions are the configured ceiling.                                                                                                                                     |
+| Cloud Tasks       | One small message per run plus retries; inside the free 1M operations.                                                                                                                                                                                                                                                                                                                                                                            |
+| Cloud Scheduler   | One job; inside the free three jobs per billing account unless other projects consume them, then $0.10/job/month.                                                                                                                                                                                                                                                                                                                                 |
+| Secret Manager    | 98 active versions on 2026-10-31 — database URL 44, the other three runtime secrets 14 each, descriptor key 12 — against six free per billing account; automatic replication bills as one location, so 92 × $0.06 ≈ $5.52/month. That is the largest single item on this account and larger than the whole CAD 5 budget, and every deploy adds five. Keep only the versions that the live and rollback-target revisions pin and destroy the rest. |
+| Artifact Registry | The web image plus the ~853 MB expanded browser image (compressed layers are smaller). The repository may exceed the 0.5 GiB free allowance; storage is about CAD 0.10/GB-month, so the current pair is on the order of a few cents per month.                                                                                                                                                                                                    |
+| Neon              | Free-plan quotas (100 CU-hours, 1 GB per project); hourly bursts must actually suspend to remain inside them.                                                                                                                                                                                                                                                                                                                                     |
+| Resend            | Test sender only until a domain is verified; free 100/day and 3,000/month.                                                                                                                                                                                                                                                                                                                                                                        |
 
 Budget alerts fire at 50 %, 90 % and 100 % of CAD 5. Review actual usage before
 adding users, teams or a sending domain.
+
+### Measured usage and the idle window (2026-10-31)
+
+The worker looks busy for about fifteen minutes after each hourly tick, and that
+time is neither work nor a charge. Cloud Run keeps a scaled-to-zero instance for
+at most 15 minutes after it last handled a request ("An instance will never stay
+idle for more than 15 minutes after processing a request"); with request-based
+billing and no minimum instances that window is throttled, unbilled time. Over
+the seven days to 2026-10-31 the worker instance existed for 2,451
+instance-minutes but accrued 2,716.9 billable instance-seconds (45 minutes):
+1.8 % of its presence. Nothing in the service extends the window. The minimum is
+zero, `cpu-throttling` is true, the hourly tick is the only request
+(`request_count` is 1 per hour with no requests inside the tail), and neither
+server image holds a timer or keepalive: the only `setInterval`/`setTimeout`
+calls outside the client bundle belong to an open hosted-browser session
+(`packages/hosted-browser`) and a socket-close timeout. The web service and the
+hosted browser show the same shape.
+
+Measured 2026-10-24 → 2026-10-31 from Cloud Monitoring `run.googleapis.com/*`:
+
+| Service        | Requests | Request p50 / p95 / p99 | End-to-end p50 / p95 / p99 | Cold starts | Start-up p50 / p95 | Memory p50 / p95 / p99 vs limit     | CPU p95 / p99 | Peak concurrency p99 | Billable vs present  |
+| -------------- | -------- | ----------------------- | -------------------------- | ----------- | ------------------ | ----------------------------------- | ------------- | -------------------- | -------------------- |
+| Web            | 1,694    | 364 / 1,371 / 1,891 ms  | 400 / 1,746 / 7,407 ms     | 77          | 5.67 / 5.92 s      | 172 / 203 / 210 MiB of 512 (41 %)   | 5.1 / 10.2 %  | 4.0 of 20            | 1,872 s vs 1,408 min |
+| Worker         | 150      | 11.5 / 18.0 / 22.0 s    | 17.8 / 24.6 / 29.3 s       | 159         | 5.68 / 6.24 s      | 173 / 189 / 216 MiB of 512 (42 %)   | 6.3 / 13.6 %  | 1.9 of 2             | 2,717 s vs 2,451 min |
+| Hosted browser | 20       | 1.7 s / 138 s / 290 s   | 1.7 s / 138 s / 319 s      | 20          | 5.15 / 5.37 s      | 122 / 385 / 700 MiB of 2 GiB (34 %) | 6.2 / 36.7 %  | 1.7 of 1             | 738 s vs 323 min     |
+
+`request_latencies` measures execution; `request_latency/e2e_latencies` is what a
+caller sees and includes the pending start-up, which is why the web clips 7.4 s
+at p99 and the worker 29.3 s. Cold-start count is the number of
+`container/startup_latencies` samples, one per worker tick plus deployments. The
+hourly tick therefore answers about 18 s after the scheduler fires: 5.7 s
+container start, then an 11.5 s median tick that reads provider pages and
+writes the run.
+
+Cost, projected from the same seven days over 30.4375 days at us-east1 list
+price (Cloud Billing catalog, 2026-10-30: $0.000024/vCPU-s, $0.0000025/GiB-s,
+$0.40 per million requests):
+
+| Service        | vCPU-s | GiB-s  | Requests | Gross  |
+| -------------- | ------ | ------ | -------- | ------ |
+| Web            | 12,546 | 3,969  | 7,366    | $0.314 |
+| Worker         | 21,650 | 5,695  | 652      | $0.534 |
+| Hosted browser | 4,146  | 6,045  | 87       | $0.115 |
+| Total          | 38,342 | 15,710 | 8,105    | $0.963 |
+
+The free allowances are 180,000 vCPU-seconds, 360,000 GiB-seconds and 2,000,000
+requests per billing account, and this billing account also serves
+`auto-gm-372620` (`mutation-api-prod`, another 19,425 vCPU-seconds and 9,541
+GiB-seconds a month at the same projection). Together they use 32 % of the free
+CPU, 7 % of the free memory and 0.4 % of the free requests, so Cloud Run bills
+nothing at this size and every figure above is gross list price, not an invoice.
+The project has no BigQuery billing export, so per-service cost is derived from
+the allocation-time metrics that Cloud Run bills against.
+
+These numbers fix the settings:
+
+- **Minimum instances stay 0 on all three services.** One warm worker instance
+  is 2,592,000 min-instance vCPU-seconds and 1,296,000 GiB-seconds a month:
+  $6.57 + $3.29 = $9.86, against $0.53 of billable work today, and more than the
+  CAD 5 budget on its own. It removes 5.7 s from a tick that runs once an hour.
+  A warm hosted browser is $6.57 + $13.15 = $19.72 a month to remove the
+  first-frame cold start.
+- **Billing stays request-based** (`cpuIdle: true`, `cpu-throttling: true`). The
+  2,406 idle instance-minutes a week are free only under this setting; charged
+  across the instance lifecycle they would be 627,635 vCPU-seconds and 313,817
+  GiB-seconds a month, about $11.93.
+- **CPU and memory stay 1 vCPU / 512 MiB (web, worker) and 1 vCPU / 2 GiB
+  (browser).** Peak memory is 41–42 % of the web and worker limits, both services
+  are provider- and database-bound, and a smaller CPU would lengthen the tick
+  rather than save a billed second. A real Chromium session reached 849 MiB, so
+  2 GiB is 2.4× the observed peak; 1 GiB would leave less headroom than a heavier
+  provider page can take.
+- **Concurrency stays 2 (worker), 20 (web), 1 (browser).** Peak request
+  concurrency is 1.9, 4.0 and 1.7. A lower web cap only starts more instances and
+  pays more cold starts for the same work.
+- **The worker timeout is 300 s, not 900 s.** The scheduler abandons an attempt
+  at 300 s and Cloud Tasks abandons a delivery at its 10-minute dispatch
+  deadline, so a longer server timeout only bills work whose caller has already
+  given up. The measured tick is 17.8 s end-to-end at p50 and 29.3 s at p99, and
+  300 s still covers a queued batch of about 50 runs at the measured ~2 s per
+  run. A batch that is killed any way is retried by the queue and resumes from
+  its recorded plan.
+
+Deliberately unchanged, and what decided it:
+
+- The hosted browser keeps minimum 0 and its 780 s timeout. The first link after
+  a quiet period pays the 5.15 s container start measured above (9.4 s to the
+  first JPEG frame in the 2026-10-25 probe), and a warm instance costs $19.72 a
+  month to avoid it.
+- The web keeps its 300 s timeout even though the browser session clock is ten
+  minutes: one request in the last seven days ended in the 295–325 s bucket at
+  that boundary. Raising it raises the worst case this section is bounding and
+  needs a session-length measurement of its own first.
+- Secret Manager versions and Artifact Registry storage are the other billed
+  Cloud Run-adjacent items and are governed by their own notes above.
+
+After the 2026-10-31 deploy the 02:55 UTC tick showed the same shape on worker
+revision `…-00044-z9g`: one start-up sample, 7.8 billable instance-seconds for
+the 5.7 s start and a 2.0 s tick (the earlier 20.7 s tick was the same start-up
+plus a 14.8 s tick that had a run to deliver), 1.0 s billed when the instance
+shut down, and 0.0 billable seconds in each of the fourteen idle minutes in
+between. The timeout change cannot move those numbers; it bounds a stuck
+request at 300 s instead of 900 s.
+
+To repeat the comparison, ask for instance presence and billable seconds over the
+same window and read them side by side (there is no `gcloud` time-series
+command; the Monitoring API is the route):
+
+```sh
+TOKEN="$(gcloud auth print-access-token)"
+END="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+START="$(date -u -v-1d +%Y-%m-%dT%H:%M:%SZ)"   # GNU date: date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ
+for metric in instance_count billable_instance_time; do
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    "https://monitoring.googleapis.com/v3/projects/lineupkeep-prod/timeSeries?filter=metric.type%3D%22run.googleapis.com%2Fcontainer%2F${metric}%22&interval.startTime=${START}&interval.endTime=${END}&aggregation.alignmentPeriod=3600s&aggregation.perSeriesAligner=ALIGN_SUM"
+done
+```
+
+Presence well above billable seconds is the idle window; presence equal to
+billable seconds would mean instance-based billing or minimum instances have
+crept back.
 
 ### Redeploy and rollback
 
