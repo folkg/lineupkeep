@@ -204,7 +204,7 @@ it.effect(
     }),
 );
 
-it.effect("keeps running when the Cloud Logging writer is unavailable", () =>
+it.effect("keeps running when the wide event writer is unavailable", () =>
   Effect.gen(function* () {
     const result = yield* Effect.succeed("ok").pipe(Effect.withSpan("LineupWorker.run"));
 
@@ -213,7 +213,7 @@ it.effect("keeps running when the Cloud Logging writer is unavailable", () =>
     Effect.provide(
       Layer.merge(
         makeObservabilityLive({
-          cloudLogging: true,
+          wideEvents: true,
           write: () => {
             throw new Error("private-stdout-failure");
           },
@@ -224,11 +224,54 @@ it.effect("keeps running when the Cloud Logging writer is unavailable", () =>
   ),
 );
 
+it.effect("keeps an exceptional error as its own entry outside a unit", () =>
+  Effect.gen(function* () {
+    const lines: Array<string> = [];
+    const console = yield* Console.Console;
+    const layer = makeObservabilityLive({ wideEvents: true, write: () => undefined }).pipe(
+      Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ APP_ENV: "production" }))),
+    );
+
+    yield* Effect.logError("Background operation failed").pipe(
+      Effect.withSpan("telemetry.server_error"),
+      Effect.provide(layer),
+      Effect.provideService(Console.Console, {
+        assert: console.assert.bind(console),
+        clear: console.clear.bind(console),
+        count: console.count.bind(console),
+        countReset: console.countReset.bind(console),
+        debug: console.debug.bind(console),
+        dir: console.dir.bind(console),
+        dirxml: console.dirxml.bind(console),
+        error: (...values) => {
+          lines.push(values.map(String).join(" "));
+        },
+        group: console.group.bind(console),
+        groupCollapsed: console.groupCollapsed.bind(console),
+        groupEnd: console.groupEnd.bind(console),
+        info: console.info.bind(console),
+        log: (...values) => {
+          lines.push(values.map(String).join(" "));
+        },
+        table: console.table.bind(console),
+        time: console.time.bind(console),
+        timeEnd: console.timeEnd.bind(console),
+        timeLog: console.timeLog.bind(console),
+        trace: console.trace.bind(console),
+        warn: console.warn.bind(console),
+      }),
+    );
+
+    assert.strictEqual(lines.length, 1);
+    assert.include(lines.join(""), "Background operation failed");
+  }),
+);
+
 it.effect("composes development output behind the safety boundary", () =>
   Effect.gen(function* () {
     const lines: Array<string> = [];
     const console = yield* Console.Console;
-    const layer = makeObservabilityLive({ cloudLogging: false }).pipe(
+    const layer = makeObservabilityLive({ wideEvents: false }).pipe(
       Layer.provide([
         ConfigProvider.layer(ConfigProvider.fromUnknown({ APP_ENV: "development" })),
         Layer.succeed(Console.Console)({

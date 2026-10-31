@@ -42,6 +42,7 @@ export function verificationEnvironment(
       ? {}
       : { OTEL_EXPORTER_OTLP_ENDPOINT: loopback(port(stack, "traces")) }),
     OTEL_TRACES_EXPORTER: "otlp",
+    OTEL_EXPORTER_OTLP_PROTOCOL: "http/json",
     OTEL_BSP_SCHEDULE_DELAY: "100",
     ...(target === "node" && stack?.inspector !== undefined
       ? { VERIFICATION_NODE_INSPECTOR: `http://${new URL(stack.inspector).host}` }

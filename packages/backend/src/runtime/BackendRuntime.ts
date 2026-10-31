@@ -77,7 +77,11 @@ export class BackendRuntime<Services = BackendServices> {
     const track = <A>(work: Promise<A>): Promise<A> => this.track(work);
 
     const registerAfterResponse = Effect.flatMap(BackgroundWork, (background) =>
-      Effect.sync(() => background.extend(track(runPlatform(afterResponse)))),
+      Effect.suspend(() => {
+        const work = track(runPlatform(afterResponse));
+        background.extend(work);
+        return Effect.promise(() => work);
+      }),
     );
 
     return track(

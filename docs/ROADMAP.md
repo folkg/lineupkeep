@@ -195,38 +195,53 @@ touched inside it, plus real spans in Cloud Trace for the parts worth a waterfal
 
 ### D1 — Send spans to Cloud Trace, not to the log
 
-- [ ] Export through OTLP to Google Cloud's Telemetry API rather than hand-writing span lines to stdout.
+- [x] Export through OTLP to Google Cloud's Telemetry API rather than hand-writing span lines to stdout.
       Cloud Trace accepts OTLP directly, so this removes our bespoke writer instead of adding to it.
-- [ ] Keep the existing Effect spans and attributes as the source; this changes the exporter, not the
+- [x] Keep the existing Effect spans and attributes as the source; this changes the exporter, not the
       instrumentation.
-- [ ] Confirm a request appears as one trace with a service waterfall, and that a lineup run's provider
+- [x] Confirm a request appears as one trace with a service waterfall, and that a lineup run's provider
       calls appear as child spans of the run.
-- [ ] Check what Alchemy already provides before writing an exporter by hand; if the stack can inject the
+- [x] Check what Alchemy already provides before writing an exporter by hand; if the stack can inject the
       telemetry configuration, prefer that over application code that hard-codes endpoints.
 
 **Verify**: a real request and a real lineup run viewed as traces in Cloud Trace, with the provider children
 attached. `M`
 
+Shipped: the Cloud Run host injects the OpenTelemetry environment and the runtime account holds
+`roles/telemetry.tracesWriter`; the exporter mints its token from the metadata server. Effect's own OTLP
+exporter writes protobuf to `telemetry.googleapis.com`, and Alchemy has no Cloud Run telemetry binding to
+inject instead. The first real worker request trace held 318 spans, with `YahooProvider.readLeague`,
+`YahooProvider.readRoster`, `YahooProvider.readPlayerHistory`, and `PublicInternet.request` under each
+`LineupWorker.run`. A request exported before the IAM grant propagated was lost, which is the expected
+telemetry-never-fails-a-request behaviour.
+
 ### D2 — One wide event per request and per run
 
-- [ ] Emit a single structured log entry per HTTP request and per lineup run, carrying the request id, the
+- [x] Emit a single structured log entry per HTTP request and per lineup run, carrying the request id, the
       route or tool, the actor, the connection and team, the counts that matter, the durations, the outcome,
       and the trace id, so a person reading logs sees one line per unit of work instead of a dozen.
-- [ ] Keep the existing redaction and suppression rules; a wide event must never carry a token, cookie,
+- [x] Keep the existing redaction and suppression rules; a wide event must never carry a token, cookie,
       crumb, note body, email address or provider payload.
-- [ ] Decide what stays a separate line: genuinely exceptional errors, and anything outside a request, such
+- [x] Decide what stays a separate line: genuinely exceptional errors, and anything outside a request, such
       as startup and shutdown.
-- [ ] Keep the failed-run alert working from the wide event rather than from a span line.
+- [x] Keep the failed-run alert working from the wide event rather than from a span line.
 
 **Verify**: one grep for a request id returns exactly one log entry, and its trace id opens the correct trace.
 `M`
 
+Shipped: the aggregation is a tracer over the exported spans, so there is no second instrumentation path.
+`event.kind` distinguishes a request from a run, and the alert filter moved to `event.kind` plus
+`event.outcome`. Transport statement detail is kept in the trace children rather than merged into the entry.
+
 ### D3 — Retire what this replaces
 
-- [ ] Remove the bespoke span-to-stdout writer and the tests that pin its shape.
-- [ ] Update the runbook queries, which currently describe span lines.
+- [x] Remove the bespoke span-to-stdout writer and the tests that pin its shape.
+- [x] Update the runbook queries, which currently describe span lines.
 
 **Verify**: no span-shaped log line remains, and the runbook's queries still find a run. `S`
+
+Shipped: `CloudLoggingTracer` and its test are gone, replaced by `WideEventTracer`. A five-run worker tick
+wrote 377 span lines before and writes six wide events now.
 
 ## E. Cold start and the edge question
 

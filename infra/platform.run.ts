@@ -20,6 +20,8 @@ const projectApis: ReadonlyArray<{ readonly id: string; readonly service: string
   { id: "MonitoringApi", service: "monitoring.googleapis.com" },
   { id: "SecretManagerApi", service: "secretmanager.googleapis.com" },
   { id: "ServiceUsageApi", service: "serviceusage.googleapis.com" },
+  { id: "TelemetryApi", service: "telemetry.googleapis.com" },
+  { id: "CloudTraceApi", service: "cloudtrace.googleapis.com" },
 ];
 
 const providers = gcpProviders;

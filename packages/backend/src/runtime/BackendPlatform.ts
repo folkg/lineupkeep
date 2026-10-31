@@ -24,9 +24,9 @@ export function longRunningProcess(): BackendPlatform {
     databaseLifetime: "process",
     database: DatabaseConnection.fromConfig({ idleTimeout: Duration.seconds(10) }),
     background: BackgroundWork.processLifetime,
-    observability: makeObservabilityLive({ cloudLogging: true }),
+    observability: makeObservabilityLive({ wideEvents: true }),
     publicInternet: publicInternetProcess,
-    afterResponse: Effect.void,
+    afterResponse: flushTelemetry,
   };
 }
 
@@ -41,12 +41,17 @@ export function isolate(options: {
       prepareStatements: false,
     }),
     background: BackgroundWork.fromWaitUntil(options.waitUntil),
-    observability: makeObservabilityLive({ cloudLogging: false }),
+    observability: makeObservabilityLive({ wideEvents: false }),
     publicInternet: publicInternetIsolate,
     afterResponse: flushTelemetry,
   };
 }
 
-const flushTelemetry = Effect.flatMap(OtlpExporter.Flusher, (flusher) => flusher.flush);
+const flushTelemetry = Effect.flatMap(OtlpExporter.Flusher, (flusher) =>
+  flusher.flush.pipe(
+    Effect.timeoutOption(Duration.seconds(3)),
+    Effect.catchCause(() => Effect.void),
+  ),
+);
 
 type WaitUntil = (promise: Promise<unknown>) => void;

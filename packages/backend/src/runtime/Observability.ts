@@ -1,11 +1,22 @@
-import { Config, Console, Duration, Effect, Layer, Logger, Tracer, Cause, Exit } from "effect";
-import { FetchHttpClient } from "effect/http";
+import {
+  Config,
+  Console,
+  Duration,
+  Effect,
+  Layer,
+  Logger,
+  Option,
+  Tracer,
+  Cause,
+  Exit,
+} from "effect";
 import { OtlpExporter, OtlpSerialization, OtlpTracer } from "effect/observability";
 
 import { appEnvironmentConfig, type AppEnvironment } from "#config/AppEnvironment.ts";
 
-import { makeCloudLoggingTracer } from "./CloudLoggingTracer.ts";
+import { telemetryHttpClientLayer } from "./GoogleCloudTelemetry.ts";
 import { makePrettyConsoleTracer } from "./PrettyConsoleTracer.ts";
+import { makeWideEventTracer } from "./WideEventTracer.ts";
 export const safeTracerLayer = Layer.effect(
   Tracer.Tracer,
   Effect.map(Tracer.Tracer, makeSafeTracer),
@@ -17,8 +28,12 @@ export function makeObservabilityLive(
   return Layer.unwrap(
     Effect.map(loadObservabilityConfig(), (config) =>
       Layer.merge(
-        Logger.layer([Logger.tracerLogger]),
-        safeTracerLayer.pipe(Layer.provideMerge(tracerLayer(config, options))),
+        Logger.layer(
+          options.wideEvents
+            ? [Logger.tracerLogger, Logger.consolePretty({ colors: false })]
+            : [Logger.tracerLogger],
+        ),
+        safeTracerLayer.pipe(Layer.provideMerge(innerTracerLayer(config, options))),
       ),
     ),
   );
@@ -27,6 +42,8 @@ export function makeObservabilityLive(
 function loadObservabilityConfig(): Config.Config<{
   environment: "development" | "production" | "test";
   otlpExporter: string;
+  otlpProtocol: "http/json" | "http/protobuf";
+  googleCloudTelemetry: boolean;
   serviceName: string;
   serviceVersion: string;
   slowSpanThreshold: Duration.Duration;
@@ -34,6 +51,22 @@ function loadObservabilityConfig(): Config.Config<{
   return Config.all({
     environment: appEnvironmentConfig,
     otlpExporter: Config.String("OTEL_TRACES_EXPORTER").pipe(Config.withDefault("none")),
+    otlpProtocol: Config.Literals(
+      ["http/json", "http/protobuf"],
+      "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL",
+    ).pipe(
+      Config.orElse(() =>
+        Config.Literals(["http/json", "http/protobuf"], "OTEL_EXPORTER_OTLP_PROTOCOL"),
+      ),
+      Config.withDefault("http/protobuf" as const),
+    ),
+    googleCloudTelemetry: Config.option(
+      Config.URL("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").pipe(
+        Config.orElse(() => Config.URL("OTEL_EXPORTER_OTLP_ENDPOINT")),
+      ),
+    ).pipe(
+      Config.map(Option.exists((endpoint) => endpoint.hostname === "telemetry.googleapis.com")),
+    ),
     serviceName: Config.String("OTEL_SERVICE_NAME").pipe(
       Config.orElse(() => Config.String("K_SERVICE")),
       Config.withDefault("lineupkeep-web"),
@@ -48,7 +81,7 @@ function loadObservabilityConfig(): Config.Config<{
   });
 }
 
-function tracerLayer(
+function innerTracerLayer(
   config: ObservabilityConfig,
   options: ObservabilityOptions,
 ): Layer.Layer<OtlpExporter.Flusher, never, never> {
@@ -65,35 +98,50 @@ function tracerLayer(
     return Layer.merge(prettyTracer, OtlpExporter.layerFlusher);
   }
 
-  if (config.otlpExporter === "otlp") {
-    return OtlpTracer.layerFromConfig({
-      resource: {
-        attributes: {
-          "deployment.environment.name": config.environment,
-        },
-        serviceName: config.serviceName,
-        serviceVersion: config.serviceVersion,
+  const exporter = otlpExporterLayer(config);
+  if (!options.wideEvents) {
+    return Layer.merge(exporter ?? Layer.empty, OtlpExporter.layerFlusher);
+  }
+
+  const wideEvents = Layer.effect(
+    Tracer.Tracer,
+    Effect.gen(function* () {
+      const inner = yield* Tracer.Tracer;
+      const console = yield* Console.Console;
+      return makeWideEventTracer({
+        inner,
+        write: options.write ?? ((line) => console.log(line)),
+      });
+    }),
+  );
+  return Layer.merge(
+    wideEvents.pipe(Layer.provideMerge(exporter ?? Layer.empty)),
+    OtlpExporter.layerFlusher,
+  );
+}
+
+function otlpExporterLayer(
+  config: ObservabilityConfig,
+): Layer.Layer<OtlpExporter.Flusher, never, never> | undefined {
+  if (config.otlpExporter !== "otlp") {
+    return undefined;
+  }
+  return OtlpTracer.layerFromConfig({
+    resource: {
+      attributes: {
+        "deployment.environment.name": config.environment,
       },
-    }).pipe(Layer.provide(OtlpSerialization.layerJson), Layer.provide(FetchHttpClient.layer));
-  }
-
-  if (config.environment === "production" && options.cloudLogging) {
-    return Layer.merge(
-      Layer.effect(
-        Tracer.Tracer,
-        Effect.map(Console.Console, (console) =>
-          makeCloudLoggingTracer({
-            serviceName: config.serviceName,
-            serviceVersion: config.serviceVersion,
-            write: options.write ?? ((line) => console.log(line)),
-          }),
-        ),
-      ),
-      OtlpExporter.layerFlusher,
-    );
-  }
-
-  return OtlpExporter.layerFlusher;
+      serviceName: config.serviceName,
+      serviceVersion: config.serviceVersion,
+    },
+  }).pipe(
+    Layer.provide(
+      config.otlpProtocol === "http/json"
+        ? OtlpSerialization.layerJson
+        : OtlpSerialization.layerProtobuf,
+    ),
+    Layer.provide(telemetryHttpClientLayer({ googleCloud: config.googleCloudTelemetry })),
+  );
 }
 
 function makeSafeTracer(tracer: Tracer.Tracer): Tracer.Tracer {
@@ -188,13 +236,15 @@ function isSuppressedAttribute(key: string, kind?: Tracer.SpanKind): boolean {
 }
 
 type ObservabilityOptions = {
-  readonly cloudLogging: boolean;
+  readonly wideEvents: boolean;
   readonly write?: (line: string) => void;
 };
 
 type ObservabilityConfig = {
   readonly environment: AppEnvironment;
   readonly otlpExporter: string;
+  readonly otlpProtocol: "http/json" | "http/protobuf";
+  readonly googleCloudTelemetry: boolean;
   readonly serviceName: string;
   readonly serviceVersion: string;
   readonly slowSpanThreshold: Duration.Duration;

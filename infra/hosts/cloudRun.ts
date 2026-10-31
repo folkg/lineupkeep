@@ -50,6 +50,29 @@ export function cloudRunHost(
       const browserAccount = yield* GCP.IAM.ServiceAccount("HostedBrowserRuntime", {
         displayName: "Lineupkeep hosted browser runtime",
       });
+      const project = yield* Config.String("GOOGLE_PROJECT_ID").pipe(
+        Config.orElse(() => Config.String("GOOGLE_CLOUD_PROJECT")),
+      );
+      const telemetryEnvironment = [
+        { name: "OTEL_TRACES_EXPORTER", value: "otlp" },
+        { name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: "https://telemetry.googleapis.com" },
+        { name: "OTEL_EXPORTER_OTLP_PROTOCOL", value: "http/protobuf" },
+        { name: "OTEL_RESOURCE_ATTRIBUTES", value: `gcp.project_id=${project}` },
+      ];
+      const telemetryNames = new Set(telemetryEnvironment.map((entry) => entry.name));
+      yield* Effect.forEach(
+        [
+          { id: "WebTelemetryWriter", account },
+          { id: "WorkerTelemetryWriter", account: workerAccount },
+        ],
+        ({ id, account: writer }) =>
+          GCP.IAM.Member(id, {
+            kind: "project",
+            name: project,
+            role: "roles/telemetry.tracesWriter",
+            member: Output.map(writer.email, (email) => `serviceAccount:${email}`),
+          }),
+      );
       const { plain, secrets } = partitionEnvironment(environment);
       const secretEntries = yield* Effect.forEach(secrets, ([name, value]) =>
         runtimeSecret(name, value, [
@@ -106,7 +129,7 @@ export function cloudRunHost(
             },
           },
         })),
-      ];
+      ].filter((entry) => !telemetryNames.has(entry.name));
       const queueEnqueuer = yield* GCP.IAM.ServiceAccount("QueueEnqueuer", {
         displayName: "Lineupkeep queue enqueuer and scheduler invoker",
       });
@@ -133,7 +156,11 @@ export function cloudRunHost(
             {
               ...cloudRunContainer(),
               image,
-              env: [...runtimeEnv, { name: "LINEUP_WORKER_ENABLED", value: "true" }],
+              env: [
+                ...runtimeEnv,
+                ...telemetryEnvironment,
+                { name: "LINEUP_WORKER_ENABLED", value: "true" },
+              ],
             },
           ],
         },
@@ -161,7 +188,7 @@ export function cloudRunHost(
             displayName: "Failed or uncertain lineup run",
             conditionMatchedLog: {
               filter:
-                'resource.type="cloud_run_revision" AND jsonPayload.span.name="LineupWorker.run" AND (jsonPayload.span.attributes."app.outcome"="failure" OR jsonPayload.span.attributes."lineup.outcome"="uncertain")',
+                'resource.type="cloud_run_revision" AND jsonPayload.event.kind="lineup_run" AND jsonPayload.event.outcome=("failed" OR "uncertain")',
             },
           },
         ],
@@ -171,7 +198,7 @@ export function cloudRunHost(
           subject: "Lineupkeep lineup run needs attention",
           mimeType: "text/markdown",
           content:
-            "A lineup run finished failed or uncertain. Find the `LineupWorker.run` entry, then follow its trace to the provider calls. The deployment runbook lists the queries and the support boundary.",
+            "A lineup run finished failed or uncertain. Find the `lineup_run` wide event, then follow its trace to the provider calls. The deployment runbook lists the queries and the support boundary.",
         },
       });
       yield* GCP.IAM.Member("WorkerInvoker", {
@@ -257,6 +284,7 @@ export function cloudRunHost(
               image,
               env: [
                 ...runtimeEnv,
+                ...telemetryEnvironment,
                 { name: "LINEUP_CLOUD_TASKS_QUEUE", value: queue.name },
                 { name: "LINEUP_WORKER_URL", value: workerUrl },
                 { name: "LINEUP_QUEUE_SERVICE_ACCOUNT", value: queueEnqueuer.email },

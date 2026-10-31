@@ -99,6 +99,21 @@ project's images were removed, and reported 18 updates. Before them, the
 revisions `…-00043-4c8`, `…-00044-z9g` and `lineupkeep-hb-00018-k2f` on web digest
 `sha256:b77e051ae741ab8147f887be10d60c0394dcc0d2a2036cbc1ceb8581851f9958`.
 
+Current revisions after the wide-event and Cloud Trace deploy (2026-10-31):
+web `lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-00053-st6` and worker
+`lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y-00054-6rc` on web digest
+`sha256:189678363a8b600f78718382b8ff3b9acbe4f6bf44f3a9b6218cb20ae7907f0b`;
+the hosted browser stayed on `lineupkeep-hb-00019-b9p`. The first apply that day
+(web `…-00049-twx`, worker `…-00050-cv4`) reported two creates and 18 updates:
+the creates were the `roles/telemetry.tracesWriter` bindings for the web and
+worker runtime accounts, and the updates were both images and services, the
+alert policy's log filter, the scheduler job, the migration step, the retention
+steps, and a `DATABASE_URL` secret version. A request made within seconds of
+that apply exported no trace because the new binding had not propagated, which
+the exporter accepted silently. Three more applies carried review-free refinements
+to the wide event's attribute merge, the exceptional-error logger, and one
+unused record field; each reported 17 updates.
+
 The deterministic alias
 `https://lineupkeepweb-web-cloud-run-aptkd6b27csgvtcc-602042678335.us-east1.run.app`
 also resolves, but the canonical URL above is the auth origin. Do not configure
@@ -639,11 +654,40 @@ Metadata retrieval must stay public-only, reject redirects, and resist DNS rebin
 
 ### Telemetry
 
-The Node target exports completed Effect spans to Google Cloud Logging as one structured JSON line per span on stdout. Cloud Run's built-in logging collects stdout, parses the line into `jsonPayload`, and uses the reserved `logging.googleapis.com/trace` / `spanId` fields to join it to the request trace. There is no Cloud Logging client library, no collector, no new IAM grant, and no log write that the application can fail on: the writer is wrapped and telemetry errors are swallowed. Cloudflare and unit tests use the no-op tracer unless the explicit OTLP override is set. OTLP remains a verification and diagnostic override, not the production path.
+Spans go to Cloud Trace through Google Cloud's Telemetry (OTLP) API. The Cloud Run host injects the OpenTelemetry configuration ([cloudRun.ts](../infra/hosts/cloudRun.ts)): `OTEL_TRACES_EXPORTER=otlp`, `OTEL_EXPORTER_OTLP_ENDPOINT=https://telemetry.googleapis.com`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, and `OTEL_RESOURCE_ATTRIBUTES=gcp.project_id=lineupkeep-prod`. Effect's OTLP exporter posts protobuf batches to `/v1/traces`; there is no collector, no log-based span writer, and no observability vendor. Alchemy has no Cloud Run telemetry binding (its telemetry layer targets its own Worker/Lambda/Container runtimes), so the host injects the standard OpenTelemetry environment rather than application code hard-coding an endpoint.
 
-To use OTLP instead, set `OTEL_TRACES_EXPORTER=otlp` **and** `OTEL_EXPORTER_OTLP_ENDPOINT`; Effect appends `/v1/traces`. Supply optional secret `OTEL_EXPORTER_OTLP_HEADERS` with URI-encoded values where required. `OTEL_SERVICE_NAME` and `SERVICE_VERSION` override the Cloud Run defaults (`K_SERVICE`, `K_REVISION`). Only the allowlisted subset is supported. Review actual exported data under the [observability policy](../.agents/skills/observability/SKILL.md).
+Authentication is the runtime service account. The exporter asks the Cloud Run metadata server for an access token and sends it as a bearer token; the host grants `roles/telemetry.tracesWriter` to the web and worker accounts. There is no key file, no Secret Manager entry, and no exporter secret. The exporter only authenticates the endpoint whose host is `telemetry.googleapis.com`; any other OTLP endpoint, including the local verification collector, is exported without a token. `OTEL_TRACES_EXPORTER`, `OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_PROTOCOL` are host-owned on Cloud Run: a stage environment that sets them is ignored for these services so the revision cannot carry duplicate values. Where a host leaves them unset, or sets the exporter to `none`, the tracer falls back to the no-op tracer and the wide events still write on the Node host; Cloudflare is unaffected.
 
-The tracer uses the trace id Cloud Run passes in `X-Cloud-Trace-Context`, converting its decimal span id to the 16-digit hexadecimal form Cloud Logging expects. Cloud Run's own request log and the application spans therefore share one trace; the application span records `request.id` (the Cloud Run request id) and the worker run records `lineup.request` (the domain request id that links a browser or MCP submit to every run it created).
+Telemetry never fails a request or a run. The exporter catches failures, drops the batch, and disables itself for 60 seconds. After the response is built, each HTTP request waits at most three seconds for one final drain, so a scaled-to-zero instance does not lose the spans it just produced; a slow or unavailable Telemetry API costs at most that bounded wait.
+
+The tracer uses the trace id Cloud Run passes in `X-Cloud-Trace-Context`, converting its decimal span id to the 16-digit hexadecimal form Cloud Trace expects. Cloud Run's own request log, the wide event line, and the spans therefore share one trace. The request span records `request.id` (the caller's `x-request-id`, or the id the entry generates), and each worker run records `lineup.request` (the domain request id that links a browser or MCP submit to every run it created).
+
+#### Wide events
+
+One structured log entry is written per unit of work: an HTTP request (the `http.server.request` span) and a lineup run (the `LineupWorker.run` span). A worker request that delivers several runs writes one request entry and one entry per run. The entry is an aggregation of the spans already collected for that unit — the same spans in Cloud Trace, not a second instrumentation path. The unit root and every descendant that ended before it contribute their attributes; the last completed value wins for a repeated key.
+
+Top-level fields are the severity, a `message` such as `GET /teams ok 179.2ms`, the reserved `logging.googleapis.com/trace` / `spanId` / `trace_sampled` fields, and an `event` object:
+
+| Field            | Meaning                                                                                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`           | `http_request` or `lineup_run`; the alert and the queries key off this                                                                                                     |
+| `operation`      | The operation span's `app.operation` (for example `teams.list`, `mcp.request`, `lineup.worker`), or the unit's own span name for a run                                     |
+| `route`          | Method and path for an HTTP request (`GET /teams`); omitted for a run                                                                                                      |
+| `tool`           | The MCP tool name when the request served a tool call; omitted otherwise                                                                                                   |
+| `request_id`     | The HTTP request id; omitted for a run                                                                                                                                     |
+| `lineup_request` | The domain request id, when the unit touched one                                                                                                                           |
+| `run_id`         | The lineup run id; only on a `lineup_run` entry                                                                                                                            |
+| `actor`          | The authenticated `user.id` (opaque identifier, never an address)                                                                                                          |
+| `connection_id`  | Provider connection id, when known                                                                                                                                         |
+| `team_id`        | Fantasy team id, when known                                                                                                                                                |
+| `outcome`        | The worst outcome among the unit's spans that carry `app.outcome` or `app.operation`: `ok`, `rejected`, `interrupted`, `retry`, `blocked`, `uncertain`, `failed`, `defect` |
+| `status_code`    | The unit root's `http.response.status_code`                                                                                                                                |
+| `duration_ms`    | Unit duration                                                                                                                                                              |
+| `span_count`     | Ended spans aggregated into the entry                                                                                                                                      |
+| `spans`          | Per-span-name `count`, `total_ms`, and `max_ms`, largest total first (at most 24 names)                                                                                    |
+| `attributes`     | Merged business attributes: `app.*`, `auth.*`, `lineup.*`, `team.*`, `connection.*`, `provider.*`, `query.*`, `feedback.*`, `tool`, and so on                              |
+
+Validation rejections, unauthorized requests, and not-found results are expected outcomes and are recorded as `rejected`; a defect or an unexpected failure is `failed` or `defect`. Genuinely exceptional work that is not a unit keeps its own entry: for example a client-reported render or server-function error recorded by `/api/telemetry` still logs its own error line, as does a failed background operation. Those lines are plain text and do not carry the trace id; the unit entry for the same request does. Startup, shutdown, and the Cloud Run request log are separate entries and unchanged.
 
 #### Span and attribute inventory
 
@@ -662,11 +706,13 @@ The tracer uses the trace id Cloud Run passes in `X-Cloud-Trace-Context`, conver
 
 The hosted browser is a separate Node process with no Effect tracer. It writes a structured `hosted_browser.session` event with session id, outcome, duration, failure class, and any refused host and reason. It is not part of a lineup run trace; linking-session correlation stays on the session id.
 
-#### Sampling and volume
+#### Redaction and volume
 
-Every span is exported; no provider read is sampled out. A provider read is already one span per call containing a bounded operation name and counts, never a response body or player list, so dropping successful reads would remove the latency record that makes a slow provider diagnosable. A normal run produces tens of entries, not one per player or row. Attribute values are capped at 512 characters, at most 32 attributes, 8 events, 4 links and 16 array items; structured values such as provider payloads are dropped rather than serialized. The [safe tracer](../packages/backend/src/runtime/Observability.ts) still filters exception, cause, header, parameter, URL-query and client-path data before the Cloud Logging tracer sees it, and the Cloud Logging writer additionally drops token, cookie, crumb, secret, email, note, body and payload keys. Redacted values render as `[REDACTED]`. Never add a per-row provider payload, a token, a crumb, a cookie, a note body or an email address to a span.
+The wide event is written behind the same [safe tracer](../packages/backend/src/runtime/Observability.ts) boundary used for the trace export, so exception, cause, header, parameter, URL-query, and client-path data never reach it. The [wide-event writer](../packages/backend/src/runtime/WideEventTracer.ts) keeps the previous suppression list: token, cookie, crumb, secret, password, email, note, body, and payload keys (exact or suffix) are dropped, `parameters` is dropped, and a `Redacted` value renders as `[REDACTED]`. Low-level transport detail (`db.*`, `effect.sql.*`, `network.*`, `server.*`, the request method, path, and status) is not merged into the wide event even though those child spans keep it in Cloud Trace; SQL statement text therefore stays in the trace, and bind values are never exported. Attribute values are capped at 512 characters, at most 64 merged attributes, 16 array items, 24 span groups, and 4096 span records per trace. Structured values such as provider payloads are dropped rather than serialized. Never add a per-row provider payload, a token, a crumb, a cookie, a note body, or an email address to a span or to a wide event.
 
-Trace sampling is separate from log volume: Cloud Logging entries are still written when the incoming trace is unsampled, and `logging.googleapis.com/trace_sampled` records the upstream decision.
+Every span is exported; no provider read is sampled out. A provider read is one span per call with a bounded operation name and counts, never a response body or player list. Sampling of the incoming trace changes nothing about the log volume: a wide event is written for every unit whether or not Cloud Run sampled the trace.
+
+Volume for the hour 07:00–08:00 UTC on 2026-10-31, before this change: 389 entries for the web and worker services, 383 of them span lines, for two HTTP requests and one hourly tick that ran five lineups. The 07:55 tick's trace alone was 377 entries. The same shape after the change — one worker request delivering five runs, 318 spans — is six entries (one request plus five runs), and the full waterfall is in Cloud Trace. The 40 minutes after the deploy (09:20–10:00 UTC) held 29 entries for both services: five wide events, zero span lines, and the rest instance startup/shutdown and Cloud Run request/rollout lines, which stay separate. A quiet hour with a single page load is two entries (the wide event plus Cloud Run's own request log) instead of a dozen or more.
 
 #### Queries
 
@@ -680,88 +726,166 @@ Failed or uncertain run:
 ```
 resource.type="cloud_run_revision"
 resource.labels.service_name="lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y"
-jsonPayload.span.name="LineupWorker.run"
-jsonPayload.span.attributes."lineup.outcome"=("failed" OR "uncertain")
-```
-
-`app.outcome="failure"` also matches both; `lineup.outcome` distinguishes a
-definitive failure from an uncertain write whose provider response was lost.
-
-Slow provider call (over two seconds), whether read or write:
-
-```
-resource.type="cloud_run_revision"
-jsonPayload.span.attributes."provider.operation"!=""
-jsonPayload.span.duration_ms>2000
+jsonPayload.event.kind="lineup_run"
+jsonPayload.event.outcome=("failed" OR "uncertain")
 ```
 
 One run by id:
 
 ```
 resource.type="cloud_run_revision"
-jsonPayload.span.name="LineupWorker.run"
-jsonPayload.span.attributes."lineup.run"="<run id>"
+jsonPayload.event.kind="lineup_run"
+jsonPayload.event.run_id="<run id>"
 ```
 
-A team's last run (sort newest first, then read `lineup.outcome` and the run id):
-
-```
-resource.type="cloud_run_revision"
-jsonPayload.span.name="LineupWorker.run"
-jsonPayload.span.attributes."team.id"="<team id>"
-```
-
-Trace for a request id. The request id shown in an error reference is
-`request.id` on the web operation span; the domain request id used to group a
-submit and its runs is `lineup.request`:
+A team's last run (sort newest first, then read `event.outcome` and `event.run_id`):
 
 ```
 resource.type="cloud_run_revision"
-jsonPayload.span.attributes."request.id"="<request id>"
+jsonPayload.event.kind="lineup_run"
+jsonPayload.event.team_id="<team id>"
 ```
 
-Open the result's **Trace** link, or add `jsonPayload.span.attributes."lineup.request"="<request id>"` to see the submit and every worker run for the same domain request. In the CLI, ask for the trace field directly:
+Every unit that touched a domain request (a submit plus the runs it created):
+
+```
+resource.type="cloud_run_revision"
+jsonPayload.event.lineup_request="<domain request id>"
+```
+
+The unit for an HTTP request id. This returns exactly one entry; open its
+**Trace** link to see the spans:
+
+```
+resource.type="cloud_run_revision"
+jsonPayload.event.request_id="<request id>"
+```
+
+In the CLI, ask for the trace field directly:
 
 ```sh
-gcloud logging read 'resource.type="cloud_run_revision" AND jsonPayload.span.attributes."request.id"="<request id>"' \
+gcloud logging read 'resource.type="cloud_run_revision" AND jsonPayload.event.request_id="<request id>"' \
   --project=lineupkeep-prod --limit=1 --format='value(trace)'
 ```
 
-Recorded example. This is one real line produced by the Cloud Logging tracer
-with synthetic values; Cloud Run wraps it into a `jsonPayload` log entry. It is
-the `LineupWorker.run` entry that the failed-run and run-by-id queries above
-select, and its `logging.googleapis.com/trace` value is the trace to open:
+Read the trace back with the Cloud Trace API. Ingestion takes about a minute; a trace read before then returns 404:
+
+```sh
+curl -sS -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "https://cloudtrace.googleapis.com/v1/projects/lineupkeep-prod/traces/<trace id>"
+```
+
+The v1 response lists spans with decimal `spanId` / `parentSpanId` fields; convert them to the hex ids the log entry's `spanId` uses when matching a wide event to its root span.
+
+A slow provider call is now a trace question, not a log query: filter Trace Explorer on the `YahooProvider.*` span names with a duration over two seconds, or open the run's wide event by `event.run_id` and follow its trace. The wide event's `spans` list already names the slowest span groups with `total_ms` and `max_ms`.
+
+Recorded example. This is one real request entry with synthetic ids; Cloud Run
+wraps it into a `jsonPayload` log entry. Its trace is the one to open:
 
 ```json
 {
-  "severity": "ERROR",
-  "message": "LineupWorker.run failed 0.6ms",
+  "severity": "INFO",
+  "message": "GET / ok 79.2ms",
   "logging.googleapis.com/trace": "d3eebcde75f4c8c8325b38080e1b27b9",
   "logging.googleapis.com/spanId": "d8694b642b18d752",
   "logging.googleapis.com/trace_sampled": true,
-  "span": {
-    "name": "LineupWorker.run",
-    "kind": "internal",
-    "outcome": "failed",
-    "duration_ms": 0.64125,
-    "service": "lineupkeepworker",
-    "service_version": "lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y-00041-abc",
+  "event": {
+    "kind": "http_request",
+    "operation": "auth.session",
+    "route": "GET /",
+    "request_id": "req_01J9ZK3F7M2C9Q4D6H8R1T5VWX",
+    "outcome": "ok",
+    "status_code": 200,
+    "duration_ms": 79.2,
+    "span_count": 4,
+    "spans": [
+      { "name": "auth.session", "count": 1, "total_ms": 1.4, "max_ms": 1.4 },
+      { "name": "getCurrentAuthSession", "count": 1, "total_ms": 0.4, "max_ms": 0.4 },
+      { "name": "AuthService.getSession", "count": 1, "total_ms": 0.1, "max_ms": 0.1 }
+    ],
     "attributes": {
-      "app.outcome": "failure",
+      "app.operation": "auth.session",
+      "app.outcome": "success",
+      "auth.state": "anonymous",
+      "request.id": "req_01J9ZK3F7M2C9Q4D6H8R1T5VWX"
+    }
+  }
+}
+```
+
+A lineup run entry from a scheduled tick. The provider reads and their counts
+are inside the same entry, and `event.spans` names where the time went. Its
+`logging.googleapis.com/trace` is shared with the worker request entry and with
+every other run in that delivery:
+
+```json
+{
+  "severity": "INFO",
+  "message": "lineup run 019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a11 ok 2043.1ms",
+  "logging.googleapis.com/trace": "d3eebcde75f4c8c8325b38080e1b27b9",
+  "logging.googleapis.com/spanId": "8a4842545a46d06f",
+  "logging.googleapis.com/trace_sampled": true,
+  "event": {
+    "kind": "lineup_run",
+    "operation": "LineupWorker.run",
+    "lineup_request": "req_01J9ZK3F7M2C9Q4D6H8R1T5VWX",
+    "run_id": "019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a11",
+    "actor": "01a17360-1cb3-74eb-afe1-efb23ae91784",
+    "connection_id": "019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a33",
+    "team_id": "019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a22",
+    "outcome": "ok",
+    "duration_ms": 2043.1,
+    "span_count": 53,
+    "spans": [
+      { "name": "PublicInternet.request", "count": 6, "total_ms": 1228.2, "max_ms": 278.9 },
+      { "name": "sql.transaction", "count": 5, "total_ms": 518.7, "max_ms": 133.1 },
+      { "name": "YahooProvider.readRoster", "count": 2, "total_ms": 453.0, "max_ms": 227.3 },
+      { "name": "YahooProvider.readLeague", "count": 2, "total_ms": 412.3, "max_ms": 209.4 },
+      { "name": "postgres", "count": 25, "total_ms": 386.6, "max_ms": 17.0 }
+    ],
+    "attributes": {
+      "app.outcome": "success",
       "connection.id": "019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a33",
-      "error.type": "provider.request_failed",
-      "http.response.status_code": 503,
+      "lineup.action": "explicit_assignments",
       "lineup.attempt": 1,
-      "lineup.failure_reason": "provider_rejected",
-      "lineup.outcome": "failed",
+      "lineup.implementation": "custom_policy",
+      "lineup.outcome": "no_op",
       "lineup.request": "req_01J9ZK3F7M2C9Q4D6H8R1T5VWX",
+      "lineup.resumed": false,
       "lineup.run": "019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a11",
       "lineup.status": "reading",
-      "provider.operation": "read_roster",
+      "lineup.trigger": "scheduled",
+      "provider.operation": "read_player_details",
+      "provider.player_count": 21,
+      "provider.player_fact_count": 21,
       "team.id": "019a3f2e-4d4b-7c2a-9f10-6f2b1d8e4a22"
     }
   }
 }
+```
+
+Recorded trace. This is the span tree read back from Cloud Trace for a real
+worker request on revision `lineupkeepweb-worker-cloud-run-hxmx3xmymjecuw3y-00050-cv4`
+(the ids are shown in hexadecimal; the v1 API reports them in decimal). It is
+one trace with 318 spans; the five runs hang under the single worker request,
+and each run's provider and SQL children hang under that run. The later
+`00052-zch` revision changed only which attributes the wide event merges, not
+which spans are exported:
+
+```
+89ece6d31d37bc1e /api/internal/lineup-worker            (Cloud Run request span)
+└─ 6a0fff064e62ec34 http.server.request
+   └─ 30278c1126035e9f lineup.worker
+      └─ e5f78c17b80834a3 Automation.run
+         ├─ ... LineupRunRepository.createScheduledRuns ...
+         └─ cec60093a2a9395f LineupWorker.run        lineup.outcome=changed
+            ├─ YahooProvider.readLeague
+            ├─ YahooProvider.readRoster
+            ├─ YahooProvider.readPlayerHistory
+            ├─ PublicInternet.request
+            ├─ postgres
+            └─ LineupRunRepository.beginApply
+         └─ ... four more LineupWorker.run spans, each with the same children ...
 ```
 
 #### Alerts
@@ -771,11 +895,11 @@ select, and its `logging.googleapis.com/trace` value is the trace to open:
 
 ```
 resource.type="cloud_run_revision"
-jsonPayload.span.name="LineupWorker.run"
-jsonPayload.span.attributes."app.outcome"="failure"
+jsonPayload.event.kind="lineup_run"
+jsonPayload.event.outcome=("failed" OR "uncertain")
 ```
 
-It also matches `lineup.outcome="uncertain"` explicitly and rate-limits notifications to one per five minutes. When `ALERT_EMAIL` is set in the provisioning environment, the same stack creates an email notification channel and attaches it. The recipe then sends a verification message; verify the channel before relying on it. Without `ALERT_EMAIL`, incidents still open in Cloud Monitoring but no email is sent. Creating the policy and channel is a deploy-plan change, not something a local check can prove.
+It rate-limits notifications to one per five minutes. When `ALERT_EMAIL` is set in the provisioning environment, the same stack creates an email notification channel and attaches it. The recipe then sends a verification message; verify the channel before relying on it. Without `ALERT_EMAIL`, incidents still open in Cloud Monitoring but no email is sent. Creating the policy and channel is a deploy-plan change, not something a local check can prove.
 
 ## Provisioning and publication prerequisites
 
