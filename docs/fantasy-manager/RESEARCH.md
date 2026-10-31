@@ -1733,6 +1733,38 @@ What the read-only pass does establish about the write path:
 So the documented trade write surface is reachable in principle, but "the API can propose a trade" is
 not an observed fact. It stays untried until someone deliberately sends one proposal.
 
+### The authorised probe was refused before it could read the league (2026-10-31)
+
+One trade write probe was authorised for exactly one league: the football league in the table above,
+with the authorisation naming a specific team as the owner's. It proposed nothing. The linked
+account is not a manager in the named league, so every read the probe needs before it can write was
+refused:
+
+| Request shape (GET, session cookie)                                     | Host | Status | Body                                                                        |
+| ----------------------------------------------------------------------- | ---- | ------ | --------------------------------------------------------------------------- |
+| `league/{league}/teams`                                                 | ro   | 403    | `You are not allowed to view this page because you are not in this league.` |
+| `league/{league}/settings`                                              | ro   | 403    | the same refusal                                                            |
+| `league/{league}/transactions;type=pending_trade;team_key={named team}` | ro   | 403    | the same refusal                                                            |
+
+This is account membership, not an API-only rule: the same league opened in the signed-in browser
+answered the same refusal as a rendered error page. `users;use_login=1/games;game_keys=nfl/leagues`
+lists one 2026 football league for the account, and its rules are the football row already recorded
+above: `trade_end_date` 2026-11-28, `trade_ratify_type` `vote`, `trade_reject_time` 2. The named
+league is a different league, and no team in the listed league carries the named team's name.
+
+No `POST`, `PUT`, or `DELETE` was sent to the provider, so nothing changed in that league or in the
+account's own league, whose pending-trade feed was read and was empty before the attempt. A probe
+cannot choose a counterparty, two players on each side, or a state to read back before it has a
+roster of its own in the league, so the write surface is exactly as untested as it was: this pass
+records a gate that failed, not a provider refusal of a trade proposal.
+
+Two consequences. A trade write probe has a precondition the earlier read-only pass never needed:
+`league/{league}/teams` must answer 200 for the authorised league, and the response must contain the
+team the probe offers from. Without that, there is no owner half of the offer to build and nothing
+for the counterparty to respond to. And the refusal is silent to the league, which is the correct
+failure mode for a write probe: the door did not open, so nothing was left in front of another
+person.
+
 ### Player add/drop and reserve moves (2026-10-31)
 
 No live provider write was performed: no disposable league was available, so the request shapes
@@ -1842,7 +1874,7 @@ reader.
 
 ### Verdict
 
-**Partially supported with a person completing it.**
+**Partially supported with a person completing it; the write half remains unproven.**
 
 Reading is supported and observed: proposals and accepted trades are both published, with two-sided
 movements, teams, and picks, and the proposal record carries the key the respond calls take. Writing
@@ -1850,6 +1882,13 @@ is documented but unproven, and even if proposing works, the other manager must 
 own provider session, which no design of ours can perform. A pick-inclusive proposal has no
 documented write shape at all. Our app can therefore carry a trade up to the point where a person
 acts, and cannot carry one past it.
+
+The one authorised proposal attempt never reached the provider, because the linked account is not a
+manager in the league the authorisation named. That leaves the write half unproven for a recorded
+reason rather than by choice: proposing, reading the proposal back, and cancelling it have still
+never been observed, so no propose, accept, reject, cancel, or vote control may be built from this
+research. The attempt also establishes the gate any later probe must pass first — a 200 on
+`league/{league}/teams` that includes the team the offer would come from.
 
 ### What the review screen should offer for trades
 
@@ -1871,3 +1910,9 @@ Offer, in this order:
 Do not build: an accept, reject, cancel, or vote button; a "propose" action that depends on the
 undocumented write path; pick selection in a proposal form; or any league-wide trade feed. Each
 either writes unproven, or promises data the provider will not show us.
+
+The refused probe leaves this list unchanged: it removes nothing that was offered and adds nothing
+new to offer. It adds only a gate on any later attempt to widen it. A proposal control earns its
+place when one probe, in a league the linked account manages, has completed propose, read the offer
+back from the owner's pending feed, cancel, and read the feed empty again — with the proposal's
+lifecycle, key form, and response statuses recorded here.
