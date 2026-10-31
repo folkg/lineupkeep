@@ -53,6 +53,7 @@ import type {
   ProviderReadFailure,
   ProviderRemainingGames,
   ProviderRoster,
+  ProviderRosterChange,
   ProviderRosterCoverage,
   ProviderRosterPlayer,
   ProviderRosterSlot,
@@ -685,6 +686,8 @@ export const yahooProvider = Effect.gen(function* () {
       input.sort === "stat"
         ? "ownership,percent_owned,percent_started,ranks,stats,transactions"
         : "ownership,percent_owned,percent_started,ranks,transactions";
+    const date = input.date === undefined ? "" : `;type=date;date=${input.date}`;
+    const opponent = input.date === undefined ? "" : "opponent,";
     const payload = yield* readJson(internet, {
       operation: "search_players",
       origin: readOrigin,
@@ -693,7 +696,8 @@ export const yahooProvider = Effect.gen(function* () {
         status +
         `;sort=${sortValue}${sortType}` +
         `;count=${String(limit)}${search}` +
-        `;out=${out}`,
+        date +
+        `;out=${opponent}${out}`,
       query: { format: "json" },
       cookie,
       normalize: true,
@@ -1265,7 +1269,8 @@ function leagueSettings(
       format: leagueFormat(attributes.scoring_type, settings.stat_modifiers?.stats.length ?? 0),
       scoringType: attributes.scoring_type,
       scoringLabel: optionalNonEmpty(attributes.scoring_label),
-      weeklyDeadline: optionalNonEmpty(attributes.weekly_deadline),
+      weeklyDeadline: attributes.weekly_deadline,
+      rosterChange: rosterChange(attributes),
       waiverType: optionalNonEmpty(settings.waiver_type),
       waiverRule: optionalNonEmpty(settings.waiver_rule),
       usesFaab: settings.uses_faab,
@@ -1329,6 +1334,81 @@ function tradeRatification(type: string | undefined): ProviderTradeRatification 
     default:
       return "unknown";
   }
+}
+
+function rosterChange(
+  attributes: (typeof LeaguePayload.Type)["league"],
+): ProviderRosterChange | undefined {
+  const deadline = attributes.weekly_deadline;
+  if (deadline === undefined) {
+    return undefined;
+  }
+  if (deadline === "intraday") {
+    return {
+      rule: "same_day",
+      source: ["weekly_deadline"],
+      detail: `The provider's weekly_deadline is "intraday", which means a roster move takes effect the same day.`,
+    };
+  }
+  if (deadline === "game") {
+    return {
+      rule: "same_day",
+      source: ["weekly_deadline"],
+      detail: `The provider's weekly_deadline is "game", so a roster move takes effect at a player's game time that day.`,
+    };
+  }
+  if (/^[1-7]$/u.test(deadline)) {
+    return {
+      rule: "weekly_lock",
+      source: ["weekly_deadline"],
+      detail: `The provider's weekly_deadline is "${deadline}", which names the weekly deadline day, so the league locks roster changes once a week.`,
+    };
+  }
+  if (deadline !== "") {
+    return undefined;
+  }
+  const editKey = editKeyOf(attributes.edit_key);
+  if (editKey === undefined) {
+    return undefined;
+  }
+  if (/^\d+$/u.test(editKey)) {
+    return {
+      rule: "weekly_lock",
+      source: ["weekly_deadline", "edit_key"],
+      detail: `The provider's weekly_deadline is empty and its edit_key is ${JSON.stringify(editKey)}, a scoring week, so roster changes are locked to that week.`,
+    };
+  }
+  const currentDate = attributes.current_date;
+  if (!isCalendarDate(editKey) || currentDate === undefined || !isCalendarDate(currentDate)) {
+    return undefined;
+  }
+  if (editKey === currentDate) {
+    return {
+      rule: "same_day",
+      source: ["weekly_deadline", "edit_key"],
+      detail: `The provider's weekly_deadline is empty and its edit_key is ${editKey}, the provider's current_date, so a roster move takes effect the same day.`,
+    };
+  }
+  if (nextCalendarDate(currentDate) === editKey) {
+    return {
+      rule: "next_day",
+      source: ["weekly_deadline", "edit_key"],
+      detail: `The provider's weekly_deadline is empty and its edit_key is ${editKey}, the day after the provider's current_date ${currentDate}, so a roster move takes effect the next day.`,
+    };
+  }
+  return undefined;
+}
+
+function isCalendarDate(value: string): boolean {
+  const parsed = DateTime.make(`${value}T00:00:00.000Z`);
+  return Option.isSome(parsed) && DateTime.formatIsoDate(parsed.value) === value;
+}
+
+function nextCalendarDate(value: string): string | undefined {
+  const parsed = DateTime.make(`${value}T00:00:00.000Z`);
+  return Option.isSome(parsed)
+    ? DateTime.formatIsoDate(DateTime.add(parsed.value, { days: 1 }))
+    : undefined;
 }
 
 function declaredRosterCoverage(
@@ -2293,6 +2373,9 @@ function toSearchPlayer(
     eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
     availability: availabilityOf(player.ownership?.ownership_type),
     proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
+    ...(player.opponent === undefined
+      ? {}
+      : { opponent: optionalNonEmpty(player.opponent ?? "") ?? null }),
     status: {
       value: injury.value,
       code: injury.code,
@@ -3428,6 +3511,7 @@ const SearchPlayerPayload = Schema.Struct({
   display_position: Schema.NonEmptyString,
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   editorial_team_abbr: Schema.optional(Schema.String),
+  opponent: Schema.optional(Schema.NullOr(Schema.String)),
   ownership: Schema.optional(PlayerOwnership),
   percent_owned: Schema.optional(PercentOwned),
   percent_started: Schema.optional(PercentOwned),

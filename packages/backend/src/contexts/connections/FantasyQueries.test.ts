@@ -193,10 +193,9 @@ it.effect(
         rule: { status: "published", value: "continuous" },
         usesFaab: { status: "published", value: false },
       });
-      assert.deepStrictEqual(rules?.timing, {
-        weeklyDeadline: { status: "not_set" },
-        waiverDays: { status: "published", value: 2 },
-      });
+      assert.deepStrictEqual(rules?.timing.weeklyDeadline, { status: "not_set" });
+      assert.strictEqual(rules?.timing.rosterChange?.status, "not_published");
+      assert.deepStrictEqual(rules?.timing.waiverDays, { status: "published", value: 2 });
       assert.deepStrictEqual(rules?.acquisitionLimits, {
         weekly: { status: "published", value: 7 },
         season: { status: "published", value: 30 },
@@ -211,6 +210,44 @@ it.effect(
         inningsPitched: { status: "not_set" },
       });
     }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("keeps the raw deadline and publishes its decoded roster-change rule", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const detail =
+      "The provider's weekly_deadline is empty and its edit_key is 2026-10-26, the day after the provider's current_date 2026-10-25, so a roster move takes effect the next day.";
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: {
+        ...leagueFixture,
+        weeklyDeadline: "",
+        rosterChange: {
+          rule: "next_day",
+          source: ["weekly_deadline", "edit_key"],
+          detail,
+        },
+      },
+    });
+
+    const league = yield* queries.getLeague(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["overview"],
+    });
+
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok") {
+      return;
+    }
+    const timing = league.overview?.transactionRules.timing;
+    assert.deepStrictEqual(timing?.weeklyDeadline, { status: "published", value: "" });
+    assert.deepStrictEqual(timing?.rosterChange, {
+      status: "published",
+      value: "next_day",
+      source: ["weekly_deadline", "edit_key"],
+      detail,
+    });
+  }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
 it.effect("reports a league's unset transaction rules as not set rather than zero", () =>
@@ -852,6 +889,118 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
     assert.deepStrictEqual(hydrated.period, { kind: "season" });
     assert.strictEqual(hydrated.dictionary.length, 1);
     assert.strictEqual(Array.getUnsafe(hydrated.dictionary, 0).name, "Passing Yards");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("dates a pool player's opponent only for a date-covered league", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
+      league: hockeyLeagueFixture,
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setSearchPlayers([
+      searchFixture({
+        providerPlayerKey: "465.p.20001",
+        name: "Dated Free Agent",
+        availability: "free_agent",
+        actualRank: 1,
+        overallRank: 1,
+        statValue: null,
+        percentOwned: 10,
+        percentOwnedDelta: 1,
+        percentStarted: 5,
+        percentStartedChange: 0,
+        proTeam: "TOR",
+        opponent: "@BOS",
+      }),
+    ]);
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      date: "2026-10-31",
+    });
+
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(search.schedule, {
+      status: "available",
+      date: "2026-10-31",
+      source: "league_player_pool",
+    });
+    assert.deepStrictEqual(Array.getUnsafe(search.players, 0).opponent, {
+      status: "scheduled",
+      opponent: "BOS",
+      home: false,
+    });
+    assert.isTrue(
+      search.coverage.some(
+        (entry) =>
+          entry.resource === "players" &&
+          entry.detail === "Player pool with opponents for 2026-10-31",
+      ),
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("states that a scoring-week pool read cannot date an opponent", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setSearchPlayers([
+      searchFixture({
+        providerPlayerKey: "461.p.20001",
+        name: "Weekly Free Agent",
+        availability: "free_agent",
+        actualRank: 1,
+        overallRank: 1,
+        statValue: null,
+        percentOwned: 10,
+        percentOwnedDelta: 1,
+        percentStarted: 5,
+        percentStartedChange: 0,
+        opponent: "Chi",
+      }),
+    ]);
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      date: "2026-10-31",
+    });
+
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(search.schedule?.status, "not_published");
+    assert.isUndefined(Array.getUnsafe(search.players, 0).opponent);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("refuses a pool date that is not a real calendar date", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
+      league: hockeyLeagueFixture,
+    });
+
+    const rejected = yield* Effect.flip(
+      queries.searchPlayers(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+        date: "2026-02-30",
+      }),
+    );
+
+    assert.strictEqual(rejected._tag, "query.selection_invalid");
+    if (rejected._tag === "query.selection_invalid") {
+      assert.include(rejected.detail, "real calendar date");
+    }
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -2349,26 +2498,22 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
     assert.deepStrictEqual(pointStats.get(gaaRef), {
       stat: gaaRef,
       name: "Goals Against Average",
-      scoring: "scoring",
-      status: "published",
       value: 7,
     });
     for (const stat of [gaRef, savesRef]) {
       const entry = pointStats.get(stat);
-      assert.strictEqual(entry?.status, "not_published");
-      if (entry?.status === "not_published") {
-        assert.include(entry.detail, "no rotisserie points");
+      assert.strictEqual(entry?.value, null);
+      if (entry?.value === null) {
+        assert.include(entry.detail ?? "", "no rotisserie points");
       }
     }
     assert.deepStrictEqual(totalStats.get(gaRef), {
       stat: gaRef,
       name: "Goals Against",
-      scoring: "scoring",
-      status: "published",
       value: 51,
     });
     assert.strictEqual(
-      (row.categoryPoints ?? []).filter((entry) => entry.status === "published").length,
+      (row.categoryPoints ?? []).filter((entry) => entry.value !== null).length,
       10,
     );
 
@@ -2409,14 +2554,14 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
       const gaa = summary.categoryTotals.values.find(
         (entry) => entry.name === "Goals Against Average",
       );
-      assert.deepStrictEqual(
-        gaa?.status === "published" ? gaa.value : gaa?.status,
+      assert.strictEqual(
+        gaa?.value,
         2.63,
         "the season total is inlined beside the league's name for the category",
       );
       assert.isTrue(
         summary.categoryTotals.values.some(
-          (entry) => entry.name === "Save Percentage" && entry.status === "published",
+          (entry) => entry.name === "Save Percentage" && entry.value !== null,
         ),
       );
     }
@@ -2477,14 +2622,13 @@ it.effect("states the rotisserie categories whose points the provider does not p
     assert.deepStrictEqual(points.get(savePercentage), {
       stat: savePercentage,
       name: "Save Percentage",
-      scoring: "scoring",
-      status: "not_published",
+      value: null,
       detail: "The provider published no rotisserie points for this category.",
     });
-    assert.strictEqual(points.get(savePercentage)?.status, "not_published");
+    assert.strictEqual(points.get(savePercentage)?.value, null);
     assert.isTrue(
       (row.categoryPoints ?? []).every(
-        (entry) => entry.status === "published" || entry.detail.length > 0,
+        (entry) => entry.value !== null || (entry.detail?.length ?? 0) > 0,
       ),
       "every unpublished category states why instead of returning a bare null",
     );
@@ -3117,8 +3261,8 @@ it.effect("uses the scoring week's opponent for a league whose coverage is a wee
         ["no_games", 0, []],
       ],
     );
-    assert.include(schedule.detail, "scoring week 3");
-    assert.include(schedule.detail, "no count of games inside a week");
+    assert.include(schedule.detail, "Scoring week 3");
+    assert.include(schedule.detail, "no per-week game count");
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -3456,6 +3600,7 @@ it.effect("pages a full roster's schedule through the roster page and one cursor
     const first = yield* queries.getTeamSummary(owner, {
       team: teamId,
       groups: ["schedule"],
+      limit: 5,
     });
     assert.strictEqual(first.status, "ok");
     if (first.status !== "ok") {
@@ -3510,7 +3655,7 @@ it.effect("pages a full roster's schedule through the roster page and one cursor
       collect(page);
       next = page.page.next;
     }
-    assert.isAtMost(pages, 2);
+    assert.isAtMost(pages, 5);
     assert.strictEqual(players.size, 22);
     assert.deepStrictEqual(
       [...players.values()],
@@ -3759,6 +3904,90 @@ it.effect("names the sections that consume the budget for the client's exact gro
       return;
     }
     assert.strictEqual(summary.status, "ok");
+    assert.isAtMost(summarySectionBytes(summary), summary.budget.hardLimitBytes);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("pairs the matchup's category values in one row per category", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("465.l.2000.t.1", "Hockey", "nhl")], {
+      league: hockeyLeagueFixture,
+    });
+    yield* fake.setMatchups([matchupFixture({ period: 3, categories: true })]);
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["categories", "matchup"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(summary.matchup?.status, "available");
+    if (summary.matchup?.status !== "available") {
+      return;
+    }
+    assert.notProperty(summary.matchup, "opponentCategories");
+    assert.isAtLeast(summary.matchup.categories?.length ?? 0, 1);
+    const first = Array.getUnsafe(summary.matchup.categories ?? [], 0);
+    assert.strictEqual(first.own, 3);
+    assert.strictEqual(first.opponent, 3);
+    assert.isUndefined(first.detail);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("fits the ordinary six-group summary for a thirteen-team league", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const fixture = thirteenTeamRotoLeague();
+    const dates = ["2026-10-30", "2026-10-31", "2026-11-01"];
+    const seeded = yield* seed(fake, [team("477.l.31027.t.1", "Roto", "nhl")], {
+      league: fixture.league,
+      roster: rosterFixture({
+        count: 21,
+        providerTeamKey: "477.l.31027.t.1",
+        providerLeagueKey: "477.l.31027",
+        coverage: { type: "date", date: "2026-10-30" },
+      }),
+    });
+    yield* fake.setStandings(fixture.standings);
+    yield* fake.setSchedule(
+      scheduleFixture({
+        providerTeamKey: "477.l.31027.t.1",
+        dates,
+        players: globalThis.Array.from({ length: 21 }, (_, index) => ({
+          key: `461.p.${String(10001 + index)}`,
+          name: `Synthetic ${String(index)}`,
+          games: [{ date: dates[0] ?? "", opponent: "TOR", home: true }],
+        })),
+      }),
+    );
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["league", "standings", "categories", "matchup", "schedule", "roster"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(summary.budget.hardLimitBytes, 28 * 1024);
+    assert.isAtLeast(summary.page.returned, 1);
+    assert.strictEqual(summary.schedule?.status, "available");
+    assert.isDefined(summary.matchup);
+    assert.notProperty(summary.matchup ?? {}, "opponentCategories");
+    assert.strictEqual(summary.categoryTotals?.status, "available");
+    if (summary.categoryTotals?.status === "available") {
+      for (const category of summary.categoryTotals.values) {
+        assert.isNumber(category.value);
+        assert.isUndefined(category.detail);
+      }
+    }
     assert.isAtMost(summarySectionBytes(summary), summary.budget.hardLimitBytes);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
@@ -4152,6 +4381,7 @@ const hockeyLeagueFixture: ProviderLeagueSettings = {
   scoringType: "head",
   scoringLabel: "H2H",
   weeklyDeadline: "daily",
+  rosterChange: undefined,
   waiverType: "FR",
   waiverRule: "continuous",
   usesFaab: false,
@@ -4198,6 +4428,7 @@ const rotoLeagueFixture: ProviderLeagueSettings = {
   scoringType: "roto",
   scoringLabel: "Roto",
   weeklyDeadline: undefined,
+  rosterChange: undefined,
   waiverType: "FR",
   waiverRule: "continuous",
   usesFaab: false,
@@ -4312,6 +4543,7 @@ const leagueFixture: ProviderLeagueSettings = {
   scoringType: "head",
   scoringLabel: "H2H",
   weeklyDeadline: undefined,
+  rosterChange: undefined,
   waiverType: "FR",
   waiverRule: "continuous",
   usesFaab: false,
@@ -4387,6 +4619,7 @@ function searchFixture(input: {
   readonly percentStarted: number | null;
   readonly percentStartedChange: number | null;
   readonly proTeam?: string;
+  readonly opponent?: string | null;
   readonly transactionTrend?: ProviderTransactionTrend;
 }): ProviderPlayerSearchResult["players"][number] {
   return {

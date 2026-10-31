@@ -1492,12 +1492,54 @@ field was never requested.
 ### Transaction timing
 
 The settings payload for all five leagues carries `waiver_type`, `waiver_rule`, `uses_faab`,
-`waiver_time`, `weekly_deadline`, `trade_end_date`, `trade_ratify_type`, and `trade_reject_time`. It
-carries no field naming the roster-transaction deadline as same-day or next-day. Yahoo's public help
-describes an "Allow roster changes" league setting with "Daily - Today", "Daily - Tomorrow", and
-weekly forms, but the settings payload does not map those names to a field, and inferring the rule
-from `weekly_deadline` (observed as `""` or `"intraday"`) would guess. The tool description states
-that the rule is not published, and the published fields are returned as they are.
+`waiver_time`, `weekly_deadline`, `trade_end_date`, `trade_ratify_type`, and `trade_reject_time`.
+The round-9 re-read found that the three leagues previously reported as `not_set` publish
+`weekly_deadline: ""`; the field is present and empty, not missing. The other two publish
+`"intraday"`. The published fields decode to a roster-change rule:
+
+| Published `weekly_deadline` | Published `edit_key` vs `current_date` | Rule          | Source fields                 |
+| --------------------------- | -------------------------------------- | ------------- | ----------------------------- |
+| `"intraday"`                | any                                    | `same_day`    | `weekly_deadline`             |
+| `"game"`                    | any                                    | `same_day`    | `weekly_deadline`             |
+| `"1"` .. `"7"`              | any                                    | `weekly_lock` | `weekly_deadline`             |
+| `""`                        | numeric scoring week                   | `weekly_lock` | `weekly_deadline`, `edit_key` |
+| `""`                        | date equal to `current_date`           | `same_day`    | `weekly_deadline`, `edit_key` |
+| `""`                        | next date after `current_date`         | `next_day`    | `weekly_deadline`, `edit_key` |
+| any other value             | any                                    | not published | none                          |
+
+The live pass on 2026-10-31 read two hockey leagues with `"intraday"` (`same_day`), one football
+league with `""` and a scoring-week `edit_key` (`weekly_lock`), and two hockey leagues with `""`
+and an `edit_key` one day after `current_date` (`next_day`). A value the adapter has not been
+taught, or an empty deadline without a usable editable period, publishes no rule rather than a
+guess. The raw value stays beside the rule in `timing.weeklyDeadline`, and the rule's `source`
+names the fields and its `detail` repeats the raw values.
+
+### Pool player schedule shapes (2026-10-31)
+
+The roster schedule read is roster-scoped, so a free agent whose professional team has no rostered
+player could not be dated by it. The shapes below were requested read-only against the owner's date-
+scoped hockey league and scoring-week football league. No player name, key, team key, or league id
+was retained.
+
+| Request shape                                                            | Status | Result                                                                                         |
+| ------------------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------- |
+| `GET /league/{league}/players;out=opponent`                              | 200    | 50 rows; the same opponents as a dated read                                                    |
+| `GET /league/{league}/players;out=opponent;date=YYYY-MM-DD`              | 200    | same 50 rows, same opponents on two different dates; the plain `date` is accepted and ignored  |
+| `GET /league/{league}/players;type=date;date=YYYY-MM-DD;out=opponent`    | 200    | opponents moved by date: 9 non-null on one date, 26 on the next in a 50-row sample             |
+| `GET /league/{league}/players;type=date;date=…;out=opponent,ownership,…` | 200    | the full search output (ownership, percent owned/started, ranks, transactions) plus `opponent` |
+| `GET /league/{league}/players;week=5;out=opponent`                       | 200    | accepted but not date-addressable; the weekly cadence supplies the week's opponent             |
+| `GET /league/{league}/players;type=week;week=5;out=opponent`             | 400    | `type=week` is not a supported selector                                                        |
+| `GET /player/{player_key};out=opponent;date=YYYY-MM-DD`                  | 400    | invalid game key; a player resource is not addressable without a game context                  |
+| `GET /league/{league}/players/{player_key};out=opponent;date=YYYY-MM-DD` | 400    | invalid player resource                                                                        |
+| `GET /team/{team}/roster;date=YYYY-MM-DD/players;out=opponent`           | 200    | works, but only for players on that roster                                                     |
+
+On a scoring-week football league the `type=date` selector is accepted but returns the week's
+opponent unchanged across dates, so it is not a dated read. The adapter therefore publishes a dated
+opponent only when the league's declared coverage is a date. The pool read was adopted for
+`search_players`: `type=date` is requested only for a date-covered league, and the result states the
+date and the `league_player_pool` source. When the provider omits the opponent field, the row
+is `not_published`; a published null is `no_game`; no opponent is inferred from a player's team or
+from another date.
 
 ## Live transaction-trend probes (2026-10-30, quick wins round 2)
 

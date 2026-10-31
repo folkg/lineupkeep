@@ -339,6 +339,14 @@ type ProviderStatModifier = {
 
 export type ProviderTradeRatification = "vote" | "commissioner" | "unknown";
 
+type ProviderRosterChangeRule = "same_day" | "next_day" | "weekly_lock";
+
+export type ProviderRosterChange = {
+  readonly rule: ProviderRosterChangeRule;
+  readonly source: ReadonlyArray<string>;
+  readonly detail: string;
+};
+
 export type ProviderLeagueSettings = {
   readonly providerLeagueKey: string;
   readonly name: string;
@@ -352,6 +360,7 @@ export type ProviderLeagueSettings = {
   readonly scoringType: string;
   readonly scoringLabel: string | undefined;
   readonly weeklyDeadline: string | undefined;
+  readonly rosterChange: ProviderRosterChange | undefined;
   readonly waiverType: string | undefined;
   readonly waiverRule: string | undefined;
   readonly usesFaab: boolean | undefined;
@@ -530,6 +539,7 @@ export type ProviderPlayerSearchInput = ProviderSessionMaterial & {
   readonly statId: number | undefined;
   readonly statType: ProviderStatBasis["type"];
   readonly limit: number;
+  readonly date?: string | undefined;
 };
 
 export type ProviderPlayerStatus = "healthy" | "day_to_day" | "out" | "injured_reserve" | "unknown";
@@ -543,6 +553,7 @@ export type ProviderPlayerSearchResult = {
     readonly eligiblePositions: ReadonlyArray<string>;
     readonly availability: "free_agent" | "waiver" | "rostered" | "unknown";
     readonly proTeam: string | undefined;
+    readonly opponent?: string | null;
     readonly status: {
       readonly value: ProviderPlayerStatus;
       readonly code: string | undefined;

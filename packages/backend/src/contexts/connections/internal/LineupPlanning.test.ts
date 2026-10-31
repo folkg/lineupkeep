@@ -610,6 +610,7 @@ function league(
     scoringType: "head",
     scoringLabel: "H2H",
     weeklyDeadline: undefined,
+    rosterChange: undefined,
     waiverType: undefined,
     waiverRule: undefined,
     usesFaab: undefined,

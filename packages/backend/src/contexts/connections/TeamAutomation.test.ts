@@ -620,6 +620,7 @@ const league: ProviderLeagueSettings = {
   scoringType: "head",
   scoringLabel: "H2H",
   weeklyDeadline: undefined,
+  rosterChange: undefined,
   waiverType: "FR",
   waiverRule: "continuous",
   usesFaab: false,

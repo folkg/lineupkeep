@@ -10,6 +10,8 @@ import {
 
 const queryResultTargetBytes = 12 * 1024;
 const queryResultHardLimitBytes = 16 * 1024;
+const summaryResultTargetBytes = 20 * 1024;
+const summaryResultHardLimitBytes = 28 * 1024;
 
 const envelopeAllowanceBytes = 1_024;
 const cursorPlaceholder = "x".repeat(256);
@@ -18,6 +20,11 @@ const utf8 = new TextEncoder();
 export const queryBudget: QueryBudget = {
   targetBytes: queryResultTargetBytes,
   hardLimitBytes: queryResultHardLimitBytes,
+};
+
+export const summaryBudget: QueryBudget = {
+  targetBytes: summaryResultTargetBytes,
+  hardLimitBytes: summaryResultHardLimitBytes,
 };
 
 export type FitPageInput<Row, Result> = {
@@ -31,6 +38,7 @@ export type FitPageInput<Row, Result> = {
   readonly build: (rows: ReadonlyArray<Row>, page: QueryPage) => Result;
   readonly makeNext: (offset: number) => Effect.Effect<string, QueryError>;
   readonly recordLabel: (row: Row) => string | undefined;
+  readonly budget?: QueryBudget;
 };
 
 export function fitPage<Row, Result>(
@@ -41,6 +49,7 @@ export function fitPage<Row, Result>(
     if (available < 0) {
       return yield* QueryCursorInvalid.make({ reason: "invalid" });
     }
+    const budget = input.budget ?? queryBudget;
     const maximum = Math.min(input.limit, available);
     if (maximum === 0) {
       const base = input.build([], {
@@ -48,9 +57,9 @@ export function fitPage<Row, Result>(
         complete: true,
         remaining: 0,
       });
-      return clientResultBytes(input.schema, base) <= queryResultHardLimitBytes
+      return clientResultBytes(input.schema, base) <= budget.hardLimitBytes
         ? base
-        : narrowing(input, undefined);
+        : narrowing(input, undefined, budget);
     }
 
     const pageFor = (returned: number, next: string | undefined): QueryPage => {
@@ -78,9 +87,9 @@ export function fitPage<Row, Result>(
       return undefined;
     };
 
-    let returned = choose(queryResultTargetBytes) ?? choose(queryResultHardLimitBytes);
+    let returned = choose(budget.targetBytes) ?? choose(budget.hardLimitBytes);
     if (returned === undefined) {
-      return narrowing(input, input.rows[input.offset]);
+      return narrowing(input, input.rows[input.offset], budget);
     }
 
     while (returned >= 1) {
@@ -90,12 +99,12 @@ export function fitPage<Row, Result>(
         input.rows.slice(input.offset, input.offset + returned),
         pageFor(returned, next),
       );
-      if (clientResultBytes(input.schema, result) <= queryResultHardLimitBytes) {
+      if (clientResultBytes(input.schema, result) <= budget.hardLimitBytes) {
         return result;
       }
       returned -= 1;
     }
-    return narrowing(input, input.rows[input.offset]);
+    return narrowing(input, input.rows[input.offset], budget);
   });
 }
 
@@ -115,6 +124,7 @@ function escapedTextContent(json: string): string {
 function narrowing<Row, Result>(
   input: FitPageInput<Row, Result>,
   record: Row | undefined,
+  budget: QueryBudget,
 ): NarrowingResult {
   const recordLabel = record === undefined ? undefined : input.recordLabel(record);
   return {
@@ -123,6 +133,6 @@ function narrowing<Row, Result>(
     ...(recordLabel === undefined ? {} : { record: recordLabel }),
     ...(input.groups === undefined ? {} : { groups: [...input.groups] }),
     detail: input.remedy,
-    budget: queryBudget,
+    budget,
   };
 }

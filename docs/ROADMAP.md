@@ -94,16 +94,23 @@ group D replaces the span-per-line writer with real traces and one wide event pe
 
 What the client filed after retesting the deploy, minus the emergency handled separately.
 
-- [ ] Populate the roster transaction deadline for every league. Two of the owner's leagues report
+- [x] Populate the roster transaction deadline for every league. Two of the owner's leagues report
       `intraday`; three report `not_set` where the provider does have a value, so the decode is incomplete.
-- [ ] Interpret it into a provider-neutral rule, `same_day | next_day | weekly_lock`, so a client does not
+- [x] Interpret it into a provider-neutral rule, `same_day | next_day | weekly_lock`, so a client does not
       need provider folklore to know that `intraday` means same-day.
-- [ ] Look at dating a pool candidate's schedule. Our schedule read is roster-scoped, so a free agent whose
+- [x] Look at dating a pool candidate's schedule. Our schedule read is roster-scoped, so a free agent whose
       professional team has no rostered player cannot be dated. Find out whether any request shape covers it
       and record the verdict either way.
-- [ ] Reduce the ordinary summary group set so a six-group call fits instead of narrowing.
+- [x] Reduce the ordinary summary group set so a six-group call fits instead of narrowing.
 
 **Verify**: every owner league reports a timing rule, and the schedule verdict is written down. `S`
+
+Shipped: the three leagues reported as `not_set` publish `weekly_deadline: ""`; the raw value is kept
+and `timing.rosterChange` publishes a sourced rule. The league player pool is date-addressable through
+`type=date`, and `search_players` uses it only for date-covered leagues; the shapes tried are recorded
+in [RESEARCH.md](fantasy-manager/RESEARCH.md#pool-player-schedule-shapes-2026-10-31). The summary
+compacts category rows, pairs matchup categories, and has its own 20 KiB target/28 KiB hard ceiling;
+the six-group call returns seven roster rows on the 13-team league.
 
 ### A7 — Reserve-slot eligibility
 

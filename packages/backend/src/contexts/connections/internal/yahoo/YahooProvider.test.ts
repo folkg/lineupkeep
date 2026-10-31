@@ -484,7 +484,13 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
     assert.deepStrictEqual(league.periodWindow, { current: 6, start: 1, end: 17 });
     assert.strictEqual(league.currentDate, undefined);
     assert.strictEqual(league.rosterCoverage, "week");
-    assert.strictEqual(league.weeklyDeadline, undefined);
+    assert.strictEqual(league.weeklyDeadline, "");
+    assert.deepStrictEqual(league.rosterChange, {
+      rule: "weekly_lock",
+      source: ["weekly_deadline", "edit_key"],
+      detail:
+        'The provider\'s weekly_deadline is empty and its edit_key is "42", a scoring week, so roster changes are locked to that week.',
+    });
     assert.strictEqual(league.waiverDays, 1);
     assert.strictEqual(league.maxWeeklyAcquisitions, undefined);
     assert.strictEqual(league.maxSeasonAcquisitions, undefined);
@@ -588,6 +594,12 @@ it.effect("reads an NHL head-to-head league with qualifying-days settings and no
     assert.strictEqual(league.rosterCoverage, "date");
     assert.strictEqual(league.webUrl, "https://hockey.fantasysports.yahoo.com/hockey/4001");
     assert.strictEqual(league.weeklyDeadline, "game");
+    assert.deepStrictEqual(league.rosterChange, {
+      rule: "same_day",
+      source: ["weekly_deadline"],
+      detail:
+        "The provider's weekly_deadline is \"game\", so a roster move takes effect at a player's game time that day.",
+    });
     assert.strictEqual(league.maxWeeklyAcquisitions, 2);
     assert.strictEqual(league.maxSeasonAcquisitions, 20);
     assert.strictEqual(league.waiverDays, 1);
@@ -622,7 +634,13 @@ it.effect("reads a rotisserie league that publishes no scoring-week window", () 
     assert.strictEqual(league.scoringType, "roto");
     assert.strictEqual(league.teamCount, 12);
     assert.strictEqual(league.startDate, "2026-10-01");
-    assert.strictEqual(league.weeklyDeadline, undefined);
+    assert.strictEqual(league.weeklyDeadline, "");
+    assert.deepStrictEqual(league.rosterChange, {
+      rule: "same_day",
+      source: ["weekly_deadline", "edit_key"],
+      detail:
+        "The provider's weekly_deadline is empty and its edit_key is 2026-10-25, the provider's current_date, so a roster move takes effect the same day.",
+    });
     assert.strictEqual(league.waiverType, "FR");
     assert.deepStrictEqual(
       league.rosterPositions.map((position) => position.position),
@@ -667,6 +685,96 @@ it.effect("derives a weekly cadence from the league's own declared deadline", ()
 
     assert.strictEqual(league.rosterCoverage, "week");
     assert.strictEqual(league.weeklyDeadline, "3");
+    assert.deepStrictEqual(league.rosterChange, {
+      rule: "weekly_lock",
+      source: ["weekly_deadline"],
+      detail:
+        'The provider\'s weekly_deadline is "3", which names the weekly deadline day, so the league locks roster changes once a week.',
+    });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("decodes an intraday deadline as a same-day roster change", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      yahooNhlLeagueSettingsWith({
+        league_key: "466.l.4004",
+        league_id: "4004",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4004",
+        weekly_deadline: "intraday",
+        edit_key: "2026-10-25",
+      }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4004",
+      sport: "hockey",
+    });
+
+    assert.strictEqual(league.weeklyDeadline, "intraday");
+    assert.strictEqual(league.rosterChange?.rule, "same_day");
+    assert.deepStrictEqual(league.rosterChange?.source, ["weekly_deadline"]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect(
+  "decodes an empty deadline and a next-date editable period as a next-day roster change",
+  () => {
+    const internet = recordingInternet(() =>
+      jsonResponse(
+        yahooNhlLeagueSettingsWith({
+          league_key: "466.l.4005",
+          league_id: "4005",
+          url: "https://hockey.fantasysports.yahoo.com/hockey/4005",
+          weekly_deadline: "",
+          edit_key: "2026-10-26",
+          current_date: "2026-10-25",
+        }),
+      ),
+    );
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+
+      const league = yield* provider.readLeague({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4005",
+        sport: "hockey",
+      });
+
+      assert.strictEqual(league.weeklyDeadline, "");
+      assert.strictEqual(league.rosterCoverage, "date");
+      assert.strictEqual(league.rosterChange?.rule, "next_day");
+      assert.deepStrictEqual(league.rosterChange?.source, ["weekly_deadline", "edit_key"]);
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
+
+it.effect("states no roster-change rule for a deadline value it cannot interpret", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse(
+      yahooNhlLeagueSettingsWith({
+        league_key: "466.l.4006",
+        league_id: "4006",
+        url: "https://hockey.fantasysports.yahoo.com/hockey/4006",
+        weekly_deadline: "fortnightly",
+      }),
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const league = yield* provider.readLeague({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4006",
+      sport: "hockey",
+    });
+
+    assert.strictEqual(league.weeklyDeadline, "fortnightly");
+    assert.isUndefined(league.rosterChange);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -3415,6 +3523,7 @@ function planLeague(input: {
     scoringType: "head",
     scoringLabel: "H2H",
     weeklyDeadline: undefined,
+    rosterChange: undefined,
     waiverType: "FR",
     waiverRule: "continuous",
     usesFaab: false,

@@ -63,6 +63,7 @@ import type {
   SummarySchedulePlayer,
   SummaryScheduleWeek,
   SummaryRosterPlayer,
+  SummaryMatchupCategory,
   SummaryScheduleWindow,
   TeamSummaryData,
 } from "#contexts/connections/QueryResults.ts";
@@ -93,7 +94,7 @@ import {
 } from "#contexts/connections/QueryValues.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
-import { fitPage, queryBudget } from "./QueryBudget.ts";
+import { fitPage, queryBudget, summaryBudget } from "./QueryBudget.ts";
 import { loadTeamContext, providerIdentity } from "./QueryContext.ts";
 import type { TeamContext } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
@@ -844,6 +845,36 @@ export const FantasyQueriesLive = Layer.effect(
       const team = queryTeam(context.owned);
       const fetchedAt = yield* DateTime.now;
       const availability = input.availability ?? "all";
+      const requestedDate = input.date;
+      if (requestedDate !== undefined && calendarDate(requestedDate) === undefined) {
+        return yield* QuerySelectionInvalid.make({
+          detail:
+            "The `date` must be a real calendar date in `YYYY-MM-DD` form, such as 2026-10-31.",
+        });
+      }
+      let datedOpponents = false;
+      let schedule: SearchPlayersData["schedule"];
+      if (requestedDate !== undefined) {
+        const leagueOutcome = yield* readLeague(context);
+        if (leagueOutcome._tag === "ok" && leagueOutcome.value.rosterCoverage === "date") {
+          datedOpponents = true;
+          schedule = {
+            status: "available",
+            date: requestedDate,
+            source: "league_player_pool",
+          };
+        } else {
+          schedule = {
+            status: "not_published",
+            detail:
+              leagueOutcome._tag === "ok"
+                ? "This league's coverage is a scoring week, so its league player pool returns the week's opponent and does not vary by date. No dated opponent is published; read the roster schedule for the week's opponents."
+                : leagueOutcome._tag === "failed"
+                  ? `The league settings could not be read, so the pool's coverage is unknown and no dated opponent is published. ${leagueOutcome.failure.message}`
+                  : `The league settings do not establish a date coverage, so no dated opponent is published. ${leagueOutcome.detail}`,
+          };
+        }
+      }
       const sort = input.sort ?? "name";
       const statPeriod = input.statPeriod ?? "season";
       const playerSearch = context.provider.capabilities.playerSearch;
@@ -908,6 +939,7 @@ export const FantasyQueriesLive = Layer.effect(
           statId,
           statType: statPeriod,
           limit: 50,
+          date: datedOpponents ? requestedDate : undefined,
         }),
       );
       if (outcome._tag !== "ok") {
@@ -936,6 +968,7 @@ export const FantasyQueriesLive = Layer.effect(
         primaryPosition: player.primaryPosition,
         displayPosition: player.displayPosition,
         proTeam: player.proTeam ?? null,
+        ...(datedOpponents ? { opponent: searchOpponent(player.opponent) } : {}),
         eligiblePositions: player.eligiblePositions,
         availability: player.availability,
         status: {
@@ -963,6 +996,7 @@ export const FantasyQueriesLive = Layer.effect(
           `sort=${sort}`,
           `stat=${input.stat ?? ""}`,
           `statPeriod=${statPeriod}`,
+          `date=${requestedDate ?? ""}`,
           "order=provider",
         ].join("|"),
       );
@@ -971,7 +1005,18 @@ export const FantasyQueriesLive = Layer.effect(
       const base: Omit<SearchPlayersData, "players" | "page"> = {
         status: "ok",
         team,
-        coverage: [coverage("players", "player_search", fetchedAt)],
+        coverage: [
+          requestedDate !== undefined && datedOpponents
+            ? coverage(
+                "players",
+                "player_search",
+                fetchedAt,
+                undefined,
+                `Player pool with opponents for ${requestedDate}`,
+              )
+            : coverage("players", "player_search", fetchedAt),
+        ],
+        ...(schedule === undefined ? {} : { schedule }),
         failures: [],
         budget: queryBudget,
       };
@@ -1919,8 +1964,8 @@ export const FantasyQueriesLive = Layer.effect(
                       percentage: row.record.percentage,
                     }),
                 points: row.points,
-                gamesBack: row.gamesBack,
-                pointsBack: row.pointsBack,
+                ...(row.gamesBack === null ? {} : { gamesBack: row.gamesBack }),
+                ...(row.pointsBack === null ? {} : { pointsBack: row.pointsBack }),
               })),
             }
           : { status: "unsupported", detail: standingsDetail };
@@ -2092,24 +2137,16 @@ export const FantasyQueriesLive = Layer.effect(
           ...(opponent.remainingGames === undefined
             ? {}
             : { opponentRemainingGames: opponent.remainingGames }),
-          ...(includes("categories") && own.categoryTotals.length > 0
+          ...(includes("categories") &&
+          (own.categoryTotals.length > 0 || opponent.categoryTotals.length > 0)
             ? {
-                categories: yield* categoryValueRows(
+                categories: yield* summaryMatchupCategories(
                   context,
                   tokens,
                   statRefs,
-                  labelledCategories(own.categoryTotals, categoryLabelsByStat, new Set()),
-                  matchupValueMissing,
-                ),
-              }
-            : {}),
-          ...(includes("categories") && opponent.categoryTotals.length > 0
-            ? {
-                opponentCategories: yield* categoryValueRows(
-                  context,
-                  tokens,
-                  statRefs,
-                  labelledCategories(opponent.categoryTotals, categoryLabelsByStat, new Set()),
+                  own.categoryTotals,
+                  opponent.categoryTotals,
+                  categoryLabelsByStat,
                   matchupValueMissing,
                 ),
               }
@@ -2371,7 +2408,7 @@ export const FantasyQueriesLive = Layer.effect(
               },
         coverage: coverageEntries,
         failures,
-        budget: queryBudget,
+        budget: summaryBudget,
       };
       const playerRows: ReadonlyArray<{
         readonly roster: SummaryRosterPlayer | undefined;
@@ -2405,6 +2442,7 @@ export const FantasyQueriesLive = Layer.effect(
         rows: playerRows,
         offset,
         limit: input.limit ?? 50,
+        budget: summaryBudget,
         ...(includes("roster")
           ? {
               resource: "team_summary.roster",
@@ -2517,24 +2555,55 @@ function categoryValueRows(
     stats,
     (entry) =>
       statRefFor(context, tokens, cache, entry.statId).pipe(
-        Effect.map((stat): CategoryValue =>
-          entry.value === null
-            ? {
-                stat,
-                name: entry.name,
-                scoring: entry.scoring,
-                status: "not_published",
-                detail: missingDetail,
-              }
-            : {
-                stat,
-                name: entry.name,
-                scoring: entry.scoring,
-                status: "published",
-                value: entry.value,
-              },
-        ),
+        Effect.map((stat): CategoryValue => ({
+          stat,
+          name: entry.name,
+          ...(entry.scoring === "informational" ? { scoring: "informational" as const } : {}),
+          ...(entry.value === null
+            ? { value: null, detail: missingDetail }
+            : { value: entry.value }),
+        })),
       ),
+    { concurrency: 1 },
+  );
+}
+
+function summaryMatchupCategories(
+  context: TeamContext,
+  tokens: QueryTokens["Service"],
+  cache: Map<number, StatRef>,
+  own: ReadonlyArray<ProviderStatValue>,
+  opponent: ReadonlyArray<ProviderStatValue>,
+  labels: CategoryLabels,
+  missingDetail: string,
+): Effect.Effect<ReadonlyArray<SummaryMatchupCategory>> {
+  const omitted = new Set<number>();
+  const ownByStat = new Map(
+    labelledCategories(own, labels, omitted).map((entry) => [entry.statId, entry] as const),
+  );
+  const opponentByStat = new Map(
+    labelledCategories(opponent, labels, omitted).map((entry) => [entry.statId, entry] as const),
+  );
+  const statIds = [...new Set([...ownByStat.keys(), ...opponentByStat.keys()])];
+  return Effect.forEach(
+    statIds,
+    (statId) =>
+      Effect.gen(function* () {
+        const entry = ownByStat.get(statId) ?? opponentByStat.get(statId);
+        if (entry === undefined) {
+          throw new Error("A paired matchup category must have at least one labelled side.");
+        }
+        const ownValue = ownByStat.get(statId)?.value ?? null;
+        const opponentValue = opponentByStat.get(statId)?.value ?? null;
+        return {
+          stat: yield* statRefFor(context, tokens, cache, statId),
+          name: entry.name,
+          ...(entry.scoring === "informational" ? { scoring: "informational" as const } : {}),
+          own: ownValue,
+          opponent: opponentValue,
+          ...(ownValue === null || opponentValue === null ? { detail: missingDetail } : {}),
+        };
+      }),
     { concurrency: 1 },
   );
 }
@@ -2544,13 +2613,13 @@ function categoryAvailability(
   select: (row: StandingRow) => ReadonlyArray<CategoryValue>,
   detail: string,
 ): { readonly status: "available" } | { readonly status: "unsupported"; readonly detail: string } {
-  return rows.some((row) => select(row).some((entry) => entry.status === "published"))
+  return rows.some((row) => select(row).some((entry) => entry.value !== null))
     ? { status: "available" }
     : { status: "unsupported", detail };
 }
 
 function hasPublishedCategoryValue(values: ReadonlyArray<CategoryValue>): boolean {
-  return values.some((entry) => entry.status === "published");
+  return values.some((entry) => entry.value !== null);
 }
 
 function omittedCategories(count: number): { readonly count: number; readonly detail: string } {
@@ -2960,6 +3029,28 @@ function rosterWithoutData(
   };
 }
 
+function searchOpponent(
+  value: string | null | undefined,
+): NonNullable<SearchPlayersData["players"][number]["opponent"]> {
+  if (value === undefined) {
+    return {
+      status: "not_published",
+      detail:
+        "The provider did not publish an opponent field for this player on the requested date.",
+    };
+  }
+  if (value === null) {
+    return { status: "no_game" };
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return { status: "no_game" };
+  }
+  return trimmed.startsWith("@")
+    ? { status: "scheduled", opponent: trimmed.slice(1), home: false }
+    : { status: "scheduled", opponent: trimmed, home: true };
+}
+
 function searchWithoutData(
   team: QueryTeam,
   fetchedAt: DateTime.Utc,
@@ -3141,21 +3232,19 @@ function schedulePeriodDetail(input: {
   readonly window: SummaryScheduleWindow | undefined;
   readonly dates: ReadonlyArray<string>;
 }): string {
-  const boundaries =
-    "The provider publishes no start time, so a light night counts rostered players rather than hours, and it publishes no season-long schedule, so only this window is covered.";
   if (input.coverage === "week") {
-    return `Coverage is scoring week ${String(input.period?.week)}: each player carries at most one opponent for the week rather than per-game dates. The provider publishes no count of games inside a week, no start time, and no season-long schedule.`;
+    return `Scoring week ${String(input.period?.week)} opponents only. The provider publishes no start time, no per-week game count, and no season-long schedule.`;
   }
   const range = input.window === undefined ? "" : ` (${input.window.start} to ${input.window.end})`;
   const count = String(input.dates.length);
   switch (input.window?.source) {
     case "requested":
-      return `Each rostered player's opponent on each of the ${count} dates of the requested window${range}. ${boundaries}`;
+      return `Opponents on each of the ${count} dates of the requested window${range}. The provider publishes no start time or season-long schedule.`;
     case "rest_of_week":
-      return `Each rostered player's opponent on each of the ${count} dates of the rest of the provider's current week${range}, because this league publishes no scoring period. ${boundaries} Pass \`window\` or \`days\` to read a different set of dates.`;
+      return `Opponents on each of the ${count} dates of the rest of the provider's current week${range}. The provider publishes no start time or season-long schedule; pass \`window\` or \`days\` for other dates.`;
     case "period":
     case undefined:
-      return `Each rostered player's opponent on each of the ${count} dates of scoring period ${String(input.period?.week)}${range}. ${boundaries}`;
+      return `Opponents on each of the ${count} dates of scoring period ${String(input.period?.week)}${range}. The provider publishes no start time or season-long schedule.`;
   }
 }
 
@@ -3405,6 +3494,19 @@ function leagueTransactionRules(
     },
     timing: {
       weeklyDeadline: declared(league.weeklyDeadline),
+      rosterChange:
+        league.rosterChange === undefined
+          ? {
+              status: "not_published",
+              detail:
+                "The league's published settings do not establish whether a roster move takes effect the same day, the next day, or at the league's weekly lock, so no rule is stated.",
+            }
+          : {
+              status: "published",
+              value: league.rosterChange.rule,
+              source: [...league.rosterChange.source],
+              detail: league.rosterChange.detail,
+            },
       waiverDays: declared(league.waiverDays),
     },
     acquisitionLimits: {
@@ -3421,7 +3523,7 @@ function leagueTransactionRules(
       inningsPitched: declared(league.maxInningsPitched),
     },
     detailNote:
-      "Every rule is either published with the league's declared value or `not_set`. `not_set` means the league declares no such rule, never zero and never a per-team count; a cap that does not apply to the league's sport, such as innings in football, is also `not_set`. Each team's acquisition usage is published with its standings row beside these limits, and the provider publishes no per-team games-played count, so only the games-played cap is known.",
+      "Every rule is either published with the league's declared value or `not_set`. `not_set` means the league declares no such rule, never zero and never a per-team count; a cap that does not apply to the league's sport, such as innings in football, is also `not_set`. `timing.weeklyDeadline` keeps the provider's raw value, including an empty string, and `timing.rosterChange` decodes it into a provider-neutral rule with its source fields and raw values. Each team's acquisition usage is published with its standings row beside these limits, and the provider publishes no per-team games-played count, so only the games-played cap is known.",
   };
 }
 

@@ -21,7 +21,7 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 | `get_calendar`                      | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                        |
 | `get_league`                        | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages |
 | `get_rosters`                       | Exact selected team/period rosters, compact by default; professional-team abbreviation on every entry                                                                      |
-| `search_players`                    | Bounded league/sport-context player search with ownership/started signals and validated sorts                                                                              |
+| `search_players`                    | Bounded league/sport-context player search with ownership/started signals, validated sorts, and an optional dated opponent for a date-covered pool                         |
 | `get_players`                       | Bounded selected-player hydration including generic stats/projections/availability groups                                                                                  |
 | `get_matchups`                      | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                 |
 | `get_transactions`                  | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution   |
@@ -69,6 +69,8 @@ Submission is bounded and rate-limited: title ≤ 120 characters, body ≤ 4000,
 
 Initial service policy: aim for about 12 KiB and enforce a 16 KiB model-facing application-result ceiling. These are our proposed application budgets, not claimed Muse/MCP limits. The measurement counts both representations a client receives: `structuredContent` and the JSON text copy that a text-only client reads. Keeping the text copy follows the specification's backwards-compatibility recommendation, so a structured page fills about half the ceiling instead of dropping the copy and halving what a text-only client can use.
 
+`get_team_summary` is the one deliberate exception because it composes up to six sections into one snapshot: it aims for 20 KiB and enforces a 28 KiB hard ceiling, with the same double-counting of structured and text copies. The ordinary six-group call fits a 13-team league inside that ceiling. A request that still cannot fit one player row refuses with the largest sections and the groups to drop, so the exception does not turn a genuinely oversized snapshot into a silent truncation or an unbounded result. Every other tool keeps the 12 KiB target and 16 KiB hard ceiling.
+
 - Bound both row counts and encoded UTF-8 bytes, including metadata and continuation information.
 - Return complete records. Do not truncate strings midway, silently drop requested fields, or mark omitted values zero.
 - If a requested record cannot fit, return an actionable narrowing-required result naming the groups or filters that can narrow it. `get_team_summary` lists its selectable groups and pages the roster with a cursor it issues and accepts; a paged resource never presents a record token as a cursor.
@@ -92,24 +94,26 @@ them — Yahoo sets `enabled` on every entry and distinguishes a display-only ca
 so the enabled flag alone cannot tell a client which numbers count. The result is verified against
 the live league described under [live scoring evidence](#live-scoring-evidence-2026-10-29): fifteen
 categories arrive from the provider, thirteen are scored, and Saves and Shots Against are
-informational. Every published category value carries the same marking, so `categoryTotals`,
-`categoryPoints`, and per-week matchup categories never present a displayed number as a scored one.
+informational. Every category entry carries `scoring: "informational"` exactly when the league
+publishes but does not score it; the field is absent for a scored category, so a client never has to
+read a display-only number as a scored one.
 A stat reference that is informational is refused as a stat-sort key with a message saying the
 league does not score it, and `get_players` `scoringContext` lists scoring categories only. A
 rotisserie league publishes rank, season points, points back, and per-category rotisserie points
 but no win-loss record; the row simply omits `record`, and `record` in `get_team_summary` says so
-with a reason. Every category entry is `{ stat, name, scoring, status: "published", value }` or
-`{ stat, name, scoring, status: "not_published", detail }`: the stat name is inlined so a client can
-read the number without a dictionary call, `scoring` says whether the league scores it, and a
-category the provider tracks but publishes no value for is stated, never returned as a silent null
-and never flattened to zero. A configured category the provider omits from a totals or points array
-entirely is still listed, with an explicit not-published status, so a reader never has to infer
-"absent" from a category that vanished. A present stat whose provider value is `null` is the same
-case: the adapter accepts the published null, keeps the category, and publishes it as not published
-instead of failing the read that contained it. A provider stat id with no league scoring definition cannot
-be labelled, so it is omitted from both category arrays and counted in the section-level
-`omittedCategories` declaration. The `categoryTotals`/`categoryPoints` coverage states whether any
-value was published, so an empty array is never read as zero.
+with a reason. Every category entry is `{ stat, name, value }` with
+`scoring: "informational"` only when the league publishes the number without scoring it, and
+`detail` only when `value` is null. The stat name is inlined so a client can read the number
+without a dictionary call, and a category the provider tracks but publishes no value for is stated
+as `value: null` with a `detail`, never returned as a silent null and never flattened to zero. A
+configured category the provider omits from a totals or points array entirely is still listed, with
+`value: null` and a detail, so a reader never has to infer "absent" from a category that vanished.
+A present stat whose provider value is `null` is the same case: the adapter accepts the published
+null, keeps the category, and publishes it as unpublished instead of failing the read that
+contained it. A provider stat id with no league scoring definition cannot be labelled, so it is
+omitted from both category arrays and counted in the section-level `omittedCategories`
+declaration. The `categoryTotals`/`categoryPoints` coverage states whether any value was published,
+so an empty array is never read as zero.
 
 The standings group has two forms, selected by `standingsDetail`. `compact` is the default: it
 returns every team's rank, points, points back, games back, the record the format publishes, and the
@@ -121,8 +125,10 @@ form genuinely does not fit a league in one result, so it pages teams and says s
 `detailNote` instead of paging silently. Both forms inline each category's name in a row, so the
 scoring dictionary is included only when the `scoring` group is requested; asking for detailed
 standings and scoring together can exceed the result budget, and the refusal names the groups to
-drop. `get_matchups` and the summary's matchup section use the same `{ stat, name, status,
-value }` category entry, so a scoring-week category with no published value is stated the same way.
+drop. `get_matchups` uses the same `{ stat, name, value, scoring?, detail? }` category entry per side, so
+a scoring-week category with no published value is stated the same way. The summary's matchup
+section pairs both sides into one row per category — `{ stat, name, own, opponent, scoring?, detail? }`
+— so the same category name, stat reference, and scoring marking are not repeated twice.
 
 Each standings row carries `acquisitionUsage`, so a waiver decision compares against league rivals
 without a second read. `status: "published"` reports `seasonMovesUsed`, `weeklyAddsUsed`, and the
@@ -146,7 +152,13 @@ per-professional-team remaining-game count and no probable-starter field, so `ge
 per-player schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group
 publishes the games themselves. `search_players` reports provider ownership/started percentages
 without inventing either, and publishes the player's professional team as `proTeam`, the same
-abbreviation a roster entry carries, so a pool player joins a schedule without another read.
+abbreviation a roster entry carries, so a pool player joins a schedule without another read. It
+also accepts an optional `date`: on a date-covered league each row carries `opponent` as
+`{ status: "scheduled", opponent, home }`, `{ status: "no_game" }` when the provider published a
+null opponent, or `{ status: "not_published", detail }` when the field was absent, and the result's
+`schedule` names the requested date and its `league_player_pool` source. On a scoring-week
+league the dated selector returns the week's opponent and does not vary by date, so no dated
+opponent is published and the result states that boundary instead of inventing one.
 
 Every roster row carries `slot` as a marked value rather than a bare string: `{ status:
 "verified", slot }` when the provider published a slot, or `{ status: "unverified", rawValue,
@@ -256,10 +268,13 @@ and the objection window in days), and games caps (games played, and innings pit
 sport declares one). Every rule is `{ status: "published", value }` or `{ status: "not_set" }`: a
 league that sets no such limit reports `not_set` rather than zero or an omitted field, and a cap
 that does not apply to the league's sport is not manufactured. An unfamiliar provider ratification
-rule is `unknown`, never guessed as one of the named forms. The settings publish the waiver fields
-and the `weeklyDeadline` value, but nothing that states whether an add or drop takes effect the same
-day or the next day; `timing` reports the published fields and the tool description says the rule is
-not stated rather than leaving a client to infer it. Per-team usage is published with the
+rule is `unknown`, never guessed as one of the named forms. `timing.weeklyDeadline` keeps the
+provider's raw value, including an empty string, and `timing.rosterChange` decodes it into
+`same_day`, `next_day`, or `weekly_lock`. A published rule names its source fields and repeats the
+raw values in `detail`; `not_published` means the published settings do not establish a rule, and no
+rule is stated. `intraday` and a game-time deadline are same-day; a weekday number is a weekly
+lock; an empty deadline is read together with the provider's editable period — a scoring week is a
+weekly lock, the current date is same-day, and the next date is next-day. Per-team usage is published with the
 team objects the provider returns: every standings row carries it, and `get_team_summary` repeats
 the owning team's usage beside the league limits. The provider publishes no per-team games-played
 count, so `transactionRules.detailNote` states that only the league's games cap is known.
@@ -281,8 +296,10 @@ standings group beside the league limits, because the summary omits `transaction
 available when the `standings` group is selected and the league settings could be read, and it states
 the same no-per-team-games-played boundary. `groups` selects `league`, `standings`,
 `categories`, `matchup`, `schedule`, and `roster`; the default is league, standings, matchup, and
-roster, `categories` adds season category totals and points plus the matchup's per-category values,
-and `schedule` adds the period's per-player games. Each section states its own availability, so a
+roster, `categories` adds season category totals and points plus the matchup's paired per-category
+values, and `schedule` adds the period's per-player games. The six-group call is the ordinary full
+snapshot and fits a 13-team league inside the summary's 20 KiB target and 28 KiB hard ceiling; the
+roster and schedule rows page with the returned cursor. Each section states its own availability, so a
 failed standings read leaves the roster and matchup intact. `remainingPlayerGames` names its unit
 (`fantasy_team_player_games`), because that is the only granularity Yahoo publishes for a fantasy
 team; football declares it unsupported with the bye-week alternative, and probable starters are
@@ -320,11 +337,12 @@ absent and a client cannot tell them apart. Schedule rows only ever appear under
 roster rows only under `roster`, so a player who entered the window's dated reads without being on
 the roster page cannot be mistaken for a roster member. Each call that does select them returns
 every requested fixed section, a page of those players, and `page.next`; the tool accepts that
-cursor on the next call, and a player carries one reference across both sections. The default
-snapshot fits a 22-player hockey roster in two pages (10 + 11 verified live on 2026-10-28) without
-dropping league, standing, record, standings, or matchup, and a 22-player, three-game schedule alone
-also returns in two pages. A budget refusal names the largest sections that consumed the result, in
-bytes, before it names the groups to drop, so a client is never told only to ask for fewer groups.
+cursor on the next call, and a player carries one reference across both sections. The summary's
+28 KiB ceiling fits a 22-player, three-game schedule in one page and the default snapshot without
+dropping league, standing, record, standings, or matchup; when a selection or an explicit `limit`
+does not fit, the cursor carries the rest instead of truncating. A budget refusal names the largest
+sections that consumed the result, in bytes, before it names the groups to drop, so a client is
+never told only to ask for fewer groups.
 The result never emits a record token as a substitute cursor.
 
 ### Live scoring evidence (2026-10-29)
@@ -379,13 +397,20 @@ retained.
   rather than matching abbreviations or prefixes; an unlearned abbreviation stays unresolved. A
   non-null opponent already establishes that the player's team plays, which is what scheduled-work
   gating needs.
-- The league players collection with `out=opponent` is not date-addressable. `players;out=opponent`
-  and `players;out=opponent;date=YYYY-MM-DD` returned the same 50 players with identical opponents,
-  including across two different dates, so the date parameter is accepted and ignored. The plain
-  form therefore cannot carry a per-date schedule into search rows, and this change is restricted to
-  the roster. The `type=date;date=…` form did move opponents in this pass, which contradicts the
-  earlier negative recorded for it; it was not adopted because it is not the published contract this
-  surface depends on, and a search-row schedule would need its own verification.
+- The league players collection is date-addressable through its `type=date` selector, not through a
+  plain `date` parameter. `players;out=opponent` and `players;out=opponent;date=YYYY-MM-DD` returned
+  the same 50 players with identical opponents across two dates, so the plain date is accepted and
+  ignored. `players;type=date;date=YYYY-MM-DD;out=opponent,…` moved the opponents: on one hockey
+  league 50 rows carried 9 non-null opponents on one date and 26 on the next. The same selector
+  works beside the full search output (`ownership`, `percent_owned`, `percent_started`, `ranks`,
+  `transactions`), keeping every field and adding `opponent`. `search_players` therefore publishes
+  `opponent` for a requested `date` only when the league's declared coverage is a date. On a
+  scoring-week football league the selector is accepted but returns the week's opponent unchanged
+  across dates, so no dated opponent is published and the result states that boundary. A player
+  resource with a date is not addressable: `/player/{key}` and
+  `/league/{league}/players/{key}` answer `400`, the former naming an invalid game key and the
+  latter an invalid player resource. The shapes and outcomes are recorded in
+  [RESEARCH.md](RESEARCH.md#pool-player-schedule-shapes-2026-10-31).
 
 ### Live tool read for the date-window schedule (2026-10-30, round 9)
 
@@ -403,12 +428,10 @@ and statuses only; no player names, team names, identifiers, or session material
   `period: { week: 5 }`, `window: { start: "2026-10-26", end: "2026-11-01", source: "period" }`, the
   same seven-date per-date counts as the earlier pass, and `observedAt` beside the window.
 - The client's exact failing group set (`league`, `standings`, `categories`, `matchup`, `roster`)
-  still returns `narrowing_required`, and now names the sections that consumed the result:
-  `standings` (about 2,532 bytes), `categoryPoints` (about 1,819), and `categoryTotals` (about
-  1,636). The default groups (`league`, `standings`, `matchup`, `roster`) returned `ok` with a
-  ten-player first page. A 13-team league with 15 categories cannot carry standings plus both
-  category arrays and a roster page inside the 16 KiB ceiling without dropping a requested section;
-  the refusal is explicit about which one to drop.
+  returned `narrowing_required` at the 16 KiB ceiling. The default groups (`league`, `standings`,
+  `matchup`, `roster`) returned `ok` with a ten-player first page. The later round-9 follow-up
+  changed the category shape, paired the summary's matchup categories, and gave the summary its own
+  budget; the same 13-team six-group call now succeeds (see below).
 - A single-group `["league"]` call returned keys `status`, `team`, `league`, `coverage`, `failures`,
   `page`, and `budget`, with no `roster` key.
 - Ten search rows sorted by ownership all carried a `proTeam` string.
@@ -442,7 +465,35 @@ were retained.
 - The same league's scoreboard published `stat.value: null` for one configured category. The stat
   entry previously required a finite number or a string, so that single null failed the whole
   matchups read. The adapter now reads a null value as no value and publishes the category entry as
-  not published; a fixture pins the shape and the other categories still arrive.
+  `value: null` with a detail; a fixture pins the shape and the other categories still arrive.
+
+### Live round-9 follow-up reads (2026-10-31)
+
+A read-only pass ran the committed `FantasyQueries.getLeague`, `searchPlayers`, and `getTeamSummary`
+against all five of the owner's linked teams. It recorded raw settings values, rule values, dates,
+counts, field presence, and byte sizes only; no player names, team names, league identifiers, or
+session material were retained.
+
+- Every league reported a raw `weeklyDeadline` and a decoded `rosterChange`. Two hockey leagues
+  published `"intraday"` and decoded `same_day` from `weekly_deadline` alone. A football league
+  published `""` with a scoring-week editable period and decoded `weekly_lock` from
+  `weekly_deadline` and `edit_key`. Two hockey leagues published `""` with an editable date one day
+  after the provider's current date and decoded `next_day` from the same pair. No league reported
+  `not_set` for the raw field; the three that previously read `not_set` published an empty string.
+- A dated pool read on the date-scoped hockey league returned `schedule: { status: "available", date,
+  source: "league_player_pool" }`; of five sampled rows, two carried a scheduled opponent and
+  three were `no_game` because the provider published a null opponent. The same call on the
+  scoring-week football league returned `schedule.status: "not_published"` with the reason that its
+  pool read returns the week's opponent and does not vary by date.
+- The full six-group call (`league`, `standings`, `categories`, `matchup`, `schedule`, `roster`) on
+  the 13-team rotisserie hockey league (12 standing rows returned in this pass) returned `ok` with
+  seven roster rows, a next cursor, and these sections: `standings` (2,469 bytes), `schedule`
+  (2,863), `matchup` (1,440, with paired categories),
+  `categoryTotals` (1,009), `acquisitionUsage` (512), `probableStarters` (311), `coverage` (851),
+  and `roster` (1,531) inside a 28,672-byte hard ceiling. The measured result was 12,439 structured
+  bytes and 27,504 wire bytes, where wire counts the structured copy, its escaped text copy, and
+  1,024 bytes of envelope. `categoryPoints` was unsupported because this league's provider
+  published no rotisserie points for the current team in this pass.
 
 ### Games-played read shapes tried (2026-10-30, round 9)
 

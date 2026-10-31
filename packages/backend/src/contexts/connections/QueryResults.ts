@@ -135,6 +135,16 @@ const DeclaredText = Schema.Union([
   Schema.Struct({ status: Schema.Literal("not_set") }),
 ]).pipe(Schema.annotate({ description: declaredStateDetail }));
 
+const DeclaredRawText = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("published"), value: Schema.String }),
+  Schema.Struct({ status: Schema.Literal("not_set") }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "`published` carries the value exactly as the league states it, including an empty string when the league publishes no value for that rule. `not_set` means the league published no such field; the two are different statements.",
+  }),
+);
+
 const DeclaredFlag = Schema.Union([
   Schema.Struct({ status: Schema.Literal("published"), value: Schema.Boolean }),
   Schema.Struct({ status: Schema.Literal("not_set") }),
@@ -223,6 +233,41 @@ const GamesPlayedUsage = Schema.Struct({
 export type AcquisitionUsage = typeof AcquisitionUsage.Type;
 export type AcquisitionLimits = typeof AcquisitionLimits.Type;
 
+const RosterChangeRule = Schema.Literals(["same_day", "next_day", "weekly_lock"]).pipe(
+  Schema.annotate({
+    description:
+      "What a roster move does under this league's published deadline: `same_day` takes effect that day, `next_day` takes effect the next day, and `weekly_lock` waits for the league's weekly lock.",
+  }),
+);
+
+const RosterChange = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("published"),
+    value: RosterChangeRule,
+    source: Schema.Array(Schema.NonEmptyString).pipe(
+      Schema.annotate({
+        description:
+          "The published settings fields the rule is decoded from, in order, as the provider's own field names. A deadline field alone can establish an intraday, game-time, or weekday rule; an empty deadline is read together with the provider's current editable-period field.",
+      }),
+    ),
+    detail: Schema.NonEmptyString.pipe(
+      Schema.annotate({
+        description:
+          "The raw published values the rule was decoded from, so a client can audit the interpretation rather than trusting it.",
+      }),
+    ),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("not_published"),
+    detail: Schema.NonEmptyString.pipe(
+      Schema.annotate({
+        description:
+          "The published settings do not establish a rule, so none is stated. This is not a default and never a guess.",
+      }),
+    ),
+  }),
+]);
+
 const TransactionRules = Schema.Struct({
   waiver: Schema.Struct({
     type: DeclaredText.pipe(
@@ -241,10 +286,16 @@ const TransactionRules = Schema.Struct({
     ),
   }),
   timing: Schema.Struct({
-    weeklyDeadline: DeclaredText.pipe(
+    weeklyDeadline: DeclaredRawText.pipe(
       Schema.annotate({
         description:
-          "The league's declared weekly deadline as the provider states it, such as `intraday`, `daily`, a weekday, or a week number.",
+          "The league's declared weekly deadline exactly as the provider states it, such as `intraday`, `game`, a weekday, or an empty string when the league publishes no weekly deadline. An empty string is published rather than reported as `not_set`.",
+      }),
+    ),
+    rosterChange: RosterChange.pipe(
+      Schema.annotate({
+        description:
+          "The provider-neutral rule decoded from the published deadline and, when the deadline is empty, the provider's current editable period. Every published rule names its source fields and repeats the raw values; when the published fields do not establish a rule, the entry is `not_published` and no rule is stated.",
       }),
     ),
     waiverDays: DeclaredNumber.pipe(
@@ -348,27 +399,35 @@ const ScoringCategory = Schema.Struct({
   ),
 });
 
-export const CategoryValue = Schema.Union([
-  Schema.Struct({
-    stat: StatRef,
-    name: Schema.NonEmptyString.pipe(
-      Schema.annotate({
-        description:
-          "The league scoring category's name, inlined so the number needs no dictionary read.",
-      }),
-    ),
-    scoring: CategoryRole,
-    status: Schema.Literal("published"),
-    value: Schema.Finite,
+const CategoryValueScoring = Schema.optional(Schema.Literal("informational")).pipe(
+  Schema.annotate({
+    description:
+      "Absent when the league scores this category. `informational` means the provider publishes the number but the league does not score it, so it is never treated as a scored value.",
   }),
-  Schema.Struct({
-    stat: StatRef,
-    name: Schema.NonEmptyString,
-    scoring: CategoryRole,
-    status: Schema.Literal("not_published"),
-    detail: Schema.String,
-  }),
-]);
+);
+
+export const CategoryValue = Schema.Struct({
+  stat: StatRef,
+  name: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description:
+        "The league scoring category's name, inlined so the number needs no dictionary read.",
+    }),
+  ),
+  scoring: CategoryValueScoring,
+  value: Schema.NullOr(Schema.Finite).pipe(
+    Schema.annotate({
+      description:
+        "The published number, or null when the provider published no value for this category. Null is never read as zero.",
+    }),
+  ),
+  detail: Schema.optional(Schema.String).pipe(
+    Schema.annotate({
+      description:
+        "Why `value` is null. Present only with a null value, and never used to explain a published number.",
+    }),
+  ),
+});
 export type CategoryValue = typeof CategoryValue.Type;
 
 const OmittedCategories = Schema.Struct({
@@ -596,8 +655,22 @@ const PlayerSort = Schema.Literals([
   "stat",
 ]);
 
+const SearchDate = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
+  Schema.annotate({
+    description:
+      "Calendar date as `YYYY-MM-DD`. The provider's league player pool is date-addressable only for a league whose coverage is a date; a scoring-week league reports that it cannot date a pool player.",
+  }),
+);
+
 export const SearchPlayersInput = Schema.Struct({
   team: TeamId,
+  date: Schema.optional(SearchDate).pipe(
+    Schema.annotate({
+      description:
+        "Read each pool row's opponent on this date. The date is used only when the league's coverage is a date; a scoring-week league states that its pool read returns the week's opponent rather than a dated one.",
+    }),
+  ),
   query: Schema.optional(
     Schema.String.pipe(
       Schema.check(Schema.isMaxLength(80)),
@@ -723,14 +796,72 @@ const SearchPlayer = Schema.Struct({
         "The provider's season value for the requested `stat` category. Present only with sort `stat`; null means the provider published no value for this player.",
     }),
   ),
+  opponent: Schema.optional(
+    Schema.Union([
+      Schema.Struct({
+        status: Schema.Literal("scheduled"),
+        opponent: Schema.NonEmptyString.pipe(
+          Schema.annotate({
+            description:
+              "The opponent's professional-team abbreviation for the date stated in the result's `schedule`. The provider publishes no full name or start time.",
+          }),
+        ),
+        home: Schema.Boolean.pipe(
+          Schema.annotate({ description: "Whether the player's professional team is at home." }),
+        ),
+      }),
+      Schema.Struct({ status: Schema.Literal("no_game") }),
+      Schema.Struct({
+        status: Schema.Literal("not_published"),
+        detail: Schema.NonEmptyString,
+      }),
+    ]),
+  ).pipe(
+    Schema.annotate({
+      description:
+        "This pool row's opponent for the date and source stated in the result's `schedule`, present only when that schedule is `available`. `no_game` means the provider published no opponent for this player on that date; `not_published` means the field was absent and no opponent is claimed.",
+    }),
+  ),
   transactionTrend: PlayerTransactionTrend,
 });
+
+const SearchSchedule = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    date: SearchDate.pipe(
+      Schema.annotate({
+        description: "The date every row's `opponent` describes, as requested by this call.",
+      }),
+    ),
+    source: Schema.Literal("league_player_pool").pipe(
+      Schema.annotate({
+        description:
+          "The read that produced the dated opponents: the league's player pool for the requested date. The provider details of that read are recorded in the research notes, not assumed by a client.",
+      }),
+    ),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("not_published"),
+    detail: Schema.NonEmptyString.pipe(
+      Schema.annotate({
+        description:
+          "Why no dated opponent is published: the league's coverage is a scoring week or its settings could not be read. No dated opponent is inferred in either case; a row whose opponent field was absent states that separately.",
+      }),
+    ),
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "Where the dated opponents on this page came from, or why none is published. Present only when `date` was requested.",
+  }),
+);
 
 export const SearchPlayersData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
   coverage: Schema.Array(QueryCoverage),
   players: Schema.Array(SearchPlayer),
+  schedule: Schema.optional(SearchSchedule),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,
   budget: QueryBudget,
@@ -1194,8 +1325,16 @@ const SummaryStandingRow = Schema.Struct({
   ties: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   percentage: Schema.optional(Schema.NullOr(Schema.Finite)),
   points: Schema.NullOr(Schema.Finite),
-  gamesBack: Schema.NullOr(Schema.Finite),
-  pointsBack: Schema.NullOr(Schema.Finite),
+  gamesBack: Schema.optional(Schema.Finite).pipe(
+    Schema.annotate({
+      description: "Games behind the leader. Absent when the format publishes no such number.",
+    }),
+  ),
+  pointsBack: Schema.optional(Schema.Finite).pipe(
+    Schema.annotate({
+      description: "Points behind the leader. Absent when the format publishes no such number.",
+    }),
+  ),
 });
 
 const SummaryStandings = Schema.Union([
@@ -1222,6 +1361,34 @@ const SummaryAcquisitionUsage = Schema.Union([
   }),
 );
 
+export const SummaryMatchupCategory = Schema.Struct({
+  stat: StatRef,
+  name: Schema.NonEmptyString,
+  scoring: CategoryValueScoring,
+  own: Schema.NullOr(Schema.Finite).pipe(
+    Schema.annotate({
+      description: "This team's value for the category, or null when unpublished.",
+    }),
+  ),
+  opponent: Schema.NullOr(Schema.Finite).pipe(
+    Schema.annotate({
+      description: "The opponent's value for the category, or null when unpublished.",
+    }),
+  ),
+  detail: Schema.optional(Schema.String).pipe(
+    Schema.annotate({
+      description:
+        "Why a side is null. Present only when at least one side published no value; a published number is never explained away.",
+    }),
+  ),
+}).pipe(
+  Schema.annotate({
+    description:
+      "One scoring category with both sides' values in one row, so the category name, stat reference, and scoring marking are not repeated twice.",
+  }),
+);
+export type SummaryMatchupCategory = typeof SummaryMatchupCategory.Type;
+
 const SummaryMatchup = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("available"),
@@ -1236,8 +1403,7 @@ const SummaryMatchup = Schema.Union([
     opponentProjectedPoints: Schema.NullOr(Schema.Finite),
     remainingGames: Schema.optional(RemainingGames),
     opponentRemainingGames: Schema.optional(RemainingGames),
-    categories: Schema.optional(Schema.Array(CategoryValue)),
-    opponentCategories: Schema.optional(Schema.Array(CategoryValue)),
+    categories: Schema.optional(Schema.Array(SummaryMatchupCategory)),
     statusLabel: Schema.optional(Schema.String),
     isPlayoffs: Schema.optional(Schema.Boolean),
   }),
