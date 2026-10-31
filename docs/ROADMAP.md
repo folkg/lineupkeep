@@ -401,7 +401,12 @@ item both behaving correctly. `M`
 - [ ] Writes through the provider's transaction endpoint, using the session and crumb the lineup writer
       already uses.
 - [ ] Per-item outcome, recorded. No silent retry: a retried add can drop the wrong player.
+- [ ] Move a player to a reserve list as an executable move, so an add can free a roster slot without
+      dropping an injured player, under the same per-item outcome and re-validation rules.
 - [ ] One team failing never hides the others.
+- [ ] **decide** whether originating a trade can be staged at all: the provider publishes no parameterized
+      trade proposal page, and its write shape is unproven, so a staged trade currently has no review
+      link that can act on it. Incoming offers stay read-only until then.
 
 **Verify**: a real add and drop on a disposable league, with per-item outcomes and the provider's own
 transaction feed agreeing. `M`
