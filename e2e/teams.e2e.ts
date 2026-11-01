@@ -139,7 +139,12 @@ test("reports a refused team as unreadable and re-checks it without pretending i
       row.getByText("You are not allowed to view this page because you are not in this league."),
     ).toBeVisible();
     await expect(row.getByText(/Seen once\./u)).toBeVisible();
+    await expect(row.getByText(/Check the team again first\./u)).toBeVisible();
     await expect(row.getByText(/Lineup checks skip it until it can be read\.$/u)).toBeVisible();
+    await expect(row.getByRole("link", { name: "Manage connections" })).toHaveAttribute(
+      "href",
+      "/connections",
+    );
   });
 
   await page.getByRole("link", { name: "Embedded Browser Team" }).click();

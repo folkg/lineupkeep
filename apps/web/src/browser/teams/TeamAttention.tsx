@@ -34,8 +34,18 @@ export function TeamAttention(props: TeamAttentionProps): JSX.Element {
                   </Text>
                   <Text size="caption">{refused().detail}</Text>
                   <Text size="caption" tone="muted">
-                    {availabilityMeaning(refused().reason)}
+                    {availabilityMeaning(refused().reason, props.team.connectionStatus === "ready")}
                   </Text>
+                  <Show
+                    when={
+                      props.team.connectionStatus === "ready" &&
+                      refused().reason !== "connection_unavailable"
+                    }
+                  >
+                    <Text size="caption" tone="muted">
+                      <TextLink to="/connections">Manage connections</TextLink>
+                    </Text>
+                  </Show>
                   <Text size="caption" tone="muted">
                     <Show when={refused().reason === "provider_refused"}>
                       <Show
@@ -143,14 +153,19 @@ function ConnectionAttention(props: {
   );
 }
 
-function availabilityMeaning(reason: UnavailableAvailability["reason"]): string {
+function availabilityMeaning(
+  reason: UnavailableAvailability["reason"],
+  connectionReady: boolean,
+): string {
   switch (reason) {
     case "provider_refused":
-      return "That usually means this team is no longer in the league it belongs to, or this account may no longer read it. Nothing was deleted.";
+      return "Check the team again first. If the provider still refuses, confirm on the provider that the team is still in this league and that you connected the account that owns it. If it belongs to another account, connect that account, then check again.";
     case "not_listed":
-      return "This account's own team list no longer includes it. Its note and history are kept.";
+      return "Check the team again first. If it is still missing, confirm on the provider whether it left the league or moved to another account. If it moved, connect that account, then check again.";
     case "connection_unavailable":
-      return "Reconnect the provider, then check the team again.";
+      return connectionReady
+        ? "The connection was not usable at the last check. It is ready now; check the team again."
+        : "Reconnect the provider, then check the team again.";
   }
 }
 

@@ -18,7 +18,9 @@ revisions that carried each change.
   consecutive provider refusals, so one refusal is not presented as a permanent fact.
 - The team list shows an unreadable team without opening it, repeats the provider's wording, says
   what that reason means, names when it was seen and how many consecutive checks saw it, and offers
-  **Check this team again** from the list as well as the team page. A stale team says when it was
+  **Check this team again** from the list as well as the team page. The block names the next action:
+  check first, then confirm on the provider that the team is still in the league under the connected
+  account, and connect the owning account if it is a different one. A stale team says when it was
   last checked and why that is not current; an unobserved team says it has not been checked yet.
 - A transient provider failure during the sweep records nothing and leaves the previous observation
   in place; only a provider refusal, a missing team, or an unusable connection changes the state. A

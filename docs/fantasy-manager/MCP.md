@@ -68,7 +68,10 @@ and its runs, and remains skipped by scheduled checks; it is never treated as de
 read for an unavailable team refuses with `team_unavailable` and the recorded reason instead of
 making a provider request that would be refused, and `set_lineup` refuses it with
 `lineup.selection_invalid` without creating a run. A stale or unobserved team is still
-attempted by reads and lineup runs; the next hourly sweep records what it finds. The owner can check a team again from the team list or the
+attempted by reads and lineup runs; the next hourly sweep records what it finds. A
+`provider_refused` or `not_listed` team is fixed outside Lineupkeep's write surface: check the team
+again first, then if it still cannot be read, connect the provider account that owns the team or
+confirm on the provider that the team is still in that league. The owner can check a team again from the team list or the
 team page; either re-reads the account's own team list and that league and records the new state.
 Ownership is enforced in the team service, so another owner's id is `not_found`, not a
 forbidden-with-details response. Responses report each input in order with its outcome, enrollment,

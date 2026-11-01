@@ -363,8 +363,11 @@ it("says a refusal was seen on consecutive checks instead of presenting it as on
 
   await expect.element(page.getByText(/Seen on 3 consecutive checks\./u)).toBeVisible();
   await expect
-    .element(page.getByText(/That usually means this team is no longer in the league/u))
+    .element(page.getByText(/Check the team again first\. If the provider still refuses/u))
     .toBeVisible();
+  await expect
+    .element(page.getByRole("link", { name: "Manage connections" }))
+    .toHaveAttribute("href", "/connections");
 });
 
 it("returns a refused team to available after checking again", async () => {
