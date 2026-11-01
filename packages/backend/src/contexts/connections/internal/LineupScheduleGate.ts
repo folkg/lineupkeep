@@ -7,8 +7,12 @@ import {
   nextFantasyDayBoundary,
 } from "#contexts/connections/FantasyDay.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
+import type { GameSourceFailure } from "#contexts/connections/GameSource.ts";
 import type { ProfessionalCalendar } from "#contexts/connections/ProfessionalCalendar.ts";
+import type { ProfessionalCalendarUnavailable } from "#contexts/connections/ProfessionalCalendar.ts";
+import type { ProfessionalGameFactStale } from "#contexts/connections/ProfessionalCalendar.ts";
 import type { ProviderSessionMaterial, ProviderShape } from "#contexts/connections/Provider.ts";
+import type { QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
 import type {
   ScheduleGateDecision,
   ScheduleGateRunReason,
@@ -17,6 +21,12 @@ import type {
 import type { ObservedFactRepository } from "./ObservedFactRepository.ts";
 import { readProviderOpponent } from "./ProviderOpponentFacts.ts";
 import { decideScheduleGate, nextLineupTick } from "./ScheduleGateDecision.ts";
+
+type CalendarFailure =
+  | ProfessionalCalendarUnavailable
+  | ProfessionalGameFactStale
+  | GameSourceFailure
+  | QueryPersistenceFailed;
 
 export function evaluateScheduleGate(input: {
   readonly facts: ObservedFactRepository["Service"];
@@ -100,6 +110,7 @@ function evaluate(input: {
       }),
     );
     if (calendarRead._tag === "Failure") {
+      yield* Effect.annotateCurrentSpan(gameFailureAttributes(calendarRead.failure));
       return yield* Effect.fail(gameSourceFailureReason(calendarRead.failure));
     }
     if (
@@ -131,6 +142,43 @@ function providerMaterial(input: {
   readonly session: Redacted.Redacted<string>;
 }): ProviderSessionMaterial {
   return { provider: input.team.provider, session: input.session };
+}
+
+function gameFailureAttributes(failure: CalendarFailure): Record<string, string> {
+  switch (failure._tag) {
+    case "game_source.request_failed":
+      return withStatus({ "schedule.gate.failure": failure._tag }, failure.status);
+    case "game_source.response_invalid":
+      return {
+        "schedule.gate.failure": failure._tag,
+        ...(failure.field === undefined ? {} : { "schedule.gate.failure_field": failure.field }),
+      };
+    case "professional_calendar.fact_stale": {
+      const cause = failure.cause;
+      return {
+        "schedule.gate.failure": failure._tag,
+        "schedule.gate.failure_cause": cause._tag,
+        ...(cause._tag === "game_source.request_failed" ? withStatus({}, cause.status) : {}),
+        ...(cause._tag === "game_source.response_invalid" && cause.field !== undefined
+          ? { "schedule.gate.failure_cause_field": cause.field }
+          : {}),
+      };
+    }
+    case "professional_calendar.unavailable":
+      return {
+        "schedule.gate.failure": failure._tag,
+        "schedule.gate.failure_reason": failure.reason,
+      };
+    case "query.persistence_failed":
+      return { "schedule.gate.failure": failure._tag };
+  }
+}
+
+function withStatus(
+  base: Record<string, string>,
+  status: number | undefined,
+): Record<string, string> {
+  return status === undefined ? base : { ...base, "schedule.gate.failure_status": String(status) };
 }
 
 function gameSourceFailureReason(failure: {
