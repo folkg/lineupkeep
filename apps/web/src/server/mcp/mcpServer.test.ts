@@ -167,11 +167,11 @@ it("challenges an unauthenticated client with protected-resource discovery and a
 
   expect(response.status).toBe(401);
   expect(response.headers.get("www-authenticate")).toBe(
-    'Bearer resource_metadata="https://connections.example/.well-known/oauth-protected-resource/mcp", scope="connections:read fantasy:read offline_access"',
+    'Bearer resource_metadata="https://connections.example/.well-known/oauth-protected-resource/mcp", scope="fantasy:read offline_access"',
   );
   expect(body).toMatchObject({
     error: "unauthorized",
-    scope: "connections:read fantasy:read offline_access",
+    scope: "fantasy:read offline_access",
     resource_metadata: "https://connections.example/.well-known/oauth-protected-resource/mcp",
   });
   expect(JSON.stringify(body)).not.toContain("teams:manage");
@@ -182,10 +182,8 @@ it("names only the calling tool's missing scope in a 403 body", async () => {
     request(
       "tools/call",
       {
-        name: "triage_feedback",
-        arguments: {
-          feedback: [{ feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" }],
-        },
+        name: "set_team_automation",
+        arguments: { teams: [{ team: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "enable" }] },
       },
       "restricted",
     ),
@@ -193,13 +191,13 @@ it("names only the calling tool's missing scope in a 403 body", async () => {
   const body = await json(response);
 
   expect(response.status).toBe(403);
-  expect(response.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
-  expect(body).toMatchObject({ error: "insufficient_scope", scope: "feedback:manage" });
-  expect(JSON.stringify(body)).not.toContain("teams:manage");
-  expect(JSON.stringify(body)).not.toContain("connections:read");
+  expect(response.headers.get("www-authenticate")).toContain('scope="teams:manage"');
+  expect(body).toMatchObject({ error: "insufficient_scope", scope: "teams:manage" });
+  expect(JSON.stringify(body)).not.toContain("transactions:review");
+  expect(JSON.stringify(body)).not.toContain("fantasy:read");
 });
 
-it("reads on a five-scope grant and refuses only the tools that need a manage scope", async () => {
+it("reads on the restricted grant and refuses only the automation tool", async () => {
   const listing = await handle(request("tools/list", {}, "restricted"));
   const read = await handle(
     request("tools/call", { name: "list_connections", arguments: {} }, "restricted"),
@@ -214,25 +212,11 @@ it("reads on a five-scope grant and refuses only the tools that need a manage sc
       "restricted",
     ),
   );
-  const triage = await handle(
-    request(
-      "tools/call",
-      {
-        name: "triage_feedback",
-        arguments: {
-          feedback: [{ feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" }],
-        },
-      },
-      "restricted",
-    ),
-  );
 
   expect(listing.status).toBe(200);
   expect(read.status).toBe(200);
   expect(automation.status).toBe(403);
   expect(automation.headers.get("www-authenticate")).toContain('scope="teams:manage"');
-  expect(triage.status).toBe(403);
-  expect(triage.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
 });
 
 it("asks the auth service only for the calling tool's scope", async () => {
@@ -292,7 +276,7 @@ it("refuses a token that grants no scopes", async () => {
   );
 
   expect(response.status).toBe(403);
-  expect(response.headers.get("www-authenticate")).toContain('scope="connections:read"');
+  expect(response.headers.get("www-authenticate")).toContain('scope="fantasy:read"');
 });
 
 it.each(["2025-03-26", "2025-06-18", "2025-11-25"])(
@@ -338,7 +322,6 @@ it("lists only the read-only connection tool without exposing account identity",
     "set_team_automation",
     "submit_feedback",
     "list_feedback",
-    "triage_feedback",
   ]);
 });
 
@@ -418,7 +401,7 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
       Effect.runPromise(Effect.provide(program, services)),
     );
 
-  const denied = await run(request("tools/call", { name: "list_teams", arguments: {} }, "read"));
+  const denied = await run(request("tools/call", { name: "list_teams", arguments: {} }, "review"));
   const listed = await run(request("tools/call", { name: "list_teams", arguments: {} }, "fantasy"));
   const invalid = await run(
     request("tools/call", { name: "list_teams", arguments: { limit: 0 } }, "fantasy"),
@@ -1008,11 +991,11 @@ it("records agent feedback for the authenticated account on a read grant", async
   };
 
   const denied = await call(
-    request("tools/call", { name: "submit_feedback", arguments: arguments_ }, "fantasy"),
+    request("tools/call", { name: "submit_feedback", arguments: arguments_ }, "review"),
   );
 
   expect(denied.status).toBe(403);
-  expect(denied.headers.get("www-authenticate")).toContain('scope="connections:read"');
+  expect(denied.headers.get("www-authenticate")).toContain('scope="fantasy:read"');
   expect(submitted).toEqual([]);
 
   const allowed = await call(
@@ -1123,123 +1106,10 @@ it("returns an actionable failure for refused feedback instead of leaking persis
   expect(await json(invalidLimit)).toMatchObject({ error: { code: -32602 } });
 });
 
-it("triages owned feedback through the shared service and reports each outcome", async () => {
-  const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
-  const triaged: Array<ReadonlyArray<unknown>> = [];
-  const feedback: FeedbackShape = {
-    ...unavailableFeedback,
-    triage: (_userId, inputs) => {
-      triaged.push(inputs);
-      return Effect.succeed(
-        inputs.map((input) => ({
-          outcome: "changed" as const,
-          feedback: {
-            id: input.feedback,
-            submitter: { kind: "agent" as const, reference: "mcp" },
-            kind: "bug" as const,
-            status: input.action === "resolve" ? ("resolved" as const) : ("acknowledged" as const),
-            title: "Week is wrong",
-            body: "The run used the next week.",
-            context: {},
-            ...(input.action === "resolve" && "note" in input
-              ? { resolutionNote: input.note }
-              : {}),
-            ...(input.action === "resolve" ? { closedAt: at } : {}),
-            createdAt: at,
-            updatedAt: at,
-          },
-          action: input.action,
-          detail: "Recorded.",
-        })),
-      );
-    },
-  };
-  const services = Layer.mergeAll(
-    authentication,
-    Layer.succeed(Connections)(unavailableConnections),
-    Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
-    Layer.succeed(LineupRuns)(unavailableLineups),
-    Layer.succeed(Teams)(unavailableTeams),
-    Layer.succeed(Feedback)(feedback),
-  );
-  const response = await handleMcpRequest(
-    request(
-      "tools/call",
-      {
-        name: "triage_feedback",
-        arguments: {
-          feedback: [
-            { feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" },
-            {
-              feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b4",
-              action: "resolve",
-              note: "Fixed the week mapping.",
-            },
-          ],
-        },
-      },
-      "feedback",
-    ),
-    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
-  );
-  const duplicate = await handleMcpRequest(
-    request(
-      "tools/call",
-      {
-        name: "triage_feedback",
-        arguments: {
-          feedback: [
-            { feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" },
-            { feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "wontfix" },
-          ],
-        },
-      },
-      "feedback",
-    ),
-    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
-  );
-  const body = await json(response);
-
-  expect(response.status).toBe(200);
-  expect(body).toMatchObject({
-    result: {
-      isError: false,
-      structuredContent: {
-        results: [
-          { outcome: "changed", action: "acknowledge", feedback: { status: "acknowledged" } },
-          {
-            outcome: "changed",
-            action: "resolve",
-            feedback: { status: "resolved", resolutionNote: "Fixed the week mapping." },
-          },
-        ],
-      },
-    },
-  });
-  expect(triaged).toEqual([
-    [
-      { feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3", action: "acknowledge" },
-      {
-        feedback: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b4",
-        action: "resolve",
-        note: "Fixed the week mapping.",
-      },
-    ],
-  ]);
-  const duplicateBody = await json(duplicate);
-  expect(duplicate.status).toBe(200);
-  expect(duplicateBody).toMatchObject({ result: { isError: true } });
-  expect(JSON.stringify(duplicateBody)).toContain("once per triage");
-  expect(triaged).toHaveLength(1);
-});
-
 const authentication = Layer.succeed(AuthService)({
   signInMethods: { google: false },
   oauthResource: "https://connections.example/mcp",
   onboardingScopes: [
-    { name: "connections:read", description: "Read connections." },
     { name: "fantasy:read", description: "Read fantasy data." },
     { name: "offline_access", description: "Stay connected." },
   ],
@@ -1250,24 +1120,16 @@ const authentication = Layer.succeed(AuthService)({
   resolveAccessToken: (token, scopes) => {
     const granted =
       token === "read"
-        ? ["connections:read", "example:read"]
+        ? ["fantasy:read", "example:read"]
         : token === "fantasy"
           ? ["fantasy:read"]
           : token === "review"
             ? ["transactions:review"]
-            : token === "feedback"
-              ? ["feedback:manage"]
-              : token === "restricted"
-                ? [
-                    "connections:read",
-                    "fantasy:read",
-                    "transactions:review",
-                    "lineups:write",
-                    "offline_access",
-                  ]
-                : token === "none"
-                  ? []
-                  : scopes;
+            : token === "restricted"
+              ? ["fantasy:read", "transactions:review", "lineups:write", "offline_access"]
+              : token === "none"
+                ? []
+                : scopes;
     return Effect.succeed(
       scopes.every((scope) => granted.includes(scope))
         ? { status: "authenticated" as const, userId: decodeUserId("reader") }

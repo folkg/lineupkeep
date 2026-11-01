@@ -27,7 +27,12 @@ import type { Scope } from "effect";
 import { appEnvironmentConfig } from "#config/AppEnvironment.ts";
 import { AuthenticationInvalidResponse, AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
 import type { AuthenticationSession, AccessTokenResolution } from "#contexts/auth/Auth.ts";
-import { AuthorizationScopes } from "#contexts/auth/AuthorizationScopes.ts";
+import {
+  AuthorizationScopes,
+  currentScopeName,
+  retiredScopeAliases,
+  retiredScopeNames,
+} from "#contexts/auth/AuthorizationScopes.ts";
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import { UserId } from "#contexts/auth/User.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
@@ -58,6 +63,17 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       const clientAddress = yield* clientAddressConfig;
       const google = yield* googleConfig;
       const scopes = yield* AuthorizationScopes;
+      const advertisedScopeNames = scopes.map((scope) => scope.name);
+      const acceptedScopeNames = [
+        ...advertisedScopeNames,
+        ...retiredScopeNames.filter((name) =>
+          advertisedScopeNames.includes(retiredScopeAliases[name] ?? name),
+        ),
+      ];
+      const currentScope = (name: string): string => {
+        const target = currentScopeName(name);
+        return target !== name && advertisedScopeNames.includes(target) ? target : name;
+      };
       const oauthResource = new URL("/mcp", baseUrl).href;
 
       const rateLimitEnabled = environment !== "development";
@@ -80,6 +96,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         baseUrl: baseUrl.href,
         oauthResource,
         scopes,
+        acceptedScopeNames,
         secret: Redacted.value(secret),
         rateLimitEnabled,
         clientAddress,
@@ -205,7 +222,8 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         ) {
           return { status: "invalid" };
         }
-        if (!requiredScopes.every((scope) => claims.value.scope.split(" ").includes(scope))) {
+        const granted = claims.value.scope.split(" ").filter(Boolean).map(currentScope);
+        if (!requiredScopes.map(currentScope).every((scope) => granted.includes(scope))) {
           return { status: "insufficient_scope" };
         }
         return { status: "authenticated", userId: claims.value.sub };
@@ -262,7 +280,9 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           ),
           Effect.mapError((cause) => AuthenticationInvalidResponse.make({ cause })),
         );
-        const requested = new Set((params.get("scope") ?? "").split(" ").filter(Boolean));
+        const requested = new Set(
+          (params.get("scope") ?? "").split(" ").filter(Boolean).map(currentScope),
+        );
         if ([...requested].some((name) => !scopes.some((scope) => scope.name === name))) {
           return { status: "invalid" } as const;
         }
@@ -402,8 +422,9 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
         consentPage: "/consent",
         resource: options.oauthResource,
         resourceSeedMode: "insertOnly",
-        scopes: options.scopes.map((scope) => scope.name),
+        scopes: [...options.acceptedScopeNames],
         clientRegistrationDefaultScopes: options.scopes.map((scope) => scope.name),
+        advertisedMetadata: { scopes_supported: options.scopes.map((scope) => scope.name) },
         grantTypes: ["authorization_code", "refresh_token"],
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
@@ -691,6 +712,7 @@ type AuthFactoryOptions = {
   readonly requestSignInCode: (request: Request, code: SignInCode) => void;
   readonly oauthResource: string;
   readonly scopes: ReadonlyArray<AuthorizationScope>;
+  readonly acceptedScopeNames: ReadonlyArray<string>;
 };
 
 type ClientAddressOptions = {

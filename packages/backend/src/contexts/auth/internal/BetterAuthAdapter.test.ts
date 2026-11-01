@@ -18,6 +18,7 @@ import {
 import { vi } from "vitest";
 
 import { AuthorizationScopes, offlineAccess } from "#contexts/auth/AuthorizationScopes.ts";
+import { retiredScopeAliases } from "#contexts/auth/AuthorizationScopes.ts";
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
@@ -684,6 +685,68 @@ it.effect(
         ),
         ["offline_access"],
       );
+      for (const retired of Object.keys(retiredScopeAliases)) {
+        assert.notInclude(authorizationServer.scopes_supported, retired);
+        assert.notInclude(protectedResource.scopes_supported, retired);
+      }
+    }).pipe(
+      Effect.provide(
+        adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),
+      ),
+    ),
+  databaseTestTimeout,
+);
+
+it.effect(
+  "resolves a token minted with a retired scope name to the scope that replaced it",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const database = yield* AuthDatabase;
+      const signer = betterAuth({
+        baseURL: baseConfig.BETTER_AUTH_URL,
+        secret: baseConfig.BETTER_AUTH_SECRET,
+        database: drizzleAdapter(database, {
+          provider: "pg",
+          schema: { ...authSchema, ...oauthSchema },
+        }),
+        plugins: [
+          jwt({
+            jwt: {
+              issuer: "http://localhost:5173/api/auth",
+              audience: "http://localhost:5173/mcp",
+            },
+          }),
+        ],
+      });
+      const token = (scope: string): Effect.Effect<{ readonly token: string }> =>
+        Effect.promise(() =>
+          signer.api.signJWT({
+            body: { payload: { sub: "reader", scope, exp: 4_000_000_000 } },
+          }),
+        );
+
+      const retired = yield* token("connections:read");
+      const current = yield* token("fantasy:read");
+      const manageOnly = yield* token("feedback:manage");
+
+      assert.deepStrictEqual(yield* adapter.resolveAccessToken(retired.token, ["fantasy:read"]), {
+        status: "authenticated",
+        userId: decodeUserId("reader"),
+      });
+      assert.deepStrictEqual(yield* adapter.resolveAccessToken(current.token, ["fantasy:read"]), {
+        status: "authenticated",
+        userId: decodeUserId("reader"),
+      });
+      assert.deepStrictEqual(
+        yield* adapter.resolveAccessToken(manageOnly.token, ["fantasy:read"]),
+        {
+          status: "insufficient_scope",
+        },
+      );
+      assert.deepStrictEqual(yield* adapter.resolveAccessToken(retired.token, ["teams:manage"]), {
+        status: "insufficient_scope",
+      });
     }).pipe(
       Effect.provide(
         adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),

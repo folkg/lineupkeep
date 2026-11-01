@@ -252,7 +252,8 @@ bun run mcp:accept --origin <url> --token-env <NAME>
 
 Local flow (default): starts a disposable local stack, registers a dynamic client, and signs in
 through the browser. Pass --origin only for an existing loopback test-composition stack with
-RESEND_API_BASE_URL pointing at its fake inbox. --scopes defaults to the full advertised set.
+RESEND_API_BASE_URL pointing at its fake inbox. --scopes defaults to the full advertised set; a
+retired scope name is accepted here so a legacy grant can be reproduced.
 
 Provided-token mode: requires --origin and reads the access token from the environment variable
 named by --token-env. Never pass the token itself. Write tools are called only with empty

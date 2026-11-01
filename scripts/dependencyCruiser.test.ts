@@ -499,15 +499,15 @@ it("permits context implementation wiring in ApplicationLayer", async () => {
 });
 
 it("keeps feature scope catalogues out of Auth and permits application composition", async () => {
-  const scope = "packages/backend/src/contexts/connections/ConnectionScopes.ts";
+  const scope = "packages/backend/src/contexts/connections/TeamScopes.ts";
   const rejected = await checkArchitecture({
     "packages/backend/src/contexts/auth/internal/Foreign.ts":
-      'import "#contexts/connections/ConnectionScopes.ts";',
+      'import "#contexts/connections/TeamScopes.ts";',
     [scope]: "export const scopes = [];",
   });
   const accepted = await checkArchitecture({
     "packages/backend/src/runtime/BackendRuntime.ts":
-      'import "#contexts/connections/ConnectionScopes.ts"; import "#contexts/auth/AuthorizationScopes.ts";',
+      'import "#contexts/connections/TeamScopes.ts"; import "#contexts/auth/AuthorizationScopes.ts";',
     [scope]: "export const scopes = [];",
     "packages/backend/src/contexts/auth/AuthorizationScopes.ts": "export const scopes = [];",
   });

@@ -57,11 +57,13 @@ This tool changes only durable Lineupkeep automation state; it never contacts th
 
 ## Feedback behavior
 
-Feedback is one owner-scoped record for a bug, data issue, friction report, or wishlist item. `submit_feedback` records the acting account's report and returns its id and `open` status; `list_feedback` returns that account's reports in newest-first order with optional status, kind, and start-time filters; `triage_feedback` acknowledges, resolves with a note, or closes as not planned.
+Feedback is one owner-scoped record for a bug, data issue, friction report, or wishlist item. `submit_feedback` records the acting account's report and returns its id and `open` status; `list_feedback` returns that account's reports in newest-first order with optional status, kind, and start-time filters.
 
-Filing a report and reading back what happened to it both need only `connections:read`; acknowledging and closing need `feedback:manage`. A submitter could otherwise never confirm what happened to what they filed, which is the channel's whole purpose. Ownership is the boundary: every query is filtered to the acting account, so a submitter sees their own items and never anyone else's, and a foreign report id is `not_found`, not a forbidden-with-details response. There is no agent-wide, operator, or support queue. The owner's intent is that the person's own agent can file, follow up, and close without the product owner relaying messages by hand.
+Filing a report and reading back what happened to it both need only `fantasy:read`, the scope every client holds; a submitter could otherwise never confirm what happened to what it filed, which is the channel's whole purpose. Ownership is the boundary: every query is filtered to the acting account, so a submitter sees their own items and never anyone else's, and a foreign report id is `not_found`, not a forbidden-with-details response. There is no agent-wide, operator, or support queue.
 
-Status is `open`, `acknowledged`, `resolved`, or `wontfix`. `resolve` requires a resolution note and sets the closure time; `wontfix` accepts an optional note. Repeating the current action is an `unchanged` no-op with the resulting record, and an action that contradicts a closed report is `rejected`: closure is final, so report the problem again if it returns. Results echo each requested action in order with its outcome, status, note, and a safe explanation.
+Triage is not part of the public surface. Acknowledging, resolving with a note, and closing as not planned are an internal domain operation in the backend, with no MCP tool and no scope a client can request. `feedback:manage` is therefore retired: no tool requires it, it is absent from both discovery documents, and a token minted while it existed keeps working for every tool it holds another scope for.
+
+Status is `open`, `acknowledged`, `resolved`, or `wontfix`. The internal operation's `resolve` requires a resolution note and sets the closure time; `wontfix` accepts an optional note. Repeating the current action is an `unchanged` no-op with the resulting record, and an action that contradicts a closed report is `rejected`: closure is final, so report the problem again if it returns.
 
 Submission is bounded and rate-limited: title ≤ 120 characters, body ≤ 4000, note ≤ 2000, control characters removed, and user text always returned as plain text. An account may submit 20 reports per clock hour and one acting client label may submit 10; the per-account limit is the backstop, so a client that renames itself cannot exceed it, and a refusal names the retry delay in seconds. Reports must never contain passwords, provider cookies, account identifiers, or raw provider payloads. Open and acknowledged reports are retained as current work; resolved and not-planned reports are deleted 180 days after closure.
 
@@ -642,7 +644,7 @@ lacking a scope a different tool needs, does not change whether a call succeeds.
 
 | Tool                                  | Required scope        |
 | ------------------------------------- | --------------------- |
-| `list_connections`                    | `connections:read`    |
+| `list_connections`                    | `fantasy:read`        |
 | `list_teams`                          | `fantasy:read`        |
 | `get_calendar`                        | `fantasy:read`        |
 | `get_league`                          | `fantasy:read`        |
@@ -652,44 +654,77 @@ lacking a scope a different tool needs, does not change whether a call succeeds.
 | `get_matchups`                        | `fantasy:read`        |
 | `get_team_summary`                    | `fantasy:read`        |
 | `get_transactions`                    | `fantasy:read`        |
+| `get_pending_trade_offers`            | `fantasy:read`        |
+| `get_lineup_runs`                     | `fantasy:read`        |
+| `submit_feedback`                     | `fantasy:read`        |
+| `list_feedback`                       | `fantasy:read`        |
 | `generate_transaction_review_links`   | `transactions:review` |
 | `propose_transactions`                | `transactions:review` |
 | `get_transaction_proposal_set`        | `transactions:review` |
 | `revalidate_transaction_proposal_set` | `transactions:review` |
-| `get_pending_trade_offers`            | `fantasy:read`        |
 | `set_lineup`                          | `lineups:write`       |
-| `get_lineup_runs`                     | `lineups:write`       |
 | `set_team_automation`                 | `teams:manage`        |
-| `submit_feedback`                     | `connections:read`    |
-| `list_feedback`                       | `connections:read`    |
-| `triage_feedback`                     | `feedback:manage`     |
 
 A scope-coverage test derives this table from the tool declarations, so a tool that omits a
 scope fails the test suite instead of becoming an open endpoint.
 
-`submit_feedback` and `list_feedback` require `connections:read` rather than `feedback:manage`.
+Four resource scopes cover the surface, and each exists because a tool needs exactly that risk:
+
+- `fantasy:read` is one read scope over everything the owner owns. Reading a connection and
+  reading a team are the same act of reading the owner's own data, so they are not separate
+  scopes. It also covers a lineup run's status, because a run read is a read, and feedback
+  submission and read-back, because reporting a problem must stay possible under the scope every
+  client holds and it writes only the acting account's own report.
+- `transactions:review` stages proposals, reads them back, revalidates them, and generates
+  human-review links. It writes nothing to the provider and submits nothing.
+- `lineups:write` is the roster mutation: `set_lineup` and only `set_lineup`. A lineup change and
+  a transaction submission are not the same risk, so they are not the same scope.
+- `teams:manage` changes team-level state the owner keeps in Lineupkeep: automation enrollment,
+  pause, and resume, and the owner note on the team page. It never contacts the provider.
+
+`submit_feedback` and `list_feedback` require `fantasy:read` rather than a manage grant.
 Submission creates only the acting account's own report under the same rate limits and owner
 scoping as before, and it is the channel for reporting the scope problem itself, so it cannot sit
-behind a manage grant. Read-back follows submission for the same reason: a submitter that cannot
-read its own report's status cannot confirm the report was received or resolved. Both are
-owner-filtered, so neither widens access to another account's reports. Triage remains
-`feedback:manage`: a client with only read scopes can file a report and read the status of its own
-reports, and cannot change any of them.
+behind a scope the client cannot request. Read-back follows submission for the same reason: a
+submitter that cannot read its own report's status cannot confirm the report was received or
+resolved. Both are owner-filtered, so neither widens access to another account's reports. There is
+no public triage tool; acknowledging and closing are an internal operation, as the Feedback
+behavior section states.
+
+### Retired scope names
+
+Two earlier scope names are gone. A retired name that has a successor is **accepted but never
+advertised**: a token or authorization request that carries one is resolved to the current scope at
+the enforcement boundary, and neither discovery document, the onboarding baseline, nor a new client
+registration names one.
+
+| Retired name       | Accepted as    | Why it went                                                                                     |
+| ------------------ | -------------- | ----------------------------------------------------------------------------------------------- |
+| `connections:read` | `fantasy:read` | Reading a connection and reading a team are the same act of reading the owner's own data.       |
+| `feedback:manage`  | none           | Triage is not public. A token that still holds it keeps working for every other scope it holds. |
+
+`connections:read` is accepted in a token's `scope` claim, in an authorization request, and on the
+consent screen; the consent screen shows the description of the scope it resolves to. A stored
+client registration keeps the scopes it was granted, so a client that still requests
+`connections:read` receives a token whose claim names that scope and every read tool answers it.
+`feedback:manage` has no successor: no tool requires it, and the authorization server no longer
+grants it, so a new registration cannot request it.
 
 ### First authorization
 
 Request this minimal baseline first:
 
 ```text
-connections:read fantasy:read offline_access
+fantasy:read offline_access
 ```
 
-It reads connections and fantasy data, submits feedback, and buys a refresh token. Every other
-tool answers `403 insufficient_scope` naming the one scope it needs; authorize again for that
-scope and keep the existing grant. The complete authorization-server set is
-`connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access`.
-A client platform that refuses `teams:manage` or `feedback:manage` still reads, submits feedback,
-and runs the tools it was granted.
+It reads connections, teams, leagues, players, matchups, transaction history, and lineup-run
+status, submits and reads back feedback, and buys a refresh token. Every other tool answers `403
+insufficient_scope` naming the one scope it needs; authorize again for that scope and keep the
+existing grant. The complete authorization-server set is
+`fantasy:read transactions:review lineups:write teams:manage offline_access`.
+A client platform that refuses `teams:manage` or `transactions:review` still reads, submits
+feedback, and runs the tools it was granted.
 
 An unauthenticated request gets `401` with the protected-resource metadata link and a `scope`
 naming only what the request needs: the called tool's scope for `tools/call`, and the baseline
@@ -713,10 +748,15 @@ A client that requests a newly advertised scope and receives `invalid_scope` is 
 registration ceiling, not a metadata cache: the authorization server validates the request
 against the scopes persisted when the client registered, and Client ID Metadata Document clients
 refresh that record from their own document on every authorization. The step-up failure reported
-against the seven-scope request was this ceiling, amplified by the old `401` telling the client
-to request the whole set in one authorization.
+against the earlier seven-scope request was this ceiling, amplified by the old `401` telling the
+client to request the whole set in one authorization. That seven-scope request was also the
+friction the smaller set removes: a client that holds a subset now holds the read scope that
+covers every read.
 
 ### Manage-scope connection failure (2026-10-29 investigation)
+
+Status note: `feedback:manage` has since been retired with the public triage tool. The investigation
+below is the record of what was tested at the time; `teams:manage` is still advertised.
 
 A client reported that a connect flow asking for `teams:manage` and `feedback:manage` reached the
 hosted consent page and then failed with a generic error that named no scope. The investigation did
@@ -756,8 +796,8 @@ place to look.
 
 ### Discovery documents
 
-Authorization-server metadata publishes all seven scopes above. Protected-resource metadata
-publishes the six resource scopes and omits `offline_access`. That difference is deliberate:
+Authorization-server metadata publishes all five scopes above. Protected-resource metadata
+publishes the four resource scopes and omits `offline_access`. That difference is deliberate:
 [RFC 9728 §2](https://www.rfc-editor.org/rfc/rfc9728#section-2) defines protected-resource
 `scopes_supported` as the scope values used to request access to that resource, while
 [OpenID Connect Core §11](https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess)
@@ -794,7 +834,7 @@ are in the [client setup](../../README.md#connecting-an-mcp-client).
 
 Use actual hosted Muse with a harmless read first: discovery, OAuth/consent, correct scopes, egress, an access-token expiry followed by a public-client refresh rather than a reconnect, structured/text output, continuation use, and bounded-run waiting. The hosted browser runs on our origin, so the client only needs to authorize MCP.
 
-The shared scope check is `bun run mcp:accept`. Its local flow starts a disposable stack and proves discovery, dynamic registration, PKCE, browser sign-in and consent, the full advertised grant, the onboarding baseline, and the `feedback:manage` case with a per-tool table. Its provided-token mode checks a deployed origin's metadata, 401 baseline, and per-tool enforcement for the token's scopes without writing. Each tool's required scope comes from the server's own unauthenticated 401 challenge, so the command cannot drift from the declaration the handler enforces. The local flow registers a fresh dynamic client per grant; a second authorization that reuses one registration is a separate case, and the client's own `error`/`error_description` and metadata document remain the decisive evidence for it. See [MCP proof](../../.agents/skills/verify-app/references/mcp.md) for both modes and the report.
+The shared scope check is `bun run mcp:accept`. Its local flow starts a disposable stack and proves discovery, dynamic registration, PKCE, browser sign-in and consent, the full advertised grant, the onboarding baseline, and a legacy grant minted with a retired scope name, with a per-tool table for each. Its provided-token mode checks a deployed origin's metadata, 401 baseline, and per-tool enforcement for the token's scopes without writing. Each tool's required scope comes from the server's own unauthenticated 401 challenge, so the command cannot drift from the declaration the handler enforces. The local flow registers a fresh dynamic client per modern grant; the legacy grant authorizes through the client whose own metadata document still asks for the retired name, which is how a grant minted before the rename looks. See [MCP proof](../../.agents/skills/verify-app/references/mcp.md) for both modes and the report.
 
 OpenCode is a possible fallback after an actual test. Pi compatibility can improve later; retain the starter's stateless/serverless transport rather than adding a legacy/stateful branch.
 

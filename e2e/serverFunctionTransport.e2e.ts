@@ -21,7 +21,7 @@ test("refuses a crafted server-function argument that forges a same-origin HTML 
       (request) =>
         request.method() === "POST" && new URL(request.url()).pathname.startsWith("/_serverFn/"),
     );
-    await beginAuthorization(page, mcpEndpoint(origin), "connections:read");
+    await beginAuthorization(page, mcpEndpoint(origin), "fantasy:read");
     await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
     await page.getByRole("button", { name: "Deny access", exact: true }).click();
 

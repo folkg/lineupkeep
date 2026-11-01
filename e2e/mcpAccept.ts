@@ -2,9 +2,13 @@ import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { offlineAccess } from "@lineupkeep/backend/auth/AuthorizationScopes";
-import { connectionScopes } from "@lineupkeep/backend/connections/ConnectionScopes";
-import { feedbackScopes } from "@lineupkeep/backend/feedback/FeedbackScopes";
+import {
+  currentScopeName,
+  offlineAccess,
+  retiredScopeAliases,
+  retiredScopeNames,
+} from "@lineupkeep/backend/auth/AuthorizationScopes";
+import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import {
   advertisedScopes,
   onboardingScopes,
@@ -14,8 +18,6 @@ import { Option, Schema } from "effect";
 
 import { mcpClient, mcpEndpoint } from "./mcpClient.ts";
 import { redactEvidence } from "./verify/redaction.ts";
-
-export type ConsentCheck = "includes-feedback-manage" | "excludes-feedback-manage";
 
 export type AuthorizedClient = {
   readonly client: McpClient;
@@ -31,8 +33,8 @@ type LocalAcceptance = {
   readonly authorize: (
     clientId: string,
     scopes: ReadonlyArray<string>,
-    consent: ConsentCheck,
   ) => Promise<AuthorizedClient>;
+  readonly authorizeLegacy: () => Promise<AuthorizedClient>;
 };
 
 type TokenAcceptance = {
@@ -66,10 +68,13 @@ export function requestedScopeNames(raw: string | undefined): ReadonlyArray<stri
   if (names.length === 0) {
     throw new Error("--scopes named no scopes.");
   }
-  const unknown = names.filter((name) => !advertisedScopes.some((scope) => scope.name === name));
+  const unknown = names.filter(
+    (name) =>
+      !advertisedScopes.some((scope) => scope.name === name) && !retiredScopeNames.includes(name),
+  );
   if (unknown.length > 0) {
     throw new Error(
-      `Unknown scopes: ${unknown.join(", ")}. Advertised: ${advertisedScopeNames().join(" ")}.`,
+      `Unknown scopes: ${unknown.join(", ")}. Advertised: ${advertisedScopeNames().join(" ")}. Retired names accepted: ${retiredScopeNames.join(" ")}.`,
     );
   }
   return names;
@@ -105,6 +110,8 @@ export class AcceptanceReport {
   requestedRows: ReadonlyArray<ToolRow> = [];
   restrictedRows: ReadonlyArray<ToolRow> = [];
   tokenRows: ReadonlyArray<ToolRow> = [];
+  legacyGranted: ReadonlyArray<string> | undefined;
+  legacyRows: ReadonlyArray<ToolRow> = [];
   feedbackCase: FeedbackCase | undefined;
 
   constructor(acceptance: { readonly mode: "local" | "token"; readonly origin: string }) {
@@ -172,6 +179,18 @@ export class AcceptanceReport {
         `Protected-resource metadata alone advertises ${scope}; it is missing from authorization-server metadata.`,
       );
     }
+    for (const retired of retiredScopeNames) {
+      if (authorization.includes(retired)) {
+        this.addFinding(
+          `Authorization-server metadata advertises retired scope ${retired}; retired names are accepted but never advertised.`,
+        );
+      }
+      if (resource.includes(retired)) {
+        this.addFinding(
+          `Protected-resource metadata advertises retired scope ${retired}; retired names are accepted but never advertised.`,
+        );
+      }
+    }
   }
 
   baseline(inspection: BaselineInspection): void {
@@ -207,14 +226,21 @@ export class AcceptanceReport {
   providedToken(environment: string, granted: ReadonlyArray<string>): void {
     this.tokenEnvironment = environment;
     this.providedGrant = granted;
-    for (const scope of granted.filter((name) => !advertisedScopeNames().includes(name))) {
+    const current = granted.map(currentScopeName);
+    for (const scope of current.filter((name) => !advertisedScopeNames().includes(name))) {
       this.addFinding(`The provided token holds ${scope}, which this checkout does not advertise.`);
     }
-    const missing = advertisedScopeNames().filter((name) => !granted.includes(name));
+    const missing = advertisedScopeNames().filter((name) => !current.includes(name));
     if (missing.length === 0) {
       this.note("The provided token holds the full advertised set.");
     } else {
       this.note(`The provided token does not hold ${missing.join(", ")}.`);
+    }
+    const retired = granted.filter((name) => retiredScopeNames.includes(name));
+    if (retired.length > 0) {
+      this.note(
+        `The provided token was minted with retired ${retired.join(", ")}; each is accepted as ${retired.map(currentScopeName).join(", ")}.`,
+      );
     }
   }
 
@@ -235,10 +261,15 @@ export class AcceptanceReport {
     this.providedGrant = granted;
   }
 
+  legacyGrant(granted: ReadonlyArray<string>, rows: ReadonlyArray<ToolRow>): void {
+    this.legacyGranted = granted;
+    this.legacyRows = rows;
+  }
+
   feedback(caseResult: FeedbackCase): void {
     this.feedbackCase = caseResult;
     if (caseResult.status === "failed") {
-      this.addFinding(`The ${feedbackScopes.manage.name} case failed: ${caseResult.detail}`);
+      this.addFinding(`The feedback case failed: ${caseResult.detail}`);
     }
   }
 
@@ -353,7 +384,36 @@ export class AcceptanceReport {
         lines.push(`| \`${row.tool}\` | \`${row.scope}\` | ${row.result} |`);
       }
     }
-    lines.push("", `## The \`${feedbackScopes.manage.name}\` case`, "");
+    lines.push("", "## Retired scope names", "");
+    lines.push(
+      "Retired names are accepted at the enforcement boundary and in an authorization request, and are never advertised.",
+      "",
+      "| Retired name | Accepted as |",
+      "| --- | --- |",
+    );
+    for (const [retired, current] of Object.entries(retiredScopeAliases)) {
+      lines.push(`| \`${retired}\` | \`${current}\` |`);
+    }
+    lines.push("");
+    if (this.mode === "local") {
+      lines.push("## Legacy grant", "");
+      if (this.legacyGranted === undefined) {
+        lines.push("Not inspected.", "");
+      } else {
+        lines.push(
+          `Grant in the minted token: ${codeList(this.legacyGranted)}`,
+          `Accepted as: ${codeList(this.legacyGranted.map(currentScopeName))}`,
+          "",
+          "| Tool | Required scope | Legacy grant |",
+          "| --- | --- | --- |",
+        );
+        for (const row of this.legacyRows) {
+          lines.push(`| \`${row.tool}\` | \`${row.scope}\` | ${row.result} |`);
+        }
+        lines.push("");
+      }
+    }
+    lines.push("", "## The feedback read-grant case", "");
     if (this.feedbackCase === undefined) {
       lines.push("Not inspected.", "");
     } else {
@@ -403,26 +463,15 @@ async function acceptLocal(acceptance: LocalAcceptance, report: AcceptanceReport
   const requested = await acceptance.authorize(
     requestedRegistration.clientId,
     acceptance.requestedScopes,
-    acceptance.requestedScopes.includes(feedbackScopes.manage.name)
-      ? "includes-feedback-manage"
-      : "excludes-feedback-manage",
   );
   const restrictedRegistration = await acceptance.register();
   const restricted = await acceptance.authorize(
     restrictedRegistration.clientId,
     onboardingScopeNames(),
-    "excludes-feedback-manage",
-  );
-  const feedbackRegistration = await acceptance.register();
-  const feedback = await acceptance.authorize(
-    feedbackRegistration.clientId,
-    feedbackGrantNames(),
-    "includes-feedback-manage",
   );
   report.register([
     { grant: "requested", scope: requestedRegistration.scope },
     { grant: "restricted", scope: restrictedRegistration.scope },
-    { grant: "feedback", scope: feedbackRegistration.scope },
   ]);
   const tools = await inspectTools(acceptance.origin, requested.client, report);
   const requestedRows = await runToolTable(
@@ -442,7 +491,17 @@ async function acceptLocal(acceptance: LocalAcceptance, report: AcceptanceReport
     report,
   );
   report.toolTable(requestedRows, restrictedRows, requested.granted, restricted.granted);
-  report.feedback(await runLocalFeedbackCase(feedback.client, report));
+  const legacy = await acceptance.authorizeLegacy();
+  const legacyRows = await runToolTable(
+    legacy.client,
+    tools,
+    legacy.granted,
+    "legacy",
+    acceptance.team,
+    report,
+  );
+  report.legacyGrant(legacy.granted, legacyRows);
+  report.feedback(await runLocalFeedbackCase(restricted.client, report));
 }
 
 async function acceptToken(acceptance: TokenAcceptance, report: AcceptanceReport): Promise<void> {
@@ -564,13 +623,14 @@ async function runToolTable(
   client: McpClient,
   tools: ReadonlyArray<ToolScope>,
   granted: ReadonlyArray<string>,
-  mode: "requested" | "restricted" | "token",
+  mode: "requested" | "restricted" | "token" | "legacy",
   team: string,
   report: AcceptanceReport,
 ): Promise<ReadonlyArray<ToolRow>> {
   const rows: Array<ToolRow> = [];
+  const accepted = granted.map(currentScopeName);
   for (const tool of tools) {
-    const held = granted.includes(tool.scope);
+    const held = accepted.includes(tool.scope);
     const writeSuppressed = mode === "token" && !tool.readOnly;
     const expectation: Expectation = held
       ? { kind: "authorized", writeSuppressed }
@@ -594,7 +654,7 @@ async function runLocalFeedbackCase(
   const submitted = await callTool(client, "submit_feedback", {
     kind: "friction",
     title,
-    body: "The acceptance command checks the feedback scope boundary.",
+    body: "The acceptance command checks the feedback surface under the read scope.",
     context: { tool: "mcp:accept", surface: "mcp", client: "mcp:accept" },
   });
   const submittedId = feedbackId(submitted.structuredContent);
@@ -603,7 +663,7 @@ async function runLocalFeedbackCase(
     `submit_feedback: ${submitted.status === 200 && submitted.isError !== true ? "ok" : `failed (${submitted.status}${submitted.code === undefined ? "" : ` ${submitted.code}`})`}`,
   );
   if (submittedId === undefined) {
-    report.addFinding("The feedback:manage case could not submit a report to triage.");
+    report.addFinding("The feedback case under the read grant could not submit a report.");
     return {
       status: "failed",
       steps,
@@ -618,39 +678,11 @@ async function runLocalFeedbackCase(
   steps.push(
     `list_feedback: ${listedOk ? "ok, the submitted report is listed" : `failed (${listed.status}${listed.code === undefined ? "" : ` ${listed.code}`})`}`,
   );
-  const acknowledged = await callTool(client, "triage_feedback", {
-    feedback: [{ feedback: submittedId, action: "acknowledge" }],
-  });
-  const acknowledgedStatus = triageStatus(acknowledged.structuredContent);
-  const acknowledgedOk =
-    acknowledged.status === 200 &&
-    acknowledged.isError !== true &&
-    acknowledgedStatus === "acknowledged";
-  steps.push(
-    `triage_feedback acknowledge: ${acknowledgedOk ? "changed to acknowledged" : `failed (${acknowledged.status}${acknowledged.code === undefined ? "" : ` ${acknowledged.code}`})`}`,
-  );
-  const resolved = await callTool(client, "triage_feedback", {
-    feedback: [
-      {
-        feedback: submittedId,
-        action: "resolve",
-        note: "MCP acceptance closed this report.",
-      },
-    ],
-  });
-  const resolvedStatus = triageStatus(resolved.structuredContent);
-  const resolvedOk =
-    resolved.status === 200 && resolved.isError !== true && resolvedStatus === "resolved";
-  steps.push(
-    `triage_feedback resolve: ${resolvedOk ? "changed to resolved" : `failed (${resolved.status}${resolved.code === undefined ? "" : ` ${resolved.code}`})`}`,
-  );
-  const passed = listedOk && acknowledgedOk && resolvedOk;
+  const passed = listedOk;
   return {
     status: passed ? "passed" : "failed",
     steps,
-    ...(passed
-      ? {}
-      : { detail: "At least one feedback step did not match the published contract." }),
+    ...(passed ? {} : { detail: "The read grant could not submit and read back its own report." }),
   };
 }
 
@@ -658,37 +690,21 @@ async function runTokenFeedbackCase(
   client: McpClient,
   granted: ReadonlyArray<string>,
 ): Promise<FeedbackCase> {
-  const manage = feedbackScopes.manage.name;
-  const read = connectionScopes.read.name;
-  if (!granted.includes(manage)) {
+  const read = fantasyQueryScopes.read.name;
+  if (!granted.map(currentScopeName).includes(read)) {
     return {
       status: "not-tested",
-      steps: [`The provided token does not hold ${manage}.`],
-    };
-  }
-  if (!granted.includes(read)) {
-    return {
-      status: "not-tested",
-      steps: [`The provided token holds ${manage} but not ${read}, so list_feedback cannot run.`],
+      steps: [`The provided token does not hold ${read}, so list_feedback cannot run.`],
     };
   }
   const listed = await callTool(client, "list_feedback", { limit: 5 });
   const listedOk = listed.status === 200 && listed.isError !== true;
-  const triaged = await callTool(client, "triage_feedback", {
-    feedback: [{ feedback: randomUUID(), action: "acknowledge" }],
-  });
-  const triagedOutcome = triageOutcome(triaged.structuredContent);
-  const triagedOk =
-    triaged.status === 200 && triaged.isError !== true && triagedOutcome === "not_found";
   return {
-    status: listedOk && triagedOk ? "passed" : "failed",
+    status: listedOk ? "passed" : "failed",
     steps: [
       `list_feedback: ${listedOk ? "ok" : `failed (${listed.status}${listed.code === undefined ? "" : ` ${listed.code}`})`}`,
-      `triage_feedback with a random report id: ${triagedOk ? "authorized, returned not_found, no write" : `failed (${triaged.status}${triaged.code === undefined ? "" : ` ${triaged.code}`})`}`,
     ],
-    ...(listedOk && triagedOk
-      ? {}
-      : { detail: "The token holds feedback:manage but the feedback tools did not accept it." }),
+    ...(listedOk ? {} : { detail: "The token holds the read scope but list_feedback refused." }),
   };
 }
 
@@ -825,8 +841,6 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
       };
     case "list_feedback":
       return { limit: 5 };
-    case "triage_feedback":
-      return { feedback: [{ feedback: randomUUID(), action: "acknowledge" }] };
     default:
       throw new Error(`No harmless call is defined for tool ${tool}.`);
   }
@@ -851,26 +865,12 @@ function feedbackId(content: Record<string, unknown> | undefined): string | unde
   return Option.isSome(decoded) ? decoded.value.feedback.id : undefined;
 }
 
-function triageStatus(content: Record<string, unknown> | undefined): string | undefined {
-  const decoded = Schema.decodeUnknownOption(TriageResults)(content);
-  if (Option.isNone(decoded)) {
-    return undefined;
-  }
-  const feedback = decoded.value.results[0]?.feedback;
-  return typeof feedback === "object" ? feedback.status : undefined;
-}
-
-function triageOutcome(content: Record<string, unknown> | undefined): string | undefined {
-  const decoded = Schema.decodeUnknownOption(TriageResults)(content);
-  return Option.isSome(decoded) ? decoded.value.results[0]?.outcome : undefined;
-}
-
 function describeFailure(result: ToolCallResult, expected: string): string {
   const detail = result.description ?? result.error ?? result.code ?? "no detail";
   return `returned ${result.status} instead of ${expected} (${detail}).`;
 }
 
-function modeLabel(mode: "requested" | "restricted" | "token"): string {
+function modeLabel(mode: "requested" | "restricted" | "token" | "legacy"): string {
   switch (mode) {
     case "requested":
       return "requested grant";
@@ -878,6 +878,8 @@ function modeLabel(mode: "requested" | "restricted" | "token"): string {
       return "restricted grant";
     case "token":
       return "provided grant";
+    case "legacy":
+      return "legacy grant";
   }
 }
 
@@ -899,10 +901,6 @@ function resourceScopeNames(): ReadonlyArray<string> {
 
 function onboardingScopeNames(): ReadonlyArray<string> {
   return onboardingScopes.map((scope) => scope.name);
-}
-
-function feedbackGrantNames(): ReadonlyArray<string> {
-  return [...new Set([...onboardingScopeNames(), feedbackScopes.manage.name])];
 }
 
 function sameSet(left: ReadonlyArray<string>, right: ReadonlyArray<string>): boolean {
@@ -1060,15 +1058,6 @@ const ToolFailure = Schema.Struct({
 
 const SubmittedFeedback = Schema.Struct({
   feedback: Schema.Struct({ id: Schema.String }),
-});
-
-const TriageResults = Schema.Struct({
-  results: Schema.Array(
-    Schema.Struct({
-      outcome: Schema.String,
-      feedback: Schema.Union([Schema.Struct({ status: Schema.String }), Schema.String]),
-    }),
-  ),
 });
 
 const TokenClaims = Schema.Struct({

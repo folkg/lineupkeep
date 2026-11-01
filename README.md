@@ -50,15 +50,15 @@ Use `./module` for same-directory imports, package-owned `#…` imports for othe
 
 ## Commands and required checks
 
-| Command                                                              | Proves                                                                                                                                                                                              | Does not prove                                                          |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `bun run test:node`, `bun run test:browser`, `bun run test:chromium` | Unit, browser-component, and Chromium-launching behavior with disposable test resources                                                                                                             | Built-app integration or deployed infrastructure                        |
-| `bun checks`                                                         | Formatting, lint and import policy, architecture, unused-code checks, every Vitest project, and both builds; it runs no E2E                                                                         | Protocol, browser, or deployed behavior                                 |
-| `bun run test:e2e`                                                   | The committed E2E suite on a disposable local Node stack, including browser, MCP, and public-service paths                                                                                          | Cloudflare or container targets, deployment, or a hosted client         |
-| `bun run test:e2e:cloudflare`, `bun run test:e2e:container`          | The same suite against the named deployment target; run serially before deploying                                                                                                                   | Production IAM, routing, or provider egress                             |
-| `bun run verify [--criteria <file>] [file ...]`                      | Selected browser, MCP, or public-service proof with retained evidence on an isolated disposable stack                                                                                               | Anything outside the selected criteria                                  |
-| `bun run mcp:accept`                                                 | Local MCP acceptance: discovery, dynamic registration, PKCE, browser sign-in and consent, the full advertised grant, the onboarding baseline, and the `feedback:manage` case, with a per-tool table | Provider data correctness or a deployed origin                          |
-| `bun run mcp:accept --origin <url> --token-env <NAME>`               | The deployed origin's metadata, 401 baseline, and per-tool scope enforcement for the token's grant; write tools are not called with valid arguments                                                 | Dynamic registration, consent, PKCE, or a scope the token does not hold |
+| Command                                                              | Proves                                                                                                                                                                                                                   | Does not prove                                                          |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `bun run test:node`, `bun run test:browser`, `bun run test:chromium` | Unit, browser-component, and Chromium-launching behavior with disposable test resources                                                                                                                                  | Built-app integration or deployed infrastructure                        |
+| `bun checks`                                                         | Formatting, lint and import policy, architecture, unused-code checks, every Vitest project, and both builds; it runs no E2E                                                                                              | Protocol, browser, or deployed behavior                                 |
+| `bun run test:e2e`                                                   | The committed E2E suite on a disposable local Node stack, including browser, MCP, and public-service paths                                                                                                               | Cloudflare or container targets, deployment, or a hosted client         |
+| `bun run test:e2e:cloudflare`, `bun run test:e2e:container`          | The same suite against the named deployment target; run serially before deploying                                                                                                                                        | Production IAM, routing, or provider egress                             |
+| `bun run verify [--criteria <file>] [file ...]`                      | Selected browser, MCP, or public-service proof with retained evidence on an isolated disposable stack                                                                                                                    | Anything outside the selected criteria                                  |
+| `bun run mcp:accept`                                                 | Local MCP acceptance: discovery, dynamic registration, PKCE, browser sign-in and consent, the full advertised grant, the onboarding baseline, and a legacy grant minted with a retired scope name, with a per-tool table | Provider data correctness or a deployed origin                          |
+| `bun run mcp:accept --origin <url> --token-env <NAME>`               | The deployed origin's metadata, 401 baseline, and per-tool scope enforcement for the token's grant; write tools are not called with valid arguments                                                                      | Dynamic registration, consent, PKCE, or a scope the token does not hold |
 
 `bun checks` runs no E2E. Run the relevant E2E target after it, and run `bun run mcp:accept` against the local stack and then the deployed origin before accepting an MCP change. See [MCP proof](.agents/skills/verify-app/references/mcp.md) for both modes, the report, and its limits.
 
@@ -81,21 +81,23 @@ Connect a stateless **MCP 2026-07-28** client to `https://<host>/mcp`; earlier s
 ### Request this scope set on the first authorization
 
 ```text
-connections:read fantasy:read offline_access
+fantasy:read offline_access
 ```
 
-Every tool enforces one scope and only that scope. This baseline reads connections and fantasy
-data, submits feedback, and buys a refresh token. A tool that needs `transactions:review`,
-`lineups:write`, `teams:manage`, or `feedback:manage` answers `403 insufficient_scope` with the
-one scope it needs, so add that scope in a new authorization instead of requesting everything up
-front. The `401` challenge names the same baseline, or the called tool's scope; the `403` body
-names the missing scope, so a client that surfaces only a response body can still see what is
-missing. Authorization-server metadata publishes the complete set—
-`connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access`—while
-protected-resource metadata publishes the six resource scopes, because `offline_access` buys a
-refresh token from the authorization server rather than access to the resource. The full
-per-tool table and the incremental-authorization behaviour are in the
-[MCP contract](docs/fantasy-manager/MCP.md#per-tool-scopes).
+Every tool enforces one scope and only that scope. This baseline reads connections, teams,
+leagues, players, matchups, transaction history, and lineup-run status, submits and reads back
+feedback, and buys a refresh token. A tool that needs `transactions:review`, `lineups:write`, or
+`teams:manage` answers `403 insufficient_scope` with the one scope it needs, so add that scope in a
+new authorization instead of requesting everything up front. The `401` challenge names the same
+baseline, or the called tool's scope; the `403` body names the missing scope, so a client that
+surfaces only a response body can still see what is missing. Authorization-server metadata
+publishes the complete set—`fantasy:read transactions:review lineups:write teams:manage offline_access`—while
+protected-resource metadata publishes the four resource scopes, because `offline_access` buys a
+refresh token from the authorization server rather than access to the resource. Two retired scope
+names are accepted but never advertised: `connections:read` is read as `fantasy:read`, so a token
+minted before the rename keeps working, and `feedback:manage` has no successor because triage is
+not public. The full per-tool table, the retired-name mapping, and the incremental-authorization
+behaviour are in the [MCP contract](docs/fantasy-manager/MCP.md#per-tool-scopes).
 
 ### First requests
 

@@ -9,6 +9,7 @@ import {
 } from "@lineupkeep/backend/connections/LineupRun";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import { lineupScopes } from "@lineupkeep/backend/connections/LineupScopes";
+import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import { Effect, Schema } from "effect";
 import type { Layer } from "effect";
 import { Tool, Toolkit } from "effect/ai";
@@ -44,12 +45,12 @@ export const lineupTools = Toolkit.make(
     .annotate(Tool.OpenWorld, true),
   Tool.make("get_lineup_runs", {
     description:
-      "Read durable lineup run status for your own teams, including safe verified change/no-op results, pending reasons, and unresolved uncertain outcomes. Runs can be selected by private run references, a request identity, or a team.",
+      "Read durable lineup run status for your own teams, including safe verified change/no-op results, pending reasons, and unresolved uncertain outcomes. Runs can be selected by private run references, a request identity, or a team. This reads run state only and needs the same fantasy:read scope as every other owned-data read.",
     parameters: GetLineupRunsInput,
     success: Schema.toCodecJson(LineupRunsData),
     failure: ToolFailure,
   })
-    .annotate(RequiredScope, lineupScopes.write)
+    .annotate(RequiredScope, fantasyQueryScopes.read)
     .annotate(Tool.Title, "Get lineup runs")
     .annotate(Tool.Readonly, true)
     .annotate(Tool.Destructive, false)

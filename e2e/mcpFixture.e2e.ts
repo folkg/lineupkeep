@@ -19,8 +19,8 @@ test("authorizes named browser personas independently through the fixture", asyn
     "connectYahooAndDiscoverTeams",
     {},
   );
-  const ownerClient = await mcp(["connections:read"], page);
-  const otherClient = await mcp(["connections:read"], other);
+  const ownerClient = await mcp(["fantasy:read"], page);
+  const otherClient = await mcp(["fantasy:read"], other);
 
   const owned = await ownerClient.callTool("list_connections", {});
   const isolated = await otherClient.callTool("list_connections", {});
@@ -42,7 +42,7 @@ test("authorizes the fixture without feature UI and lists through read scope", a
   mcp,
   page,
 }) => {
-  const reader = await mcp(["connections:read"], "owner");
+  const reader = await mcp(["fantasy:read"], "owner");
   await expect(page).toHaveURL("about:blank");
   await test.step("Baseline: discover tools over MCP", async () => {
     expect((await reader.listTools()).tools.map((tool) => tool.name)).toContain("list_connections");

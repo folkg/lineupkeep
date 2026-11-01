@@ -33,11 +33,12 @@ test("discovers and authorizes a stateless client through email sign-in, consent
   expect(toolChallenge.status).toBe(401);
   expect(toolChallenge.headers.get("www-authenticate")).toContain('scope="teams:manage"');
   expect(toolChallenge.headers.get("www-authenticate")).not.toContain("feedback:manage");
+  expect(toolChallenge.headers.get("www-authenticate")).not.toContain(retiredReadScope);
 
   const { credentials } = await authorize(
     page,
     origin,
-    "connections:read",
+    "fantasy:read",
     `mcp-${randomUUID()}@example.com`,
   );
   const tools = await mcpClient(mcpEndpoint(origin), credentials.access_token).request(
@@ -72,7 +73,6 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "set_team_automation",
     "submit_feedback",
     "list_feedback",
-    "triage_feedback",
   ]);
 });
 
@@ -154,7 +154,6 @@ test("serves every tool scope after one consent for the documented scope set", a
       { kind: "friction", title: "Scope probe", body: "Checking the feedback surface." },
     ],
     ["list_feedback", { limit: 5 }],
-    ["triage_feedback", { feedback: [{ feedback: randomUUID(), action: "acknowledge" }] }],
   ] as const;
   const statuses: Array<[string, number]> = [];
   for (const [name, arguments_] of calls) {
@@ -199,14 +198,14 @@ test("lists the owner's connection status over MCP without exposing account iden
   expect(hidden.structuredContent).toEqual({ connections: [] });
 });
 
-test("reports, retrieves, and closes feedback for the acting account only", async ({
+test("reports and retrieves feedback for the acting account only", async ({
   page,
   baseURL,
   newUser,
 }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const { credentials } = await authorize(page, origin, documentedScopes);
+  const { credentials } = await authorize(page, origin, onboardingScopes);
   const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
 
   const submitted = await client.callTool("submit_feedback", {
@@ -234,59 +233,23 @@ test("reports, retrieves, and closes feedback for the acting account only", asyn
   const listed = await client.callTool("list_feedback", { statuses: ["open"], limit: 5 });
   expect(JSON.stringify(listed.structuredContent)).toContain(feedback);
 
-  const acknowledged = await client.callTool("triage_feedback", {
-    feedback: [{ feedback, action: "acknowledge" }],
-  });
-  expect(acknowledged.structuredContent).toMatchObject({
-    results: [{ outcome: "changed", feedback: { status: "acknowledged" } }],
-  });
-
-  const resolved = await client.callTool("triage_feedback", {
-    feedback: [{ feedback, action: "resolve", note: "Fixed by the week-mapping change." }],
-  });
-  expect(resolved.structuredContent).toMatchObject({
-    results: [
-      {
-        outcome: "changed",
-        feedback: { status: "resolved", resolutionNote: "Fixed by the week-mapping change." },
-      },
-    ],
-  });
-  expect(JSON.stringify(resolved)).not.toContain("cause");
-
-  const repeated = await client.callTool("triage_feedback", {
-    feedback: [{ feedback, action: "resolve", note: "A replacement note." }],
-  });
-  expect(repeated.structuredContent).toMatchObject({
-    results: [
-      {
-        outcome: "unchanged",
-        feedback: { status: "resolved", resolutionNote: "Fixed by the week-mapping change." },
-      },
-    ],
-  });
-
   const other = await newUser();
   await signUp(other);
   const otherAuthorization = await authorize(other, origin, documentedScopes);
   const otherClient = mcpClient(mcpEndpoint(origin), otherAuthorization.credentials.access_token);
   const hidden = await otherClient.callTool("list_feedback", {});
-  const refused = await otherClient.callTool("triage_feedback", {
-    feedback: [{ feedback, action: "acknowledge" }],
-  });
 
   expect(hidden.structuredContent).toMatchObject({ feedback: [], page: { returned: 0 } });
-  expect(refused.structuredContent).toMatchObject({ results: [{ outcome: "not_found" }] });
 
   await page.goto("/feedback");
   await expect(page.getByText("Roster totals disagree")).toBeVisible();
-  await expect(page.getByText("Wrong data · Resolved")).toBeVisible();
+  await expect(page.getByText("Wrong data · Open")).toBeVisible();
 });
 
 test("enforces fantasy read and transaction review scopes over MCP", async ({ page, baseURL }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const { credentials } = await authorize(page, origin, "connections:read");
+  const { credentials } = await authorize(page, origin, "lineups:write");
   const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
 
   const readDenied = await client.request("tools/call", {
@@ -309,16 +272,6 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   });
   expect(reviewDenied.status).toBe(403);
   expect(reviewDenied.headers.get("www-authenticate")).toContain('scope="transactions:review"');
-
-  const lineupDenied = await client.request("tools/call", {
-    name: "set_lineup",
-    arguments: {
-      requestId: randomUUID(),
-      teams: [{ team: randomUUID(), period: { coverage: "week", week: 3 } }],
-    },
-  });
-  expect(lineupDenied.status).toBe(403);
-  expect(lineupDenied.headers.get("www-authenticate")).toContain('scope="lineups:write"');
 
   const automationDenied = await client.request("tools/call", {
     name: "set_team_automation",
@@ -346,9 +299,7 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   expect(review.isError).toBe(true);
   expect(JSON.stringify(review)).not.toContain("submit");
 
-  const lineupAuthorization = await authorize(page, origin, "lineups:write");
-  const lineupWriter = mcpClient(mcpEndpoint(origin), lineupAuthorization.credentials.access_token);
-  const missingTeam = await lineupWriter.callTool("set_lineup", {
+  const missingTeam = await client.callTool("set_lineup", {
     requestId: randomUUID(),
     teams: [{ team: randomUUID(), period: { coverage: "week", week: 3 } }],
   });
@@ -362,7 +313,7 @@ test("reads on a restricted grant and refuses only the manage tools", async ({ p
   const { credentials } = await authorize(
     page,
     origin,
-    "connections:read fantasy:read transactions:review lineups:write offline_access",
+    "fantasy:read transactions:review lineups:write offline_access",
   );
   const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
 
@@ -395,13 +346,6 @@ test("reads on a restricted grant and refuses only the manage tools", async ({ p
   expect(listed.structuredContent).toMatchObject({
     feedback: [{ id: feedbackId, status: "open", title: "Restricted grant" }],
   });
-
-  const triaged = await client.request("tools/call", {
-    name: "triage_feedback",
-    arguments: { feedback: [{ feedback: feedbackId, action: "acknowledge" }] },
-  });
-  expect(triaged.status).toBe(403);
-  expect(triaged.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
 });
 
 test("lists tools and submits feedback on the onboarding grant", async ({ page, baseURL }) => {
@@ -424,10 +368,6 @@ test("lists tools and submits feedback on the onboarding grant", async ({ page, 
     Schema.Struct({ feedback: Schema.Struct({ id: Schema.String }) }),
   )(submitted.structuredContent).feedback.id;
   const listed = await client.callTool("list_feedback", {});
-  const triaged = await client.request("tools/call", {
-    name: "triage_feedback",
-    arguments: { feedback: [{ feedback: feedbackId, action: "acknowledge" }] },
-  });
 
   expect(tools.status).toBe(200);
   expect(read.status).toBe(200);
@@ -436,8 +376,32 @@ test("lists tools and submits feedback on the onboarding grant", async ({ page, 
   expect(listed.structuredContent).toMatchObject({
     feedback: [{ id: feedbackId, status: "open", title: "Onboarding grant" }],
   });
-  expect(triaged.status).toBe(403);
-  expect(triaged.headers.get("www-authenticate")).toContain('scope="feedback:manage"');
+});
+
+test("serves read tools to a grant minted with the retired connections:read name", async ({
+  page,
+  baseURL,
+}) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+  const clientId = await registerRetiredScopeClient(page, origin, retiredReadScope);
+  const { credentials } = await authorizeLegacy(page, origin, clientId, retiredReadScope);
+
+  expect(credentials.scope.split(" ")).toEqual([retiredReadScope]);
+
+  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
+  const connections = await client.callTool("list_connections", {});
+  const teams = await client.callTool("list_teams", {});
+  const automation = await client.request("tools/call", {
+    name: "set_team_automation",
+    arguments: { teams: [{ team: randomUUID(), action: "enable" }] },
+  });
+
+  expect(connections.isError).toBe(false);
+  expect(teams.isError).toBe(false);
+  expect(teams.structuredContent).toMatchObject({ status: "ok", teams: [] });
+  expect(automation.status).toBe(403);
+  expect(automation.headers.get("www-authenticate")).toContain('scope="teams:manage"');
 });
 
 test("proposes transactions without writing to the provider and reads pending offers", async ({
@@ -602,6 +566,15 @@ test("changes automation over MCP and reports it through list_teams", async ({
     return;
   }
 
+  const readOnly = await authorize(page, origin, "fantasy:read");
+  const reader = mcpClient(mcpEndpoint(origin), readOnly.credentials.access_token);
+  const denied = await reader.request("tools/call", {
+    name: "set_team_automation",
+    arguments: { teams: [{ team, action: "enable" }] },
+  });
+  expect(denied.status).toBe(403);
+  expect(denied.headers.get("www-authenticate")).toContain('scope="teams:manage"');
+
   const { credentials } = await authorize(page, origin, "fantasy:read teams:manage");
   const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
   const initial = await client.callTool("list_teams", {});
@@ -662,16 +635,7 @@ test("changes automation over MCP and reports it through list_teams", async ({
     enrolled: false,
     automation: { status: "disabled" },
   });
-
-  const readOnly = await authorize(page, origin, "fantasy:read connections:read");
-  const reader = mcpClient(mcpEndpoint(origin), readOnly.credentials.access_token);
-  const denied = await reader.request("tools/call", {
-    name: "set_team_automation",
-    arguments: { teams: [{ team, action: "enable" }] },
-  });
-  expect(denied.status).toBe(403);
-  expect(denied.headers.get("www-authenticate")).toContain('scope="teams:manage"');
-  expect(teamAutomation(await reader.callTool("list_teams", {}), team)).toMatchObject({
+  expect(teamAutomation(await client.callTool("list_teams", {}), team)).toMatchObject({
     automation: { status: "disabled" },
   });
 });
@@ -682,7 +646,7 @@ test("returns access_denied and the original state when consent is denied", asyn
 }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const authorization = await beginAuthorization(page, mcpEndpoint(origin), "connections:read");
+  const authorization = await beginAuthorization(page, mcpEndpoint(origin), "fantasy:read");
   await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
 
   await page.getByRole("button", { name: "Deny access", exact: true }).click();
@@ -715,7 +679,7 @@ test("presents missing and forged consent requests without permission actions", 
 test("rejects legacy protocols and registers dynamic clients", async ({ page, baseURL }) => {
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const { credentials } = await authorize(page, origin, "connections:read");
+  const { credentials } = await authorize(page, origin, "fantasy:read");
 
   const legacy = await mcpClient(mcpEndpoint(origin), credentials.access_token).request(
     "tools/list",
@@ -796,7 +760,7 @@ test("rotates refresh credentials and rejects the spent token after the retry wi
   const { credentials, authorization } = await authorize(
     page,
     origin,
-    "connections:read offline_access",
+    "fantasy:read offline_access",
   );
   const initial = Schema.decodeUnknownSync(RefreshCredentials)(credentials);
 
@@ -837,14 +801,10 @@ test("issues a refresh token only for a grant that asks for offline_access", asy
   const origin = requiredOrigin(baseURL);
   await signUp(page);
 
-  const { credentials: withoutOffline } = await authorize(page, origin, "connections:read");
+  const { credentials: withoutOffline } = await authorize(page, origin, "fantasy:read");
   expect(withoutOffline.refresh_token).toBeUndefined();
 
-  const { credentials: withOffline } = await authorize(
-    page,
-    origin,
-    "connections:read offline_access",
-  );
+  const { credentials: withOffline } = await authorize(page, origin, "fantasy:read offline_access");
   expect(withOffline.refresh_token).toBeDefined();
 });
 
@@ -975,14 +935,16 @@ function documentedHeaders(method: string): Record<string, string> {
 }
 
 const protocolVersion = "2026-07-28";
-const onboardingScopes = "connections:read fantasy:read offline_access";
+const onboardingScopes = "fantasy:read offline_access";
 const documentedScopes =
-  "connections:read fantasy:read transactions:review lineups:write teams:manage feedback:manage offline_access";
+  "fantasy:read transactions:review lineups:write teams:manage offline_access";
+const retiredReadScope = "connections:read";
+const retiredClientName = "Lineupkeep retired scope probe";
 
 async function authorize(
   page: Page,
   origin: string,
-  scope = "connections:read",
+  scope = "fantasy:read",
   email?: string,
 ): Promise<{
   credentials: {
@@ -1016,6 +978,58 @@ async function authorize(
   ).toBeVisible();
   await expect(
     page.getByText("https://connections-client.test/client.json", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Allow access", exact: true }).click();
+  await expect(page).toHaveURL(callbackPattern);
+  return { credentials: await exchangeCode(page, authorization), authorization };
+}
+
+async function registerRetiredScopeClient(
+  page: Page,
+  origin: string,
+  scope: string,
+): Promise<string> {
+  const cookies = await page.context().cookies(origin);
+  const response = await fetch(new URL("/api/auth/oauth2/create-client", origin), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin,
+      cookie: cookies.map(({ name, value }) => `${name}=${value}`).join("; "),
+    },
+    body: JSON.stringify({
+      client_name: retiredClientName,
+      redirect_uris: [callback],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      application_type: "native",
+      scope,
+    }),
+  });
+  expect(response.status, "a managed client registration").toBe(201);
+  const registered = Schema.decodeUnknownSync(
+    Schema.Struct({ client_id: Schema.String, scope: Schema.String }),
+  )(await response.json());
+  expect(registered.scope).toBe(scope);
+  return registered.client_id;
+}
+
+async function authorizeLegacy(
+  page: Page,
+  origin: string,
+  clientId: string,
+  scope: string,
+): Promise<{
+  credentials: { readonly access_token: string; readonly scope: string };
+  authorization: Awaited<ReturnType<typeof beginAuthorization>>;
+}> {
+  const authorization = await beginAuthorization(page, mcpEndpoint(origin), scope, fetch, clientId);
+  await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
+  await expect(
+    page.getByText(`Calls itself “${retiredClientName}”. Names are not verified.`, {
+      exact: true,
+    }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Allow access", exact: true }).click();
   await expect(page).toHaveURL(callbackPattern);

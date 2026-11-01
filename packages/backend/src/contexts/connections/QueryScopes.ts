@@ -2,7 +2,7 @@ export const fantasyQueryScopes = {
   read: {
     name: "fantasy:read",
     description:
-      "Read your linked fantasy leagues, rosters, players, matchups, and transaction history. This cannot change lineups, submit transactions, or access another person's teams.",
+      "Read your own fantasy data: linked provider connections, teams, leagues, rosters, players, matchups, transaction history, and the status of your lineup runs, plus the feedback reports your account filed and a feedback report of your own. This cannot change a lineup or an automation setting, cannot propose or submit a transaction, and cannot read another person's data.",
   },
   reviewTransactions: {
     name: "transactions:review",

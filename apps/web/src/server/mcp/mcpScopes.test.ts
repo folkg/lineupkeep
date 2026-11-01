@@ -1,3 +1,4 @@
+import { retiredScopeNames } from "@lineupkeep/backend/auth/AuthorizationScopes";
 import {
   advertisedScopes,
   onboardingScopes,
@@ -16,17 +17,22 @@ const toolScopes = Object.values(applicationTools.tools).map((tool) => ({
   readOnly: Context.getUnsafe(tool.annotations, Tool.Readonly),
 }));
 
-it("derives the published resource scopes from the scope every shipped tool declares", () => {
+it("declares exactly the advertised resource scopes on the shipped tools", () => {
   expect([...new Set(toolScopes.map(({ scope }) => scope))].sort()).toEqual(
     resourceScopes.map(({ name }) => name).sort(),
   );
 });
 
-it("advertises every tool scope and the refresh scope in the authorization-server set", () => {
+it("requires no retired scope name and advertises none", () => {
   const advertised = advertisedScopes.map(({ name }) => name);
 
   for (const { name, scope } of toolScopes) {
     expect(advertised, name).toContain(scope);
+    expect(retiredScopeNames, name).not.toContain(scope);
+  }
+  for (const retired of retiredScopeNames) {
+    expect(advertised).not.toContain(retired);
+    expect(resourceScopes.map(({ name }) => name)).not.toContain(retired);
   }
   expect(advertised).toContain("offline_access");
 });
@@ -43,8 +49,19 @@ it("reaches only read tools and feedback submission and read-back with the onboa
   }
   expect(reachable.map(({ name }) => name)).toContain("submit_feedback");
   expect(reachable.map(({ name }) => name)).toContain("list_feedback");
-  expect(reachable.map(({ name }) => name)).not.toContain("triage_feedback");
+  expect(reachable.map(({ name }) => name)).toContain("list_connections");
   expect(onboarding.has("lineups:write")).toBe(false);
+  expect(onboarding.has("transactions:review")).toBe(false);
   expect(onboarding.has("teams:manage")).toBe(false);
-  expect(onboarding.has("feedback:manage")).toBe(false);
+});
+
+it("reads a connection, a team, and a lineup run under the same read scope", () => {
+  const scopeOf = new Map(toolScopes.map(({ name, scope }) => [name, scope]));
+
+  expect(scopeOf.get("list_connections")).toBe("fantasy:read");
+  expect(scopeOf.get("list_teams")).toBe("fantasy:read");
+  expect(scopeOf.get("get_lineup_runs")).toBe("fantasy:read");
+  expect(scopeOf.get("set_lineup")).toBe("lineups:write");
+  expect(scopeOf.get("submit_feedback")).toBe("fantasy:read");
+  expect(toolScopes.map(({ name }) => name)).not.toContain("triage_feedback");
 });

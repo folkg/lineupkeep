@@ -10,7 +10,7 @@ import type {
   ProviderConnection,
 } from "@lineupkeep/backend/connections/Connection";
 import { Connections } from "@lineupkeep/backend/connections/Connections";
-import { connectionScopes } from "@lineupkeep/backend/connections/ConnectionScopes";
+import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import { Effect, Schema } from "effect";
 import type { Layer } from "effect";
 import { Tool, Toolkit } from "effect/ai";
@@ -39,7 +39,7 @@ export const connectionTools = Toolkit.make(
     success: Schema.Struct({ connections: Schema.Array(Schema.toCodecJson(ConnectionView)) }),
     failure: ToolFailure,
   })
-    .annotate(RequiredScope, connectionScopes.read)
+    .annotate(RequiredScope, fantasyQueryScopes.read)
     .annotate(Tool.Title, "List connections")
     .annotate(Tool.Readonly, true)
     .annotate(Tool.Destructive, false)

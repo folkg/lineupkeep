@@ -3,6 +3,22 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — four resource scopes, retired names accepted
+
+- The advertised set is now `fantasy:read transactions:review lineups:write teams:manage offline_access`.
+  `connections:read` merged into `fantasy:read`, which is one read scope over the owner's
+  connections, teams, leagues, players, transaction history, lineup-run status, and feedback
+  reports. `get_lineup_runs` moved from `lineups:write` to `fantasy:read` because reading a run is a
+  read; `submit_feedback` and `list_feedback` moved with the connections read scope.
+- `feedback:manage` and the public `triage_feedback` tool are gone. Acknowledging and closing are an
+  internal domain operation with no scope a client can request; submission and read-back stay under
+  `fantasy:read`.
+- Retired names are accepted but never advertised: a token whose claim says `connections:read`
+  reaches every `fantasy:read` tool, and a stored registration that still asks for it authorizes and
+  consents normally. A token that still holds `feedback:manage` keeps working for every other scope
+  it holds. Neither discovery document, the onboarding baseline, nor a new client registration
+  names a retired scope.
+
 ## Unreleased — round-9 MCP fixes (schedule window, roster key, search team)
 
 - `get_team_summary` accepts a `window` of inclusive dates or a `days` count for the `schedule`

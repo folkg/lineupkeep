@@ -2,6 +2,6 @@ export const teamScopes = {
   manage: {
     name: "teams:manage",
     description:
-      "Enable, disable, pause for the rest of the provider fantasy day, or resume scheduled lineup automation for your own teams. This changes only Lineupkeep's automation setting; it does not set a lineup, contact the provider, or manage another person's team.",
+      "Change what Lineupkeep records about your own teams: enable, disable, pause for the rest of the provider fantasy day, or resume scheduled lineup automation, and the note you keep on a team. This changes only Lineupkeep's stored team state; it does not set a lineup, contact the provider, or manage another person's team.",
   },
 } as const;

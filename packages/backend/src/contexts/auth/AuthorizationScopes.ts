@@ -11,6 +11,16 @@ export const offlineAccess = {
     "Stay connected with renewable access until this authorization expires or is revoked.",
 } as const;
 
+export const retiredScopeAliases: Readonly<Record<string, string>> = {
+  "connections:read": "fantasy:read",
+};
+
+export const retiredScopeNames: ReadonlyArray<string> = Object.keys(retiredScopeAliases);
+
+export function currentScopeName(name: string): string {
+  return retiredScopeAliases[name] ?? name;
+}
+
 export type AuthorizationScope = {
   readonly name: string;
   readonly description: string;
