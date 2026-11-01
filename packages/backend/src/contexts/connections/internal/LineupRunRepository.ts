@@ -878,6 +878,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
       });
 
       const recordBlocked = terminal("Blocked");
+      const recordSkipped = terminal("Skipped");
       const recordFailed = terminal("Failed");
 
       const recordRetry = Effect.fn("LineupRunRepository.recordRetry")(function* (input: {
@@ -1273,6 +1274,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         recordVerified,
         recordUncertain,
         recordBlocked,
+        recordSkipped,
         recordFailed,
         recordRetry,
         claimDeliveries,

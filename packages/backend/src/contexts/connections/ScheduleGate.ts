@@ -1,0 +1,41 @@
+import { Context } from "effect";
+import type { DateTime, Effect, Redacted } from "effect";
+
+import type { FantasyTeam } from "./FantasyTeam.ts";
+import type { ProviderShape } from "./Provider.ts";
+
+export type ScheduleGateRunReason =
+  | "no_game_source"
+  | "game_source_unavailable"
+  | "game_observation_stale"
+  | "provider_schedule_unavailable"
+  | "provider_schedule_stale"
+  | "roster_team_unmapped"
+  | "provider_game_missing_from_source"
+  | "game_start_unknown"
+  | "game_before_next_tick"
+  | "invalid_window"
+  | "unexpected_error";
+
+export type ScheduleGateDecision =
+  | { readonly kind: "run"; readonly reason: ScheduleGateRunReason }
+  | {
+      readonly kind: "skip";
+      readonly summary: string;
+      readonly nextGameAt?: DateTime.Utc;
+    };
+
+type ScheduleGateInput = {
+  readonly team: FantasyTeam;
+  readonly provider: ProviderShape;
+  readonly session: Redacted.Redacted<string>;
+  readonly now: DateTime.Utc;
+};
+
+export class ScheduleGate extends Context.Service<ScheduleGate, ScheduleGateShape>()(
+  "@lineupkeep/backend/contexts/connections/ScheduleGate",
+) {}
+
+export type ScheduleGateShape = {
+  readonly evaluate: (input: ScheduleGateInput) => Effect.Effect<ScheduleGateDecision, never>;
+};

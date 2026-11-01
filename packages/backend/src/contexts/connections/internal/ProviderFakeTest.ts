@@ -120,6 +120,8 @@ type FakeProviderState = {
   readonly reserveDetail: string | undefined;
   readonly reserveRequests: ReadonlyArray<FakeReserveMoveRequest>;
   readonly planRefusal: FakePlanRefusal | undefined;
+  readonly providerCalls: number;
+  readonly providerReads: number;
 };
 
 export type FakeProviderWorldShape = {
@@ -169,6 +171,8 @@ export type FakeProviderWorldShape = {
   readonly setNativeAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly nativeTargets: Effect.Effect<ReadonlyArray<ProviderNativeTarget>>;
   readonly nativeCallCount: Effect.Effect<number>;
+  readonly providerCalls: Effect.Effect<number>;
+  readonly providerReads: Effect.Effect<number>;
   readonly setExplicitAction: (action: FakeWriteAction) => Effect.Effect<void>;
   readonly setExplicitAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly explicitRequests: Effect.Effect<ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>>;
@@ -260,6 +264,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         reserveDetail: undefined,
         reserveRequests: [],
         planRefusal: undefined,
+        providerCalls: 0,
+        providerReads: 0,
       });
       const modify = (
         update: (current: FakeProviderState) => FakeProviderState,
@@ -331,6 +337,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setNativeAfter: (nativeAfter) => modify((current) => ({ ...current, nativeAfter })),
         nativeTargets: Effect.map(Ref.get(state), (current) => current.nativeTargets),
         nativeCallCount: Effect.map(Ref.get(state), (current) => current.nativeCalls),
+        providerCalls: Effect.map(Ref.get(state), (current) => current.providerCalls),
+        providerReads: Effect.map(Ref.get(state), (current) => current.providerReads),
         setExplicitAction: (explicitAction) =>
           modify((current) => ({ ...current, explicitAction })),
         setExplicitAfter: (explicitAfter) => modify((current) => ({ ...current, explicitAfter })),
@@ -382,6 +390,11 @@ const providerFake = Effect.gen(function* () {
   > =>
     Effect.gen(function* () {
       yield* validate(input, operation);
+      yield* Ref.update(world.state, (current) => ({
+        ...current,
+        providerCalls: current.providerCalls + 1,
+        providerReads: current.providerReads + (readOperations.has(operation) ? 1 : 0),
+      }));
       const current = yield* Ref.get(world.state);
       if (current.sessionRejected) {
         return yield* ProviderSessionRejected.make({ operation });
@@ -926,6 +939,24 @@ const providerFake = Effect.gen(function* () {
 export const ProviderFakeTest = Layer.effect(ProviderRegistry)(
   Effect.map(providerFake, (provider) => ProviderRegistry.of(providerRegistryOf([provider]))),
 ).pipe(Layer.provideMerge(FakeProviderWorld.layer));
+
+const readOperations: ReadonlySet<ProviderOperation> = new Set<ProviderOperation>([
+  "validate_session",
+  "discover_teams",
+  "read_league",
+  "read_standings",
+  "read_roster",
+  "read_roster_schedule",
+  "read_player_details",
+  "read_player_history",
+  "read_matchups",
+  "search_players",
+  "read_transactions",
+  "read_completed_trades",
+  "read_pending_trades",
+  "read_draft_results",
+  "read_league_teams",
+]);
 
 const fakeCapabilities: ProviderCapabilities = {
   fantasyDay: {

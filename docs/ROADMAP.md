@@ -141,14 +141,17 @@ Memory peaks at 41 to 42 percent of the limits and 849 MiB in a real Chromium se
 
 ### B2 — Skip runs that cannot do anything
 
-- [ ] Return early only when the cached calendar says no rostered player has a game before the next tick
+- [x] Return early only when the cached calendar says no rostered player has a game before the next tick
       **and** that date was observed after the fantasy day began.
-- [ ] Fail open: an unknown, stale or incomplete calendar runs as usual, and a manual `set_lineup` bypasses
+- [x] Fail open: an unknown, stale or incomplete calendar runs as usual, and a manual `set_lineup` bypasses
       the gate.
-- [ ] Record a skipped outcome with its reason.
+- [x] Record a skipped outcome with its reason.
 
 **Verify**: a fixture whose game moves into today after the sweep proves the run happens, because a wrong
-skip is worse than a wasted read. Measure the request saving over a real week. `M`, depends on F1.
+skip is worse than a wasted read. The counters measure one ordinary check at four provider reads, one gate read
+on a busy day, and a quiet day of 24 hourly ticks at one read, so 95 provider reads are saved per team per quiet
+day at the cost of one extra read on a busy day. The gate's own tests cover a quiet day, a busy day, stale and
+missing schedules, an unmapped roster team, and a sport with no game source. `M`, done.
 
 ---
 

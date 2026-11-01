@@ -17,6 +17,7 @@ import { PublicInternet } from "#runtime/PublicInternet.ts";
 
 import { ConnectionsDatabaseTest } from "./ConnectionsDatabaseTest.ts";
 import { nhlGameSource } from "./game-sources/nhl/NhlGameSource.ts";
+import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
 import { ObservedFactRepository } from "./ObservedFactRepository.ts";
 import { ProfessionalCalendarLive } from "./ProfessionalCalendarLive.ts";
 
@@ -42,6 +43,62 @@ const observedAt = DateTime.makeUnsafe("2026-11-01T12:00:00.000Z");
 const ObservedFactRepositoryTest = ObservedFactRepository.layer.pipe(
   Layer.provide(ConnectionsDatabaseTest),
 );
+
+it.effect("counts a real hockey week's games and marks its off nights", () => {
+  const calls: Array<URL> = [];
+  return Effect.gen(function* () {
+    const calendar = yield* ProfessionalCalendar;
+    const facts = yield* ObservedFactRepository;
+    yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
+    yield* seedProviderPairs(facts);
+
+    const window = yield* calendar.readGames({
+      league: "nhl",
+      from: "2026-11-01",
+      to: "2026-11-07",
+      freshness: "calendar",
+    });
+
+    assert.strictEqual(window.teamCount, 32);
+    const byDate = leagueGamesByDate(window.games.map((fact) => fact.game));
+    assert.deepStrictEqual(
+      [...byDate.keys()].map((date) => [date, byDate.get(date)?.games]),
+      [
+        ["2026-11-01", 5],
+        ["2026-11-02", 4],
+        ["2026-11-03", 11],
+        ["2026-11-04", 4],
+        ["2026-11-05", 11],
+        ["2026-11-06", 3],
+        ["2026-11-07", 12],
+      ],
+    );
+    assert.deepStrictEqual(
+      [...byDate.values()].map((entry) =>
+        isLeagueOffNight({ teamsPlaying: entry.teamsPlaying, teamCount: window.teamCount }),
+      ),
+      [true, true, false, true, false, true, false],
+    );
+
+    const edm = pairByAbbreviation.get("EDM");
+    assert.isDefined(edm);
+    assert.strictEqual(
+      countGamesForTeam(
+        window.games.map((fact) => fact.game),
+        edm,
+      ),
+      4,
+    );
+  }).pipe(
+    Effect.provide(
+      calendarLayer(
+        (weekStart) =>
+          weekStart === "2026-11-01" ? jsonResponse(leagueWeek) : jsonResponse({ gameWeek: [] }),
+        calls,
+      ),
+    ),
+  );
+});
 
 it.effect("produces a fact for every game of one league-week request with teams resolved", () => {
   const calls: Array<URL> = [];

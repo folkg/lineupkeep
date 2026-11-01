@@ -10,6 +10,7 @@ export type GameSourceKey = typeof GameSourceKey.Type;
 export type GameSourceCoverage = {
   readonly league: FantasyLeague;
   readonly sport: FantasySport;
+  readonly teamCount: number;
 };
 
 type GameSourceCapabilities = {

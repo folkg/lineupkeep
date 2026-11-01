@@ -36,6 +36,11 @@ export const ProfessionalGame = Schema.Struct({
 });
 export type ProfessionalGame = typeof ProfessionalGame.Type;
 
+export const leagueOffNightDefinition = {
+  name: "league_off_night",
+  maximumTeamShare: 0.5,
+} as const;
+
 const professionalGameAspects = ["fixture", "startTime", "status"] as const;
 type ProfessionalGameAspect = (typeof professionalGameAspects)[number];
 
@@ -66,8 +71,12 @@ export function professionalGameIsFresh(input: {
   readonly observedAt: DateTime.Utc;
   readonly now: DateTime.Utc;
   readonly freshness: ProfessionalGameFreshness;
+  readonly notBefore?: DateTime.Utc;
 }): boolean {
   const observed = DateTime.toEpochMillis(input.observedAt);
+  if (input.notBefore !== undefined && observed < DateTime.toEpochMillis(input.notBefore)) {
+    return false;
+  }
   const now = DateTime.toEpochMillis(input.now);
   const required = Math.min(
     ...refreshAspects[input.freshness].map(

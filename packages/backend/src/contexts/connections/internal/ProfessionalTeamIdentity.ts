@@ -11,6 +11,21 @@ export type ProfessionalTeamResolution = {
   readonly recorded: ReadonlyArray<TeamIdentity>;
 };
 
+export function uniqueProviderTeamKeys(
+  rows: ReadonlyArray<TeamIdentity>,
+): ReadonlyMap<string, string> {
+  const grouped = group(
+    rows,
+    (row) => row.sourceTeamIdentifier,
+    (row) => row.providerTeamKey,
+  );
+  return new Map(
+    [...grouped.entries()].flatMap(([identifier, keys]) =>
+      keys.size === 1 ? [[identifier, Array.getUnsafe([...keys], 0)] as const] : [],
+    ),
+  );
+}
+
 type TeamClaim = {
   readonly team: GameSourceTeam;
   readonly published: TeamIdentity;

@@ -4,6 +4,10 @@ import type { UserId } from "#contexts/auth/User.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
+import { GameSourceRegistry } from "#contexts/connections/GameSource.ts";
+import { ProfessionalCalendar } from "#contexts/connections/ProfessionalCalendar.ts";
+import { leagueOffNightDefinition } from "#contexts/connections/ProfessionalGame.ts";
+import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
 import type {
   ProviderAcquisitionUsage,
   ProviderDraftPick,
@@ -94,7 +98,9 @@ import {
 } from "#contexts/connections/QueryValues.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
+import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
 import { ObservedFactRepository } from "./ObservedFactRepository.ts";
+import { uniqueProviderTeamKeys } from "./ProfessionalTeamIdentity.ts";
 import { ProviderOpponentFactStale, readProviderOpponent } from "./ProviderOpponentFacts.ts";
 import { fitPage, queryBudget, summaryBudget } from "./QueryBudget.ts";
 import { loadTeamContext, providerIdentity } from "./QueryContext.ts";
@@ -127,6 +133,16 @@ type ReadOutcome<A> =
 
 type FailureOutcome = Extract<ReadOutcome<never>, { readonly _tag: "unsupported" | "failed" }>;
 
+type PoolGames =
+  | {
+      readonly status: "available";
+      readonly window: SummaryScheduleWindow;
+      readonly games: ReadonlyArray<ProfessionalGame>;
+      readonly observedAt: DateTime.Utc;
+      readonly unresolvedTeamCount: number;
+    }
+  | { readonly status: "unavailable"; readonly detail: string };
+
 export const FantasyQueriesLive = Layer.effect(
   FantasyQueries,
   Effect.gen(function* () {
@@ -136,6 +152,8 @@ export const FantasyQueriesLive = Layer.effect(
     const encryption = yield* ConnectionCredentialEncryption;
     const tokens = yield* QueryTokens;
     const observedFacts = yield* ObservedFactRepository;
+    const calendar = yield* ProfessionalCalendar;
+    const gameSources = yield* GameSourceRegistry;
 
     const loadContext = (
       userId: UserId,
@@ -275,6 +293,68 @@ export const FantasyQueriesLive = Layer.effect(
             message: "The provider league season does not match the linked team.",
           },
         };
+      });
+
+    const readPoolGames = (
+      context: TeamContext,
+      leagueOutcome: ReadOutcome<ProviderLeagueSettings> | undefined,
+      requestedDate: string | undefined,
+    ): Effect.Effect<PoolGames, QueryPersistenceFailed> =>
+      Effect.gen(function* () {
+        if (gameSources.sourceFor(context.owned.team.league) === undefined) {
+          return {
+            status: "unavailable" as const,
+            detail:
+              "This league has no professional-game source. Hockey is the only supported sport today.",
+          };
+        }
+        if (leagueOutcome === undefined || leagueOutcome._tag !== "ok") {
+          return {
+            status: "unavailable" as const,
+            detail:
+              "The league settings could not be read, so no scoring window bounds the pool's games.",
+          };
+        }
+        const league = leagueOutcome.value;
+        const period = currentPeriod(league.periodWindow);
+        let weekDates: { readonly start: string; readonly end: string } | undefined;
+        if (period !== undefined) {
+          const matchupOutcome = yield* readOutcome(
+            context,
+            "matchups",
+            context.provider.readMatchups({
+              ...providerIdentity(context),
+              providerLeagueKey: context.owned.team.providerLeagueKey,
+              period,
+            }),
+          );
+          if (matchupOutcome._tag === "ok") {
+            weekDates = publishedWeekWindow(undefined, matchupOutcome.value);
+          }
+        }
+        const window = searchGamesWindow({ league, period, weekDates, requestedDate });
+        if (window === undefined) {
+          return {
+            status: "unavailable" as const,
+            detail:
+              "The provider publishes neither a scoring period nor a current date for this league, so no window bounds the pool's games.",
+          };
+        }
+        const professionalGames = yield* readProfessionalScheduleGames({
+          calendar,
+          league: context.owned.team.league,
+          from: window.start,
+          to: window.end,
+        });
+        return professionalGames.status === "available"
+          ? {
+              status: "available" as const,
+              window,
+              games: professionalGames.games,
+              observedAt: professionalGames.observedAt,
+              unresolvedTeamCount: professionalGames.unresolvedTeamCount,
+            }
+          : { status: "unavailable" as const, detail: professionalGames.detail };
       });
 
     const resolveStatRef = (
@@ -901,29 +981,6 @@ export const FantasyQueriesLive = Layer.effect(
             "The `date` must be a real calendar date in `YYYY-MM-DD` form, such as 2026-10-31.",
         });
       }
-      let datedOpponents = false;
-      let schedule: SearchPlayersData["schedule"];
-      if (requestedDate !== undefined) {
-        const leagueOutcome = yield* readLeague(context);
-        if (leagueOutcome._tag === "ok" && leagueOutcome.value.rosterCoverage === "date") {
-          datedOpponents = true;
-          schedule = {
-            status: "available",
-            date: requestedDate,
-            source: "league_player_pool",
-          };
-        } else {
-          schedule = {
-            status: "not_published",
-            detail:
-              leagueOutcome._tag === "ok"
-                ? "This league's coverage is a scoring week, so its league player pool returns the week's opponent and does not vary by date. No dated opponent is published; read the roster schedule for the week's opponents."
-                : leagueOutcome._tag === "failed"
-                  ? `The league settings could not be read, so the pool's coverage is unknown and no dated opponent is published. ${leagueOutcome.failure.message}`
-                  : `The league settings do not establish a date coverage, so no dated opponent is published. ${leagueOutcome.detail}`,
-          };
-        }
-      }
       const sort = input.sort ?? "name";
       const statPeriod = input.statPeriod ?? "season";
       const playerSearch = context.provider.capabilities.playerSearch;
@@ -948,6 +1005,33 @@ export const FantasyQueriesLive = Layer.effect(
         return yield* QuerySelectionInvalid.make({
           detail: "The `stat` reference is used only with sort `stat`.",
         });
+      }
+      const hasGameSource = gameSources.sourceFor(context.owned.team.league) !== undefined;
+      const leagueOutcome =
+        requestedDate !== undefined || hasGameSource ? yield* readLeague(context) : undefined;
+      let datedOpponents = false;
+      let schedule: SearchPlayersData["schedule"];
+      if (requestedDate !== undefined) {
+        if (leagueOutcome?._tag === "ok" && leagueOutcome.value.rosterCoverage === "date") {
+          datedOpponents = true;
+          schedule = {
+            status: "available",
+            date: requestedDate,
+            source: "league_player_pool",
+          };
+        } else {
+          schedule = {
+            status: "not_published",
+            detail:
+              leagueOutcome?._tag === "ok"
+                ? "This league's coverage is a scoring week, so its league player pool returns the week's opponent and does not vary by date. No dated opponent is published; read the roster schedule for the week's opponents."
+                : leagueOutcome?._tag === "failed"
+                  ? `The league settings could not be read, so the pool's coverage is unknown and no dated opponent is published. ${leagueOutcome.failure.message}`
+                  : leagueOutcome?._tag === "unsupported"
+                    ? `The league settings do not establish a date coverage, so no dated opponent is published. ${leagueOutcome.detail}`
+                    : "The league settings could not be read, so no dated opponent is published.",
+          };
+        }
       }
       let statId: number | undefined;
       if (input.stat !== undefined) {
@@ -994,6 +1078,7 @@ export const FantasyQueriesLive = Layer.effect(
       if (outcome._tag !== "ok") {
         return searchWithoutData(team, fetchedAt, outcome);
       }
+      const poolGames = yield* readPoolGames(context, leagueOutcome, requestedDate);
       const positions = new Set(input.positions ?? []);
       const filtered = outcome.value.players.filter(
         (player) =>
@@ -1006,35 +1091,55 @@ export const FantasyQueriesLive = Layer.effect(
       const ordered = providerOrdered(context.provider, sort)
         ? filtered
         : filtered.toSorted((left, right) => comparePlayers(left, right, sort));
+      const missingProTeamKeys = ordered.flatMap((player) =>
+        player.proTeamKey === undefined && player.proTeam !== undefined ? [player.proTeam] : [],
+      );
+      const proTeamIdentities =
+        missingProTeamKeys.length === 0
+          ? []
+          : yield* observedFacts.readProviderTeamIdentities({
+              sport: context.owned.team.sport,
+              identifiers: missingProTeamKeys,
+            });
+      const proTeamKeyByAbbreviation = uniqueProviderTeamKeys(proTeamIdentities);
+      const poolProTeamKey = (player: (typeof ordered)[number]): string | undefined =>
+        player.proTeamKey ??
+        (player.proTeam === undefined ? undefined : proTeamKeyByAbbreviation.get(player.proTeam));
       const refs = yield* tokens.sealPlayerRefs({
         userId,
         leagueKey: context.owned.team.providerLeagueKey,
         playerKeys: ordered.map((player) => player.providerPlayerKey),
       });
-      const players = EffectArray.map(EffectArray.zip(ordered, refs), ([player, playerRef]) => ({
-        player: playerRef,
-        name: player.name,
-        primaryPosition: player.primaryPosition,
-        displayPosition: player.displayPosition,
-        proTeam: player.proTeam ?? null,
-        ...(datedOpponents ? { opponent: searchOpponent(player.opponent) } : {}),
-        eligiblePositions: player.eligiblePositions,
-        availability: player.availability,
-        status: {
-          value: player.status.value,
-          ...(player.status.code === undefined ? {} : { code: player.status.code }),
-          ...(player.status.detail === undefined ? {} : { detail: player.status.detail }),
-          observedAt: fetchedAt,
-        },
-        percentOwned: player.percentOwned,
-        percentOwnedDelta: player.percentOwnedDelta,
-        percentStarted: player.percentStarted,
-        percentStartedChange: player.percentStartedChange,
-        actualRank: player.actualRank,
-        overallRank: player.overallRank,
-        transactionTrend: player.transactionTrend,
-        ...(sort === "stat" ? { statValue: player.statValue } : {}),
-      }));
+      const players = EffectArray.map(EffectArray.zip(ordered, refs), ([player, playerRef]) => {
+        const proTeamKey = poolProTeamKey(player);
+        return {
+          player: playerRef,
+          name: player.name,
+          primaryPosition: player.primaryPosition,
+          displayPosition: player.displayPosition,
+          proTeam: player.proTeam ?? null,
+          ...(datedOpponents ? { opponent: searchOpponent(player.opponent) } : {}),
+          ...(poolGames.status === "available"
+            ? { gamesRemaining: poolGamesRemaining(poolGames, proTeamKey) }
+            : {}),
+          eligiblePositions: player.eligiblePositions,
+          availability: player.availability,
+          status: {
+            value: player.status.value,
+            ...(player.status.code === undefined ? {} : { code: player.status.code }),
+            ...(player.status.detail === undefined ? {} : { detail: player.status.detail }),
+            observedAt: fetchedAt,
+          },
+          percentOwned: player.percentOwned,
+          percentOwnedDelta: player.percentOwnedDelta,
+          percentStarted: player.percentStarted,
+          percentStartedChange: player.percentStartedChange,
+          actualRank: player.actualRank,
+          overallRank: player.overallRank,
+          transactionTrend: player.transactionTrend,
+          ...(sort === "stat" ? { statValue: player.statValue } : {}),
+        };
+      });
       const fingerprintValue = yield* queryFingerprint(
         [
           "search_players",
@@ -1064,8 +1169,27 @@ export const FantasyQueriesLive = Layer.effect(
                 `Player pool with opponents for ${requestedDate}`,
               )
             : coverage("players", "player_search", fetchedAt),
+          ...(poolGames.status === "available"
+            ? [
+                coverage(
+                  "players",
+                  "professional_games",
+                  poolGames.observedAt,
+                  undefined,
+                  "Games remaining counted from the league's professional games.",
+                ),
+              ]
+            : []),
         ],
         ...(schedule === undefined ? {} : { schedule }),
+        gamesRemaining:
+          poolGames.status === "available"
+            ? {
+                status: "available",
+                window: poolGames.window,
+                observedAt: poolGames.observedAt,
+              }
+            : { status: "unsupported", detail: poolGames.detail },
         failures: [],
         budget: queryBudget,
       };
@@ -2249,6 +2373,11 @@ export const FantasyQueriesLive = Layer.effect(
                 period: schedulePeriod,
               }),
             );
+      const scheduleWindow =
+        scheduleWindowResolution.status === "resolved"
+          ? scheduleWindowResolution.window
+          : undefined;
+      const gamesRemainingSources = new Set<GamesRemainingSource>();
       const schedulePlayerByKey = new Map<string, SummarySchedulePlayer>();
       let scheduleSection: TeamSummaryData["schedule"];
       if (!includes("schedule")) {
@@ -2278,6 +2407,43 @@ export const FantasyQueriesLive = Layer.effect(
         }
       } else {
         const schedule = scheduleOutcome.value.schedule;
+        const professionalWindow = scheduleWindow ?? windowDates;
+        const professionalGames: ProfessionalScheduleGames =
+          professionalWindow === undefined
+            ? {
+                status: "unavailable",
+                detail:
+                  "The provider publishes no date window for this schedule, so the league's games cannot be placed on its dates.",
+              }
+            : yield* readProfessionalScheduleGames({
+                calendar,
+                league: context.owned.team.league,
+                from: professionalWindow.start,
+                to: professionalWindow.end,
+              });
+        const scheduleDates =
+          scheduleWindow === undefined ? undefined : scheduleDateCounts(schedule);
+        const leagueByDate =
+          professionalGames.status === "available"
+            ? leagueGamesByDate(professionalGames.games)
+            : undefined;
+        const offNightByDate = new Map<string, boolean>();
+        if (
+          leagueByDate !== undefined &&
+          professionalGames.status === "available" &&
+          scheduleDates !== undefined
+        ) {
+          for (const entry of scheduleDates) {
+            offNightByDate.set(
+              entry.date,
+              isLeagueOffNight({
+                teamsPlaying: leagueByDate.get(entry.date)?.teamsPlaying ?? 0,
+                teamCount: professionalGames.teamCount,
+              }),
+            );
+          }
+        }
+        let providerFallbackForMissingGame = 0;
         const scheduleRefs = yield* tokens.sealPlayerRefs({
           userId,
           leagueKey: context.owned.team.providerLeagueKey,
@@ -2285,23 +2451,107 @@ export const FantasyQueriesLive = Layer.effect(
         });
         for (const [player, sealedRef] of EffectArray.zip(schedule.players, scheduleRefs)) {
           const rosterRow = rosterRowByKey.get(player.providerPlayerKey);
+          const providerGames = providerGamesInWindow(player.games, scheduleWindow);
+          const professionalCount =
+            professionalGames.status === "available" && player.proTeamKey !== undefined
+              ? countGamesForTeam(professionalGames.games, player.proTeamKey)
+              : undefined;
+          const gamesRemaining: SummarySchedulePlayer["gamesRemaining"] =
+            professionalCount === undefined
+              ? {
+                  status: "available",
+                  count: providerGames.length,
+                  source: "provider_opponent",
+                }
+              : professionalCount > 0
+                ? {
+                    status: "available",
+                    count: professionalCount,
+                    source: "professional_games",
+                  }
+                : providerGames.length > 0
+                  ? {
+                      status: "available",
+                      count: providerGames.length,
+                      source: "provider_opponent",
+                    }
+                  : {
+                      status: "available",
+                      count: 0,
+                      source: "professional_games",
+                    };
+          gamesRemainingSources.add(gamesRemaining.source);
+          if (
+            professionalCount !== undefined &&
+            professionalCount === 0 &&
+            providerGames.length > 0
+          ) {
+            providerFallbackForMissingGame += 1;
+          }
           schedulePlayerByKey.set(player.providerPlayerKey, {
             player: rosterRow?.player ?? sealedRef,
             name: rosterRow?.name ?? player.name,
             proTeam: rosterRow?.proTeam ?? player.proTeamAbbreviation ?? null,
-            status: player.games.length === 0 ? "no_games" : "scheduled",
-            gameCount: player.games.length,
-            games: scheduledGames(player.games),
+            status: providerGames.length === 0 ? "no_games" : "scheduled",
+            gameCount: providerGames.length,
+            games: scheduledGames(providerGames, offNightByDate),
+            gamesRemaining,
           });
         }
-        const scheduleWindow = scheduleWindowResolution.window;
         scheduleSection = {
           status: "available",
           coverage: scheduleWindowResolution.coverage,
           ...(period === undefined ? {} : { period }),
           ...(scheduleWindow === undefined ? {} : { window: scheduleWindow }),
           observedAt: scheduleOutcome.value.observedAt,
-          ...(scheduleWindow === undefined ? {} : { dates: scheduleDateCounts(schedule) }),
+          ...(scheduleDates === undefined
+            ? {}
+            : {
+                dates: scheduleDates.map((entry) => {
+                  const league = leagueByDate?.get(entry.date);
+                  const offNight = offNightByDate.get(entry.date);
+                  return {
+                    date: entry.date,
+                    rosterGames: entry.rosterGames,
+                    ...(offNight === undefined
+                      ? {}
+                      : {
+                          leagueGames: league?.games ?? 0,
+                          teamsPlaying: league?.teamsPlaying ?? 0,
+                          offNight,
+                        }),
+                  };
+                }),
+              }),
+          offNights:
+            offNightByDate.size > 0
+              ? {
+                  status: "available",
+                  definition: leagueOffNightDefinition,
+                  sport: "hockey",
+                }
+              : {
+                  status: "unsupported",
+                  detail: offNightsUnavailableDetail({
+                    professionalGames,
+                    scheduleWindow,
+                    coverage: scheduleWindowResolution.coverage,
+                  }),
+                },
+          gamesRemaining: gamesRemainingState({
+            sources: gamesRemainingSources,
+            professionalGames,
+            window:
+              professionalWindow === undefined
+                ? undefined
+                : (scheduleWindow ?? {
+                    start: professionalWindow.start,
+                    end: professionalWindow.end,
+                    source: "period",
+                  }),
+            providerObservedAt: scheduleOutcome.value.observedAt,
+            providerFallbackForMissingGame,
+          }),
           players: [],
           detail: schedulePeriodDetail({
             coverage: scheduleWindowResolution.coverage,
@@ -2322,6 +2572,17 @@ export const FantasyQueriesLive = Layer.effect(
                 `Dated roster reads for ${schedule.dates.join(", ")}`,
               ),
         );
+        if (professionalGames.status === "available") {
+          coverageEntries.push(
+            coverage(
+              "schedule",
+              "professional_games",
+              professionalGames.observedAt,
+              undefined,
+              "Games remaining and off nights counted from the league's professional games.",
+            ),
+          );
+        }
       }
       if (scheduleSection?.status === "unsupported") {
         coverageEntries.push(
@@ -3230,6 +3491,38 @@ function resolveScheduleWindow(input: {
   return dateWindowResolution(calendarDates(anchor, restOfWeekEnd(anchor)), "rest_of_week");
 }
 
+function searchGamesWindow(input: {
+  readonly league: ProviderLeagueSettings;
+  readonly period: QueryPeriod | undefined;
+  readonly weekDates: { readonly start: string; readonly end: string } | undefined;
+  readonly requestedDate: string | undefined;
+}): SummaryScheduleWindow | undefined {
+  if (input.weekDates !== undefined) {
+    return {
+      start: input.weekDates.start,
+      end: input.weekDates.end,
+      source: input.period === undefined ? "rest_of_week" : "period",
+    };
+  }
+  if (input.requestedDate !== undefined) {
+    return {
+      start: input.requestedDate,
+      end: input.requestedDate,
+      source: "requested",
+    };
+  }
+  const anchor =
+    input.league.currentDate === undefined ? undefined : calendarDate(input.league.currentDate);
+  if (anchor === undefined) {
+    return undefined;
+  }
+  return {
+    start: DateTime.formatIsoDate(anchor),
+    end: DateTime.formatIsoDate(restOfWeekEnd(anchor)),
+    source: "rest_of_week",
+  };
+}
+
 function dateWindowResolution(
   dates: ReadonlyArray<string> | undefined,
   source: SummaryScheduleWindow["source"],
@@ -3323,14 +3616,192 @@ function largestSectionBytes(entries: ReadonlyArray<readonly [string, unknown]>)
   return `The largest sections are ${listed} of this result, so dropping one of those frees the most space.`;
 }
 
+type GamesRemainingSource = "professional_games" | "provider_opponent";
+
+type ProfessionalScheduleGames =
+  | {
+      readonly status: "available";
+      readonly games: ReadonlyArray<ProfessionalGame>;
+      readonly observedAt: DateTime.Utc;
+      readonly teamCount: number;
+      readonly unresolvedTeamCount: number;
+    }
+  | { readonly status: "unavailable"; readonly detail: string };
+
+function poolGamesRemaining(
+  games: Extract<PoolGames, { readonly status: "available" }>,
+  proTeamKey: string | undefined,
+): SummarySchedulePlayer["gamesRemaining"] {
+  if (proTeamKey === undefined) {
+    return {
+      status: "unavailable",
+      detail:
+        "This pool row publishes no professional team key, so its games cannot be joined without guessing from an abbreviation.",
+    };
+  }
+  const count = countGamesForTeam(games.games, proTeamKey);
+  if (count === 0 && games.unresolvedTeamCount > 0) {
+    return {
+      status: "unavailable",
+      detail:
+        "The league's professional games include a team with no provider key, so this player's team cannot be counted without guessing.",
+    };
+  }
+  return { status: "available", count, source: "professional_games" };
+}
+
+function readProfessionalScheduleGames(input: {
+  readonly calendar: ProfessionalCalendar["Service"];
+  readonly league: TeamContext["owned"]["team"]["league"];
+  readonly from: string;
+  readonly to: string;
+}): Effect.Effect<ProfessionalScheduleGames, never> {
+  return input.calendar
+    .readGames({
+      league: input.league,
+      from: input.from,
+      to: input.to,
+      freshness: "calendar",
+    })
+    .pipe(
+      Effect.map((window) => ({
+        status: "available" as const,
+        games: window.games.map((fact) => fact.game),
+        observedAt: window.observedAt,
+        teamCount: window.teamCount,
+        unresolvedTeamCount: window.unresolvedTeams.length,
+      })),
+      Effect.catch((failure) =>
+        Effect.succeed({
+          status: "unavailable" as const,
+          detail: professionalGamesUnavailableDetail(failure),
+        }),
+      ),
+    );
+}
+
+function professionalGamesUnavailableDetail(failure: {
+  readonly _tag: string;
+  readonly reason?: string;
+}): string {
+  if (failure._tag === "professional_calendar.unavailable") {
+    switch (failure.reason) {
+      case "no_source":
+        return "This league has no professional-game source. Hockey is the only supported sport today.";
+      case "invalid_window":
+      case "invalid_week":
+        return "The schedule window is not a valid date range.";
+      case undefined:
+        return "The professional-game source did not accept this schedule window.";
+    }
+  }
+  if (failure._tag === "professional_calendar.fact_stale") {
+    return "The professional-game source could not be refreshed, and its previous observation is past its maximum age.";
+  }
+  return "The professional-game source could not be reached.";
+}
+
+function providerGamesInWindow(
+  games: ReadonlyArray<ProviderScheduledGame>,
+  window: SummaryScheduleWindow | undefined,
+): ReadonlyArray<ProviderScheduledGame> {
+  return window === undefined
+    ? games
+    : games.filter(
+        (game) => game.date === undefined || (game.date >= window.start && game.date <= window.end),
+      );
+}
+
+function offNightsUnavailableDetail(input: {
+  readonly professionalGames: ProfessionalScheduleGames;
+  readonly scheduleWindow: SummaryScheduleWindow | undefined;
+  readonly coverage: "date" | "week";
+}): string {
+  if (input.coverage === "week") {
+    return "A scoring-week league publishes one opponent for the week and no per-date schedule, so an off night cannot be placed on a date.";
+  }
+  if (input.professionalGames.status === "unavailable") {
+    return `Off nights need the league's professional games, which are unavailable: ${input.professionalGames.detail}`;
+  }
+  return "The league's professional games were not observed for this window, so no date can be marked as an off night.";
+}
+
+function gamesRemainingState(input: {
+  readonly sources: ReadonlySet<GamesRemainingSource>;
+  readonly professionalGames: ProfessionalScheduleGames;
+  readonly window: SummaryScheduleWindow | undefined;
+  readonly providerObservedAt: DateTime.Utc;
+  readonly providerFallbackForMissingGame: number;
+}):
+  | {
+      readonly status: "available";
+      readonly sources: ReadonlyArray<GamesRemainingSource>;
+      readonly observedAt: DateTime.Utc;
+      readonly detail?: string;
+    }
+  | { readonly status: "unsupported"; readonly detail: string } {
+  if (input.sources.size === 0) {
+    return {
+      status: "unsupported",
+      detail: "The provider returned no players whose games could be counted.",
+    };
+  }
+  const detail =
+    input.professionalGames.status === "unavailable"
+      ? `The professional games are unavailable, so the counts come from the provider's own opponent fact: ${input.professionalGames.detail}`
+      : input.providerFallbackForMissingGame > 0
+        ? "Some players' counts come from the provider's own opponent fact because the professional games did not contain the game the provider published."
+        : input.sources.has("provider_opponent")
+          ? "Some players' professional team keys were not resolved, so those counts come from the provider's own opponent fact instead."
+          : undefined;
+  const observedAt =
+    input.professionalGames.status === "available" && input.sources.has("professional_games")
+      ? oldestInstant([
+          input.professionalGames.observedAt,
+          ...(input.sources.has("provider_opponent") ? [input.providerObservedAt] : []),
+        ])
+      : input.providerObservedAt;
+  return {
+    status: "available",
+    sources: [...input.sources],
+    ...(input.window === undefined ? {} : { window: input.window }),
+    observedAt,
+    ...(detail === undefined ? {} : { detail }),
+  };
+}
+
+function oldestInstant(instants: ReadonlyArray<DateTime.Utc>): DateTime.Utc {
+  const oldest = instants.reduce<DateTime.Utc | undefined>(
+    (current, instant) =>
+      current === undefined || DateTime.toEpochMillis(instant) < DateTime.toEpochMillis(current)
+        ? instant
+        : current,
+    undefined,
+  );
+  if (oldest === undefined) {
+    throw new Error("A games-remaining answer must observe at least one source");
+  }
+  return oldest;
+}
+
 function scheduledGames(
   games: ReadonlyArray<ProviderScheduledGame>,
-): ReadonlyArray<{ readonly date?: string; readonly opponent: string; readonly home: boolean }> {
-  return games.map((game) => ({
-    ...(game.date === undefined ? {} : { date: game.date }),
-    opponent: game.opponent,
-    home: game.home,
-  }));
+  offNightByDate: ReadonlyMap<string, boolean>,
+): ReadonlyArray<{
+  readonly date?: string;
+  readonly opponent: string;
+  readonly home: boolean;
+  readonly offNight?: boolean;
+}> {
+  return games.map((game) => {
+    const offNight = game.date === undefined ? undefined : offNightByDate.get(game.date);
+    return {
+      ...(game.date === undefined ? {} : { date: game.date }),
+      opponent: game.opponent,
+      home: game.home,
+      ...(offNight === undefined ? {} : { offNight }),
+    };
+  });
 }
 
 function scheduleDateCounts(

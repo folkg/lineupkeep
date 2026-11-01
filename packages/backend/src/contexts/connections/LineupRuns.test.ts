@@ -38,6 +38,7 @@ import {
   refuseCustomPlanning,
 } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
+import { ScheduleGateTest } from "./internal/ScheduleGateTest.ts";
 import { TeamAutomationState } from "./internal/TeamAutomationWorkflow.ts";
 import { LineupRequestConflict, LineupRequestInput, LineupRunNotFound } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
@@ -49,6 +50,7 @@ import type {
   ProviderRoster,
   ProviderTeam,
 } from "./Provider.ts";
+import { ScheduleGate } from "./ScheduleGate.ts";
 
 it.effect(
   "creates one durable run per team, falls back to the native action, and verifies it",
@@ -1439,6 +1441,61 @@ function testRequestId(): string {
   return `018f79ea-7d86-4c18-9b4a-${String(requestSerial).padStart(12, "0")}`;
 }
 
+it.effect("records a skipped outcome and its reason for a scheduled run", () =>
+  Effect.gen(function* () {
+    const fake = yield* FakeProviderWorld;
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    const at = yield* DateTime.now;
+    const created = yield* repository.createScheduledRuns({
+      userId: owner,
+      at,
+      runs: [{ team: team.id, connectionId: team.connectionId }],
+    });
+    const runId = Array.getUnsafe(created.runs, 0).id;
+
+    yield* worker.deliver([runId]);
+
+    const loaded = yield* repository.loadRuns(owner, { runs: [runId], limit: 1 });
+    const run = Array.getUnsafe(loaded.runs, 0);
+    assert.strictEqual(run.state._tag, "Skipped");
+    assert.strictEqual(
+      run.state._tag === "Skipped" ? run.state.outcome.kind : undefined,
+      "skipped",
+    );
+    assert.strictEqual(
+      run.state._tag === "Skipped" ? run.state.outcome.summary : undefined,
+      "Nothing to check before Friday.",
+    );
+  }).pipe(Effect.provide(SkippingLayer)),
+);
+
+it.effect("counts the four provider reads one ordinary check makes", () =>
+  Effect.gen(function* () {
+    const fake = yield* FakeProviderWorld;
+    const runs = yield* LineupRuns;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    const before = yield* fake.providerReads;
+    yield* runs.submit(owner, lineupRequest(team.id, requestId));
+    const reads = (yield* fake.providerReads) - before;
+    assert.strictEqual(reads, 4);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect("lets a manual set_lineup bypass the schedule gate", () =>
+  Effect.gen(function* () {
+    const fake = yield* FakeProviderWorld;
+    const runs = yield* LineupRuns;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* refuseCustomPlanning(fake);
+
+    const submitted = yield* runs.submit(owner, lineupRequest(team.id, requestId));
+    assert.strictEqual(submitted.runs.length, 1);
+    assert.notStrictEqual(Array.getUnsafe(submitted.runs, 0).status, "skipped");
+  }).pipe(Effect.provide(SkippingRunsLayer)),
+);
+
 function lineupRequest(
   team: import("./FantasyTeam.ts").TeamId,
   requestId: string,
@@ -1641,6 +1698,7 @@ const WorkerTest = LineupWorkerLive.pipe(
   Layer.provide(QueryRepositoryTest),
   Layer.provide(EncryptionTestLayer),
   Layer.provideMerge(ProviderFakeTest),
+  Layer.provide(ScheduleGateTest),
 );
 const DeliveryTest = LineupDeliveryLocal.pipe(Layer.provide(WorkerTest));
 const DispatcherTest = LineupDispatcherLive.pipe(
@@ -1661,6 +1719,56 @@ const LineupTestLayer = Layer.mergeAll(
   RunsTest,
   WorkerTest,
   DispatcherTest,
+  LineupRepositoryTest,
+  ConnectionsTest,
+  ProviderFakeTest,
+).pipe(
+  Layer.provideMerge(DatabaseLayer),
+  Layer.provideMerge(ProviderFakeTest),
+  Layer.provide(EncryptionTestLayer),
+  Layer.provide(NodeCrypto.layer),
+  Layer.orDie,
+);
+const SkippingGateTest = Layer.succeed(ScheduleGate)({
+  evaluate: () =>
+    Effect.succeed({
+      kind: "skip" as const,
+      summary: "Nothing to check before Friday.",
+    }),
+});
+const SkippingWorkerTest = LineupWorkerLive.pipe(
+  Layer.provide(LineupRepositoryTest),
+  Layer.provide(QueryRepositoryTest),
+  Layer.provide(EncryptionTestLayer),
+  Layer.provideMerge(ProviderFakeTest),
+  Layer.provide(SkippingGateTest),
+);
+const SkippingLayer = Layer.mergeAll(
+  SkippingWorkerTest,
+  LineupRepositoryTest,
+  ConnectionsTest,
+  ProviderFakeTest,
+).pipe(
+  Layer.provideMerge(DatabaseLayer),
+  Layer.provideMerge(ProviderFakeTest),
+  Layer.provide(EncryptionTestLayer),
+  Layer.provide(NodeCrypto.layer),
+  Layer.orDie,
+);
+const SkippingDeliveryTest = LineupDeliveryLocal.pipe(Layer.provide(SkippingWorkerTest));
+const SkippingDispatcherTest = LineupDispatcherLive.pipe(
+  Layer.provide(LineupRepositoryTest),
+  Layer.provide(SkippingDeliveryTest),
+);
+const SkippingRunsTest = LineupRunsLive.pipe(
+  Layer.provide(LineupRepositoryTest),
+  Layer.provide(QueryRepositoryTest),
+  Layer.provide(SkippingDispatcherTest),
+);
+const SkippingRunsLayer = Layer.mergeAll(
+  SkippingRunsTest,
+  SkippingWorkerTest,
+  SkippingDispatcherTest,
   LineupRepositoryTest,
   ConnectionsTest,
   ProviderFakeTest,

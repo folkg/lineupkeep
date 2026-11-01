@@ -41,6 +41,7 @@ import { ProfessionalCalendarLive } from "#contexts/connections/internal/Profess
 import { QueryRepository } from "#contexts/connections/internal/QueryRepository.ts";
 import { QueryTokens } from "#contexts/connections/internal/QueryTokens.ts";
 import { RetentionSweepLive } from "#contexts/connections/internal/RetentionSweepRepository.ts";
+import { ScheduleGateLive } from "#contexts/connections/internal/ScheduleGateLive.ts";
 import { TeamRepository } from "#contexts/connections/internal/TeamRepository.ts";
 import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
 import { TransactionProposalRepository } from "#contexts/connections/internal/TransactionProposalRepository.ts";
@@ -123,6 +124,8 @@ const ProfessionalCalendarLayer = ProfessionalCalendarLive.pipe(
 const QueriesLayer = Layer.merge(FantasyQueriesLive, TransactionReviewsLive).pipe(
   Layer.provide(QueryRepositoryLayer),
   Layer.provide(ObservedFactRepositoryLayer),
+  Layer.provide(ProfessionalCalendarLayer),
+  Layer.provide(GameSourceLayer),
   Layer.provide(ConnectionsLayer),
   Layer.provide(ProviderLayer),
   Layer.provide(CredentialEncryptionLayer),
@@ -141,11 +144,17 @@ const ProposalsLayer = TransactionProposalsLive.pipe(
 const LineupRepositoryLayer = LineupRunRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
 );
+const ScheduleGateLayer = ScheduleGateLive.pipe(
+  Layer.provide(ObservedFactRepositoryLayer),
+  Layer.provide(ProfessionalCalendarLayer),
+  Layer.provide(GameSourceLayer),
+);
 const LineupWorkerLayer = LineupWorkerLive.pipe(
   Layer.provide(LineupRepositoryLayer),
   Layer.provide(QueryRepositoryLayer),
   Layer.provide(CredentialEncryptionLayer),
   Layer.provide(ProviderLayer),
+  Layer.provide(ScheduleGateLayer),
 );
 const LineupDeliveryLayer = Layer.unwrap(
   Config.option(Config.String("LINEUP_CLOUD_TASKS_QUEUE")).pipe(
@@ -204,6 +213,7 @@ export const ApplicationLayer = Layer.mergeAll(
   HostedLinkingLayer,
   QueriesLayer,
   ProfessionalCalendarLayer,
+  ScheduleGateLayer,
   ProposalsLayer,
   LineupRunsLayer,
   TeamsLayer,

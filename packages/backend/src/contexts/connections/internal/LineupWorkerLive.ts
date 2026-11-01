@@ -32,6 +32,7 @@ import type {
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
+import { ScheduleGate } from "#contexts/connections/ScheduleGate.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { planAssignments } from "./LineupPlanning.ts";
@@ -56,6 +57,7 @@ export const LineupWorkerLive = Layer.effect(
     const queries = yield* QueryRepository;
     const encryption = yield* ConnectionCredentialEncryption;
     const registry = yield* ProviderRegistry;
+    const scheduleGate = yield* ScheduleGate;
 
     const deliver = Effect.fn("LineupWorker.deliver")(function* (
       runIds: ReadonlyArray<LineupRunId>,
@@ -117,6 +119,28 @@ export const LineupWorkerLive = Layer.effect(
       }
       const session = yield* decryptContext(run.record.userId, context);
       const now = yield* DateTime.now;
+      if (run.record.trigger === "scheduled") {
+        const decision = yield* scheduleGate.evaluate({
+          team: context.team,
+          provider,
+          session,
+          now,
+        });
+        yield* Effect.annotateCurrentSpan({
+          "schedule.gate": decision.kind,
+          ...(decision.kind === "run"
+            ? { "schedule.gate.reason": decision.reason }
+            : {
+                "schedule.gate.next_game_at":
+                  decision.nextGameAt === undefined
+                    ? "unstated"
+                    : DateTime.formatIso(decision.nextGameAt),
+              }),
+        });
+        if (decision.kind === "skip") {
+          return yield* skip(run, decision.summary);
+        }
+      }
       const league = yield* readLeague(run, provider, context, session);
       if (league === undefined) {
         return;
@@ -903,6 +927,29 @@ export const LineupWorkerLive = Layer.effect(
 
     const rejectSession = Effect.fnUntraced(function* (userId: UserId, owned: OwnedTeam) {
       yield* queries.recordSessionRejected(userId, owned);
+    });
+
+    const skip = Effect.fnUntraced(function* (run: ClaimedLineupRun, summary: string) {
+      const at = yield* DateTime.now;
+      yield* repository.recordSkipped({
+        runId: run.record.id,
+        lease: run.lease,
+        outcome: {
+          kind: "skipped",
+          verified: false,
+          reconciled: false,
+          summary,
+          observedAt: at,
+          changes: [],
+          lockedPlayers: 0,
+          editablePlayers: 0,
+        },
+        at,
+      });
+      yield* Effect.annotateCurrentSpan({
+        "app.outcome": "success",
+        "lineup.outcome": "skipped",
+      });
     });
 
     const block = Effect.fnUntraced(function* (

@@ -2865,6 +2865,9 @@ function toSearchPlayer(
     eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
     availability: availabilityOf(player.ownership?.ownership_type),
     proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
+    ...(optionalNonEmpty(player.editorial_team_key ?? "") === undefined
+      ? {}
+      : { proTeamKey: optionalNonEmpty(player.editorial_team_key ?? "") }),
     ...(player.opponent === undefined
       ? {}
       : { opponent: optionalNonEmpty(player.opponent ?? "") ?? null }),
@@ -4120,6 +4123,7 @@ const SearchPlayerPayload = Schema.Struct({
   display_position: Schema.NonEmptyString,
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   editorial_team_abbr: Schema.optional(Schema.String),
+  editorial_team_key: Schema.optional(Schema.String),
   opponent: Schema.optional(Schema.NullOr(Schema.String)),
   ownership: Schema.optional(PlayerOwnership),
   percent_owned: Schema.optional(PercentOwned),

@@ -27,6 +27,7 @@ import {
 } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { RetentionSweepLive } from "./internal/RetentionSweepRepository.ts";
+import { ScheduleGateTest } from "./internal/ScheduleGateTest.ts";
 import { LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
@@ -268,6 +269,7 @@ const WorkerTest = LineupWorkerLive.pipe(
   Layer.provide(QueryRepositoryTest),
   Layer.provide(EncryptionTestLayer),
   Layer.provideMerge(ProviderFakeTest),
+  Layer.provide(ScheduleGateTest),
 );
 const DeliveryTest = LineupDeliveryLocal.pipe(Layer.provide(WorkerTest));
 const DispatcherTest = LineupDispatcherLive.pipe(

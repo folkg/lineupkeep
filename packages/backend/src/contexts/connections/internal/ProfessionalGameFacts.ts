@@ -38,6 +38,7 @@ export function readProfessionalGameWeek(input: {
   readonly league: FantasyLeague;
   readonly weekStart: string;
   readonly freshness: ProfessionalGameFreshness;
+  readonly notBefore?: DateTime.Utc;
 }): Effect.Effect<
   ProfessionalGameWeek,
   ProfessionalGameFactStale | GameSourceFailure | QueryPersistenceFailed
@@ -71,6 +72,7 @@ export function readProfessionalGameWeek(input: {
           observedAt: row.observedAt,
           now,
           freshness: input.freshness,
+          ...(input.notBefore === undefined ? {} : { notBefore: input.notBefore }),
         }),
       );
     if (settled) {

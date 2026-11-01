@@ -46,6 +46,7 @@ export const factRefreshPolicies: { readonly provider_opponent: FactRefreshPolic
 const providerOpponentPlayer = Schema.Struct({
   providerPlayerKey: Schema.NonEmptyString,
   name: Schema.NonEmptyString,
+  proTeamKey: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
   proTeamAbbreviation: Schema.NullOr(Schema.NonEmptyString),
   games: Schema.Array(
     Schema.Struct({

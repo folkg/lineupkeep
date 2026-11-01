@@ -2,6 +2,7 @@ import { Schema } from "effect";
 
 import { ConnectionId } from "./Connection.ts";
 import { FantasySport, TeamId } from "./FantasyTeam.ts";
+import { leagueOffNightDefinition } from "./ProfessionalGame.ts";
 import {
   CounterpartyRef,
   Cursor,
@@ -715,6 +716,37 @@ export const SearchPlayersInput = Schema.Struct({
 });
 export type SearchPlayersInput = typeof SearchPlayersInput.Type;
 
+const ScheduleGamesRemainingSource = Schema.Literals(["professional_games", "provider_opponent"]);
+
+const ScheduleWindowSource = Schema.Literals(["period", "requested", "rest_of_week"]);
+
+const ScheduleWindow = Schema.Struct({
+  start: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "First date the window covers, inclusive." }),
+  ),
+  end: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "Last date the window covers, inclusive." }),
+  ),
+  source: ScheduleWindowSource,
+});
+
+const SchedulePlayerGamesRemaining = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    source: ScheduleGamesRemainingSource,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unavailable"),
+    detail: Schema.NonEmptyString,
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "Games this player's professional team plays in the window this section states. `professional_games` is counted from the professional-game source and `provider_opponent` from the provider's own opponent fact; the source is named because the two can disagree. `unavailable` states why neither produced a count; it is never a silent zero.",
+  }),
+);
+
 const SearchPlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
@@ -822,6 +854,7 @@ const SearchPlayer = Schema.Struct({
         "This pool row's opponent for the date and source stated in the result's `schedule`, present only when that schedule is `available`. `no_game` means the provider published no opponent for this player on that date; `not_published` means the field was absent and no opponent is claimed.",
     }),
   ),
+  gamesRemaining: Schema.optional(SchedulePlayerGamesRemaining),
   transactionTrend: PlayerTransactionTrend,
 });
 
@@ -856,12 +889,31 @@ const SearchSchedule = Schema.Union([
   }),
 );
 
+const SearchGamesRemaining = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    window: ScheduleWindow,
+    observedAt: Schema.DateTimeUtc,
+    detail: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unsupported"),
+    detail: Schema.NonEmptyString,
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "The window the pool rows' `gamesRemaining` counts cover and when their professional games were observed. Every count is joined from the row's professional-team key, never from an abbreviation. `unsupported` states why no count is published instead of returning a zero.",
+  }),
+);
+
 export const SearchPlayersData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
   coverage: Schema.Array(QueryCoverage),
   players: Schema.Array(SearchPlayer),
   schedule: Schema.optional(SearchSchedule),
+  gamesRemaining: Schema.optional(SearchGamesRemaining),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,
   budget: QueryBudget,
@@ -1444,6 +1496,12 @@ const SummaryScheduledGame = Schema.Struct({
   home: Schema.Boolean.pipe(
     Schema.annotate({ description: "Whether the player's team is at home for this game." }),
   ),
+  offNight: Schema.optional(Schema.Boolean).pipe(
+    Schema.annotate({
+      description:
+        "Whether this date is a league off night under the definition in `schedule.offNights`. Absent when the league's professional games are unknown; absent is not false.",
+    }),
+  ),
 });
 
 export const SummarySchedulePlayer = Schema.Struct({
@@ -1463,6 +1521,7 @@ export const SummarySchedulePlayer = Schema.Struct({
     }),
   ),
   games: Schema.Array(SummaryScheduledGame),
+  gamesRemaining: SchedulePlayerGamesRemaining,
 });
 export type SummarySchedulePlayer = typeof SummarySchedulePlayer.Type;
 
@@ -1474,23 +1533,94 @@ const SummaryScheduleDate = Schema.Struct({
         "How many of this roster's players play on this date, so a light night needs no client-side arithmetic.",
     }),
   ),
-});
-
-export const SummaryScheduleWindow = Schema.Struct({
-  start: Schema.NonEmptyString.pipe(
-    Schema.annotate({ description: "First date the schedule covers, inclusive." }),
-  ),
-  end: Schema.NonEmptyString.pipe(
-    Schema.annotate({ description: "Last date the schedule covers, inclusive." }),
-  ),
-  source: Schema.Literals(["period", "requested", "rest_of_week"]).pipe(
+  leagueGames: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(
     Schema.annotate({
       description:
-        "Where this window came from. `period` is the league's own scoring-period window; `requested` is a `window` or `days` argument on this call; `rest_of_week` is the default for a league with no scoring period, counted from the provider's current date through the end of that week. The dates covered are in `start` and `end`, never inferred by the client.",
+        "How many games the professional league has on this date, from the professional-game source. Absent when that source does not cover this league or its games are unknown, never zero by default.",
+    }),
+  ),
+  teamsPlaying: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).pipe(
+    Schema.annotate({
+      description:
+        "How many of the league's professional teams play on this date. Absent with `leagueGames`.",
+    }),
+  ),
+  offNight: Schema.optional(Schema.Boolean).pipe(
+    Schema.annotate({
+      description:
+        "Whether this date is a league off night under the definition in `schedule.offNights`. Absent when the league's professional games are unknown; absent is not false.",
     }),
   ),
 });
+
+export const SummaryScheduleWindow = ScheduleWindow.pipe(
+  Schema.annotate({
+    description:
+      "The inclusive dates this schedule covers and where they came from. `period` is the league's own scoring-period window; `requested` is a `window` or `days` argument on the call; `rest_of_week` is the default for a league with no scoring period, counted from the provider's current date through the end of that week. The dates covered are in `start` and `end`, never inferred by the client.",
+  }),
+);
 export type SummaryScheduleWindow = typeof SummaryScheduleWindow.Type;
+
+const SummaryOffNights = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    definition: Schema.Struct({
+      name: Schema.Literal(leagueOffNightDefinition.name),
+      maximumTeamShare: Schema.Literal(leagueOffNightDefinition.maximumTeamShare).pipe(
+        Schema.annotate({
+          description:
+            "A league off night is a date where fewer than this share of the league's professional teams play. Published so a client can compare its own threshold against the same raw per-date counts in `dates`.",
+        }),
+      ),
+    }),
+    sport: Schema.Literal("hockey").pipe(
+      Schema.annotate({
+        description:
+          "The sport whose professional games made off nights computable. Hockey is the only supported sport today; every other sport reports `unsupported` instead.",
+      }),
+    ),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unsupported"),
+    detail: Schema.NonEmptyString,
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "Whether off nights can be computed for this league, and the exact definition when they can. When unsupported, the per-date `leagueGames` and `offNight` fields are absent with this reason, never false.",
+  }),
+);
+
+const SummaryGamesRemainingState = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    sources: Schema.Array(ScheduleGamesRemainingSource),
+    window: Schema.optional(
+      SummaryScheduleWindow.pipe(
+        Schema.annotate({
+          description:
+            "The exact inclusive dates these counts cover, when the provider publishes them. Absent when the count follows the schedule section's `period` and the provider publishes no dated window.",
+        }),
+      ),
+    ),
+    observedAt: Schema.DateTimeUtc.pipe(
+      Schema.annotate({
+        description:
+          "The oldest instant among the sources used for these counts. The schedule section's `observedAt` is the provider's opponent observation; this is when the professional games behind a `professional_games` count were observed.",
+      }),
+    ),
+    detail: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unsupported"),
+    detail: Schema.NonEmptyString,
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "How the per-player `gamesRemaining` counts were produced. `window` states the exact dates they cover when the provider publishes them; otherwise the schedule section's `period` bounds them. A count is never zero because a source was missing: each player states its own source or an `unavailable` reason.",
+  }),
+);
 
 const SummarySchedule = Schema.Union([
   Schema.Struct({
@@ -1517,9 +1647,11 @@ const SummarySchedule = Schema.Union([
     dates: Schema.optional(Schema.Array(SummaryScheduleDate)).pipe(
       Schema.annotate({
         description:
-          "Every date of the window with the roster's game count for it. Present only for date coverage; a scoring-week league has no per-date view.",
+          "Every date of the window with the roster's game count for it. Present only for date coverage; a scoring-week league has no per-date view. When off nights are supported, each entry also carries the league's game count, teams playing, and whether the date is an off night.",
       }),
     ),
+    offNights: SummaryOffNights,
+    gamesRemaining: SummaryGamesRemainingState,
     players: Schema.Array(SummarySchedulePlayer).pipe(
       Schema.annotate({
         description:

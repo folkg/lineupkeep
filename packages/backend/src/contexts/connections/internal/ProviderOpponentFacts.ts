@@ -47,6 +47,7 @@ export function readProviderOpponent(input: {
   readonly sport: FantasySport;
   readonly providerTeamKey: string;
   readonly period: ProviderSchedulePeriod;
+  readonly notBefore?: DateTime.Utc;
 }): Effect.Effect<
   ProviderOpponentRead,
   ProviderReadFailure | ProviderOpponentFactStale | QueryPersistenceFailed
@@ -76,7 +77,7 @@ export function readProviderOpponent(input: {
     const staleDates: Array<string> = [];
     for (const date of dates) {
       const observation = latestByDate.get(date);
-      if (observation !== undefined && isFresh(observation, now, fantasyDay)) {
+      if (observation !== undefined && isFresh(observation, now, fantasyDay, input.notBefore)) {
         served.set(date, observation);
       } else {
         staleDates.push(date);
@@ -172,9 +173,12 @@ function isFresh(
   observation: ProviderOpponentObservation,
   now: DateTime.Utc,
   fantasyDay: ProviderFantasyDay,
+  notBefore: DateTime.Utc | undefined,
 ): boolean {
   const policy = factRefreshPolicies.provider_opponent;
   return (
+    (notBefore === undefined ||
+      DateTime.toEpochMillis(observation.observedAt) >= DateTime.toEpochMillis(notBefore)) &&
     !policy.reReadWhen(observation.window, now, fantasyDay) &&
     DateTime.toEpochMillis(now) <
       DateTime.toEpochMillis(policy.maximumAgeEndsAt(observation.window, fantasyDay))
@@ -259,6 +263,7 @@ function valueForDate(schedule: ProviderRosterSchedule, date: string): ProviderO
     players: schedule.players.map((player) => ({
       providerPlayerKey: player.providerPlayerKey,
       name: player.name,
+      proTeamKey: player.proTeamKey ?? null,
       proTeamAbbreviation: player.proTeamAbbreviation ?? null,
       games: player.games
         .filter((game) => game.date === date)
@@ -292,7 +297,7 @@ function rebuildSchedule(input: {
           ? {
               providerPlayerKey: player.providerPlayerKey,
               name: player.name,
-              proTeamKey: undefined,
+              proTeamKey: player.proTeamKey ?? undefined,
               proTeamAbbreviation: player.proTeamAbbreviation ?? undefined,
               games,
             }

@@ -159,6 +159,29 @@ _Avoid_: Pro team, club, franchise, editorial team
 A game between two professional teams, with a date, an optional start time and its venue time zone, a venue, and a status of scheduled, in progress, final, postponed, cancelled, or unknown. Its teams are provider professional-team keys, or an unresolved source identifier when no identity is known. It is a fact about the real world, not a `Scheduled game`, which is what the provider publishes for a rostered player.
 _Avoid_: Fixture, event, scheduled game when the provider's fact is not meant
 
+**Games remaining**:
+The number of professional games a player's team plays in the schedule window, counted from observed
+professional games. When those are unavailable for a rostered player, the provider's own roster schedule
+supplies the count and the answer names `provider_opponent`; a pool player has no such roster schedule and
+reports `unavailable` rather than zero. When neither is available the answer refuses with a reason rather
+than zero.
+_Avoid_: Remaining player-games (that is the provider's fantasy-team total), projected games
+
+**Off night**:
+A date on which fewer than half of the league's professional teams play, by the declared
+`league_off_night` share. Half is the ordinary line between a night the league runs and one it does not:
+below it, most managers have no lineup decision to make on that date. The result publishes the raw per-date
+league game and team counts, so a client can apply a different threshold; hockey is the only sport whose
+games make the marking computable today.
+_Avoid_: Light night (that is a per-roster count), bye
+
+**Schedule gate**:
+The scheduled-run early return that skips provider work only when a fresh professional calendar, observed
+after the fantasy day began, shows no rostered team game starting before the next tick. Unknown, stale, or
+unmapped data runs the check; a manual `set_lineup` bypasses the gate and the skip is recorded with its
+reason.
+_Avoid_: Precheck, cache miss
+
 **Professional team identity**:
 A stored pairing of a source's team identifier to a professional team's provider key, learned from a pairing the provider itself publishes and scoped to its sport. A pairing that resolves an identifier to two teams is not used, and an identifier with no pairing stays unresolved.
 _Avoid_: Team alias, abbreviation map

@@ -31,12 +31,23 @@ export type ProfessionalGameWeek = {
   readonly unresolvedTeams: ReadonlyArray<UnresolvedProfessionalTeam>;
 };
 
+type ProfessionalGameWindow = {
+  readonly league: FantasyLeague;
+  readonly from: string;
+  readonly to: string;
+  readonly source: GameSourceKey;
+  readonly teamCount: number;
+  readonly observedAt: DateTime.Utc;
+  readonly games: ReadonlyArray<ProfessionalGameFact>;
+  readonly unresolvedTeams: ReadonlyArray<UnresolvedProfessionalTeam>;
+};
+
 export class ProfessionalCalendarUnavailable extends Schema.TaggedError<
   ProfessionalCalendarUnavailable,
   { readonly brand: unique symbol }
 >()("professional_calendar.unavailable", {
   league: FantasyLeague,
-  reason: Schema.Literals(["no_source", "invalid_week"]),
+  reason: Schema.Literals(["no_source", "invalid_week", "invalid_window"]),
 }) {}
 
 export class ProfessionalGameFactStale extends Schema.TaggedError<
@@ -58,8 +69,23 @@ export type ProfessionalCalendarShape = {
     readonly league: FantasyLeague;
     readonly weekStart: string;
     readonly freshness: ProfessionalGameFreshness;
+    readonly notBefore?: DateTime.Utc;
   }) => Effect.Effect<
     ProfessionalGameWeek,
+    | ProfessionalCalendarUnavailable
+    | ProfessionalGameFactStale
+    | GameSourceFailure
+    | QueryPersistenceFailed
+  >;
+
+  readonly readGames: (input: {
+    readonly league: FantasyLeague;
+    readonly from: string;
+    readonly to: string;
+    readonly freshness: ProfessionalGameFreshness;
+    readonly notBefore?: DateTime.Utc;
+  }) => Effect.Effect<
+    ProfessionalGameWindow,
     | ProfessionalCalendarUnavailable
     | ProfessionalGameFactStale
     | GameSourceFailure

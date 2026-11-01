@@ -224,12 +224,17 @@ leagues, plus `remainingGames` for the scoring week where the provider publishes
 section states the unit or declares the capability unsupported with the reason: Yahoo publishes
 that remaining-game count only as a fantasy-team total of player-games (National Hockey League),
 and a football player plays at most one game per scoring week. The provider publishes no
-per-professional-team remaining-game count and no probable-starter field, so `get_rosters` reports
-`proTeam`, injury, and the bye week where published; its `playerSchedule` declaration states the
-per-player schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group
-publishes the games themselves. `search_players` reports provider ownership/started percentages
-without inventing either, and publishes the player's professional team as `proTeam`, the same
-abbreviation a roster entry carries, so a pool player joins a schedule without another read. It
+per-professional-team remaining-game count and no probable-starter field; Lineupkeep counts the
+professional team's games from the league's own schedule instead. `get_rosters` reports `proTeam`,
+injury, and the bye week where published; its `playerSchedule` declaration states the per-player
+schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group publishes the
+games themselves and each player's games remaining. `search_players` reports provider
+ownership/started percentages without inventing either, and publishes the player's professional team
+as `proTeam`, the same abbreviation a roster entry carries. Each pool row also carries
+`gamesRemaining`, joined from the row's professional-team key against the same professional games
+over the scoring window, so a pool player needs no roster row and no second read; a row with no key
+reports `unavailable` with the reason instead of a guessed count, and the result's `gamesRemaining`
+section states the window and observation time or why the league has no game source. It
 also accepts an optional `date`: on a date-covered league each row carries `opponent` as
 `{ status: "scheduled", opponent, home }`, `{ status: "no_game" }` when the provider published a
 null opponent, or `{ status: "not_published", detail }` when the field was absent, and the result's
@@ -390,11 +395,28 @@ team; football declares it unsupported with the bye-week alternative, and probab
 always declared unsupported because no read shape exposes them.
 
 The `schedule` group answers what a client cannot otherwise compute: which games a candidate has in
-a stated window, and which nights are light. For every rostered player it reports the dates they
-play, the opponent abbreviation, whether the game is home or away, and a game count for the window;
-`dates` carries a per-date count across the roster, so a light night needs no client-side arithmetic
-and no second schedule source. The section states its own `window` — the inclusive `start` and `end`
-dates and a `source` — and `observedAt`, so a client never has to assume which dates were covered.
+a stated window, how many games their professional team has left in it, and which nights are light.
+For every rostered player it reports the dates they play, the opponent abbreviation, whether the game
+is home or away, and a game count for the window; `dates` carries a per-date count across the roster,
+so a light night needs no client-side arithmetic and no second schedule source. Each player also
+carries `gamesRemaining` with the source of its own count: `professional_games` when it was counted
+from the league's professional games, `provider_opponent` when those games were unavailable and the
+provider's own roster schedule supplied it; the section aggregates the sources used. A count is
+never zero because a source was missing; when neither source can answer, the player or section says
+why.
+The section states its own `window` — the inclusive `start` and `end` dates and a `source` — and
+`observedAt`. The `gamesRemaining` section adds the exact dates its counts cover in `window` when
+the provider publishes them (otherwise the schedule's `period` bounds the count), and
+`gamesRemaining.observedAt` is the oldest observation among the sources used, so a client never has
+to assume which dates were covered or how old the count is.
+
+Off nights are declared once, in `offNights`: a date on which fewer than half of the league's
+professional teams play (`league_off_night`, maximum team share `0.5`). The per-date entries in
+`dates` publish `leagueGames` and `teamsPlaying` beside the roster count, so a client can apply a
+different threshold; each scheduled game carries `offNight` against the same definition. Hockey is
+the only sport whose professional games make this computable today. A football, baseball, or
+basketball league reports `offNights: { status: "unsupported", detail }`, and the `leagueGames` and
+`offNight` fields are absent with that reason, never false.
 `source` is `period` when the window is the league's own scoring period, `requested` when the call
 passed `window` or `days`, and `rest_of_week` when a league with no scoring period was read from the
 provider's current date through the end of that week. A player who does not play in the window is
@@ -402,8 +424,8 @@ provider's current date through the end of that week. A player who does not play
 
 A league the provider gives no period window is no longer a dead end: `get_team_summary` accepts a
 date `window` or a `days` count for the schedule, and a period-less date-scoped league defaults to
-the rest of the provider's current week. Games remaining in a period are genuinely undefined without
-a period, but games per date are not, and that is the lineup decision the client needs. When the
+the rest of the provider's current week. There is no scoring period to count, so games remaining is
+counted over the stated rest-of-week window instead, and games per date are published too. When the
 provider publishes neither a period nor a current date and the call passed neither argument, the
 section says so in one sentence and names `window`/`days` instead of inventing dates. An explicit
 `window` or `days` takes precedence over a scoring period and is marked `requested`. Coverage

@@ -73,7 +73,7 @@ export const nhlGameSource: Effect.Effect<GameSourceShape, never, PublicInternet
     return {
       key: sourceKey,
       capabilities: {
-        coverage: [{ league: "nhl", sport: "hockey" }],
+        coverage: [{ league: "nhl", sport: "hockey", teamCount: 32 }],
         weekDays,
         publishesStartTime: true,
         publishesVenueTimeZone: true,

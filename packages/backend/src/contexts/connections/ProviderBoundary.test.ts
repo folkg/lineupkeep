@@ -5,6 +5,7 @@ import { Array, DateTime, Effect, Layer, Redacted } from "effect";
 
 import { Connections } from "#contexts/connections/Connections.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
+import { GameSourceRegistry, gameSourceRegistryOf } from "#contexts/connections/GameSource.ts";
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
 
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
@@ -16,6 +17,7 @@ import { FantasyQueriesLive } from "./internal/FantasyQueriesLive.ts";
 import { planAssignments } from "./internal/LineupPlanning.ts";
 import { resolveTarget } from "./internal/LineupTarget.ts";
 import { ObservedFactRepository } from "./internal/ObservedFactRepository.ts";
+import { ProfessionalCalendarLive } from "./internal/ProfessionalCalendarLive.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
 import {
@@ -35,6 +37,11 @@ const ConnectionRepositoryTest = ConnectionRepository.layer.pipe(
 const ObservedFactRepositoryTest = ObservedFactRepository.layer.pipe(
   Layer.provide(ConnectionsDatabaseTest),
 );
+const EmptyGameSourceTest = Layer.succeed(GameSourceRegistry)(gameSourceRegistryOf([]));
+const ProfessionalCalendarTest = ProfessionalCalendarLive.pipe(
+  Layer.provideMerge(ObservedFactRepositoryTest),
+  Layer.provide(EmptyGameSourceTest),
+);
 
 const SecondProviderTestLayer = FantasyQueriesLive.pipe(
   Layer.provideMerge(ConnectionsLive),
@@ -45,7 +52,9 @@ const SecondProviderTestLayer = FantasyQueriesLive.pipe(
       Effect.succeed(ProviderRegistry.of(providerRegistryOf([secondProvider]))),
     ),
   ),
-  Layer.provide(ObservedFactRepositoryTest),
+  Layer.provideMerge(ObservedFactRepositoryTest),
+  Layer.provide(EmptyGameSourceTest),
+  Layer.provideMerge(ProfessionalCalendarTest),
   Layer.provide(
     ConnectionCredentialEncryption.forKey(
       ConnectionEncryptionKey.fromBytes({

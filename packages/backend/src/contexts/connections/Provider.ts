@@ -646,6 +646,7 @@ export type ProviderPlayerSearchResult = {
     readonly eligiblePositions: ReadonlyArray<string>;
     readonly availability: "free_agent" | "waiver" | "rostered" | "unknown";
     readonly proTeam: string | undefined;
+    readonly proTeamKey?: string | undefined;
     readonly opponent?: string | null;
     readonly status: {
       readonly value: ProviderPlayerStatus;

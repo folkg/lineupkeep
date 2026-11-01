@@ -580,6 +580,17 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
             { date: "2026-10-26", rosterGames: 0 },
             { date: "2026-10-27", rosterGames: 2 },
           ],
+          offNights: {
+            status: "unsupported",
+            detail:
+              "Off nights need the league's professional games, which are unavailable: This league has no professional-game source.",
+          },
+          gamesRemaining: {
+            status: "available",
+            sources: ["provider_opponent"],
+            observedAt: DateTime.makeUnsafe("2026-10-26T12:00:00.000Z"),
+            detail: "The counts come from the provider's own opponent fact.",
+          },
           players: [
             {
               player: Schema.decodeSync(PlayerRef)("r1.test"),
@@ -588,6 +599,11 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
               status: "scheduled",
               gameCount: 1,
               games: [{ date: "2026-10-27", opponent: "TOR", home: false }],
+              gamesRemaining: {
+                status: "available",
+                count: 1,
+                source: "provider_opponent",
+              },
             },
           ],
           detail: "Each rostered player's opponent on each of the 2 dates of scoring period 5.",

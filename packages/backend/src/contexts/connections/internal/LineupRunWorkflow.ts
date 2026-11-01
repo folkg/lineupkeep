@@ -276,6 +276,7 @@ export const LineupRunWorkflow = Machine.make({
           }),
         },
         RetryScheduled: retryWait,
+        Skipped: terminal("Skipped"),
         Blocked: terminal("Blocked"),
         Failed: terminal("Failed"),
       },
