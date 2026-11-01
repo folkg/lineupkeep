@@ -7,8 +7,10 @@ reviewer can tell a deliberate provider declaration from a leak.
 The first correction is [ADR 0007](adr/0007-provider-registry-and-planner-capability.md) with
 [ADR 0008](adr/0008-refusal-kinds-and-planner-cutover.md). The second — a provider publishes a final
 score rather than a scoring policy — is [ADR 0009](adr/0009-provider-score-ownership.md); the sections
-below marked _second pass_ were changed by it. The responsible-module map stays in
-[ARCHITECTURE.md](ARCHITECTURE.md#2-modules-and-seams).
+below marked _second pass_ were changed by it. The third sweep looked for provider-shaped _ideas_ that
+survive the import rule: sport-to-behaviour rules, provider wire vocabulary, a provider's numeric
+bounds, and capability claims the provider never made. Sections marked _third pass_ were changed by it.
+The responsible-module map stays in [ARCHITECTURE.md](ARCHITECTURE.md#2-modules-and-seams).
 
 ## Result
 
@@ -53,11 +55,15 @@ source won crosses the seam.
 
 - `fantasyDay`: time zone, `local-midnight` boundary, and the provider version used when pausing.
 - `sports`: the sports this provider serves.
-- `playerSearch`: accepted sorts, the sorts the provider itself orders, and the sports with weekly
-  statistic series.
+- `playerSearch`: accepted sorts, the sorts the provider itself orders, and whether its search rows
+  publish the value a weekly order sorts by (`weeklyOrderingValues`, _third pass_).
+- `statPeriods`: per sport, which statistic-period kinds the provider serves natively, by aggregating
+  daily reads, or not at all.
+- `scheduleRead.maximumDates`: how many dates one schedule read covers (_third pass_).
 - `publishesProjections`: whether the query surface can offer the projections group.
 - `limitations`: named, human-readable limitations by subject (`player_schedule`,
-  `probable_starters`, `projections`, `team_remaining_games`, `lock_timing`, `historical_seasons`).
+  `probable_starters`, `projections`, `team_remaining_games`, `per_team_games_played` (_third pass_),
+  `lock_timing`, `historical_seasons`).
 
 Generic query code renders and enforces those facts. It never infers them from a provider name.
 
@@ -69,6 +75,9 @@ Generic query code renders and enforces those facts. It never infers them from a
 | `sports`                                           | Discovery and team lists must filter to what the provider serves                     | Providers cover different sports                                                  |
 | `playerSearch.sorts`                               | A sort the provider refuses must be answered with a remedy, not forwarded            | Sort vocabularies differ                                                          |
 | `playerSearch.providerOrderedSorts`                | The query layer must not re-order a provider-ordered page                            | Another provider sorts fewer or more things itself                                |
+| `playerSearch.weeklyOrderingValues` (_third pass_) | A weekly order may only be offered where the rows publish the value it sorts by      | Another provider publishes the weekly value, or publishes none at all             |
+| `statPeriods` (per sport)                          | A period kind the provider cannot serve is refused with its remedy, not substituted  | Providers serve different period kinds natively or by aggregating daily reads     |
+| `scheduleRead.maximumDates` (_third pass_)         | The schedule section must state the bound the provider enforces                      | A provider with a shorter or longer schedule-read bound declares its own          |
 | `publishesProjections`                             | The `projections` group must say "unsupported" rather than silently empty            | Another provider publishes projections                                            |
 | `limitations`                                      | Unsupported reads must explain the provider's own limit                              | Every limit is provider-specific prose                                            |
 | `rosterCoverage` (`week` or `date`)                | Resolving a target period and writing a roster both branch on it                     | Weekly roster providers and dated roster providers both exist today               |
@@ -152,6 +161,34 @@ computed at all (no completed period, no published value), but a scheme whose sc
 placed now blocks the attempt instead of silently switching to a weaker scheme. Roster shape is not
 evidence about which measurement to trust.
 
+### Provider-shaped ideas that survived the import rule — third pass
+
+The import rule was already true, so this sweep looked for knowledge rather than dependencies: a
+generic module that decided something only the provider knows, a capability claim the provider never
+made, and a name that would mislead the next reader. Each hit is listed with its disposition.
+
+| Where                                                                                                                                          | Provider-specific idea                                                                                                                                                                                                               | Disposition                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/FantasyQueriesLive.ts` `searchPlayers`                                                                                               | Refused `statPeriod: "week"` for every provider with the fixed claim "the provider's player search publishes only season rank and stat values" — a fact about one provider's search payload, and a claim the provider never declared | **Real leak.** The declaration it needed already existed but was unread and misnamed (`weeklyStatSeriesSports`, which reads like the player-detail series `statPeriods` already declares). Replaced by `playerSearch.weeklyOrderingValues`; the refusal is now gated on it and the text names the declaration |
+| `QueryResults.ts` `statPeriod` description                                                                                                     | "Only `season` is offered: the provider publishes no weekly rank or stat value in its search payload"                                                                                                                                | **Real leak, same fact.** Description now states the condition ("only where the provider declares that its search rows publish the weekly value they order by") instead of asserting one provider's payload                                                                                                   |
+| `internal/FantasyQueriesLive.ts` `gamesPlayedUsageDetail`                                                                                      | Named one provider's wire query, `teams;out=games_played`, inside a generic explanation                                                                                                                                              | **Real leak.** The fact is now the declared `per_team_games_played` limitation; the generic layer renders `limitation(provider, "per_team_games_played")`                                                                                                                                                     |
+| `QueryResults.ts` `GamesPlayedUsage` description, `internal/FantasyQueriesLive.ts` `transactionRules.detailNote`, MCP `get_league` description | The same wire query repeated in three generic texts, and a claim about per-team games played made for every provider                                                                                                                 | **Real leak.** The wire fragment is gone; `detail` names the provider's declared limitation, and the duplicated claim is removed from the transaction-rules note                                                                                                                                              |
+| `QueryResults.ts` `window` / `days` descriptions, MCP `get_team_summary` description                                                           | Hardcoded "one schedule read covers at most 21 dates" — a numeric bound only the adapter enforces                                                                                                                                    | **Real leak.** Declared as `scheduleRead.maximumDates`; the schedule section's `detail` states the provider's own number, and the generic text points at it instead of naming one                                                                                                                             |
+| `QueryResults.ts` `percentOwnedDelta` / `percentStartedChange` descriptions                                                                    | "a scoring week in football, the provider's fantasy day in hockey" — a sport-to-window rule the generic layer does not implement                                                                                                     | **Real leak.** Both now say the provider's own change window and that it is not published with the row, so no period may be inferred                                                                                                                                                                          |
+| `apps/web/src/browser/teams/teamLabels.ts`, `browser/transactions/TransactionReviewPage.tsx`                                                   | `league === "nfl" ? "NFL" : "NHL"` and `sport === "football" ? "Football" : "Hockey"` — a closed two-value map over a four-value contract, which mislabels MLB and NBA                                                               | **Real leak and a visible bug.** Replaced by `contracts/connections/teamVocabulary.ts`, an exhaustive map over every declared sport and league, so a new value fails to compile instead of rendering the wrong label                                                                                          |
+| `apps/web/src/browser/landing/LandingPage.tsx`                                                                                                 | "The scoring period is a week in football and a day in hockey" — presentation stating a rule the code deliberately does not have                                                                                                     | **Real leak.** Copy now says the league decides whether a period is a week or a day. This is the one visible copy change, and it changed because the old sentence asserted a rule the product does not apply                                                                                                  |
+| `apps/web/src/browser/auth/AuthPage.tsx`                                                                                                       | "For Yahoo football and hockey leagues."                                                                                                                                                                                             | **Presentation only.** Kept: it names the sports the one live adapter serves, it is honest, and it drives no decision. When a second provider exists the connections flow must ask which provider, which is the product decision already recorded in ADR 0007                                                 |
+| `Provider.ts` `ProviderPlayerStatus`, `injuryCode`, `byeWeek`, `displayPosition`, roster slot names                                            | Injury codes, a bye week, and slot names that look like one sport's vocabulary                                                                                                                                                       | **Generic concepts that look provider-ish.** Kept: the provider publishes each value verbatim, no generic module compares or enumerates one, and a provider without byes reports null. `ProviderPlayerStatus` is the provider-neutral availability vocabulary the adapter maps its own codes into             |
+| `ProviderLeagueSettings.maxInningsPitched`, `statCategories`, `statModifiers`                                                                  | A baseball cap and a league's scoring context                                                                                                                                                                                        | **Declared league facts.** Kept: nullable, published only when the league declares one, and never branched on. The description says "a cap its sport does not apply is not manufactured"                                                                                                                      |
+| `internal/LineupPlanning.ts`, `internal/LineupTarget.ts`                                                                                       | None: slots, eligibility, coverage, and the target period all come from declarations                                                                                                                                                 | **No leak.** Confirmed by the second-provider test below                                                                                                                                                                                                                                                      |
+
+The `readMatchups` and `readPlayerHistory` inputs still take `ProviderScoringWeek` (_third pass,
+deferred_). That is a real coverage assumption in the seam: a provider whose matchups are dated cannot
+express one. Fixing it changes `ProviderShape` and the adapter together, which this chunk deliberately
+does not do; generic code degrades honestly instead, refusing a matchup read for a league with no
+declared period window. It is recorded here so the next provider's work starts from the fact rather
+than the assumption.
+
 ### Presentation and tooling
 
 | Where                                                                               | Provider-specific fact                                                          | Disposition                                                                                                        |
@@ -165,14 +202,14 @@ evidence about which measurement to trust.
 
 ### Examined and kept, with reasons
 
-| Candidate                                                | Disposition                                                                                                                                                                                                                               |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `displayPosition` on roster, search, and details         | Kept. It is the provider's own human-facing position label, rendered verbatim; generic code never parses or compares it, and synthesising a label across providers would be worse. Eligibility and primary position carry every decision. |
-| Roster slot names (`QB`, `W/R/T`, `BN`, `IR+`, ...)      | Kept as opaque identifiers. The provider publishes them, players declare eligibility by name, and the solver treats both as strings. No generic module enumerates a slot name.                                                            |
-| Week-versus-date periods                                 | Kept as a declared fact (`rosterCoverage`, `ProviderRosterCoverage`, `ProviderPeriodWindow`). Weekly and dated rosters both exist in the live account, and target resolution needs the provider's own range.                              |
-| Sport literals in public contracts                       | Kept, unchanged from ADR 0007's deferral: the contracts name football and hockey while provider-declared sports are already accepted at the persistence edge. Generic planning no longer branches on sport at all.                        |
-| `custom_policy` / `custom-policy/2` implementation names | Kept. They name which implementation acted (the product's planner or the provider's native action), not a scoring rule; the version was bumped because planning moved.                                                                    |
-| Provider limitations prose                               | Kept as provider-authored text, consumed by subject. It is the only place a provider explains what it cannot publish.                                                                                                                     |
+| Candidate                                                | Disposition                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `displayPosition` on roster, search, and details         | Kept. It is the provider's own human-facing position label, rendered verbatim; generic code never parses or compares it, and synthesising a label across providers would be worse. Eligibility and primary position carry every decision.                                                                                                                                                               |
+| Roster slot names (`QB`, `W/R/T`, `BN`, `IR+`, ...)      | Kept as opaque identifiers. The provider publishes them, players declare eligibility by name, and the solver treats both as strings. No generic module enumerates a slot name.                                                                                                                                                                                                                          |
+| Week-versus-date periods                                 | Kept as a declared fact (`rosterCoverage`, `ProviderRosterCoverage`, `ProviderPeriodWindow`). Weekly and dated rosters both exist in the live account, and target resolution needs the provider's own range.                                                                                                                                                                                            |
+| Sport and league literals in public contracts            | Kept, unchanged from ADR 0007's deferral: `FantasySport` and `FantasyLeague` enumerate four values while a provider declares the subset it serves. Generic planning never branches on sport, and generic presentation now maps every declared value exhaustively (`teamVocabulary.ts`) rather than comparing one. Widening the vocabulary is still deferred to a provider that publishes another sport. |
+| `custom_policy` / `custom-policy/2` implementation names | Kept. They name which implementation acted (the product's planner or the provider's native action), not a scoring rule; the version was bumped because planning moved.                                                                                                                                                                                                                                  |
+| Provider limitations prose                               | Kept as provider-authored text, consumed by subject. It is the only place a provider explains what it cannot publish.                                                                                                                                                                                                                                                                                   |
 
 ## Provider-specific by nature
 
@@ -204,7 +241,7 @@ adapter. They stay in the hosted-browser modules that drive the provider's own s
 - **Rejected:** any import from a scoring module into the application, Effect, persistence, transport,
   the solver, or the brand — `provider-scoring-is-self-contained`.
 
-The `repository` lint plugin adds three rules:
+The `repository` lint plugin adds five rules:
 
 - `provider-scoring-vocabulary` rejects a fixed list of scoring identifiers (`communityStartRate`,
   `valueSource`, `startCutPreference`, `scoringProfile`, `scorePeriod`, `mean-points-per-period`,
@@ -216,6 +253,14 @@ The `repository` lint plugin adds three rules:
 - `provider-identity` rejects `Yahoo` or `yahoo` in generic source outside the adapter, the
   composition root, and the keyed presentation declarations, so a provider-name branch cannot
   reappear as a string comparison.
+- `provider-sport-rule` (_third pass_) rejects a comparison of a sport or league against a declared
+  literal — `sport === "football"`, `league === "nfl"` — in any generic `src/` module, so a generic
+  layer cannot select behavior by sport. The remedy is the provider's declared capability or an
+  exhaustive map over every declared value.
+- `provider-wire-vocabulary` (_third pass_) rejects one provider's request path and query fragments
+  (`fantasy/v2/`, `;out=`, `;sort_type=`, `fantasysports`) in the same generic source, so a wire key
+  cannot become an explanation a person reads. The remedy is a declared capability or a named
+  limitation.
 
 Each rule is covered by acceptance and rejection fixtures in `scripts/dependencyCruiser.test.ts`. A
 deliberate violation was added to the real tree — a single import of `YahooProvider.ts` from
@@ -252,6 +297,43 @@ and a native action name added to a generic scopes module:
 ```text
 packages/backend/src/contexts/connections/LineupScopes.ts:15:9: error repository(provider-action-vocabulary): `start-active` names one provider's native action; keep it inside the provider adapter and expose only the generic run outcome.
 ```
+
+The third-pass rules are proved by fixtures in the same suite, and each was also run against a real
+generic module. A sport rule added to `contexts/connections/LineupScopes.ts`:
+
+```text
+packages/backend/src/contexts/connections/LineupScopes.ts:9:55: error repository(provider-sport-rule): `sport === "football"` makes a generic module decide by sport or league; read the fact the provider declares on ProviderShape.capabilities, or map every declared value exhaustively instead of comparing one.
+```
+
+and a wire fragment added to `contexts/connections/QueryResults.ts`:
+
+```text
+packages/backend/src/contexts/connections/QueryResults.ts:1607:37: error repository(provider-wire-vocabulary): `;out=` is one provider's wire vocabulary; keep request paths, query fragments, and response keys inside the adapter and expose the fact as a declared capability or a named limitation.
+```
+
+Both accept the remedy: a `capabilities.sports.includes(sport)` check and an exhaustive
+`Record<FantasySport, string>` map pass, and the wire vocabulary stays legal inside the adapter and its
+scoring modules.
+
+## A second provider, exercised through the generic path
+
+`internal/SecondProviderFakeTest.ts` declares a provider that differs from the first in every fact this
+audit names: date roster coverage instead of a scoring week, a rotisserie league, its own slot names
+(`PG`, `SG`, `UTIL`, `BENCH`, `RESERVE`), a different fantasy-day time zone and version, a weekly
+search order its rows can explain, its own schedule-read bound, and no projections of the first
+provider's kind. `ProviderBoundary.test.ts` drives the same generic code with it and asserts that:
+
+- `internal/LineupPlanning.ts` places the roster using that provider's slot names, kinds, and
+  eligibility with no branch for either provider;
+- `internal/LineupTarget.ts` resolves a dated target and refuses a weekly one, from the declared
+  coverage alone;
+- `FantasyQueries.searchPlayers` accepts a weekly order because that provider declares
+  `weeklyOrderingValues`, where the first provider's identical call is refused — the same generic
+  gate, two declarations, no edit;
+- `get_team_summary` states that provider's own `scheduleRead.maximumDates` in `schedule.detail`, and
+  its league reports the declared rotisserie format.
+
+That test is the standing proof that adding a provider is an adapter plus a registry entry.
 
 ## AutoCoach breadth review
 

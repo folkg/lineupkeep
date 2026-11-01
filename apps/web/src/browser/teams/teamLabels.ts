@@ -5,9 +5,10 @@ import type {
   TeamRosterTrendView,
   TeamView,
 } from "#contracts/connections/teamContract.ts";
+import { leagueDisplayName, sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
 export function teamContextLabel(team: TeamView): string {
-  return `${sportLabel(team.sport)} · ${leagueLabel(team.league)} ${String(team.season)}`;
+  return `${sportDisplayName(team.sport)} · ${leagueDisplayName(team.league)} ${String(team.season)}`;
 }
 
 export function lastCheckLine(run: LineupRunView, now?: Date): string {
@@ -183,14 +184,6 @@ export function rosterTrendLabel(trend: TeamRosterTrendView): string {
 
 function moveCount(count: number, noun: "add" | "drop"): string {
   return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-function leagueLabel(league: TeamView["league"]): string {
-  return league === "nfl" ? "NFL" : "NHL";
-}
-
-function sportLabel(sport: TeamView["sport"]): string {
-  return sport === "football" ? "Football" : "Hockey";
 }
 
 export type QuietGroupSpan = {

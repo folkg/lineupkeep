@@ -41,10 +41,19 @@ named reason.
 **Capabilities are declared facts, not inferred brand behavior.**
 
 Each provider reports its fantasy-day policy, supported sports, player-search sorts, which sorts it
-orders itself, which sports publish weekly statistic series, whether it publishes projections, and
-named limitations (for example a sport without a point-total sort, lock timing, or historical
-seasons). Generic layers render and enforce those facts. They do not contain provider prose, provider
-names, or per-provider branches. How a provider constructs a score is not a declared capability.
+orders itself, whether its search rows publish the value a weekly order sorts by, which statistic
+periods it serves per sport, how many dates one schedule read covers, whether it publishes
+projections, and named limitations (for example a sport without a point-total sort, lock timing,
+historical seasons, or a per-team games-played count). Generic layers render and enforce those facts.
+They do not contain provider prose, provider names, per-provider branches, or a numeric bound only
+the adapter enforces. How a provider constructs a score is not a declared capability.
+
+**A capability the generic layer does not read is a liability, not a declaration.** The first
+`playerSearch` table declared which sports publish weekly statistic series, and nothing read it while
+the query layer refused every weekly search order with a sentence about one provider's payload. The
+declaration was replaced by the fact the decision actually needs — whether the search rows publish the
+value a weekly order sorts by — and the decision now reads it. A declared fact with no reader is
+either dead or a claim the provider never made, and both mislead the next reader.
 
 **Planning is a provider capability; the worker stays generic.**
 
@@ -71,6 +80,19 @@ label and a human-readable detail.
 A dependency-cruiser rule forbids imports of a provider adapter from anywhere except the adapter's own
 directory and the composition root, with acceptance and rejection fixtures. The rule is proved against
 a deliberate generic-to-Yahoo import in the architecture test suite.
+
+The import rule was not enough. It cannot see a generic module that compares a sport to a literal, or
+one that repeats a provider's wire query as an explanation, so the `repository` lint plugin adds
+`provider-sport-rule` and `provider-wire-vocabulary` beside the existing scoring, action, and identity
+rules. The first rejects `sport === "football"` and `league === "nfl"` in generic source, with the
+provider's declared capability or an exhaustive map over every declared value as the remedy. The
+second rejects a provider request path or query fragment (`fantasy/v2/`, `;out=`, `;sort_type=`,
+`fantasysports`) in the same source. Both have acceptance and rejection fixtures, and both were proved
+against deliberate violations in the real tree before being reverted.
+
+A second test adapter with different coverage, league format, slots, fantasy day, and schedule bound
+runs through the same generic planner, target resolver, and query service, so "a provider is an
+adapter plus a registry entry" is a test rather than a claim.
 
 ## Consequences
 
@@ -101,6 +123,11 @@ a deliberate generic-to-Yahoo import in the architecture test suite.
 
 ## Deferred
 
+- The `readMatchups` and `readPlayerHistory` inputs still take a scoring week. A provider whose
+  matchups are dated cannot express one through the seam. Changing it edits `ProviderShape` and the
+  adapter together, so generic code degrades honestly — it refuses a matchup read for a league with no
+  declared period window — and the gap is recorded in the [provider boundary
+  audit](../PROVIDER-BOUNDARY-AUDIT.md) rather than left implicit.
 - Widening the product's sport and league-code vocabulary beyond football and hockey. The seam now takes
   provider-declared sports and free-form league codes at the persistence edge, but the public contracts
   and UI still name the two live sports; widening waits for a provider that publishes another sport.

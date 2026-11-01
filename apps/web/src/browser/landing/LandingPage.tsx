@@ -53,8 +53,8 @@ export function LandingPage(): JSX.Element {
                 <Stack gap="xs">
                   <Text weight="semibold">Scoring periods</Text>
                   <Text size="caption" tone="muted">
-                    The scoring period is a week in football and a day in hockey. Lineupkeep sets
-                    the lineup for whichever is current.
+                    Your league decides whether a scoring period is a week or a day. Lineupkeep sets
+                    the lineup for whichever period is current.
                   </Text>
                 </Stack>
                 <Stack gap="xs">

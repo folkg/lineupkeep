@@ -227,7 +227,7 @@ const GamesPlayedUsage = Schema.Struct({
 }).pipe(
   Schema.annotate({
     description:
-      "Per-team games played is not published. The provider's `teams;out=games_played` read returns an empty per-team node, and its roster, standings, and players reads refuse that output, so only the league's games-played cap is known.",
+      "Per-team games played is not published. `detail` carries the provider's own declared limitation, so only the league's games-played cap is known.",
   }),
 );
 export type AcquisitionUsage = typeof AcquisitionUsage.Type;
@@ -706,7 +706,7 @@ export const SearchPlayersInput = Schema.Struct({
     Schema.Literals(["season", "week"]).pipe(
       Schema.annotate({
         description:
-          "Period for a `stat` sort. Only `season` is offered: the provider publishes no weekly rank or stat value in its search payload, so a weekly order cannot be shown in the rows. A `week` value answers with the remedy.",
+          "Period for a `stat` sort. `season` orders by the provider's season rank or stat value. `week` is available only where the provider declares that its search rows publish the weekly value they order by; otherwise it answers with the remedy instead of an unexplainable order.",
       }),
     ),
   ),
@@ -763,7 +763,7 @@ const SearchPlayer = Schema.Struct({
   percentOwnedDelta: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Change in percent owned over the provider's current reporting window, which for this provider is its ownership week rather than the fantasy day. This is the only ownership-change field; null means the provider published no change for this row.",
+        "Change in percent owned over the provider's own ownership-change window. The provider does not publish that window with the row, so do not read it as the fantasy day or as a scoring period. This is the only ownership-change field; null means the provider published no change for this row.",
     }),
   ),
   percentStarted: Schema.NullOr(Schema.Finite).pipe(
@@ -775,7 +775,7 @@ const SearchPlayer = Schema.Struct({
   percentStartedChange: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Change in percent started over the provider's current started-percentage window (a scoring week in football, the provider's fantasy day in hockey). Null means the provider published no change for this row.",
+        "Change in percent started over the provider's own started-percentage window. The provider does not publish that window with the row, so do not read it as the fantasy day or as a scoring period. Null means the provider published no change for this row.",
     }),
   ),
   actualRank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).pipe(
@@ -1252,7 +1252,7 @@ export const GetTeamSummaryInput = Schema.Struct({
     Schema.Struct({ start: SummaryWindowDate, end: SummaryWindowDate }).pipe(
       Schema.annotate({
         description:
-          "Inclusive date window for the `schedule` group. It is used instead of the league's scoring period and is the way to read a schedule for a league whose provider publishes no period, such as a rotisserie hockey league. The provider bounds one schedule read to 21 dates, so a wider window is refused with that limit rather than truncated.",
+          "Inclusive date window for the `schedule` group. It is used instead of the league's scoring period and is the way to read a schedule for a league whose provider publishes no scoring period. The provider bounds one schedule read to the number of dates it declares, and the result's `schedule.detail` states that number; a wider window is refused with the provider's limit rather than truncated.",
       }),
     ),
   ),
@@ -1260,7 +1260,7 @@ export const GetTeamSummaryInput = Schema.Struct({
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(366)).pipe(
       Schema.annotate({
         description:
-          "Length in days of the `schedule` window, counted from the provider's current date for the league. It is used only when `window` is absent, and takes precedence over the league's scoring period. The provider bounds one schedule read to 21 dates and refuses a longer window with that limit rather than truncating it, so a longer `days` value is refused too. Omitting both `window` and `days` keeps the scoring period when the league has one and otherwise reads from the provider's current date through the end of that week.",
+          "Length in days of the `schedule` window, counted from the provider's current date for the league. It is used only when `window` is absent, and takes precedence over the league's scoring period. The provider bounds one schedule read to the number of dates it declares, and the result's `schedule.detail` states that number; a longer window is refused with the provider's limit rather than truncated, so a longer `days` value is refused too. Omitting both `window` and `days` keeps the scoring period when the league has one and otherwise reads from the provider's current date through the end of that week.",
       }),
     ),
   ),
@@ -1499,7 +1499,7 @@ const SummarySchedule = Schema.Union([
     period: Schema.optional(QueryPeriod).pipe(
       Schema.annotate({
         description:
-          "The scoring period that bounds this schedule. Absent for a league whose provider publishes no scoring period, such as a rotisserie league; `window` states the dates covered instead.",
+          "The scoring period that bounds this schedule. Absent for a league whose provider publishes no scoring period; `window` states the dates covered instead.",
       }),
     ),
     window: Schema.optional(SummaryScheduleWindow).pipe(

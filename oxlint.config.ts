@@ -637,6 +637,8 @@ export default defineConfig({
     "repository/provider-scoring-vocabulary": "error",
     "repository/provider-action-vocabulary": "error",
     "repository/provider-identity": "error",
+    "repository/provider-sport-rule": "error",
+    "repository/provider-wire-vocabulary": "error",
   },
   overrides: [
     { files: ["**/*.{js,cjs,mjs}"], rules: { "no-redeclare": "error" } },

@@ -626,7 +626,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
   );
 
   expect(response.status).toBe(200);
-  expect(JSON.stringify(listed)).toContain("21 dates");
+  expect(JSON.stringify(listed)).toContain("schedule.detail");
   expect(await json(response)).toMatchObject({
     result: {
       isError: false,
@@ -1421,7 +1421,7 @@ it("publishes the accepted player-statistics periods and the compact standings f
   const search = JSON.stringify(tool("search_players").outputSchema);
   expect(search).toContain("percentOwnedDelta");
   expect(search).not.toContain("percentOwnedChange");
-  expect(search).toContain("ownership week");
+  expect(search).toContain("ownership-change window");
   expect(search).toContain("injured_reserve");
   expect(search).toContain("observedAt");
 

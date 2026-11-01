@@ -216,6 +216,41 @@ const plugin = {
         },
       }),
     },
+    "provider-sport-rule": {
+      create: (context: CommentsRuleContext) => ({
+        Program: () => {
+          if (!isGenericSourceModule(context.filename)) {
+            return;
+          }
+          for (const match of context.sourceCode.text.matchAll(sportOrLeagueComparison)) {
+            sourceReport(
+              context,
+              match.index,
+              `\`${match[0]}\` makes a generic module decide by sport or league; read the fact the provider declares on ProviderShape.capabilities, or map every declared value exhaustively instead of comparing one.`,
+            );
+          }
+        },
+      }),
+    },
+    "provider-wire-vocabulary": {
+      create: (context: CommentsRuleContext) => ({
+        Program: () => {
+          if (!isGenericSourceModule(context.filename)) {
+            return;
+          }
+          for (const [term, offset] of occurrencesOf(
+            context.sourceCode.text,
+            providerWireVocabulary,
+          )) {
+            sourceReport(
+              context,
+              offset,
+              `\`${term}\` is one provider's wire vocabulary; keep request paths, query fragments, and response keys inside the adapter and expose the fact as a declared capability or a named limitation.`,
+            );
+          }
+        },
+      }),
+    },
     "no-intrinsic-elements": {
       create: (context: DesignSystemRuleContext) => ({
         JSXOpeningElement: (node: DesignSystemJSXOpeningElement) => {
@@ -1005,6 +1040,16 @@ const providerActionVocabulary: ReadonlyArray<string> = [
   "start_active",
   "start active",
 ];
+
+const providerWireVocabulary: ReadonlyArray<string> = [
+  ";out=",
+  ";sort_type=",
+  "fantasysports",
+  "fantasy/v2/",
+];
+
+const sportOrLeagueComparison =
+  /\b(?:sport|league)\s*[!=]==?\s*["'](?:football|hockey|baseball|basketball|nfl|nhl|mlb|nba)["']/gu;
 
 const providerScoringOwners = [
   "/contexts/connections/internal/yahoo/",

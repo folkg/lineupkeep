@@ -883,10 +883,10 @@ export const FantasyQueriesLive = Layer.effect(
           detail: `This provider does not accept the \`${sort}\` player sort. Choose one of: ${playerSearch.sorts.join(", ")}.`,
         });
       }
-      if (statPeriod === "week") {
+      if (statPeriod === "week" && !playerSearch.weeklyOrderingValues) {
         return yield* QuerySelectionInvalid.make({
           detail:
-            "The provider's player search publishes only season rank and stat values, so a weekly ordering cannot be shown in the rows. Use statPeriod `season`, or sort by name, position, or ownership.",
+            "This provider's player search publishes no weekly rank or stat value, so a weekly ordering cannot be shown in the rows. Use statPeriod `season`, or sort by name, position, or ownership.",
         });
       }
       if (sort === "stat" && input.stat === undefined) {
@@ -1985,7 +1985,7 @@ export const FantasyQueriesLive = Layer.effect(
                 usage: current.acquisitionUsage,
                 gamesPlayedUsage: {
                   status: "not_published",
-                  detail: gamesPlayedUsageDetail,
+                  detail: limitation(context.provider, "per_team_games_played"),
                 },
               };
 
@@ -2256,6 +2256,7 @@ export const FantasyQueriesLive = Layer.effect(
             period,
             window: scheduleWindow,
             dates: schedule.dates,
+            maximumDates: context.provider.capabilities.scheduleRead.maximumDates,
           }),
         };
         coverageEntries.push(
@@ -3231,20 +3232,22 @@ function schedulePeriodDetail(input: {
   readonly period: QueryPeriod | undefined;
   readonly window: SummaryScheduleWindow | undefined;
   readonly dates: ReadonlyArray<string>;
+  readonly maximumDates: number;
 }): string {
   if (input.coverage === "week") {
     return `Scoring week ${String(input.period?.week)} opponents only. The provider publishes no start time, no per-week game count, and no season-long schedule.`;
   }
+  const bound = ` One schedule read covers at most ${String(input.maximumDates)} dates; a wider window is refused rather than truncated.`;
   const range = input.window === undefined ? "" : ` (${input.window.start} to ${input.window.end})`;
   const count = String(input.dates.length);
   switch (input.window?.source) {
     case "requested":
-      return `Opponents on each of the ${count} dates of the requested window${range}. The provider publishes no start time or season-long schedule.`;
+      return `Opponents on each of the ${count} dates of the requested window${range}. The provider publishes no start time or season-long schedule.${bound}`;
     case "rest_of_week":
-      return `Opponents on each of the ${count} dates of the rest of the provider's current week${range}. The provider publishes no start time or season-long schedule; pass \`window\` or \`days\` for other dates.`;
+      return `Opponents on each of the ${count} dates of the rest of the provider's current week${range}. The provider publishes no start time or season-long schedule; pass \`window\` or \`days\` for other dates.${bound}`;
     case "period":
     case undefined:
-      return `Opponents on each of the ${count} dates of scoring period ${String(input.period?.week)}${range}. The provider publishes no start time or season-long schedule.`;
+      return `Opponents on each of the ${count} dates of scoring period ${String(input.period?.week)}${range}. The provider publishes no start time or season-long schedule.${bound}`;
   }
 }
 
@@ -3523,7 +3526,7 @@ function leagueTransactionRules(
       inningsPitched: declared(league.maxInningsPitched),
     },
     detailNote:
-      "Every rule is either published with the league's declared value or `not_set`. `not_set` means the league declares no such rule, never zero and never a per-team count; a cap that does not apply to the league's sport, such as innings in football, is also `not_set`. `timing.weeklyDeadline` keeps the provider's raw value, including an empty string, and `timing.rosterChange` decodes it into a provider-neutral rule with its source fields and raw values. Each team's acquisition usage is published with its standings row beside these limits, and the provider publishes no per-team games-played count, so only the games-played cap is known.",
+      "Every rule is either published with the league's declared value or `not_set`. `not_set` means the league declares no such rule, never zero and never a per-team count; a cap that does not apply to the league's sport, such as innings in football, is also `not_set`. `timing.weeklyDeadline` keeps the provider's raw value, including an empty string, and `timing.rosterChange` decodes it into a provider-neutral rule with its source fields and raw values. Each team's acquisition usage is published with its standings row beside these limits.",
   };
 }
 
@@ -3532,9 +3535,6 @@ function declared<T>(
 ): { readonly status: "published"; readonly value: T } | { readonly status: "not_set" } {
   return value === undefined ? { status: "not_set" } : { status: "published", value };
 }
-
-const gamesPlayedUsageDetail =
-  "The provider publishes no per-team games-played count: its `teams;out=games_played` read returns an empty per-team node, and its roster, standings, and players reads refuse that output, so only the league's games-played cap is known.";
 
 type AcquisitionLimitValues = {
   readonly weekly: number | undefined;

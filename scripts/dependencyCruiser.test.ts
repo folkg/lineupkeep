@@ -1495,3 +1495,59 @@ it.each([
 
   expect(result.status, result.output).toBe(0);
 });
+
+it.each([
+  [
+    "a sport literal",
+    'export const label = (sport: string): string => (sport === "football" ? "F" : "H");',
+  ],
+  [
+    "a league literal",
+    'export const label = (league: string): string => (league === "nfl" ? "N" : "H");',
+  ],
+])("rejects a generic module deciding by %s", async (_name, source) => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/connections/TeamLabels.ts": source,
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("repository(provider-sport-rule)");
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain("decide by sport or league");
+});
+
+it.each([
+  [
+    "a declared-capability read",
+    "export const decide = (sports: ReadonlyArray<string>, sport: string): boolean => sports.includes(sport);",
+  ],
+  [
+    "an exhaustive declared-value map",
+    'const names: Readonly<Record<"football" | "hockey", string>> = { football: "Football", hockey: "Hockey" }; export const label = (sport: "football" | "hockey"): string => names[sport];',
+  ],
+])("accepts %s in a generic module", async (_name, source) => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/connections/TeamLabels.ts": source,
+  });
+
+  expect(result.status, result.output).toBe(0);
+});
+
+it("rejects a provider wire fragment in generic code", async () => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/connections/QueryResults.ts":
+      'export const detail = "its `teams;out=games_played` read returns an empty node";',
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("repository(provider-wire-vocabulary)");
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain("one provider's wire vocabulary");
+});
+
+it.each([
+  "packages/backend/src/contexts/connections/internal/yahoo/YahooProvider.ts",
+  "packages/backend/src/contexts/connections/internal/provider-scoring/LineupScore.ts",
+])("accepts a provider wire fragment in %s", async (path) => {
+  const result = await checkLint({ [path]: 'export const path = "/fantasy/v2/league;out=stats";' });
+
+  expect(result.status, result.output).toBe(0);
+});

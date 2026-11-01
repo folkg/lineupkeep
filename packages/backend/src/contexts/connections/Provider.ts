@@ -61,6 +61,7 @@ const ProviderLimitationSubject = Schema.Literals([
   "probable_starters",
   "projections",
   "team_remaining_games",
+  "per_team_games_played",
   "lock_timing",
   "historical_seasons",
 ]);
@@ -77,9 +78,12 @@ export type ProviderCapabilities = {
   readonly playerSearch: {
     readonly sorts: ReadonlyArray<ProviderPlayerSearchSort>;
     readonly providerOrderedSorts: ReadonlyArray<ProviderPlayerSearchSort>;
-    readonly weeklyStatSeriesSports: ReadonlyArray<FantasySport>;
+    readonly weeklyOrderingValues: boolean;
   };
   readonly statPeriods: Readonly<Record<FantasySport, ProviderPeriodSupport>>;
+  readonly scheduleRead: {
+    readonly maximumDates: number;
+  };
   readonly publishesProjections: boolean;
   readonly limitations: ReadonlyArray<ProviderLimitation>;
 };

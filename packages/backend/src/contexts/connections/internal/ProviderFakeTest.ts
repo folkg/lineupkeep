@@ -915,7 +915,7 @@ const fakeCapabilities: ProviderCapabilities = {
   playerSearch: {
     sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
     providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
-    weeklyStatSeriesSports: ["football"],
+    weeklyOrderingValues: false,
   },
   statPeriods: {
     football: {
@@ -959,6 +959,7 @@ const fakeCapabilities: ProviderCapabilities = {
     },
   },
   publishesProjections: false,
+  scheduleRead: { maximumDates: 21 },
   limitations: [
     {
       subject: "player_schedule",
@@ -978,6 +979,11 @@ const fakeCapabilities: ProviderCapabilities = {
       subject: "team_remaining_games",
       detail:
         "This provider publishes no remaining-game count for football: a player plays at most one game per scoring week, and each roster entry carries the bye week instead.",
+    },
+    {
+      subject: "per_team_games_played",
+      detail:
+        "This provider publishes no per-team games-played count: its league settings carry only the league's games-played cap.",
     },
     {
       subject: "lock_timing",

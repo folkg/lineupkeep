@@ -68,7 +68,7 @@ export const yahooCapabilities: ProviderCapabilities = {
   playerSearch: {
     sorts: ["name", "position", "ownership", "actual_rank", "overall_rank", "stat"],
     providerOrderedSorts: ["actual_rank", "overall_rank", "stat"],
-    weeklyStatSeriesSports: ["football"],
+    weeklyOrderingValues: false,
   },
   statPeriods: {
     football: {
@@ -103,6 +103,7 @@ export const yahooCapabilities: ProviderCapabilities = {
     basketball: unsupportedSportPeriods("This provider does not serve basketball."),
   },
   publishesProjections: false,
+  scheduleRead: { maximumDates: 21 },
   limitations: [
     {
       subject: "player_schedule",
@@ -122,6 +123,11 @@ export const yahooCapabilities: ProviderCapabilities = {
       subject: "team_remaining_games",
       detail:
         "Yahoo publishes no remaining-game count for football: a player plays at most one game per scoring week, and each roster entry carries the bye week instead.",
+    },
+    {
+      subject: "per_team_games_played",
+      detail:
+        "Yahoo publishes no per-team games-played count: its teams games-played output returns an empty per-team node, and its roster, standings, and players reads refuse that output, so only the league's games-played cap is known.",
     },
     {
       subject: "lock_timing",

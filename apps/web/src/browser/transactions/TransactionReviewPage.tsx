@@ -25,6 +25,7 @@ import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
+import { leagueDisplayName, sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 import type {
   TransactionReviewExecutionView,
   TransactionReviewItemView,
@@ -349,7 +350,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
           </TextLink>
         </Heading>
         <Text size="caption" tone="muted">
-          {leagueLabel(props.team.team.league)} · {sportLabel(props.team.team.sport)}{" "}
+          {leagueDisplayName(props.team.team.league)} · {sportDisplayName(props.team.team.sport)}{" "}
           {String(props.team.team.season)}
         </Text>
         <Show when={props.team.budget}>
@@ -1097,14 +1098,6 @@ function moveCount(count: number): string {
 
 function teamCount(count: number): string {
   return `${String(count)} ${count === 1 ? "team" : "teams"}`;
-}
-
-function leagueLabel(league: TransactionReviewTeamView["team"]["league"]): string {
-  return league === "nfl" ? "NFL" : "NHL";
-}
-
-function sportLabel(sport: TransactionReviewTeamView["team"]["sport"]): string {
-  return sport === "football" ? "Football" : "Hockey";
 }
 
 type TransactionReviewPageProps = {
