@@ -632,7 +632,6 @@ export type ProviderPlayerSearchInput = ProviderSessionMaterial & {
   readonly statId: number | undefined;
   readonly statType: ProviderStatBasis["type"];
   readonly limit: number;
-  readonly date?: string | undefined;
 };
 
 export type ProviderPlayerStatus = "healthy" | "day_to_day" | "out" | "injured_reserve" | "unknown";
@@ -647,7 +646,6 @@ export type ProviderPlayerSearchResult = {
     readonly availability: "free_agent" | "waiver" | "rostered" | "unknown";
     readonly proTeam: string | undefined;
     readonly proTeamKey?: string | undefined;
-    readonly opponent?: string | null;
     readonly status: {
       readonly value: ProviderPlayerStatus;
       readonly code: string | undefined;

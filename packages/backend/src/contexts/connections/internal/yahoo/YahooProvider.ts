@@ -877,8 +877,6 @@ export const yahooProvider = Effect.gen(function* () {
       input.sort === "stat"
         ? "ownership,percent_owned,percent_started,ranks,stats,transactions"
         : "ownership,percent_owned,percent_started,ranks,transactions";
-    const date = input.date === undefined ? "" : `;type=date;date=${input.date}`;
-    const opponent = input.date === undefined ? "" : "opponent,";
     const payload = yield* readJson(internet, {
       operation: "search_players",
       origin: readOrigin,
@@ -887,8 +885,7 @@ export const yahooProvider = Effect.gen(function* () {
         status +
         `;sort=${sortValue}${sortType}` +
         `;count=${String(limit)}${search}` +
-        date +
-        `;out=${opponent}${out}`,
+        `;out=${out}`,
       query: { format: "json" },
       cookie,
       normalize: true,
@@ -2868,9 +2865,6 @@ function toSearchPlayer(
     ...(optionalNonEmpty(player.editorial_team_key ?? "") === undefined
       ? {}
       : { proTeamKey: optionalNonEmpty(player.editorial_team_key ?? "") }),
-    ...(player.opponent === undefined
-      ? {}
-      : { opponent: optionalNonEmpty(player.opponent ?? "") ?? null }),
     status: {
       value: injury.value,
       code: injury.code,
@@ -4124,7 +4118,6 @@ const SearchPlayerPayload = Schema.Struct({
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
   editorial_team_abbr: Schema.optional(Schema.String),
   editorial_team_key: Schema.optional(Schema.String),
-  opponent: Schema.optional(Schema.NullOr(Schema.String)),
   ownership: Schema.optional(PlayerOwnership),
   percent_owned: Schema.optional(PercentOwned),
   percent_started: Schema.optional(PercentOwned),

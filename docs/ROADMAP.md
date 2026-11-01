@@ -99,8 +99,10 @@ What the client filed after retesting the deploy, minus the emergency handled se
 
 Shipped: the three leagues reported as `not_set` publish `weekly_deadline: ""`; the raw value is kept
 and `timing.rosterChange` publishes a sourced rule. The league player pool is date-addressable through
-`type=date`, and `search_players` uses it only for date-covered leagues; the shapes tried are recorded
-in [RESEARCH.md](fantasy-manager/RESEARCH.md#pool-player-schedule-shapes-2026-10-31). The summary
+`type=date`; the shape was probed and recorded in
+[RESEARCH.md](fantasy-manager/RESEARCH.md#pool-player-schedule-shapes-2026-10-31), but the public
+pool selector was removed because it projected one date's opponent rather than filtering the pool and
+no client used it. Pool rows carry games remaining only when `includeGames` is requested. The summary
 compacts category rows, pairs matchup categories, and has its own 20 KiB target/28 KiB hard ceiling;
 the six-group call returns seven roster rows on the 13-team league.
 

@@ -656,22 +656,8 @@ const PlayerSort = Schema.Literals([
   "stat",
 ]);
 
-const SearchDate = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
-  Schema.annotate({
-    description:
-      "Calendar date as `YYYY-MM-DD`. The provider's league player pool is date-addressable only for a league whose coverage is a date; a scoring-week league reports that it cannot date a pool player.",
-  }),
-);
-
 export const SearchPlayersInput = Schema.Struct({
   team: TeamId,
-  date: Schema.optional(SearchDate).pipe(
-    Schema.annotate({
-      description:
-        "Read each pool row's opponent on this date. The date is used only when the league's coverage is a date; a scoring-week league states that its pool read returns the week's opponent rather than a dated one.",
-    }),
-  ),
   query: Schema.optional(
     Schema.String.pipe(
       Schema.check(Schema.isMaxLength(80)),
@@ -708,6 +694,14 @@ export const SearchPlayersInput = Schema.Struct({
       Schema.annotate({
         description:
           "Period for a `stat` sort. `season` orders by the provider's season rank or stat value. `week` is available only where the provider declares that its search rows publish the weekly value they order by; otherwise it answers with the remedy instead of an unexplainable order.",
+      }),
+    ),
+  ),
+  includeGames: Schema.optional(
+    Schema.Boolean.pipe(
+      Schema.annotate({
+        description:
+          "Add each pool row's games remaining for the current scoring window and the result's `gamesRemaining` section. Omit it when you only need names, ownership, availability, or ranks; the join reads the league window and the professional calendar.",
       }),
     ),
   ),
@@ -828,66 +822,9 @@ const SearchPlayer = Schema.Struct({
         "The provider's season value for the requested `stat` category. Present only with sort `stat`; null means the provider published no value for this player.",
     }),
   ),
-  opponent: Schema.optional(
-    Schema.Union([
-      Schema.Struct({
-        status: Schema.Literal("scheduled"),
-        opponent: Schema.NonEmptyString.pipe(
-          Schema.annotate({
-            description:
-              "The opponent's professional-team abbreviation for the date stated in the result's `schedule`. The provider publishes no full name or start time.",
-          }),
-        ),
-        home: Schema.Boolean.pipe(
-          Schema.annotate({ description: "Whether the player's professional team is at home." }),
-        ),
-      }),
-      Schema.Struct({ status: Schema.Literal("no_game") }),
-      Schema.Struct({
-        status: Schema.Literal("not_published"),
-        detail: Schema.NonEmptyString,
-      }),
-    ]),
-  ).pipe(
-    Schema.annotate({
-      description:
-        "This pool row's opponent for the date and source stated in the result's `schedule`, present only when that schedule is `available`. `no_game` means the provider published no opponent for this player on that date; `not_published` means the field was absent and no opponent is claimed.",
-    }),
-  ),
   gamesRemaining: Schema.optional(SchedulePlayerGamesRemaining),
   transactionTrend: PlayerTransactionTrend,
 });
-
-const SearchSchedule = Schema.Union([
-  Schema.Struct({
-    status: Schema.Literal("available"),
-    date: SearchDate.pipe(
-      Schema.annotate({
-        description: "The date every row's `opponent` describes, as requested by this call.",
-      }),
-    ),
-    source: Schema.Literal("league_player_pool").pipe(
-      Schema.annotate({
-        description:
-          "The read that produced the dated opponents: the league's player pool for the requested date. The provider details of that read are recorded in the research notes, not assumed by a client.",
-      }),
-    ),
-  }),
-  Schema.Struct({
-    status: Schema.Literal("not_published"),
-    detail: Schema.NonEmptyString.pipe(
-      Schema.annotate({
-        description:
-          "Why no dated opponent is published: the league's coverage is a scoring week or its settings could not be read. No dated opponent is inferred in either case; a row whose opponent field was absent states that separately.",
-      }),
-    ),
-  }),
-]).pipe(
-  Schema.annotate({
-    description:
-      "Where the dated opponents on this page came from, or why none is published. Present only when `date` was requested.",
-  }),
-);
 
 const SearchGamesRemaining = Schema.Union([
   Schema.Struct({
@@ -903,7 +840,7 @@ const SearchGamesRemaining = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "The window the pool rows' `gamesRemaining` counts cover and when their professional games were observed. Every count is joined from the row's professional-team key, never from an abbreviation. `unsupported` states why no count is published instead of returning a zero.",
+      "The window the pool rows' `gamesRemaining` counts cover and when their professional games were observed. Present only when `includeGames` is true. Every count is joined from the row's professional-team key, never from an abbreviation. `unsupported` states why no count is published instead of returning a zero.",
   }),
 );
 
@@ -912,7 +849,6 @@ export const SearchPlayersData = Schema.Struct({
   team: QueryTeam,
   coverage: Schema.Array(QueryCoverage),
   players: Schema.Array(SearchPlayer),
-  schedule: Schema.optional(SearchSchedule),
   gamesRemaining: Schema.optional(SearchGamesRemaining),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,

@@ -298,7 +298,6 @@ export const FantasyQueriesLive = Layer.effect(
     const readPoolGames = (
       context: TeamContext,
       leagueOutcome: ReadOutcome<ProviderLeagueSettings> | undefined,
-      requestedDate: string | undefined,
     ): Effect.Effect<PoolGames, QueryPersistenceFailed> =>
       Effect.gen(function* () {
         if (gameSources.sourceFor(context.owned.team.league) === undefined) {
@@ -332,7 +331,7 @@ export const FantasyQueriesLive = Layer.effect(
             weekDates = publishedWeekWindow(undefined, matchupOutcome.value);
           }
         }
-        const window = searchGamesWindow({ league, period, weekDates, requestedDate });
+        const window = searchGamesWindow({ league, period, weekDates });
         if (window === undefined) {
           return {
             status: "unavailable" as const,
@@ -974,13 +973,6 @@ export const FantasyQueriesLive = Layer.effect(
       const team = queryTeam(context.owned);
       const fetchedAt = yield* DateTime.now;
       const availability = input.availability ?? "all";
-      const requestedDate = input.date;
-      if (requestedDate !== undefined && calendarDate(requestedDate) === undefined) {
-        return yield* QuerySelectionInvalid.make({
-          detail:
-            "The `date` must be a real calendar date in `YYYY-MM-DD` form, such as 2026-10-31.",
-        });
-      }
       const sort = input.sort ?? "name";
       const statPeriod = input.statPeriod ?? "season";
       const playerSearch = context.provider.capabilities.playerSearch;
@@ -1006,33 +998,9 @@ export const FantasyQueriesLive = Layer.effect(
           detail: "The `stat` reference is used only with sort `stat`.",
         });
       }
-      const hasGameSource = gameSources.sourceFor(context.owned.team.league) !== undefined;
-      const leagueOutcome =
-        requestedDate !== undefined || hasGameSource ? yield* readLeague(context) : undefined;
-      let datedOpponents = false;
-      let schedule: SearchPlayersData["schedule"];
-      if (requestedDate !== undefined) {
-        if (leagueOutcome?._tag === "ok" && leagueOutcome.value.rosterCoverage === "date") {
-          datedOpponents = true;
-          schedule = {
-            status: "available",
-            date: requestedDate,
-            source: "league_player_pool",
-          };
-        } else {
-          schedule = {
-            status: "not_published",
-            detail:
-              leagueOutcome?._tag === "ok"
-                ? "This league's coverage is a scoring week, so its league player pool returns the week's opponent and does not vary by date. No dated opponent is published; read the roster schedule for the week's opponents."
-                : leagueOutcome?._tag === "failed"
-                  ? `The league settings could not be read, so the pool's coverage is unknown and no dated opponent is published. ${leagueOutcome.failure.message}`
-                  : leagueOutcome?._tag === "unsupported"
-                    ? `The league settings do not establish a date coverage, so no dated opponent is published. ${leagueOutcome.detail}`
-                    : "The league settings could not be read, so no dated opponent is published.",
-          };
-        }
-      }
+      const includeGames = input.includeGames === true;
+      const hasGameSource =
+        includeGames && gameSources.sourceFor(context.owned.team.league) !== undefined;
       let statId: number | undefined;
       if (input.stat !== undefined) {
         const resolved = yield* resolveStatRef(context, input.stat);
@@ -1072,13 +1040,13 @@ export const FantasyQueriesLive = Layer.effect(
           statId,
           statType: statPeriod,
           limit: 50,
-          date: datedOpponents ? requestedDate : undefined,
         }),
       );
       if (outcome._tag !== "ok") {
         return searchWithoutData(team, fetchedAt, outcome);
       }
-      const poolGames = yield* readPoolGames(context, leagueOutcome, requestedDate);
+      const leagueOutcome = hasGameSource ? yield* readLeague(context) : undefined;
+      const poolGames = includeGames ? yield* readPoolGames(context, leagueOutcome) : undefined;
       const positions = new Set(input.positions ?? []);
       const filtered = outcome.value.players.filter(
         (player) =>
@@ -1118,8 +1086,7 @@ export const FantasyQueriesLive = Layer.effect(
           primaryPosition: player.primaryPosition,
           displayPosition: player.displayPosition,
           proTeam: player.proTeam ?? null,
-          ...(datedOpponents ? { opponent: searchOpponent(player.opponent) } : {}),
-          ...(poolGames.status === "available"
+          ...(poolGames?.status === "available"
             ? { gamesRemaining: poolGamesRemaining(poolGames, proTeamKey) }
             : {}),
           eligiblePositions: player.eligiblePositions,
@@ -1150,7 +1117,7 @@ export const FantasyQueriesLive = Layer.effect(
           `sort=${sort}`,
           `stat=${input.stat ?? ""}`,
           `statPeriod=${statPeriod}`,
-          `date=${requestedDate ?? ""}`,
+          `includeGames=${String(includeGames)}`,
           "order=provider",
         ].join("|"),
       );
@@ -1160,16 +1127,8 @@ export const FantasyQueriesLive = Layer.effect(
         status: "ok",
         team,
         coverage: [
-          requestedDate !== undefined && datedOpponents
-            ? coverage(
-                "players",
-                "player_search",
-                fetchedAt,
-                undefined,
-                `Player pool with opponents for ${requestedDate}`,
-              )
-            : coverage("players", "player_search", fetchedAt),
-          ...(poolGames.status === "available"
+          coverage("players", "player_search", fetchedAt),
+          ...(poolGames?.status === "available"
             ? [
                 coverage(
                   "players",
@@ -1181,15 +1140,18 @@ export const FantasyQueriesLive = Layer.effect(
               ]
             : []),
         ],
-        ...(schedule === undefined ? {} : { schedule }),
-        gamesRemaining:
-          poolGames.status === "available"
-            ? {
-                status: "available",
-                window: poolGames.window,
-                observedAt: poolGames.observedAt,
-              }
-            : { status: "unsupported", detail: poolGames.detail },
+        ...(poolGames === undefined
+          ? {}
+          : {
+              gamesRemaining:
+                poolGames.status === "available"
+                  ? {
+                      status: "available",
+                      window: poolGames.window,
+                      observedAt: poolGames.observedAt,
+                    }
+                  : { status: "unsupported", detail: poolGames.detail },
+            }),
         failures: [],
         budget: queryBudget,
       };
@@ -3343,28 +3305,6 @@ function rosterWithoutData(
   };
 }
 
-function searchOpponent(
-  value: string | null | undefined,
-): NonNullable<SearchPlayersData["players"][number]["opponent"]> {
-  if (value === undefined) {
-    return {
-      status: "not_published",
-      detail:
-        "The provider did not publish an opponent field for this player on the requested date.",
-    };
-  }
-  if (value === null) {
-    return { status: "no_game" };
-  }
-  const trimmed = value.trim();
-  if (trimmed === "") {
-    return { status: "no_game" };
-  }
-  return trimmed.startsWith("@")
-    ? { status: "scheduled", opponent: trimmed.slice(1), home: false }
-    : { status: "scheduled", opponent: trimmed, home: true };
-}
-
 function searchWithoutData(
   team: QueryTeam,
   fetchedAt: DateTime.Utc,
@@ -3495,20 +3435,12 @@ function searchGamesWindow(input: {
   readonly league: ProviderLeagueSettings;
   readonly period: QueryPeriod | undefined;
   readonly weekDates: { readonly start: string; readonly end: string } | undefined;
-  readonly requestedDate: string | undefined;
 }): SummaryScheduleWindow | undefined {
   if (input.weekDates !== undefined) {
     return {
       start: input.weekDates.start,
       end: input.weekDates.end,
       source: input.period === undefined ? "rest_of_week" : "period",
-    };
-  }
-  if (input.requestedDate !== undefined) {
-    return {
-      start: input.requestedDate,
-      end: input.requestedDate,
-      source: "requested",
     };
   }
   const anchor =

@@ -904,60 +904,6 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("dates a pool player's opponent only for a date-covered league", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: hockeyLeagueFixture,
-    });
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    yield* fake.setSearchPlayers([
-      searchFixture({
-        providerPlayerKey: "465.p.20001",
-        name: "Dated Free Agent",
-        availability: "free_agent",
-        actualRank: 1,
-        overallRank: 1,
-        statValue: null,
-        percentOwned: 10,
-        percentOwnedDelta: 1,
-        percentStarted: 5,
-        percentStartedChange: 0,
-        proTeam: "TOR",
-        opponent: "@BOS",
-      }),
-    ]);
-
-    const search = yield* queries.searchPlayers(owner, {
-      team: teamId,
-      date: "2026-10-31",
-    });
-
-    assert.strictEqual(search.status, "ok");
-    if (search.status !== "ok") {
-      return;
-    }
-    assert.deepStrictEqual(search.schedule, {
-      status: "available",
-      date: "2026-10-31",
-      source: "league_player_pool",
-    });
-    assert.deepStrictEqual(Array.getUnsafe(search.players, 0).opponent, {
-      status: "scheduled",
-      opponent: "BOS",
-      home: false,
-    });
-    assert.isTrue(
-      search.coverage.some(
-        (entry) =>
-          entry.resource === "players" &&
-          entry.detail === "Player pool with opponents for 2026-10-31",
-      ),
-    );
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
 it.effect("counts a pool player's games from its professional team key without a roster row", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -1051,7 +997,16 @@ it.effect("counts a pool player's games from its professional team key without a
       calendarGame("g3", "2026-10-22", "ZZZ", "BOS"),
     ]);
 
-    const search = yield* queries.searchPlayers(owner, { team: teamId });
+    const before = yield* fake.providerReads;
+    const plain = yield* queries.searchPlayers(owner, { team: teamId });
+    assert.strictEqual(plain.status, "ok");
+    if (plain.status !== "ok") {
+      return;
+    }
+    assert.isUndefined(plain.gamesRemaining);
+    assert.strictEqual((yield* fake.providerReads) - before, 1);
+
+    const search = yield* queries.searchPlayers(owner, { team: teamId, includeGames: true });
     assert.strictEqual(search.status, "ok");
     if (search.status !== "ok") {
       return;
@@ -1089,64 +1044,6 @@ it.effect("counts a pool player's games from its professional team key without a
       ],
     );
   }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
-);
-
-it.effect("states that a scoring-week pool read cannot date an opponent", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    yield* fake.setSearchPlayers([
-      searchFixture({
-        providerPlayerKey: "461.p.20001",
-        name: "Weekly Free Agent",
-        availability: "free_agent",
-        actualRank: 1,
-        overallRank: 1,
-        statValue: null,
-        percentOwned: 10,
-        percentOwnedDelta: 1,
-        percentStarted: 5,
-        percentStartedChange: 0,
-        opponent: "Chi",
-      }),
-    ]);
-
-    const search = yield* queries.searchPlayers(owner, {
-      team: teamId,
-      date: "2026-10-31",
-    });
-
-    assert.strictEqual(search.status, "ok");
-    if (search.status !== "ok") {
-      return;
-    }
-    assert.strictEqual(search.schedule?.status, "not_published");
-    assert.isUndefined(Array.getUnsafe(search.players, 0).opponent);
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("refuses a pool date that is not a real calendar date", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: hockeyLeagueFixture,
-    });
-
-    const rejected = yield* Effect.flip(
-      queries.searchPlayers(owner, {
-        team: Array.getUnsafe(seeded, 0).id,
-        date: "2026-02-30",
-      }),
-    );
-
-    assert.strictEqual(rejected._tag, "query.selection_invalid");
-    if (rejected._tag === "query.selection_invalid") {
-      assert.include(rejected.detail, "real calendar date");
-    }
-  }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
 it.effect(
@@ -5480,7 +5377,6 @@ function searchFixture(input: {
   readonly percentStartedChange: number | null;
   readonly proTeam?: string;
   readonly proTeamKey?: string;
-  readonly opponent?: string | null;
   readonly transactionTrend?: ProviderTransactionTrend;
 }): ProviderPlayerSearchResult["players"][number] {
   return {

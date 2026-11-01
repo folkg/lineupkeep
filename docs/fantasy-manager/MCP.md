@@ -21,7 +21,7 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 | `get_calendar`                      | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                        |
 | `get_league`                        | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages |
 | `get_rosters`                       | Exact selected team/period rosters, compact by default; professional-team abbreviation on every entry                                                                      |
-| `search_players`                    | Bounded league/sport-context player search with ownership/started signals, validated sorts, and an optional dated opponent for a date-covered pool                         |
+| `search_players`                    | Bounded league/sport-context player search with ownership/started signals, validated sorts, and optional professional games remaining                                      |
 | `get_players`                       | Bounded selected-player hydration including generic stats/projections/availability groups                                                                                  |
 | `get_matchups`                      | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                 |
 | `get_transactions`                  | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution   |
@@ -230,17 +230,15 @@ injury, and the bye week where published; its `playerSchedule` declaration state
 schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group publishes the
 games themselves and each player's games remaining. `search_players` reports provider
 ownership/started percentages without inventing either, and publishes the player's professional team
-as `proTeam`, the same abbreviation a roster entry carries. Each pool row also carries
-`gamesRemaining`, joined from the row's professional-team key against the same professional games
-over the scoring window, so a pool player needs no roster row and no second read; a row with no key
-reports `unavailable` with the reason instead of a guessed count, and the result's `gamesRemaining`
-section states the window and observation time or why the league has no game source. It
-also accepts an optional `date`: on a date-covered league each row carries `opponent` as
-`{ status: "scheduled", opponent, home }`, `{ status: "no_game" }` when the provider published a
-null opponent, or `{ status: "not_published", detail }` when the field was absent, and the result's
-`schedule` names the requested date and its `league_player_pool` source. On a scoring-week
-league the dated selector returns the week's opponent and does not vary by date, so no dated
-opponent is published and the result states that boundary instead of inventing one.
+as `proTeam`, the same abbreviation a roster entry carries. Pass `includeGames: true` to add
+`gamesRemaining` to each pool row, joined from the row's professional-team key against the same
+professional games over the scoring window, so a pool player needs no roster row and no second
+read; a row with no key reports `unavailable` with the reason instead of a guessed count, and the
+result's `gamesRemaining` section states the window and observation time or why the league has no
+game source. Omit `includeGames` for a cheaper search that does not read the league window or the
+professional calendar. The provider’s dated pool selector is not exposed: it projected one date’s
+opponent rather than filtering the pool, and no client used it. The probe and its results remain in
+[RESEARCH.md](RESEARCH.md#pool-player-schedule-shapes-2026-10-31).
 
 Every roster row carries `slot` as a marked value rather than a bare string: `{ status:
 "verified", slot }` when the provider published a slot, or `{ status: "unverified", rawValue,
@@ -509,10 +507,11 @@ retained.
   ignored. `players;type=date;date=YYYY-MM-DD;out=opponent,…` moved the opponents: on one hockey
   league 50 rows carried 9 non-null opponents on one date and 26 on the next. The same selector
   works beside the full search output (`ownership`, `percent_owned`, `percent_started`, `ranks`,
-  `transactions`), keeping every field and adding `opponent`. `search_players` therefore publishes
-  `opponent` for a requested `date` only when the league's declared coverage is a date. On a
-  scoring-week football league the selector is accepted but returns the week's opponent unchanged
-  across dates, so no dated opponent is published and the result states that boundary. A player
+  `transactions`), keeping every field and adding `opponent`. The shape was probed for a pool
+  candidate, but the public tool does not expose it: the selector projected one date’s opponent
+  rather than filtering the pool, and no client used it. On a scoring-week football league the
+  selector is accepted but returns the week's opponent unchanged across dates, which is one reason
+  the projection was not exposed. A player
   resource with a date is not addressable: `/player/{key}` and
   `/league/{league}/players/{key}` answer `400`, the former naming an invalid game key and the
   latter an invalid player resource. The shapes and outcomes are recorded in
@@ -586,11 +585,11 @@ session material were retained.
   `weekly_deadline` and `edit_key`. Two hockey leagues published `""` with an editable date one day
   after the provider's current date and decoded `next_day` from the same pair. No league reported
   `not_set` for the raw field; the three that previously read `not_set` published an empty string.
-- A dated pool read on the date-scoped hockey league returned `schedule: { status: "available", date,
-  source: "league_player_pool" }`; of five sampled rows, two carried a scheduled opponent and
-  three were `no_game` because the provider published a null opponent. The same call on the
-  scoring-week football league returned `schedule.status: "not_published"` with the reason that its
-  pool read returns the week's opponent and does not vary by date.
+- A dated pool read was probed on the date-scoped hockey league: of five sampled rows, two carried a
+  scheduled opponent and three were `no_game` because the provider published a null opponent. The
+  same call on the scoring-week football league returned the week's opponent unchanged. The public
+  `search_players` tool does not expose that selector; it was a date projection, not a filter, and no
+  client used it.
 - The full six-group call (`league`, `standings`, `categories`, `matchup`, `schedule`, `roster`) on
   the 13-team rotisserie hockey league (12 standing rows returned in this pass) returned `ok` with
   seven roster rows, a next cursor, and these sections: `standings` (2,469 bytes), `schedule`
