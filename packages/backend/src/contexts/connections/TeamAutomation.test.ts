@@ -156,6 +156,7 @@ it.effect("keeps availability separate from the automation setting", () =>
           reason: "provider_refused",
           detail: "You are not allowed to view this page because you are not in this league.",
           observedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
+          consecutiveRefusals: 1,
         }),
       )
       .where(and(eq(providerTeams.userId, owner), eq(providerTeams.id, seeded)));

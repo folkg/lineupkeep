@@ -23,6 +23,7 @@ import type {
 } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
+import { observedTeamAvailability } from "#contexts/connections/FantasyTeam.ts";
 import type { ProviderFailure } from "#contexts/connections/Provider.ts";
 import type { ProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
@@ -226,11 +227,16 @@ export const ConnectionsLive = Layer.effect(
     const listTeams = (
       userId: UserId,
     ): Effect.Effect<ReadonlyArray<FantasyTeam>, ConnectionError> =>
-      repository
-        .listTeams(userId)
-        .pipe(
-          Effect.tap((teams) => Effect.annotateCurrentSpan("connections.team_count", teams.length)),
-        );
+      Effect.gen(function* () {
+        const teams = yield* repository.listTeams(userId);
+        const now = yield* DateTime.now;
+        const observed = teams.map((team) => ({
+          ...team,
+          availability: observedTeamAvailability(team.availability, now),
+        }));
+        yield* Effect.annotateCurrentSpan("connections.team_count", observed.length);
+        return observed;
+      });
 
     const discoverTeams = (
       userId: UserId,
@@ -313,33 +319,12 @@ export const ConnectionsLive = Layer.effect(
         if (error._tag !== "provider.session_rejected") {
           return yield* connectionProviderError(credential.connectionId, error);
         }
-        const marked = yield* Effect.result(
-          repository.markReconnectRequired(userId, [
-            {
-              id: credential.connectionId,
-              expectedGeneration: credential.generation,
-            },
-          ]),
-        );
-        if (marked._tag === "Failure") {
-          if (marked.failure._tag !== "connection.credential_generation_stale") {
-            return yield* marked.failure;
-          }
-          return yield* ConnectionProviderRejected.make({
-            id: credential.connectionId,
-          });
-        }
-        yield* repository.markTeamsUnavailable(
+        return yield* repository.rejectSession(
           userId,
-          {
-            connectionIds: [credential.connectionId],
-            reason: "connection_unavailable",
-            detail:
-              "The provider rejected this connection's sign-in, so Lineupkeep cannot read this team.",
-          },
+          credential.connectionId,
+          credential.generation,
           at,
         );
-        return yield* ConnectionProviderRejected.make({ id: credential.connectionId });
       });
 
     return Connections.of({

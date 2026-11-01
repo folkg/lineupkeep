@@ -46,7 +46,7 @@ export function useTeamCheck(props: TeamCheckOptions): TeamCheckController {
 
 function checkFeedback(teams: ReadonlyArray<TeamSummaryView>, teamId: string): ActionFeedbackState {
   const checked = teams.find((team) => team.team.id === teamId)?.team.availability;
-  if (checked === undefined || checked.status === "available") {
+  if (checked === undefined || checked.status !== "unavailable") {
     return {
       type: "success",
       message: `Checked. ${defaultProviderName()} reads this team, so lineup checks can run again.`,

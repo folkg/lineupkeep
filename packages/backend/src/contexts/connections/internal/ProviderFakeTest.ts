@@ -92,6 +92,7 @@ type FakeProviderState = {
   readonly draftResults: ReadonlyArray<ProviderDraftPick>;
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
   readonly refusedLeagues: Readonly<Record<string, string>>;
+  readonly leagueAccessCalls: ReadonlyArray<ReadonlyArray<string>>;
   readonly unsupported: ReadonlySet<ProviderOperation>;
   readonly reviewLinkFailure: ProviderReviewLinkInvalid | undefined;
   readonly reviewLinkUrl: string | undefined;
@@ -147,6 +148,7 @@ export type FakeProviderWorldShape = {
   readonly setDraftResults: (picks: ReadonlyArray<ProviderDraftPick>) => Effect.Effect<void>;
   readonly setLeagueTeams: (teams: ReadonlyArray<ProviderLeagueTeam>) => Effect.Effect<void>;
   readonly refuseLeague: (leagueKey: string, detail: string | undefined) => Effect.Effect<void>;
+  readonly leagueAccessCalls: Effect.Effect<ReadonlyArray<ReadonlyArray<string>>>;
   readonly unsupportedOperations: (
     operations: ReadonlyArray<ProviderOperation>,
   ) => Effect.Effect<void>;
@@ -212,6 +214,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         draftResults: [],
         leagueTeams: [],
         refusedLeagues: {},
+        leagueAccessCalls: [],
         unsupported: new Set(),
         reviewLinkFailure: undefined,
         reviewLinkUrl: undefined,
@@ -297,6 +300,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
             }
             return { ...current, refusedLeagues };
           }),
+        leagueAccessCalls: Effect.map(Ref.get(state), (current) => current.leagueAccessCalls),
         unsupportedOperations: (operations) =>
           modify((current) => ({ ...current, unsupported: new Set(operations) })),
         failReviewLinks: (reviewLinkFailure) =>
@@ -391,6 +395,10 @@ const providerFake = Effect.gen(function* () {
         return yield* ProviderSessionRejected.make({ operation: "check_league_access" });
       }
       yield* requestFailure(current, "check_league_access");
+      yield* Ref.update(world.state, (state) => ({
+        ...state,
+        leagueAccessCalls: [...state.leagueAccessCalls, input.providerLeagueKeys],
+      }));
       return input.providerLeagueKeys.map((providerLeagueKey): ProviderLeagueAccess => {
         const detail = current.refusedLeagues[providerLeagueKey];
         return detail === undefined

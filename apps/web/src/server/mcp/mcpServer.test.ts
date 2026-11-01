@@ -934,7 +934,10 @@ it("requires teams:manage and changes automation through the shared team service
             team: input.team,
             action: input.action,
             enrolled: enabled,
-            availability: { status: "available" as const },
+            availability: {
+              status: "available" as const,
+              observedAt: DateTime.makeUnsafe("2026-10-25T11:55:00Z"),
+            },
             automation: {
               status: enabled ? ("enabled" as const) : ("disabled" as const),
               changedAt: at,

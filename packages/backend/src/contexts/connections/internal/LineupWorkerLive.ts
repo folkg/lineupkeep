@@ -112,7 +112,7 @@ export const LineupWorkerLive = Layer.effect(
           "The selected team or its connection is not available for this run.",
         );
       }
-      if (context.team.availability.status !== "available") {
+      if (context.team.availability.status === "unavailable") {
         return yield* block(
           run,
           "team_unavailable",

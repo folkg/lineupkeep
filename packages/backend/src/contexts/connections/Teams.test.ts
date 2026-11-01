@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { and, eq } from "drizzle-orm";
 import { Array, Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { TestClock } from "effect/testing";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
@@ -174,12 +175,23 @@ it.effect("records a provider refusal with its wording and keeps the team", () =
     if (refused.availability.status === "unavailable") {
       assert.strictEqual(refused.availability.reason, "provider_refused");
       assert.strictEqual(refused.availability.detail, refusal);
+      assert.strictEqual(refused.availability.consecutiveRefusals, 1);
       assert.isAtLeast(
         DateTime.toEpochMillis(refused.availability.observedAt),
         DateTime.toEpochMillis(checkedAt),
       );
     }
-    assert.deepInclude(yield* connections.listTeams(owner), refused);
+    const again = findTeam(
+      yield* connections.discoverTeams(owner, [{ id: ready.id }]),
+      refusedTeam.providerTeamKey,
+    );
+    assert.deepInclude(again.availability, {
+      status: "unavailable",
+      reason: "provider_refused",
+      consecutiveRefusals: 2,
+    });
+    assert.strictEqual(again.id, stored.id);
+    assert.strictEqual(again.ownerNote, "Keeper league: hold the second-round pick.");
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
@@ -201,14 +213,68 @@ it.effect("returns a refused team to available when the provider's refusal clear
     yield* connections.discoverTeams(owner, [{ id: ready.id }]);
 
     yield* fake.refuseLeague("nhl", undefined);
+    const checkedAt = yield* DateTime.now;
     const recovered = findTeam(
       yield* connections.discoverTeams(owner, [{ id: ready.id }]),
       target.providerTeamKey,
     );
 
-    assert.deepStrictEqual(recovered.availability, { status: "available" });
+    assert.strictEqual(recovered.availability.status, "available");
+    if (recovered.availability.status === "available") {
+      assert.isAtLeast(
+        DateTime.toEpochMillis(recovered.availability.observedAt),
+        DateTime.toEpochMillis(checkedAt),
+      );
+    }
     assert.strictEqual(recovered.ownerNote, "Hold the second-round pick.");
     assert.strictEqual(recovered.id, stored.id);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("reports a team nobody has observed as unobserved, not available", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    yield* fake.setTeams([team("nhl.l.1.t.1", "First Skate")]);
+    const discovered = Array.getUnsafe(
+      yield* connections.discoverTeams(owner, [{ id: ready.id }]),
+      0,
+    );
+    yield* database
+      .update(providerTeams)
+      .set({ availabilityObservedAt: null })
+      .where(eq(providerTeams.id, discovered.id));
+
+    const listed = Array.getUnsafe(yield* connections.listTeams(owner), 0);
+
+    assert.deepStrictEqual(listed.availability, { status: "unobserved" });
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("reports an observation older than three hours as stale with its time", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    yield* fake.setTeams([team("nhl.l.1.t.1", "First Skate")]);
+    const discovered = Array.getUnsafe(
+      yield* connections.discoverTeams(owner, [{ id: ready.id }]),
+      0,
+    );
+    assert.strictEqual(discovered.availability.status, "available");
+    if (discovered.availability.status !== "available") {
+      return;
+    }
+
+    yield* TestClock.adjust(4 * 3_600_000);
+    const stale = Array.getUnsafe(yield* connections.listTeams(owner), 0);
+
+    assert.deepStrictEqual(stale.availability, {
+      status: "stale",
+      observedAt: discovered.availability.observedAt,
+    });
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 

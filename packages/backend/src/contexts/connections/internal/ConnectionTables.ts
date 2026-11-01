@@ -92,6 +92,7 @@ export const providerTeams = pgTable(
     }),
     unavailableDetail: text("unavailable_detail"),
     availabilityObservedAt: timestamp("availability_observed_at", { withTimezone: true }),
+    availabilityRefusals: integer("availability_refusals").notNull().default(0),
     automationState: jsonb("automation_state").notNull(),
     automationStatus: text("automation_status", {
       enum: ["disabled", "enabled", "paused-until-fantasy-day-end"],
@@ -119,20 +120,35 @@ export function teamAvailabilityColumns(availability: TeamAvailability): {
   readonly unavailableReason: TeamUnavailabilityReason | null;
   readonly unavailableDetail: string | null;
   readonly availabilityObservedAt: Date | null;
+  readonly availabilityRefusals: number;
 } {
-  return availability.status === "available"
-    ? {
+  switch (availability.status) {
+    case "unobserved":
+      return {
         availability: "available",
         unavailableReason: null,
         unavailableDetail: null,
         availabilityObservedAt: null,
-      }
-    : {
+        availabilityRefusals: 0,
+      };
+    case "available":
+    case "stale":
+      return {
+        availability: "available",
+        unavailableReason: null,
+        unavailableDetail: null,
+        availabilityObservedAt: DateTime.toDateUtc(availability.observedAt),
+        availabilityRefusals: 0,
+      };
+    case "unavailable":
+      return {
         availability: "unavailable",
         unavailableReason: availability.reason,
         unavailableDetail: availability.detail,
         availabilityObservedAt: DateTime.toDateUtc(availability.observedAt),
+        availabilityRefusals: availability.consecutiveRefusals,
       };
+  }
 }
 
 const FantasyTeamSelect = createSelectSchema(providerTeams, {
@@ -150,6 +166,7 @@ const FantasyTeamSelect = createSelectSchema(providerTeams, {
   unavailableReason: Schema.NullOr(TeamUnavailabilityReason),
   unavailableDetail: Schema.NullOr(Schema.String),
   availabilityObservedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  availabilityRefusals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   automationState: Schema.Unknown,
   automationStatus: TeamAutomationStatus,
   ownerNote: Schema.NullOr(Schema.NonEmptyString),
@@ -217,15 +234,24 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
           const automationState = yield* SchemaParser.encodeEffect(
             Schema.toCodecJson(TeamAutomationState),
           )(state);
+          const observedAt =
+            team.availability.status === "available" || team.availability.status === "stale"
+              ? team.availability.observedAt
+              : team.availability.status === "unavailable"
+                ? team.availability.observedAt
+                : null;
           return {
             ...team,
-            availability: team.availability.status,
+            availability: team.availability.status === "unavailable" ? "unavailable" : "available",
             unavailableReason:
               team.availability.status === "unavailable" ? team.availability.reason : null,
             unavailableDetail:
               team.availability.status === "unavailable" ? team.availability.detail : null,
-            availabilityObservedAt:
-              team.availability.status === "unavailable" ? team.availability.observedAt : null,
+            availabilityObservedAt: observedAt,
+            availabilityRefusals:
+              team.availability.status === "unavailable"
+                ? team.availability.consecutiveRefusals
+                : 0,
             automationState,
             automationStatus: teamAutomationStateStatus(state),
           };
@@ -239,16 +265,15 @@ function availabilityView(row: {
   readonly unavailableReason: TeamUnavailabilityReason | null;
   readonly unavailableDetail: string | null;
   readonly availabilityObservedAt: DateTime.Utc | null;
+  readonly availabilityRefusals: number;
 }): TeamAvailability {
   if (row.availability === "available") {
-    if (
-      row.unavailableReason !== null ||
-      row.unavailableDetail !== null ||
-      row.availabilityObservedAt !== null
-    ) {
+    if (row.unavailableReason !== null || row.unavailableDetail !== null) {
       throw new Error("An available team carries an unavailable reason");
     }
-    return { status: "available" };
+    return row.availabilityObservedAt === null
+      ? { status: "unobserved" }
+      : { status: "available", observedAt: row.availabilityObservedAt };
   }
   if (
     row.unavailableReason === null ||
@@ -262,6 +287,7 @@ function availabilityView(row: {
     reason: row.unavailableReason,
     detail: row.unavailableDetail,
     observedAt: row.availabilityObservedAt,
+    consecutiveRefusals: row.availabilityRefusals,
   };
 }
 

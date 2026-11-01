@@ -32,6 +32,7 @@ import { NotificationsLive } from "#contexts/connections/internal/NotificationsR
 import { QueryRepository } from "#contexts/connections/internal/QueryRepository.ts";
 import { QueryTokens } from "#contexts/connections/internal/QueryTokens.ts";
 import { RetentionSweepLive } from "#contexts/connections/internal/RetentionSweepRepository.ts";
+import { TeamAvailabilitySweepLive } from "#contexts/connections/internal/TeamAvailabilitySweepLive.ts";
 import { TeamRepository } from "#contexts/connections/internal/TeamRepository.ts";
 import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
 import { TransactionProposalRepository } from "#contexts/connections/internal/TransactionProposalRepository.ts";
@@ -43,6 +44,7 @@ import type { LineupDispatcher, LineupWorker } from "#contexts/connections/Lineu
 import type { Notifications } from "#contexts/connections/Notifications.ts";
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
 import type { RetentionSweep } from "#contexts/connections/Retention.ts";
+import type { TeamAvailabilitySweep } from "#contexts/connections/TeamAvailabilitySweep.ts";
 import type { Teams } from "#contexts/connections/Teams.ts";
 import type { TransactionProposals } from "#contexts/connections/TransactionProposals.ts";
 import type { TransactionReviews } from "#contexts/connections/TransactionReview.ts";
@@ -142,11 +144,17 @@ const TeamsLayer = TeamsLive.pipe(
   Layer.provide(CredentialEncryptionLayer),
 );
 const RetentionSweepLayer = RetentionSweepLive.pipe(Layer.provide(ConnectionsDatabase.layer));
+const AvailabilitySweepLayer = TeamAvailabilitySweepLive.pipe(
+  Layer.provide(RepositoryLayer),
+  Layer.provide(ProviderLayer),
+  Layer.provide(CredentialEncryptionLayer),
+);
 const AutomationLayer = AutomationLive.pipe(
   Layer.provide(TeamRepositoryLayer),
   Layer.provide(LineupRepositoryLayer),
   Layer.provide(LineupDispatcherLayer),
   Layer.provide(RetentionSweepLayer),
+  Layer.provide(AvailabilitySweepLayer),
 );
 const UserDirectoryLayer = UserDirectoryLive.pipe(Layer.provide(AuthDatabase.layer));
 const NotificationsLayer = NotificationsLive.pipe(
@@ -169,6 +177,7 @@ export const ApplicationLayer = Layer.mergeAll(
   AutomationLayer,
   NotificationsLayer,
   RetentionSweepLayer,
+  AvailabilitySweepLayer,
   LineupDispatcherLayer,
   LineupWorkerLayer,
   FeedbackLayer,
@@ -190,6 +199,7 @@ export type BackendServices =
   | Automation
   | Notifications
   | RetentionSweep
+  | TeamAvailabilitySweep
   | LineupDispatcher
   | LineupWorker
   | Feedback

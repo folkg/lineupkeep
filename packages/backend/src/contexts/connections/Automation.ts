@@ -9,6 +9,13 @@ export const AutomationSummary = Schema.Struct({
   scheduledRuns: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   delivered: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   pending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  availability: Schema.Struct({
+    connectionsChecked: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    connectionsSkipped: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    leaguesChecked: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    teamsObserved: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    teamsUnavailable: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  }),
   retention: RetentionSummary,
 });
 export type AutomationSummary = typeof AutomationSummary.Type;

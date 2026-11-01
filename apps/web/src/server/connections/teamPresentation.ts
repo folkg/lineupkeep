@@ -110,14 +110,21 @@ function toTeamView(summary: TeamSummary["team"]): TeamView {
 
 function toAvailabilityView(availability: TeamAvailability): TeamAvailabilityView {
   switch (availability.status) {
+    case "unobserved":
+      return { status: "unobserved" };
     case "available":
-      return { status: "available" };
+    case "stale":
+      return {
+        status: availability.status,
+        observedAt: DateTime.formatIso(availability.observedAt),
+      };
     case "unavailable":
       return {
         status: "unavailable",
         reason: availability.reason,
         detail: availability.detail,
         observedAt: DateTime.formatIso(availability.observedAt),
+        consecutiveRefusals: availability.consecutiveRefusals,
       };
   }
 }

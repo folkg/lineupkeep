@@ -103,7 +103,7 @@ const team: TeamSummaryView = {
     sport: "football",
     season: 2026,
     name: "Alpha",
-    availability: { status: "available" },
+    availability: { status: "available", observedAt: hoursAgo(2) },
     automation: {
       status: "enabled",
       changedAt: threeDaysAgo,
@@ -182,6 +182,7 @@ it("says a team cannot be read, with the provider's wording, and offers a check"
         reason: "provider_refused",
         detail: "You are not allowed to view this page because you are not in this league.",
         observedAt: "2026-10-31T16:20:00.000Z",
+        consecutiveRefusals: 1,
       },
     },
   };
@@ -194,7 +195,7 @@ it("says a team cannot be read, with the provider's wording, and offers a check"
     )
     .toBeVisible();
   await expect
-    .element(page.getByText(/Observed .*Lineup checks skip it until it can be read\./))
+    .element(page.getByText(/Seen once\..*Lineup checks skip it until it can be read\./u))
     .toBeVisible();
   await expect.element(page.getByRole("button", { name: "Check this team again" })).toBeVisible();
 });

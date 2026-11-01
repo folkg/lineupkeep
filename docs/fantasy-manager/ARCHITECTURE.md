@@ -155,7 +155,7 @@ A reconnect-required transition opens one connection incident and one notificati
 
 ### Team automation
 
-States: disabled, enabled, paused-until-fantasy-day-end. Keep availability observations separate from enrollment: unavailable is not the same as disabled. Pause expiry restores eligibility at the next normal check, not a special forced run.
+States: disabled, enabled, paused-until-fantasy-day-end. Keep availability observations separate from enrollment: unavailable is not the same as disabled. Every hourly automation check sweeps every stored team's availability before it selects work, whether or not the team is enrolled: group teams by connection and read each held league once. An available observation older than three hours is stale, not current health; a provider refusal keeps its wording and consecutive count, while a transient failure records nothing and leaves the last observation in place. Pause expiry restores eligibility at the next normal check, not a special forced run.
 
 Evaluate deadlines using the provider's fantasy-day policy and Effect DateTime named-zone calendar arithmetic. No fixed PST offset, 24-hour arithmetic across DST, or dependence on the server/user timezone. Yahoo's exact rollover still needs verification.
 

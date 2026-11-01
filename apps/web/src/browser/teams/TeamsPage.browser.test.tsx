@@ -29,6 +29,7 @@ import { TeamsPage } from "./TeamsPage";
 
 const teamId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165a1";
 const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1_000).toISOString();
+const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1_000).toISOString();
 
 const noOpRun: LineupRunView = {
   run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b1",
@@ -84,7 +85,7 @@ const baseTeam: TeamSummaryView = {
     sport: "football",
     season: 2026,
     name: "Alpha",
-    availability: { status: "available" },
+    availability: { status: "available", observedAt: twoHoursAgo },
     automation: {
       status: "disabled",
       changedAt: "2026-10-25T08:00:00.000Z",
@@ -114,6 +115,7 @@ const refusedAvailability = {
   reason: "provider_refused",
   detail: "You are not allowed to view this page because you are not in this league.",
   observedAt: "2026-10-31T16:20:00.000Z",
+  consecutiveRefusals: 1,
 } as const;
 
 const pausedTeam: TeamSummaryView = {
@@ -312,10 +314,66 @@ it("says a team cannot be read, with the provider's wording", async () => {
   await expect.element(page.getByRole("button", { name: "Check this team again" })).toBeVisible();
 });
 
+it("says when a stale team was last checked instead of claiming it is healthy", async () => {
+  using _app = setupTeamsPage([
+    {
+      ...enabledTeam,
+      team: {
+        ...enabledTeam.team,
+        availability: { status: "stale", observedAt: fourHoursAgo },
+      },
+    },
+  ]);
+
+  await expect
+    .element(page.getByText("Lineupkeep has not checked this team recently."))
+    .toBeVisible();
+  await expect
+    .element(page.getByText(/The last readable check was .*older than the three hours/u))
+    .toBeVisible();
+  await expect.element(page.getByText("Lineupkeep cannot read this team.")).not.toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Check this team again" })).toBeVisible();
+});
+
+it("says a team has not been checked yet rather than assuming it is readable", async () => {
+  using _app = setupTeamsPage([
+    {
+      ...enabledTeam,
+      team: { ...enabledTeam.team, availability: { status: "unobserved" } },
+    },
+  ]);
+
+  await expect.element(page.getByText("Lineupkeep has not checked this team yet.")).toBeVisible();
+  await expect
+    .element(page.getByText(/Its availability is unknown until the next hourly check/u))
+    .toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Check this team again" })).toBeVisible();
+});
+
+it("says a refusal was seen on consecutive checks instead of presenting it as one event", async () => {
+  using _app = setupTeamsPage([
+    {
+      ...enabledTeam,
+      team: {
+        ...enabledTeam.team,
+        availability: { ...refusedAvailability, consecutiveRefusals: 3 },
+      },
+    },
+  ]);
+
+  await expect.element(page.getByText(/Seen on 3 consecutive checks\./u)).toBeVisible();
+  await expect
+    .element(page.getByText(/That usually means this team is no longer in the league/u))
+    .toBeVisible();
+});
+
 it("returns a refused team to available after checking again", async () => {
   const readable = {
     ...enabledTeam,
-    team: { ...enabledTeam.team, availability: { status: "available" as const } },
+    team: {
+      ...enabledTeam.team,
+      availability: { status: "available" as const, observedAt: twoHoursAgo },
+    },
   };
   using _app = setupTeamsPage(
     [{ ...enabledTeam, team: { ...enabledTeam.team, availability: refusedAvailability } }],

@@ -52,19 +52,28 @@ Inputs: a bounded batch of owned private team ids, each with exactly one action:
 `enable` and `disable` change enrollment without deleting team configuration. `pause-today` suspends scheduled work until the end of the team's provider fantasy day, computed with Effect DateTime named-zone arithmetic, and returns the resulting `resumesAt`, time zone, and fantasy day. `resume` clears an active pause. A repeated action is an `unchanged` no-op with the same resulting state, not an error; an action that contradicts the current state is `rejected` with the reason and the unchanged state.
 
 Availability is separate from enrollment and from a pause. A team records the provider's own read
-state, observed at a time: `{status: "available"}` when the last check read it, or
-`{status: "unavailable", reason, detail, observedAt}` when it could not. The reason is
+state, observed at a time, and every stored team is swept on the hourly automation check even when
+its automation is off. The sweep makes one league-level read per held league on a connection rather
+than one request per team. A team records `{status: "available", observedAt}` when the sweep or a
+manual check read it within the last three hours, `{status: "stale", observedAt}` when the last
+read is older than that (so it is not presented as current health), or `{status: "unobserved"}` when
+no check has recorded a read. When a check cannot read the team it records
+`{status: "unavailable", reason, detail, observedAt, consecutiveRefusals}`. The reason is
 `provider_refused` with the provider's wording in `detail`, `not_listed` when the account's own team
-list no longer includes the team, or `connection_unavailable` when the connection cannot be used. An
-unavailable team keeps the requested automation setting, its note, and its runs, and remains skipped
-by scheduled checks; it is never treated as deleted. A per-team read for an unavailable team refuses
-with `team_unavailable` and the recorded reason instead of making a provider request that would be
-refused, and `set_lineup` refuses it with `lineup.selection_invalid` without creating a run. The
-owner can check a team again from the team page, which re-reads the account's own team list and that
-league, and records the new state. Ownership is enforced in the team service, so another owner's id
-is `not_found`, not a forbidden-with-details response. Responses report each input in order with its
-outcome, enrollment, availability, and full automation state, so an agent does not need to re-read
-before the next action.
+list no longer includes the team, or `connection_unavailable` when the connection cannot be used.
+`consecutiveRefusals` counts how many checks in a row saw the same provider refusal, so one refusal
+is not presented as a permanent fact. A transient provider failure records nothing and leaves the
+last observation in place. An unavailable team keeps the requested automation setting, its note,
+and its runs, and remains skipped by scheduled checks; it is never treated as deleted. A per-team
+read for an unavailable team refuses with `team_unavailable` and the recorded reason instead of
+making a provider request that would be refused, and `set_lineup` refuses it with
+`lineup.selection_invalid` without creating a run. A stale or unobserved team is still
+attempted by reads and lineup runs; the next hourly sweep records what it finds. The owner can check a team again from the team list or the
+team page; either re-reads the account's own team list and that league and records the new state.
+Ownership is enforced in the team service, so another owner's id is `not_found`, not a
+forbidden-with-details response. Responses report each input in order with its outcome, enrollment,
+availability, and full automation state, so an agent does not need to re-read before the next
+action.
 
 This tool changes only durable Lineupkeep automation state; it never contacts the provider. `set_lineup` remains the sole provider mutation and continues to bypass enrollment for a manual run while honoring ownership, connection readiness, availability, locks, and uncertain-write protection.
 

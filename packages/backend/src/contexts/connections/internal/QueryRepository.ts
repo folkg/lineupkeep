@@ -64,6 +64,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
           | null;
         readonly unavailableDetail: string | null;
         readonly availabilityObservedAt: Date | null;
+        readonly availabilityRefusals: number;
         readonly automationState: unknown;
         readonly automationStatus: "disabled" | "enabled" | "paused-until-fantasy-day-end";
         readonly ownerNote: string | null;
@@ -132,6 +133,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
             unavailableReason: providerTeams.unavailableReason,
             unavailableDetail: providerTeams.unavailableDetail,
             availabilityObservedAt: providerTeams.availabilityObservedAt,
+            availabilityRefusals: providerTeams.availabilityRefusals,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
             ownerNote: providerTeams.ownerNote,
@@ -221,6 +223,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
             unavailableReason: providerTeams.unavailableReason,
             unavailableDetail: providerTeams.unavailableDetail,
             availabilityObservedAt: providerTeams.availabilityObservedAt,
+            availabilityRefusals: providerTeams.availabilityRefusals,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
             ownerNote: providerTeams.ownerNote,

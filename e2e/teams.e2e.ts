@@ -138,6 +138,7 @@ test("reports a refused team as unreadable and re-checks it without pretending i
     await expect(
       row.getByText("You are not allowed to view this page because you are not in this league."),
     ).toBeVisible();
+    await expect(row.getByText(/Seen once\./u)).toBeVisible();
     await expect(row.getByText(/Lineup checks skip it until it can be read\.$/u)).toBeVisible();
   });
 
@@ -165,6 +166,7 @@ test("reports a refused team as unreadable and re-checks it without pretending i
       ),
     ).toBeVisible();
     await expect(page.getByText("Lineupkeep cannot read this team.")).toBeVisible();
+    await expect(page.getByText(/Seen on 2 consecutive checks\./u)).toBeVisible();
   });
 
   await test.step("Result: [owner] reads the same refusal over MCP instead of an empty read", async () => {
@@ -176,6 +178,7 @@ test("reports a refused team as unreadable and re-checks it without pretending i
       status: "unavailable",
       reason: "provider_refused",
       detail: "You are not allowed to view this page because you are not in this league.",
+      consecutiveRefusals: 2,
     });
     expect(availability.observedAt).toEqual(expect.any(String));
 
@@ -187,6 +190,57 @@ test("reports a refused team as unreadable and re-checks it without pretending i
     expect(JSON.stringify(lineup)).toContain("cannot read this team");
   });
 });
+
+test("shows an unreadable team in the list on phone and desktop in light and dark", async ({
+  page,
+  services,
+}, info) => {
+  await signUp(page);
+  await services.exercise(
+    page,
+    "link a provider session whose league reads the provider refuses",
+    "connectRefusedYahooAndDiscoverTeams",
+    {},
+  );
+  await page.goto("/teams");
+  const row = page.getByRole("listitem").filter({ hasText: "Embedded Browser Team" });
+  await expect(row.getByText("Lineupkeep cannot read this team.")).toBeVisible();
+  await expect(
+    row.getByText("You are not allowed to view this page because you are not in this league."),
+  ).toBeVisible();
+  await expect(row.getByRole("button", { name: "Check this team again" })).toBeVisible();
+
+  for (const variant of availabilityShots) {
+    await page.setViewportSize(variant.viewport);
+    await page.emulateMedia({ colorScheme: variant.colorScheme });
+    await page.reload();
+    await expect(row.getByText("Lineupkeep cannot read this team.")).toBeVisible();
+    await captureCheckpoint(page, info, `team-availability-${variant.name}`);
+  }
+});
+
+const availabilityShots = [
+  {
+    name: "desktop-light",
+    viewport: { width: 1280, height: 900 },
+    colorScheme: "light" as const,
+  },
+  {
+    name: "desktop-dark",
+    viewport: { width: 1280, height: 900 },
+    colorScheme: "dark" as const,
+  },
+  {
+    name: "phone-light",
+    viewport: { width: 390, height: 844 },
+    colorScheme: "light" as const,
+  },
+  {
+    name: "phone-dark",
+    viewport: { width: 390, height: 844 },
+    colorScheme: "dark" as const,
+  },
+];
 
 test("renders the teams surface before client scripts and hydrates its navigation", async ({
   page,
@@ -249,6 +303,7 @@ const ListedTeams = Schema.Struct({
         reason: Schema.optional(Schema.String),
         detail: Schema.optional(Schema.String),
         observedAt: Schema.optional(Schema.String),
+        consecutiveRefusals: Schema.optional(Schema.Number),
       }),
     }),
   ),

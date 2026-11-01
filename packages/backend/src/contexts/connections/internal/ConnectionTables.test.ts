@@ -132,6 +132,7 @@ it.effect("round-trips discovered team rows through the codec", () =>
       unavailableReason: null,
       unavailableDetail: null,
       availabilityObservedAt: null,
+      availabilityRefusals: 0,
       automationState: yield* Schema.encodeEffect(Schema.toCodecJson(TeamAutomationState))({
         _tag: "Disabled",
         changedAt: at,

@@ -26,12 +26,15 @@ export type TeamAutomationView = {
 };
 
 export type TeamAvailabilityView =
-  | { readonly status: "available" }
+  | { readonly status: "unobserved" }
+  | { readonly status: "available"; readonly observedAt: string }
+  | { readonly status: "stale"; readonly observedAt: string }
   | {
       readonly status: "unavailable";
       readonly reason: TeamUnavailabilityReason;
       readonly detail: string;
       readonly observedAt: string;
+      readonly consecutiveRefusals: number;
     };
 
 export type TeamView = {

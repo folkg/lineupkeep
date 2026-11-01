@@ -169,7 +169,7 @@ function validateTeams(
       if (entry === undefined) {
         return yield* LineupTeamNotFound.make({ team: request.team });
       }
-      if (entry.team.availability.status !== "available") {
+      if (entry.team.availability.status === "unavailable") {
         return yield* LineupSelectionInvalid.make({
           detail: `Lineupkeep cannot read this team, so this run was not started. ${describeUnavailableTeam(entry.team.availability)}`,
         });
