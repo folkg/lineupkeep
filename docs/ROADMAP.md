@@ -459,8 +459,10 @@ and a registration loop is refused at the cap. `L`, split registration from eras
 Finding F5, Medium. A leaked `CONNECTION_ENCRYPTION_KEY` has no fast remedy: the only path is to disconnect
 every connection and have each owner link again.
 
-- [ ] Decrypt with any retained key version and encrypt with the current one, against the existing envelope.
-- [ ] Re-encrypt on the next successful credential use, then retire the old version.
+- [x] Decrypt with any retained key version and encrypt with the current one, against the existing envelope.
+- [x] Re-encrypt on the next successful credential use, then retire the old version.
+- [x] Report stored key versions with the hourly maintenance tick, so retirement follows a count, and refuse
+      a retired version by name instead of as a corrupt envelope.
 
 **Verify**: a connection linked under version 1 keeps working after version 2 becomes current, its stored
 envelope is version 2 on the next use, and the old version's key can no longer decrypt anything. `M`.

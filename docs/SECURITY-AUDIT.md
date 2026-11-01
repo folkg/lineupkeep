@@ -1,8 +1,8 @@
 # Security and privacy audit
 
-Status: written findings for review. Four findings are fixed, eleven are deferred with the reason they
-were not taken, and one is accepted as designed. F1 was fixed in a follow-up change once its product
-decision was made; the rest of this document is unchanged from the audit revision. This document contains
+Status: written findings for review. Six findings are fixed, nine are deferred with the reason they
+were not taken, and one is accepted as designed. F1 and F5 were fixed in follow-up changes once their
+product decisions were made; the rest of this document is unchanged from the audit revision. This document contains
 no secret, token, cookie, crumb, or personal datum; every credential is referred to by shape only.
 
 Date: 2026-11-01. Baseline: `5871f3e8` (`mcp: reduce the scope set to four resource scopes`).
@@ -54,7 +54,7 @@ reviewer to schedule.
 | F2  | Dynamic client registration is unauthenticated, uncapped and never cleaned up              | Medium   | Deferred  |
 | F3  | Session revocation lags up to five minutes and there is no session inventory or revoke-all | Medium   | **Fixed** |
 | F4  | No erasure or export path for personal data, and some tables have no retention at all      | Medium   | Deferred  |
-| F5  | A connection-key compromise has no fast remediation                                        | Medium   | Deferred  |
+| F5  | A connection-key compromise has no fast remediation                                        | Medium   | **Fixed** |
 | F6  | Google sign-in would store provider OAuth tokens unencrypted                               | Medium   | Deferred  |
 | F7  | `/api/telemetry` has a process-global budget and no authentication                         | Low      | Deferred  |
 | F8  | The internal worker route is gated only by an environment variable on a shared image       | Low      | Deferred  |
@@ -67,7 +67,7 @@ reviewer to schedule.
 | F15 | The egress proxy records an unbounded number of distinct refusals per session              | Low      | **Fixed** |
 | F16 | The hosted browser can reach Lineupkeep's own public origin                                | Low      | Accepted  |
 
-Count: 0 critical, 1 high, 5 medium, 10 low. Five fixed, one accepted as designed, ten deferred.
+Count: 0 critical, 1 high, 5 medium, 10 low. Six fixed, one accepted as designed, nine deferred.
 
 ## Findings
 
@@ -246,8 +246,7 @@ decisions, and the change wants a migration. Recorded as roadmap group J2.
 
 ### F5 — A connection-key compromise has no fast remediation
 
-**Severity: Medium. Deferred: a keyring is an architectural addition, explicitly out of scope for this
-audit.**
+**Severity: Medium. Fixed in a follow-up change: the configuration keyring.**
 
 Evidence. The envelope is sound: AES-GCM with a 12-byte random nonce, an authenticated-data string binding
 the envelope version, key version, owner, connection, and provider
@@ -269,8 +268,14 @@ encrypt with the current one, re-encrypt on the next successful credential use, 
 version. The envelope already carries the version and binds it as authenticated data, so the format does
 not need to change — only the key provider does.
 
-**Why not here.** It changes the key provider's shape and the deployment's secret set; that is an
-architectural change, which this audit was told not to attempt.
+**Fix released.** The key provider now reads a configuration keyring: `CONNECTION_ENCRYPTION_KEY` with
+`CONNECTION_ENCRYPTION_KEY_VERSION`, plus `CONNECTION_ENCRYPTION_RETAINED_KEYS` for versions that may
+still decrypt. An envelope under a retained version opens and is resealed under the current key by a
+compare-and-swap, so the ring converges under normal traffic without a migration. A version absent from
+the ring is refused by name (`connection.credential_key_version_unavailable`) with the operator action,
+and the hourly maintenance tick reports `olderEnvelopes` and `unreadableEnvelopes` so retirement is
+decided from counts. The envelope format, authenticated data, and endorsed cipher are unchanged;
+`deployment.md` owns the rotation and leak runbook.
 
 ### F6 — Google sign-in would store provider OAuth tokens unencrypted
 

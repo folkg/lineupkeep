@@ -19,9 +19,11 @@ import type { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import type { HostedLinking } from "#contexts/connections/HostedLinking.ts";
 import { AutomationLive } from "#contexts/connections/internal/AutomationLive.ts";
 import { ConnectionCredentialEncryption } from "#contexts/connections/internal/ConnectionCredentialEncryption.ts";
+import { ConnectionCredentialRepository } from "#contexts/connections/internal/ConnectionCredentialRepository.ts";
 import { ConnectionRepository } from "#contexts/connections/internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "#contexts/connections/internal/ConnectionsDatabase.ts";
 import { ConnectionsLive } from "#contexts/connections/internal/ConnectionsLive.ts";
+import { CredentialKeyCensusLive } from "#contexts/connections/internal/CredentialKeyCensusLive.ts";
 import { FantasyQueriesLive } from "#contexts/connections/internal/FantasyQueriesLive.ts";
 import { HostedLinkingLive } from "#contexts/connections/internal/HostedLinkingLive.ts";
 import { HostedLinkingRepository } from "#contexts/connections/internal/HostedLinkingRepository.ts";
@@ -80,6 +82,12 @@ const ProviderLayer = Layer.effect(ProviderRegistry)(
   Effect.map(yahooProvider, (yahoo) => ProviderRegistry.of(providerRegistryOf([yahoo]))),
 );
 const CredentialEncryptionLayer = ConnectionCredentialEncryption.layer;
+const CredentialCensusLayer = CredentialKeyCensusLive.pipe(
+  Layer.provide(
+    ConnectionCredentialRepository.layer.pipe(Layer.provide(ConnectionsDatabase.layer)),
+  ),
+  Layer.provide(CredentialEncryptionLayer),
+);
 const RepositoryLayer = ConnectionRepository.layer.pipe(Layer.provide(ConnectionsDatabase.layer));
 const ConnectionsLayer = ConnectionsLive.pipe(
   Layer.provide(RepositoryLayer),
@@ -158,6 +166,7 @@ const AutomationLayer = AutomationLive.pipe(
   Layer.provide(LineupRepositoryLayer),
   Layer.provide(LineupDispatcherLayer),
   Layer.provide(RetentionSweepLayer),
+  Layer.provide(CredentialCensusLayer),
 );
 const UserDirectoryLayer = UserDirectoryLive.pipe(Layer.provide(AuthDatabase.layer));
 const NotificationsLayer = NotificationsLive.pipe(
@@ -193,7 +202,11 @@ export const ApplicationLayer = Layer.mergeAll(
   AuthLayer,
   ProviderLayer,
   QueryTokens.layer,
-).pipe(Layer.provide(PostgresLive), Layer.provide(NodeCrypto.layer));
+).pipe(
+  Layer.provide(ConnectionsDatabase.layer),
+  Layer.provide(PostgresLive),
+  Layer.provide(NodeCrypto.layer),
+);
 
 export type BackendServices =
   | AuthService

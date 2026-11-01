@@ -18,6 +18,16 @@ const settings: Readonly<Record<string, ApplicationSetting>> = {
     production: "required",
     development: true,
   },
+  CONNECTION_ENCRYPTION_KEY_VERSION: {
+    config: Config.String("CONNECTION_ENCRYPTION_KEY_VERSION"),
+    production: "optional",
+    development: true,
+  },
+  CONNECTION_ENCRYPTION_RETAINED_KEYS: {
+    config: Config.Redacted("CONNECTION_ENCRYPTION_RETAINED_KEYS"),
+    production: "optional",
+    development: true,
+  },
   RESEND_API_KEY: {
     config: Config.Redacted("RESEND_API_KEY"),
     production: "required",

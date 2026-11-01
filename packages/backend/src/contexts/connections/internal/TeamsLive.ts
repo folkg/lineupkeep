@@ -140,7 +140,7 @@ export const TeamsLive = Layer.effect(
           });
         }
         const session = yield* encryption
-          .decrypt({
+          .open({
             userId,
             connectionId: access.connection.id,
             provider: access.connection.provider,

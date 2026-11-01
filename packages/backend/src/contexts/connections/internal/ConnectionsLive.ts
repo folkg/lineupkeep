@@ -284,7 +284,7 @@ export const ConnectionsLive = Layer.effect(
     ): Effect.Effect<TeamDiscovery, ConnectionError> =>
       Effect.gen(function* () {
         const session = yield* encryption
-          .decrypt({
+          .open({
             userId,
             connectionId: credential.connectionId,
             provider: credential.provider,

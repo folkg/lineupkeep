@@ -1,7 +1,5 @@
 import { Config, ConfigProvider, Context, Effect, Layer, Redacted, Schema } from "effect";
 
-import { connectionEncryptionKeyVersion } from "#contexts/connections/ConnectionLimits.ts";
-
 export type ConnectionEncryptionKeyShape = {
   readonly key: CryptoKey;
   readonly keyVersion: number;
@@ -15,19 +13,23 @@ export class ConnectionEncryptionKey extends Context.Service<
     ConnectionEncryptionKey,
     Effect.gen(function* () {
       const configured = yield* Config.Redacted("CONNECTION_ENCRYPTION_KEY");
+      const keyVersion = yield* Config.Int("CONNECTION_ENCRYPTION_KEY_VERSION").pipe(
+        Config.withDefault(defaultKeyVersion),
+      );
+      if (!Number.isSafeInteger(keyVersion) || keyVersion <= 0) {
+        return yield* Effect.fail(
+          configurationRejected("CONNECTION_ENCRYPTION_KEY_VERSION must be a positive integer"),
+        );
+      }
       const bytes = yield* Schema.decodeEffect(Schema.Uint8ArrayFromBase64)(
         Redacted.value(configured),
       ).pipe(Effect.mapError((cause) => new Config.ConfigError(cause)));
-      if (bytes.length !== 32) {
+      if (bytes.length !== connectionEncryptionKeyBytes) {
         return yield* Effect.fail(
-          new Config.ConfigError(
-            new ConfigProvider.SourceError({
-              message: "CONNECTION_ENCRYPTION_KEY must be a base64-encoded 32-byte key",
-            }),
-          ),
+          configurationRejected("CONNECTION_ENCRYPTION_KEY must be a base64-encoded 32-byte key"),
         );
       }
-      return yield* importKey(bytes, connectionEncryptionKeyVersion);
+      return yield* importConnectionEncryptionKey(bytes, keyVersion);
     }),
   );
 
@@ -37,12 +39,14 @@ export class ConnectionEncryptionKey extends Context.Service<
   }): Layer.Layer<ConnectionEncryptionKey> {
     return Layer.effect(
       ConnectionEncryptionKey,
-      importKey(input.bytes, input.keyVersion).pipe(Effect.orDie),
+      importConnectionEncryptionKey(input.bytes, input.keyVersion).pipe(Effect.orDie),
     );
   }
 }
 
-function importKey(
+export const connectionEncryptionKeyBytes = 32;
+
+export function importConnectionEncryptionKey(
   bytes: Uint8Array,
   keyVersion: number,
 ): Effect.Effect<ConnectionEncryptionKeyShape, Config.ConfigError> {
@@ -52,11 +56,12 @@ function importKey(
       globalThis.crypto.subtle
         .importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"])
         .then((key) => ({ key, keyVersion })),
-    catch: () =>
-      new Config.ConfigError(
-        new ConfigProvider.SourceError({
-          message: "CONNECTION_ENCRYPTION_KEY could not be imported",
-        }),
-      ),
+    catch: () => configurationRejected("Connection encryption key material could not be imported"),
   });
 }
+
+export function configurationRejected(message: string): Config.ConfigError {
+  return new Config.ConfigError(new ConfigProvider.SourceError({ message }));
+}
+
+const defaultKeyVersion = 1;

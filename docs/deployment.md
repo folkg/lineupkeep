@@ -8,7 +8,7 @@ Bootstrap, outside Alchemy (Alchemy has no billing-link provider, and state cann
 
 - GCP project `lineupkeep-prod` (number `602042678335`), billing account `0139E5-D27389-43F1F2`, region `us-east1`. The gcloud CLI's active project is still the deleted `auto-gm-372620`, so every command needs `--project=lineupkeep-prod`; set it in the CLI if bare commands are wanted.
 - Protected Alchemy state in the owner's shared Neon project `alchemy-state` (`spring-cell-62836171`): database and role `lineupkeep_state`, direct endpoint, `sslmode=verify-full`.
-- Provisioning inputs: `~/.config/lineupkeep/infra.env` (mode 600, outside the repository) with `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, `AUTH_CLIENT_IP_HEADERS`. `ALERT_EMAIL` is optional and only attaches an email notification channel to the lineup-run alert; without it the alert policy still opens incidents in Cloud Monitoring. Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token` and never echo it.
+- Provisioning inputs: `~/.config/lineupkeep/infra.env` (mode 600, outside the repository) with `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, `AUTH_CLIENT_IP_HEADERS`. A key rotation additionally carries `CONNECTION_ENCRYPTION_KEY_VERSION` and `CONNECTION_ENCRYPTION_RETAINED_KEYS`; see [connection credential encryption rotation](#connection-credential-encryption-rotation). `ALERT_EMAIL` is optional and only attaches an email notification channel to the lineup-run alert; without it the alert policy still opens incidents in Cloud Monitoring. Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token` and never echo it.
 - Alchemy-managed: application Neon project (`database.run.ts`, stage `production`), project APIs and the CAD 5/month budget with 50/90/100% alerts (`platform.run.ts`, stage `production`), and the Cloud Run web service (`alchemy.run.ts`, stage `cloud-run`).
 - Email uses Resend's test sender `onboarding@resend.dev`, which delivers only to the owner's account address; a verified domain is a launch gate for open registration.
 
@@ -621,15 +621,103 @@ Plan and destroy need the same state store as deploy. Keep URLs out of source an
 
 ## Production configuration
 
-Supply the six required application inputs through protected provisioning/CI inputs: canonical HTTPS `BETTER_AUTH_URL`, a generated random `BETTER_AUTH_SECRET`, a base64-encoded 32-byte `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and a reviewed `AUTH_CLIENT_IP_HEADERS` policy. Keep the auth and encryption secrets stable across restarts and rotate deliberately. The allowlist forwards secrets to the host, not to build commands; `APP_ENV` is generated as production.
+Supply the six required application inputs through protected provisioning/CI inputs: canonical HTTPS `BETTER_AUTH_URL`, a generated random `BETTER_AUTH_SECRET`, a base64-encoded 32-byte `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and a reviewed `AUTH_CLIENT_IP_HEADERS` policy. Optional rotation inputs are described under [connection credential encryption rotation](#connection-credential-encryption-rotation). Keep the auth and encryption secrets stable across restarts and rotate deliberately. The allowlist forwards secrets to the host, not to build commands; `APP_ENV` is generated as production.
 
 ### Connection credential encryption rotation
 
-Provider session material is stored only as a versioned AES-GCM envelope. The envelope records the key version, and authenticated data binds the owner, connection, provider, and key version. The current release supports one active key version (`1`) from `CONNECTION_ENCRYPTION_KEY`.
+Provider session material is stored only as a versioned AES-GCM envelope. The envelope records the key
+version, and authenticated data binds the owner, connection, provider, and key version. Every service reads
+its keyring from configuration only, never from the database, so a database compromise cannot supply the key
+that opens its own stored secrets.
 
-Current supported rotation: pause provider work, disconnect every affected connection so active ciphertext is deleted, replace the secret with a newly generated base64 32-byte key, and have each owner reconnect. Disconnecting first avoids leaving ciphertext under a discarded key. This requires owner action per connection and should be planned as an incident, not a routine deploy.
+| Input                                 | Required | Meaning                                                                                                                                                                  |
+| ------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CONNECTION_ENCRYPTION_KEY`           | yes      | Base64 32-byte key that seals every new and re-wrapped envelope.                                                                                                         |
+| `CONNECTION_ENCRYPTION_KEY_VERSION`   | no       | Positive integer stamped into new envelopes, default `1`. Increase it with every new key.                                                                                |
+| `CONNECTION_ENCRYPTION_RETAINED_KEYS` | no       | Comma-separated `version:base64-32-byte-key` entries the deployment may still decrypt with, for example `1:<old-key>`. Retained keys never encrypt. Empty means no ring. |
 
-Planned keyring rotation without re-linking: deploy a release that decrypts retained envelopes with the old key version while encrypting new credentials with the new version, re-encrypt on the next successful credential use, then remove the old key version. Do not change the key without either the disconnect-first path or a keyring-capable release. Losing the key makes stored provider sessions unrecoverable; it does not expose them. Never place the key in plain environment entries, build outputs, logs, or repository files.
+A lone `CONNECTION_ENCRYPTION_KEY` with no version and no ring is key version `1` and behaves exactly as
+before. Every service must run the same ring; roll out a ring to web and worker together.
+
+Opening a credential is its use. An envelope under a retained version still decrypts, and a successful open
+reseals the same plaintext under the current key using a compare-and-swap on the stored envelope. A
+concurrent reconnect or another rewrap has already replaced the envelope, so a losing writer never
+overwrites newer material. Each envelope converges once, under normal traffic, with no migration. Use the
+connections and let scheduled work run; nothing else is required.
+
+Rotate without re-linking:
+
+```sh
+set -a && . ~/.config/lineupkeep/infra.env && set +a
+# 1. Retain the current key under its current version (keeping any earlier retained
+#    versions), mint the next key, then advance the version.
+export CONNECTION_ENCRYPTION_RETAINED_KEYS="${CONNECTION_ENCRYPTION_RETAINED_KEYS:+$CONNECTION_ENCRYPTION_RETAINED_KEYS,}${CONNECTION_ENCRYPTION_KEY_VERSION:-1}:$CONNECTION_ENCRYPTION_KEY"
+export CONNECTION_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+export CONNECTION_ENCRYPTION_KEY_VERSION=$(( ${CONNECTION_ENCRYPTION_KEY_VERSION:-1} + 1 ))
+# 2. Persist those three lines to ~/.config/lineupkeep/infra.env (mode 600), then
+#    deploy from infra/ using the [redeploy commands](#redeploy-and-rollback).
+```
+
+Watch the old version drain. The hourly `tick` runs the credential-key census and reports it in the
+`lineup.worker` wide event as `event.attributes`: `connection.credential_key_versions` (a `version:count`
+list), `connection.credential_older_envelopes` (not on the current version), and
+`connection.credential_unreadable_envelopes` (versions the ring no longer holds). The tick response
+carries the same values as `credentialKeys`.
+
+```sh
+gcloud logging read 'resource.type="cloud_run_revision"
+  AND jsonPayload.event.operation="lineup.worker"
+  AND jsonPayload.event.attributes."connection.credential_older_envelopes">=0' \
+  --project=lineupkeep-prod --freshness=2h --limit=1 \
+  --format='value(jsonPayload.event.attributes)'
+```
+
+Retire only when the version's count is zero: remove its entry from `CONNECTION_ENCRYPTION_RETAINED_KEYS`
+and deploy. Retirement is deliberate, never inferred. If an envelope still names the removed version, its
+connection fails with the named refusal `connection.credential_key_version_unavailable` rather than a
+generic decryption failure, and the census reports it under `connection.credential_unreadable_envelopes`.
+The refused span also carries `connection.credential_key_version` and
+`connection.credential_failure="key_version_unavailable"`:
+
+```sh
+gcloud logging read 'resource.type="cloud_run_revision"
+  AND jsonPayload.event.attributes."connection.credential_failure"="key_version_unavailable"' \
+  --project=lineupkeep-prod --freshness=24h --limit=5 \
+  --format='value(jsonPayload.event.attributes)'
+```
+
+Restore that entry (while the key material still exists) and redeploy, or have the owner disconnect and
+re-link that connection. Losing key material makes those sessions unrecoverable; it does not expose them.
+Never place a key in logs, build outputs, tickets, repository files, or chat; record only versions and
+counts.
+
+Suspected key leak, first ten minutes:
+
+1. Rotate immediately with the leaked key retained under its version, so new and re-wrapped envelopes no
+   longer use it. Deploy the ring; do not disconnect first if you want to keep reading the old envelopes.
+2. Assume the stored provider sessions are compromised if the database may also have been read. A key
+   rotation does not revoke a provider session, and the provider cannot tell us from an attacker. Pause
+   automated provider work (`gcloud scheduler jobs pause <job> --project=lineupkeep-prod --location=us-east1`,
+   with the job name from `gcloud scheduler jobs list`), have each owner disconnect the affected
+   connections on the Connections page so their ciphertext is deleted, and have them re-link after the new
+   ring is live.
+3. Keep the leaked key in the ring only while it enables convergence of envelopes you still intend to keep;
+   remove it once `olderEnvelopes` reaches zero or those connections are disconnected, and deploy again.
+4. Record the incident with key versions and counts only. Deleting a retained version before its envelopes
+   are gone turns recoverable connections into re-links, which the named refusal will tell you about.
+
+Scratch-database dry run of the mechanism, before any deployment:
+
+```sh
+bunx vitest run --project node \
+  packages/backend/src/contexts/connections/internal/ConnectionCredentialEncryption.test.ts \
+  packages/backend/src/contexts/connections/internal/ConnectionCredentialConvergence.test.ts \
+  packages/backend/src/contexts/connections/internal/CredentialKeyCensus.test.ts
+```
+
+These exercise a retained version decrypting, convergence after use, the named refusal for an absent
+version, and the census, against a disposable migrated database. They are not a substitute for verifying a
+deployed ring on a scratch deployment.
 
 Choose client-address headers from actual trusted ingress: Cloudflare's `cf-connecting-ip` or a reviewed Cloud Run forwarding/proxy policy. Header names alone do not prevent spoofing. Set `AUTH_TRUSTED_PROXIES` only to actual trusted ranges and verify address attribution/rate limiting under that topology. Rate-limit `/api/telemetry` at ingress as well.
 

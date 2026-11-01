@@ -787,7 +787,7 @@ export const LineupWorkerLive = Layer.effect(
 
     const decryptContext = Effect.fnUntraced(function* (userId: UserId, owned: OwnedTeam) {
       return yield* encryption
-        .decrypt({
+        .open({
           userId,
           connectionId: owned.connection.id,
           provider: owned.connection.provider,

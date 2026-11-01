@@ -15,12 +15,14 @@ import { Connections } from "./Connections.ts";
 import type { TeamId } from "./FantasyTeam.ts";
 import { AutomationLive } from "./internal/AutomationLive.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
+import { ConnectionCredentialRepository } from "./internal/ConnectionCredentialRepository.ts";
 import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
 import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { providerTeams } from "./internal/ConnectionTables.ts";
+import { CredentialKeyCensusLive } from "./internal/CredentialKeyCensusLive.ts";
 import { LineupDeliveryLocal } from "./internal/LineupDeliveryLocal.ts";
 import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
@@ -72,6 +74,22 @@ it.effect("runs one current-period automation per team per hour", () =>
     const nextHour = yield* automation.run(10);
     assert.strictEqual(nextHour.scheduledRuns, 1);
     assert.strictEqual(yield* fake.nativeCallCount, 2);
+  }).pipe(Effect.provide(AutomationTestLayer)),
+);
+
+it.effect("reports stored credential key versions with the maintenance tick", () =>
+  Effect.gen(function* () {
+    const automation = yield* Automation;
+    const fake = yield* FakeProviderWorld;
+    yield* refuseCustomPlanning(fake);
+    yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
+
+    const summary = yield* automation.run(10);
+
+    assert.strictEqual(summary.credentialKeys.currentKeyVersion, 1);
+    assert.deepStrictEqual(summary.credentialKeys.usage, [{ keyVersion: 1, envelopes: 1 }]);
+    assert.strictEqual(summary.credentialKeys.olderEnvelopes, 0);
+    assert.strictEqual(summary.credentialKeys.unreadableEnvelopes, 0);
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
@@ -626,11 +644,19 @@ const TeamsTest = TeamsLive.pipe(
   Layer.provide(LineupRepositoryTest),
 );
 const RetentionTest = RetentionSweepLive.pipe(Layer.provide(DatabaseLayer));
+const CredentialRepositoryTest = ConnectionCredentialRepository.layer.pipe(
+  Layer.provide(DatabaseLayer),
+);
+const CredentialCensusTest = CredentialKeyCensusLive.pipe(
+  Layer.provide(CredentialRepositoryTest),
+  Layer.provide(EncryptionTestLayer),
+);
 const AutomationTest = AutomationLive.pipe(
   Layer.provide(TeamRepositoryTest),
   Layer.provide(LineupRepositoryTest),
   Layer.provide(DispatcherTest),
   Layer.provide(RetentionTest),
+  Layer.provide(CredentialCensusTest),
 );
 const AutomationTestLayer = Layer.mergeAll(
   AutomationTest,

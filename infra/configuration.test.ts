@@ -135,6 +135,7 @@ it.effect(
             BETTER_AUTH_URL: "https://app.example.com",
             BETTER_AUTH_SECRET: "private-auth-secret",
             CONNECTION_ENCRYPTION_KEY: "private-connection-encryption-key",
+            CONNECTION_ENCRYPTION_RETAINED_KEYS: "1:private-retained-connection-key",
             RESEND_API_KEY: "private-email-secret",
             EMAIL_FROM: "Lineupkeep <lineupkeep@example.com>",
             AUTH_CLIENT_IP_HEADERS: "cf-connecting-ip",
@@ -147,6 +148,7 @@ it.effect(
         expect(Redacted.isRedacted(config["BETTER_AUTH_SECRET"])).toBe(true);
         expect(Redacted.isRedacted(config["RESEND_API_KEY"])).toBe(true);
         expect(Redacted.isRedacted(config["CONNECTION_ENCRYPTION_KEY"])).toBe(true);
+        expect(Redacted.isRedacted(config["CONNECTION_ENCRYPTION_RETAINED_KEYS"])).toBe(true);
         expect(config).not.toHaveProperty("CLOUDFLARE_API_TOKEN");
       }),
     ),

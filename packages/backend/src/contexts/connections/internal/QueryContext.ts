@@ -37,7 +37,7 @@ export function loadTeamContext(
           )
         : Effect.all([
             encryption
-              .decrypt({
+              .open({
                 userId,
                 connectionId: owned.connection.id,
                 provider: owned.connection.provider,

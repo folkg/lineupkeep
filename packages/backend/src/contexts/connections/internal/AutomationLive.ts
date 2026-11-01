@@ -3,6 +3,7 @@ import { DateTime, Effect, Layer } from "effect";
 import type { UserId } from "#contexts/auth/User.ts";
 import { Automation, AutomationFailed } from "#contexts/connections/Automation.ts";
 import type { AutomationSummary } from "#contexts/connections/Automation.ts";
+import { CredentialKeyCensus } from "#contexts/connections/CredentialKeyCensus.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import { LineupDispatcher } from "#contexts/connections/LineupWork.ts";
 import { RetentionSweep } from "#contexts/connections/Retention.ts";
@@ -18,6 +19,7 @@ export const AutomationLive = Layer.effect(
     const runs = yield* LineupRunRepository;
     const dispatcher = yield* LineupDispatcher;
     const retention = yield* RetentionSweep;
+    const credentialKeys = yield* CredentialKeyCensus;
 
     const run = Effect.fn("Automation.run")(function* (limit: number) {
       const now = yield* DateTime.now;
@@ -39,6 +41,7 @@ export const AutomationLive = Layer.effect(
       const scheduledRuns = scheduled.reduce((total, result) => total + result.runs.length, 0);
       const repaired = yield* dispatcher.repair(limit);
       const retained = yield* retention.run(limit, now);
+      const credentialKeyReport = yield* credentialKeys.report;
       const summary: AutomationSummary = {
         pausesExpired: pausesExpired.length,
         eligibleTeams: eligible.length,
@@ -46,6 +49,7 @@ export const AutomationLive = Layer.effect(
         delivered: repaired.delivered,
         pending: repaired.pending,
         retention: retained,
+        credentialKeys: credentialKeyReport,
       };
       yield* Effect.annotateCurrentSpan({
         "automation.eligible_teams": summary.eligibleTeams,

@@ -1,6 +1,7 @@
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
+import { CredentialKeyReport } from "./CredentialKeyCensus.ts";
 import { RetentionSummary } from "./Retention.ts";
 
 export const AutomationSummary = Schema.Struct({
@@ -10,6 +11,7 @@ export const AutomationSummary = Schema.Struct({
   delivered: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   pending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   retention: RetentionSummary,
+  credentialKeys: CredentialKeyReport,
 });
 export type AutomationSummary = typeof AutomationSummary.Type;
 
