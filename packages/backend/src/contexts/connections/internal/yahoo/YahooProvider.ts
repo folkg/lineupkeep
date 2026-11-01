@@ -2171,6 +2171,7 @@ function toSchedulePlayer(
   return {
     providerPlayerKey: player.player_key,
     name: player.name.full,
+    proTeamKey: optionalNonEmpty(player.editorial_team_key ?? ""),
     proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr ?? ""),
     games,
   };
@@ -3980,6 +3981,7 @@ const RosterPlayerPayload = Schema.Struct({
   primary_position: Schema.NonEmptyString,
   position_type: Schema.optional(Schema.String),
   eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
+  editorial_team_key: Schema.optional(Schema.String),
   editorial_team_abbr: Schema.optional(Schema.String),
   opponent: Schema.NullOr(Schema.String),
   starting_status: Schema.optional(Schema.Array(StartingStatus)),

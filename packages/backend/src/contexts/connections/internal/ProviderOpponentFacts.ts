@@ -1,6 +1,6 @@
 import { DateTime, Effect, Schema } from "effect";
 
-import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import type { FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
   ProviderReadFailureSchema,
   ProviderResponseInvalid,
@@ -20,6 +20,7 @@ import type {
   ObservedFactRepository,
   ProviderOpponentObservation,
   ProviderOpponentObservationWrite,
+  TeamIdentity,
 } from "./ObservedFactRepository.ts";
 import type { FactWindow, ProviderOpponentValue } from "./ObservedFacts.ts";
 import { factRefreshPolicies } from "./ObservedFacts.ts";
@@ -43,6 +44,7 @@ export function readProviderOpponent(input: {
   readonly provider: ProviderShape;
   readonly material: ProviderSessionMaterial;
   readonly teamId: TeamId;
+  readonly sport: FantasySport;
   readonly providerTeamKey: string;
   readonly period: ProviderSchedulePeriod;
 }): Effect.Effect<
@@ -57,7 +59,9 @@ export function readProviderOpponent(input: {
         providerTeamKey: input.providerTeamKey,
         period: input.period,
       });
-      return { schedule, observedAt: yield* DateTime.now };
+      const observedAt = yield* DateTime.now;
+      yield* input.facts.recordTeamIdentities(observedTeamIdentities(input, schedule, observedAt));
+      return { schedule, observedAt };
     }
 
     const dates = datesBetween(input.period.start, input.period.end);
@@ -96,6 +100,9 @@ export function readProviderOpponent(input: {
         range,
         previousObservedAt: oldestObservedAt(range, latestByDate),
       });
+      yield* input.facts.recordTeamIdentities(
+        observedTeamIdentities(input, read.schedule, read.observedAt),
+      );
       for (const observation of observationsFor(
         read.schedule,
         range,
@@ -116,6 +123,7 @@ export function readProviderOpponent(input: {
     for (const observation of observed) {
       all.set(observation.window.from, {
         ...observation,
+        subjectKey: input.teamId,
         source: input.material.provider,
       });
     }
@@ -130,6 +138,34 @@ export function readProviderOpponent(input: {
     };
   });
   return read();
+}
+
+function observedTeamIdentities(
+  input: {
+    readonly material: ProviderSessionMaterial;
+    readonly sport: FantasySport;
+  },
+  schedule: ProviderRosterSchedule,
+  observedAt: DateTime.Utc,
+): ReadonlyArray<TeamIdentity> {
+  const pairs = new Map<string, { readonly abbreviation: string; readonly key: string }>();
+  for (const player of schedule.players) {
+    if (player.proTeamKey === undefined || player.proTeamAbbreviation === undefined) {
+      continue;
+    }
+    pairs.set(player.proTeamKey, {
+      abbreviation: player.proTeamAbbreviation,
+      key: player.proTeamKey,
+    });
+  }
+  return [...pairs.values()].map((pair) => ({
+    sport: input.sport,
+    source: input.material.provider,
+    sourceTeamIdentifier: pair.abbreviation,
+    provider: input.material.provider,
+    providerTeamKey: pair.key,
+    observedAt,
+  }));
 }
 
 function isFresh(
@@ -256,6 +292,7 @@ function rebuildSchedule(input: {
           ? {
               providerPlayerKey: player.providerPlayerKey,
               name: player.name,
+              proTeamKey: undefined,
               proTeamAbbreviation: player.proTeamAbbreviation ?? undefined,
               games,
             }

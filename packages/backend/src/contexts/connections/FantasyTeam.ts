@@ -9,7 +9,8 @@ export const decodeTeamId = Schema.decodeUnknownSync(TeamId);
 export const FantasyLeague = Schema.Literals(["nfl", "nhl", "mlb", "nba"]);
 export type FantasyLeague = typeof FantasyLeague.Type;
 
-export const FantasySport = Schema.Literals(["football", "hockey", "baseball", "basketball"]);
+export const fantasySports = ["football", "hockey", "baseball", "basketball"] as const;
+export const FantasySport = Schema.Literals(fantasySports);
 export type FantasySport = typeof FantasySport.Type;
 
 export const TeamAvailability = Schema.Literals(["available", "unavailable"]);

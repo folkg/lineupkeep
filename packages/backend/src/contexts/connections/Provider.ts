@@ -551,6 +551,7 @@ export type ProviderScheduledGame = {
 export type ProviderSchedulePlayer = {
   readonly providerPlayerKey: string;
   readonly name: string;
+  readonly proTeamKey: string | undefined;
   readonly proTeamAbbreviation: string | undefined;
   readonly games: ReadonlyArray<ProviderScheduledGame>;
 };

@@ -15,6 +15,7 @@ const provisioningPackages =
 
 const providerScoring = "^packages/backend/src/contexts/connections/internal/provider-scoring/";
 const providerAdapters = "^packages/backend/src/contexts/connections/internal/yahoo/";
+const gameSourceAdapters = "^packages/backend/src/contexts/connections/internal/game-sources/";
 
 const browserPlatform = [
   "app-shell",
@@ -571,6 +572,14 @@ export default {
         ],
       },
       { path: "^packages/backend/src/contexts/connections/internal/yahoo/" },
+    ),
+    forbid(
+      "game-source-adapters-are-injected",
+      "Generic code must not import a game source adapter; use GameSourceRegistry and construct each adapter only in runtime/ApplicationLayer.ts.",
+      {
+        pathNot: [gameSourceAdapters, "^packages/backend/src/runtime/ApplicationLayer\\.ts$"],
+      },
+      { path: gameSourceAdapters },
     ),
     forbid(
       "live-layers-only-used-by-composition-roots",

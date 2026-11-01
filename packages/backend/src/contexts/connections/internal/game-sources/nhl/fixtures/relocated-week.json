@@ -1,0 +1,172 @@
+{
+  "nextStartDate": "2026-11-08",
+  "previousStartDate": "2026-10-25",
+  "gameWeek": [
+    {
+      "date": "2026-11-01",
+      "games": [
+        {
+          "id": 2026020301,
+          "season": 20262027,
+          "gameType": 2,
+          "venue": {
+            "default": "Scotiabank Arena"
+          },
+          "startTimeUTC": "2026-11-01T23:00:00Z",
+          "easternUTCOffset": "-05:00",
+          "venueUTCOffset": "-05:00",
+          "venueTimezone": "America/Toronto",
+          "gameState": "FUT",
+          "gameScheduleState": "PPD",
+          "awayTeam": {
+            "id": 6,
+            "abbrev": "BOS",
+            "placeName": {
+              "default": "Boston"
+            },
+            "commonName": {
+              "default": "Bruins"
+            }
+          },
+          "homeTeam": {
+            "id": 10,
+            "abbrev": "TOR",
+            "placeName": {
+              "default": "Toronto"
+            },
+            "commonName": {
+              "default": "Maple Leafs"
+            }
+          }
+        },
+        {
+          "id": 2026020302,
+          "season": 20262027,
+          "gameType": 2,
+          "venue": {
+            "default": "United Center"
+          },
+          "startTimeUTC": "2026-11-02T00:00:00Z",
+          "easternUTCOffset": "-05:00",
+          "venueUTCOffset": "-05:00",
+          "venueTimezone": "America/Chicago",
+          "gameState": "FUT",
+          "gameScheduleState": "CNCL",
+          "awayTeam": {
+            "id": 21,
+            "abbrev": "COL",
+            "placeName": {
+              "default": "Colorado"
+            },
+            "commonName": {
+              "default": "Avalanche"
+            }
+          },
+          "homeTeam": {
+            "id": 16,
+            "abbrev": "CHI",
+            "placeName": {
+              "default": "Chicago"
+            },
+            "commonName": {
+              "default": "Blackhawks"
+            }
+          }
+        },
+        {
+          "id": 2026020303,
+          "season": 20262027,
+          "gameType": 2,
+          "venue": {
+            "default": "Crypto.com Arena"
+          },
+          "startTimeUTC": "2026-11-02T02:00:00Z",
+          "easternUTCOffset": "-05:00",
+          "venueUTCOffset": "-05:00",
+          "venueTimezone": "America/Los_Angeles",
+          "gameState": "FUT",
+          "gameScheduleState": "OK",
+          "awayTeam": {
+            "id": 22,
+            "abbrev": "EDM",
+            "placeName": {
+              "default": "Edmonton"
+            },
+            "commonName": {
+              "default": "Oilers"
+            }
+          },
+          "homeTeam": {
+            "id": 26,
+            "abbrev": "LAK",
+            "placeName": {
+              "default": "Los Angeles"
+            },
+            "commonName": {
+              "default": "Kings"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "date": "2026-11-02",
+      "games": [
+        {
+          "id": 2026020304,
+          "season": 20262027,
+          "gameType": 2,
+          "venue": {
+            "default": "Madison Square Garden"
+          },
+          "startTimeUTC": "2026-11-03T00:30:00Z",
+          "easternUTCOffset": "-05:00",
+          "venueUTCOffset": "-05:00",
+          "venueTimezone": "America/New_York",
+          "gameState": "FINAL",
+          "gameScheduleState": "OK",
+          "awayTeam": {
+            "id": 52,
+            "abbrev": "WPG",
+            "placeName": {
+              "default": "Winnipeg"
+            },
+            "commonName": {
+              "default": "Jets"
+            }
+          },
+          "homeTeam": {
+            "id": 3,
+            "abbrev": "NYR",
+            "placeName": {
+              "default": "New York"
+            },
+            "commonName": {
+              "default": "Rangers"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "date": "2026-11-03",
+      "games": []
+    },
+    {
+      "date": "2026-11-04",
+      "games": []
+    },
+    {
+      "date": "2026-11-05",
+      "games": []
+    },
+    {
+      "date": "2026-11-06",
+      "games": []
+    },
+    {
+      "date": "2026-11-07",
+      "games": []
+    }
+  ]
+}

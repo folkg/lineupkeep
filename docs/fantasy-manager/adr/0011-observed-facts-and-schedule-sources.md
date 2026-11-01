@@ -58,11 +58,22 @@ hook. External sources are added per sport, and only where the terms permit.**
    a policy it cannot satisfy, and the narrowed bound is what the reader sees. Steady state is 8 to 10 requests
    a day for the owner's two leagues and five linked teams, against up to 360 today.
 
+   One professional game is stored as one observation carrying its date, start instant with its venue time
+   zone, its two teams, its venue, and its status, because one league-week request refreshes all of them at
+   once. Its covered window is the league week that was read, so a stored slate is served only for the week it
+   was read for and a shifted week is a new read rather than a partial answer. The three game ages are named
+   aspects of that fact rather than three fact kinds: a **calendar** read needs the fixture and start-time
+   aspects, and a **status** read needs the status aspect. A read of a game whose team has no settled identity
+   is not settled either, so a provider pairing learned after the games were stored is picked up by the next
+   read instead of waiting out the fixture age.
+
 3. **Identity is the provider's professional-team key.** Abbreviations are display text and are never a join.
    A new source's identifiers are attached to the canonical team only through a pair the provider itself
    publishes on one roster row — `editorial_team_key` beside `editorial_team_abbr` — recorded with its source
    and observation instant. A mapping is scoped to its league, is one-to-one or is not used, and an unmatched
-   source team stays unresolved and is never served for a canonical team.
+   source team stays unresolved and is never served for a canonical team. The mappings are stored, one row per
+   observed pairing, keyed by the sport, the source, and the source's own team identifier; the bridge from a
+   game source's identifier to the provider's key is a second observed pairing, never a request-time compare.
 
 4. **One hook, and the consumer never names a source.** `Facts.require({ subject, fact, window, maximumAge })`
    resolves the canonical subject, reads the newest qualifying observation, and asks the source registry only
@@ -93,8 +104,9 @@ hook. External sources are added per sport, and only where the terms permit.**
 - The efficiency the owner asked for arrives without an external dependency. Caching our own reads takes the
   same answers from up to 360 provider reads a day to five, and it is the first slice.
 - The external source buys facts the provider cannot supply — start times, venues, a horizon beyond the
-  current period, and a cancellation state — rather than buying efficiency. It costs one request a day per
-  league.
+  current period, and a cancellation state — rather than buying efficiency. One league-week read costs one
+  request and refreshes every game in that week for every fantasy league on that sport; measured against a real
+  NHL week it is 7 requests over 7 daily sweeps (1 a day) and 28 requests over 168 hourly reads (4 a day).
 - Every cached fact can answer "when did we learn this", which is what makes a stale value showable instead of
   hidden, and what makes a conflict recordable instead of silent.
 - One generic hook and one registry serve schedules, season state, and whatever fact is added next, so a later
@@ -114,9 +126,10 @@ hook. External sources are added per sport, and only where the terms permit.**
 - **The NHL API is undocumented.** It is the API the league's own site and app use, and it publishes no
   versioning or deprecation policy. A rename or a new required parameter breaks the adapter; the failure is a
   named refusal and a stale-but-marked fact, not a silent empty schedule.
-- **The NHL `gameScheduleState` values beyond `OK` are unobserved.** The field is the right place for a
-  postponement, but only `OK` was seen. Until a postponed game is observed, the adapter must treat an
-  unrecognised value as "unknown status", not as "on".
+- **The NHL `gameScheduleState` values beyond `OK` are still unobserved in a real game.** The league's own
+  client bundle names the vocabulary — `OK`, `TBD`, `PPD`, `SUSP`, `CNCL` — and the adapter decodes it, with
+  every unrecognised value becoming "unknown status" rather than "on". No real postponed game has been read
+  yet, so the postponed case is proved against the named vocabulary and a fixture, not against a live game.
 - **Postponement latency is unmeasured.** How long after a league announcement a source flips its status is
   unknown for every candidate. The 30-minute maximum age bounds our own staleness, not the source's.
 - **A 7-day fixture age assumes fixtures are stable.** A league can move a game a week out. The 6-hour start

@@ -1,0 +1,192 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "cf0f63d6-3451-4c65-8a2c-163117f9a6fe",
+  "prevIds": ["403f4308-0e45-4175-a284-faeecb6ec632"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "professional_team_identities"],
+      "writes": [
+        "s|tbl|public.professional_team_identities",
+        "n|tbl|public.professional_team_identities",
+        "e|tbl|public.professional_team_identities",
+        "n|rel|public.professional_team_identities",
+        "n|type|public.professional_team_identities",
+        "n|rel|public.professional_team_identities_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "professional_team_identities",
+        "professional_team_identities_lookup_idx"
+      ],
+      "writes": [
+        "s|idx|public.professional_team_identities_lookup_idx",
+        "n|idx|public.professional_team_identities_lookup_idx",
+        "e|idx|public.professional_team_identities_lookup_idx",
+        "n|rel|public.professional_team_identities_lookup_idx"
+      ],
+      "reads": [
+        "n|tbl|public.professional_team_identities",
+        "n|sch|public",
+        "n|col|public.professional_team_identities.sport",
+        "n|col|public.professional_team_identities.source_team_identifier"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "professional_team_identities",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "professional_team_identities",
+        "name": "sport",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "professional_team_identities",
+        "name": "source",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "professional_team_identities",
+        "name": "source_team_identifier",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "professional_team_identities",
+        "name": "provider",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "professional_team_identities",
+        "name": "provider_team_key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "professional_team_identities",
+        "name": "observed_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "professional_team_identities",
+        "name": "professional_team_identities_lookup_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "sport",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "source_team_identifier",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "professional_team_identities",
+        "name": "professional_team_identities_pkey",
+        "columns": ["sport", "source", "source_team_identifier", "provider", "provider_team_key"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

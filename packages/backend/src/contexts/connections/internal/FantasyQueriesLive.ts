@@ -2244,6 +2244,7 @@ export const FantasyQueriesLive = Layer.effect(
                 provider: context.provider,
                 material: providerIdentity(context),
                 teamId: context.owned.team.id,
+                sport: context.owned.team.sport,
                 providerTeamKey: context.owned.team.providerTeamKey,
                 period: schedulePeriod,
               }),

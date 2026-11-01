@@ -16,6 +16,7 @@ import type { SignInSessions } from "#contexts/auth/SignInSessions.ts";
 import type { Automation } from "#contexts/connections/Automation.ts";
 import type { Connections } from "#contexts/connections/Connections.ts";
 import type { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
+import { GameSourceRegistry, gameSourceRegistryOf } from "#contexts/connections/GameSource.ts";
 import type { HostedLinking } from "#contexts/connections/HostedLinking.ts";
 import { AutomationLive } from "#contexts/connections/internal/AutomationLive.ts";
 import { ConnectionCredentialEncryption } from "#contexts/connections/internal/ConnectionCredentialEncryption.ts";
@@ -25,6 +26,7 @@ import { ConnectionsDatabase } from "#contexts/connections/internal/ConnectionsD
 import { ConnectionsLive } from "#contexts/connections/internal/ConnectionsLive.ts";
 import { CredentialKeyCensusLive } from "#contexts/connections/internal/CredentialKeyCensusLive.ts";
 import { FantasyQueriesLive } from "#contexts/connections/internal/FantasyQueriesLive.ts";
+import { nhlGameSource } from "#contexts/connections/internal/game-sources/nhl/NhlGameSource.ts";
 import { HostedLinkingLive } from "#contexts/connections/internal/HostedLinkingLive.ts";
 import { HostedLinkingRepository } from "#contexts/connections/internal/HostedLinkingRepository.ts";
 import { LineupDeliveryCloudTasks } from "#contexts/connections/internal/LineupDeliveryCloudTasks.ts";
@@ -35,6 +37,7 @@ import { LineupRunsLive } from "#contexts/connections/internal/LineupRunsLive.ts
 import { LineupWorkerLive } from "#contexts/connections/internal/LineupWorkerLive.ts";
 import { NotificationsLive } from "#contexts/connections/internal/NotificationsRepository.ts";
 import { ObservedFactRepository } from "#contexts/connections/internal/ObservedFactRepository.ts";
+import { ProfessionalCalendarLive } from "#contexts/connections/internal/ProfessionalCalendarLive.ts";
 import { QueryRepository } from "#contexts/connections/internal/QueryRepository.ts";
 import { QueryTokens } from "#contexts/connections/internal/QueryTokens.ts";
 import { RetentionSweepLive } from "#contexts/connections/internal/RetentionSweepRepository.ts";
@@ -47,6 +50,7 @@ import { yahooProvider } from "#contexts/connections/internal/yahoo/YahooProvide
 import type { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import type { LineupDispatcher, LineupWorker } from "#contexts/connections/LineupWork.ts";
 import type { Notifications } from "#contexts/connections/Notifications.ts";
+import type { ProfessionalCalendar } from "#contexts/connections/ProfessionalCalendar.ts";
 import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/ProviderRegistry.ts";
 import type { RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { Teams } from "#contexts/connections/Teams.ts";
@@ -82,6 +86,9 @@ const SignInSessionsLayer = SignInSessionsLive.pipe(Layer.provide(SignInSessionR
 const ProviderLayer = Layer.effect(ProviderRegistry)(
   Effect.map(yahooProvider, (yahoo) => ProviderRegistry.of(providerRegistryOf([yahoo]))),
 );
+const GameSourceLayer = Layer.effect(GameSourceRegistry)(
+  Effect.map(nhlGameSource, (nhl) => GameSourceRegistry.of(gameSourceRegistryOf([nhl]))),
+);
 const CredentialEncryptionLayer = ConnectionCredentialEncryption.layer;
 const CredentialCensusLayer = CredentialKeyCensusLive.pipe(
   Layer.provide(
@@ -108,6 +115,10 @@ const QueryRepositoryLayer = QueryRepository.layer.pipe(
 );
 const ObservedFactRepositoryLayer = ObservedFactRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
+);
+const ProfessionalCalendarLayer = ProfessionalCalendarLive.pipe(
+  Layer.provide(ObservedFactRepositoryLayer),
+  Layer.provide(GameSourceLayer),
 );
 const QueriesLayer = Layer.merge(FantasyQueriesLive, TransactionReviewsLive).pipe(
   Layer.provide(QueryRepositoryLayer),
@@ -192,6 +203,7 @@ export const ApplicationLayer = Layer.mergeAll(
   ConnectionsLayer,
   HostedLinkingLayer,
   QueriesLayer,
+  ProfessionalCalendarLayer,
   ProposalsLayer,
   LineupRunsLayer,
   TeamsLayer,
@@ -206,6 +218,7 @@ export const ApplicationLayer = Layer.mergeAll(
   SignInSessionsLayer,
   AuthLayer,
   ProviderLayer,
+  GameSourceLayer,
   QueryTokens.layer,
 ).pipe(
   Layer.provide(ConnectionsDatabase.layer),
@@ -219,6 +232,7 @@ export type BackendServices =
   | Connections
   | HostedLinking
   | FantasyQueries
+  | ProfessionalCalendar
   | TransactionReviews
   | TransactionProposals
   | LineupRuns

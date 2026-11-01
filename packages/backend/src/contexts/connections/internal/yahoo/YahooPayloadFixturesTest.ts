@@ -3513,6 +3513,7 @@ export function yahooNhlDatedRoster(input: {
     readonly key: string;
     readonly name: string;
     readonly proTeam: string;
+    readonly proTeamKey?: string;
     readonly opponent: string | null;
     readonly slot?: string;
   }>;
@@ -3525,6 +3526,7 @@ export function yahooNhlDatedRoster(input: {
           [
             { player_key: player.key },
             { name: { full: player.name, first: "Synthetic", last: "Player" } },
+            ...(player.proTeamKey === undefined ? [] : [{ editorial_team_key: player.proTeamKey }]),
             { editorial_team_abbr: player.proTeam },
             { display_position: "C" },
             { position_type: "P" },

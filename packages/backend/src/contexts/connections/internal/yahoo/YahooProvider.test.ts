@@ -1672,6 +1672,7 @@ it.effect("reads every player's games across a date-scoped period, one request p
           key: `466.p.${String(30001 + index)}`,
           name: `Synthetic Game ${String(index)}`,
           proTeam: "SYN",
+          proTeamKey: `fixture.t.${String(index + 1)}`,
           opponent,
         })),
       }),
@@ -1695,11 +1696,11 @@ it.effect("reads every player's games across a date-scoped period, one request p
     );
     assert.deepStrictEqual(schedule.dates, ["2026-10-26", "2026-10-27"]);
     assert.deepStrictEqual(
-      schedule.players.map((player) => [player.name, player.games]),
+      schedule.players.map((player) => [player.name, player.proTeamKey, player.games]),
       [
-        ["Synthetic Game 0", [{ date: "2026-10-26", opponent: "LA", home: false }]],
-        ["Synthetic Game 1", [{ date: "2026-10-27", opponent: "BOS", home: true }]],
-        ["Synthetic Game 2", [{ date: "2026-10-26", opponent: "WPG", home: true }]],
+        ["Synthetic Game 0", "fixture.t.1", [{ date: "2026-10-26", opponent: "LA", home: false }]],
+        ["Synthetic Game 1", "fixture.t.2", [{ date: "2026-10-27", opponent: "BOS", home: true }]],
+        ["Synthetic Game 2", "fixture.t.3", [{ date: "2026-10-26", opponent: "WPG", home: true }]],
       ],
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
@@ -1725,12 +1726,14 @@ it.effect("reads a weekly league's opponent as the period's game without dates",
       {
         providerPlayerKey: "466.p.20001",
         name: "Synthetic Starter",
+        proTeamKey: undefined,
         proTeamAbbreviation: "SYN",
         games: [{ date: undefined, opponent: "SEA", home: true }],
       },
       {
         providerPlayerKey: "466.p.20002",
         name: "Synthetic Reserve",
+        proTeamKey: undefined,
         proTeamAbbreviation: "SYN",
         games: [],
       },

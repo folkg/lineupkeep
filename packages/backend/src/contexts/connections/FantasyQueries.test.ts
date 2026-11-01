@@ -3263,6 +3263,19 @@ it.effect("serves a repeated schedule window from stored opponent facts", () =>
       firstSchedule.players.map((player) => [player.name, player.gameCount, player.games]),
     );
     assert.deepStrictEqual(secondSchedule.dates, firstSchedule.dates);
+
+    const facts = yield* ObservedFactRepository;
+    const identities = yield* facts.readSourceTeamIdentities({
+      sport: "hockey",
+      source: "yahoo",
+    });
+    assert.deepStrictEqual(
+      identities.map((identity) => [identity.sourceTeamIdentifier, identity.providerTeamKey]),
+      [
+        ["BOS", "fixture.t.2"],
+        ["TOR", "fixture.t.1"],
+      ],
+    );
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -3539,12 +3552,14 @@ it.effect("uses the scoring week's opponent for a league whose coverage is a wee
         {
           providerPlayerKey: "461.p.10001",
           name: "Synthetic 0",
+          proTeamKey: undefined,
           proTeamAbbreviation: "SYN",
           games: [{ date: undefined, opponent: "SEA", home: true }],
         },
         {
           providerPlayerKey: "461.p.10002",
           name: "Synthetic 1",
+          proTeamKey: undefined,
           proTeamAbbreviation: "SYN",
           games: [],
         },
@@ -3989,12 +4004,14 @@ it.effect("shares one player reference between the roster and schedule sections"
         {
           providerPlayerKey: "461.p.10001",
           name: "Synthetic 0",
+          proTeamKey: undefined,
           proTeamAbbreviation: "SYN",
           games: [{ date: undefined, opponent: "SEA", home: true }],
         },
         {
           providerPlayerKey: "461.p.10002",
           name: "Synthetic 1",
+          proTeamKey: undefined,
           proTeamAbbreviation: "SYN",
           games: [],
         },
@@ -4633,6 +4650,8 @@ function opponentSchedule(providerTeamKey: string): import("./Provider.ts").Prov
       {
         key: `465.p.${teamNumber}001`,
         name: "Synthetic Skater",
+        proTeamKey: "fixture.t.1",
+        proTeamAbbreviation: "TOR",
         games: [
           { date: "2026-10-19", opponent: "TOR", home: true },
           { date: "2026-10-21", opponent: "LA", home: false },
@@ -4642,6 +4661,8 @@ function opponentSchedule(providerTeamKey: string): import("./Provider.ts").Prov
       {
         key: `465.p.${teamNumber}002`,
         name: "Synthetic Goalie",
+        proTeamKey: "fixture.t.2",
+        proTeamAbbreviation: "BOS",
         games: [
           { date: "2026-10-20", opponent: "BOS", home: true },
           { date: "2026-10-22", opponent: "SEA", home: false },
@@ -4673,6 +4694,8 @@ function scheduleFixture(input: {
   readonly players: ReadonlyArray<{
     readonly key: string;
     readonly name: string;
+    readonly proTeamKey?: string;
+    readonly proTeamAbbreviation?: string;
     readonly games: ReadonlyArray<{
       readonly date: string | undefined;
       readonly opponent: string;
@@ -4687,7 +4710,8 @@ function scheduleFixture(input: {
     players: input.players.map((player) => ({
       providerPlayerKey: player.key,
       name: player.name,
-      proTeamAbbreviation: "SYN",
+      proTeamKey: player.proTeamKey,
+      proTeamAbbreviation: player.proTeamAbbreviation ?? "SYN",
       games: player.games,
     })),
   };
@@ -5157,7 +5181,7 @@ const QueriesTestLayer = Layer.merge(FantasyQueriesLive, TransactionReviewsLive)
   Layer.provideMerge(QueryRepositoryTest),
   Layer.provideMerge(ConnectionRepositoryTest),
   Layer.provideMerge(ProviderFakeTest),
-  Layer.provide(ObservedFactRepositoryTest),
+  Layer.provideMerge(ObservedFactRepositoryTest),
   Layer.provide(EncryptionTestLayer),
   Layer.provide(QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars")),
   Layer.provide(NodeCrypto.layer),

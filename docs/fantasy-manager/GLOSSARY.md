@@ -156,8 +156,16 @@ A real-world team a rostered player plays for, identified by the provider's prof
 _Avoid_: Pro team, club, franchise, editorial team
 
 **Professional game**:
-A game between two professional teams, with a date, an optional start time, a venue, and a status. It is a fact about the real world, not a `Scheduled game`, which is what the provider publishes for a rostered player.
+A game between two professional teams, with a date, an optional start time and its venue time zone, a venue, and a status of scheduled, in progress, final, postponed, cancelled, or unknown. Its teams are provider professional-team keys, or an unresolved source identifier when no identity is known. It is a fact about the real world, not a `Scheduled game`, which is what the provider publishes for a rostered player.
 _Avoid_: Fixture, event, scheduled game when the provider's fact is not meant
+
+**Professional team identity**:
+A stored pairing of a source's team identifier to a professional team's provider key, learned from a pairing the provider itself publishes and scoped to its sport. A pairing that resolves an identifier to two teams is not used, and an identifier with no pairing stays unresolved.
+_Avoid_: Team alias, abbreviation map
+
+**Game source**:
+An external service that publishes professional games, such as the NHL's own API, reached through one provider-neutral interface and selected by the league it declares. It is not a `Provider`, which is the fantasy platform.
+_Avoid_: Feed, scraper, schedule API
 
 **Observed fact**:
 A value cached with what it is about, the window it covers, when it was observed, which source produced it, and how strongly it is held (`authoritative`, `corroborated`, or `reported`). Facts are stored as observations, so a later value does not erase what was learned earlier.

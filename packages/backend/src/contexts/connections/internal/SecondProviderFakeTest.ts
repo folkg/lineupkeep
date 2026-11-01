@@ -207,6 +207,7 @@ function schedule(period: ProviderRosterSchedule["period"]): ProviderRosterSched
     players: secondProviderRoster.players.map((player) => ({
       providerPlayerKey: player.providerPlayerKey,
       name: player.name,
+      proTeamKey: undefined,
       proTeamAbbreviation: player.proTeamAbbreviation,
       games:
         dates.length === 0

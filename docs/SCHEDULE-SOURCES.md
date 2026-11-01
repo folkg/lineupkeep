@@ -258,9 +258,13 @@ league's own. Neither is the fantasy provider's key. The bridge is the provider'
 publish `editorial_team_key` (`nhl.t.26`) and `editorial_team_abbr` together — a provider-published pair, not
 a guess. NHL abbreviations are unique within the league, so the mapping is one-to-one and can be verified.
 
-**Postponement.** `gameScheduleState` is the field that would carry it. Every game in the 2025-26 and 2026-27
-Edmonton schedules carried `OK`; no postponed example was found, so the other values of that field are
-**unprobed**. `gameState` and `startTimeUTC` are the fields a reschedule would change.
+**Postponement.** `gameScheduleState` is the field that carries it. Every game in the 2025-26 and 2026-27
+Edmonton schedules carried `OK`, so no postponed example was read from the API. The vocabulary is nevertheless
+published by the league's own web client: `wsr.nhle.com/static/js/main.bundle.js` decodes `gameScheduleState`
+as `OK` (scheduled), `TBD`, `PPD` (postponed), `SUSP` (suspended), and `CNCL` (cancelled), and `gameState` as
+`FUT`, `PRE`, `LIVE`, `CRIT`, `OVER`, `FINAL`, and `OFF` (read 2026-11-01). The adapter decodes those named
+values and turns anything else into "unknown", never "on". `gameState` and `startTimeUTC` are the fields a
+reschedule would change.
 
 **Terms.** `https://api-web.nhle.com/robots.txt` returns a Cloudflare content-signal block:
 
@@ -423,6 +427,32 @@ within a day unless a game is imminent.
 What this deliberately does not do: it does not poll a live scoreboard, does not chase in-game state, and does
 not re-read a fact merely because a page was viewed.
 
+### Measured cost of the declared game policy
+
+The game fact stores one observation per professional game, and **one league-week request refreshes every game
+and every aspect in that week**. That makes the cost of a read independent of how many fantasy leagues share the
+sport: the source is the NHL's league week, not a fantasy team. Measured 2026-11-01 against the real
+`2026-11-01` league week checked in as the adapter fixture:
+
+| Read pattern                                           | Requests over one week | Requests per day |
+| ------------------------------------------------------ | ---------------------- | ---------------- |
+| A daily calendar sweep (`freshness: calendar`)         | 7                      | 1                |
+| An hourly calendar read, the automation tick's cadence | 28                     | 4                |
+
+The hourly number is the start-time aspect doing its job: games are inside the 48-hour window most of a
+playing week, so an observation older than 6 hours is re-read. The status aspect is separate and tighter —
+30 minutes inside 12 hours — so a caller that asks for status every hour on a game day re-reads every hour
+(24 requests that day), which is one league-week request per read rather than a poll of a scoreboard. A caller
+that only needs "is this game still on today" should read status at the league-day sweep, not on every tick.
+
+The earlier per-fact rows below count _reads_ under the assumption that each aspect is fetched separately. That
+assumption is wrong for this source: the league-week response carries all of them.
+
+A league week with no games stores no game fact, because a fact is stored per game. Reading such a week is
+still a fact — the week is served with an empty games list — but the next read of that week re-requests it
+rather than serving nothing as if it were stored. That is one request per read during a break or the
+off-season, and it is the honest cost of having no row to point at.
+
 ## Failure behaviour
 
 **The source is down, slow, or returns an error.** Serve the newest observation that is still inside its
@@ -572,8 +602,8 @@ generic module imports a source module.
   the automation question, and the cheapest licensed option is $20/month for facts we would not yet use.
 - **How fast a postponement actually appears.** Not observable on a quiet day. It needs an observation during
   a real postponement, which is a standing verification rather than a task.
-- **The NHL `gameScheduleState` vocabulary beyond `OK`.** The field exists; its postponed value has not been
-  seen.
+- **A real postponed NHL game.** The vocabulary is established from the league's own client, but no live game
+  has been read in a postponed state, so the latency from announcement to status flip is still unmeasured.
 - **Whether the NHL publishes a separate data-licence page** for the API distinct from `robots.txt`.
 - **Whether the owner accepts the same automated-access posture for the Fantasy Sports API** that the product
   already depends on. That is a pre-existing question, not one this investigation changes, and it belongs to

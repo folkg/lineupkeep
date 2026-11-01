@@ -1091,6 +1091,36 @@ it("accepts constructing a provider adapter in the composition root", async () =
   expect(result.status, result.output).toBe(0);
 });
 
+it("rejects a generic context module importing a game source adapter", async () => {
+  const files = {
+    "packages/backend/src/contexts/connections/internal/ProfessionalCalendarLive.ts":
+      'import { nhlGameSource } from "#contexts/connections/internal/game-sources/nhl/NhlGameSource.ts"; export const source = nhlGameSource;',
+    "packages/backend/src/contexts/connections/internal/game-sources/nhl/NhlGameSource.ts":
+      "export const nhlGameSource = 1;",
+  };
+
+  const result = await checkArchitecture(files);
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("game-source-adapters-are-injected");
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+    "use GameSourceRegistry and construct each adapter",
+  );
+});
+
+it("accepts constructing a game source adapter in the composition root", async () => {
+  const files = {
+    "packages/backend/src/runtime/ApplicationLayer.ts":
+      'import { nhlGameSource } from "#contexts/connections/internal/game-sources/nhl/NhlGameSource.ts"; export const GameSourceLayer = nhlGameSource;',
+    "packages/backend/src/contexts/connections/internal/game-sources/nhl/NhlGameSource.ts":
+      "export const nhlGameSource = 1;",
+  };
+
+  const result = await checkArchitecture(files);
+
+  expect(result.status, result.output).toBe(0);
+});
+
 it("rejects persistence re-exports from a public context module", async () => {
   const files = {
     "packages/backend/src/contexts/notes/Notes.ts":
