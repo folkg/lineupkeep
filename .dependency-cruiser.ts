@@ -4,6 +4,7 @@ const permittedContextImports = {
   auth: [],
   connections: ["contexts/auth/User.ts", "contexts/auth/UserDirectory.ts"],
   feedback: ["contexts/auth/User.ts"],
+  toolCalls: ["contexts/auth/User.ts"],
 };
 
 const backendRoot = "^packages/backend/src/";

@@ -16,7 +16,25 @@ export function anyOf<Column extends PgColumn>(
 }
 
 export function addedToExcluded(column: PgColumn): SQL {
-  return sql`${column} + excluded.${sql.identifier(column.name)}`;
+  return sql`${column} + ${excludedColumn(column)}`;
+}
+
+function excludedColumn(column: PgColumn): SQL {
+  return sql`excluded.${sql.identifier(column.name)}`;
+}
+
+export function incrementedWindowCounter(table: {
+  readonly windowStartedAt: PgColumn;
+  readonly count: PgColumn;
+}): { readonly count: SQL; readonly windowStartedAt: SQL } {
+  const { count, windowStartedAt } = table;
+  return {
+    count: sql`case
+      when ${windowStartedAt} < ${excludedColumn(windowStartedAt)} then ${excludedColumn(count)}
+      else ${count} + ${excludedColumn(count)}
+    end`,
+    windowStartedAt: sql`greatest(${windowStartedAt}, ${excludedColumn(windowStartedAt)})`,
+  };
 }
 
 export function scheduledPendingPredicate(table: {
@@ -63,9 +81,7 @@ export function excludedValues<
   Keys extends keyof InferSelectModel<Table> & string,
 >(table: Table, keys: ReadonlyArray<Keys>): Record<string, SQL> {
   const columns = getTableColumns(table) as Record<Keys, PgColumn>;
-  return Object.fromEntries(
-    keys.map((key) => [key, sql`excluded.${sql.identifier(columns[key].name)}`] as const),
-  );
+  return Object.fromEntries(keys.map((key) => [key, excludedColumn(columns[key])] as const));
 }
 
 export function maxInsertRows(table: PgTable): number {

@@ -19,6 +19,10 @@ Run `bun run mcp:accept` before accepting an MCP change. It exercises the real p
 
 `bun run mcp:accept` starts a disposable local stack, registers a fresh public client for each modern grant, and runs discovery, PKCE, browser sign-in, and consent. It requests the full advertised set and the onboarding baseline, then prints every tool's result under both grants. It also authorizes once through the client metadata document that still asks for the retired `connections:read` name and prints the same table for that legacy grant, proving a retired name in a token's claim still reaches its tool. Each tool's required scope comes from that tool's own unauthenticated 401 challenge, cross-checked against whether the grant actually runs or refuses it. `--scopes <subset>` reproduces a client's exact request and accepts a retired name; the restricted baseline and the legacy grant are still tested. `--origin` may point at an existing loopback test-composition stack with `RESEND_API_BASE_URL` set; otherwise omit it.
 
+Each grant makes a handful of calls, far below the [tool-call limits](../../../../docs/fantasy-manager/MCP.md#tool-call-limits),
+so a `429` in a report is a real limit refusal and not a scope finding; the refused call counts, so the
+next run of the command may need the stated retry.
+
 ### Provided token: the deployed origin
 
 ```sh

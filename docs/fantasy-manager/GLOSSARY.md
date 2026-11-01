@@ -209,6 +209,15 @@ _Avoid_: Priority, milestone
 **Feedback submission quota**:
 The bounded number of feedback reports one account, and one acting client label, may submit within a clock hour. It is an abuse control, not an allowance a person spends.
 
+## MCP tool calls
+
+**Tool-call class**:
+Which of three allowances an MCP tool call spends: a read, an ordinary write, or a destructive write. The tool's published read-only and destructive annotations decide it, so the bucket a client is told about is the bucket it pays; a tool that declares neither is treated as destructive.
+
+**Tool-call quota**:
+The bounded number of MCP tool calls one account, and one acting client of that account, may make for a class within that class's window. A refused call also counts. It is an abuse control that protects shared free allowances and the provider account's standing, not an allowance a person is meant to spend.
+_Avoid_: Rate limit when the client-visible quota is meant
+
 ## Actions
 
 **Native lineup action**:

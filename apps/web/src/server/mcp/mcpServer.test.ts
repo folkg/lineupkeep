@@ -1,3 +1,4 @@
+import { it as effectIt } from "@effect/vitest";
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { ConnectionPersistenceFailed } from "@lineupkeep/backend/connections/Connection";
@@ -40,7 +41,9 @@ import {
 } from "@lineupkeep/backend/feedback/Feedback";
 import type { FeedbackShape } from "@lineupkeep/backend/feedback/Feedback";
 import { FeedbackPersistenceFailed } from "@lineupkeep/backend/feedback/Feedback";
-import { DateTime, Effect, Layer, Schema } from "effect";
+import { ToolCallQuota, toolCallLimits } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
+import type { ToolCall } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
+import { DateTime, Duration, Effect, Layer, Schema } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { expect, it } from "vitest";
 
@@ -96,7 +99,7 @@ it("derives the endpoint path and discovery challenge from the Auth resource", a
           ...auth,
           oauthResource: "https://connections.example/agents",
         })),
-        Effect.provide(authentication),
+        Effect.provide(Layer.merge(authentication, permissiveQuota)),
       ),
     );
   const input = request("tools/list", {}, "read");
@@ -141,7 +144,7 @@ it("serves composed feature toolkits without requiring connection services", asy
   const run = (invocation: Request): Promise<Response> =>
     Effect.runPromise(
       mcpRequest(invocation, tools, handlers, { name: "Example", version: "1" }).pipe(
-        Effect.provide(authentication),
+        Effect.provide(Layer.merge(authentication, permissiveQuota)),
       ),
     );
 
@@ -244,22 +247,25 @@ it("asks the auth service only for the calling tool's scope", async () => {
         { name: "Example", version: "1" },
       ).pipe(
         Effect.provide(
-          Layer.succeed(AuthService)({
-            signInMethods: { google: false },
-            oauthResource: "https://connections.example/mcp",
-            onboardingScopes: [{ name: "example:read", description: "Read examples." }],
-            getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
-            consent: () => Effect.succeed("https://client.test/callback"),
-            handle: () => Effect.succeed(new Response()),
-            getSession: () => Effect.void.pipe(Effect.as(undefined)),
-            resolveAccessToken: (_token, scopes) => {
-              requested.push(scopes);
-              return Effect.succeed({
-                status: "authenticated" as const,
-                userId: decodeUserId("reader"),
-              });
-            },
-          }),
+          Layer.merge(
+            Layer.succeed(AuthService)({
+              signInMethods: { google: false },
+              oauthResource: "https://connections.example/mcp",
+              onboardingScopes: [{ name: "example:read", description: "Read examples." }],
+              getConsentRequest: () => Effect.succeed({ status: "invalid" as const }),
+              consent: () => Effect.succeed("https://client.test/callback"),
+              handle: () => Effect.succeed(new Response()),
+              getSession: () => Effect.void.pipe(Effect.as(undefined)),
+              resolveAccessToken: (_token, scopes) => {
+                requested.push(scopes);
+                return Effect.succeed({
+                  status: "authenticated" as const,
+                  userId: decodeUserId("reader"),
+                });
+              },
+            }),
+            permissiveQuota,
+          ),
         ),
       ),
     );
@@ -277,6 +283,95 @@ it("refuses a token that grants no scopes", async () => {
 
   expect(response.status).toBe(403);
   expect(response.headers.get("www-authenticate")).toContain('scope="fantasy:read"');
+});
+
+effectIt.effect(
+  "refuses a call over its allowance with Retry-After and records rejected with the tool name",
+  () =>
+    Effect.gen(function* () {
+      const tools = rateLimitedToolkit;
+      const consumed: Array<ToolCall> = [];
+      const quota = Layer.succeed(ToolCallQuota)({
+        consume: (call) => {
+          consumed.push(call);
+          return Effect.succeed({
+            allowed: false as const,
+            callClass: "read" as const,
+            bucket: "client" as const,
+            limit: toolCallLimits.read,
+            retryAfter: Duration.seconds(45),
+          });
+        },
+      });
+      const observation = yield* Effect.gen(function* () {
+        const response = yield* mcpRequest(
+          request("tools/call", { name: "echo", arguments: {} }, "read"),
+          tools,
+          () => tools.toLayer({ echo: () => Effect.succeed("ok") }),
+          { name: "Example", version: "1" },
+        ).pipe(Effect.provide(Layer.merge(authentication, quota)));
+        const span = yield* Effect.currentSpan;
+        const body = yield* Effect.promise(() => response.json() as Promise<unknown>);
+        return { response, body, attributes: span.attributes };
+      }).pipe(Effect.withSpan("test.tool_call_refusal"));
+
+      expect(observation.response.status).toBe(429);
+      expect(observation.response.headers.get("retry-after")).toBe("45");
+      expect(observation.body).toMatchObject({
+        jsonrpc: "2.0",
+        id: 1,
+        error: {
+          code: -32_001,
+          data: {
+            reason: "tool_call_quota_exhausted",
+            class: "read",
+            bucket: "client",
+            limit: 60,
+            windowSeconds: 60,
+            retryAfterSeconds: 45,
+          },
+        },
+      });
+      const refusal = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ error: Schema.Struct({ message: Schema.String }) }),
+      )(observation.body);
+      expect(refusal.error.message).toContain("Retry in 45 seconds");
+      expect(observation.attributes.get("app.outcome")).toBe("rejected");
+      expect(observation.attributes.get("mcp.tool.name")).toBe("echo");
+      expect(consumed).toEqual([
+        { userId: decodeUserId("reader"), clientId: undefined, callClass: "read" },
+      ]);
+    }),
+);
+
+it("spends the allowance for a failing tool, an invalid call, and an unknown tool", async () => {
+  const consumed: Array<ToolCall> = [];
+  const quota = Layer.succeed(ToolCallQuota)({
+    consume: (call) => {
+      consumed.push(call);
+      return Effect.succeed({ allowed: true as const });
+    },
+  });
+  const run = (invocation: Request): Promise<Response> => handle(invocation, undefined, quota);
+
+  const anonymous = await run(request("tools/call", { name: "list_teams", arguments: {} }));
+  expect(anonymous.status).toBe(401);
+  expect(consumed).toEqual([]);
+
+  await run(request("tools/list", {}, "read"));
+  expect(consumed).toEqual([]);
+
+  const failing = await run(request("tools/call", { name: "list_teams", arguments: {} }, "read"));
+  const invalid = await run(
+    request("tools/call", { name: "list_connections", arguments: { limit: 1 } }, "read"),
+  );
+  const missing = await run(request("tools/call", { name: "missing", arguments: {} }, "read"));
+
+  expect(failing.status).toBe(200);
+  expect(await json(failing)).toMatchObject({ result: { isError: true } });
+  expect(invalid.status).toBe(400);
+  expect(missing.status).not.toBe(429);
+  expect(consumed.map((call) => call.callClass)).toEqual(["read", "read", "write"]);
 });
 
 it.each(["2025-03-26", "2025-06-18", "2025-11-25"])(
@@ -388,6 +483,7 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
   };
   const services = Layer.mergeAll(
     authentication,
+    permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
@@ -434,6 +530,7 @@ it("reaches search_players with an empty query and returns the remedy instead of
   };
   const services = Layer.mergeAll(
     authentication,
+    permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
@@ -505,6 +602,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
   };
   const services = Layer.mergeAll(
     authentication,
+    permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
@@ -568,6 +666,7 @@ it("names the cause when a continuation cursor is reused with different argument
   };
   const services = Layer.mergeAll(
     authentication,
+    permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
@@ -632,6 +731,7 @@ it("requires transaction review scope and returns human-review-only links", asyn
   };
   const services = Layer.mergeAll(
     authentication,
+    permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(reviews),
@@ -710,6 +810,7 @@ it("proposes a transaction set under the review scope and returns the review lin
   };
   const services = Layer.mergeAll(
     authentication,
+    permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
@@ -816,6 +917,7 @@ it("returns a durable queued lineup reference without claiming success", async (
   };
   const services = Layer.mergeAll(
     authentication,
+    permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
@@ -885,6 +987,7 @@ it("requires teams:manage and changes automation through the shared team service
   };
   const services = Layer.mergeAll(
     authentication,
+    permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
@@ -971,6 +1074,7 @@ it("records agent feedback for the authenticated account on a read grant", async
   };
   const services = Layer.mergeAll(
     authentication,
+    permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(unavailableReviews),
@@ -1074,6 +1178,7 @@ it("returns an actionable failure for refused feedback instead of leaking persis
             program,
             Layer.mergeAll(
               authentication,
+              permissiveQuota,
               Layer.succeed(Connections)(unavailableConnections),
               Layer.succeed(FantasyQueries)(unavailableQueries),
               Layer.succeed(TransactionReviews)(unavailableReviews),
@@ -1104,6 +1209,20 @@ it("returns an actionable failure for refused feedback instead of leaking persis
   expect(JSON.stringify(failedBody)).toContain("internal server error");
   expect(invalidLimit.status).toBe(400);
   expect(await json(invalidLimit)).toMatchObject({ error: { code: -32602 } });
+});
+
+const rateLimitedToolkit = Toolkit.make(
+  Tool.make("echo", {
+    parameters: Schema.Struct({ value: Schema.String }),
+    success: Schema.String,
+  })
+    .annotate(RequiredScope, { name: "example:read", description: "Read examples." })
+    .annotate(Tool.Readonly, true)
+    .annotate(Tool.Destructive, false),
+);
+
+const permissiveQuota = Layer.succeed(ToolCallQuota)({
+  consume: () => Effect.succeed({ allowed: true as const }),
 });
 
 const authentication = Layer.succeed(AuthService)({
@@ -1149,9 +1268,11 @@ const unavailableConnections: ConnectionsShape = {
 function handle(
   request: Request,
   connections: ConnectionsShape = unavailableConnections,
+  quota: Layer.Layer<ToolCallQuota> = permissiveQuota,
 ): Promise<Response> {
   const services = Layer.mergeAll(
     authentication,
+    quota,
     Layer.succeed(Connections)(connections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
     Layer.succeed(TransactionReviews)(unavailableReviews),

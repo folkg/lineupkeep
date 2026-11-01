@@ -5,12 +5,13 @@ import {
   onboardingScopes,
   resourceScopes,
 } from "@lineupkeep/backend/runtime/ApplicationScopes";
-import { Context } from "effect";
+import { toolCallLimits } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
+import { Context, Schema } from "effect";
 import { Tool } from "effect/ai";
 import { expect, it } from "vitest";
 
 import { applicationTools } from "./mcpServer";
-import { RequiredScope } from "./toolAuthorization";
+import { RequiredScope, toolCallClass } from "./toolAuthorization";
 
 const toolScopes = Object.values(applicationTools.tools).map((tool) => ({
   name: tool.name,
@@ -22,6 +23,56 @@ it("declares exactly the advertised resource scopes on the shipped tools", () =>
   expect([...new Set(toolScopes.map(({ scope }) => scope))].sort()).toEqual(
     resourceScopes.map(({ name }) => name).sort(),
   );
+});
+
+const toolClasses = Object.values(applicationTools.tools).map((tool) => ({
+  name: tool.name,
+  callClass: toolCallClass(tool),
+}));
+
+it("spends a declared allowance on every shipped tool, smallest for the destructive one", () => {
+  expect(
+    toolClasses.filter(({ callClass }) => callClass === "destructive").map(({ name }) => name),
+  ).toEqual(["set_lineup"]);
+  expect(
+    toolClasses
+      .filter(({ callClass }) => callClass === "write")
+      .map(({ name }) => name)
+      .sort(),
+  ).toEqual([
+    "propose_transactions",
+    "revalidate_transaction_proposal_set",
+    "set_team_automation",
+    "submit_feedback",
+  ]);
+  expect(
+    toolClasses
+      .filter(({ callClass }) => callClass === "read")
+      .map(({ name }) => name)
+      .sort(),
+  ).toEqual([
+    "generate_transaction_review_links",
+    "get_calendar",
+    "get_league",
+    "get_lineup_runs",
+    "get_matchups",
+    "get_pending_trade_offers",
+    "get_players",
+    "get_rosters",
+    "get_team_summary",
+    "get_transaction_proposal_set",
+    "get_transactions",
+    "list_connections",
+    "list_feedback",
+    "list_teams",
+    "search_players",
+  ]);
+  expect(toolCallLimits.destructive.clientMax).toBeLessThan(toolCallLimits.write.clientMax);
+  expect(toolCallLimits.write.clientMax).toBeLessThan(toolCallLimits.read.clientMax);
+});
+
+it("bounds a tool that declares no annotations with the smallest allowance", () => {
+  expect(toolCallClass(Tool.make("unannotated", { success: Schema.String }))).toBe("destructive");
 });
 
 it("requires no retired scope name and advertises none", () => {

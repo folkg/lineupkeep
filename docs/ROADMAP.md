@@ -469,23 +469,26 @@ Distinct from the dependency audit, which is done.
 - [x] Review the address-based egress policy and the hosted browser's blast radius.
 - [x] Review rate limits, logging hygiene, and what a compromised worker could reach.
 
-Written up in [SECURITY-AUDIT.md](SECURITY-AUDIT.md): sixteen findings with severities and evidence, three
-fixed in the same change with a regression test each, one accepted as designed, twelve deferred with a
-reason. The four groups below are the deferred work that is worth scheduling.
+Written up in [SECURITY-AUDIT.md](SECURITY-AUDIT.md): sixteen findings with severities and evidence, four
+fixed with a regression test each, one accepted as designed, eleven deferred with a reason. The groups
+below are the deferred work that is worth scheduling; J1 is done.
 
 ### J1 — Rate limits and a cost ceiling on the tools
 
-Finding F1, High. The destructive and expensive tools have no per-owner limit, so one stolen token can drive
-provider traffic and upstream lineup writes at machine speed and exhaust the free allowances the deployment
-depends on.
+Finding F1, High. The destructive and expensive tools had no per-owner limit, so one stolen token could
+drive provider traffic and upstream lineup writes at machine speed and exhaust the free allowances the
+deployment depends on.
 
-- [ ] Put one limiter in front of the MCP toolkit, beside the existing scope check, so every tool inherits it.
-- [ ] Key it by owner and by acting client, in durable storage, so scale-to-zero does not reset it.
-- [ ] Give `set_lineup` a smaller bucket than the read tools, and refuse with `Retry-After`, not a 500.
+- [x] Put one limiter in front of the MCP toolkit, beside the existing scope check, so every tool inherits it.
+- [x] Key it by owner and by acting client, in durable storage, so scale-to-zero does not reset it.
+- [x] Give `set_lineup` a smaller bucket than the read tools, and refuse with `Retry-After`, not a 500.
 
-**Decide**: how many lineup requests per hour a person may make, and whether the owner and the agent share
-that budget. **Verify**: a test that a loop is refused with the stated retry, and that a normal agent session
-is not. `M`, needs the decision first.
+**Decided**: reads are 60 per client and 180 per owner a minute; other writes 20 and 60 an hour;
+`set_lineup` 6 and 18 an hour, in its own bucket and window. The owner ceiling is three client ceilings, so
+one client at its limit leaves a full share for two more. A refused call counts, so a failing tool is not a
+free loop. The numbers and the client contract are documented in
+[MCP.md](fantasy-manager/MCP.md#tool-call-limits); the counter is the durable `tool_call_quota` table. `M`,
+done.
 
 ### J2 — Registration, retention and erasure for account data
 

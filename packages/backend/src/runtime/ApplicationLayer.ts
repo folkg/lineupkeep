@@ -52,6 +52,10 @@ import { FeedbackDatabase } from "#contexts/feedback/internal/FeedbackDatabase.t
 import { FeedbackLive } from "#contexts/feedback/internal/FeedbackLive.ts";
 import { FeedbackRepository } from "#contexts/feedback/internal/FeedbackRepository.ts";
 import { FeedbackRetentionLive } from "#contexts/feedback/internal/FeedbackRetentionLive.ts";
+import { ToolCallQuotaDatabase } from "#contexts/toolCalls/internal/ToolCallQuotaDatabase.ts";
+import { ToolCallQuotaLive } from "#contexts/toolCalls/internal/ToolCallQuotaLive.ts";
+import { ToolCallQuotaRepository } from "#contexts/toolCalls/internal/ToolCallQuotaRepository.ts";
+import type { ToolCallQuota } from "#contexts/toolCalls/ToolCallQuota.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
 import { advertisedScopes } from "#runtime/ApplicationScopes.ts";
@@ -159,6 +163,10 @@ const FeedbackRepositoryLayer = FeedbackRepository.layer.pipe(
 );
 const FeedbackLayer = FeedbackLive.pipe(Layer.provide(FeedbackRepositoryLayer));
 const FeedbackRetentionLayer = FeedbackRetentionLive.pipe(Layer.provide(FeedbackRepositoryLayer));
+const ToolCallQuotaLayer = ToolCallQuotaLive.pipe(
+  Layer.provide(ToolCallQuotaRepository.layer),
+  Layer.provide(ToolCallQuotaDatabase.layer),
+);
 export const ApplicationLayer = Layer.mergeAll(
   ConnectionsLayer,
   HostedLinkingLayer,
@@ -173,6 +181,7 @@ export const ApplicationLayer = Layer.mergeAll(
   LineupWorkerLayer,
   FeedbackLayer,
   FeedbackRetentionLayer,
+  ToolCallQuotaLayer,
   AuthLayer,
   ProviderLayer,
   QueryTokens.layer,
@@ -193,4 +202,5 @@ export type BackendServices =
   | LineupDispatcher
   | LineupWorker
   | Feedback
-  | FeedbackRetention;
+  | FeedbackRetention
+  | ToolCallQuota;

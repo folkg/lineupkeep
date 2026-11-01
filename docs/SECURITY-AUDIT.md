@@ -1,8 +1,9 @@
 # Security and privacy audit
 
-Status: written findings for review. Three findings are fixed in this change, twelve are deferred with the
-reason they were not taken here, and one is accepted as designed. This document contains no secret, token,
-cookie, crumb, or personal datum; every credential is referred to by shape only.
+Status: written findings for review. Four findings are fixed, eleven are deferred with the reason they
+were not taken, and one is accepted as designed. F1 was fixed in a follow-up change once its product
+decision was made; the rest of this document is unchanged from the audit revision. This document contains
+no secret, token, cookie, crumb, or personal datum; every credential is referred to by shape only.
 
 Date: 2026-11-01. Baseline: `5871f3e8` (`mcp: reduce the scope set to four resource scopes`).
 
@@ -41,14 +42,15 @@ Two rules were applied to keep the word "high" meaningful:
 - A finding whose only cost is that a control could be stronger, with no demonstrated gain, is Low even
   when the topic is serious. "This could be better" is not High.
 
-`Fixed here` means the change is in this revision with a regression test that fails without it. `Deferred`
-means it is recorded for the named reason and left for the reviewer to schedule.
+`Fixed` means the change is in this audit's revision or in the follow-up named on the finding, with a
+regression test that fails without it. `Deferred` means it is recorded for the named reason and left for the
+reviewer to schedule.
 
 ## Summary
 
 | #   | Finding                                                                                    | Severity | Status    |
 | --- | ------------------------------------------------------------------------------------------ | -------- | --------- |
-| F1  | No rate limit or cost ceiling on the expensive and destructive MCP tools                   | High     | Deferred  |
+| F1  | No rate limit or cost ceiling on the expensive and destructive MCP tools                   | High     | **Fixed** |
 | F2  | Dynamic client registration is unauthenticated, uncapped and never cleaned up              | Medium   | Deferred  |
 | F3  | Session revocation lags up to five minutes and there is no session inventory or revoke-all | Medium   | Deferred  |
 | F4  | No erasure or export path for personal data, and some tables have no retention at all      | Medium   | Deferred  |
@@ -65,14 +67,13 @@ means it is recorded for the named reason and left for the reviewer to schedule.
 | F15 | The egress proxy records an unbounded number of distinct refusals per session              | Low      | **Fixed** |
 | F16 | The hosted browser can reach Lineupkeep's own public origin                                | Low      | Accepted  |
 
-Count: 0 critical, 1 high, 5 medium, 10 low. Three fixed here, one accepted as designed, twelve deferred.
+Count: 0 critical, 1 high, 5 medium, 10 low. Four fixed, one accepted as designed, eleven deferred.
 
 ## Findings
 
 ### F1 — No rate limit or cost ceiling on the expensive and destructive MCP tools
 
-**Severity: High. Deferred: it needs a policy decision (bucket, window, owner-or-client key) and a
-migration, neither of which is an audit fix.**
+**Severity: High. Fixed in a follow-up change, after the product decision this audit asked for.**
 
 Evidence. `/mcp` has no application-level limiter: `apps/web/src/server/mcp/mcpEndpoint.ts:25` verifies the
 bearer token and scopes, then serves the toolkit. The only limiter in the system is
@@ -103,9 +104,19 @@ bucket for the destructive tool than for reads, plus a durable count (the databa
 it survives scale-to-zero). Refusals must be a `rejected` outcome with `Retry-After`, not a 500. It belongs
 beside the existing scope check so every tool inherits it.
 
-**Why not here.** The numbers are a product decision (how many lineups per hour is a person allowed to ask
-for?), and a wrong guess either blocks a legitimate agent loop or does nothing. It is recorded as roadmap
-group J1 with the recommendation.
+**Why it waited.** The numbers are a product decision (how many lineups per hour is a person allowed to ask
+for?), and a wrong guess either blocks a legitimate agent loop or does nothing.
+
+**How it was fixed.** `ToolCallQuota` (`contexts/toolCalls`) reserves a durable count in the
+`tool_call_quota` table before the tool runs, and `mcpEndpoint` calls it beside the bearer and scope checks
+so no tool can be added without it. The allowance is priced by the tool's published `readOnlyHint` and
+`destructiveHint`: reads get 60 per client and 180 per owner per minute, other writes 20 and 60 per hour,
+and `set_lineup` 6 and 18 per hour, each with its own window. The client key is the token's `client_id`,
+never the client address. A refusal increments the counters like any other call, and answers `429` with
+`Retry-After` and a JSON-RPC error, annotated as `app.outcome: rejected` with the tool name. The numbers and
+the contract are documented in [MCP.md](fantasy-manager/MCP.md#tool-call-limits). Regression tests cover the
+read loop, the smaller write and destructive buckets, client isolation, survival across a fresh process, and
+the refusal shape.
 
 ### F2 — Dynamic client registration is unauthenticated, uncapped and never cleaned up
 
@@ -658,6 +669,11 @@ Each item below was checked; silence would have been a gap, so each carries its 
   change-email, request-password-reset, reset-password) are disabled outright.
 - **The MCP server is stateless and request-scoped.** `handleMcpRequest` builds the handler layer per
   request from the resolved `UserId`, so one request cannot leave state that another request inherits.
+- **Every MCP tool call spends a durable allowance.** Reads are 60 per client and 180 per owner a minute,
+  writes 20 and 60 an hour, and `set_lineup` 6 and 18 an hour, counted in `tool_call_quota` before the tool
+  runs and keyed by the token's owner and `client_id` rather than by client address. A refusal is a `429`
+  with `Retry-After` and a JSON-RPC error, and the refused call is counted too
+  (`contexts/toolCalls`, `mcpEndpoint.ts`).
 - **Nothing in this repository logs a secret.** Cloud Run's own request log contains the path and status;
   the ticket lives in a cookie, which that log does not contain. The hosted-browser service logs one line
   per session with id, outcome, duration, failure class, and refused host and reason — verified in

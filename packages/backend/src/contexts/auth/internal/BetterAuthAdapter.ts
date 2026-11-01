@@ -226,7 +226,12 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         if (!requiredScopes.map(currentScope).every((scope) => granted.includes(scope))) {
           return { status: "insufficient_scope" };
         }
-        return { status: "authenticated", userId: claims.value.sub };
+        const clientId = claims.value.client_id;
+        return {
+          status: "authenticated",
+          userId: claims.value.sub,
+          ...(clientId === undefined ? {} : { clientId }),
+        };
       });
       const getConsentRequest = Effect.fn("AuthService.getConsentRequest")(function* (
         headers: Headers,

@@ -27,7 +27,11 @@ type AuthenticationError = AuthenticationUnavailable | AuthenticationInvalidResp
 export type AccessTokenResolution =
   | { readonly status: "invalid" }
   | { readonly status: "insufficient_scope" }
-  | { readonly status: "authenticated"; readonly userId: UserId };
+  | {
+      readonly status: "authenticated";
+      readonly userId: UserId;
+      readonly clientId?: string;
+    };
 
 export type AuthenticationSession = {
   readonly user: {

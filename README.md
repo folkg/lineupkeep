@@ -99,6 +99,11 @@ minted before the rename keeps working, and `feedback:manage` has no successor b
 not public. The full per-tool table, the retired-name mapping, and the incremental-authorization
 behaviour are in the [MCP contract](docs/fantasy-manager/MCP.md#per-tool-scopes).
 
+Every tool call also spends a limit per acting client and per account: a read is generous, a write is
+small, and `set_lineup` is the smallest. A refusal is `429` with `Retry-After` and a JSON-RPC error, so
+wait the stated seconds instead of retrying immediately. The numbers, the buckets, and the remedy are in
+the [tool-call limits](docs/fantasy-manager/MCP.md#tool-call-limits).
+
 ### First requests
 
 `server/discover` needs no token and returns only the product name, supported protocol versions, and capabilities:

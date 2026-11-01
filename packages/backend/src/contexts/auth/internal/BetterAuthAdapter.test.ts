@@ -1052,6 +1052,7 @@ it.effect(
       ]);
       assert.propertyVal(identity, "status", "authenticated");
       assert.propertyVal(identity, "userId", (yield* adapter.getSession(headers))?.user.id);
+      assert.propertyVal(identity, "clientId", "https://connections-client.test/client.json");
     }).pipe(
       Effect.provide(
         adapterLayer(

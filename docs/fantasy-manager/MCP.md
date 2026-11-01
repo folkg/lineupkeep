@@ -85,6 +85,81 @@ Starting adapter bounds can reuse verified selected-player batches of at most 25
 
 Upstream response caps are separate from agent-output caps. The adapter may fetch a bounded megabyte-scale response, decode and select fields, then return a small page. Filtering statistics upstream was not demonstrated by earlier Yahoo probes; local projection must not pretend it saved upstream bytes.
 
+## Tool-call limits
+
+Every authenticated `tools/call` spends a durable allowance before the tool runs. The limit sits in
+`mcpEndpoint` beside the bearer and scope checks, so a tool cannot be added without inheriting it.
+Tools are priced by the MCP annotations they already publish: a tool marked `destructiveHint: true`
+spends the smallest allowance, a `readOnlyHint: true` tool spends the generous one, and everything else
+spends the write allowance. An unannotated tool defaults to destructive, so forgetting to describe a
+new tool bounds it more tightly rather than leaving it unlimited.
+
+| Class         | Tools                                                                                                    | Window | Per client | Per owner |
+| ------------- | -------------------------------------------------------------------------------------------------------- | ------ | ---------- | --------- |
+| `read`        | every `readOnlyHint: true` tool, including the summaries, searches, proposal read-back, and review links | 1 min  | 60         | 180       |
+| `write`       | `submit_feedback`, `propose_transactions`, `revalidate_transaction_proposal_set`, `set_team_automation`  | 1 hour | 20         | 60        |
+| `destructive` | `set_lineup`                                                                                             | 1 hour | 6          | 18        |
+
+The numbers are a product judgement, not a measurement. A polling agent reading a team summary a few
+times a minute uses well under a tenth of the read allowance; 60 reads a minute still lets one client
+enumerate a league, search a pool, and poll several teams. A write is rare by nature, so 20 an hour is
+far above a person revising and revalidating a proposal set, and bounds a machine loop to one change
+every three minutes. `set_lineup` is the one upstream mutation, so it gets the smallest bucket: six
+requests an hour is a handful, and one request already covers up to ten teams. Each class has its own
+window and its own counters, so a read loop can never spend a write's allowance. The owner allowance is
+three client allowances, which means one client at its own limit leaves a full share for a second and a
+third client of the same person, while a client that mints more clients still meets the owner's ceiling.
+
+The counters live in the `tool_call_quota` table: one row per owner and class, and one per owner,
+acting client, and class. Each row stores its window's start and a count, and a call increments both
+rows atomically in one statement, resetting a row whose window has passed. Nothing lives in process
+memory, so scale-to-zero, a deploy, or a restart does not hand back an allowance. The key is the owner
+id from the access token and the `client_id` claim of that token — never the client address, which the
+[security audit](../SECURITY-AUDIT.md#f9--rate-limit-buckets-are-keyed-by-client-address-so-one-account-can-spend-anothers)
+records as a cross-account problem elsewhere. A token without a client claim spends only the owner
+allowance, so it gets no extra room.
+
+A refused call is a spend like any other: the counters increment before the decision, so a failing tool
+cannot be hammered for free, and a malformed call or an unknown tool name still spends its class (an
+unknown name spends the write allowance). An unauthenticated or insufficiently scoped call is refused
+before the allowance is touched, because it never reaches a tool.
+
+When the allowance is spent the server answers `429 Too Many Requests` with a `Retry-After` header in
+seconds and a JSON-RPC error, so a client sees a named refusal rather than a 500 or a truncated result:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32001,
+    "message": "The read tool-call allowance for this client is spent: 60 calls per 60 seconds. Another client of the same account has its own allowance. Retry in 37 seconds; a refused call also counts, so wait rather than retrying immediately.",
+    "data": {
+      "reason": "tool_call_quota_exhausted",
+      "class": "read",
+      "bucket": "client",
+      "limit": 60,
+      "windowSeconds": 60,
+      "retryAfterSeconds": 37
+    }
+  }
+}
+```
+
+A client should wait the stated seconds and retry once, then slow down: poll less often, batch teams
+into one call, and read `get_lineup_runs` rather than re-submitting a lineup. It must not retry in a
+tight loop, rotate its client registration, or open a second connection to get a fresh allowance: the
+owner ceiling is shared by every client, and a refused call still counts. The `bucket` field says
+whether the account or the client is the one that is spent, so a client can tell "slow down" from
+"another client of mine is busy".
+
+The numbers and windows are one constant: `toolCallLimits` in
+`packages/backend/src/contexts/toolCalls/ToolCallQuota.ts`. Changing a number needs no migration; change
+the constant and this table. `apps/web/src/server/mcp/mcpScopes.test.ts` pins the class of every shipped
+tool and the ordering of the three allowances, so neither can drift silently. Changing which allowance a
+tool spends is the declaration the tool already makes: correct its `Tool.Readonly` and `Tool.Destructive`
+annotations, and that test fails until its table agrees.
+
 ## Analysis surface behaviour
 
 `get_league` with the `standings` group reports each team's rank, the format inferred from the

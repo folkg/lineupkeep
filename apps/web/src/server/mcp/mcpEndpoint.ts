@@ -1,12 +1,17 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import type { AuthorizationScope } from "@lineupkeep/backend/auth/AuthorizationScopes";
 import type { UserId } from "@lineupkeep/backend/auth/User";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { ToolCallQuota } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
+import type {
+  ToolCallDecision,
+  ToolCallQuotaUnavailable,
+} from "@lineupkeep/backend/toolCalls/ToolCallQuota";
+import { Context, Duration, Effect, Layer, Option, Result, Schema } from "effect";
 import { McpProtocol, McpServer } from "effect/ai";
 import type { Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
-import { RequiredScope } from "./toolAuthorization";
+import { RequiredScope, toolCallClass } from "./toolAuthorization";
 
 export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<string, Tool.Any>, R>(
   request: Request,
@@ -39,6 +44,10 @@ export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<stri
     "auth.state": "authenticated",
     "user.id": identity.userId,
   });
+  const refusal = yield* quotaRefusal(invocation, identity);
+  if (refusal !== undefined) {
+    return refusal;
+  }
   const invalid = invalidArgumentsResponse(invocation);
   if (invalid !== undefined) {
     yield* Effect.annotateCurrentSpan({
@@ -188,6 +197,73 @@ function challengeResponse(
   });
 }
 
+function quotaRefusal(
+  invocation: Invocation,
+  identity: { readonly userId: UserId; readonly clientId?: string },
+): Effect.Effect<Response | undefined, ToolCallQuotaUnavailable, ToolCallQuota> {
+  return Effect.gen(function* () {
+    const call = invocation.call;
+    if (Option.isNone(call)) {
+      return undefined;
+    }
+    const tool = call.value.params.name;
+    const quota = yield* ToolCallQuota;
+    const decision = yield* quota.consume({
+      userId: identity.userId,
+      clientId: identity.clientId,
+      callClass: toolCallClass(invocation.tool),
+    });
+    if (decision.allowed) {
+      yield* Effect.annotateCurrentSpan({ "mcp.tool.name": tool });
+      return undefined;
+    }
+    yield* Effect.annotateCurrentSpan({
+      "app.outcome": "rejected",
+      "http.response.status_code": 429,
+      "mcp.tool.name": tool,
+      "mcp.outcome": "tool_call_quota_exhausted",
+    });
+    return quotaRefusalResponse(call.value.id ?? null, decision);
+  });
+}
+
+function quotaRefusalResponse(
+  id: string | number | null,
+  decision: Extract<ToolCallDecision, { readonly allowed: false }>,
+): Response {
+  const retryAfterSeconds = Math.max(1, Math.ceil(Duration.toSeconds(decision.retryAfter)));
+  const allowance =
+    decision.bucket === "owner" ? decision.limit.ownerMax : decision.limit.clientMax;
+  const windowSeconds = Math.ceil(Duration.toSeconds(decision.limit.window));
+  const scope = decision.bucket === "owner" ? "account" : "client";
+  const sideEffect =
+    decision.bucket === "owner"
+      ? "Every client of this account shares that allowance."
+      : "Another client of the same account has its own allowance.";
+  return Response.json(
+    {
+      jsonrpc: "2.0",
+      id,
+      error: {
+        code: rateLimitedCode,
+        message: `The ${decision.callClass} tool-call allowance for this ${scope} is spent: ${allowance} calls per ${windowSeconds} seconds. ${sideEffect} Retry in ${retryAfterSeconds} seconds; a refused call also counts, so wait rather than retrying immediately.`,
+        data: {
+          reason: "tool_call_quota_exhausted",
+          class: decision.callClass,
+          bucket: decision.bucket,
+          limit: allowance,
+          windowSeconds,
+          retryAfterSeconds,
+        },
+      },
+    },
+    {
+      status: 429,
+      headers: { "Retry-After": String(retryAfterSeconds), "Cache-Control": "no-store" },
+    },
+  );
+}
+
 function invalidArgumentsResponse(invocation: Invocation): Response | undefined {
   if (invocation.tool === undefined || Option.isNone(invocation.call)) {
     return undefined;
@@ -255,6 +331,7 @@ const serveToolkit = Effect.fnUntraced(function* <Tools extends Record<string, T
 const discoveryMethod = "server/discover";
 const supportedProtocolVersion = "2026-07-28";
 const unsupportedProtocolVersionCode = -32_022;
+const rateLimitedCode = -32_001;
 
 const RpcRequest = Schema.Struct({
   id: Schema.optional(Schema.Union([Schema.String, Schema.Finite, Schema.Null])),

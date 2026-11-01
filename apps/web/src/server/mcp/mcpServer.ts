@@ -7,6 +7,7 @@ import type { Teams } from "@lineupkeep/backend/connections/Teams";
 import type { TransactionProposals } from "@lineupkeep/backend/connections/TransactionProposals";
 import type { TransactionReviews } from "@lineupkeep/backend/connections/TransactionReview";
 import type { Feedback } from "@lineupkeep/backend/feedback/Feedback";
+import type { ToolCallQuota } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import { productName } from "@lineupkeep/brand/product";
 import { Layer } from "effect";
 import type { Tool } from "effect/ai";
@@ -77,7 +78,7 @@ function applicationRequest(
 ): ReturnType<
   typeof mcpRequest<
     Toolkit.Tools<typeof applicationTools>,
-    Layer.Services<ReturnType<typeof applicationHandlers>>
+    Layer.Services<ReturnType<typeof applicationHandlers>> | ToolCallQuota
   >
 > {
   return mcpRequest(request, applicationTools, applicationHandlers, {
