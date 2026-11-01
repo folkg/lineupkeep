@@ -125,6 +125,21 @@ const pausedTeam: TeamSummaryView = {
   },
 };
 
+it("says what to turn on when no team is being checked", async () => {
+  using _app = setupTeamsPage([baseTeam]);
+
+  await expect.element(page.getByText("No teams are being checked.")).toBeVisible();
+  await expect
+    .element(page.getByText("Turn on Lineup checks for the teams you want managed."))
+    .toBeVisible();
+});
+
+it("hides the prompt once a team is being checked", async () => {
+  using _app = setupTeamsPage([enabledTeam]);
+
+  await expect.element(page.getByText("No teams are being checked.")).not.toBeInTheDocument();
+});
+
 it("turns lineup checks on through the switch and confirms the change", async () => {
   const changes: Array<{ readonly team: string; readonly action: string }> = [];
   using _app = setupTeamsPage([baseTeam], {

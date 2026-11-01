@@ -34,6 +34,7 @@ export function createRemoteHostedBrowser(
       const token = await options.identityToken(audience);
       const descriptor = signHostedBrowserDescriptor(options.descriptorKey, {
         sessionId: session.id,
+        provider: session.provider,
         expiresAt: DateTime.toEpochMillis(session.expiresAt),
         loginUrl: session.loginUrl.href,
         viewport: session.viewport,
@@ -175,6 +176,7 @@ async function completeSession(
   callbacks: HostedBrowserCallbacks,
   cookieHeader: string,
 ): Promise<void> {
+  callbacks.onMessage({ _tag: "Status", status: "finishing" });
   const completion = await callbacks.complete(Redacted.make(cookieHeader));
   callbacks.onMessage(
     completion.status === "ready"

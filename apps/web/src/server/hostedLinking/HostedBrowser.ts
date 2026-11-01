@@ -13,6 +13,7 @@ import type {
 export type HostedBrowserSession = {
   readonly id: HostedLinkingSessionId;
   readonly userId: UserId;
+  readonly provider: string;
   readonly expiresAt: DateTime.Utc;
   readonly loginUrl: URL;
   readonly viewport: HostedBrowserViewportProfile;

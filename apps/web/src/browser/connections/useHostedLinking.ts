@@ -165,7 +165,7 @@ export function useHostedLinking(options: HostedLinkingOptions): HostedLinkingCo
       if (!ready() && session() !== undefined) {
         setFailure({
           type: "attention",
-          message: `The private browser disconnected. Start again to reconnect ${defaultProviderName()}.`,
+          message: "The private browser disconnected before sign-in finished. Try again.",
         });
         finish("failed");
       }
@@ -270,27 +270,28 @@ function textChunks(text: string): ReadonlyArray<string> {
 function refusalMessage(host: string, reason: HostedBrowserRefusalReason): string {
   switch (reason) {
     case "non_public_address":
-      return `The private browser refused to connect to ${host} because it does not resolve to a public internet address.`;
+      return `The private browser cannot open ${host} because it is on a private network. Try a different sign-in method.`;
     case "unresolvable":
-      return `The private browser refused to connect to ${host} because the name could not be resolved.`;
+      return `The private browser cannot open ${host} because the address was not found. Try a different sign-in method.`;
     case "invalid_destination":
-      return `The private browser refused to connect to ${host} because it is not a valid destination.`;
+      return `The private browser cannot open ${host}. Try a different sign-in method.`;
   }
 }
 
 function failureMessage(reason: HostedBrowserMessageFailure): string {
   switch (reason) {
     case "session_rejected":
-      return `${defaultProviderName()} did not accept this session. Check the account and try again.`;
+      return `${defaultProviderName()} did not accept the sign-in. Try again, or use a different sign-in method in the browser.`;
     case "provider_unavailable":
       return `${defaultProviderName()} could not be reached. Try again in a moment.`;
     case "browser_unavailable":
+      return "The private browser could not open. Try again.";
     case "page_unavailable":
-      return "The private browser could not start. Try again.";
+      return "The private browser closed before sign-in finished. Try again.";
     case "expired":
       return `This sign-in session expired. Start again to reconnect ${defaultProviderName()}.`;
     case "completion_failed":
-      return "We could not confirm the sign-in. Try again.";
+      return `${defaultProviderName()} took the sign-in, but we could not confirm it. Try again.`;
   }
 }
 
@@ -301,11 +302,15 @@ export function statusMessage(status: HostedBrowserStatus): string {
     case "loading":
       return `Loading the ${defaultProviderName()} sign-in page…`;
     case "waiting":
-      return "Finish signing in. This window updates automatically.";
+      return "Sign in on the page above. This window updates on its own.";
     case "two-factor":
       return `${defaultProviderName()} asked for an additional verification step. Complete it here.`;
     case "blocked":
-      return `${defaultProviderName()} blocked this sign-in. Cancel and try again.`;
+      return `${defaultProviderName()} blocked this sign-in. Cancel and sign in again, or use a different sign-in method.`;
+    case "identifier-refused":
+      return `${defaultProviderName()} refused this sign-in address.`;
+    case "finishing":
+      return `You're signed in. Reading your ${defaultProviderName()} teams…`;
   }
 }
 

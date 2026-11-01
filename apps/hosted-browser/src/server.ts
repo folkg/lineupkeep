@@ -225,6 +225,7 @@ export function createHostedBrowserService(
       handle = await browser.open(
         {
           id: descriptor.sessionId,
+          provider: descriptor.provider,
           expiresAt: descriptor.expiresAt,
           loginUrl: descriptor.loginUrl,
           viewport: descriptor.viewport,

@@ -273,6 +273,7 @@ function sessionFor(
   return {
     id: Schema.decodeSync(HostedLinkingSessionId)(id),
     userId: decodeUserId("owner"),
+    provider: "yahoo",
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),
     loginUrl: new URL(path, origin),
     viewport: "desktop",

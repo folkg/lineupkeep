@@ -13,44 +13,38 @@ import { Time } from "#browser/shared-ui/Time.tsx";
 import { viewportSize } from "#contracts/connections/hostedBrowserProtocol.ts";
 import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
-import { SessionSignInWithGoogleHint, SignInWithGoogleHint } from "./SignInWithGoogleHint";
 import { statusMessage } from "./useHostedLinking";
 import type { HostedLinkingController } from "./useHostedLinking";
 
 export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element {
+  const provider = defaultProviderName();
+
   return (
     <Stack as="section" gap="sm" labelledBy="provider-signin-title">
       <Heading id="provider-signin-title" level={2} size="section">
-        {defaultProviderName()} sign-in
+        {props.controller.session() === undefined && props.connected
+          ? `${provider} connection`
+          : `${provider} sign-in`}
       </Heading>
-      <Text size="body" tone="muted">
-        Sign in as you normally would, in a browser that belongs to this sign-in only.
-      </Text>
-      <Show
-        fallback={
-          <Stack gap="sm">
-            <Inline gap="sm">
-              <Button
-                pending={props.controller.starting()}
-                pendingLabel="Starting…"
-                onClick={() => void props.controller.start()}
-              >
-                Connect {defaultProviderName()}
-              </Button>
-              <Text size="caption" tone="muted">
-                Nothing to install.
-              </Text>
-            </Inline>
-            <SignInWithGoogleHint />
-          </Stack>
-        }
-        when={props.controller.session()}
-      >
+      <Show when={props.controller.session()}>
         {(session) => (
           <Stack gap="sm">
-            <SessionSignInWithGoogleHint />
             <BrowserFrame
               frameUrl={props.controller.frameUrl()}
+              notice={
+                props.controller.status() === "identifier-refused" ? (
+                  <Stack gap="xs">
+                    <Text size="caption" weight="semibold">
+                      {provider} refuses Gmail addresses in this browser.
+                    </Text>
+                    <Text size="caption" tone="muted">
+                      If the account has a phone number, sign in with that number instead. If it
+                      does not, add one in {provider}'s account settings. {provider} decides which
+                      sign-in options it offers.
+                    </Text>
+                  </Stack>
+                ) : undefined
+              }
               ready={props.controller.ready()}
               statusLabel={statusMessage(props.controller.status())}
               viewport={viewportSize(props.controller.viewportProfile())}
@@ -60,15 +54,24 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
               onScroll={props.controller.scroll}
               onText={props.controller.sendText}
             />
-            <Text size="caption" tone="muted">
-              {props.controller.ready()
-                ? "Connected. Opening your teams…"
-                : statusMessage(props.controller.status())}
-            </Text>
-            <Text size="caption" tone="muted">
-              Tap the page and type. Keystrokes go to {defaultProviderName()}'s page through the
-              private browser. Lineupkeep does not store or log them.
-            </Text>
+            <Show
+              when={
+                props.controller.status() !== "identifier-refused" &&
+                props.controller.frameUrl() !== undefined
+              }
+            >
+              <Text live="polite" role="status" size="caption" tone="muted">
+                {props.controller.ready()
+                  ? "Connected. Opening your teams…"
+                  : statusMessage(props.controller.status())}
+              </Text>
+            </Show>
+            <Show when={props.controller.frameUrl() !== undefined}>
+              <Text size="caption" tone="muted">
+                Tap the page and type. Keystrokes go to {provider}'s page through the private
+                browser. Lineupkeep does not store or log them.
+              </Text>
+            </Show>
             <Text size="caption" tone="muted">
               This sign-in expires{" "}
               <Time datetime={session().session.expiresAt}>
@@ -79,11 +82,36 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
           </Stack>
         )}
       </Show>
+      <Show when={props.controller.session() === undefined && props.connected}>
+        <Text size="body" tone="muted">
+          {provider} is connected. Lineup checks use this connection.
+        </Text>
+        <Inline gap="sm">
+          <Button variant="link" onClick={() => void props.controller.start()}>
+            Connect another account
+          </Button>
+        </Inline>
+      </Show>
+      <Show when={props.controller.session() === undefined && !props.connected}>
+        <Text size="body" tone="muted">
+          Sign in as you normally would, in a browser that belongs to this sign-in only.
+        </Text>
+        <Inline gap="sm">
+          <Button
+            pending={props.controller.starting()}
+            pendingLabel="Starting…"
+            onClick={() => void props.controller.start()}
+          >
+            {props.controller.failure() === undefined ? `Connect ${provider}` : "Try again"}
+          </Button>
+        </Inline>
+      </Show>
       <ActionFeedback feedback={props.controller.failure()} />
     </Stack>
   );
 }
 
 type HostedBrowserPanelProps = {
+  readonly connected: boolean;
   readonly controller: HostedLinkingController;
 };

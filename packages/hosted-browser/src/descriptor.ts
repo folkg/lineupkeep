@@ -2,9 +2,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { isHostedBrowserViewportProfile } from "./protocol.ts";
 import type { HostedBrowserViewportProfile } from "./protocol.ts";
+import { hostedBrowserProvider } from "./provider.ts";
 
 export type HostedBrowserDescriptor = {
   readonly sessionId: string;
+  readonly provider: string;
   readonly expiresAt: number;
   readonly loginUrl: string;
   readonly viewport: HostedBrowserViewportProfile;
@@ -54,10 +56,14 @@ function decodeDescriptor(payload: string): HostedBrowserDescriptor | undefined 
     return undefined;
   }
   const sessionId = decoded["sessionId"];
+  const provider = decoded["provider"];
   const expiresAt = decoded["expiresAt"];
   const loginUrl = decoded["loginUrl"];
   const viewport = decoded["viewport"];
   if (typeof sessionId !== "string" || sessionId.length < 1 || sessionId.length > 100) {
+    return undefined;
+  }
+  if (typeof provider !== "string" || hostedBrowserProvider(provider) === undefined) {
     return undefined;
   }
   if (typeof expiresAt !== "number" || !Number.isSafeInteger(expiresAt)) {
@@ -69,7 +75,7 @@ function decodeDescriptor(payload: string): HostedBrowserDescriptor | undefined 
   if (!isHostedBrowserViewportProfile(viewport)) {
     return undefined;
   }
-  return { sessionId, expiresAt, loginUrl, viewport };
+  return { sessionId, provider, expiresAt, loginUrl, viewport };
 }
 
 function isHttpUrl(value: string): boolean {

@@ -7,6 +7,7 @@ import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
+import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -35,6 +36,13 @@ export function TeamList(props: TeamListProps): JSX.Element {
           Refresh teams
         </Button>
       </Inline>
+      <Show
+        when={!props.isLoading() && props.loadFailure() === null && allTeamsIdle(props.teams())}
+      >
+        <Notice tone="neutral" title="No teams are being checked.">
+          <Text size="caption">Turn on Lineup checks for the teams you want managed.</Text>
+        </Notice>
+      </Show>
       <Show
         fallback={<LoadingState label="Loading teams">Loading your teams…</LoadingState>}
         when={!props.isLoading()}
@@ -129,3 +137,13 @@ type TeamRowProps = {
   readonly team: TeamSummaryView;
   readonly remote: TeamRemote;
 };
+
+function allTeamsIdle(teams: ReadonlyArray<TeamSummaryView>): boolean {
+  return (
+    teams.length > 0 &&
+    teams.every(
+      (summary) =>
+        summary.connectionStatus === "ready" && summary.team.automation.status === "disabled",
+    )
+  );
+}

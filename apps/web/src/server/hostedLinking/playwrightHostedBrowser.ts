@@ -25,6 +25,7 @@ export function createPlaywrightHostedBrowser(
       const handle = await browser.open(
         {
           id: session.id,
+          provider: session.provider,
           expiresAt: DateTime.toEpochMillis(session.expiresAt),
           loginUrl: session.loginUrl.href,
           viewport: session.viewport,
@@ -63,6 +64,7 @@ async function completeSession(
   callbacks: HostedBrowserCallbacks,
   cookieHeader: string,
 ): Promise<void> {
+  callbacks.onMessage({ _tag: "Status", status: "finishing" });
   const completion = await callbacks.complete(Redacted.make(cookieHeader));
   const message: HostedBrowserMessage =
     completion.status === "ready"

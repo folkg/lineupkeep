@@ -94,6 +94,7 @@ async function authorizeStream(
   const browserSession: HostedBrowserSession = {
     id: linking.id,
     userId,
+    provider: linking.provider,
     expiresAt: linking.expiresAt,
     loginUrl: providerLogin.loginUrl,
     viewport,

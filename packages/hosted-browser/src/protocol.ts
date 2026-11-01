@@ -45,7 +45,14 @@ export type HostedBrowserKey =
   | "PageUp"
   | "PageDown";
 
-export type HostedBrowserStatus = "starting" | "loading" | "waiting" | "two-factor" | "blocked";
+export type HostedBrowserStatus =
+  | "starting"
+  | "loading"
+  | "waiting"
+  | "two-factor"
+  | "blocked"
+  | "identifier-refused"
+  | "finishing";
 
 export type HostedBrowserRefusalReason =
   | "non_public_address"
@@ -251,7 +258,9 @@ function isHostedBrowserStatus(value: unknown): value is HostedBrowserStatus {
     value === "loading" ||
     value === "waiting" ||
     value === "two-factor" ||
-    value === "blocked"
+    value === "blocked" ||
+    value === "identifier-refused" ||
+    value === "finishing"
   );
 }
 

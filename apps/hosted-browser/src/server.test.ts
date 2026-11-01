@@ -36,6 +36,7 @@ it("streams provider sign-in, captures the session, and removes the profile", as
 
     const session = {
       sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
+      provider: "yahoo",
       expiresAt: Date.now() + 60_000,
       loginUrl: provider.url.href,
       viewport: "desktop" as const,
@@ -85,6 +86,51 @@ it("streams provider sign-in, captures the session, and removes the profile", as
     expect(await clientClosed).toBe(1000);
     await waitForEmptyDirectory(profileRoot);
     expect(events.at(-1)).toMatchObject({ outcome: "captured" });
+  } finally {
+    await service.close();
+    await closeServer(provider.server);
+    await rm(profileRoot, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it("reports a refused identifier when the provider page shows its refusal", async () => {
+  const provider = await startServer((_request, response) => {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end(`<!doctype html>
+<html><body><p>To use a Gmail address, sign in with Google.</p></body></html>`);
+  });
+  const profileRoot = await mkdtemp(join(tmpdir(), "lineupkeep-service-test-"));
+  const service = createHostedBrowserService({
+    descriptorKey,
+    fixtureOrigin: provider.url.origin,
+    profileRoot,
+    log: () => undefined,
+  });
+  const port = await service.listen(0);
+  try {
+    const client = new WebSocket(`ws://127.0.0.1:${port}/session`);
+    const refused = Promise.withResolvers<void>();
+    client.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      const message = parseTransportMessage(rawDataText(data) ?? "");
+      if (message?._tag === "Status" && message.status === "identifier-refused") {
+        refused.resolve();
+      }
+    });
+    await opened(client);
+    client.send(
+      signHostedBrowserDescriptor(descriptorKey, {
+        sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a7",
+        provider: "yahoo",
+        expiresAt: Date.now() + 60_000,
+        loginUrl: provider.url.href,
+        viewport: "desktop" as const,
+      }),
+    );
+    await refused.promise;
+    client.close(1000, "Test finished");
   } finally {
     await service.close();
     await closeServer(provider.server);
@@ -151,6 +197,7 @@ it("refuses non-public destinations, names them, and records them in the outcome
     client.send(
       signHostedBrowserDescriptor(descriptorKey, {
         sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a6",
+        provider: "yahoo",
         expiresAt: Date.now() + 60_000,
         loginUrl: provider.url.href,
         viewport: "desktop" as const,
@@ -204,6 +251,7 @@ it("refuses forged descriptors, replayed sessions, and a second browser", async 
 
     const session = {
       sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",
+      provider: "yahoo",
       expiresAt: Date.now() + 60_000,
       loginUrl: provider.url.href,
       viewport: "desktop" as const,
@@ -264,6 +312,7 @@ it("destroys the browser and profile when the service stops", async () => {
   try {
     const session = {
       sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a5",
+      provider: "yahoo",
       expiresAt: Date.now() + 60_000,
       loginUrl: provider.url.href,
       viewport: "desktop" as const,

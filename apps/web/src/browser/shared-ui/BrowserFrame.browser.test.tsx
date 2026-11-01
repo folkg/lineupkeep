@@ -6,6 +6,17 @@ import type { HostedBrowserKey } from "#contracts/connections/hostedBrowserProto
 
 import { BrowserFrame } from "./BrowserFrame";
 
+it("does not forward typing until the first frame is visible", async () => {
+  const events = recordedEvents();
+  using _frame = renderFrame(events, { width: 1100, height: 720 }, false);
+
+  const surface = page.getByRole("textbox", { name: "Yahoo sign-in browser" });
+  await surface.click();
+  await userEvent.keyboard("too early");
+
+  expect(events.text).toEqual([]);
+});
+
 it("forwards typed characters to the remote page and keeps the local field empty", async () => {
   const events = recordedEvents();
   using _frame = renderFrame(events);
@@ -92,12 +103,13 @@ it("keeps the frame aspect equal to the phone viewport", () => {
 function renderFrame(
   events: RecordedEvents,
   viewport: { readonly width: number; readonly height: number } = { width: 1100, height: 720 },
+  hasFrame = true,
 ): { [Symbol.dispose](): void } {
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(
     () => (
       <BrowserFrame
-        frameUrl={undefined}
+        frameUrl={hasFrame ? "data:image/gif;base64,R0lGODlhAQABAAAAACw=" : undefined}
         ready={false}
         statusLabel="Loading the sign-in page…"
         viewport={viewport}

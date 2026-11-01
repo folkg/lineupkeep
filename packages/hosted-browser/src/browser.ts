@@ -13,6 +13,7 @@ import {
   type HostedBrowserStatus,
   type HostedBrowserViewportProfile,
 } from "./protocol.ts";
+import { hostedBrowserProvider } from "./provider.ts";
 
 const capturePollMillis = 400;
 const navigationTimeoutMillis = 30_000;
@@ -20,6 +21,7 @@ const maximumFrameBytes = 1_500_000;
 
 export type HostedBrowserSession = {
   readonly id: string;
+  readonly provider: string;
   readonly expiresAt: number;
   readonly loginUrl: string;
   readonly viewport: HostedBrowserViewportProfile;
@@ -228,6 +230,7 @@ async function openBrowser(
       streaming: false,
       inputGeneration: 0,
       inputWatch: undefined,
+      refusalWatch: undefined,
     };
     targets.set(page, target);
     activationOrder.push(page);
@@ -245,6 +248,7 @@ async function openBrowser(
         report(currentStatus(page));
       }
       watchForInput(page);
+      watchForIdentifierRefusal(page);
     });
     page.on("close", () => {
       forgetTarget(page);
@@ -261,6 +265,7 @@ async function openBrowser(
     void page.bringToFront().catch(() => undefined);
     switchQueue = switchQueue.then(() => streamTarget(page)).catch(() => undefined);
     watchForInput(page);
+    watchForIdentifierRefusal(page);
   }
 
   async function streamTarget(page: Page): Promise<void> {
@@ -308,6 +313,7 @@ async function openBrowser(
       void page.screencast.stop().catch(() => undefined);
     }
     target?.inputWatch?.abort();
+    target?.refusalWatch?.abort();
     targets.delete(page);
     const index = activationOrder.lastIndexOf(page);
     if (index >= 0) {
@@ -339,6 +345,37 @@ async function openBrowser(
       .then(() => {
         if (target.inputGeneration === generation && active === page && !closed) {
           events.onAcceptsInput();
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  function watchForIdentifierRefusal(page: Page): void {
+    const target = targets.get(page);
+    const marker = hostedBrowserProvider(session.provider)?.refusedIdentifier?.text;
+    if (target === undefined || marker === undefined || closed) {
+      return;
+    }
+    target.refusalWatch?.abort();
+    const watch = new AbortController();
+    target.refusalWatch = watch;
+    void page
+      .waitForFunction((text) => document.body.innerText.includes(text), marker, {
+        timeout: 0,
+        signal: watch.signal,
+      })
+      .then(() => {
+        if (!closed && active === page) {
+          report("identifier-refused");
+        }
+        return page.waitForFunction((text) => !document.body.innerText.includes(text), marker, {
+          timeout: 0,
+          signal: watch.signal,
+        });
+      })
+      .then(() => {
+        if (!closed && active === page) {
+          report(currentStatus(page));
         }
       })
       .catch(() => undefined);
@@ -483,4 +520,5 @@ type Target = {
   streaming: boolean;
   inputGeneration: number;
   inputWatch: AbortController | undefined;
+  refusalWatch: AbortController | undefined;
 };

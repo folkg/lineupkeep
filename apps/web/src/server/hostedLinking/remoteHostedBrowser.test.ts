@@ -82,6 +82,7 @@ it("relays the hosted browser stream and completes the owner session", async () 
   expect(messages).toEqual([
     { _tag: "Status", status: "waiting" },
     { _tag: "AcceptsInput" },
+    { _tag: "Status", status: "finishing" },
     {
       _tag: "Ready",
       connectionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",
@@ -134,6 +135,7 @@ function session(): HostedBrowserSession {
   return {
     id: Schema.decodeSync(HostedLinkingSessionId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2"),
     userId: decodeUserId("owner"),
+    provider: "yahoo",
     expiresAt: DateTime.addDuration(DateTime.nowUnsafe(), "1 minute"),
     loginUrl: new URL("https://login.yahoo.com/"),
     viewport: "desktop",

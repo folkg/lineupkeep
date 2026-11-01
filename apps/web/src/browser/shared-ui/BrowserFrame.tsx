@@ -1,5 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
+import type { Element } from "solid-js";
 
 import type { HostedBrowserKey } from "#contracts/connections/hostedBrowserProtocol.ts";
 import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
@@ -11,9 +12,11 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
   let surface: HTMLInputElement | undefined;
   let composing = false;
 
+  const acceptsInput = (): boolean => props.frameUrl !== undefined;
+
   const forwardTypedText = (): void => {
     const element = surface;
-    if (element === undefined) {
+    if (element === undefined || !acceptsInput()) {
       return;
     }
     const text = element.value;
@@ -25,6 +28,9 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
   };
 
   const handlePointerDown: JSX.EventHandler<HTMLInputElement, PointerEvent> = (event) => {
+    if (!acceptsInput()) {
+      return;
+    }
     const bounds = event.currentTarget.getBoundingClientRect();
     if (bounds.width === 0 || bounds.height === 0) {
       return;
@@ -35,7 +41,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
   };
 
   const handleKeyDown: JSX.EventHandler<HTMLInputElement, KeyboardEvent> = (event) => {
-    if (composing || event.isComposing) {
+    if (!acceptsInput() || composing || event.isComposing) {
       return;
     }
     if (event.ctrlKey || event.metaKey || event.altKey) {
@@ -50,7 +56,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
   };
 
   const handleBeforeInput: JSX.EventHandler<HTMLInputElement, InputEvent> = (event) => {
-    if (composing || event.isComposing) {
+    if (!acceptsInput() || composing || event.isComposing) {
       return;
     }
     switch (event.inputType) {
@@ -79,13 +85,16 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
   };
 
   const handleInput: JSX.EventHandler<HTMLInputElement, InputEvent> = (event) => {
-    if (composing || event.isComposing) {
+    if (!acceptsInput() || composing || event.isComposing) {
       return;
     }
     forwardTypedText();
   };
 
   const handleCompositionStart: JSX.EventHandler<HTMLInputElement, CompositionEvent> = () => {
+    if (!acceptsInput()) {
+      return;
+    }
     composing = true;
   };
 
@@ -95,6 +104,9 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
   };
 
   const handlePaste: JSX.EventHandler<HTMLInputElement, ClipboardEvent> = (event) => {
+    if (!acceptsInput()) {
+      return;
+    }
     event.preventDefault();
     const text = event.clipboardData?.getData("text/plain") ?? "";
     if (text !== "") {
@@ -103,6 +115,9 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
   };
 
   const handleWheel: JSX.EventHandler<HTMLInputElement, WheelEvent> = (event) => {
+    if (!acceptsInput()) {
+      return;
+    }
     event.preventDefault();
     props.onScroll(Math.max(Math.min(event.deltaY, 2_000), -2_000));
   };
@@ -127,6 +142,13 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
           </Button>
         </span>
       </div>
+      <Show when={props.notice}>
+        {(notice) => (
+          <div aria-live="polite" role="status" class="border-b border-rule bg-paper px-3.5 py-3">
+            {notice()}
+          </div>
+        )}
+      </Show>
       <div
         class="relative w-full overflow-hidden bg-ink/5"
         style={{ "aspect-ratio": `${props.viewport.width} / ${props.viewport.height}` }}
@@ -143,7 +165,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
         </Show>
         <Show when={props.frameUrl === undefined}>
           <span class="pointer-events-none absolute inset-0 grid place-items-center">
-            <Text size="caption" tone="muted">
+            <Text live="polite" role="status" size="caption" tone="muted">
               {props.statusLabel}
             </Text>
           </span>
@@ -158,6 +180,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
           autocomplete="off"
           autocapitalize="none"
           autocorrect="off"
+          readonly={props.frameUrl === undefined}
           spellcheck={false}
           class="absolute inset-0 h-full w-full cursor-text touch-auto appearance-none border-0 bg-transparent p-0 text-base text-transparent caret-transparent outline-none"
           onBeforeInput={handleBeforeInput}
@@ -197,6 +220,7 @@ function hostedKey(key: string): HostedBrowserKey | undefined {
 
 type BrowserFrameProps = {
   readonly frameUrl: string | undefined;
+  readonly notice?: Element;
   readonly statusLabel: string;
   readonly ready: boolean;
   readonly viewport: { readonly width: number; readonly height: number };

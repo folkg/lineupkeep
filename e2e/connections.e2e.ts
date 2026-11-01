@@ -13,6 +13,10 @@ test("shows a linked connection with its team count", async ({ page, services },
 
   await expect(page.getByText("2 teams")).toBeVisible();
   await expect(page.getByText(/Connected/).first()).toBeVisible();
+  await expect(
+    page.getByText("Yahoo is connected. Lineup checks use this connection."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect Yahoo" })).toHaveCount(0);
   await captureCheckpoint(page, info, "connections-identified");
 });
 

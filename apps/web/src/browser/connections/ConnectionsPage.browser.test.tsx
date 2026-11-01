@@ -9,7 +9,7 @@ import {
   createRouter,
 } from "@tanstack/solid-router";
 import { expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
@@ -78,17 +78,34 @@ it("renders timestamps in the reader's locale with the raw value in datetime", a
   expect(expiry?.textContent).toBe(formatReaderTime(fourMinutesFromNow));
 });
 
-it("keeps the Google sign-in hint collapsed until the reader opens it by keyboard", async () => {
+it("keeps setup out of the way when a connection is already present", async () => {
   using _app = setupConnectionsPage([connected]);
 
-  const summary = page.getByText("Sign in with Google? Read this first.");
-  const explanation = page.getByText(/Yahoo does not accept a Gmail address here/);
+  await expect
+    .element(page.getByText("Yahoo is connected. Lineup checks use this connection."))
+    .toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Connect another account" })).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Sign in as you normally would, in a browser that belongs to this sign-in only.",
+      ),
+    )
+    .not.toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).not.toBeInTheDocument();
+});
 
-  await expect.element(summary).toBeVisible();
-  await expect.element(explanation).not.toBeVisible();
-  summary.element().focus();
-  await userEvent.keyboard("{Enter}");
-  await expect.element(explanation).toBeVisible();
+it("offers the connect action when no connection exists", async () => {
+  using _app = setupConnectionsPage([]);
+
+  await expect
+    .element(
+      page.getByText(
+        "Sign in as you normally would, in a browser that belongs to this sign-in only.",
+      ),
+    )
+    .toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).toBeVisible();
 });
 
 it("starts a hosted sign-in for a connection that needs to reconnect", async () => {
@@ -112,7 +129,7 @@ it("starts a hosted sign-in for a connection that needs to reconnect", async () 
 it("starts a phone viewport profile from a phone-sized client", async () => {
   await page.viewport(390, 844);
   const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _app = setupConnectionsPage([connected], {
+  using _app = setupConnectionsPage([], {
     startHosted: (input) => {
       hostedInputs.push(input);
       return new Promise(() => undefined);
@@ -127,7 +144,7 @@ it("starts a phone viewport profile from a phone-sized client", async () => {
 it("starts a desktop viewport profile from a wide client", async () => {
   await page.viewport(1440, 900);
   const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _app = setupConnectionsPage([connected], {
+  using _app = setupConnectionsPage([], {
     startHosted: (input) => {
       hostedInputs.push(input);
       return new Promise(() => undefined);

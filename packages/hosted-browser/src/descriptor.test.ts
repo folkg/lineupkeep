@@ -72,6 +72,14 @@ describe("hosted browser session descriptors", () => {
     expect(verifyHostedBrowserDescriptor(key, unknown, now)).toBeUndefined();
   });
 
+  it("rejects a descriptor without a known provider", () => {
+    const missing = signRaw({ ...descriptor(), provider: undefined });
+    const unknown = signRaw({ ...descriptor(), provider: "unknown" });
+
+    expect(verifyHostedBrowserDescriptor(key, missing, now)).toBeUndefined();
+    expect(verifyHostedBrowserDescriptor(key, unknown, now)).toBeUndefined();
+  });
+
   it("rejects something that is not a signed envelope", () => {
     expect(verifyHostedBrowserDescriptor(key, "not-json", now)).toBeUndefined();
     expect(
@@ -83,6 +91,7 @@ describe("hosted browser session descriptors", () => {
 function descriptor(overrides: Partial<HostedBrowserDescriptor> = {}): HostedBrowserDescriptor {
   return {
     sessionId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
+    provider: "yahoo",
     expiresAt: now + 10 * 60 * 1_000,
     loginUrl: "https://login.yahoo.com/",
     viewport: "desktop",

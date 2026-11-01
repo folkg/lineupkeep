@@ -19,6 +19,16 @@ export function handleFakeProvider(request: Request): Promise<Response> {
       }
       const url = new URL(request.url);
       if (request.method === "POST") {
+        const form = yield* Effect.promise(() => request.formData().catch(() => undefined));
+        const username = form?.get("username");
+        if (typeof username === "string" && gmailAddress(username)) {
+          return new Response(refusedIdentifierPage, {
+            headers: {
+              "cache-control": "no-store",
+              "content-type": "text/html; charset=utf-8",
+            },
+          });
+        }
         const counter = yield* Effect.sync(() => ++fakeTokenCounter);
         const headers = new Headers({
           "cache-control": "no-store",
@@ -70,7 +80,19 @@ const loginPage = `<!doctype html>
         <label>Username <input name="username" autofocus autocomplete="off"></label>
         <button type="submit">Sign in</button>
       </form>
+      <p id="gmail-notice" hidden>To use a Gmail address, sign in with Google.</p>
       <small>This stand-in page runs only in development and automated tests.</small>
+      <script>
+        const input = document.querySelector('input[name="username"]');
+        const notice = document.getElementById('gmail-notice');
+        const submit = document.querySelector('button[type="submit"]');
+        input.addEventListener('input', () => {
+          const value = input.value.trim().toLowerCase();
+          const gmail = value.endsWith('@gmail.com') || value.endsWith('@googlemail.com');
+          notice.hidden = !gmail;
+          submit.disabled = gmail;
+        });
+      </script>
     </main>
   </body>
 </html>`;
@@ -86,3 +108,31 @@ const blockedPage = `<!doctype html>
 const twoFactorPage = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Additional verification</title></head>
 <body><main><h1>Additional verification</h1><p>This stand-in shows the two-factor state.</p></main></body></html>`;
+
+const refusedIdentifierPage = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stand-in provider sign-in</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #f4f1fb; color: #241b3a; }
+      main { max-width: 420px; margin: 72px auto; padding: 32px; background: #fff; border-radius: 18px; box-shadow: 0 18px 48px rgba(54, 26, 120, 0.14); }
+      h1 { margin: 0 0 8px; font-size: 24px; }
+      p { margin: 0 0 16px; color: #5d5473; line-height: 1.5; }
+      a { color: #5b2bd1; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Sign in</h1>
+      <p>To use a Gmail address, sign in with Google.</p>
+      <p>This stand-in shows the provider refusal.</p>
+      <a href="/api/dev/provider-login">Use another address</a>
+    </main>
+  </body>
+</html>`;
+
+function gmailAddress(value: string): boolean {
+  return /@(?:gmail|googlemail)\.com$/iu.test(value.trim());
+}

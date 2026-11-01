@@ -8,8 +8,10 @@ test("renders the empty teams surface and links back to provider linking", async
   await page.goto("/teams");
 
   await expect(page.getByRole("heading", { name: "Teams", exact: true })).toBeVisible();
-  await expect(page.getByText("Choose which teams Lineupkeep manages.")).toBeVisible();
-  await expect(page.getByText("You can turn lineup checks on or off for each team")).toBeVisible();
+  await expect(
+    page.getByText("Lineup checks run once an hour for each team you turn on."),
+  ).toBeVisible();
+  await expect(page.getByText("Pause a team when you want to take over.")).toBeVisible();
   await expect(page.getByText("No teams yet.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Connect Yahoo" })).toHaveAttribute(
     "href",
@@ -31,12 +33,14 @@ test("enables, pauses, resumes, and disables a team through the automation contr
     {},
   );
   await page.goto("/teams");
+  await expect(page.getByText("No teams are being checked.")).toBeVisible();
   const row = page.getByRole("listitem").filter({ hasText: "Embedded Browser Team" });
   const toggle = row.getByRole("switch", { name: "Lineup checks for Embedded Browser Team" });
 
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByText("No teams are being checked.")).toHaveCount(0);
   await expect(toggle).not.toHaveAttribute("aria-busy");
 
   await row.getByRole("button", { name: "Pause for the rest of the fantasy day" }).click();

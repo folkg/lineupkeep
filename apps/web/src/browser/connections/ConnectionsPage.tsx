@@ -33,14 +33,21 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
     remote: () => props.sessionsRemote,
     onRefresh: () => props.onRefreshSessions(),
   });
+  const readyConnection = (): boolean =>
+    page.connections().some((connection) => connection.status === "ready");
+  const hasConnection = (): boolean => page.connections().length > 0;
   return (
     <AppShell>
       <Page
-        lede={`Connect ${defaultProviderName()} once. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage.`}
+        lede={
+          hasConnection()
+            ? `Lineupkeep keeps the encrypted ${defaultProviderName()} session, not your password, and lists the teams this account can manage.`
+            : `Connect ${defaultProviderName()} in a private browser. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage.`
+        }
         title="Connections"
       >
         <Stack gap="xl">
-          <HostedBrowserPanel controller={hosted} />
+          <HostedBrowserPanel connected={readyConnection()} controller={hosted} />
           <ConnectionList
             connections={page.connections}
             disconnectingId={page.disconnectingId}
