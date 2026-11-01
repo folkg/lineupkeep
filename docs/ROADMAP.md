@@ -231,24 +231,100 @@ numbers. `M`, depends on C1.
 The provider publishes no season or team schedule; the only schedule fact is one opponent per rostered
 player per date or scoring week.
 
-### F1 — Cache the professional-team calendar
+### F1 — The professional-team calendar
 
-- [ ] **decide** the source: derive from our own roster reads, or add an external schedule for a whole
-      season with start times. Recommendation: derive first, add an external source only when a feature
-      needs every team or a full season.
-- [ ] **Never join on an abbreviation.** Roster rows carry a professional-team key, observed as `nhl.t.26`.
-      League abbreviations differ from the provider's (`LAK` against `LA`). An opponent arrives only as an
-      abbreviation, so its key comes from observed key/abbreviation pairs, and an unknown abbreviation
-      stays unresolved rather than guessed.
-- [ ] Persist what the reads already see, with an observation instant, so the calendar grows from normal
-      work and adds no upstream contract.
-- [ ] Sweep the current period daily, not hourly, and after a provider-day rollover.
-- [ ] Publish coverage: games beyond the current period, games remaining, and a postponed signal once the
-      cache covers them, each stating when it was observed.
+**The source decision is settled** ([SCHEDULE-SOURCES.md](SCHEDULE-SOURCES.md), [ADR 0011](fantasy-manager/adr/0011-observed-facts-and-schedule-sources.md)):
 
-**Verify**: one week of live reads match the direct provider read for every rostered player's dates,
-opponents and home or away; a postponed game stays unresolved until an observed case proves the marking.
-`L`. See [DECISIONS.md round 13](fantasy-manager/DECISIONS.md).
+- Cache what our own reads already publish, as observed facts with a per-fact refresh policy. Caching is what
+  makes the reads efficient — up to 360 provider reads a day for the same answers becomes five.
+- Add the **NHL's own API** (`api-web.nhle.com`) as the first external source, for start times, venues, a
+  horizon beyond the current period, and postponement state. It is free, keyless, one 100 KB request per
+  league week, and its `robots.txt` allows the site with `use=reference`.
+- **Do not use Yahoo graphite** without written permission: it is technically the best candidate and Yahoo's
+  Universal Terms of Service prohibit both the automated collection and the database it would create.
+- **Do not add an NFL source yet.** The provider's own opponent fact answers the automation question. If a
+  feature needs one, TheSportsDB at $20/month is the cheapest licensed option, and that cost is stated before
+  it is recommended.
+- **Never join on an abbreviation.** Roster rows carry a professional-team key, observed as `nhl.t.26`. League
+  abbreviations differ from the provider's (`LAK` against `LA`). A mapping comes only from a pair the provider
+  publishes on one roster row, is scoped to its league, is one-to-one or is unused, and an unmatched team stays
+  unresolved rather than guessed.
+
+### F1.1 — Observed-facts store and read view
+
+- [ ] Add the append-only observation store: subject, fact kind, the window it covers, value, observation
+      instant, source, confidence (`authoritative` / `corroborated` / `reported`), and the upstream reference.
+- [ ] Add the read view that takes the newest observation inside a requested age, resolves a tie on time to
+      the higher confidence, and reports a disagreement between two authoritative observations as a conflict.
+- [ ] Keep the newest observation per key plus the previous one where the value changed, and nothing else.
+
+**Verify**: a fixture that changes value yields two observations, the read returns the newer one, and a
+conflicting authoritative pair is reported rather than resolved. `S`.
+
+### F1.2 — Record the provider's own schedule facts
+
+- [ ] Record the opponent fact the roster reads already publish, one observation per fantasy team per date,
+      with the fantasy-day maximum age.
+- [ ] Serve the schedule window from the store, refreshing once per fantasy day per linked team instead of
+      once per automation tick.
+
+**Verify**: a week of live reads matches the direct provider read for every rostered player's dates, opponents
+and home or away, and the request count over the same week is recorded. `M`.
+
+### F1.3 — Professional-team identity from provider-published pairs
+
+- [ ] Store the canonical professional team on the provider's key, with the league and the display
+      abbreviation kept as display text only.
+- [ ] Attach a source identifier only through a key/abbreviation pair observed on one roster row, recorded
+      with its source and instant; scope it to the league and refuse a one-to-many mapping.
+- [ ] Leave an unmatched source team unresolved and unserved for any canonical team.
+
+**Verify**: a deliberate one-to-many mapping is refused, and an unknown abbreviation produces no canonical
+team. `S`.
+
+### F1.4 — The fact hook and the source registry
+
+- [ ] Add `Facts.require({ subject, fact, window, maximumAge })` returning the fact with its observation
+      instant, source, confidence, and window, or a named refusal.
+- [ ] Add the `FactSource` registry injected at the composition root, with declared sport coverage, fact
+      kinds, horizon, and request budget. No generic module names or imports a source.
+- [ ] Move the existing schedule reads onto the hook, so a caller asks for a fact and not for a read.
+
+**Verify**: a fake source with different coverage and horizon needs no generic edit, and the provider adapter
+is the only module that names the provider. `M`.
+
+### F1.5 — The NHL external source
+
+- [ ] Add the `api-web.nhle.com` source: the league-week read for start times, venue and status, and the
+      team-season read for the fixture skeleton.
+- [ ] Ask for a concrete season id, never the `/now` alias, which redirects and is refused by our egress
+      policy.
+- [ ] Decode the status field so an unrecognised value is `unknown`, never `on`, and an empty games array is a
+      fact while a missing one is a fault.
+
+**Verify**: one live week matches the league's own page for every NHL team's dates, start times, venues and
+home or away, and the request count for a week is recorded. `M`, depends on F1.1, F1.3, F1.4.
+
+### F1.6 — Coverage, conflicts, and the postponed signal
+
+- [ ] Publish coverage: games beyond the current period, games remaining, and how far the source reaches,
+      each stating when it was observed.
+- [ ] Split a disagreement by question: the provider wins on whether a game exists on a fantasy date, the
+      external source wins on when, where, and whether it is still on. Record the conflict and surface it.
+- [ ] Mark a postponed game as postponed from an observed case, and leave it unresolved until one is observed.
+
+**Verify**: a week where the two sources agree publishes no conflict; a deliberately conflicting fixture is
+recorded and surfaced with both observations; a postponed game stays unresolved until an observed case proves
+the marking. `M`, depends on F1.5.
+
+### F1.7 — An NFL source, gated
+
+- [ ] **decide** whether a feature needs NFL start times, venues, or a full-season horizon. Nothing does today.
+- [ ] If one does, TheSportsDB at $20/month is the cheapest licensed option covering all four sports; state
+      the cost and the identity mapping before buying.
+
+**Verify**: the decision is recorded with the feature that needs it, or the item stays closed. `S`, blocked on
+a feature requirement.
 
 ---
 
@@ -616,17 +692,17 @@ why anything is declined. Currently zero open.
 
 ## Decisions needed from the owner
 
-| ID  | Decision                                                             | Blocks |
-| --- | -------------------------------------------------------------------- | ------ |
-| D1  | Staging model for CI: long-lived or per-branch                       | C1     |
-| D2  | Cloudflare split, or make GCP cold start good enough                 | E2     |
-| D3  | Schedule cache source: derived from our reads, or external           | F1     |
-| D4  | Retention, RPO/RTO and recovery owner                                | N1     |
-| D5  | Rename to lineupgrade, and when                                      | O1     |
-| D6  | Solver direction: positional scarcity first, or category-aware first | M1, M2 |
-| D7  | ~~Transactions read-only or executed~~ settled: group I owns it      | —      |
-| D8  | Reserve-slot eligibility: per-player, or per reserve position        | A7     |
-| D9  | Passkeys as a sign-in option                                         | future |
+| ID  | Decision                                                                                                               | Blocks |
+| --- | ---------------------------------------------------------------------------------------------------------------------- | ------ |
+| D1  | Staging model for CI: long-lived or per-branch                                                                         | C1     |
+| D2  | Cloudflare split, or make GCP cold start good enough                                                                   | E2     |
+| D3  | ~~Schedule cache source: derived from our reads, or external~~ settled: cache our reads, NHL API external, no graphite | F1     |
+| D4  | Retention, RPO/RTO and recovery owner                                                                                  | N1     |
+| D5  | Rename to lineupgrade, and when                                                                                        | O1     |
+| D6  | Solver direction: positional scarcity first, or category-aware first                                                   | M1, M2 |
+| D7  | ~~Transactions read-only or executed~~ settled: group I owns it                                                        | —      |
+| D8  | Reserve-slot eligibility: per-player, or per reserve position                                                          | A7     |
+| D9  | Passkeys as a sign-in option                                                                                           | future |
 
 Ruled already, recorded so they are not reopened: the transactions review is one group and comes before the
 framework migration, which is waiting on a release; Foldkit before any redesign; the rename before the

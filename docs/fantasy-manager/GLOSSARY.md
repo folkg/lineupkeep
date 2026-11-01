@@ -151,6 +151,30 @@ _Avoid_: Season schedule, full schedule, light night when the per-date count is 
 The inclusive dates a schedule read covers and where they came from: the league's scoring period, a window or day count requested on the call, or the rest of the provider's current week when the league publishes no period. The result states the window and its observation time. When the provider establishes neither a period nor a current date and the call requested neither, the window is refused with the argument to pass rather than invented.
 _Avoid_: Guessed week, assumed dates, games remaining when the window is meant
 
+**Professional team**:
+A real-world team a rostered player plays for, identified by the provider's professional-team key (`nhl.t.26`). Its abbreviation is display text and is never an identity.
+_Avoid_: Pro team, club, franchise, editorial team
+
+**Professional game**:
+A game between two professional teams, with a date, an optional start time, a venue, and a status. It is a fact about the real world, not a `Scheduled game`, which is what the provider publishes for a rostered player.
+_Avoid_: Fixture, event, scheduled game when the provider's fact is not meant
+
+**Observed fact**:
+A value cached with what it is about, the window it covers, when it was observed, which source produced it, and how strongly it is held (`authoritative`, `corroborated`, or `reported`). Facts are stored as observations, so a later value does not erase what was learned earlier.
+_Avoid_: Cache entry, cached value, truth when a single observation is meant
+
+**Fact source**:
+A declared origin of observed facts: the provider for what it publishes, or an external service for a professional game's date, start time, venue, or status. A source declares which sports and fact kinds it serves, its horizon, and its request budget.
+_Avoid_: Feed, provider (a provider is the fantasy platform), data vendor
+
+**Refresh policy**:
+The maximum age a fact kind may have before a read must re-observe it, and what a read does when the re-observation fails. It is declared per fact kind, not per table and not per job.
+_Avoid_: Cache TTL, polling interval, sync schedule
+
+**Fact hook**:
+The one call a consumer makes to obtain an observed fact, naming what it needs and how stale it may be, never which source it comes from.
+_Avoid_: Cache lookup, fact repository, data service
+
 ## Automation
 
 **Disabled team**:

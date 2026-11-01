@@ -16,10 +16,11 @@ Planning workspace for Lineupkeep, the independent provider-neutral rewrite. The
 - [Hosting comparison](HOSTING.md): Cloudflare/GCP/AWS limits, illustrative sizing, and the proposed acceptance checks.
 - [Hosted browser infrastructure](HOSTED-BROWSER-INFRA-PLAN.md): deployed IAM-only browser service, egress, limits, and remaining gates.
 - [Research notes](RESEARCH.md): inspected code and primary-source evidence.
+- [Schedule sources](SCHEDULE-SOURCES.md): the candidates probed, their terms, the refresh cadence per fact, and the observed-facts design.
 - [Reference knowledge](AUTOCOACH-KNOWLEDGE.md): everything the AutoCoach implementation encodes about setting a lineup, recorded before that checkout stops being consulted.
 - [Lineup correctness analysis](LINEUP-CORRECTNESS-ANALYSIS.md): the participation regression, the gap against the reference, and the ordered correction design.
 - [Naming research](NAMING-RESEARCH.md): preliminary domain/commercial/US-Canadian screening; Lineupkeep is selected, not legally cleared or purchased.
-- Architecture decisions: [provider-neutral product](adr/0001-provider-neutral-product.md), [workflow machines and pure selection](adr/0002-workflow-machines-and-pure-selection.md), [independent product](adr/0003-independent-product.md), [Cloud Run first](adr/0004-cloud-run-first.md), [free-tier Postgres](adr/0005-free-tier-postgres.md), [availability tiers in the lineup objective](adr/0006-availability-tiers.md), [provider registry and planner capability](adr/0007-provider-registry-and-planner-capability.md), [refusal kinds and the planner cutover](adr/0008-refusal-kinds-and-planner-cutover.md), and [provider score ownership](adr/0009-provider-score-ownership.md).
+- Architecture decisions: [provider-neutral product](adr/0001-provider-neutral-product.md), [workflow machines and pure selection](adr/0002-workflow-machines-and-pure-selection.md), [independent product](adr/0003-independent-product.md), [Cloud Run first](adr/0004-cloud-run-first.md), [free-tier Postgres](adr/0005-free-tier-postgres.md), [availability tiers in the lineup objective](adr/0006-availability-tiers.md), [provider registry and planner capability](adr/0007-provider-registry-and-planner-capability.md), [refusal kinds and the planner cutover](adr/0008-refusal-kinds-and-planner-cutover.md), [provider score ownership](adr/0009-provider-score-ownership.md), [address-based egress](adr/0010-address-based-egress.md), and [observed facts and schedule sources](adr/0011-observed-facts-and-schedule-sources.md).
 
 ## Source of truth
 

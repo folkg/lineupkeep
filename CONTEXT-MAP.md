@@ -6,6 +6,7 @@
 - [PRODUCT.md](PRODUCT.md): intended users and product direction, not implemented claims.
 - [Planning index](docs/fantasy-manager/README.md): all 17 planning documents.
 - [Implementation plan](docs/fantasy-manager/IMPLEMENTATION-PLAN.md), [stages](docs/fantasy-manager/DELIVERY-PLAN.md), [architecture](docs/fantasy-manager/ARCHITECTURE.md), [testing](docs/fantasy-manager/TESTING.md).
+- [Schedule sources](docs/SCHEDULE-SOURCES.md): the professional-team calendar's candidates, terms, refresh cadence, and observed-facts design.
 - [Glossary](docs/fantasy-manager/GLOSSARY.md): authoritative fantasy-domain vocabulary.
 - [DESIGN.md](DESIGN.md), [brand](docs/brand/BRAND.md), [.impeccable/design.json](.impeccable/design.json): approved foundation.
 - [Setup](docs/SETUP.md), [release readiness](docs/release-readiness.md), [deployment](docs/deployment.md): provenance and gates.
