@@ -34,6 +34,9 @@ export type AccessTokenResolution =
     };
 
 export type AuthenticationSession = {
+  readonly session: {
+    readonly id: string;
+  };
   readonly user: {
     readonly id: string;
     readonly email: string;

@@ -196,6 +196,16 @@ _Avoid_: Error, temporary failure
 **Active lineup implementation**:
 The implementation a deployment stamps on fresh lineup runs. Changing it changes future execution only; it cannot restore assignments an earlier implementation already wrote.
 
+## Account access
+
+**Sign-in session**:
+One browser's continued access to the account, recorded from when it starts and refreshed as it is used. The owner can list their own sign-in sessions and end one or all others; ending one takes effect on that browser's next request.
+_Avoid_: Login, device, browser session when the account's other sessions are meant
+
+**Device hint**:
+The short browser-and-system phrase derived from a sign-in session's stored user agent, such as "Chrome on macOS". It never carries the full user agent, a made-up device name, or a location we did not receive.
+_Avoid_: Device name, location, user agent
+
 ## Feedback
 
 **Feedback report**:

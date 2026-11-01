@@ -14,6 +14,8 @@ import { page, userEvent } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
+import { signInSessionsQueries } from "#browser/session/signInSessionsQueries.ts";
+import type { SignInSessionsRemote } from "#browser/session/signInSessionsRemote.ts";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type { ConnectionView } from "#contracts/connections/connectionContract.ts";
 
@@ -154,6 +156,12 @@ function setupConnectionsPage(
     cancelHosted: () => Promise.reject(new Error("Unexpected hosted sign-in cancellation")),
   };
   const connectionsQuery = connectionQueries.list(remote);
+  const sessionsRemote: SignInSessionsRemote = {
+    list: () => Promise.resolve({ sessions: [] }),
+    end: () => Promise.reject(new Error("Unexpected session ending")),
+    endOthers: () => Promise.reject(new Error("Unexpected session ending")),
+  };
+  const sessionsQuery = signInSessionsQueries.list(sessionsRemote);
   const sessionRemote: SessionRemote = {
     load: () => Promise.resolve({ status: "anonymous" }),
     signOut: () => Promise.resolve(),
@@ -173,6 +181,9 @@ function setupConnectionsPage(
         connectionsQuery={() => connectionsQuery}
         remote={remote}
         onRefresh={() => Promise.resolve()}
+        onRefreshSessions={() => Promise.resolve()}
+        sessionsQuery={() => sessionsQuery}
+        sessionsRemote={sessionsRemote}
       />
     ),
   });

@@ -474,7 +474,8 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
       "/email-otp/change-email",
     ],
     session: {
-      cookieCache: { enabled: true, maxAge: 5 * 60 },
+      cookieCache: { enabled: false },
+      updateAge: Duration.toSeconds(sessionRefreshWindow),
     },
 
     rateLimit: { enabled: options.rateLimitEnabled, storage: "database" },
@@ -532,6 +533,9 @@ function deliveryFailedResponse(failure: EmailDeliveryFailed): Response {
 
 function toAuthenticationSession(session: BetterAuthSessionValue): AuthenticationSession {
   return {
+    session: {
+      id: session.session.id,
+    },
     user: {
       id: session.user.id,
       email: session.user.email,
@@ -543,6 +547,8 @@ function toAuthenticationSession(session: BetterAuthSessionValue): Authenticatio
 const signInCodeLifetime = Duration.minutes(10);
 
 const accessTokenLifetime = Duration.minutes(5);
+
+const sessionRefreshWindow = Duration.minutes(5);
 
 const refreshTokenLifetime = Duration.days(30);
 
@@ -644,6 +650,9 @@ function isNonEmpty(values: ReadonlyArray<string>): boolean {
 }
 
 const BetterAuthSession = Schema.Struct({
+  session: Schema.Struct({
+    id: Schema.String,
+  }),
   user: Schema.Struct({
     id: Schema.String,
     email: Schema.String,

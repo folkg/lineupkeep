@@ -19,6 +19,7 @@ import { vi } from "vitest";
 
 import { AuthorizationScopes, offlineAccess } from "#contexts/auth/AuthorizationScopes.ts";
 import { retiredScopeAliases } from "#contexts/auth/AuthorizationScopes.ts";
+import { SignInSessions } from "#contexts/auth/SignInSessions.ts";
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
@@ -36,6 +37,8 @@ import { OAuthClientRepository } from "./OAuthClientRepository.ts";
 import * as oauthSchema from "./OAuthTables.ts";
 import { oauthClient, oauthRefreshToken, jwks } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
+import { SignInSessionRepository } from "./SignInSessionRepository.ts";
+import { SignInSessionsLive } from "./SignInSessionsLive.ts";
 
 const databaseTestTimeout = 30_000;
 
@@ -137,6 +140,31 @@ it.effect(
         users.map(({ email, emailVerified, name }) => ({ email, emailVerified, name })),
         [{ email: "new.reader@example.test", emailVerified: true, name: "" }],
       );
+    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+  databaseTestTimeout,
+);
+
+it.effect(
+  "refuses an ended session on the next request",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const sessions = yield* SignInSessions;
+
+      yield* adapter.handle(sendCodeRequest("ended.reader@example.test"));
+      const code = yield* latestCode("ended.reader@example.test");
+      const signedIn = yield* adapter.handle(signInRequest("ended.reader@example.test", code));
+      const headers = new Headers({ cookie: cookieHeader(signedIn) });
+      const signedInSession = yield* adapter.getSession(headers);
+      assert.isDefined(signedInSession);
+
+      const userId = decodeUserId(signedInSession.user.id);
+      const listed = yield* sessions.list(userId);
+      const [listedSession] = listed;
+      assert.isDefined(listedSession);
+      yield* sessions.end(userId, [listedSession.id]);
+
+      assert.isUndefined(yield* adapter.getSession(headers));
     }).pipe(Effect.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
@@ -879,6 +907,7 @@ it.effect(
         signInRequest("oauth@example.test", yield* latestCode("oauth@example.test")),
       );
       const headers = new Headers({ cookie: cookieHeader(signedIn) });
+      const signedInUser = yield* adapter.getSession(headers);
       const verifier = "1234567890123456789012345678901234567890123";
       const hash = yield* Effect.promise(() =>
         crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
@@ -1051,7 +1080,7 @@ it.effect(
         "connections:write",
       ]);
       assert.propertyVal(identity, "status", "authenticated");
-      assert.propertyVal(identity, "userId", (yield* adapter.getSession(headers))?.user.id);
+      assert.propertyVal(identity, "userId", signedInUser?.user.id);
       assert.propertyVal(identity, "clientId", "https://connections-client.test/client.json");
     }).pipe(
       Effect.provide(
@@ -1270,13 +1299,15 @@ function adapterLayer(
   | EmailDelivery
   | EmailOutbox
   | PublicInternet
-  | SignInCodeQuotaRepository,
+  | SignInCodeQuotaRepository
+  | SignInSessions,
   import("effect/Config").ConfigError,
   never
 > {
   return BetterAuthAdapter.layer.pipe(
     Layer.provideMerge(SignInCodeQuotaRepository.layer),
     Layer.provide(OAuthClientRepository.layer),
+    Layer.provideMerge(SignInSessionsLive.pipe(Layer.provide(SignInSessionRepository.layer))),
     Layer.provide(scopes),
     Layer.provideMerge(
       Layer.mergeAll(

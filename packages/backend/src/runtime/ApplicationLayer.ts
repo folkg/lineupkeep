@@ -9,7 +9,10 @@ import { AuthLive } from "#contexts/auth/internal/AuthLive.ts";
 import { BetterAuthAdapter } from "#contexts/auth/internal/BetterAuthAdapter.ts";
 import { OAuthClientRepository } from "#contexts/auth/internal/OAuthClientRepository.ts";
 import { SignInCodeQuotaRepository } from "#contexts/auth/internal/SignInCodeQuotaRepository.ts";
+import { SignInSessionRepository } from "#contexts/auth/internal/SignInSessionRepository.ts";
+import { SignInSessionsLive } from "#contexts/auth/internal/SignInSessionsLive.ts";
 import { UserDirectoryLive } from "#contexts/auth/internal/UserDirectoryRepository.ts";
+import type { SignInSessions } from "#contexts/auth/SignInSessions.ts";
 import type { Automation } from "#contexts/connections/Automation.ts";
 import type { Connections } from "#contexts/connections/Connections.ts";
 import type { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
@@ -69,6 +72,10 @@ const AuthLayer = AuthLive.pipe(
   Layer.provide(AuthDatabase.layer),
   Layer.provide(EmailDeliveryLayer),
 );
+const SignInSessionRepositoryLayer = SignInSessionRepository.layer.pipe(
+  Layer.provide(AuthDatabase.layer),
+);
+const SignInSessionsLayer = SignInSessionsLive.pipe(Layer.provide(SignInSessionRepositoryLayer));
 const ProviderLayer = Layer.effect(ProviderRegistry)(
   Effect.map(yahooProvider, (yahoo) => ProviderRegistry.of(providerRegistryOf([yahoo]))),
 );
@@ -182,6 +189,7 @@ export const ApplicationLayer = Layer.mergeAll(
   FeedbackLayer,
   FeedbackRetentionLayer,
   ToolCallQuotaLayer,
+  SignInSessionsLayer,
   AuthLayer,
   ProviderLayer,
   QueryTokens.layer,
@@ -189,6 +197,7 @@ export const ApplicationLayer = Layer.mergeAll(
 
 export type BackendServices =
   | AuthService
+  | SignInSessions
   | Connections
   | HostedLinking
   | FantasyQueries

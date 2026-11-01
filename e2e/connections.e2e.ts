@@ -25,11 +25,14 @@ test("keeps another person's connections invisible", async ({ page, newUser, ser
     {},
   );
   await page.goto("/connections");
-  await expect(page.getByRole("listitem")).toHaveCount(1);
+  const listed = page.getByRole("region", { name: "Your connections" });
+  await expect(listed.getByRole("listitem")).toHaveCount(1);
 
   const other = await newUser();
   await signUp(other);
 
   await expect(other.getByText("No connections yet.", { exact: true })).toBeVisible();
-  await expect(other.getByRole("listitem")).toHaveCount(0);
+  await expect(
+    other.getByRole("region", { name: "Your connections" }).getByRole("listitem"),
+  ).toHaveCount(0);
 });

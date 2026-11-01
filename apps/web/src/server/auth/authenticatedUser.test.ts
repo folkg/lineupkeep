@@ -33,15 +33,16 @@ it.effect("runs the use case for the authenticated user", () =>
       new Request("http://localhost/connections", { headers: { "x-request-id": "test-entry" } }),
     );
     const authentication = authenticationLayer({
+      session: { id: "signed-in-session" },
       user: { id: "signed-in-user", email: "person@example.test", name: "Person" },
     });
 
-    const result = yield* withAuthenticatedUser((owner) =>
-      Ref.update(owners, (values) => [...values, owner]).pipe(Effect.as("saved")),
+    const result = yield* withAuthenticatedUser((owner, session) =>
+      Ref.update(owners, (values) => [...values, `${owner}/${session}`]).pipe(Effect.as("saved")),
     ).pipe(Effect.provide(Layer.merge(authentication, requestContextLayer(context))));
 
     assert.strictEqual(result, "saved");
-    assert.deepStrictEqual(yield* Ref.get(owners), ["signed-in-user"]);
+    assert.deepStrictEqual(yield* Ref.get(owners), ["signed-in-user/signed-in-session"]);
   }),
 );
 

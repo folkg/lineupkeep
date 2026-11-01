@@ -51,5 +51,7 @@ test("returns home on sign-out and back to the account's connections on sign-in"
 
   await expect(page).toHaveURL("/connections");
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-  await expect(page.getByRole("listitem")).toHaveCount(1);
+  await expect(
+    page.getByRole("region", { name: "Your connections" }).getByRole("listitem"),
+  ).toHaveCount(1);
 });

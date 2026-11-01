@@ -43,7 +43,7 @@ function PrimaryNavigation(): JSX.Element {
           variant="quiet"
           onClick={() => void session.signOut()}
         >
-          Sign out
+          Sign out this device
         </Button>
       </Nav>
     </Show>

@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect";
 import { RequestContext } from "#runtime/RequestContext.ts";
 
 import { AuthenticationInvalidResponse, AuthService } from "./Auth.ts";
+import { SignInSessionId } from "./SignInSessions.ts";
 import { UserId } from "./User.ts";
 
 export const getCurrentAuthSession = Effect.fn("getCurrentAuthSession")(function* () {
@@ -18,8 +19,12 @@ export const getCurrentAuthSession = Effect.fn("getCurrentAuthSession")(function
   const userId = yield* Schema.decodeEffect(UserId)(session.user.id).pipe(
     Effect.mapError((cause) => AuthenticationInvalidResponse.make({ cause })),
   );
+  const sessionId = yield* Schema.decodeEffect(SignInSessionId)(session.session.id).pipe(
+    Effect.mapError((cause) => AuthenticationInvalidResponse.make({ cause })),
+  );
   const authenticated: AuthSessionValue = {
     status: "authenticated",
+    sessionId,
     user: {
       id: userId,
       email: session.user.email,
@@ -33,6 +38,7 @@ export type AuthSessionValue =
   | { readonly status: "anonymous" }
   | {
       readonly status: "authenticated";
+      readonly sessionId: SignInSessionId;
       readonly user: AuthSessionUser;
     };
 

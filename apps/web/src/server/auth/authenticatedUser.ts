@@ -1,11 +1,12 @@
 import { getCurrentAuthSession } from "@lineupkeep/backend/auth/AuthSession";
+import type { SignInSessionId } from "@lineupkeep/backend/auth/SignInSessions";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import { Effect } from "effect";
 
 import type { AuthenticationFailureResult } from "#contracts/auth/authContract.ts";
 
 export function withAuthenticatedUser<A, E, R>(
-  useCase: (userId: UserId) => Effect.Effect<A, E, R>,
+  useCase: (userId: UserId, sessionId: SignInSessionId) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
   A | AuthenticationFailureResult,
   | E
@@ -35,7 +36,7 @@ export function withAuthenticatedUser<A, E, R>(
       return Effect.annotateCurrentSpan({
         "auth.state": "authenticated",
         "user.id": session.user.id,
-      }).pipe(Effect.andThen(useCase(session.user.id)));
+      }).pipe(Effect.andThen(useCase(session.user.id, session.sessionId)));
     },
   );
 }

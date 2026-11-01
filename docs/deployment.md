@@ -760,6 +760,31 @@ The stateless adapter composes request-local identity and calls public use cases
 MCP access tokens last five minutes and refresh tokens last 30 days from issue or last rotation; every refresh rotates the token, and reusing a rotated token outside the 30-second retry window revokes the whole grant. These values are explicit in `BetterAuthAdapter.ts` rather than inherited from a plugin default. The `oauth_resource.refresh_token_ttl` column can cap that value when set; it is null in the seeded schema, so leave it null unless deliberately shortening the grant. JWT signing keys are rows in the `jwks` table, and refresh tokens are hashed rows in `oauth_refresh_token`; a Cloud Run revision change or scale-to-zero therefore does not invalidate a live token or grant. Only pointing the service at a different database or deleting those rows invalidates an existing grant; changing `BETTER_AUTH_SECRET` invalidates browser session cookies, so keep it stable for sign-in continuity. `bun checks` and the MCP E2E exercise this on migrated local storage; they do not prove a specific production revision change.
 Metadata retrieval must stay public-only, reject redirects, and resist DNS rebinding at connection time. Process routing can pin approved addresses; Workers need host-enforced protection. Test metadata routing is never a production exception, and local workerd cannot prove this guarantee.
 
+### Browser sessions
+
+A signed cookie keeps a browser signed in. Every authenticated request reads its `session` row, because
+better-auth's cookie cache is disabled (`cookieCache: { enabled: false }` in `BetterAuthAdapter.ts`). The
+chosen cache window is therefore zero. Ending a session deletes its row, and the next request from that
+device finds nothing and is treated as signed out; sign-out does the same for the current device. A stolen
+cookie cannot outlive the row it names.
+
+The cost is one read of the `session` row by session token per authenticated request. The page shell reads
+the session once and each server-function call reads it once more, so a page load costs about two indexed
+reads. That is the whole price of a zero window, and at current traffic it is cheaper than a revocation
+window nobody can see.
+
+The same read refreshes `expires_at` and `updated_at` at most once every five minutes
+(`session.updateAge`). That interval sets the resolution of the last-used time in the session list and caps
+how often an active session writes. Sessions still expire after seven days without a refresh, and the
+browser cookie is issued with the same seven-day life at sign-in. Session lifetime itself is unchanged;
+shortening it changes sign-in continuity and needs a product decision.
+
+The owner sees the list on the Connections page: the device hint derived from the stored user agent, when
+the session started, and when it was last used, with the current device marked. The page can end one
+session or every other session. Every statement is scoped by owner id, so the list never shows another
+account's rows, and no session token is rendered. Sign-out is labelled "Sign out this device"; MCP grants
+described above are separate and survive browser sign-out.
+
 ### Telemetry
 
 Spans go to Cloud Trace through Google Cloud's Telemetry (OTLP) API. The Cloud Run host injects the OpenTelemetry configuration ([cloudRun.ts](../infra/hosts/cloudRun.ts)): `OTEL_TRACES_EXPORTER=otlp`, `OTEL_EXPORTER_OTLP_ENDPOINT=https://telemetry.googleapis.com`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, and `OTEL_RESOURCE_ATTRIBUTES=gcp.project_id=lineupkeep-prod`. Effect's OTLP exporter posts protobuf batches to `/v1/traces`; there is no collector, no log-based span writer, and no observability vendor. Alchemy has no Cloud Run telemetry binding (its telemetry layer targets its own Worker/Lambda/Container runtimes), so the host injects the standard OpenTelemetry environment rather than application code hard-coding an endpoint.

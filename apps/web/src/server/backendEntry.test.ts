@@ -170,6 +170,7 @@ function authentication(
             Effect.succeed(
               signedIn
                 ? {
+                    session: { id: "signed-in-session" },
                     user: { id: "signed-in-user", email: "person@example.test", name: "Person" },
                   }
                 : undefined,

@@ -2,6 +2,7 @@ import {
   AuthenticationInvalidResponse,
   AuthenticationUnavailable,
 } from "@lineupkeep/backend/auth/Auth";
+import type { SignInSessionId } from "@lineupkeep/backend/auth/SignInSessions";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import type { BackendOperation, BackendServices } from "@lineupkeep/backend/runtime/BackendRuntime";
 import type { RequestContext } from "@lineupkeep/backend/runtime/RequestContext";
@@ -13,7 +14,7 @@ import { withAuthenticatedUser } from "./auth/authenticatedUser.ts";
 export function runUseCase<A, E, R extends BackendServices, Code extends string>(
   request: Request,
   operation: BackendOperation,
-  useCase: (userId: UserId) => Effect.Effect<A, E, R | RequestContext>,
+  useCase: (userId: UserId, sessionId: SignInSessionId) => Effect.Effect<A, E, R | RequestContext>,
   mapExpectedError: (error: E) => ExpectedFailure<Code>,
 ): Promise<
   | import("#contracts/auth/authContract.ts").AuthenticationFailureResult
@@ -60,7 +61,7 @@ export function mapAuthenticationFailure(error: unknown): never {
 }
 
 export function authenticatedUseCase<A, E, R, Code extends string>(
-  useCase: (userId: UserId) => Effect.Effect<A, E, R>,
+  useCase: (userId: UserId, sessionId: SignInSessionId) => Effect.Effect<A, E, R>,
   mapExpectedError: (error: E) => ExpectedFailure<Code>,
 ): Effect.Effect<
   | import("#contracts/auth/authContract.ts").AuthenticationFailureResult
@@ -77,8 +78,8 @@ export function authenticatedUseCase<A, E, R, Code extends string>(
   AuthenticationInvalidResponse | AuthenticationUnavailable,
   R | import("@lineupkeep/backend/auth/Auth").AuthService | RequestContext
 > {
-  return withAuthenticatedUser((userId) =>
-    Effect.matchEffect(useCase(userId), {
+  return withAuthenticatedUser((userId, sessionId) =>
+    Effect.matchEffect(useCase(userId, sessionId), {
       onFailure: (error) => {
         const failure = mapExpectedError(error);
         return Effect.annotateCurrentSpan({
