@@ -34,6 +34,7 @@ import { LineupRunRepository } from "#contexts/connections/internal/LineupRunRep
 import { LineupRunsLive } from "#contexts/connections/internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "#contexts/connections/internal/LineupWorkerLive.ts";
 import { NotificationsLive } from "#contexts/connections/internal/NotificationsRepository.ts";
+import { ObservedFactRepository } from "#contexts/connections/internal/ObservedFactRepository.ts";
 import { QueryRepository } from "#contexts/connections/internal/QueryRepository.ts";
 import { QueryTokens } from "#contexts/connections/internal/QueryTokens.ts";
 import { RetentionSweepLive } from "#contexts/connections/internal/RetentionSweepRepository.ts";
@@ -105,8 +106,12 @@ const QueryRepositoryLayer = QueryRepository.layer.pipe(
   Layer.provide(RepositoryLayer),
   Layer.provide(ConnectionsDatabase.layer),
 );
+const ObservedFactRepositoryLayer = ObservedFactRepository.layer.pipe(
+  Layer.provide(ConnectionsDatabase.layer),
+);
 const QueriesLayer = Layer.merge(FantasyQueriesLive, TransactionReviewsLive).pipe(
   Layer.provide(QueryRepositoryLayer),
+  Layer.provide(ObservedFactRepositoryLayer),
   Layer.provide(ConnectionsLayer),
   Layer.provide(ProviderLayer),
   Layer.provide(CredentialEncryptionLayer),

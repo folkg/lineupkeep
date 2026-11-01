@@ -1511,7 +1511,7 @@ const SummarySchedule = Schema.Union([
     observedAt: Schema.DateTimeUtc.pipe(
       Schema.annotate({
         description:
-          "When these games were read from the provider. Compare it against now to judge staleness.",
+          "The oldest instant these games were observed from the provider. Compare it against now to judge staleness.",
       }),
     ),
     dates: Schema.optional(Schema.Array(SummaryScheduleDate)).pipe(

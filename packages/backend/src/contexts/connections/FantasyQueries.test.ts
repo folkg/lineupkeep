@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
 import { Array, Cause, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { TestClock } from "effect/testing";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
@@ -16,6 +17,7 @@ import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { providerTeams } from "./internal/ConnectionTables.ts";
 import { FantasyQueriesLive } from "./internal/FantasyQueriesLive.ts";
+import { ObservedFactRepository } from "./internal/ObservedFactRepository.ts";
 import { FakeProviderWorld } from "./internal/ProviderFakeTest.ts";
 import { ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
@@ -23,6 +25,7 @@ import { QueryTokens } from "./internal/QueryTokens.ts";
 import { TransactionReviewsLive } from "./internal/TransactionReviewsLive.ts";
 import type {
   ProviderAcquisitionUsage,
+  ProviderSchedulePeriod,
   ProviderLeagueSettings,
   ProviderTransaction,
   ProviderTransactionMovement,
@@ -35,6 +38,7 @@ import type {
   ProviderTeam,
 } from "./Provider.ts";
 import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
+import { ProviderRegistry } from "./ProviderRegistry.ts";
 import { RosterResult, TeamSummaryData, TeamSummaryResult } from "./QueryResults.ts";
 import { StatRef } from "./QueryValues.ts";
 import { QueryTeamNotFound } from "./QueryValues.ts";
@@ -3219,6 +3223,308 @@ it.effect("reports each rostered player's scheduled games and the roster count p
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("serves a repeated schedule window from stored opponent facts", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedOpponentTeams(fake, ["465.l.2000.t.1"]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-19T12:00:00.000Z")),
+    );
+
+    const first = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: opponentWindow,
+    });
+    const second = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: opponentWindow,
+    });
+
+    assert.deepStrictEqual(yield* fake.schedulePeriods, [
+      { type: "date", start: "2026-10-19", end: "2026-10-21" },
+    ]);
+    assert.strictEqual(second.status, "ok");
+    if (first.status !== "ok" || second.status !== "ok") {
+      return;
+    }
+    const firstSchedule = first.schedule;
+    const secondSchedule = second.schedule;
+    assert.strictEqual(secondSchedule?.status, "available");
+    if (firstSchedule?.status !== "available" || secondSchedule?.status !== "available") {
+      return;
+    }
+    assert.strictEqual(DateTime.formatIso(secondSchedule.observedAt), "2026-10-19T12:00:00.000Z");
+    assert.deepStrictEqual(
+      secondSchedule.players.map((player) => [player.name, player.gameCount, player.games]),
+      firstSchedule.players.map((player) => [player.name, player.gameCount, player.games]),
+    );
+    assert.deepStrictEqual(secondSchedule.dates, firstSchedule.dates);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("re-reads only the date past its fantasy-day boundary", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedOpponentTeams(fake, ["465.l.2000.t.1"]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-19T12:00:00.000Z")),
+    );
+    yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: opponentWindow,
+    });
+
+    yield* TestClock.adjust(2 * 3_600_000);
+    const insideTheDay = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: opponentWindow,
+    });
+    if (insideTheDay.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(insideTheDay.schedule?.status, "available");
+    if (insideTheDay.schedule?.status === "available") {
+      assert.strictEqual(
+        DateTime.formatIso(insideTheDay.schedule.observedAt),
+        "2026-10-19T12:00:00.000Z",
+      );
+    }
+    assert.deepStrictEqual(yield* fake.schedulePeriods, [
+      { type: "date", start: "2026-10-19", end: "2026-10-21" },
+    ]);
+
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-20T08:00:00.000Z")),
+    );
+    const afterTheBoundary = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: opponentWindow,
+    });
+
+    assert.deepStrictEqual(yield* fake.schedulePeriods, [
+      { type: "date", start: "2026-10-19", end: "2026-10-21" },
+      { type: "date", start: "2026-10-19", end: "2026-10-19" },
+    ]);
+    if (afterTheBoundary.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(afterTheBoundary.schedule?.status, "available");
+    if (afterTheBoundary.schedule?.status === "available") {
+      assert.deepStrictEqual(afterTheBoundary.schedule.dates, [
+        { date: "2026-10-19", rosterGames: 1 },
+        { date: "2026-10-20", rosterGames: 1 },
+        { date: "2026-10-21", rosterGames: 1 },
+      ]);
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("keeps a stale opponent's previous observation when the re-read fails", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedOpponentTeams(fake, ["465.l.2000.t.1"]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-19T12:00:00.000Z")),
+    );
+    const first = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: opponentWindow,
+    });
+    if (first.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(first.schedule?.status, "available");
+
+    yield* fake.failSchedule("unavailable");
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-20T08:00:00.000Z")),
+    );
+    const refused = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: opponentWindow,
+    });
+    assert.strictEqual(refused.status, "failed");
+    if (refused.status === "narrowing_required") {
+      return;
+    }
+    assert.deepStrictEqual(
+      refused.failures.map((failure) => failure.code),
+      ["schedule_fact_stale"],
+    );
+    assert.strictEqual(refused.schedule?.status, "unsupported");
+    if (refused.schedule?.status !== "unsupported") {
+      return;
+    }
+    assert.include(refused.schedule.detail, "2026-10-19");
+    assert.include(refused.schedule.detail, "past their maximum age");
+    assert.include(refused.schedule.detail, "2026-10-19T12:00:00.000Z");
+    assert.include(refused.schedule.detail, "could not be reached");
+
+    yield* TestClock.adjust(3_600_000);
+    const refusedAgain = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: opponentWindow,
+    });
+    if (refusedAgain.status === "narrowing_required") {
+      return;
+    }
+    assert.strictEqual(refusedAgain.schedule?.status, "unsupported");
+    if (refusedAgain.schedule?.status === "unsupported") {
+      assert.include(refusedAgain.schedule.detail, "2026-10-19T12:00:00.000Z");
+      assert.notInclude(refusedAgain.schedule.detail, "2026-10-20T09:00:00.000Z");
+    }
+
+    yield* fake.failSchedule(undefined);
+    const recovered = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: { start: "2026-10-19", end: "2026-10-19" },
+    });
+    if (recovered.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(recovered.schedule?.status, "available");
+    if (recovered.schedule?.status === "available") {
+      assert.strictEqual(
+        DateTime.formatIso(recovered.schedule.observedAt),
+        "2026-10-20T09:00:00.000Z",
+      );
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("lets two workers record the same date without conflicting", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedOpponentTeams(fake, ["465.l.2000.t.1"]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-19T12:00:00.000Z")),
+    );
+
+    const [left, right] = yield* Effect.all(
+      [
+        queries.getTeamSummary(owner, {
+          team: teamId,
+          groups: ["schedule"],
+          window: opponentWindow,
+        }),
+        queries.getTeamSummary(owner, {
+          team: teamId,
+          groups: ["schedule"],
+          window: opponentWindow,
+        }),
+      ],
+      { concurrency: 2 },
+    );
+    assert.strictEqual(left.status, "ok");
+    assert.strictEqual(right.status, "ok");
+
+    const readsByWorkers = (yield* fake.schedulePeriods).length;
+    const settled = yield* queries.getTeamSummary(owner, {
+      team: teamId,
+      groups: ["schedule"],
+      window: opponentWindow,
+    });
+    if (settled.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(settled.schedule?.status, "available");
+    assert.strictEqual((yield* fake.schedulePeriods).length, readsByWorkers);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("measures a day of uncached hourly schedule sweeps", () =>
+  Effect.gen(function* () {
+    const fake = yield* FakeProviderWorld;
+    const registry = yield* ProviderRegistry;
+    const provider = yield* registry.requireProvider(decodeProviderKey("yahoo"));
+    for (const teamKey of ownerTeamKeys) {
+      yield* fake.setTeamSchedule(teamKey, opponentSchedule(teamKey));
+    }
+
+    const periods: Array<ProviderSchedulePeriod> = [];
+    for (let hour = 0; hour < 24; hour += 1) {
+      for (const providerTeamKey of ownerTeamKeys) {
+        const schedule = yield* provider.readRosterSchedule({
+          provider: decodeProviderKey("yahoo"),
+          session,
+          providerTeamKey,
+          period: { type: "date", ...opponentWindow },
+        });
+        periods.push(schedule.period);
+      }
+    }
+
+    assert.strictEqual(periods.length, 120);
+    assert.strictEqual(scheduleDateReads(periods), 360);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("serves a day of hourly sweeps with one newly covered date per team", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedOpponentTeams(fake, ownerTeamKeys, { periodWindow: undefined });
+    const teamIds = seeded.map((row) => row.id);
+    const tickReads: Array<number> = [];
+    const dailyReads: Array<number> = [];
+
+    for (let day = 0; day < 3; day += 1) {
+      const firstTick = DateTime.add(DateTime.makeUnsafe("2026-10-19T07:00:00.000Z"), {
+        days: day,
+      });
+      const window = {
+        start: DateTime.formatIsoDate(firstTick),
+        end: DateTime.formatIsoDate(DateTime.add(firstTick, { days: 2 })),
+      };
+      let dayReads = 0;
+      for (let hour = 0; hour < 24; hour += 1) {
+        yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.add(firstTick, { hours: hour })));
+        const before = (yield* fake.schedulePeriods).length;
+        for (const teamId of teamIds) {
+          const summary = yield* queries.getTeamSummary(owner, {
+            team: teamId,
+            groups: ["schedule"],
+            window,
+          });
+          assert.strictEqual(summary.status, "ok");
+          if (summary.status !== "ok") {
+            return;
+          }
+        }
+        const reads = scheduleDateReads((yield* fake.schedulePeriods).slice(before));
+        tickReads.push(reads);
+        dayReads += reads;
+      }
+      dailyReads.push(dayReads);
+    }
+
+    assert.deepStrictEqual(dailyReads, [15, 5, 5]);
+    assert.deepStrictEqual(tickReads.slice(0, 3), [15, 0, 0]);
+    assert.deepStrictEqual(tickReads.slice(24, 27), [5, 0, 0]);
+    assert.strictEqual(
+      tickReads.slice(48, 51).reduce((total, reads) => total + reads, 0),
+      5,
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("uses the scoring week's opponent for a league whose coverage is a week", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -4278,6 +4584,89 @@ function seed(
   }).pipe(Effect.orDie);
 }
 
+const ownerTeamKeys = [
+  "465.l.2000.t.1",
+  "465.l.2000.t.2",
+  "465.l.2000.t.3",
+  "465.l.2000.t.4",
+  "465.l.2000.t.5",
+] as const;
+
+const opponentWindow = { start: "2026-10-19", end: "2026-10-21" };
+
+function seedOpponentTeams(
+  fake: FakeProviderWorld["Service"],
+  teamKeys: ReadonlyArray<string>,
+  options: { readonly periodWindow?: ProviderLeagueSettings["periodWindow"] } = {},
+): Effect.Effect<
+  ReadonlyArray<{ readonly id: import("./FantasyTeam.ts").TeamId }>,
+  never,
+  Connections
+> {
+  return Effect.gen(function* () {
+    const seeded = yield* seed(
+      fake,
+      teamKeys.map((key, index) => team(key, `Hockey ${String(index + 1)}`, "nhl")),
+      {
+        league: { ...hockeyLeagueFixture, periodWindow: options.periodWindow },
+        roster: rosterFixture({
+          count: 2,
+          providerTeamKey: Array.getUnsafe(teamKeys, 0),
+          providerLeagueKey: "465.l.2000",
+          coverage: { type: "date", date: "2026-10-19" },
+        }),
+      },
+    );
+    for (const teamKey of teamKeys) {
+      yield* fake.setTeamSchedule(teamKey, opponentSchedule(teamKey));
+    }
+    return seeded;
+  });
+}
+
+function opponentSchedule(providerTeamKey: string): import("./Provider.ts").ProviderRosterSchedule {
+  const teamNumber = providerTeamKey.slice(providerTeamKey.lastIndexOf(".t.") + 3);
+  return scheduleFixture({
+    providerTeamKey,
+    dates: ["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"],
+    players: [
+      {
+        key: `465.p.${teamNumber}001`,
+        name: "Synthetic Skater",
+        games: [
+          { date: "2026-10-19", opponent: "TOR", home: true },
+          { date: "2026-10-21", opponent: "LA", home: false },
+          { date: "2026-10-23", opponent: "WPG", home: true },
+        ],
+      },
+      {
+        key: `465.p.${teamNumber}002`,
+        name: "Synthetic Goalie",
+        games: [
+          { date: "2026-10-20", opponent: "BOS", home: true },
+          { date: "2026-10-22", opponent: "SEA", home: false },
+        ],
+      },
+    ],
+  });
+}
+
+function scheduleDateReads(periods: ReadonlyArray<ProviderSchedulePeriod>): number {
+  return periods.reduce((total, period) => {
+    if (period.type === "week") {
+      return total;
+    }
+    return (
+      total +
+      Math.round(
+        (Date.parse(`${period.end}T00:00:00.000Z`) - Date.parse(`${period.start}T00:00:00.000Z`)) /
+          86_400_000,
+      ) +
+      1
+    );
+  }, 0);
+}
+
 function scheduleFixture(input: {
   readonly providerTeamKey: string;
   readonly dates: ReadonlyArray<string>;
@@ -4759,12 +5148,16 @@ const ConnectionRepositoryTest = ConnectionRepository.layer.pipe(
   Layer.provideMerge(ConnectionsDatabaseTest),
 );
 const QueryRepositoryTest = QueryRepository.layer.pipe(Layer.provide(ConnectionRepositoryTest));
+const ObservedFactRepositoryTest = ObservedFactRepository.layer.pipe(
+  Layer.provide(ConnectionsDatabaseTest),
+);
 
 const QueriesTestLayer = Layer.merge(FantasyQueriesLive, TransactionReviewsLive).pipe(
   Layer.provideMerge(ConnectionsLive),
   Layer.provideMerge(QueryRepositoryTest),
   Layer.provideMerge(ConnectionRepositoryTest),
   Layer.provideMerge(ProviderFakeTest),
+  Layer.provide(ObservedFactRepositoryTest),
   Layer.provide(EncryptionTestLayer),
   Layer.provide(QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars")),
   Layer.provide(NodeCrypto.layer),

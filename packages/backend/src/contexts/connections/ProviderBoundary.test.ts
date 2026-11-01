@@ -15,6 +15,7 @@ import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { FantasyQueriesLive } from "./internal/FantasyQueriesLive.ts";
 import { planAssignments } from "./internal/LineupPlanning.ts";
 import { resolveTarget } from "./internal/LineupTarget.ts";
+import { ObservedFactRepository } from "./internal/ObservedFactRepository.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
 import {
@@ -31,6 +32,10 @@ const ConnectionRepositoryTest = ConnectionRepository.layer.pipe(
   Layer.provideMerge(ConnectionsDatabaseTest),
 );
 
+const ObservedFactRepositoryTest = ObservedFactRepository.layer.pipe(
+  Layer.provide(ConnectionsDatabaseTest),
+);
+
 const SecondProviderTestLayer = FantasyQueriesLive.pipe(
   Layer.provideMerge(ConnectionsLive),
   Layer.provideMerge(QueryRepository.layer.pipe(Layer.provide(ConnectionRepositoryTest))),
@@ -40,6 +45,7 @@ const SecondProviderTestLayer = FantasyQueriesLive.pipe(
       Effect.succeed(ProviderRegistry.of(providerRegistryOf([secondProvider]))),
     ),
   ),
+  Layer.provide(ObservedFactRepositoryTest),
   Layer.provide(
     ConnectionCredentialEncryption.forKey(
       ConnectionEncryptionKey.fromBytes({

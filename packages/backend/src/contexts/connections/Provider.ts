@@ -197,6 +197,15 @@ export type ProviderReadFailure =
   | ProviderPeriodMismatch
   | ProviderPeriodUnsupported;
 
+export const ProviderReadFailureSchema = Schema.Union([
+  ProviderSessionRejected,
+  ProviderRequestFailed,
+  ProviderResponseInvalid,
+  ProviderOperationUnsupported,
+  ProviderPeriodMismatch,
+  ProviderPeriodUnsupported,
+]);
+
 export type Provider = ProviderShape;
 
 export type ProviderShape = {

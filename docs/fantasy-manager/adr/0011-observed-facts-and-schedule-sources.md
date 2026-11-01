@@ -52,9 +52,11 @@ hook. External sources are added per sport, and only where the terms permit.**
 
 2. **A refresh policy per fact kind, not per table and not per job.** League season state: 24 hours. A game
    fixture: 7 days. A start time: 6 hours inside 48 hours, 7 days beyond. Game status: 30 minutes inside 12
-   hours, 6 hours otherwise. Venue: 7 days. The provider's own opponent fact: the fantasy day boundary. A
-   source may narrow a policy it cannot satisfy, and the narrowed bound is what the reader sees. Steady state
-   is 8 to 10 requests a day for the owner's two leagues and five linked teams, against up to 360 today.
+   hours, 6 hours otherwise. Venue: 7 days. The provider's own opponent fact: the fantasy day boundary. Because
+   that fact covers one fantasy date, its bound is the end of the day it covers: a date observed once while it
+   is in the window is trusted through that date and re-read only after the date has ended. A source may narrow
+   a policy it cannot satisfy, and the narrowed bound is what the reader sees. Steady state is 8 to 10 requests
+   a day for the owner's two leagues and five linked teams, against up to 360 today.
 
 3. **Identity is the provider's professional-team key.** Abbreviations are display text and are never a join.
    A new source's identifiers are attached to the canonical team only through a pair the provider itself

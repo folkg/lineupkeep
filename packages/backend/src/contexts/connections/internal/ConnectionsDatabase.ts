@@ -16,6 +16,7 @@ import {
   lineupTeamLeases,
   lineupWriteIntents,
 } from "./LineupRunTables.ts";
+import { observedFacts } from "./ObservedFactTables.ts";
 import { transactionProposalItems, transactionProposalSets } from "./TransactionProposalTables.ts";
 
 export const connectionsRelations = defineRelations({
@@ -31,6 +32,7 @@ export const connectionsRelations = defineRelations({
   lineupWriteIntents,
   transactionProposalSets,
   transactionProposalItems,
+  observedFacts,
 });
 
 export class ConnectionsDatabase extends Context.Service<

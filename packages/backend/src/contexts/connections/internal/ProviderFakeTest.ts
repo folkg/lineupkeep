@@ -81,6 +81,8 @@ type FakeProviderState = {
   readonly rosterAfterNextRead: ProviderRoster | undefined;
   readonly rosterPeriods: ReadonlyArray<ProviderRosterCoverage | undefined>;
   readonly schedule: ProviderRosterSchedule | undefined;
+  readonly teamSchedules: Readonly<Record<string, ProviderRosterSchedule>>;
+  readonly scheduleFailure: FakeRequestFailure | undefined;
   readonly schedulePeriods: ReadonlyArray<ProviderSchedulePeriod>;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
   readonly searchPlayers: ReadonlyArray<ProviderPlayerSearchResult["players"][number]> | undefined;
@@ -138,6 +140,11 @@ export type FakeProviderWorldShape = {
   readonly setRosterAfterNextRead: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly rosterPeriods: Effect.Effect<ReadonlyArray<ProviderRosterCoverage | undefined>>;
   readonly setSchedule: (schedule: ProviderRosterSchedule | undefined) => Effect.Effect<void>;
+  readonly setTeamSchedule: (
+    teamKey: string,
+    schedule: ProviderRosterSchedule,
+  ) => Effect.Effect<void>;
+  readonly failSchedule: (failure: FakeRequestFailure | undefined) => Effect.Effect<void>;
   readonly schedulePeriods: Effect.Effect<ReadonlyArray<ProviderSchedulePeriod>>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
   readonly setSearchPlayers: (
@@ -214,6 +221,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         rosterAfterNextRead: undefined,
         rosterPeriods: [],
         schedule: undefined,
+        teamSchedules: {},
+        scheduleFailure: undefined,
         schedulePeriods: [],
         playerDetails: [],
         searchPlayers: undefined,
@@ -294,6 +303,12 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           modify((current) => ({ ...current, rosterAfterNextRead })),
         rosterPeriods: Effect.map(Ref.get(state), (current) => current.rosterPeriods),
         setSchedule: (schedule) => modify((current) => ({ ...current, schedule })),
+        setTeamSchedule: (teamKey, schedule) =>
+          modify((current) => ({
+            ...current,
+            teamSchedules: { ...current.teamSchedules, [teamKey]: schedule },
+          })),
+        failSchedule: (scheduleFailure) => modify((current) => ({ ...current, scheduleFailure })),
         schedulePeriods: Effect.map(Ref.get(state), (current) => current.schedulePeriods),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
         setSearchPlayers: (players) =>
@@ -507,16 +522,23 @@ const providerFake = Effect.gen(function* () {
         ...state,
         schedulePeriods: [...state.schedulePeriods, input.period],
       }));
-      if (current.schedule === undefined) {
+      if (current.scheduleFailure === "unavailable") {
+        return yield* ProviderRequestFailed.make({ operation: "read_roster_schedule" });
+      }
+      if (current.scheduleFailure === "invalid_response") {
+        return yield* ProviderResponseInvalid.make({ operation: "read_roster_schedule" });
+      }
+      const configured = current.teamSchedules[input.providerTeamKey] ?? current.schedule;
+      if (configured === undefined) {
         return yield* ProviderOperationUnsupported.make({
           operation: "read_roster_schedule",
           reason: "No roster schedule is configured for the fake provider.",
         });
       }
-      if (current.schedule.providerTeamKey !== input.providerTeamKey) {
+      if (configured.providerTeamKey !== input.providerTeamKey) {
         return yield* ProviderResponseInvalid.make({ operation: "read_roster_schedule" });
       }
-      return { ...current.schedule, period: input.period };
+      return scheduleForPeriod(configured, input.period);
     }),
     applyNativeAction: Effect.fn("FakeProvider.applyNativeAction")(function* (input) {
       const current = yield* prepare(input, "apply_native_action").pipe(
@@ -1202,6 +1224,37 @@ function applyAssignments(
       };
     }),
   };
+}
+
+function scheduleForPeriod(
+  schedule: ProviderRosterSchedule,
+  period: ProviderSchedulePeriod,
+): ProviderRosterSchedule {
+  if (period.type === "week") {
+    return { ...schedule, period };
+  }
+  const dates = datesInRange(period.start, period.end);
+  const covered = new Set(dates);
+  return {
+    ...schedule,
+    period,
+    dates: schedule.dates.filter((date) => covered.has(date)),
+    players: schedule.players.map((player) => ({
+      ...player,
+      games: player.games.filter((game) => game.date !== undefined && covered.has(game.date)),
+    })),
+  };
+}
+
+function datesInRange(start: string, end: string): ReadonlyArray<string> {
+  const first = DateTime.makeUnsafe(`${start}T00:00:00.000Z`);
+  const last = DateTime.makeUnsafe(`${end}T00:00:00.000Z`);
+  const span = Math.floor(
+    (DateTime.toEpochMillis(last) - DateTime.toEpochMillis(first)) / 86_400_000,
+  );
+  return globalThis.Array.from({ length: span + 1 }, (_, index) =>
+    DateTime.formatIsoDate(DateTime.add(first, { days: index })),
+  );
 }
 
 function requestFailure(

@@ -199,19 +199,32 @@ function rosterPlayer(
 }
 
 function schedule(period: ProviderRosterSchedule["period"]): ProviderRosterSchedule {
+  const dates = period.type === "date" ? datesBetween(period.start, period.end) : [];
   return {
     providerTeamKey: secondProviderRoster.providerTeamKey,
     period,
-    dates: period.type === "date" ? [period.start] : [],
+    dates,
     players: secondProviderRoster.players.map((player) => ({
       providerPlayerKey: player.providerPlayerKey,
       name: player.name,
       proTeamAbbreviation: player.proTeamAbbreviation,
-      games: [
-        { date: period.type === "date" ? period.start : undefined, opponent: "BOS", home: true },
-      ],
+      games:
+        dates.length === 0
+          ? [{ date: undefined, opponent: "BOS", home: true }]
+          : dates.map((date) => ({ date, opponent: "BOS", home: true })),
     })),
   };
+}
+
+function datesBetween(start: string, end: string): ReadonlyArray<string> {
+  const first = DateTime.makeUnsafe(`${start}T00:00:00.000Z`);
+  const last = DateTime.makeUnsafe(`${end}T00:00:00.000Z`);
+  const span = Math.floor(
+    (DateTime.toEpochMillis(last) - DateTime.toEpochMillis(first)) / 86_400_000,
+  );
+  return globalThis.Array.from({ length: span + 1 }, (_, index) =>
+    DateTime.formatIsoDate(DateTime.add(first, { days: index })),
+  );
 }
 
 function scores(roster: ProviderRoster): ProviderScoreOutcome {

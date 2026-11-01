@@ -16,3 +16,11 @@ export function nextFantasyDayBoundary(now: DateTime.Utc, day: ProviderFantasyDa
 export function fantasyDayLabel(now: DateTime.Utc, day: ProviderFantasyDay): string {
   return DateTime.formatIsoDate(DateTime.setZoneNamedUnsafe(now, day.timeZone));
 }
+
+export function endOfFantasyDay(date: string, day: ProviderFantasyDay): DateTime.Utc {
+  const start = DateTime.makeZonedUnsafe(`${date}T00:00:00`, {
+    timeZone: day.timeZone,
+    adjustForTimeZone: true,
+  });
+  return DateTime.toUtc(DateTime.add(start, { days: 1 }));
+}

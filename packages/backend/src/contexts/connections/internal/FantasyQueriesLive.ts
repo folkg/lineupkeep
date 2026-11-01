@@ -94,6 +94,8 @@ import {
 } from "#contexts/connections/QueryValues.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
+import { ObservedFactRepository } from "./ObservedFactRepository.ts";
+import { ProviderOpponentFactStale, readProviderOpponent } from "./ProviderOpponentFacts.ts";
 import { fitPage, queryBudget, summaryBudget } from "./QueryBudget.ts";
 import { loadTeamContext, providerIdentity } from "./QueryContext.ts";
 import type { TeamContext } from "./QueryContext.ts";
@@ -123,6 +125,8 @@ type ReadOutcome<A> =
   | { readonly _tag: "unsupported"; readonly detail: string }
   | { readonly _tag: "failed"; readonly failure: QueryFailure };
 
+type FailureOutcome = Extract<ReadOutcome<never>, { readonly _tag: "unsupported" | "failed" }>;
+
 export const FantasyQueriesLive = Layer.effect(
   FantasyQueries,
   Effect.gen(function* () {
@@ -131,6 +135,7 @@ export const FantasyQueriesLive = Layer.effect(
     const registry = yield* ProviderRegistry;
     const encryption = yield* ConnectionCredentialEncryption;
     const tokens = yield* QueryTokens;
+    const observedFacts = yield* ObservedFactRepository;
 
     const loadContext = (
       userId: UserId,
@@ -138,73 +143,117 @@ export const FantasyQueriesLive = Layer.effect(
     ): Effect.Effect<TeamContext, QueryError> =>
       loadTeamContext(repository, encryption, registry, userId, teamId);
 
+    const failureOutcome = (
+      context: TeamContext,
+      resource: string,
+      error: ProviderReadFailure,
+    ): Effect.Effect<FailureOutcome> => {
+      switch (error._tag) {
+        case "provider.operation_unsupported":
+          return Effect.succeed({ _tag: "unsupported", detail: error.reason });
+        case "provider.session_rejected":
+          return repository.recordSessionRejected(context.userId, context.owned).pipe(
+            Effect.as<FailureOutcome>({
+              _tag: "failed",
+              failure: {
+                code: "provider_session_rejected",
+                resource,
+                message:
+                  "The provider rejected the stored session. Reconnect the connection and start the query again.",
+              },
+            }),
+          );
+        case "provider.request_failed":
+          return Effect.succeed<FailureOutcome>({
+            _tag: "failed",
+            failure: {
+              code: "provider_unavailable",
+              resource,
+              message: "The provider could not be reached.",
+            },
+          });
+        case "provider.response_invalid":
+          return Effect.succeed<FailureOutcome>({
+            _tag: "failed",
+            failure: {
+              code: "provider_invalid_response",
+              resource,
+              message:
+                error.field === undefined
+                  ? "The provider returned data that could not be verified for this request."
+                  : `The provider returned data that could not be verified (field \`${error.field}\`).`,
+            },
+          });
+        case "provider.period_mismatch":
+          return Effect.succeed<FailureOutcome>({
+            _tag: "failed",
+            failure: {
+              code: "period_unavailable",
+              resource,
+              message: periodMismatchDetail(error.requested, error.covered),
+            },
+          });
+        case "provider.period_unsupported":
+          return Effect.succeed<FailureOutcome>({
+            _tag: "failed",
+            failure: {
+              code: "period_unsupported",
+              resource,
+              message: `${error.reason} ${error.remedy}`,
+            },
+          });
+      }
+    };
+
+    const staleOutcome = (
+      context: TeamContext,
+      resource: string,
+      error: ProviderOpponentFactStale,
+    ): Effect.Effect<ReadOutcome<never>> =>
+      Effect.gen(function* () {
+        const providerOutcome = yield* failureOutcome(context, resource, error.cause);
+        const reason =
+          providerOutcome._tag === "unsupported"
+            ? providerOutcome.detail
+            : providerOutcome.failure.message;
+        const previous =
+          error.previousObservedAt === undefined
+            ? "it has no earlier observation"
+            : `its last observation was ${DateTime.formatIso(error.previousObservedAt)}`;
+        return {
+          _tag: "failed",
+          failure: {
+            code: "schedule_fact_stale",
+            resource,
+            message: `The provider opponents for ${error.dates.join(", ")} are past their maximum age and were not served; ${previous}. The re-read failed: ${reason}`,
+          },
+        };
+      });
+
     const readOutcome = <A>(
       context: TeamContext,
       resource: string,
-      program: Effect.Effect<A, ProviderReadFailure>,
-    ): Effect.Effect<ReadOutcome<A>> =>
+      program: Effect.Effect<
+        A,
+        ProviderReadFailure | ProviderOpponentFactStale | QueryPersistenceFailed
+      >,
+    ): Effect.Effect<ReadOutcome<A>, QueryPersistenceFailed> =>
       Effect.matchEffect(program, {
         onSuccess: (value) => Effect.succeed<ReadOutcome<A>>({ _tag: "ok", value }),
         onFailure: (error) => {
-          switch (error._tag) {
-            case "provider.operation_unsupported":
-              return Effect.succeed<ReadOutcome<A>>({ _tag: "unsupported", detail: error.reason });
-            case "provider.session_rejected":
-              return repository.recordSessionRejected(context.userId, context.owned).pipe(
-                Effect.as<ReadOutcome<A>>({
-                  _tag: "failed",
-                  failure: {
-                    code: "provider_session_rejected",
-                    resource,
-                    message:
-                      "The provider rejected the stored session. Reconnect the connection and start the query again.",
-                  },
-                }),
-              );
-            case "provider.request_failed":
-              return Effect.succeed<ReadOutcome<A>>({
-                _tag: "failed",
-                failure: {
-                  code: "provider_unavailable",
-                  resource,
-                  message: "The provider could not be reached.",
-                },
-              });
-            case "provider.response_invalid":
-              return Effect.succeed<ReadOutcome<A>>({
-                _tag: "failed",
-                failure: {
-                  code: "provider_invalid_response",
-                  resource,
-                  message:
-                    error.field === undefined
-                      ? "The provider returned data that could not be verified for this request."
-                      : `The provider returned data that could not be verified (field \`${error.field}\`).`,
-                },
-              });
-            case "provider.period_mismatch":
-              return Effect.succeed<ReadOutcome<A>>({
-                _tag: "failed",
-                failure: {
-                  code: "period_unavailable",
-                  resource,
-                  message: periodMismatchDetail(error.requested, error.covered),
-                },
-              });
-            case "provider.period_unsupported":
-              return Effect.succeed<ReadOutcome<A>>({
-                _tag: "failed",
-                failure: {
-                  code: "period_unsupported",
-                  resource,
-                  message: `${error.reason} ${error.remedy}`,
-                },
-              });
+          if (error._tag === "query.persistence_failed") {
+            return Effect.fail(error);
           }
+          if (error._tag === "provider_opponent.fact_stale") {
+            return staleOutcome(context, resource, error);
+          }
+          return failureOutcome(context, resource, error);
         },
       });
 
-    const readLeague = (context: TeamContext): Effect.Effect<ReadOutcome<ProviderLeagueSettings>> =>
+    const readLeague = (
+      context: TeamContext,
+    ): Effect.Effect<ReadOutcome<ProviderLeagueSettings>, QueryPersistenceFailed> =>
       Effect.gen(function* () {
         const outcome = yield* readOutcome(
           context,
@@ -265,7 +314,7 @@ export const FantasyQueriesLive = Layer.effect(
       fetchedAt: DateTime.Utc,
       coverageEntries: Array<QueryCoverage>,
       unresolvedKeys: ReadonlyArray<string>,
-    ): Effect.Effect<ReadonlyMap<string, TransactionIdentity>> =>
+    ): Effect.Effect<ReadonlyMap<string, TransactionIdentity>, QueryPersistenceFailed> =>
       Effect.gen(function* () {
         const wanted = new Set(unresolvedKeys);
         const identities = new Map<string, TransactionIdentity>();
@@ -747,7 +796,7 @@ export const FantasyQueriesLive = Layer.effect(
       const period = input.period ?? currentPeriod(window);
       const readRoster = (
         requested: { readonly week: number } | undefined,
-      ): Effect.Effect<ReadOutcome<ProviderRoster>> =>
+      ): Effect.Effect<ReadOutcome<ProviderRoster>, QueryPersistenceFailed> =>
         readOutcome(
           context,
           "roster",
@@ -1993,7 +2042,7 @@ export const FantasyQueriesLive = Layer.effect(
       const period = currentPeriod(window);
       const readRoster = (
         requested: QueryPeriod | undefined,
-      ): Effect.Effect<ReadOutcome<ProviderRoster>> =>
+      ): Effect.Effect<ReadOutcome<ProviderRoster>, QueryPersistenceFailed> =>
         readOutcome(
           context,
           "roster",
@@ -2190,13 +2239,15 @@ export const FantasyQueriesLive = Layer.effect(
           : yield* readOutcome(
               context,
               "schedule",
-              context.provider.readRosterSchedule({
-                ...providerIdentity(context),
+              readProviderOpponent({
+                facts: observedFacts,
+                provider: context.provider,
+                material: providerIdentity(context),
+                teamId: context.owned.team.id,
                 providerTeamKey: context.owned.team.providerTeamKey,
                 period: schedulePeriod,
               }),
             );
-      const scheduleObservedAt = yield* DateTime.now;
       const schedulePlayerByKey = new Map<string, SummarySchedulePlayer>();
       let scheduleSection: TeamSummaryData["schedule"];
       if (!includes("schedule")) {
@@ -2225,7 +2276,7 @@ export const FantasyQueriesLive = Layer.effect(
           failures.push(scheduleOutcome.failure);
         }
       } else {
-        const schedule = scheduleOutcome.value;
+        const schedule = scheduleOutcome.value.schedule;
         const scheduleRefs = yield* tokens.sealPlayerRefs({
           userId,
           leagueKey: context.owned.team.providerLeagueKey,
@@ -2248,7 +2299,7 @@ export const FantasyQueriesLive = Layer.effect(
           coverage: scheduleWindowResolution.coverage,
           ...(period === undefined ? {} : { period }),
           ...(scheduleWindow === undefined ? {} : { window: scheduleWindow }),
-          observedAt: scheduleObservedAt,
+          observedAt: scheduleOutcome.value.observedAt,
           ...(scheduleWindow === undefined ? {} : { dates: scheduleDateCounts(schedule) }),
           players: [],
           detail: schedulePeriodDetail({
