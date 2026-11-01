@@ -73,23 +73,14 @@ the provider.
 
 ### A5 — Ship the existing spans to Cloud Logging
 
-The Effect spans and annotations from the starter should already exist. This is a tracer provider, not new
-instrumentation.
+Shipped, then superseded by group D: spans leave the process as traces and the log carries one wide event per
+unit of work instead of one line per span.
 
-- [ ] Confirm the spans and annotations are present and useful in the worker, the web app and the hosted
-      browser before adding anything.
-- [ ] Inject a tracer that exports them to Cloud Logging in a queryable format.
-- [ ] Document the queries worth knowing in the deployment runbook.
-- [ ] Add an alert on failed and uncertain runs.
-
-**Verify**: a known run id is found in Logs Explorer with its provider operations, and a deliberately
-failed run raises the alert. `S`
-
-Shipped and deployed: spans export as structured JSON with Cloud Run's trace id, and the alert policy
-`Lineupkeep failed or uncertain lineup runs` is enabled. Reading the result showed the shape is wrong, so
-group D replaced the span-per-line writer with real traces and one wide event per unit of work.
-
----
+- [x] Confirm the spans and annotations are present and useful in the worker, the web app and the hosted
+      browser.
+- [x] Inject a tracer that exports them in a queryable format.
+- [x] Document the queries worth knowing in the deployment runbook.
+- [x] Add an alert on failed and uncertain runs. It keys off the wide event, and it is enabled.
 
 ### A6 — Round 9 follow-ups
 
@@ -131,15 +122,22 @@ Settings changes, not projects.
 
 ### B1 — Cloud Run configuration and cost
 
-The container appears to live about fifteen minutes after each hourly wake, which is paid compute for no
-work.
+The container appearing to live fifteen minutes after each tick turned out to be a scaled-to-zero instance
+throttled and unbilled, not work. Seven days of Monitoring data: 2,451 worker instance-minutes against 2,716.9
+billable instance-seconds, and no request inside a tail. One warm instance would cost $9.86 a month and one warm
+hosted browser $19.72, against $0.53 and $0.11 of actual work, to remove a five-second cold start once an hour.
+Memory peaks at 41 to 42 percent of the limits and 849 MiB in a real Chromium session; peak concurrency is 4.0,
+1.9 and 1.7; the project uses 32 percent of the free vCPU-seconds.
 
-- [ ] Find what keeps it alive: CPU always allocated, a long-lived connection, or a keepalive setting.
-- [ ] Review memory and CPU against real usage, and concurrency against real traffic.
-- [ ] Review the worker's minimum instances, and whether the hosted browser should scale to zero.
-- [ ] Record the monthly cost per service so any change can be judged.
+- [x] Find what keeps it alive: nothing does. Request-based billing with minimum instances at zero makes the
+      window throttled and free, and neither image holds a timer or keepalive.
+- [x] Review memory, CPU and concurrency against measured usage. All stay as they are.
+- [x] Review the worker's minimum instances and the hosted browser's scaling. Both stay at zero.
+- [x] Record the monthly cost per service. The one setting the measurements rejected was the worker's 900 s
+      timeout, which outlived the scheduler's 300 s and Cloud Tasks' ten-minute deadline while the tick is 17.8 s
+      at p50. It is 300 s now.
 
-**Verify**: measured idle time and cost after the change, with no latency regression on a real request. `S`
+`S`, done. Measurements and counters are in the [deployment runbook](deployment.md).
 
 ### B2 — Skip runs that cannot do anything
 
@@ -171,78 +169,16 @@ approval. `M`
 
 ### C2 — `bun checks` is too slow
 
-Every chunk pays this, currently two to four minutes.
+A first attempt rearranged the entry point into parallel steps and measured 142 s against a 128 s baseline. It
+was reverted. The real cost was inside the node suite: every storage test built a fresh Postgres cluster and
+replayed 21 migrations, about 590 ms per test, and one file spent 45 of its 46 s doing only that.
 
-- [ ] Measure per-project and per-file timings and name the long poles. A first attempt restructured the
-      entry point into parallel steps without changing what dominates; it measured 142 s against a 128 s
-      baseline and was reverted. The test step is roughly 124 s of that, so the work is inside the suite.
-- [ ] Cut what is measurable: redundant builds, repeated setup, work that could parallelise.
-- [ ] Keep the discipline: no retries, no skips, no inflated timeouts.
+- [x] Measure per-project and per-file timings and name the long poles.
+- [x] Cut what is measurable: one migrated template image per file, and each test still opens its own instance
+      from it, so isolation is unchanged.
+- [x] Keep the discipline: no retries, no skips, no inflated timeouts, and the test count went up.
 
-**Verify**: measured before and after, same suites, same counts. `M`. Note that the entry-point work is
-already done and did not help; the remaining gain has to come from the node project itself.
-
----
-
-## D. Wide events and real traces
-
-The owner read the production logs and found them fragmented: a request arrives as dozens of separate
-single-line entries instead of one wide event. That is a fair reading of what we shipped. Each completed span
-was written as its own log line, so the shape is span-per-line rather than one event per unit of work, and
-nothing reached Cloud Trace as a trace.
-
-The intended shape is a canonical wide event per request and per lineup run, with every attribute the work
-touched inside it, plus real spans in Cloud Trace for the parts worth a waterfall.
-
-### D1 — Send spans to Cloud Trace, not to the log
-
-- [x] Export through OTLP to Google Cloud's Telemetry API rather than hand-writing span lines to stdout.
-      Cloud Trace accepts OTLP directly, so this removes our bespoke writer instead of adding to it.
-- [x] Keep the existing Effect spans and attributes as the source; this changes the exporter, not the
-      instrumentation.
-- [x] Confirm a request appears as one trace with a service waterfall, and that a lineup run's provider
-      calls appear as child spans of the run.
-- [x] Check what Alchemy already provides before writing an exporter by hand; if the stack can inject the
-      telemetry configuration, prefer that over application code that hard-codes endpoints.
-
-**Verify**: a real request and a real lineup run viewed as traces in Cloud Trace, with the provider children
-attached. `M`
-
-Shipped: the Cloud Run host injects the OpenTelemetry environment and the runtime account holds
-`roles/telemetry.tracesWriter`; the exporter mints its token from the metadata server. Effect's own OTLP
-exporter writes protobuf to `telemetry.googleapis.com`, and Alchemy has no Cloud Run telemetry binding to
-inject instead. The first real worker request trace held 318 spans, with `YahooProvider.readLeague`,
-`YahooProvider.readRoster`, `YahooProvider.readPlayerHistory`, and `PublicInternet.request` under each
-`LineupWorker.run`. A request exported before the IAM grant propagated was lost, which is the expected
-telemetry-never-fails-a-request behaviour.
-
-### D2 — One wide event per request and per run
-
-- [x] Emit a single structured log entry per HTTP request and per lineup run, carrying the request id, the
-      route or tool, the actor, the connection and team, the counts that matter, the durations, the outcome,
-      and the trace id, so a person reading logs sees one line per unit of work instead of a dozen.
-- [x] Keep the existing redaction and suppression rules; a wide event must never carry a token, cookie,
-      crumb, note body, email address or provider payload.
-- [x] Decide what stays a separate line: genuinely exceptional errors, and anything outside a request, such
-      as startup and shutdown.
-- [x] Keep the failed-run alert working from the wide event rather than from a span line.
-
-**Verify**: one grep for a request id returns exactly one log entry, and its trace id opens the correct trace.
-`M`
-
-Shipped: the aggregation is a tracer over the exported spans, so there is no second instrumentation path.
-`event.kind` distinguishes a request from a run, and the alert filter moved to `event.kind` plus
-`event.outcome`. Transport statement detail is kept in the trace children rather than merged into the entry.
-
-### D3 — Retire what this replaces
-
-- [x] Remove the bespoke span-to-stdout writer and the tests that pin its shape.
-- [x] Update the runbook queries, which currently describe span lines.
-
-**Verify**: no span-shaped log line remains, and the runbook's queries still find a run. `S`
-
-Shipped: `CloudLoggingTracer` and its test are gone, replaced by `WideEventTracer`. A five-run worker tick
-wrote 377 span lines before and writes six wide events now.
+**Verify**: 128 s to 86 s, 1420 node tests passing, measured before and after in the commit message. `M`, done.
 
 ## E. Cold start and the edge question
 
@@ -320,16 +256,17 @@ opponents and home or away; a postponed game stays unresolved until an observed 
 
 ### G1 — Stop provider-shaped ideas leaking into generic code
 
-Weekly versus daily coverage, league types, waiver shapes and stat quirks are provider facts. A second
-provider must not require editing generic modules.
+- [x] Audit every generic module for provider-shaped concepts. Found real leaks, including a bug: two-value
+      ternaries labelled MLB and NBA teams as NHL and Hockey, and the landing page claimed a scoring period the
+      code does not implement.
+- [x] Express each as declared capability data: the weekly search ordering, the schedule read limit of 21
+      dates, and the games-played limitation that had named one provider's wire query in three places.
+- [x] Extend the boundary audit and ADR 0007, and add two lint rules rejecting a sport or league literal
+      comparison and a provider request path in generic source, each proved against a deliberate violation.
+- [x] Keep the dependency rule that rejects an adapter import outside the composition root.
 
-- [ ] Audit every generic module — lineups, queries, runs, policy — for provider-shaped concepts.
-- [ ] Express each as declared capability data beside the existing table.
-- [ ] Extend the boundary audit and ADR 0007 with what is now enforceable.
-- [ ] Keep the dependency rule that rejects an adapter import outside the composition root.
-
-**Verify**: a deliberate violation is rejected, and adding a fake provider with different coverage and
-league types requires no edit outside the provider. `M`
+**Verify**: a second fake provider with different coverage, league type and slots needs no generic edit. `M`,
+done.
 
 ### G2 — Ponytail discipline
 
@@ -359,9 +296,13 @@ before a browser sees it. No link we construct survives either.
 
 ### H1 — Trade probe
 
-- [ ] Read-only: does the league transaction feed publish pending trade proposals, and what does the trade
-      review setting actually permit.
-- [ ] Only then, one write on one league, reported before anything is built on it.
+- [x] Read-only: does the league transaction feed publish pending trade proposals, and what does the trade
+      review setting actually permit. It does: a manager's own offers, with both parties, both ends of every
+      movement, the picks, and the `pt` key the documented respond calls take. The plain feed never carries
+      them, and another team's offers are refused.
+- [x] One write on one league: a proposal was sent, read back and withdrawn in the Irish lacrosse football
+      league, and the counterparty could have seen it for about a minute. A repeated propose is unproven, so
+      the product never retries one.
 
 **Verify**: a written finding with the request shapes tried. `S`
 
@@ -388,11 +329,11 @@ written upstream. `M`
 
 ### H3 — The screen
 
-- [ ] Grouped by team, with a quiet section for teams that have nothing proposed.
-- [ ] The reason beside each move, and the drop beside the add so a swap reads as one decision.
-- [ ] Reversible and irreversible actions do not look alike: a waiver claim spends FAAB and cannot be
-      undone; a trade involves another person.
-- [ ] Checkboxes to include or exclude, then one submit. Works on a phone first.
+- [x] Grouped by team, with a quiet section for teams that have nothing proposed.
+- [x] The reason beside each move, and the drop beside the add so a swap reads as one decision.
+- [x] Reversible and irreversible actions do not look alike: a waiver claim says it spends FAAB and cannot be
+      undone, and a trade says it is an offer only the other manager decides.
+- [x] Checkboxes to include or exclude, then one submit, with the action fixed on a 390 px phone.
 
 **Verify**: a six-team proposal set reviewed on a phone-sized viewport, with a stale item and an excluded
 item both behaving correctly. `M`
@@ -507,15 +448,11 @@ and a registration loop is refused at the cap. `L`, split registration from eras
 
 ### J3 — Session revocation and a session inventory
 
-Finding F3, Medium. Revocation lags up to five minutes behind the cookie cache, lifetime is the seven-day
-default, and nothing lets a person see or end another device's session.
-
-- [ ] Choose one: drop the cookie cache for session lookup and shorten the lifetime, or keep the cache and add
-      a session list with revoke and revoke-all.
-- [ ] Record the chosen trade in [deployment.md](deployment.md) beside the MCP token facts.
-
-**Verify**: a revoked session is refused on the next request, and the documented window matches the test.
-`S`, needs the choice.
+- [x] Choose the trade: the cookie cache is off, so a revoked session is refused on the next request at the
+      cost of one database read per authenticated request. At this traffic that is the right trade.
+- [x] Record the chosen trade in [deployment.md](deployment.md) beside the MCP token facts.
+- [x] Give the owner a session list, an end-one action and an end-all-others action, with sign-out labelled as
+      ending this device.
 
 ### J4 — Keyring rotation for connection credentials
 
@@ -536,32 +473,24 @@ Standing friction with the external client, and the verification gap that let it
 
 ### K1 — An MCP acceptance command
 
-Scope problems have been argued from two sides without a shared test. Make them testable.
-
-- [ ] A command that registers a client against a chosen origin, runs the full authorization flow, and
-      asserts per-tool scope enforcement for each tool and each scope subset.
-- [ ] Prove both directions: a restricted grant reads what it should and is refused on exactly the tools
-      it lacks, with the refusal naming the scope.
-- [ ] Run it against the deployed origin as part of accepting any MCP change, and add it to the verify
-      skill so it is not ad hoc.
-
-**Verify**: the command exercised against a local instance and the deployed origin, with a recorded pass
-for a full grant and for a reduced grant. `M`
+- [x] `bun run mcp:accept` registers a client, runs the full flow, and asserts per-tool enforcement.
+- [x] Proves both directions: a restricted grant reads what it should and is refused on exactly the tools it
+      lacks, with the refusal naming the scope.
+- [x] Wired into the verify skill, so accepting an MCP change includes running it.
 
 ### K2 — Reduce the scope set
 
-Seven scopes is more than the product needs, and a client holding a subset has hit repeated friction.
+- [x] Map every tool to the scope it needs. Four resource scopes remain: `fantasy:read`, `transactions:review`,
+      `lineups:write`, `teams:manage`. `feedback:manage` is gone with the public triage tool, and reading a run
+      no longer needs a write scope.
+- [x] Keep `offline_access`: it is the refresh request, not a resource right.
+- [x] Keep the protected-resource document's omission of `offline_access`, which is correct under RFC 9728, and
+      say so where a client author will read it.
+- [x] Document the set, the retired names, and the old-to-new mapping. Retired names are accepted but never
+      advertised.
 
-- [ ] Map every tool to the scope it truly needs and find scopes that can merge without weakening
-      enforcement.
-- [ ] Keep `offline_access`: it is the OAuth scope that asks for a refresh token, and without it an
-      unattended agent must re-authorize constantly.
-- [ ] Fix the metadata inconsistency where the protected-resource document omits `offline_access` while the
-      authorization-server document lists it.
-- [ ] Document the resulting set for client authors.
-
-**Verify**: K1's command passes for the reduced set, and each tool's required scope is unchanged in
-practice or weaker with a stated reason. `M`, depends on K1.
+**Verify**: the acceptance command passes for the full grant, the onboarding baseline, and a legacy grant minted
+with a retired name. `M`, done.
 
 ### K3 — Grants should survive a deploy
 
@@ -579,16 +508,14 @@ persisted, so access tokens survive a revision change.
 
 ## L. Onboarding
 
-- [ ] Map the first-run path from landing to a connected, enabled team and count the steps.
-- [ ] Place the Google-account workaround where someone actually gets stuck, not only on the connections
-      page.
-- [ ] Make progress states truthful about what is not automated until a connection succeeds.
-- [ ] Reduce what a first-time user must understand before value.
-
-**Verify**: a first-time user reaches a connected team without help, with the step count measured before and
-after. `M`
-
----
+- [x] Map the first-run path and count the steps. Before: 17 facts and 6 fixed actions. After: 13 facts and 5
+      actions, with no new page.
+- [x] Put the Gmail workaround where someone gets stuck: inside the browser frame, when the provider refuses the
+      address, rather than in a disclosure on the page they have left.
+- [x] Make progress states truthful: reading teams, what failed, a retry, and the fact that no team is checked
+      until its switch is on.
+- [x] Reduce what a first-time user must understand before value. Written up in
+      [onboarding-audit-2026-11-01.md](onboarding-audit-2026-11-01.md).
 
 ## M. Solver and product expansion
 
