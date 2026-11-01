@@ -1619,8 +1619,9 @@ Two consequences follow. A proposal is visible to the account that manages one o
 to nobody else: the same request against the proposer's team was refused with `You are not a manager
 of this team.` An owner-scoped product therefore sees its own offers and can never see the league's
 other pending trade traffic. That is the correct scope for us, but it means a "league trade wire" is
-not available. Only the incoming direction was observed; the read is scoped to the owner's team, so
-an offer the owner proposed should appear through the same request, but that is unproven.
+not available. Only the incoming direction was observed in that pass; the read is scoped to the
+owner's team, and the later write probe confirmed that an offer the owner proposed appears through the
+same request, as recorded below.
 
 ### What a proposal looks like
 
@@ -1792,6 +1793,210 @@ because discovery only proves the account lists the team, and it had never been 
 now also reads each held league and records the team as readable or as unreadable with the reason
 and the time, so a team that changes from readable to refused is visible rather than assumed.
 
+### The trade write path is proven: propose, read back, cancel (2026-11-01T00:59Z)
+
+One authorised write probe ran in one league, and it completed. The owner named "the football league
+named something like Irish lacrosse football". The linked account has exactly one football league, and it is
+`470.l.70271`, named **Irish Lax** — a name that means lacrosse and is not the literal phrase. The
+hockey league named `477.l.5744` **Irish Lacrosse** is a different sport and was not touched, and
+`470.l.918636` was not touched. Every other league stayed read-only; no request of any method was sent
+to any other league.
+
+The probe proposed once, read the proposal back from the owner's pending-trade feed, cancelled it once
+with the published `pt` key, and read the feed empty again. The whole lifecycle is recorded here, with
+no cookie or crumb retained.
+
+#### Membership was proven before anything was written
+
+The account's leagues were enumerated from the stored session, not assumed:
+
+| Read (GET, session cookie)                                                    | Host | Status | Result                                                                          |
+| ----------------------------------------------------------------------------- | ---- | ------ | ------------------------------------------------------------------------------- |
+| `users;use_login=1/games;game_keys=nfl/leagues`                               | ro   | 200    | one football league: `470.l.70271` "Irish Lax", 12 teams, 2026                  |
+| `users;use_login=1/games;game_keys=nhl/leagues`                               | ro   | 200    | four hockey leagues, one of them "Irish Lacrosse" (`477.l.5744`), none touched  |
+| `users;use_login=1/games;game_keys=nfl/teams`                                 | ro   | 200    | `470.l.70271.t.4` "$G-Money$", `is_owned_by_current_login: 1`, manager Graeme F |
+| `league/470.l.70271/teams`                                                    | ro   | 200    | all twelve teams, including `470.l.70271.t.4`, marked owned by this login       |
+| `league/470.l.70271/settings`                                                 | ro   | 200    | the league and its trade rules                                                  |
+| `league/470.l.70271/transactions;type=pending_trade;team_key=470.l.70271.t.4` | ro   | 200    | zero rows before the probe                                                      |
+| `league/470.l.70271/transactions;type=trade;count=50`                         | ro   | 200    | zero completed trades                                                           |
+
+This is the gate the previous probe failed: `league/{league}/teams` answered 200 and contained the
+team the offer would come from. The pending-trade read for that team also answered 200, so the write
+probe could choose a counterparty, two players on each side, and a state to read back.
+
+Trading was open at the time of the probe: `settings` published `trade_end_date` 2026-11-28 with
+`trade_ratify_type` `vote` and `trade_reject_time` 2, in the league's current week 8. An accepted
+trade here therefore goes to a league vote with a two-day objection window; none of that step was
+exercised.
+
+#### The offer was deliberately low-stakes
+
+Two bench wide receivers went each way, players only, no draft picks, no note. Neither side's
+starters, best player, or obvious stash was involved; both outgoing players were the owner's bench,
+both incoming players were the counterparty's bench, and no player was injured.
+
+| Direction | Player                      | Player key    | From              | To                |
+| --------- | --------------------------- | ------------- | ----------------- | ----------------- |
+| out       | Khalil Shakir (WR, Buf)     | `470.p.34104` | `470.l.70271.t.4` | `470.l.70271.t.7` |
+| out       | Courtland Sutton (WR, Den)  | `470.p.31010` | `470.l.70271.t.4` | `470.l.70271.t.7` |
+| in        | Wan'Dale Robinson (WR, Ten) | `470.p.33998` | `470.l.70271.t.7` | `470.l.70271.t.4` |
+| in        | Kendrick Bourne (WR, Ari)   | `470.p.30551` | `470.l.70271.t.7` | `470.l.70271.t.4` |
+
+The proposer was `470.l.70271.t.4` "$G-Money$"; the receiver was `470.l.70271.t.7` "kees's Swag
+Team". The published league positions make this a shape-preserving swap: both rosters keep six bench
+spots and the same starting counts.
+
+#### The exact propose request
+
+```http
+POST https://pub-api-rw.fantasysports.yahoo.com/fantasy/v2/league/470.l.70271/transactions?format=json_f&crumb=<redacted>
+Accept: application/json
+Content-Type: application/xml
+Cookie: <redacted>
+
+<?xml version="1.0" encoding="UTF-8"?>
+<fantasy_content>
+  <transaction>
+    <type>pending_trade</type>
+    <trader_team_key>470.l.70271.t.4</trader_team_key>
+    <tradee_team_key>470.l.70271.t.7</tradee_team_key>
+    <trade_note></trade_note>
+    <players>
+      <player>
+        <player_key>470.p.34104</player_key>
+        <transaction_data>
+          <type>pending_trade</type>
+          <source_team_key>470.l.70271.t.4</source_team_key>
+          <destination_team_key>470.l.70271.t.7</destination_team_key>
+        </transaction_data>
+      </player>
+      <player>
+        <player_key>470.p.31010</player_key>
+        <transaction_data>
+          <type>pending_trade</type>
+          <source_team_key>470.l.70271.t.4</source_team_key>
+          <destination_team_key>470.l.70271.t.7</destination_team_key>
+        </transaction_data>
+      </player>
+      <player>
+        <player_key>470.p.33998</player_key>
+        <transaction_data>
+          <type>pending_trade</type>
+          <source_team_key>470.l.70271.t.7</source_team_key>
+          <destination_team_key>470.l.70271.t.4</destination_team_key>
+        </transaction_data>
+      </player>
+      <player>
+        <player_key>470.p.30551</player_key>
+        <transaction_data>
+          <type>pending_trade</type>
+          <source_team_key>470.l.70271.t.7</source_team_key>
+          <destination_team_key>470.l.70271.t.4</destination_team_key>
+        </transaction_data>
+      </player>
+    </players>
+  </transaction>
+</fantasy_content>
+```
+
+The crumb came from `GET /fantasy/v3/getCrumb?format=json_f` 200. The body is the documented shape
+verbatim: two-sided movements, players only, no picks, and an empty `trade_note`, which the provider
+accepted. The response was **201**, and it was the full league payload with the new transaction
+already inside it, so the `pt` key is available synchronously from the propose response as well as
+from the pending feed.
+
+#### Read-back
+
+The owner-scoped pending read returned exactly one row:
+
+```text
+transaction_key: 470.l.70271.pt.10, type: pending_trade, status: proposed
+trader_team_key: 470.l.70271.t.4 ($G-Money$)
+tradee_team_key: 470.l.70271.t.7 (kees's Swag Team)
+trade_proposed_time: 2026-11-01T00:59:58.000Z
+current_login_can_respond: 0, tradee_unused_roster_spots: 0, trade_note: empty
+players: Khalil Shakir t.4->t.7, Courtland Sutton t.4->t.7,
+         Wan'Dale Robinson t.7->t.4, Kendrick Bourne t.7->t.4
+picks: none
+```
+
+Both parties, both ends of every movement, the `pt` key form
+(`{game}.l.{league}.pt.{id}`), and the empty picks array are all as the earlier read-only pass
+predicted. `current_login_can_respond` is 0 because this session is the proposer; the receiver is the
+one who can respond.
+
+The read-back also confirmed that nothing else changed. The league's team list, settings, and both
+rosters matched the preflight reads field-for-field; `type=trade` still returned zero rows; and the
+plain `transactions;count=50` window held exactly the same fifty `tr` keys before and after. The
+pending trade never appeared in the all-types feed, only in the typed, team-scoped read.
+
+#### Cancel and final state
+
+```http
+DELETE https://pub-api-rw.fantasysports.yahoo.com/fantasy/v2/transaction/470.l.70271.pt.10?format=json_f&crumb=<redacted>
+Accept: application/json
+Cookie: <redacted>
+```
+
+The response was **204** with an empty body. The pending feed for the owner's team then returned zero
+rows, and `GET transaction/470.l.70271.pt.10` answered **400** with `Transaction ID
+470.l.70271.pt.10 does not exist.` The provider does not publish a cancelled record; the offer is
+deleted. Rosters, teams, settings, and the plain transaction window were unchanged again at the final
+read. No second proposal and no second cancel was sent.
+
+#### Lifecycle and the window another manager had
+
+| Event                               | Time (UTC)               |
+| ----------------------------------- | ------------------------ |
+| preflight read completed            | 2026-11-01T00:59:57.649Z |
+| propose sent                        | 2026-11-01T00:59:57.894Z |
+| propose 201 received                | 2026-11-01T00:59:58.552Z |
+| provider `trade_proposed_time`      | 2026-11-01T00:59:58Z     |
+| read-back completed (offer present) | 2026-11-01T01:00:00.475Z |
+| cancel sent                         | 2026-11-01T01:00:00.476Z |
+| cancel 204 received                 | 2026-11-01T01:00:00.759Z |
+| final read completed (feed empty)   | 2026-11-01T01:00:02.453Z |
+
+A counterparty could have seen the offer for at most **2.76 seconds** — from the provider's proposal
+second to the cancel taking effect — and for at least 1.76 if the proposal landed at the end of that
+second, because the provider publishes whole seconds. Between our own 201 and the cancel response the
+observed window was 2.21 seconds. The counterparty's session was never used, and no acceptance,
+rejection, vote, or commissioner action was sent, and the feed was empty again two seconds after the
+cancel.
+
+#### What this probe does and does not prove
+
+Proven from the owner's own session, in this league:
+
+- a two-sided, player-only `pending_trade` is accepted with 201 and a `pt` key;
+- the proposer can read that offer back from `type=pending_trade;team_key={own}` with both parties,
+  both ends of all four movements, `status: proposed`, the proposal time, and no picks;
+- the proposer can cancel it before acceptance with `DELETE /fantasy/v2/transaction/{pt}`, which
+  answers 204 and removes the record;
+- an empty `trade_note` is accepted, and the propose response is a league payload carrying the new
+  transaction.
+
+Not proven, and not to be built from this pass:
+
+- **Accept, reject, vote, allow, disallow.** None was sent; every one needs the counterparty's or a
+  commissioner's session. The `vote` ratification rule was never exercised, so the objection window
+  and vote counting remain unobserved.
+- **The proposal as the counterparty sees it.** The read is team-scoped and we read only our own
+  team. That the receiver can open and respond to the offer is the provider's documented behaviour
+  and follows from the earlier finding that only a manager of one of the two teams may read the row,
+  but it was not observed from the receiver's session.
+- **Picks.** Only the documented players-only body was sent. A pick-inclusive proposal still has no
+  published request shape, and every completed trade in the earlier sample moved at least one pick.
+- **A cancelled record.** The provider deletes the offer rather than publishing a cancelled status,
+  so a product must treat "absent from the pending feed" as cancelled, not expect a record.
+- **A retried or duplicated propose.** Exactly one was sent. Idempotency of a repeated POST is
+  unknown.
+
+One decode detail: the pending-trade movements arrive with `transaction_data.type: pending_trade`, so
+the adapter classifies them as movement kind `other`, not `trade`. The pending-offer surface uses
+`from` and `to` and does not expose the kind, so this is not user-visible today; a later consumer that
+filters on `kind === "trade"` would drop every proposal movement.
+
 ### Player add/drop and reserve moves (2026-10-31)
 
 No live provider write was performed: no disposable league was available, so the request shapes
@@ -1895,27 +2100,32 @@ link can open the hub; it cannot open a filled-in offer.
 `MCP.md` states that the provider publishes no proposals resource and that pending trade offers are
 not available to any client. That is no longer true of the provider: a `pending_trade` row is
 published to the managing account, with the parties, both ends of every movement, the picks, and the
-key the respond calls take. It remains true of our tools, which do not request the type. The
-sentence has to be corrected when proposals are implemented rather than left to mislead the next
-reader.
+key the respond calls take. Our tools now request the type: `get_pending_trade_offers` reads that
+feed read-only, so the correction this paragraph asked for has been made.
 
 ### Verdict
 
-**Partially supported with a person completing it; the write half remains unproven.**
+**Supported for proposing and withdrawing from the owner's own session; every call that needs the
+other side of the trade is still unproven.**
 
 Reading is supported and observed: proposals and accepted trades are both published, with two-sided
-movements, teams, and picks, and the proposal record carries the key the respond calls take. Writing
-is documented but unproven, and even if proposing works, the other manager must accept it in their
-own provider session, which no design of ours can perform. A pick-inclusive proposal has no
-documented write shape at all. Our app can therefore carry a trade up to the point where a person
-acts, and cannot carry one past it.
+movements, teams, and picks, and the proposal record carries the key the respond calls take. The
+write half is now observed for the owner's own side. One two-sided, player-only proposal was accepted
+with 201, read back from the owner's pending feed with both parties and all four movements, and
+cancelled with 204 using the published `pt` key, leaving the feed empty. The offer existed for at
+most 2.76 seconds.
 
-The one authorised proposal attempt never reached the provider, because the linked account is not a
-manager in the league the authorisation named. That leaves the write half unproven for a recorded
-reason rather than by choice: proposing, reading the proposal back, and cancelling it have still
-never been observed, so no propose, accept, reject, cancel, or vote control may be built from this
-research. The attempt also establishes the gate any later probe must pass first — a 200 on
-`league/{league}/teams` that includes the team the offer would come from.
+Everything past that still belongs to the other manager. Accept, reject, and the league's `vote`
+ratification were not exercised, and no design of ours can act in another manager's session. A
+pick-inclusive proposal still has no documented write shape, and the provider publishes no cancelled
+record, so withdrawal is confirmed by the row disappearing rather than by a status. Our app can
+carry a trade through propose and withdraw on the owner's behalf, and still cannot carry one past the
+handoff.
+
+The two earlier attempts explain the gate rather than contradict this. The first never reached the
+provider because its account was not a manager in the named league; the second showed the refusal
+belonged to the other connection. The probe recorded above passed that gate by reading
+`league/{league}/teams` 200 and finding the owner's team before writing.
 
 ### What the review screen should offer for trades
 
@@ -1928,18 +2138,28 @@ Offer, in this order:
 2. **Show the league's rules beside the offer.** Ratification (`vote`, `commissioner`, or none), the
    objection window in days, and the trade end date, so the screen can say who acts next and whether
    trading is still open. `none` must read as "no review", not `unknown`.
-3. **Open the league trade hub.** A verified, league-scoped link with no query parameters, labelled
+3. **Propose a two-sided, player-only trade.** Build it from the owner's team and one counterparty's
+   team, players only, through `POST /fantasy/v2/league/{league}/transactions` with the documented
+   body and crumb. Keep the `pt` key from the 201, and show the stored offer from the pending feed
+   before claiming it exists. This shape is now proven; pick-inclusive proposals are not.
+4. **Withdraw the owner's own proposal before acceptance.** `DELETE /fantasy/v2/transaction/{pt}`
+   answers 204 and removes the record. Treat the row's disappearance from the pending feed as the
+   confirmation; the provider publishes no cancelled state. Withdrawal after acceptance is outside
+   the documented contract.
+5. **Open the league trade hub.** A verified, league-scoped link with no query parameters, labelled
    as the place to act. It cannot prefill, and the screen must say so.
-4. **State the handoff plainly.** For an incoming offer, the owner accepts or rejects on the
+6. **State the handoff plainly.** For an incoming offer, the owner accepts or rejects on the
    provider; for an offer the owner makes, the counterparty does. The screen tracks the offer's
    status; it does not claim to complete it.
 
-Do not build: an accept, reject, cancel, or vote button; a "propose" action that depends on the
-undocumented write path; pick selection in a proposal form; or any league-wide trade feed. Each
-either writes unproven, or promises data the provider will not show us.
+Do not build: an accept, reject, or vote button; pick selection in a proposal form; a league-wide
+trade feed; or a claim that the counterparty has seen an offer. Each either writes a call that needs
+the other manager's session, promises a request shape the provider has not published, or asserts an
+observation the team-scoped read cannot make.
 
-The refused probe leaves this list unchanged: it removes nothing that was offered and adds nothing
-new to offer. It adds only a gate on any later attempt to widen it. A proposal control earns its
-place when one probe, in a league the linked account manages, has completed propose, read the offer
-back from the owner's pending feed, cancel, and read the feed empty again — with the proposal's
-lifecycle, key form, and response statuses recorded here.
+A proposal control now has the evidence it was missing: one probe completed propose, read-back,
+cancel, and an empty feed again, with 201 and 204 and the `pt` key form recorded above. What it still
+lacks is the counterparty half — a proposal another manager actually received and answered — so the
+screen may propose and withdraw, and must hand the rest to the provider. The requirement is to tell
+the owner, before they send, that this puts a real offer in front of another person, and that only
+their counterparty can accept or reject it.
