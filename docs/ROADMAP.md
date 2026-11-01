@@ -23,7 +23,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                 |
 | Lineup algorithm     | Custom solver live for all five owner teams                                                    |
 | Provider boundary    | Keyed injection at the composition root; some provider-shaped ideas still reach generic layers |
-| MCP surface          | 17 tools, seven scopes, per-tool enforcement; feedback rounds 2 to 8 closed                    |
+| MCP surface          | 20 tools, four resource scopes, per-tool enforcement; feedback rounds 2 to 8 closed            |
 | Client feedback      | Zero open items                                                                                |
 | Connections          | Hosted browser only; local helper and device flow deleted                                      |
 | Interface            | Reworked from the owner walkthrough; a bolder direction is a later exploration                 |
@@ -31,6 +31,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Publication gate     | Blocked on upstream: a temporary backport of the TanStack advisory is in force                 |
 | Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                       |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                      |
+| Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J      |
 | Checks               | 1339 node, 89 browser, 9 chromium; end to end 52 per target                                    |
 
 ---
@@ -458,16 +459,71 @@ before delegating.
 
 Distinct from the dependency audit, which is done.
 
-- [ ] Threat model the whole surface: sign-in, sessions, the hosted browser, the MCP server and its OAuth
-      issuer, the worker, and the database.
-- [ ] Review dynamic client registration for abuse, and per-tool scope enforcement.
-- [ ] Review encrypted credential storage, key handling and rotation.
-- [ ] Inventory personal data actually stored, where it lives, and how long it lives.
-- [ ] Review the address-based egress policy and the hosted browser's blast radius.
-- [ ] Review rate limits, logging hygiene, and what a compromised worker could reach.
+### J0 — The audit
 
-**Verify**: written findings with severities, each fixed or accepted with a reason, and a re-test per fix.
-`L`, split into audit and remediation.
+- [x] Threat model the whole surface: sign-in, sessions, the hosted browser, the MCP server and its OAuth
+      issuer, the worker, and the database.
+- [x] Review dynamic client registration for abuse, and per-tool scope enforcement.
+- [x] Review encrypted credential storage, key handling and rotation.
+- [x] Inventory personal data actually stored, where it lives, and how long it lives.
+- [x] Review the address-based egress policy and the hosted browser's blast radius.
+- [x] Review rate limits, logging hygiene, and what a compromised worker could reach.
+
+Written up in [SECURITY-AUDIT.md](SECURITY-AUDIT.md): sixteen findings with severities and evidence, three
+fixed in the same change with a regression test each, one accepted as designed, twelve deferred with a
+reason. The four groups below are the deferred work that is worth scheduling.
+
+### J1 — Rate limits and a cost ceiling on the tools
+
+Finding F1, High. The destructive and expensive tools have no per-owner limit, so one stolen token can drive
+provider traffic and upstream lineup writes at machine speed and exhaust the free allowances the deployment
+depends on.
+
+- [ ] Put one limiter in front of the MCP toolkit, beside the existing scope check, so every tool inherits it.
+- [ ] Key it by owner and by acting client, in durable storage, so scale-to-zero does not reset it.
+- [ ] Give `set_lineup` a smaller bucket than the read tools, and refuse with `Retry-After`, not a 500.
+
+**Decide**: how many lineup requests per hour a person may make, and whether the owner and the agent share
+that budget. **Verify**: a test that a loop is refused with the stated retry, and that a normal agent session
+is not. `M`, needs the decision first.
+
+### J2 — Registration, retention and erasure for account data
+
+Findings F2 and F4, Medium. Dynamic registration is unauthenticated and never cleaned up, and there is no
+erasure or export path for a person's data.
+
+- [ ] Cap live dynamic registrations and age out ones that never completed an authorization.
+- [ ] Make the scope-widening update set-based instead of loading and rewriting every row.
+- [ ] Add one owner-scoped erasure routine and one owner-scoped export over the tables in the audit's
+      inventory, in transaction order, with the cascade gaps closed.
+- [ ] Sweep `session`, `verification`, `oauth_consent`, `hosted_linking_sessions`, and `uncertain` runs once
+      they have a resolution.
+
+**Verify**: an erasure leaves no row carrying the owner id anywhere in the database, an export round-trips,
+and a registration loop is refused at the cap. `L`, split registration from erasure before delegating.
+
+### J3 — Session revocation and a session inventory
+
+Finding F3, Medium. Revocation lags up to five minutes behind the cookie cache, lifetime is the seven-day
+default, and nothing lets a person see or end another device's session.
+
+- [ ] Choose one: drop the cookie cache for session lookup and shorten the lifetime, or keep the cache and add
+      a session list with revoke and revoke-all.
+- [ ] Record the chosen trade in [deployment.md](deployment.md) beside the MCP token facts.
+
+**Verify**: a revoked session is refused on the next request, and the documented window matches the test.
+`S`, needs the choice.
+
+### J4 — Keyring rotation for connection credentials
+
+Finding F5, Medium. A leaked `CONNECTION_ENCRYPTION_KEY` has no fast remedy: the only path is to disconnect
+every connection and have each owner link again.
+
+- [ ] Decrypt with any retained key version and encrypt with the current one, against the existing envelope.
+- [ ] Re-encrypt on the next successful credential use, then retire the old version.
+
+**Verify**: a connection linked under version 1 keeps working after version 2 becomes current, its stored
+envelope is version 2 on the next use, and the old version's key can no longer decrypt anything. `M`.
 
 ---
 

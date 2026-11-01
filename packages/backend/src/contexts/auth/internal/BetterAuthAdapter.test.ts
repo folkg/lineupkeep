@@ -815,6 +815,61 @@ it.effect(
 );
 
 it.effect(
+  "does not present an unverified client name as the address it is connecting to",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      yield* adapter.handle(sendCodeRequest("named@example.test"));
+      const signedIn = yield* adapter.handle(
+        signInRequest("named@example.test", yield* latestCode("named@example.test")),
+      );
+      const headers = new Headers({ cookie: cookieHeader(signedIn) });
+      const registration = yield* adapter.handle(
+        new Request("http://localhost:5173/api/auth/oauth2/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+            client_name: "Lineupkeep Support",
+            redirect_uris: ["http://127.0.0.1:19999/callback"],
+            grant_types: ["authorization_code"],
+            response_types: ["code"],
+            token_endpoint_auth_method: "none",
+            application_type: "native",
+          }),
+        }),
+      );
+      const registered = yield* jsonOf(registration, Schema.Struct({ client_id: Schema.String }));
+      const query = new URLSearchParams({
+        response_type: "code",
+        client_id: registered.client_id,
+        redirect_uri: "http://127.0.0.1:19999/callback",
+        scope: "connections:read offline_access",
+        resource: "http://localhost:5173/mcp",
+        code_challenge: yield* pkceChallenge(pkceVerifier),
+        code_challenge_method: "S256",
+        state: "oauth-state",
+      });
+      const authorization = yield* adapter.handle(
+        new Request(`http://localhost:5173/api/auth/oauth2/authorize?${query}`, { headers }),
+      );
+      const location = new URL(
+        authorization.headers.get("location") ?? "",
+        baseConfig.BETTER_AUTH_URL,
+      );
+      const consent = yield* adapter.getConsentRequest(new Headers(), location.search.slice(1));
+
+      assert.strictEqual(registration.status, 201);
+      assert.strictEqual(consent.status, "valid");
+      assert.deepStrictEqual(consent.status === "valid" ? consent.client : undefined, {
+        id: registered.client_id,
+        name: "Lineupkeep Support",
+        host: "an unverified client",
+      });
+    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+  databaseTestTimeout,
+);
+
+it.effect(
   "approves a signed authorization query and exchanges its code with PKCE",
   () =>
     Effect.gen(function* () {

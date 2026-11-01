@@ -9,6 +9,7 @@ import {
   choosePublicAddress,
   createEgressProxy,
   isPublicAddress,
+  maximumReportedRefusals,
   type EgressProxy,
   type EgressRefusal,
 } from "./egress.ts";
@@ -96,6 +97,23 @@ describe("address-based egress proxy", () => {
     expect(refusals).toEqual([{ host: address, reason }]);
     expect(proxy.refusals()).toEqual([{ host: address, reason }]);
     response.socket.destroy();
+  });
+
+  it("stops reporting new refusals after a bounded number and still refuses them", async () => {
+    const refusals: EgressRefusal[] = [];
+    const proxy = await trackedProxy({
+      resolve: () => Promise.reject(new Error("An IP literal must not be resolved")),
+      onRefused: (refusal) => refusals.push(refusal),
+    });
+
+    for (let index = 0; index <= maximumReportedRefusals; index += 1) {
+      const response = await connectRequest(proxy.url, `10.0.${String(index)}.1:80`);
+      expect(response.status).toBe(403);
+      response.socket.destroy();
+    }
+
+    expect(proxy.refusals()).toHaveLength(maximumReportedRefusals);
+    expect(refusals).toHaveLength(maximumReportedRefusals);
   });
 
   it("allows a public host and dials the verified address, not the name", async () => {

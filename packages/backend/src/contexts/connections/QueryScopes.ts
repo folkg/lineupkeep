@@ -2,7 +2,7 @@ export const fantasyQueryScopes = {
   read: {
     name: "fantasy:read",
     description:
-      "Read your own fantasy data: linked provider connections, teams, leagues, rosters, players, matchups, transaction history, and the status of your lineup runs, plus the feedback reports your account filed and a feedback report of your own. This cannot change a lineup or an automation setting, cannot propose or submit a transaction, and cannot read another person's data.",
+      "Read your own fantasy data: linked provider connections, teams, leagues, rosters, players, matchups, transaction history, and the status of your lineup runs. The same grant lets the client file a feedback report for your account and read back the reports your account filed, because reporting a problem should not need a write scope. It cannot change a lineup, an automation setting, or a transaction, cannot propose or submit a transaction, and cannot read another person's data.",
   },
   reviewTransactions: {
     name: "transactions:review",

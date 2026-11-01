@@ -291,7 +291,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           client: {
             id: client.client_id,
             name: client.client_name ?? null,
-            host: metadataHost ?? client.client_name ?? "an unverified client",
+            host: metadataHost ?? "an unverified client",
           },
           scopes: scopes.filter((scope) => requested.has(scope.name)),
         } as const;

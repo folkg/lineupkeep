@@ -1,4 +1,5 @@
 import { retiredScopeNames } from "@lineupkeep/backend/auth/AuthorizationScopes";
+import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import {
   advertisedScopes,
   onboardingScopes,
@@ -35,6 +36,10 @@ it("requires no retired scope name and advertises none", () => {
     expect(resourceScopes.map(({ name }) => name)).not.toContain(retired);
   }
   expect(advertised).toContain("offline_access");
+});
+
+it("says in the read scope description that the grant can file a feedback report", () => {
+  expect(fantasyQueryScopes.read.description).toMatch(/file a feedback report/u);
 });
 
 it("reaches only read tools and feedback submission and read-back with the onboarding grant", () => {

@@ -12,6 +12,8 @@ export type EgressRefusal = {
   readonly reason: EgressRefusalReason;
 };
 
+export const maximumReportedRefusals = 20;
+
 export type EgressProxyOptions = {
   readonly fixtureOrigins?: ReadonlyArray<string>;
   readonly resolve?: (hostname: string) => Promise<ReadonlyArray<string>>;
@@ -69,7 +71,7 @@ export async function createEgressProxy(options: EgressProxyOptions = {}): Promi
   const refuse = (host: string, reason: EgressRefusalReason): EgressRefusal => {
     const refusal = { host, reason };
     const key = `${reason}\u0000${host}`;
-    if (!refusedKeys.has(key)) {
+    if (!refusedKeys.has(key) && refusals.length < maximumReportedRefusals) {
       refusedKeys.add(key);
       refusals.push(refusal);
       options.onRefused?.(refusal);
