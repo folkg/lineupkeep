@@ -39,7 +39,9 @@ import type {
   ProviderStatBasis,
   ProviderStatPeriod,
   ProviderTeam,
+  ProviderTradeProposalResult,
   ProviderTransaction,
+  ProviderTransactionPlayer,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
@@ -105,6 +107,13 @@ type FakeProviderState = {
   readonly transactionDetail: string | undefined;
   readonly teamTransactionActions: Readonly<Record<string, FakeWriteAction>>;
   readonly transactionRequests: ReadonlyArray<FakeTransactionRequest>;
+  readonly tradeProposalAction: FakeWriteAction;
+  readonly tradeProposalKey: string | undefined;
+  readonly tradeProposalRequests: ReadonlyArray<FakeTradeProposalRequest>;
+  readonly withdrawTradeAction: FakeWriteAction;
+  readonly withdrawTradeDetail: string | undefined;
+  readonly withdrawTradeRequests: ReadonlyArray<string>;
+  readonly completedTrades: ReadonlyArray<ProviderTransaction>;
   readonly reserveAction: FakeWriteAction;
   readonly reserveDetail: string | undefined;
   readonly reserveRequests: ReadonlyArray<FakeReserveMoveRequest>;
@@ -163,6 +172,14 @@ export type FakeProviderWorldShape = {
     action: FakeWriteAction,
   ) => Effect.Effect<void>;
   readonly transactionRequests: Effect.Effect<ReadonlyArray<FakeTransactionRequest>>;
+  readonly setTradeProposalAction: (action: FakeWriteAction, key?: string) => Effect.Effect<void>;
+  readonly tradeProposalRequests: Effect.Effect<ReadonlyArray<FakeTradeProposalRequest>>;
+  readonly setWithdrawTradeAction: (
+    action: FakeWriteAction,
+    detail?: string,
+  ) => Effect.Effect<void>;
+  readonly withdrawTradeRequests: Effect.Effect<ReadonlyArray<string>>;
+  readonly setCompletedTrades: (trades: ReadonlyArray<ProviderTransaction>) => Effect.Effect<void>;
   readonly setReserveAction: (action: FakeWriteAction, detail?: string) => Effect.Effect<void>;
   readonly reserveRequests: Effect.Effect<ReadonlyArray<FakeReserveMoveRequest>>;
   readonly setPlanRefusal: (refusal: FakePlanRefusal | undefined) => Effect.Effect<void>;
@@ -223,6 +240,13 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         transactionDetail: undefined,
         teamTransactionActions: {},
         transactionRequests: [],
+        tradeProposalAction: "accept",
+        tradeProposalKey: "nhl.l.1.pt.1",
+        tradeProposalRequests: [],
+        withdrawTradeAction: "accept",
+        withdrawTradeDetail: undefined,
+        withdrawTradeRequests: [],
+        completedTrades: [],
         reserveAction: "accept",
         reserveDetail: undefined,
         reserveRequests: [],
@@ -305,6 +329,20 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
             teamTransactionActions: { ...current.teamTransactionActions, [teamKey]: action },
           })),
         transactionRequests: Effect.map(Ref.get(state), (current) => current.transactionRequests),
+        setTradeProposalAction: (tradeProposalAction, tradeProposalKey) =>
+          modify((current) => ({ ...current, tradeProposalAction, tradeProposalKey })),
+        tradeProposalRequests: Effect.map(
+          Ref.get(state),
+          (current) => current.tradeProposalRequests,
+        ),
+        setWithdrawTradeAction: (withdrawTradeAction, withdrawTradeDetail) =>
+          modify((current) => ({ ...current, withdrawTradeAction, withdrawTradeDetail })),
+        withdrawTradeRequests: Effect.map(
+          Ref.get(state),
+          (current) => current.withdrawTradeRequests,
+        ),
+        setCompletedTrades: (completedTrades) =>
+          modify((current) => ({ ...current, completedTrades })),
         setReserveAction: (reserveAction, reserveDetail) =>
           modify((current) => ({ ...current, reserveAction, reserveDetail })),
         reserveRequests: Effect.map(Ref.get(state), (current) => current.reserveRequests),
@@ -569,6 +607,80 @@ const providerFake = Effect.gen(function* () {
       }
       return writeResult(action, current.transactionDetail);
     }),
+    proposeTrade: Effect.fn("FakeProvider.proposeTrade")(function* (input) {
+      const current = yield* prepare(input, "propose_trade").pipe(
+        Effect.mapError((error) =>
+          error._tag === "provider.session_rejected"
+            ? error
+            : ProviderResponseInvalid.make({ operation: "propose_trade" }),
+        ),
+      );
+      const acceptedKey =
+        current.tradeProposalAction === "accept" ? current.tradeProposalKey : undefined;
+      yield* Ref.update(world.state, (state) => ({
+        ...state,
+        tradeProposalRequests: [
+          ...state.tradeProposalRequests,
+          {
+            providerLeagueKey: input.providerLeagueKey,
+            providerTeamKey: input.providerTeamKey,
+            counterpartyTeamKey: input.counterpartyTeamKey,
+            send: input.send,
+            receive: input.receive,
+            note: input.note,
+            session: Redacted.value(input.session),
+          },
+        ],
+        ...(acceptedKey === undefined
+          ? {}
+          : {
+              pendingTrades: [
+                ...state.pendingTrades,
+                fakePendingTrade({
+                  transactionKey: acceptedKey,
+                  providerTeamKey: input.providerTeamKey,
+                  counterpartyTeamKey: input.counterpartyTeamKey,
+                  send: input.send,
+                  receive: input.receive,
+                  note: input.note,
+                }),
+              ],
+            }),
+      }));
+      if (current.tradeProposalAction === "invalid") {
+        return yield* ProviderResponseInvalid.make({ operation: "propose_trade" });
+      }
+      if (current.tradeProposalAction === "accept") {
+        return acceptedKey === undefined
+          ? { status: "unknown" as const }
+          : { status: "accepted" as const, transactionKey: acceptedKey };
+      }
+      return tradeWriteResult(current.tradeProposalAction);
+    }),
+    withdrawTrade: Effect.fn("FakeProvider.withdrawTrade")(function* (input) {
+      const current = yield* prepare(input, "withdraw_trade").pipe(
+        Effect.mapError((error) =>
+          error._tag === "provider.session_rejected"
+            ? error
+            : ProviderResponseInvalid.make({ operation: "withdraw_trade" }),
+        ),
+      );
+      yield* Ref.update(world.state, (state) => ({
+        ...state,
+        withdrawTradeRequests: [...state.withdrawTradeRequests, input.transactionKey],
+        ...(current.withdrawTradeAction === "accept"
+          ? {
+              pendingTrades: state.pendingTrades.filter(
+                (offer) => offer.transactionKey !== input.transactionKey,
+              ),
+            }
+          : {}),
+      }));
+      if (current.withdrawTradeAction === "invalid") {
+        return yield* ProviderResponseInvalid.make({ operation: "withdraw_trade" });
+      }
+      return writeResult(current.withdrawTradeAction, current.withdrawTradeDetail);
+    }),
     applyReserveMove: Effect.fn("FakeProvider.applyReserveMove")(function* (input) {
       const current = yield* prepare(input, "apply_reserve_move").pipe(
         Effect.mapError((error) =>
@@ -709,6 +821,14 @@ const providerFake = Effect.gen(function* () {
           (transaction) =>
             input.providerTeamKey === undefined ||
             transaction.teams.some((team) => team.providerTeamKey === input.providerTeamKey),
+        )
+        .slice(0, input.limit);
+    }),
+    readCompletedTrades: Effect.fn("FakeProvider.readCompletedTrades")(function* (input) {
+      const current = yield* prepare(input, "read_completed_trades");
+      return current.completedTrades
+        .filter((transaction) =>
+          transaction.teams.some((team) => team.providerTeamKey === input.providerTeamKey),
         )
         .slice(0, input.limit);
     }),
@@ -980,6 +1100,58 @@ function fakeDayCount(start: string, end: string): number {
   return (to - from) / 86_400_000 + 1;
 }
 
+function fakePendingTrade(input: {
+  readonly transactionKey: string;
+  readonly providerTeamKey: string;
+  readonly counterpartyTeamKey: string;
+  readonly send: ReadonlyArray<string>;
+  readonly receive: ReadonlyArray<string>;
+  readonly note: string | undefined;
+}): ProviderPendingTrade {
+  const proposer = { providerTeamKey: input.providerTeamKey, name: undefined };
+  const receiver = { providerTeamKey: input.counterpartyTeamKey, name: undefined };
+  const player = (
+    providerPlayerKey: string,
+    from: typeof proposer,
+    to: typeof proposer,
+  ): ProviderTransactionPlayer => ({
+    providerPlayerKey,
+    movement: { kind: "other", from, to },
+    name: undefined,
+    primaryPosition: undefined,
+    displayPosition: undefined,
+    eligiblePositions: undefined,
+    proTeam: undefined,
+  });
+  return {
+    transactionKey: input.transactionKey,
+    proposedAt: "2026-11-01T00:00:00.000Z",
+    note: input.note,
+    canRespond: false,
+    proposer,
+    receiver,
+    unusedRosterSpots: undefined,
+    players: [
+      ...input.send.map((key) => player(key, proposer, receiver)),
+      ...input.receive.map((key) => player(key, receiver, proposer)),
+    ],
+    picks: [],
+    incomplete: undefined,
+  };
+}
+
+function tradeWriteResult(action: Exclude<FakeWriteAction, "accept">): ProviderTradeProposalResult {
+  switch (action) {
+    case "lost_response":
+      return { status: "unknown" };
+    case "unavailable":
+      return { status: "not_sent", reason: "request_failed" };
+    case "reject":
+    case "invalid":
+      return { status: "rejected", reason: "invalid_request" };
+  }
+}
+
 function writeResult(action: FakeWriteAction, detail?: string): ProviderWriteResult {
   switch (action) {
     case "accept":
@@ -1046,6 +1218,16 @@ type FakeTransactionRequest = {
   readonly adds: ReadonlyArray<string>;
   readonly drops: ReadonlyArray<string>;
   readonly faabBid: number | undefined;
+};
+
+type FakeTradeProposalRequest = {
+  readonly providerLeagueKey: string;
+  readonly providerTeamKey: string;
+  readonly counterpartyTeamKey: string;
+  readonly send: ReadonlyArray<string>;
+  readonly receive: ReadonlyArray<string>;
+  readonly note: string | undefined;
+  readonly session: string;
 };
 
 type FakeReserveMoveRequest = {

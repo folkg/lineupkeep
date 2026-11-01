@@ -63,9 +63,7 @@ it("renders a two-team proposal, a quiet team, and one disabled action", async (
     .element(page.getByText("3 of 4 moves included. 1 waiver claim spends 25 FAAB."))
     .toBeVisible();
   await expect
-    .element(
-      page.getByText(/One provider transaction per move, sent in this order, with no retries/u),
-    )
+    .element(page.getByText(/One provider request per move, sent in this order, with no retries/u))
     .toBeVisible();
 });
 
@@ -169,6 +167,114 @@ it("says nothing was proposed for an empty set", async () => {
   await expect.element(page.getByRole("heading", { name: "Submission" })).not.toBeInTheDocument();
 });
 
+const tradeItemId = "018f79ea-7d86-7c18-9b4a-8b4d0c9165c1";
+const providerOfferRef = "r1.offerReference";
+
+function tradeItem(state: "proposed" | "pending" | "withdrawn"): TransactionReviewItemView {
+  const trade =
+    state === "pending"
+      ? {
+          state: "pending" as const,
+          requestedAt: oneHourAgo,
+          proposedAt: oneHourAgo,
+        }
+      : state === "withdrawn"
+        ? {
+            state: "withdrawn" as const,
+            requestedAt: oneHourAgo,
+            proposedAt: oneHourAgo,
+            settledAt: twoHoursAgo,
+            detail: "Withdrawn before acceptance. The provider deletes a withdrawn offer.",
+          }
+        : undefined;
+  return {
+    id: tradeItemId,
+    kind: "trade",
+    adds: [player("Marco Diaz", "RW", "NYR", "Healthy")],
+    drops: [player("Elias Ford", "C", "BOS", "Healthy")],
+    counterparty: { ref: "r1.counterparty", name: "Beta", managerName: "Dana Ruiz" },
+    reason: "Swap a center for a wing.",
+    state,
+    staleness: { status: "current", checkedAt: now, reasons: [] },
+    ...(trade === undefined
+      ? {}
+      : {
+          trade,
+          execution: {
+            outcome: "pending" as const,
+            detail:
+              "Offer sent to Beta. The other manager decides; we cannot accept on their behalf.",
+            decidedAt: oneHourAgo,
+            steps: [],
+          },
+        }),
+  };
+}
+
+function tradeTeam(item: TransactionReviewItemView): TransactionReviewTeamView {
+  return {
+    team: { id: alphaId, name: "Alpha", league: "nfl", sport: "football", season: 2026 },
+    tradeRules: { endDate: "2026-11-28", ratification: "vote", objectionDays: 2 },
+    items: [item],
+    pendingOffers: [],
+  };
+}
+
+function tradeReviewFixture(): TransactionReviewView {
+  return {
+    ...reviewFixture(),
+    teams: [tradeTeam(tradeItem("proposed"))],
+  };
+}
+
+function pendingTradeReviewFixture(): TransactionReviewView {
+  return {
+    ...reviewFixture(),
+    set: { ...reviewFixture().set, submission: { submittedAt: now, completedAt: now } },
+    teams: [tradeTeam(tradeItem("pending"))],
+  };
+}
+
+function withdrawnTradeReviewFixture(): TransactionReviewView {
+  return {
+    ...reviewFixture(),
+    set: { ...reviewFixture().set, submission: { submittedAt: now, completedAt: now } },
+    teams: [tradeTeam(tradeItem("withdrawn"))],
+  };
+}
+
+function providerOfferReviewFixture(): TransactionReviewView {
+  return {
+    ...reviewFixture(),
+    teams: [
+      teamFixture(alphaId, "Alpha", "nfl", "football", [dropItem()]),
+      {
+        ...teamFixture(betaId, "Beta", "nhl", "hockey", []),
+        pendingOffers: [
+          {
+            offerRef: providerOfferRef,
+            proposedAt: oneHourAgo,
+            canRespond: false,
+            proposingTeam: { ref: "r1.beta", name: "Beta" },
+            receivingTeam: { ref: "r1.delta", name: "Delta" },
+            players: [
+              {
+                player: "r1.player",
+                name: "Casey Trail",
+                displayPosition: "LW",
+                proTeam: "SEA",
+                from: { ref: "r1.beta", name: "Beta" },
+                to: { ref: "r1.delta", name: "Delta" },
+              },
+            ],
+            picks: [],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function reviewFixture(): TransactionReviewView {
   return {
     set: {
@@ -203,6 +309,7 @@ function teamFixture(
       ? { budget: { status: "published" as const, remaining: 50 } }
       : {}),
     items,
+    pendingOffers: [],
   };
 }
 
@@ -390,6 +497,92 @@ it("does not send a submission when every move is left out", async () => {
   expect(submissions).toBe(0);
 });
 
+it("shows a trade as an offer, not a change, with both sides and the league rule", async () => {
+  using _app = setupReviewPage(tradeReviewFixture());
+
+  await expect.element(page.getByText("Trade offer", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Offer to Beta", { exact: true })).toBeVisible();
+  await expect
+    .element(
+      page.getByText("Dana Ruiz decides. We cannot accept or reject on their behalf.", {
+        exact: false,
+      }),
+    )
+    .toBeVisible();
+  await expect.element(page.getByText("You receive", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("You send", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText(/League review: a vote follows if the other manager accepts./u))
+    .toBeVisible();
+  await expect.element(page.getByText(/Trading closes 2026-11-28./u)).toBeVisible();
+  await expect
+    .element(page.getByText(/This is an offer, not a change to either roster./u))
+    .toBeVisible();
+  await expect.element(page.getByText(/An offer, not a change./u)).toBeVisible();
+  expect(page.getByText("Pending on waivers").elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: "Withdraw offer" }).elements()).toHaveLength(0);
+});
+
+it("withdraws a pending trade from our own record", async () => {
+  const requests: Array<{
+    readonly team: string;
+    readonly item?: string;
+    readonly offer?: string;
+  }> = [];
+  using _app = setupReviewPage(pendingTradeReviewFixture(), {
+    withdraw: (input) => {
+      requests.push(input);
+      return Promise.resolve({
+        status: "withdrawn" as const,
+        detail: "The provider confirmed the withdrawal and no longer lists the offer.",
+      });
+    },
+  });
+
+  await expect
+    .element(page.getByText("Pending with the other manager", { exact: true }))
+    .toBeVisible();
+  await page.getByRole("button", { name: "Withdraw offer" }).click();
+  await expect
+    .element(page.getByText("The provider confirmed the withdrawal and no longer lists the offer."))
+    .toBeVisible();
+  expect(requests).toEqual([{ team: alphaId, item: tradeItemId }]);
+});
+
+it("shows a withdrawn trade as ended and offers no second withdrawal", async () => {
+  using _app = setupReviewPage(withdrawnTradeReviewFixture());
+
+  await expect.element(page.getByText("Withdrawn", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("Withdrawn before acceptance. The provider deletes a withdrawn offer."))
+    .toBeVisible();
+  expect(page.getByRole("button", { name: "Withdraw offer" }).elements()).toHaveLength(0);
+});
+
+it("withdraws an offer created elsewhere from the provider's pending feed", async () => {
+  const requests: Array<{
+    readonly team: string;
+    readonly item?: string;
+    readonly offer?: string;
+  }> = [];
+  using _app = setupReviewPage(providerOfferReviewFixture(), {
+    withdraw: (input) => {
+      requests.push(input);
+      return Promise.resolve({
+        status: "withdrawn" as const,
+        detail: "The provider confirmed the withdrawal and no longer lists the offer.",
+      });
+    },
+  });
+
+  await expect
+    .element(page.getByRole("heading", { name: "Offers pending at the provider" }))
+    .toBeVisible();
+  await expect.element(page.getByText("Beta to Delta", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Withdraw offer" }).click();
+  expect(requests).toEqual([{ team: betaId, offer: providerOfferRef }]);
+});
+
 it("captures the review for visual inspection", async () => {
   using _app = setupReviewPage(reviewFixture());
   await expect.element(page.getByRole("heading", { name: "Alpha" })).toBeVisible();
@@ -414,6 +607,48 @@ it("captures the review for visual inspection", async () => {
       await page.screenshot({
         path: `../../../../../.artifacts/transactions-review/${capture.name}.png`,
       });
+    }
+  } finally {
+    document.documentElement.classList.remove("dark");
+    await page.viewport(1280, 720);
+  }
+});
+
+it("captures a trade item, its pending state, and its withdrawn state", async () => {
+  const captures = [
+    {
+      name: "trade-item",
+      fixture: tradeReviewFixture,
+    },
+    {
+      name: "trade-pending",
+      fixture: pendingTradeReviewFixture,
+    },
+    {
+      name: "trade-withdrawn",
+      fixture: withdrawnTradeReviewFixture,
+    },
+  ] as const;
+
+  try {
+    for (const capture of captures) {
+      using _app = setupReviewPage(capture.fixture());
+      await page.viewport(390, 844);
+      await expect.element(page.getByText("Trade offer", { exact: true })).toBeVisible();
+      for (const dark of [false, true]) {
+        document.documentElement.classList.toggle("dark", dark);
+        const fullHeight = Math.max(
+          844,
+          document.documentElement.scrollHeight,
+          document.body.scrollHeight,
+        );
+        await page.viewport(390, fullHeight);
+        await page.screenshot({
+          path: `../../../../../.artifacts/trade-proposals/${capture.name}-390-${dark ? "dark" : "light"}.png`,
+        });
+        await page.viewport(390, 844);
+      }
+      document.documentElement.classList.remove("dark");
     }
   } finally {
     document.documentElement.classList.remove("dark");
@@ -582,12 +817,22 @@ function executedDropItem(): TransactionReviewItemView {
 
 function setupReviewPage(
   review: TransactionReviewView,
-  options: { readonly submit?: TransactionRemote["submit"] } = {},
+  options: {
+    readonly submit?: TransactionRemote["submit"];
+    readonly withdraw?: TransactionRemote["withdraw"];
+  } = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TransactionRemote = {
     read: () => Promise.resolve(review),
     submit: options.submit ?? (() => Promise.resolve(review)),
+    withdraw:
+      options.withdraw ??
+      (() =>
+        Promise.resolve({
+          status: "withdrawn" as const,
+          detail: "The provider confirmed the withdrawal.",
+        })),
   };
   const reviewQuery = transactionQueries.review(remote, review.set.id);
   queryClient.setQueryData(reviewQuery.queryKey, review);

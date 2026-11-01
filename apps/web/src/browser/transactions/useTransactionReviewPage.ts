@@ -8,9 +8,14 @@ import type {
   TransactionReviewItemView,
   TransactionReviewTeamView,
   TransactionReviewView,
+  WithdrawTradeData,
+  WithdrawTradeRequest,
 } from "#contracts/connections/transactionContract.ts";
 
-import { describeTransactionSubmissionFailure } from "./transactionFailure";
+import {
+  describeTradeWithdrawalFailure,
+  describeTransactionSubmissionFailure,
+} from "./transactionFailure";
 import { transactionMutations } from "./transactionMutations";
 import type { TransactionReviewQueryOptions } from "./transactionQueries";
 import type { TransactionRemote } from "./transactionRemote";
@@ -25,6 +30,7 @@ export function useTransactionReviewPage(
   const [excluded, setExcluded] = createSignal<ReadonlySet<string>>(new Set());
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [justSubmitted, setJustSubmitted] = createSignal(false);
+  const [withdrawingKey, setWithdrawingKey] = createSignal<string>();
 
   createEffect(
     () => justSubmitted(),
@@ -69,6 +75,54 @@ export function useTransactionReviewPage(
       },
     };
   });
+
+  const withdraw = useMutation(() => {
+    const options = transactionMutations.withdraw(props.remote());
+    return {
+      ...options,
+      onSuccess: (
+        data: WithdrawTradeData,
+        variables: WithdrawTradeRequest,
+        onMutateResult: unknown,
+        context: Parameters<NonNullable<typeof options.onSuccess>>[3],
+      ) => {
+        options.onSuccess?.(data, variables, onMutateResult, context);
+        setFeedback({ type: "success", message: data.detail });
+      },
+      onError: (error: Error) => {
+        const failure = describeTradeWithdrawalFailure(error);
+        setFeedback({
+          type: "attention",
+          message: failure.message,
+          ...(failure.kind === "authentication" ? { recovery: signIn } : {}),
+        });
+        if (failure.kind === "conflict") {
+          void review.refetch();
+        }
+      },
+      onSettled: () => {
+        setWithdrawingKey(undefined);
+      },
+    };
+  });
+
+  const withdrawItem = (team: string, item: string): void => {
+    if (withdraw.isPending) {
+      return;
+    }
+    setWithdrawingKey(item);
+    setFeedback(undefined);
+    void withdraw.mutate({ team, item });
+  };
+
+  const withdrawOffer = (team: string, offer: string): void => {
+    if (withdraw.isPending) {
+      return;
+    }
+    setWithdrawingKey(offer);
+    setFeedback(undefined);
+    void withdraw.mutate({ team, offer });
+  };
 
   const isSubmitted = (): boolean => review.data.set.submission !== undefined;
 
@@ -154,6 +208,10 @@ export function useTransactionReviewPage(
     signIn,
     submit: send,
     submitting: () => submit.isPending,
+    withdrawItem,
+    withdrawOffer,
+    withdrawing: withdrawingKey,
+    withdrawingTrade: () => withdraw.isPending,
     feedback,
     justSubmitted,
     acknowledgeSubmit: () => setJustSubmitted(false),
@@ -187,6 +245,10 @@ export type TransactionReviewPageController = {
   readonly signIn: RecoveryAction;
   readonly submit: () => void;
   readonly submitting: Accessor<boolean>;
+  readonly withdrawItem: (team: string, item: string) => void;
+  readonly withdrawOffer: (team: string, offer: string) => void;
+  readonly withdrawing: Accessor<string | undefined>;
+  readonly withdrawingTrade: Accessor<boolean>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
   readonly justSubmitted: Accessor<boolean>;
   readonly acknowledgeSubmit: () => void;

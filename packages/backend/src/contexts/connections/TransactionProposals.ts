@@ -4,7 +4,13 @@ import type { Effect } from "effect";
 import type { UserId } from "#contexts/auth/User.ts";
 
 import { TeamId } from "./FantasyTeam.ts";
-import { CounterpartyRef, PlayerRef, QueryCoverage, QueryTeam } from "./QueryValues.ts";
+import {
+  CounterpartyRef,
+  PlayerRef,
+  QueryCoverage,
+  QueryTeam,
+  TradeOfferRef,
+} from "./QueryValues.ts";
 
 export const proposalSetLifetimeMillis = 24 * 60 * 60 * 1000;
 
@@ -20,8 +26,16 @@ export const ProposalItemId = Schema.String.pipe(
 );
 export type ProposalItemId = typeof ProposalItemId.Type;
 
-export const ProposalItemKind = Schema.Literals(["free_agent_add", "waiver_claim", "drop"]);
+export const ProposalItemKind = Schema.Literals([
+  "free_agent_add",
+  "waiver_claim",
+  "drop",
+  "trade",
+]);
 export type ProposalItemKind = typeof ProposalItemKind.Type;
+
+export const ProposalTradeState = Schema.Literals(["pending", "accepted", "withdrawn", "expired"]);
+export type ProposalTradeState = typeof ProposalTradeState.Type;
 
 export const ProposalItemState = Schema.Literals([
   "proposed",
@@ -30,6 +44,9 @@ export const ProposalItemState = Schema.Literals([
   "failed",
   "skipped",
   "unknown",
+  "accepted",
+  "withdrawn",
+  "expired",
 ]);
 export type ProposalItemState = typeof ProposalItemState.Type;
 
@@ -53,6 +70,9 @@ export const ProposalStaleCode = Schema.Literals([
   "bid_exceeds_budget",
   "bid_not_available",
   "state_unavailable",
+  "trade_window_closed",
+  "trade_counterparty_missing",
+  "trade_player_not_rostered",
 ]);
 export type ProposalStaleCode = typeof ProposalStaleCode.Type;
 
@@ -117,6 +137,22 @@ const ProposalStaleness = Schema.Struct({
 });
 type ProposalStaleness = typeof ProposalStaleness.Type;
 
+const ProposalCounterparty = Schema.Struct({
+  ref: CounterpartyRef,
+  name: Schema.optional(Schema.NonEmptyString),
+  managerName: Schema.optional(Schema.NonEmptyString),
+});
+type ProposalCounterparty = typeof ProposalCounterparty.Type;
+
+const ProposalTrade = Schema.Struct({
+  state: ProposalTradeState,
+  requestedAt: Schema.DateTimeUtc,
+  proposedAt: Schema.optional(Schema.DateTimeUtc),
+  settledAt: Schema.optional(Schema.DateTimeUtc),
+  detail: Schema.optional(Schema.NonEmptyString),
+});
+type ProposalTrade = typeof ProposalTrade.Type;
+
 export const ProposalItem = Schema.Struct({
   id: ProposalItemId,
   team: TeamId,
@@ -129,6 +165,8 @@ export const ProposalItem = Schema.Struct({
   staleness: ProposalStaleness,
   execution: Schema.optional(ProposalItemExecution),
   reserveMove: Schema.optional(ProposalReserveMove),
+  counterparty: Schema.optional(ProposalCounterparty),
+  trade: Schema.optional(ProposalTrade),
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
 });
@@ -146,11 +184,63 @@ export const ProposalBudget = Schema.Union([
 ]);
 export type ProposalBudget = typeof ProposalBudget.Type;
 
+const PendingTradeRefusal = Schema.Struct({
+  code: Schema.Literals(["no_movements", "movement_missing_party"]),
+  detail: Schema.NonEmptyString,
+});
+type PendingTradeRefusal = typeof PendingTradeRefusal.Type;
+
+const PendingTradeParty = Schema.Struct({
+  ref: CounterpartyRef,
+  name: Schema.optional(Schema.NonEmptyString),
+});
+type PendingTradeParty = typeof PendingTradeParty.Type;
+
+const PendingTradePlayer = Schema.Struct({
+  player: PlayerRef,
+  name: Schema.optional(Schema.NonEmptyString),
+  displayPosition: Schema.optional(Schema.NonEmptyString),
+  proTeam: Schema.optional(Schema.NonEmptyString),
+  from: Schema.optional(PendingTradeParty),
+  to: Schema.optional(PendingTradeParty),
+});
+type PendingTradePlayer = typeof PendingTradePlayer.Type;
+
+const PendingTradePick = Schema.Struct({
+  round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  from: Schema.optional(PendingTradeParty),
+  to: Schema.optional(PendingTradeParty),
+  original: Schema.optional(PendingTradeParty),
+});
+type PendingTradePick = typeof PendingTradePick.Type;
+
+export const PendingTradeOffer = Schema.Struct({
+  offerRef: TradeOfferRef,
+  proposedAt: Schema.DateTimeUtc,
+  note: Schema.optional(Schema.NonEmptyString),
+  canRespond: Schema.Boolean,
+  proposingTeam: Schema.optional(PendingTradeParty),
+  receivingTeam: Schema.optional(PendingTradeParty),
+  players: Schema.Array(PendingTradePlayer),
+  picks: Schema.Array(PendingTradePick),
+  incomplete: Schema.optional(PendingTradeRefusal),
+});
+export type PendingTradeOffer = typeof PendingTradeOffer.Type;
+
+const ProposalTradeRules = Schema.Struct({
+  endDate: Schema.optional(Schema.NonEmptyString),
+  ratification: Schema.optional(Schema.Literals(["vote", "commissioner", "none", "unknown"])),
+  objectionDays: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+});
+type ProposalTradeRules = typeof ProposalTradeRules.Type;
+
 export const ProposalTeam = Schema.Struct({
   team: QueryTeam,
   budget: Schema.optional(ProposalBudget),
+  tradeRules: Schema.optional(ProposalTradeRules),
   failure: Schema.optional(Schema.NonEmptyString),
   items: Schema.Array(ProposalItem),
+  pendingOffers: Schema.Array(PendingTradeOffer),
 });
 export type ProposalTeam = typeof ProposalTeam.Type;
 
@@ -203,6 +293,7 @@ export const ProposalItemDraft = Schema.Struct({
   kind: ProposalItemKind,
   adds: Schema.Array(PlayerRef).pipe(Schema.check(Schema.isMaxLength(10))),
   drops: Schema.Array(PlayerRef).pipe(Schema.check(Schema.isMaxLength(10))),
+  counterparty: Schema.optional(Schema.NullOr(CounterpartyRef)),
   bid: Schema.optional(Schema.NullOr(ProposalBid)),
   reason: ProposalReason,
 });
@@ -223,6 +314,10 @@ const ProposalItemRefusal = Schema.Literals([
   "bid_invalid",
   "player_in_both",
   "duplicate_item",
+  "trade_counterparty_invalid",
+  "trade_player_not_rostered",
+  "trade_window_closed",
+  "trade_state_unavailable",
 ]);
 type ProposalItemRefusal = typeof ProposalItemRefusal.Type;
 
@@ -263,48 +358,6 @@ export const SubmitTransactionProposalInput = Schema.Struct({
 });
 export type SubmitTransactionProposalInput = typeof SubmitTransactionProposalInput.Type;
 
-const PendingTradeRefusal = Schema.Struct({
-  code: Schema.Literals(["no_movements", "movement_missing_party"]),
-  detail: Schema.NonEmptyString,
-});
-type PendingTradeRefusal = typeof PendingTradeRefusal.Type;
-
-const PendingTradeParty = Schema.Struct({
-  ref: CounterpartyRef,
-  name: Schema.optional(Schema.NonEmptyString),
-});
-type PendingTradeParty = typeof PendingTradeParty.Type;
-
-const PendingTradePlayer = Schema.Struct({
-  player: PlayerRef,
-  name: Schema.optional(Schema.NonEmptyString),
-  displayPosition: Schema.optional(Schema.NonEmptyString),
-  proTeam: Schema.optional(Schema.NonEmptyString),
-  from: Schema.optional(PendingTradeParty),
-  to: Schema.optional(PendingTradeParty),
-});
-type PendingTradePlayer = typeof PendingTradePlayer.Type;
-
-const PendingTradePick = Schema.Struct({
-  round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  from: Schema.optional(PendingTradeParty),
-  to: Schema.optional(PendingTradeParty),
-  original: Schema.optional(PendingTradeParty),
-});
-type PendingTradePick = typeof PendingTradePick.Type;
-
-export const PendingTradeOffer = Schema.Struct({
-  proposedAt: Schema.DateTimeUtc,
-  note: Schema.optional(Schema.NonEmptyString),
-  canRespond: Schema.Boolean,
-  proposingTeam: Schema.optional(PendingTradeParty),
-  receivingTeam: Schema.optional(PendingTradeParty),
-  players: Schema.Array(PendingTradePlayer),
-  picks: Schema.Array(PendingTradePick),
-  incomplete: Schema.optional(PendingTradeRefusal),
-});
-export type PendingTradeOffer = typeof PendingTradeOffer.Type;
-
 export const PendingTradeOffersInput = Schema.Struct({ team: TeamId });
 export type PendingTradeOffersInput = typeof PendingTradeOffersInput.Type;
 
@@ -317,6 +370,20 @@ export const PendingTradeOffersResult = Schema.Struct({
   detail: Schema.NonEmptyString,
 });
 export type PendingTradeOffersResult = typeof PendingTradeOffersResult.Type;
+
+export const WithdrawTradeInput = Schema.Struct({
+  team: TeamId,
+  item: Schema.optional(ProposalItemId),
+  offer: Schema.optional(TradeOfferRef),
+});
+export type WithdrawTradeInput = typeof WithdrawTradeInput.Type;
+
+export const WithdrawTradeResult = Schema.Struct({
+  status: Schema.Literals(["withdrawn", "not_pending"]),
+  tradeState: Schema.optional(ProposalTradeState),
+  detail: Schema.NonEmptyString,
+});
+export type WithdrawTradeResult = typeof WithdrawTradeResult.Type;
 
 export class TransactionProposals extends Context.Service<
   TransactionProposals,
@@ -349,6 +416,11 @@ export type TransactionProposalsShape = {
     userId: UserId,
     input: PendingTradeOffersInput,
   ) => Effect.Effect<PendingTradeOffersResult, ProposalError>;
+
+  readonly withdrawTrade: (
+    userId: UserId,
+    input: WithdrawTradeInput,
+  ) => Effect.Effect<WithdrawTradeResult, ProposalError>;
 };
 
 export type ProposalError =
@@ -359,6 +431,8 @@ export type ProposalError =
   | ProposalSetExpired
   | ProposalSetAlreadySubmitted
   | ProposalTeamNotFound
+  | ProposalTradeNotFound
+  | ProposalTradeNotPending
   | ProposalConnectionNotReady
   | ProposalProviderUnavailable
   | ProposalPersistenceFailed;
@@ -398,6 +472,21 @@ export class ProposalTeamNotFound extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("proposal.team_not_found", {
   team: TeamId,
+}) {}
+
+export class ProposalTradeNotFound extends Schema.TaggedError<
+  ProposalTradeNotFound,
+  { readonly brand: unique symbol }
+>()("proposal.trade_not_found", {
+  detail: Schema.NonEmptyString,
+}) {}
+
+export class ProposalTradeNotPending extends Schema.TaggedError<
+  ProposalTradeNotPending,
+  { readonly brand: unique symbol }
+>()("proposal.trade_not_pending", {
+  state: ProposalTradeState,
+  detail: Schema.NonEmptyString,
 }) {}
 
 export class ProposalConnectionNotReady extends Schema.TaggedError<

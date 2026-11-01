@@ -150,10 +150,10 @@ const DeclaredFlag = Schema.Union([
   Schema.Struct({ status: Schema.Literal("not_set") }),
 ]).pipe(Schema.annotate({ description: declaredStateDetail }));
 
-const TradeRatification = Schema.Literals(["vote", "commissioner", "unknown"]).pipe(
+const TradeRatification = Schema.Literals(["vote", "commissioner", "none", "unknown"]).pipe(
   Schema.annotate({
     description:
-      "How a trade is ratified: `vote` by league managers, `commissioner` by the commissioner, or `unknown` for a rule this server cannot name.",
+      "How a trade is ratified: `vote` by league managers, `commissioner` by the commissioner, `none` when no review follows acceptance, or `unknown` for a rule this server cannot name.",
   }),
 );
 

@@ -26,23 +26,32 @@ export function loadTeamContext(
 ): Effect.Effect<TeamContext, QueryError> {
   return repository.loadOwnedTeam(userId, teamId).pipe(
     Effect.flatMap((owned) =>
-      Effect.all([
-        encryption
-          .decrypt({
-            userId,
-            connectionId: owned.connection.id,
-            provider: owned.connection.provider,
-            envelope: owned.connection.envelope,
-          })
-          .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause }))),
-        registry
-          .requireProvider(owned.connection.provider)
-          .pipe(
-            Effect.mapError((error) =>
-              QueryPersistenceFailed.make({ cause: new Error(error.message) }),
-            ),
-          ),
-      ]).pipe(Effect.map(([session, provider]) => ({ userId, owned, session, provider }))),
+      owned.team.connectionId !== owned.connection.id ||
+      owned.team.provider !== owned.connection.provider
+        ? Effect.fail(
+            QueryPersistenceFailed.make({
+              cause: new Error(
+                "A team resolved to a connection it does not belong to; no provider request was made",
+              ),
+            }),
+          )
+        : Effect.all([
+            encryption
+              .decrypt({
+                userId,
+                connectionId: owned.connection.id,
+                provider: owned.connection.provider,
+                envelope: owned.connection.envelope,
+              })
+              .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause }))),
+            registry
+              .requireProvider(owned.connection.provider)
+              .pipe(
+                Effect.mapError((error) =>
+                  QueryPersistenceFailed.make({ cause: new Error(error.message) }),
+                ),
+              ),
+          ]).pipe(Effect.map(([session, provider]) => ({ userId, owned, session, provider }))),
     ),
   );
 }

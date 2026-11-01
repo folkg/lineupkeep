@@ -70,7 +70,9 @@ test("reviews and submits a proposed transaction set across the owner's teams", 
   await expect(page.getByText("Riverside Receiver", { exact: true })).toBeVisible();
   await expect(page.getByText(/Checked against current state/u)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Teams with nothing proposed" })).toBeVisible();
-  await expect(page.getByText("Hosted Hockey Team", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Teams with nothing proposed").getByText("Hosted Hockey Team", { exact: true }),
+  ).toBeVisible();
 
   const checkbox = page.getByRole("checkbox", { name: /Drop Riverside Receiver/u });
   await expect(checkbox).toBeChecked();
@@ -78,7 +80,7 @@ test("reviews and submits a proposed transaction set across the owner's teams", 
     "aria-disabled",
   );
   await expect(
-    page.getByText(/One provider transaction per move, sent in this order, with no retries./u),
+    page.getByText(/One provider request per move, sent in this order, with no retries./u),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Submit 1 move" }).click();

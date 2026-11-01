@@ -143,7 +143,9 @@ type WriteOperation =
   | "apply_native_action"
   | "apply_explicit_assignments"
   | "apply_transaction"
-  | "apply_reserve_move";
+  | "apply_reserve_move"
+  | "propose_trade"
+  | "withdraw_trade";
 
 export const yahooProvider = Effect.gen(function* () {
   const internet = yield* PublicInternet;
@@ -436,6 +438,110 @@ export const yahooProvider = Effect.gen(function* () {
     );
   });
 
+  const proposeTrade: ProviderShape["proposeTrade"] = Effect.fn("YahooProvider.proposeTrade")(
+    function* (input) {
+      yield* Effect.annotateCurrentSpan("provider.operation", "propose_trade");
+      const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "propose_trade");
+      yield* ValidTeamKey(input.providerTeamKey, "propose_trade");
+      yield* ValidLeagueTeamKey(input.counterpartyTeamKey, leagueKey, "propose_trade");
+      if (input.counterpartyTeamKey === input.providerTeamKey) {
+        return yield* ProviderResponseInvalid.make({ operation: "propose_trade" });
+      }
+      const send = yield* ValidTradePlayerKeys(input.send);
+      const receive = yield* ValidTradePlayerKeys(input.receive);
+      if (send.length + receive.length === 0) {
+        return yield* ProviderResponseInvalid.make({ operation: "propose_trade" });
+      }
+      yield* Effect.annotateCurrentSpan({
+        "provider.send_count": send.length,
+        "provider.receive_count": receive.length,
+      });
+      const cookie = yield* sessionCookie(input, "propose_trade");
+      const crumb = yield* Effect.result(readCrumb(input, "propose_trade"));
+      if (crumb._tag === "Failure") {
+        if (crumb.failure._tag === "provider.session_rejected") {
+          yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
+          return yield* crumb.failure;
+        }
+        yield* Effect.annotateCurrentSpan("provider.outcome", "not_sent");
+        return crumb.failure._tag === "provider.crumb_unavailable"
+          ? { status: "not_sent" as const, reason: "session_incomplete" as const }
+          : { status: "not_sent" as const, reason: "request_failed" as const };
+      }
+      const url = yahooWriteUrl(
+        `/fantasy/v2/league/${leagueKey}/transactions`,
+        Redacted.value(crumb.success.crumb),
+      );
+      const response = yield* Effect.scoped(
+        internet
+          .request(
+            new Request(url, {
+              method: "POST",
+              headers: {
+                accept: "application/json",
+                "content-type": "application/xml",
+                cookie,
+              },
+              body: tradeProposalBody({
+                providerTeamKey: input.providerTeamKey,
+                counterpartyTeamKey: input.counterpartyTeamKey,
+                send,
+                receive,
+                note: input.note,
+              }),
+            }),
+            {
+              timeoutMs: yahooWriteDeadlineMillis,
+              maxResponseBytes: yahooWriteResponseLimitBytes,
+            },
+          )
+          .pipe(Effect.catchTag("PublicInternetUnavailable", () => Effect.void)),
+      );
+      if (response === undefined) {
+        yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
+        return { status: "unknown" as const };
+      }
+      yield* Effect.annotateCurrentSpan("http.response.status_code", response.status);
+      if (response.status === 401 || response.status === 403) {
+        yield* discardBody(response);
+        yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
+        return yield* ProviderSessionRejected.make({ operation: "propose_trade" });
+      }
+      if (!response.ok) {
+        const failure = yield* writeFailureOf(response);
+        return failure.status === "accepted" ? { status: "unknown" as const } : failure;
+      }
+      const text = yield* Effect.tryPromise({
+        try: () => response.text(),
+        catch: () => ProviderResponseInvalid.make({ operation: "propose_trade" }),
+      });
+      const transactionKey = pendingTradeKeyOf(text);
+      if (transactionKey === undefined) {
+        yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
+        return { status: "unknown" as const };
+      }
+      yield* Effect.annotateCurrentSpan("provider.outcome", "accepted");
+      return { status: "accepted" as const, transactionKey };
+    },
+  );
+
+  const withdrawTrade: ProviderShape["withdrawTrade"] = Effect.fn("YahooProvider.withdrawTrade")(
+    function* (input) {
+      yield* Effect.annotateCurrentSpan("provider.operation", "withdraw_trade");
+      const transactionKey = yield* ValidTradeTransactionKey(
+        input.transactionKey,
+        "withdraw_trade",
+      );
+      return yield* writeToProvider(
+        input,
+        "withdraw_trade",
+        "DELETE",
+        `/fantasy/v2/transaction/${transactionKey}`,
+        undefined,
+      );
+    },
+  );
+
   const applyReserveMove: ProviderShape["applyReserveMove"] = Effect.fn(
     "YahooProvider.applyReserveMove",
   )(function* (input) {
@@ -476,9 +582,9 @@ export const yahooProvider = Effect.gen(function* () {
   const writeToProvider = (
     input: ProviderSessionMaterial,
     operation: WriteOperation,
-    method: "POST" | "PUT",
+    method: "POST" | "PUT" | "DELETE",
     path: string,
-    body: string,
+    body: string | undefined,
   ): Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid> =>
     Effect.gen(function* () {
       const cookie = yield* sessionCookie(input, operation);
@@ -501,10 +607,10 @@ export const yahooProvider = Effect.gen(function* () {
               method,
               headers: {
                 accept: "application/json",
-                "content-type": "application/xml",
+                ...(body === undefined ? {} : { "content-type": "application/xml" }),
                 cookie,
               },
-              body,
+              ...(body === undefined ? {} : { body }),
             }),
             {
               timeoutMs: yahooWriteDeadlineMillis,
@@ -528,6 +634,13 @@ export const yahooProvider = Effect.gen(function* () {
         yield* Effect.annotateCurrentSpan("provider.outcome", "accepted");
         return { status: "accepted" as const };
       }
+      return yield* writeFailureOf(response);
+    });
+
+  const writeFailureOf = (
+    response: Response,
+  ): Effect.Effect<ProviderWriteResult, ProviderResponseInvalid> =>
+    Effect.gen(function* () {
       const detail = yield* providerErrorDetail(response);
       if (response.status === 404) {
         yield* Effect.annotateCurrentSpan("provider.outcome", "rejected");
@@ -545,7 +658,9 @@ export const yahooProvider = Effect.gen(function* () {
       yield* Effect.annotateCurrentSpan("provider.outcome", "rejected");
       return {
         status: "rejected" as const,
-        reason: /premium/iu.test(detail.detail ?? "") ? "premium_required" : "invalid_request",
+        reason: /premium/iu.test(detail.detail ?? "")
+          ? ("premium_required" as const)
+          : ("invalid_request" as const),
         ...detail,
       };
     });
@@ -849,6 +964,44 @@ export const yahooProvider = Effect.gen(function* () {
     return transactions;
   });
 
+  const readCompletedTrades = Effect.fn("YahooProvider.readCompletedTrades")(function* (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKey: string;
+      readonly limit: number;
+    },
+  ) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_completed_trades");
+    const cookie = yield* sessionCookie(input, "read_completed_trades");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_completed_trades");
+    const limit = yield* ValidTransactionLimit(input.limit);
+    const teamFilter = yield* ValidLeagueTeamKey(
+      input.providerTeamKey,
+      leagueKey,
+      "read_completed_trades",
+    );
+    const payload = yield* readJson(internet, {
+      operation: "read_completed_trades",
+      origin: readOrigin,
+      path: `/fantasy/v2/league/${leagueKey}/transactions;type=trade${teamFilter};count=${String(limit)}`,
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(TransactionsPayload, payload, "read_completed_trades");
+    if (decoded.league.league_key !== leagueKey) {
+      return yield* responseMismatch({
+        operation: "read_completed_trades",
+        field: "league.league_key",
+      });
+    }
+    const trades = (yield* decodeTransactions(decoded.league.transactions)).filter(
+      (transaction) => transaction.type === "trade",
+    );
+    yield* Effect.annotateCurrentSpan("provider.completed_trade_count", trades.length);
+    return trades;
+  });
+
   const readPendingTrades = Effect.fn("YahooProvider.readPendingTrades")(function* (
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
@@ -992,12 +1145,15 @@ export const yahooProvider = Effect.gen(function* () {
     applyNativeAction,
     applyExplicitAssignments,
     applyTransaction,
+    proposeTrade,
+    withdrawTrade,
     applyReserveMove,
     readPlayerDetails,
     readPlayerHistory,
     searchPlayers,
     readMatchups,
     readTransactions,
+    readCompletedTrades,
     readPendingTrades,
     readDraftResults,
     readLeagueTeams,
@@ -1055,6 +1211,8 @@ class YahooCrumbUnavailable extends Schema.TaggedError<
     "apply_native_action",
     "apply_explicit_assignments",
     "apply_transaction",
+    "propose_trade",
+    "withdraw_trade",
     "apply_reserve_move",
   ]),
 }) {}
@@ -1236,6 +1394,25 @@ function ValidTransactionPlayerKeys(
   return Effect.succeed(keys);
 }
 
+function ValidTradePlayerKeys(
+  keys: ReadonlyArray<string>,
+): Effect.Effect<ReadonlyArray<string>, ProviderResponseInvalid> {
+  const unique = new Set(keys);
+  if (unique.size !== keys.length || !keys.every(isTransactionPlayerKey) || keys.length === 0) {
+    return ProviderResponseInvalid.make({ operation: "propose_trade" });
+  }
+  return Effect.succeed(keys);
+}
+
+function ValidTradeTransactionKey(
+  key: string,
+  operation: ProviderOperation,
+): Effect.Effect<string, ProviderResponseInvalid> {
+  return /^[0-9]+\.l\.[0-9]+\.pt\.[0-9]+$/u.test(key)
+    ? Effect.succeed(key)
+    : ProviderResponseInvalid.make({ operation });
+}
+
 function ValidTransactionPlayerKey(
   key: string,
   operation: ProviderOperation,
@@ -1284,6 +1461,87 @@ function transactionPlayerBody(
 ): string {
   const team = movement === "add" ? "destination_team_key" : "source_team_key";
   return `<player><player_key>${playerKey}</player_key><transaction_data><type>${movement}</type><${team}>${providerTeamKey}</${team}></transaction_data></player>`;
+}
+
+function tradeProposalBody(input: {
+  readonly providerTeamKey: string;
+  readonly counterpartyTeamKey: string;
+  readonly send: ReadonlyArray<string>;
+  readonly receive: ReadonlyArray<string>;
+  readonly note: string | undefined;
+}): string {
+  const players = [
+    ...input.send.map((key) =>
+      tradePlayerBody(key, input.providerTeamKey, input.counterpartyTeamKey),
+    ),
+    ...input.receive.map((key) =>
+      tradePlayerBody(key, input.counterpartyTeamKey, input.providerTeamKey),
+    ),
+  ];
+  return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>${input.providerTeamKey}</trader_team_key><tradee_team_key>${input.counterpartyTeamKey}</tradee_team_key><trade_note>${xmlText(input.note ?? "")}</trade_note><players>${players.join("")}</players></transaction></fantasy_content>`;
+}
+
+function tradePlayerBody(
+  playerKey: string,
+  sourceTeamKey: string,
+  destinationTeamKey: string,
+): string {
+  return `<player><player_key>${playerKey}</player_key><transaction_data><type>pending_trade</type><source_team_key>${sourceTeamKey}</source_team_key><destination_team_key>${destinationTeamKey}</destination_team_key></transaction_data></player>`;
+}
+
+function xmlText(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function pendingTradeKeyOf(body: string): string | undefined {
+  const payload = (() => {
+    try {
+      return JSON.parse(body) as unknown;
+    } catch {
+      return undefined;
+    }
+  })();
+  return findPendingTradeKey(normalizeYahooJson(payload));
+}
+
+function findPendingTradeKey(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findPendingTradeKey(entry);
+      if (found !== undefined) {
+        return found;
+      }
+    }
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const record = value;
+  const key = record["transaction_key"];
+  if (
+    record["type"] === "pending_trade" &&
+    typeof key === "string" &&
+    /^[0-9]+\.l\.[0-9]+\.pt\.[0-9]+$/u.test(key)
+  ) {
+    return key;
+  }
+  for (const entry of Object.values(record)) {
+    const found = findPendingTradeKey(entry);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
 }
 
 function reserveMoveBody(target: ProviderNativeTarget, playerKey: string, slot: string): string {
@@ -1560,6 +1818,8 @@ function tradeRatification(type: string | undefined): ProviderTradeRatification 
       return "vote";
     case "commish":
       return "commissioner";
+    case "none":
+      return "none";
     default:
       return "unknown";
   }
@@ -2909,6 +3169,7 @@ function decodeTransactions(
         original: transactionTeam(pick.original_team_key, pick.original_team_name),
       }));
       decoded.push({
+        transactionKey: transaction.transaction_key,
         occurredAt,
         type,
         status: optionalNonEmpty(transaction.status ?? ""),
@@ -2962,6 +3223,7 @@ function decodePendingTrades(
         original: transactionTeam(pick.original_team_key, pick.original_team_name),
       }));
       offers.push({
+        transactionKey: transaction.transaction_key,
         proposedAt: yield* providerInstant(transaction.trade_proposed_time, "read_pending_trades"),
         note: optionalNonEmpty(transaction.trade_note ?? ""),
         canRespond: optionalFlag(transaction.current_login_can_respond) ?? false,
@@ -3573,6 +3835,16 @@ const AcquisitionPayload = Schema.Struct({
 const TeamPayload = Schema.Struct({
   team_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[^.]+\.l\.[^.]+\.t\.[^.]+$/u))),
   name: Schema.NonEmptyString,
+  managers: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        manager: Schema.Struct({
+          manager_id: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
+          nickname: Schema.optional(Schema.String),
+        }),
+      }),
+    ),
+  ),
   number_of_moves: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
   roster_adds: Schema.optional(AcquisitionPayload),
   faab_balance: Schema.optional(IntFromStringOrNumber),
@@ -4006,6 +4278,7 @@ const TransactionPickPayload = Schema.Struct({
 });
 
 const TransactionPayload = Schema.Struct({
+  transaction_key: Schema.optional(Schema.NonEmptyString),
   type: Schema.NonEmptyString,
   status: Schema.optional(Schema.String),
   timestamp: IntFromStringOrNumber,
@@ -4041,6 +4314,7 @@ const TransactionsPayload = Schema.Struct({
 });
 
 const PendingTradePayload = Schema.Struct({
+  transaction_key: Schema.NonEmptyString,
   type: Schema.NonEmptyString,
   status: Schema.optional(Schema.String),
   trader_team_key: Schema.optional(TeamKey),

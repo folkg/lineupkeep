@@ -253,8 +253,9 @@ teams: `transactions;type=pending_trade;team_key={own}` returns a `pending_trade
 and whether the session can respond. The plain league feed never carries them and another team's
 request is refused, so there is no league-wide trade wire and no offer data is inferred.
 `get_pending_trade_offers` reads that feed for one owned team, marks the result `readOnly: true`,
-and states that this product cannot accept, reject, cancel, or propose a trade. It never exposes a
-provider team key or player key; parties and players arrive as private references. A provider that
+and states that this product cannot accept, reject, or vote on a trade. It returns an opaque reference
+a signed-in person can use on the review page to withdraw an offer this account made. It never exposes
+a provider team key, player key, or pending-trade key; parties and players arrive as private references. A provider that
 publishes no such feed reports `status: "unsupported"` with the reason instead of an empty success.
 
 `get_league`'s `draft_history` group returns the provider's `draftresults` read: every published
@@ -567,8 +568,12 @@ A coverage entry has one of three states. `available` means the resource was rea
 `propose_transactions` stores what an agent proposes; it writes nothing to the provider. One call
 covers every team the account has, and the set it creates is grouped by team, so teams with nothing
 proposed still appear as an empty section on the review. Each item names one team, a kind
-(`free_agent_add`, `waiver_claim`, or `drop`), the players to add and drop, an optional FAAB bid, and
-a required reason. A free-agent add carries no bid, a waiver claim carries one of 0 or more, and a
+(`free_agent_add`, `waiver_claim`, `drop`, or `trade`), the players to add and drop, an optional FAAB
+bid, and a required reason. A trade names `counterparty` from the league's teams read, the players
+going out in `drops`, and the players coming back in `adds`; it carries no bid and no draft picks.
+Staging a trade reads the league settings, both rosters, and the league's teams, and refuses the item
+when the counterparty is not another team in the same league, a player is not on the roster they
+would leave, or the trade window has closed. A free-agent add carries no bid, a waiver claim carries one of 0 or more, and a
 drop item only drops. The result carries the set id, the review link
 (`https://{origin}/transactions/{setId}`), the surface (`mcp`) and acting client, and each item's
 outcome by position: accepted with its stored state, or refused with a code and a sentence that
@@ -582,7 +587,9 @@ once per team (its roster, its league rules, the pool state of the players it ad
 balance when a bid is present) and marks each open item `current` or `stale` with reasons: the added
 player is no longer in the pool, a dropped player is no longer on the roster, the roster would
 exceed the league's declared capacity, the league's period has closed, the bid exceeds the team's
-remaining budget, the league has no FAAB budget, or the team's state could not be read. Staleness is
+remaining budget, the league has no FAAB budget, or the team's state could not be read. A trade is
+re-checked against both rosters, the counterparty's continuing place in the league, and the trade
+window, and carries its current state back to the review. Staleness is
 recorded beside the item's state and is never a failure; an item stays `proposed`. A team whose
 state cannot be read marks only its own items, and the review reports the failure beside that team.
 An expired set refuses re-validation instead of re-checking or executing, so a set that sat overnight
@@ -601,8 +608,12 @@ A waiver claim is `pending` until the provider processes it, and `unknown` means
 not have applied and is never retried automatically. The set records who submitted, when, and the
 outcome of every item and step; after submission it is an audit record and cannot be submitted again.
 A failed, unknown, or pending item stops the later items for that team only, because their checks no
-longer describe the roster; other teams continue. Trades remain read-only: review links and pending
-offers are never submitted by any tool or by the review page.
+longer describe the roster; other teams continue. A submitted trade is sent once with no retry: an `unknown` propose is recorded as unknown and the
+person is told to check the provider's trade page before trying again, because a repeated propose has
+no proven idempotency. The review page reads the provider's pending feed and completed trades to show
+the trade as pending, accepted, withdrawn, or expired, and can withdraw an offer before acceptance
+from our own record or from the provider's pending feed. It never accepts, rejects, votes, counters,
+or selects a pick for another manager or the league.
 
 ## Review-link safety
 

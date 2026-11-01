@@ -38,7 +38,7 @@ type ProposalReview = typeof ProposalReview.Type;
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Propose one set of player transactions across any of this account's teams for a person to review, and return the set id and one review link. Proposing writes nothing to the provider: it stores the set and returns per-item state, and no transaction is submitted. Each item names one team, a kind, the players to add and drop, an optional FAAB bid, and a required reason. `free_agent_add` adds players with no bid, `waiver_claim` adds players with a bid of 0 or more, and `drop` only drops; a drop item cannot add or bid, and a free-agent add cannot bid. Teams with nothing proposed still appear on the review, so the set covers every team this account has. Player references must come from a read of that team's league; a reference from another account or league, a team this account does not have, a player named in both adds and drops, or the same move repeated is refused and named by its position. Repeating the identical set returns the existing set instead of creating a duplicate. A set expires 24 hours after it is created, and the review re-reads current state before anyone decides: use `revalidate_transaction_proposal_set` for that, and `get_transaction_proposal_set` to read the set back. No tool submits, executes, or spends anything: only a signed-in person can submit the included moves from the review page.",
+      "Propose one set of player transactions across any of this account's teams for a person to review, and return the set id and one review link. Proposing writes nothing to the provider: it stores the set and returns per-item state, and no transaction is submitted. Each item names one team, a kind, the players to add and drop, an optional FAAB bid, and a required reason. `free_agent_add` adds players with no bid, `waiver_claim` adds players with a bid of 0 or more, and `drop` only drops; a drop item cannot add or bid, and a free-agent add cannot bid. A `trade` item names `counterparty` (a team reference from the league's teams read), the players going out in `drops`, and the players coming back in `adds`; it carries no bid and no draft picks. A trade is refused when the counterparty is not another team in the same league, a player is not on the roster they would leave, or the league's trade window has closed, and the refusal names the item. Teams with nothing proposed still appear on the review, so the set covers every team this account has. Player references must come from a read of that team's league; a reference from another account or league, a team this account does not have, a player named in both adds and drops, or the same move repeated is refused and named by its position. Repeating the identical set returns the existing set instead of creating a duplicate. A set expires 24 hours after it is created, and the review re-reads current state before anyone decides: use `revalidate_transaction_proposal_set` for that, and `get_transaction_proposal_set` to read the set back. No tool submits, executes, or spends anything: only a signed-in person can submit the included moves from the review page. A submitted trade is a real offer to another manager, who alone decides whether to accept it.",
     parameters: ProposeTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -77,7 +77,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_pending_trade_offers", {
     description:
-      "Read the pending trade offers the provider publishes for one team this account owns, with the proposing and receiving teams, both ends of every player, and any traded draft picks. This is read-only: Lineupkeep cannot accept, reject, cancel, or propose a trade in this product, and the result says so. The provider publishes only the managing account's own offers, so this never reports another manager's trade traffic. A provider that publishes no offers resource reports that boundary instead of an empty success.",
+      "Read the pending trade offers the provider publishes for one team this account owns, with the proposing and receiving teams, both ends of every player, any traded draft picks, and an opaque reference a signed-in person can use on the review page to withdraw an offer this account made. This tool is read-only: Lineupkeep cannot accept, reject, vote, or counter an offer, and the result says so. The provider publishes only the managing account's own offers, so this never reports another manager's trade traffic. A provider that publishes no offers resource reports that boundary instead of an empty success.",
     parameters: PendingTradeOffersInput,
     success: Schema.toCodecJson(PendingTradeOffersResult),
     failure: ToolFailure,
@@ -173,6 +173,13 @@ function mapFailure<A>(
             "set_expired",
             "This proposal set expired and refuses re-validation rather than executing stale moves. Propose the transactions again to create a fresh set.",
           );
+        case "proposal.trade_not_found":
+          return reject(
+            "trade_not_found",
+            "That trade proposal is not available to this account. Reload the review and try again.",
+          );
+        case "proposal.trade_not_pending":
+          return reject("trade_not_pending", error.detail);
         case "proposal.team_not_found":
           return reject(
             "team_not_found",

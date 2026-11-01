@@ -408,6 +408,139 @@ it.effect("sends a waiver claim with its FAAB bid", () => {
   }).pipe(Effect.provide(yahooLayer(layer)));
 });
 
+it.effect("proposes a two-sided trade and reads the pt key from the response", () => {
+  const calls: Array<{ readonly url: URL; readonly method: string; readonly body: string }> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.promise(async () => {
+        calls.push({
+          url: new URL(request.url),
+          method: request.method,
+          body: request.body === null ? "" : await request.clone().text(),
+        });
+        return request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : jsonResponse({
+              fantasy_content: {
+                league: [
+                  { league_key: "461.l.1000", league_id: "1000", name: "Synthetic" },
+                  {
+                    transactions: {
+                      "0": {
+                        transaction: [
+                          {
+                            transaction_key: "461.l.1000.pt.5",
+                            type: "pending_trade",
+                            status: "proposed",
+                            trader_team_key: "461.l.1000.t.1",
+                            tradee_team_key: "461.l.1000.t.2",
+                          },
+                        ],
+                      },
+                      count: 1,
+                    },
+                  },
+                ],
+              },
+            });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const result = yield* provider.proposeTrade({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      counterpartyTeamKey: "461.l.1000.t.2",
+      send: ["461.p.10001", "461.p.10002"],
+      receive: ["461.p.10003"],
+      note: "Two for one.",
+    });
+
+    assert.deepStrictEqual(result, {
+      status: "accepted",
+      transactionKey: "461.l.1000.pt.5",
+    });
+    const write = calls[1];
+    assert.isDefined(write);
+    assert.strictEqual(write.method, "POST");
+    assert.strictEqual(write.url.origin, "https://pub-api-rw.fantasysports.yahoo.com");
+    assert.strictEqual(write.url.pathname, "/fantasy/v2/league/461.l.1000/transactions");
+    assert.strictEqual(
+      write.body,
+      '<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>pending_trade</type><trader_team_key>461.l.1000.t.1</trader_team_key><tradee_team_key>461.l.1000.t.2</tradee_team_key><trade_note>Two for one.</trade_note><players><player><player_key>461.p.10001</player_key><transaction_data><type>pending_trade</type><source_team_key>461.l.1000.t.1</source_team_key><destination_team_key>461.l.1000.t.2</destination_team_key></transaction_data></player><player><player_key>461.p.10002</player_key><transaction_data><type>pending_trade</type><source_team_key>461.l.1000.t.1</source_team_key><destination_team_key>461.l.1000.t.2</destination_team_key></transaction_data></player><player><player_key>461.p.10003</player_key><transaction_data><type>pending_trade</type><source_team_key>461.l.1000.t.2</source_team_key><destination_team_key>461.l.1000.t.1</destination_team_key></transaction_data></player></players></transaction></fantasy_content>',
+    );
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("treats an accepted trade propose without a pt key as unknown and never retries", () => {
+  const calls: Array<string> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.sync(() => {
+        calls.push(request.url);
+        return request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : jsonResponse({ fantasy_content: { league: [{ league_key: "461.l.1000" }] } });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.proposeTrade({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      counterpartyTeamKey: "461.l.1000.t.2",
+      send: ["461.p.10001"],
+      receive: ["461.p.10003"],
+      note: undefined,
+    });
+    assert.deepStrictEqual(result, { status: "unknown" });
+    assert.strictEqual(calls.length, 2);
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("withdraws a pending trade with DELETE and no body", () => {
+  const calls: Array<{
+    readonly url: URL;
+    readonly method: string;
+    readonly body: string | null;
+    readonly headers: Record<string, string>;
+  }> = [];
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.promise(async () => {
+        calls.push({
+          url: new URL(request.url),
+          method: request.method,
+          body: request.body === null ? null : await request.clone().text(),
+          headers: Object.fromEntries(request.headers.entries()),
+        });
+        return request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : new Response(null, { status: 204 });
+      }),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.withdrawTrade({
+      ...sessionInput,
+      transactionKey: "461.l.1000.pt.5",
+    });
+    assert.deepStrictEqual(result, { status: "accepted" });
+    const write = calls[1];
+    assert.isDefined(write);
+    assert.strictEqual(write.method, "DELETE");
+    assert.strictEqual(write.url.pathname, "/fantasy/v2/transaction/461.l.1000.pt.5");
+    assert.isNull(write.body);
+    assert.isUndefined(write.headers["content-type"]);
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
 it.effect("moves a player to a reserve slot through the roster endpoint", () => {
   const calls: Array<{ readonly url: URL; readonly method: string; readonly body: string }> = [];
   const layer = Layer.succeed(PublicInternet)({
@@ -3114,6 +3247,30 @@ it.effect("scopes a transaction read to one team in the same league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads completed trades with the type filter and their transaction keys", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTradeTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const trades = yield* provider.readCompletedTrades({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: "466.l.4000.t.1",
+      limit: 25,
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;type=trade;team_key=466.l.4000.t.1;count=25?format=json",
+    );
+    assert.isTrue(trades.every((trade) => trade.type === "trade"));
+    assert.deepStrictEqual(
+      trades.map((trade) => trade.transactionKey),
+      ["466.l.4000.tr.7"],
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("reads the owner's pending trade offers from the typed feed", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflPendingTrades));
   return Effect.gen(function* () {
@@ -3131,6 +3288,7 @@ it.effect("reads the owner's pending trade offers from the typed feed", () => {
     );
     assert.deepStrictEqual(offers, [
       {
+        transactionKey: "466.l.4000.pt.7",
         proposedAt: "2026-10-03T04:00:00.000Z",
         note: "A synthetic offer.",
         canRespond: true,
@@ -3251,6 +3409,7 @@ it.effect("reads bounded league transaction history with dropped-player identity
     );
     assert.deepStrictEqual(transactions, [
       {
+        transactionKey: "466.l.4000.tr.1",
         occurredAt: "2026-10-03T04:00:00.000Z",
         type: "add_drop",
         status: "successful",
@@ -3288,6 +3447,7 @@ it.effect("reads bounded league transaction history with dropped-player identity
         incomplete: undefined,
       },
       {
+        transactionKey: "466.l.4000.tr.2",
         occurredAt: "2026-10-02T00:13:20.000Z",
         type: "drop",
         status: "successful",
@@ -3329,6 +3489,7 @@ it.effect("decodes both sides of a trade with the team each player left and join
 
     assert.deepStrictEqual(transactions, [
       {
+        transactionKey: "466.l.4000.tr.7",
         occurredAt: "2026-10-05T08:46:40.000Z",
         type: "trade",
         status: "successful",
@@ -3429,6 +3590,7 @@ it.effect("marks a trade with no player movements incomplete instead of empty", 
 
     assert.deepStrictEqual(transactions, [
       {
+        transactionKey: "466.l.4000.tr.9",
         occurredAt: "2026-10-03T04:00:00.000Z",
         type: "trade",
         status: "successful",

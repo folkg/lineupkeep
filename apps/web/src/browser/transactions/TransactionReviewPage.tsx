@@ -28,9 +28,12 @@ import { Time } from "#browser/shared-ui/Time.tsx";
 import type {
   TransactionReviewExecutionView,
   TransactionReviewItemView,
+  TransactionReviewPendingOfferView,
   TransactionReviewPlayerView,
   TransactionReviewStepView,
   TransactionReviewTeamView,
+  TransactionReviewTradeRulesView,
+  TransactionReviewTradeView,
   TransactionReviewView,
 } from "#contracts/connections/transactionContract.ts";
 
@@ -73,6 +76,9 @@ export function TransactionReviewPage(props: TransactionReviewPageProps): JSX.El
                 onSubmit={page.submit}
                 onToggle={page.toggleItem}
                 submitting={page.submitting()}
+                withdrawItem={page.withdrawItem}
+                withdrawOffer={page.withdrawOffer}
+                withdrawing={page.withdrawing()}
               />
             )}
           </Show>
@@ -131,6 +137,15 @@ function isNotFoundFailure(error: unknown): boolean {
 
 function Review(props: ReviewProps): JSX.Element {
   const submitted = (): boolean => props.model.submitted;
+  const providerOffers = (): ReadonlyArray<{
+    readonly team: TransactionReviewTeamView;
+    readonly offer: TransactionReviewPendingOfferView;
+  }> =>
+    props.model.review.teams.flatMap((team) =>
+      team.pendingOffers
+        .filter((offer) => !offerMatchesItem(team, offer))
+        .map((offer) => ({ team, offer })),
+    );
   return (
     <Stack gap="xl">
       <Stack gap="sm">
@@ -160,6 +175,7 @@ function Review(props: ReviewProps): JSX.Element {
         </Show>
       </Stack>
 
+      <ActionFeedback feedback={props.feedback} />
       <Show
         fallback={
           <EmptyState title="Nothing was proposed.">
@@ -178,10 +194,19 @@ function Review(props: ReviewProps): JSX.Element {
                   submitting={props.submitting}
                   isItemIncluded={props.isItemIncluded}
                   team={team}
+                  withdrawing={props.withdrawing}
                   onToggle={props.onToggle}
+                  onWithdraw={props.withdrawItem}
                 />
               )}
             </For>
+            <Show when={providerOffers().length > 0}>
+              <ProviderOffers
+                offers={providerOffers()}
+                withdrawing={props.withdrawing}
+                onWithdraw={props.withdrawOffer}
+              />
+            </Show>
             <Show when={props.model.quietTeams.length > 0}>
               <QuietTeams teams={props.model.quietTeams} />
             </Show>
@@ -190,7 +215,6 @@ function Review(props: ReviewProps): JSX.Element {
         <Show when={!props.model.review.set.expired && !submitted()}>
           <SubmissionPanel
             faab={props.model.includedFaab}
-            feedback={props.feedback}
             included={props.model.includedCount}
             staleCount={props.model.staleCount}
             submitting={props.submitting}
@@ -260,7 +284,7 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
             <Badge tone="accent">Audit record</Badge>
           </Inline>
           <Text size="body" weight="semibold" live="polite">
-            {outcomeSummary(props.counts)}
+            {outcomeSummary(props.counts, props.review)}
           </Text>
           <Text size="caption" tone="muted">
             Submitted by you{" "}
@@ -352,7 +376,10 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
               submitting={props.submitting}
               included={props.isItemIncluded(item)}
               item={item}
+              tradeRules={props.team.tradeRules}
+              withdrawing={props.withdrawing === item.id}
               onToggle={(includedNow) => props.onToggle(item.id, includedNow)}
+              onWithdraw={() => props.onWithdraw(props.team.team.id, item.id)}
             />
           )}
         </For>
@@ -364,6 +391,11 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
 function ProposalItem(props: ProposalItemProps): JSX.Element {
   const stale = (): boolean => props.item.staleness.status === "stale";
   const result = (): TransactionReviewExecutionView | undefined => props.item.execution;
+  const shownResult = (): TransactionReviewExecutionView | undefined => {
+    const execution = result();
+    return props.item.kind === "trade" && execution?.outcome === "pending" ? undefined : execution;
+  };
+  const trade = (): TransactionReviewTradeView | undefined => props.item.trade;
   const staleId = (): string => `stale-${props.item.id}`;
   return (
     <RuleListItem
@@ -385,7 +417,18 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           <Badge tone={props.item.kind === "waiver_claim" ? "accent" : "neutral"}>
             {kindLabel(props.item.kind)}
           </Badge>
-          <Show when={result()}>
+          <Show when={trade()}>
+            {(state) => (
+              <Badge
+                tone={
+                  state().state === "pending" || state().state === "accepted" ? "accent" : "neutral"
+                }
+              >
+                {tradeStateLabel(state().state)}
+              </Badge>
+            )}
+          </Show>
+          <Show when={trade() === undefined ? result() : undefined}>
             {(execution) => (
               <Badge tone={isAttention(execution().outcome) ? "neutral" : "accent"}>
                 {outcomeLabel(execution().outcome)}
@@ -397,12 +440,42 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           </Text>
         </Inline>
 
+        <Show when={props.item.counterparty}>
+          {(counterparty) => (
+            <Stack gap="xs">
+              <Text size="body" weight="semibold">
+                Offer to {counterparty().name ?? "the counterparty team"}
+              </Text>
+              <Text size="caption" tone="muted">
+                {trade()?.state === "accepted"
+                  ? "The other manager accepted this offer, so both rosters changed."
+                  : trade()?.state === "withdrawn" || trade()?.state === "expired"
+                    ? "This offer is no longer pending with the other manager."
+                    : counterparty().managerName === undefined
+                      ? "The other team's manager decides. We cannot accept or reject on their behalf."
+                      : `${counterparty().managerName} decides. We cannot accept or reject on their behalf.`}{" "}
+                {trade()?.state === "accepted"
+                  ? "Lineupkeep could not have accepted it for them."
+                  : trade()?.state === "withdrawn" || trade()?.state === "expired"
+                    ? "It did not change either roster."
+                    : "This is an offer, not a change to either roster."}
+              </Text>
+            </Stack>
+          )}
+        </Show>
+
         <Split columns={props.item.adds.length > 0 && props.item.drops.length > 0 ? 2 : undefined}>
           <Show when={props.item.adds.length > 0}>
-            <PlayerColumn label="Add" players={props.item.adds} />
+            <PlayerColumn
+              label={props.item.kind === "trade" ? "You receive" : "Add"}
+              players={props.item.adds}
+            />
           </Show>
           <Show when={props.item.drops.length > 0}>
-            <PlayerColumn label="Drop" players={props.item.drops} />
+            <PlayerColumn
+              label={props.item.kind === "trade" ? "You send" : "Drop"}
+              players={props.item.drops}
+            />
           </Show>
         </Split>
 
@@ -414,6 +487,68 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
                 before the add. That reserve move is reported as its own step.
               </Text>
             </Notice>
+          )}
+        </Show>
+
+        <Show when={props.item.kind === "trade" && props.tradeRules}>
+          {(rules) => (
+            <Stack gap="2xs">
+              <Text size="caption" tone="muted">
+                {tradeRatificationLine(rules().ratification)} {tradeDeadlineLine(rules().endDate)}
+              </Text>
+              <Text size="caption" tone="faint">
+                {trade()?.state === "pending" || trade() === undefined
+                  ? "You are making an offer. The other manager decides; Lineupkeep cannot accept, reject, vote, or counter for them."
+                  : "This offer is settled. Lineupkeep never accepts, rejects, votes, or counters for another manager."}
+              </Text>
+            </Stack>
+          )}
+        </Show>
+
+        <Show when={trade()}>
+          {(state) => (
+            <Stack gap="2xs">
+              <Text size="caption" tone="muted">
+                Sent{" "}
+                <Time datetime={state().requestedAt}>{formatReaderTime(state().requestedAt)}</Time>
+                <Show
+                  when={state().proposedAt === undefined}
+                  fallback={
+                    <>
+                      {" "}
+                      · provider recorded{" "}
+                      <Time datetime={state().proposedAt ?? state().requestedAt}>
+                        {formatReaderTime(state().proposedAt ?? state().requestedAt)}
+                      </Time>
+                    </>
+                  }
+                >
+                  {""}
+                </Show>
+                <Show
+                  when={state().settledAt === undefined}
+                  fallback={
+                    <>
+                      {" "}
+                      · {tradeStateLabel(state().state)}{" "}
+                      <Time datetime={state().settledAt ?? state().requestedAt}>
+                        {formatReaderTime(state().settledAt ?? state().requestedAt)}
+                      </Time>
+                    </>
+                  }
+                >
+                  {""}
+                </Show>
+                .
+              </Text>
+              <Show when={state().detail}>
+                {(detail) => (
+                  <Text size="caption" tone="muted">
+                    {detail()}
+                  </Text>
+                )}
+              </Show>
+            </Stack>
           )}
         </Show>
 
@@ -430,7 +565,28 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           />
         </Show>
 
-        <Show when={result()}>{(execution) => <ExecutionResult execution={execution()} />}</Show>
+        <Show when={trade()?.state === "pending"}>
+          <Inline gap="sm" align="baseline" collapse>
+            <Button
+              variant="secondary"
+              pending={props.withdrawing}
+              pendingLabel="Withdrawing offer…"
+              onClick={props.onWithdraw}
+            >
+              Withdraw offer
+            </Button>
+            <Text size="caption" tone="muted">
+              Withdrawing deletes the offer at the provider before it is accepted. It does not
+              cancel anything already accepted.
+            </Text>
+          </Inline>
+        </Show>
+
+        <Show when={shownResult()}>
+          {(execution) => (
+            <ExecutionResult execution={execution()} isTrade={props.item.kind === "trade"} />
+          )}
+        </Show>
       </Stack>
     </RuleListItem>
   );
@@ -438,6 +594,7 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
 
 function ExecutionResult(props: {
   readonly execution: TransactionReviewExecutionView;
+  readonly isTrade: boolean;
 }): JSX.Element {
   return (
     <Stack gap="sm">
@@ -490,9 +647,14 @@ function ExecutionResult(props: {
         </Notice>
       </Show>
       <Show when={props.execution.outcome === "pending"}>
-        <Notice tone="neutral" title="Pending on waivers">
+        <Notice
+          tone="neutral"
+          title={props.isTrade ? "Waiting for the other manager" : "Pending on waivers"}
+        >
           <Text size="caption" tone="muted">
-            The provider will process this claim later. It is not done, and it is not a failure.
+            {props.isTrade
+              ? "This is a real offer. The other manager alone can accept or reject it; Lineupkeep cannot answer for them."
+              : "The provider will process this claim later. It is not done, and it is not a failure."}
           </Text>
         </Notice>
       </Show>
@@ -533,6 +695,137 @@ function PlayerColumn(props: PlayerColumnProps): JSX.Element {
   );
 }
 
+function ProviderOffers(props: ProviderOffersProps): JSX.Element {
+  return (
+    <Stack as="section" gap="sm" labelledBy="provider-offers-title">
+      <Stack gap="xs">
+        <Heading id="provider-offers-title" level={2} size="section">
+          Offers pending at the provider
+        </Heading>
+        <Text size="caption" tone="muted">
+          These offers are on the provider now. An offer Lineupkeep did not create still appears
+          here, so you can withdraw it before it is accepted.
+        </Text>
+      </Stack>
+      <RuleList>
+        <For each={props.offers}>
+          {(entry) => (
+            <RuleListItem layout="stack">
+              <Stack gap="sm">
+                <Inline gap="sm" align="baseline">
+                  <Badge tone="neutral">Offer</Badge>
+                  <Text size="item" weight="semibold">
+                    {entry.team.team.name}
+                  </Text>
+                  <Text size="caption" tone="muted">
+                    {offerParties(entry.offer)}
+                  </Text>
+                </Inline>
+                <Text size="caption" tone="muted">
+                  Sent{" "}
+                  <Time datetime={entry.offer.proposedAt}>
+                    {formatReaderTime(entry.offer.proposedAt)}
+                  </Time>
+                  .
+                </Text>
+                <Stack gap="2xs">
+                  <For each={entry.offer.players}>
+                    {(player) => (
+                      <Text size="caption" tone="muted">
+                        {player.name ?? "Unnamed player"}
+                        {player.displayPosition === undefined ? "" : ` · ${player.displayPosition}`}
+                        {player.proTeam === undefined ? "" : ` · ${player.proTeam}`}
+                        {player.from?.name === undefined && player.to?.name === undefined
+                          ? ""
+                          : ` · ${player.from?.name ?? "no team"} to ${player.to?.name ?? "no team"}`}
+                      </Text>
+                    )}
+                  </For>
+                  <Show when={entry.offer.picks.length > 0}>
+                    <Text size="caption" tone="faint">
+                      {entry.offer.picks
+                        .map(
+                          (pick) =>
+                            `Round ${String(pick.round)} pick from ${pick.from?.name ?? "unknown"} to ${pick.to?.name ?? "unknown"}`,
+                        )
+                        .join("; ")}
+                    </Text>
+                  </Show>
+                  <Show when={entry.offer.note}>
+                    {(note) => (
+                      <Text size="caption" tone="muted">
+                        Note: {note()}
+                      </Text>
+                    )}
+                  </Show>
+                  <Show when={entry.offer.incomplete}>
+                    {(detail) => (
+                      <Text size="caption" tone="danger">
+                        {detail()}
+                      </Text>
+                    )}
+                  </Show>
+                </Stack>
+                <Show
+                  fallback={
+                    <Inline gap="sm" align="baseline" collapse>
+                      <Button
+                        variant="secondary"
+                        pending={props.withdrawing === entry.offer.offerRef}
+                        pendingLabel="Withdrawing offer…"
+                        onClick={() => props.onWithdraw(entry.team.team.id, entry.offer.offerRef)}
+                      >
+                        Withdraw offer
+                      </Button>
+                      <Text size="caption" tone="muted">
+                        Withdrawing deletes this offer at the provider before it is accepted.
+                      </Text>
+                    </Inline>
+                  }
+                  when={entry.offer.canRespond}
+                >
+                  <Text size="caption" tone="muted">
+                    This offer is waiting for your answer on the provider. Accepting or rejecting it
+                    belongs to you there; Lineupkeep cannot answer it for you.
+                  </Text>
+                </Show>
+              </Stack>
+            </RuleListItem>
+          )}
+        </For>
+      </RuleList>
+    </Stack>
+  );
+}
+
+function offerParties(offer: TransactionReviewPendingOfferView): string {
+  const from = offer.proposingTeam?.name ?? "Unknown team";
+  const to = offer.receivingTeam?.name ?? "Unknown team";
+  return `${from} to ${to}`;
+}
+
+function offerMatchesItem(
+  team: TransactionReviewTeamView,
+  offer: TransactionReviewPendingOfferView,
+): boolean {
+  if (offer.proposingTeam?.name !== team.team.name) {
+    return false;
+  }
+  const names = (players: ReadonlyArray<{ readonly name?: string }>): string =>
+    players
+      .flatMap((player) => (player.name === undefined ? [] : [player.name]))
+      .sort()
+      .join("|");
+  const offerNames = names(offer.players);
+  return team.items.some(
+    (item) =>
+      item.kind === "trade" &&
+      item.trade?.state === "pending" &&
+      item.counterparty?.ref === offer.receivingTeam?.ref &&
+      names([...item.adds, ...item.drops]) === offerNames,
+  );
+}
+
 function QuietTeams(props: QuietTeamsProps): JSX.Element {
   return (
     <Stack as="section" gap="sm" labelledBy="quiet-teams-title">
@@ -567,8 +860,10 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
                   )}
                 </Text>
                 <Text id="submission-note" size="caption" tone="muted">
-                  One provider transaction per move, sent in this order, with no retries. Waiver
-                  claims stay pending until the provider processes them.
+                  One provider request per move, sent in this order, with no retries. A waiver claim
+                  stays pending until the provider processes it. A trade becomes a real offer to
+                  another manager: submitting again or reloading will not undo it, and only
+                  withdrawing removes it before it is accepted.
                 </Text>
                 <Show when={props.staleCount > 0}>
                   <Text size="caption" tone="muted">
@@ -587,7 +882,6 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
                 {submitLabel(props.included)}
               </Button>
             </Inline>
-            <ActionFeedback feedback={props.feedback} />
           </Stack>
         </Form>
       </Box>
@@ -602,6 +896,9 @@ function budgetLine(budget: NonNullable<TransactionReviewTeamView["budget"]>): s
 function moveSummary(item: TransactionReviewItemView): string {
   const adds = playerNames(item.adds);
   const drops = playerNames(item.drops);
+  if (item.kind === "trade" && adds !== undefined && drops !== undefined) {
+    return `Send ${drops} to ${item.counterparty?.name ?? "the counterparty"} for ${adds}`;
+  }
   if (adds !== undefined && drops !== undefined) {
     return `Add ${adds} and drop ${drops}`;
   }
@@ -643,15 +940,66 @@ function kindLabel(kind: TransactionReviewItemView["kind"]): string {
       return "Free agent add";
     case "drop":
       return "Drop";
+    case "trade":
+      return "Trade offer";
   }
 }
 
 function consequenceLine(item: TransactionReviewItemView): string {
+  if (item.kind === "trade") {
+    switch (item.trade?.state) {
+      case "accepted":
+        return "Accepted by the other manager. Both rosters changed, and submitting again cannot undo it.";
+      case "withdrawn":
+        return "Withdrawn before acceptance. The offer is gone, and submitting again does nothing.";
+      case "expired":
+        return "No longer pending. The provider publishes no ended record, so it was declined or expired.";
+      case "pending":
+      case undefined:
+        return "An offer, not a change. Only the other manager decides, and submitting again does not undo it.";
+    }
+  }
   if (item.kind !== "waiver_claim") {
     return "No FAAB. Usually reversible.";
   }
   const bid = item.bid ?? 0;
   return `Spends ${String(bid)} FAAB and cannot be undone.`;
+}
+
+function tradeStateLabel(state: TransactionReviewTradeView["state"]): string {
+  switch (state) {
+    case "pending":
+      return "Pending with the other manager";
+    case "accepted":
+      return "Accepted";
+    case "withdrawn":
+      return "Withdrawn";
+    case "expired":
+      return "Expired";
+  }
+}
+
+function tradeRatificationLine(
+  ratification: TransactionReviewTradeRulesView["ratification"],
+): string {
+  switch (ratification) {
+    case "vote":
+      return "League review: a vote follows if the other manager accepts.";
+    case "commissioner":
+      return "League review: the commissioner reviews a trade the other manager accepts.";
+    case "none":
+      return "League review: none. An accepted trade stands immediately.";
+    case "unknown":
+      return "League review: the league's rule is not one we can name, so the provider's trade page is the authority.";
+    case undefined:
+      return "League review: the provider did not publish a review rule.";
+  }
+}
+
+function tradeDeadlineLine(endDate: string | undefined): string {
+  return endDate === undefined
+    ? "The provider did not publish a trade deadline."
+    : `Trading closes ${endDate}.`;
 }
 
 function includedTally(
@@ -712,10 +1060,26 @@ function stepLabel(step: TransactionReviewStepView): string {
   }
 }
 
-function outcomeSummary(counts: TransactionReviewModel["counts"]): string {
+function outcomeSummary(
+  counts: TransactionReviewModel["counts"],
+  review: TransactionReviewView,
+): string {
+  const trades = review.teams.flatMap((team) => team.items).filter((item) => item.kind === "trade");
+  const tradeExecutionPending = trades.filter(
+    (item) => item.execution?.outcome === "pending",
+  ).length;
+  const tradePending = trades.filter((item) => item.trade?.state === "pending").length;
+  const tradeAccepted = trades.filter((item) => item.trade?.state === "accepted").length;
+  const tradeWithdrawn = trades.filter((item) => item.trade?.state === "withdrawn").length;
+  const tradeExpired = trades.filter((item) => item.trade?.state === "expired").length;
+  const pending = counts.pending - tradeExecutionPending;
   const parts = [
     counts.executed > 0 ? `${String(counts.executed)} executed` : undefined,
-    counts.pending > 0 ? `${String(counts.pending)} pending on waivers` : undefined,
+    pending > 0 ? `${String(pending)} pending on waivers` : undefined,
+    tradePending > 0 ? `${String(tradePending)} waiting for the other manager` : undefined,
+    tradeAccepted > 0 ? `${String(tradeAccepted)} accepted` : undefined,
+    tradeWithdrawn > 0 ? `${String(tradeWithdrawn)} withdrawn` : undefined,
+    tradeExpired > 0 ? `${String(tradeExpired)} expired` : undefined,
     counts.failed > 0 ? `${String(counts.failed)} failed` : undefined,
     counts.unknown > 0 ? `${String(counts.unknown)} unknown` : undefined,
     counts.skipped > 0 ? `${String(counts.skipped)} skipped` : undefined,
@@ -754,6 +1118,9 @@ type ReviewProps = {
   readonly onToggle: (item: string, included: boolean) => void;
   readonly onSubmit: () => void;
   readonly submitting: boolean;
+  readonly withdrawItem: (team: string, item: string) => void;
+  readonly withdrawOffer: (team: string, offer: string) => void;
+  readonly withdrawing: string | undefined;
   readonly feedback: ActionFeedbackState | undefined;
 };
 
@@ -788,25 +1155,39 @@ type TeamProposalProps = {
   readonly submitted: boolean;
   readonly submitting: boolean;
   readonly isItemIncluded: (item: TransactionReviewItemView) => boolean;
+  readonly withdrawing: string | undefined;
   readonly onToggle: (item: string, included: boolean) => void;
+  readonly onWithdraw: (team: string, item: string) => void;
 };
 
 type ProposalItemProps = {
   readonly item: TransactionReviewItemView;
+  readonly tradeRules: TransactionReviewTradeRulesView | undefined;
   readonly expired: boolean;
   readonly submitted: boolean;
   readonly submitting: boolean;
   readonly included: boolean;
+  readonly withdrawing: boolean;
   readonly onToggle: (included: boolean) => void;
+  readonly onWithdraw: () => void;
 };
 
 type PlayerColumnProps = {
-  readonly label: "Add" | "Drop";
+  readonly label: string;
   readonly players: ReadonlyArray<TransactionReviewPlayerView>;
 };
 
 type QuietTeamsProps = {
   readonly teams: ReadonlyArray<TransactionReviewTeamView>;
+};
+
+type ProviderOffersProps = {
+  readonly offers: ReadonlyArray<{
+    readonly team: TransactionReviewTeamView;
+    readonly offer: TransactionReviewPendingOfferView;
+  }>;
+  readonly withdrawing: string | undefined;
+  readonly onWithdraw: (team: string, offer: string) => void;
 };
 
 type SubmissionPanelProps = {
@@ -816,6 +1197,5 @@ type SubmissionPanelProps = {
   readonly faab: number;
   readonly staleCount: number;
   readonly submitting: boolean;
-  readonly feedback: ActionFeedbackState | undefined;
   readonly onSubmit: () => void;
 };

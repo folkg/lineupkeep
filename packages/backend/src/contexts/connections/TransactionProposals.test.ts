@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { eq } from "drizzle-orm";
 import { Array, Effect, Layer, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -10,8 +11,10 @@ import type { FantasyTeam, TeamId } from "./FantasyTeam.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
 import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
+import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
+import { providerTeams } from "./internal/ConnectionTables.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
@@ -24,11 +27,15 @@ import type {
   ProviderPlayerDetail,
   ProviderRoster,
   ProviderTeam,
+  ProviderTransaction,
+  ProviderTransactionPlayer,
+  ProviderTransactionTeam,
 } from "./Provider.ts";
 import { decodeProviderKey } from "./ProviderKey.ts";
-import type { PlayerRef } from "./QueryValues.ts";
+import type { CounterpartyRef, PlayerRef } from "./QueryValues.ts";
 import {
   ProposalContentInvalid,
+  ProposalItemDraft,
   ProposalSetAlreadySubmitted,
   ProposalSetExpired,
   ProposalSetNotFound,
@@ -908,6 +915,419 @@ it.effect("marks a lost response unknown, stops that team, and never retries", (
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("stages a trade with both rosters and the league's trade window checked", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTradeTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "trade",
+          counterparty: yield* counterpartyRef(tokens, "nhl.l.1.t.2"),
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Swap a center for the rival's wing.",
+        },
+      ],
+    });
+
+    assert.isTrue(result.created);
+    const item = Array.getUnsafe(result.items, 0);
+    assert.strictEqual(item.outcome, "accepted");
+    if (item.outcome !== "accepted") {
+      return;
+    }
+    assert.strictEqual(item.item.kind, "trade");
+    assert.strictEqual(item.item.counterparty?.name, "Blue Line");
+    assert.isTrue(item.item.counterparty?.ref.startsWith("r1."));
+    assert.deepStrictEqual(
+      item.item.adds.map((player) => [player.name, player.position, player.proTeam]),
+      [["Roster One", "C", "SYN"]],
+    );
+    assert.deepStrictEqual(
+      item.item.drops.map((player) => [player.name, player.position]),
+      [["Roster One", "C"]],
+    );
+    assert.isUndefined(item.item.trade);
+    assert.isFalse(includesText(result, "nhl.l.1.t.2"));
+    assert.isFalse(includesText(result, "nhl.p.90003"));
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect(
+  "refuses a trade whose window closed, whose counterparty is elsewhere, or whose player is on the wrong roster",
+  () =>
+    Effect.gen(function* () {
+      const proposals = yield* TransactionProposals;
+      const fake = yield* FakeProviderWorld;
+      const tokens = yield* QueryTokens;
+      const closed = yield* seedTradeTeams(fake, {
+        league: leagueFixture({
+          tradeEndDate: "2026-10-01",
+          currentDate: "2026-10-31",
+        }),
+      });
+      const closedRed = teamId(closed, "nhl.l.1.t.1");
+      const closedRefusals = yield* Effect.flip(
+        proposals.propose(owner, proposer, {
+          items: [
+            {
+              team: closedRed,
+              kind: "trade",
+              counterparty: yield* counterpartyRef(tokens, "nhl.l.1.t.2"),
+              adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+              drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+              reason: "A trade after the deadline.",
+            },
+          ],
+        }),
+      );
+      if (closedRefusals._tag !== "proposal.nothing_accepted") {
+        return;
+      }
+      assert.deepStrictEqual(
+        closedRefusals.refusals.map((refusal) => refusal.refusal),
+        ["trade_window_closed"],
+      );
+      assert.include(Array.getUnsafe(closedRefusals.refusals, 0).detail, "Item 1");
+    }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a trade counterparty in another league and a player on the wrong roster", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTradeTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+
+    const foreignRefusals = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "trade",
+            counterparty: yield* counterpartyRef(tokens, "nhl.l.2.t.1"),
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            reason: "A trade with another league.",
+          },
+        ],
+      }),
+    );
+    if (foreignRefusals._tag !== "proposal.nothing_accepted") {
+      return;
+    }
+    assert.deepStrictEqual(
+      foreignRefusals.refusals.map((refusal) => refusal.refusal),
+      ["trade_counterparty_invalid"],
+    );
+
+    const rosterRefusals = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "trade",
+            counterparty: yield* counterpartyRef(tokens, "nhl.l.1.t.2"),
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            reason: "Ask for a player the rival does not hold.",
+          },
+        ],
+      }),
+    );
+    if (rosterRefusals._tag !== "proposal.nothing_accepted") {
+      return;
+    }
+    assert.deepStrictEqual(
+      rosterRefusals.refusals.map((refusal) => refusal.refusal),
+      ["trade_player_not_rostered"],
+    );
+    assert.include(Array.getUnsafe(rosterRefusals.refusals, 0).detail, "Item 1");
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("proposes each trade once, records the provider key and time, and never retries", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTradeTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [yield* tradeDraft(tokens, redLine)],
+    });
+    const id = Array.getUnsafe(itemsOf(yield* proposals.read(owner, { set: result.set.id })), 0).id;
+
+    const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [id] });
+    const item = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(item.state, "pending");
+    assert.strictEqual(item.trade?.state, "pending");
+    assert.isDefined(item.trade?.requestedAt);
+    assert.include(item.execution?.detail ?? "", "The other manager decides");
+    assert.strictEqual((yield* fake.tradeProposalRequests).length, 1);
+    assert.isFalse(includesText(submitted, "nhl.l.1.pt.1"));
+
+    const repeated = yield* Effect.flip(
+      proposals.submit(owner, { set: result.set.id, include: [id] }),
+    );
+    assert.instanceOf(repeated, ProposalSetAlreadySubmitted);
+    assert.strictEqual((yield* fake.tradeProposalRequests).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("records an unknown trade outcome as unknown and never retries the propose", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTradeTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    yield* fake.setTradeProposalAction("lost_response");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [yield* tradeDraft(tokens, redLine)],
+    });
+    const id = Array.getUnsafe(itemsOf(yield* proposals.read(owner, { set: result.set.id })), 0).id;
+
+    const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [id] });
+    const item = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(item.state, "unknown");
+    assert.isUndefined(item.trade);
+    assert.include(item.execution?.detail ?? "", "Check the provider's trade page");
+    assert.strictEqual((yield* fake.tradeProposalRequests).length, 1);
+
+    yield* fake.setTradeProposalAction("accept");
+    const review = yield* proposals.revalidate(owner, { set: result.set.id });
+    assert.strictEqual(Array.getUnsafe(itemsOf(review), 0).state, "unknown");
+    assert.strictEqual((yield* fake.tradeProposalRequests).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("withdraws a pending trade from our record and from the provider's feed", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTradeTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [yield* tradeDraft(tokens, redLine)],
+    });
+    const id = Array.getUnsafe(itemsOf(yield* proposals.read(owner, { set: result.set.id })), 0).id;
+    yield* proposals.submit(owner, { set: result.set.id, include: [id] });
+
+    const pending = yield* proposals.revalidate(owner, { set: result.set.id });
+    const pendingItem = Array.getUnsafe(itemsOf(pending), 0);
+    assert.strictEqual(pendingItem.trade?.state, "pending");
+    assert.isDefined(pendingItem.trade?.proposedAt);
+
+    const withdrawn = yield* proposals.withdrawTrade(owner, { team: redLine, item: id });
+    assert.strictEqual(withdrawn.status, "withdrawn");
+    assert.deepStrictEqual(yield* fake.withdrawTradeRequests, ["nhl.l.1.pt.1"]);
+    const after = yield* proposals.read(owner, { set: result.set.id });
+    const afterItem = Array.getUnsafe(itemsOf(after), 0);
+    assert.strictEqual(afterItem.state, "withdrawn");
+    assert.strictEqual(afterItem.trade?.state, "withdrawn");
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("withdraws an offer created elsewhere from the provider's pending feed", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedTradeTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    yield* fake.setPendingTrades([pendingTrade]);
+
+    const offers = yield* proposals.readPendingOffers(owner, { team: redLine });
+    assert.strictEqual(offers.offers.length, 1);
+    const offer = Array.getUnsafe(offers.offers, 0);
+    assert.isTrue(offer.offerRef.startsWith("r1."));
+
+    const withdrawn = yield* proposals.withdrawTrade(owner, {
+      team: redLine,
+      offer: offer.offerRef,
+    });
+    assert.strictEqual(withdrawn.status, "withdrawn");
+    assert.deepStrictEqual(yield* fake.withdrawTradeRequests, ["nhl.l.1.pt.9"]);
+
+    yield* fake.setPendingTrades([]);
+    const notPending = yield* Effect.flip(
+      proposals.withdrawTrade(owner, { team: redLine, offer: offer.offerRef }),
+    );
+    assert.strictEqual(notPending._tag, "proposal.trade_not_pending");
+    assert.strictEqual((yield* fake.withdrawTradeRequests).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("recognises an accepted trade after we stopped watching", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTradeTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [yield* tradeDraft(tokens, redLine)],
+    });
+    const id = Array.getUnsafe(itemsOf(yield* proposals.read(owner, { set: result.set.id })), 0).id;
+    yield* proposals.submit(owner, { set: result.set.id, include: [id] });
+
+    yield* fake.setPendingTrades([]);
+    yield* fake.setCompletedTrades([acceptedTrade()]);
+    const refreshed = yield* proposals.revalidate(owner, { set: result.set.id });
+    const item = Array.getUnsafe(itemsOf(refreshed), 0);
+    assert.strictEqual(item.state, "accepted");
+    if (item.trade === undefined) {
+      return assert.fail("The accepted trade is missing its state");
+    }
+    assert.strictEqual(item.trade.state, "accepted");
+    assert.isDefined(item.trade.settledAt);
+    assert.include(item.trade.detail ?? "", "accepted");
+
+    const readAgain = yield* proposals.read(owner, { set: result.set.id });
+    assert.strictEqual(Array.getUnsafe(itemsOf(readAgain), 0).trade?.state, "accepted");
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a trade write when the team's connection changed after staging", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    yield* seedTradeTeams(fake);
+    const secondLink = Array.getUnsafe(
+      yield* connections.link(owner, [
+        { provider: decodeProviderKey("yahoo"), session: Redacted.make("A1=second-session") },
+      ]),
+      0,
+    );
+    yield* fake.setTeams([team("nhl.l.1.t.1", "Red Line"), team("nhl.l.1.t.2", "Blue Line")]);
+    const secondTeams = yield* connections.discoverTeams(owner, [{ id: secondLink.id }]);
+    const secondRed = secondTeams.find((entry) => entry.providerTeamKey === "nhl.l.1.t.1");
+    assert.isDefined(secondRed);
+    const thirdLink = Array.getUnsafe(
+      yield* connections.link(owner, [
+        { provider: decodeProviderKey("yahoo"), session: Redacted.make("A1=third-session") },
+      ]),
+      0,
+    );
+
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [yield* tradeDraft(tokens, secondRed.id)],
+    });
+    const id = Array.getUnsafe(itemsOf(yield* proposals.read(owner, { set: result.set.id })), 0).id;
+    yield* database
+      .update(providerTeams)
+      .set({ connectionId: thirdLink.id })
+      .where(eq(providerTeams.id, secondRed.id));
+
+    const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [id] });
+    const item = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(item.state, "skipped");
+    assert.include(item.execution?.detail ?? "", "different provider connection");
+    assert.strictEqual((yield* fake.tradeProposalRequests).length, 0);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+function seedTradeTeams(
+  fake: FakeProviderWorld["Service"],
+  options: { readonly league?: ProviderLeagueSettings } = {},
+): Effect.Effect<ReadonlyArray<FantasyTeam>, never, Connections> {
+  return Effect.gen(function* () {
+    const seeded = yield* seed(
+      fake,
+      [team("nhl.l.1.t.1", "Red Line"), team("nhl.l.1.t.2", "Blue Line")],
+      {
+        playerDetails,
+        ...(options.league === undefined ? {} : { league: options.league }),
+        leagueTeams: [
+          leagueTeam("nhl.l.1.t.1", "Red Line"),
+          leagueTeam("nhl.l.1.t.2", "Blue Line"),
+        ],
+      },
+    );
+    yield* fake.setTeamRoster(
+      "nhl.l.1.t.2",
+      rosterFixture(["nhl.p.90003", "nhl.p.90004"], "nhl.l.1.t.2"),
+    );
+    return seeded;
+  }).pipe(Effect.orDie);
+}
+
+function leagueTeam(providerTeamKey: string, name: string): ProviderLeagueTeam {
+  return {
+    providerTeamKey,
+    providerLeagueKey: providerTeamKey.slice(0, providerTeamKey.lastIndexOf(".t.")),
+    name,
+    acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+  };
+}
+
+function counterpartyRef(
+  tokens: QueryTokens["Service"],
+  teamKey: string,
+): Effect.Effect<CounterpartyRef> {
+  return tokens.sealCounterpartyRef({
+    userId: owner,
+    leagueKey: "nhl.l.1",
+    teamKey,
+  });
+}
+
+function tradeDraft(
+  tokens: QueryTokens["Service"],
+  team: TeamId,
+): Effect.Effect<ProposalItemDraft> {
+  return Effect.gen(function* () {
+    return {
+      team,
+      kind: "trade" as const,
+      counterparty: yield* counterpartyRef(tokens, "nhl.l.1.t.2"),
+      adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+      drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+      reason: "Swap a center for the rival's wing.",
+    } satisfies ProposalItemDraft;
+  });
+}
+
+function acceptedTrade(): ProviderTransaction {
+  const own: ProviderTransactionTeam = { providerTeamKey: "nhl.l.1.t.1", name: "Red Line" };
+  const rival: ProviderTransactionTeam = { providerTeamKey: "nhl.l.1.t.2", name: "Blue Line" };
+  const movement = (
+    providerPlayerKey: string,
+    from: ProviderTransactionTeam,
+    to: ProviderTransactionTeam,
+  ): ProviderTransactionPlayer => ({
+    providerPlayerKey,
+    movement: { kind: "trade", from, to },
+    name: undefined,
+    primaryPosition: undefined,
+    displayPosition: undefined,
+    eligiblePositions: undefined,
+    proTeam: undefined,
+  });
+  return {
+    transactionKey: "nhl.l.1.tr.3",
+    occurredAt: "2026-11-01T00:00:00.000Z",
+    type: "trade",
+    status: "successful",
+    parties: undefined,
+    teams: [own, rival],
+    picks: [],
+    players: [movement("nhl.p.90001", own, rival), movement("nhl.p.90003", rival, own)],
+    incomplete: undefined,
+  };
+}
+
 function seedTwoTeams(
   fake: FakeProviderWorld["Service"],
 ): Effect.Effect<ReadonlyArray<FantasyTeam>, never, Connections> {
@@ -948,6 +1368,7 @@ const TestLayer = TransactionProposalsLive.pipe(
   Layer.provideMerge(ConnectionsLive),
   Layer.provideMerge(QueryRepositoryTest),
   Layer.provideMerge(ConnectionRepositoryTest),
+  Layer.provideMerge(ConnectionsDatabaseTest),
   Layer.provideMerge(ProviderFakeTest),
   Layer.provide(EncryptionTestLayer),
   Layer.provideMerge(QueryTokensTest),
@@ -1128,6 +1549,7 @@ const rival = { providerTeamKey: "nhl.l.1.t.2", name: "Blue Line" };
 const mine = { providerTeamKey: "nhl.l.1.t.1", name: "Red Line" };
 
 const pendingTrade: ProviderPendingTrade = {
+  transactionKey: "nhl.l.1.pt.9",
   proposedAt: "2026-10-30T18:00:00.000Z",
   note: "Two for two.",
   canRespond: true,

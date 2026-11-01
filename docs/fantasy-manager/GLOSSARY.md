@@ -234,11 +234,11 @@ One team's proposed transaction inside a proposal set: the players to add, the p
 _Avoid_: Proposal when one item is meant, transaction when it is not yet executed
 
 **Proposal item kind**:
-Which executable shape a proposal item takes: a free-agent add (players added, no bid), a waiver claim (players added with a FAAB bid), or a drop (players dropped only). A waiver claim is the only kind that spends a budget, so it is never presented as a free-agent add.
+Which shape a proposal item takes: a free-agent add (players added, no bid), a waiver claim (players added with a FAAB bid), a drop (players dropped only), or a trade (players going out and coming back with one counterparty team, no bid, no draft picks). A waiver claim is the only kind that spends a budget, so it is never presented as a free-agent add. A trade is an offer to another manager, not a change either manager has made.
 _Avoid_: Claim when the bid is not part of it, move, action
 
 **Proposal item state**:
-Where a proposal item sits in its lifecycle: proposed (its initial state), executed (the provider accepted the whole move), pending (a waiver claim the provider has not processed yet), failed (an attempt was made and did not succeed), skipped (a person left it out, it was stale at submit, or an earlier move stopped its team), or unknown (a request that may or may not have applied). Staleness is not a state: a stale item keeps its state and carries the reason it no longer matches current state.
+Where a proposal item sits in its lifecycle: proposed (its initial state), executed (the provider accepted the whole move), pending (a waiver claim the provider has not processed, or a trade offer awaiting the other manager), failed (an attempt was made and did not succeed), skipped (a person left it out, it was stale at submit, an earlier move stopped its team, or a team's connection changed), unknown (a request that may or may not have applied), or, for a trade, accepted (the counterparty accepted it), withdrawn (we withdrew it before acceptance), or expired (the provider no longer lists it and did not complete it). Staleness is not a state: a stale item keeps its state and carries the reason it no longer matches current state.
 _Avoid_: Stale as a state, rejected when no attempt was made, done when a waiver is still pending
 
 **Proposal staleness**:
@@ -270,5 +270,13 @@ The grouped view of one proposal set that presents each team, the reason beside 
 _Avoid_: Approvals, cart, confirmation screen
 
 **Pending trade offer**:
-A trade the provider reports as proposed and awaiting a response on a team the account manages, carrying both parties, both ends of every player, any traded draft picks, and whether this session can respond. It is read-only in this product, and another manager's offer is never visible.
+A trade the provider reports as proposed and awaiting a response on a team the account manages, carrying both parties, both ends of every player, any traded draft picks, and whether this session can respond. An offer this account made can be withdrawn before acceptance from either our own record or the provider's pending feed; accepting, rejecting, voting on, or countering an offer belongs to the other manager or the league. Another manager's offer is never visible.
 _Avoid_: Pending trade when no offer awaits a response, proposal when the provider's own offer is meant
+
+**Trade proposal**:
+One proposal item that offers named players from one of the account's teams to one counterparty team in the same league, for named players coming back. It carries the counterparty team and manager, both sides of the move, the required reason, and no draft pick. The league's trade window and review rule are read beside it. The product proposes and withdraws; it never accepts, rejects, votes, counters, or selects a pick.
+_Avoid_: Trade request when the item is meant, swap, trade offer when the stored item is meant
+
+**Trade proposal state**:
+Where a trade proposal sits: pending (the provider lists the offer and the counterparty has not accepted), accepted (the provider publishes a completed trade matching it), withdrawn (we deleted it before acceptance and confirmed it is no longer pending), or expired (the provider no longer lists it and it is not among completed trades; the provider publishes no ended record, so a declined or expired offer reads the same). The state is read from the provider for pending, accepted, and expired, and from our confirmed withdrawal for withdrawn.
+_Avoid_: Done when the other manager has not accepted, cancelled when the provider may have accepted it

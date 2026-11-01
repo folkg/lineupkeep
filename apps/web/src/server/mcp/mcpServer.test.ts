@@ -1323,6 +1323,7 @@ const unavailableProposals: TransactionProposalsShape = {
   read: () => Effect.die(new Error("proposals unavailable")),
   submit: () => Effect.die(new Error("proposals unavailable")),
   readPendingOffers: () => Effect.die(new Error("proposals unavailable")),
+  withdrawTrade: () => Effect.die(new Error("proposals unavailable")),
 };
 const unavailableLineups: LineupRunsShape = {
   submit: () => Effect.die(new Error("lineups unavailable")),

@@ -30,7 +30,7 @@ Status: product grilling and independent Lineupkeep repository/brand preparation
 
 Fresh Effect domain implementation on a stable approved rush-hour baseline. Borrow API knowledge and lessons, not AutoCoach implementation code. Never migrate users, history, preferences, credentials, or secrets. Leave the old application intact.
 
-No server LLM, agent-code runner, MCP-initiated transaction execution, trade writes, custom query language, arbitrary URL proxy, provider recommendations/premium optimization, or general-purpose hosted browser infrastructure. The scoped, owner-bound provider login browser in ARCHITECTURE §9 is the exception; it is not a proxy or CDP service. Agent-proposed player transactions are reviewed and submitted once by a signed-in person on the web; no MCP tool executes, accepts, or spends anything.
+No server LLM, agent-code runner, MCP-initiated transaction execution, custom query language, arbitrary URL proxy, provider recommendations/premium optimization, or general-purpose hosted browser infrastructure. The scoped, owner-bound provider login browser in ARCHITECTURE §9 is the exception; it is not a proxy or CDP service. Agent-proposed player transactions are reviewed and submitted once by a signed-in person on the web; no MCP tool executes, accepts, or spends anything. A person may propose and withdraw a player-only trade from that review, but accepting, rejecting, voting, and countering remain the other managers' or the league's.
 
 ### Generic contracts and data
 

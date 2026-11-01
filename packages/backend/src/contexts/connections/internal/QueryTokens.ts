@@ -17,6 +17,7 @@ import {
   QueryCursorInvalid,
   QueryReferenceInvalid,
   StatRef,
+  TradeOfferRef,
   queryCursorTtlMillis,
 } from "#contexts/connections/QueryValues.ts";
 import type { QueryCursorInvalidReason } from "#contexts/connections/QueryValues.ts";
@@ -47,6 +48,14 @@ export type QueryTokensShape = {
     readonly leagueKey: string;
     readonly playerKeys: ReadonlyArray<string>;
   }) => Effect.Effect<ReadonlyArray<PlayerRef>>;
+
+  readonly sealPlayerRefGroups: (input: {
+    readonly userId: UserId;
+    readonly groups: ReadonlyArray<{
+      readonly leagueKey: string;
+      readonly playerKeys: ReadonlyArray<string>;
+    }>;
+  }) => Effect.Effect<ReadonlyArray<ReadonlyArray<PlayerRef>>>;
 
   readonly openPlayerRef: (input: {
     readonly userId: UserId;
@@ -80,10 +89,52 @@ export type QueryTokensShape = {
     readonly teamKeys: ReadonlyArray<string>;
   }) => Effect.Effect<ReadonlyArray<CounterpartyRef>>;
 
+  readonly sealCounterpartyRefGroups: (input: {
+    readonly userId: UserId;
+    readonly groups: ReadonlyArray<{
+      readonly leagueKey: string;
+      readonly teamKeys: ReadonlyArray<string>;
+    }>;
+  }) => Effect.Effect<ReadonlyArray<ReadonlyArray<CounterpartyRef>>>;
+
   readonly openCounterpartyRef: (input: {
     readonly userId: UserId;
     readonly leagueKey: string;
     readonly ref: CounterpartyRef;
+  }) => Effect.Effect<string, QueryReferenceInvalid>;
+
+  readonly openCounterpartyRefGroups: (input: {
+    readonly userId: UserId;
+    readonly groups: ReadonlyArray<{
+      readonly leagueKey: string;
+      readonly refs: ReadonlyArray<CounterpartyRef>;
+    }>;
+  }) => Effect.Effect<ReadonlyArray<ReadonlyArray<string | undefined>>>;
+
+  readonly sealTradeOfferRef: (input: {
+    readonly userId: UserId;
+    readonly leagueKey: string;
+    readonly transactionKey: string;
+  }) => Effect.Effect<TradeOfferRef>;
+
+  readonly sealTradeOfferRefs: (input: {
+    readonly userId: UserId;
+    readonly leagueKey: string;
+    readonly transactionKeys: ReadonlyArray<string>;
+  }) => Effect.Effect<ReadonlyArray<TradeOfferRef>>;
+
+  readonly sealTradeOfferRefGroups: (input: {
+    readonly userId: UserId;
+    readonly groups: ReadonlyArray<{
+      readonly leagueKey: string;
+      readonly transactionKeys: ReadonlyArray<string>;
+    }>;
+  }) => Effect.Effect<ReadonlyArray<ReadonlyArray<TradeOfferRef>>>;
+
+  readonly openTradeOfferRef: (input: {
+    readonly userId: UserId;
+    readonly leagueKey: string;
+    readonly ref: TradeOfferRef;
   }) => Effect.Effect<string, QueryReferenceInvalid>;
 
   readonly statRef: (input: {
@@ -156,6 +207,22 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
             ),
           ),
         ).pipe(Effect.map((values) => values.map((value) => Schema.decodeSync(PlayerRef)(value)))),
+      sealPlayerRefGroups: ({ userId, groups }) =>
+        Effect.promise(() =>
+          Promise.all(
+            groups.map((group) =>
+              Promise.all(
+                group.playerKeys.map((playerKey) =>
+                  sealReference(keys.aes, "player", userId, group.leagueKey, playerKey),
+                ),
+              ),
+            ),
+          ),
+        ).pipe(
+          Effect.map((groupValues) =>
+            groupValues.map((values) => values.map((value) => Schema.decodeSync(PlayerRef)(value))),
+          ),
+        ),
       openPlayerRef: ({ userId, leagueKey, ref }) =>
         Effect.tryPromise({
           try: () => openReference(keys.aes, "player", userId, leagueKey, ref),
@@ -197,9 +264,78 @@ function makeQueryTokens(secret: string): Effect.Effect<QueryTokensShape> {
         ).pipe(
           Effect.map((values) => values.map((value) => Schema.decodeSync(CounterpartyRef)(value))),
         ),
+      sealCounterpartyRefGroups: ({ userId, groups }) =>
+        Effect.promise(() =>
+          Promise.all(
+            groups.map((group) =>
+              Promise.all(
+                group.teamKeys.map((teamKey) =>
+                  sealReference(keys.aes, "counterparty", userId, group.leagueKey, teamKey),
+                ),
+              ),
+            ),
+          ),
+        ).pipe(
+          Effect.map((groupValues) =>
+            groupValues.map((values) =>
+              values.map((value) => Schema.decodeSync(CounterpartyRef)(value)),
+            ),
+          ),
+        ),
       openCounterpartyRef: ({ userId, leagueKey, ref }) =>
         Effect.tryPromise({
           try: () => openReference(keys.aes, "counterparty", userId, leagueKey, ref),
+          catch: () => QueryReferenceInvalid.make({ reason: "invalid" }),
+        }),
+      openCounterpartyRefGroups: ({ userId, groups }) =>
+        Effect.promise(() =>
+          Promise.all(
+            groups.map((group) =>
+              Promise.all(
+                group.refs.map((ref) =>
+                  openReference(keys.aes, "counterparty", userId, group.leagueKey, ref).catch(
+                    () => undefined,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      sealTradeOfferRef: ({ userId, leagueKey, transactionKey }) =>
+        Effect.promise(() =>
+          sealReference(keys.aes, "trade_offer", userId, leagueKey, transactionKey),
+        ).pipe(Effect.map((value) => Schema.decodeSync(TradeOfferRef)(value))),
+      sealTradeOfferRefs: ({ userId, leagueKey, transactionKeys }) =>
+        Effect.promise(() =>
+          Promise.all(
+            transactionKeys.map((transactionKey) =>
+              sealReference(keys.aes, "trade_offer", userId, leagueKey, transactionKey),
+            ),
+          ),
+        ).pipe(
+          Effect.map((values) => values.map((value) => Schema.decodeSync(TradeOfferRef)(value))),
+        ),
+      sealTradeOfferRefGroups: ({ userId, groups }) =>
+        Effect.promise(() =>
+          Promise.all(
+            groups.map((group) =>
+              Promise.all(
+                group.transactionKeys.map((transactionKey) =>
+                  sealReference(keys.aes, "trade_offer", userId, group.leagueKey, transactionKey),
+                ),
+              ),
+            ),
+          ),
+        ).pipe(
+          Effect.map((groupValues) =>
+            groupValues.map((values) =>
+              values.map((value) => Schema.decodeSync(TradeOfferRef)(value)),
+            ),
+          ),
+        ),
+      openTradeOfferRef: ({ userId, leagueKey, ref }) =>
+        Effect.tryPromise({
+          try: () => openReference(keys.aes, "trade_offer", userId, leagueKey, ref),
           catch: () => QueryReferenceInvalid.make({ reason: "invalid" }),
         }),
       statRef: ({ leagueKey, statId }) =>
@@ -317,7 +453,7 @@ function openCursor(
 
 function sealReference(
   key: CryptoKey,
-  purpose: "player" | "counterparty",
+  purpose: "player" | "counterparty" | "trade_offer",
   userId: string,
   leagueKey: string,
   value: string,
@@ -339,7 +475,7 @@ function sealReference(
 
 function openReference(
   key: CryptoKey,
-  purpose: "player" | "counterparty",
+  purpose: "player" | "counterparty" | "trade_offer",
   userId: string,
   leagueKey: string,
   ref: string,
@@ -383,7 +519,7 @@ function statRef(key: CryptoKey, leagueKey: string, statId: number): Promise<Sta
 }
 
 function referenceAad(
-  purpose: "player" | "counterparty",
+  purpose: "player" | "counterparty" | "trade_offer",
   userId: string,
   leagueKey: string,
 ): Uint8Array {

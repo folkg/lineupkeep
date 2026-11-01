@@ -18,6 +18,7 @@ const ProviderOperation = Schema.Literals([
   "search_players",
   "read_matchups",
   "read_transactions",
+  "read_completed_trades",
   "read_pending_trades",
   "read_draft_results",
   "read_league_teams",
@@ -25,6 +26,8 @@ const ProviderOperation = Schema.Literals([
   "apply_native_action",
   "apply_explicit_assignments",
   "apply_transaction",
+  "propose_trade",
+  "withdraw_trade",
   "apply_reserve_move",
 ]);
 export type ProviderOperation = typeof ProviderOperation.Type;
@@ -251,6 +254,24 @@ export type ProviderShape = {
     },
   ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
 
+  readonly proposeTrade: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKey: string;
+      readonly counterpartyTeamKey: string;
+      readonly send: ReadonlyArray<string>;
+      readonly receive: ReadonlyArray<string>;
+      readonly note: string | undefined;
+    },
+  ) => Effect.Effect<
+    ProviderTradeProposalResult,
+    ProviderSessionRejected | ProviderResponseInvalid
+  >;
+
+  readonly withdrawTrade: (
+    input: ProviderSessionMaterial & { readonly transactionKey: string },
+  ) => Effect.Effect<ProviderWriteResult, ProviderSessionRejected | ProviderResponseInvalid>;
+
   readonly applyReserveMove: (
     input: ProviderSessionMaterial & {
       readonly providerTeamKey: string;
@@ -288,6 +309,14 @@ export type ProviderShape = {
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
       readonly providerTeamKey: string | undefined;
+      readonly limit: number;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderTransaction>, ProviderReadFailure>;
+
+  readonly readCompletedTrades: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerTeamKey: string;
       readonly limit: number;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderTransaction>, ProviderReadFailure>;
@@ -366,7 +395,7 @@ type ProviderStatModifier = {
   readonly points: string;
 };
 
-export type ProviderTradeRatification = "vote" | "commissioner" | "unknown";
+export type ProviderTradeRatification = "vote" | "commissioner" | "none" | "unknown";
 
 type ProviderRosterChangeRule = "same_day" | "next_day" | "weekly_lock";
 
@@ -422,6 +451,20 @@ export type ProviderLineupAssignment = {
 
 export type ProviderWriteResult =
   | { readonly status: "accepted" }
+  | {
+      readonly status: "rejected";
+      readonly reason: "invalid_request" | "not_found" | "premium_required";
+      readonly detail?: string;
+    }
+  | {
+      readonly status: "not_sent";
+      readonly reason: "session_incomplete" | "request_failed";
+      readonly detail?: string;
+    }
+  | { readonly status: "unknown" };
+
+export type ProviderTradeProposalResult =
+  | { readonly status: "accepted"; readonly transactionKey: string }
   | {
       readonly status: "rejected";
       readonly reason: "invalid_request" | "not_found" | "premium_required";
@@ -719,6 +762,7 @@ type ProviderTransactionPick = {
 };
 
 export type ProviderTransaction = {
+  readonly transactionKey: string | undefined;
   readonly occurredAt: string;
   readonly type: "add" | "drop" | "add_drop" | "trade" | "commissioner" | "other";
   readonly status: string | undefined;
@@ -730,6 +774,7 @@ export type ProviderTransaction = {
 };
 
 export type ProviderPendingTrade = {
+  readonly transactionKey: string;
   readonly proposedAt: string;
   readonly note: string | undefined;
   readonly canRespond: boolean;
@@ -762,6 +807,7 @@ export type ProviderLeagueTeam = {
   readonly providerTeamKey: string;
   readonly providerLeagueKey: string;
   readonly name: string;
+  readonly managerName?: string;
   readonly acquisitionUsage: ProviderAcquisitionUsage;
   readonly remainingBudget?: number | undefined;
 };

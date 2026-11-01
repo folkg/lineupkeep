@@ -3,11 +3,12 @@ import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
-import { ProviderKey } from "#contexts/connections/Connection.ts";
+import { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
 import { FantasyLeague, FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
   ProposalItemId,
   ProposalItemKind,
+  ProposalItemState,
   ProposalOutcome,
   ProposalPersistenceFailed,
   ProposalSetId,
@@ -26,6 +27,7 @@ import type {
   ProposalTeamRecord,
   StoredProposalPlayer,
   StoredProposalStaleness,
+  StoredProposalTrade,
   StoredReserveMove,
 } from "./TransactionProposalRecord.ts";
 import {
@@ -39,9 +41,12 @@ import {
 
 export type ProposalItemCommand = {
   readonly team: TeamId;
+  readonly connection: ConnectionId;
   readonly kind: ProposalItemKind;
   readonly adds: ReadonlyArray<StoredProposalPlayer>;
   readonly drops: ReadonlyArray<StoredProposalPlayer>;
+  readonly counterpartyKey: string | undefined;
+  readonly counterpartyName: string | undefined;
   readonly bid: number | undefined;
   readonly reason: string;
 };
@@ -59,6 +64,8 @@ export type ProposalItemChange = {
   readonly adds: ReadonlyArray<StoredProposalPlayer>;
   readonly drops: ReadonlyArray<StoredProposalPlayer>;
   readonly reserveMove?: StoredReserveMove;
+  readonly trade?: StoredProposalTrade;
+  readonly state?: ProposalItemState;
 };
 
 export type ProposalStepCommand = {
@@ -72,12 +79,20 @@ export type ProposalStepCommand = {
   readonly decidedAt: DateTime.Utc;
 };
 
+type ProposalTradeCommand = {
+  readonly itemId: ProposalItemId;
+  readonly state: ProposalItemState;
+  readonly trade: StoredProposalTrade;
+  readonly at: DateTime.Utc;
+};
+
 export type ProposalOutcomeCommand = {
   readonly itemId: ProposalItemId;
   readonly outcome: ProposalOutcome;
   readonly detail: string | undefined;
   readonly at: DateTime.Utc;
   readonly steps: ReadonlyArray<ProposalStepCommand>;
+  readonly trade?: StoredProposalTrade;
 };
 
 export class TransactionProposalRepository extends Context.Service<TransactionProposalRepository>()(
@@ -140,9 +155,12 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                   position: index,
                   userId: input.userId,
                   teamId: item.team,
+                  connectionId: item.connection,
                   kind: item.kind,
                   addPlayers: item.adds,
                   dropPlayers: item.drops,
+                  counterpartyTeamKey: item.counterpartyKey ?? null,
+                  counterpartyName: item.counterpartyName ?? null,
                   bid: item.bid ?? null,
                   reason: item.reason,
                   state: "proposed" as const,
@@ -217,6 +235,25 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         return { set, items, steps };
       });
 
+      const loadItem = Effect.fn("TransactionProposalRepository.loadItem")(function* (
+        userId: UserId,
+        itemId: ProposalItemId,
+      ) {
+        const rows = yield* database
+          .select()
+          .from(transactionProposalItems)
+          .where(
+            and(
+              eq(transactionProposalItems.userId, userId),
+              eq(transactionProposalItems.id, itemId),
+            ),
+          )
+          .limit(1)
+          .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        const row = rows[0];
+        return row === undefined ? undefined : yield* decodeItem(row);
+      });
+
       const saveChecks = Effect.fn("TransactionProposalRepository.saveChecks")(function* (input: {
         readonly userId: UserId;
         readonly setId: ProposalSetId;
@@ -251,6 +288,8 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                       adds: change.adds,
                       drops: change.drops,
                       staleness: change.staleness,
+                      ...(change.trade === undefined ? {} : { trade: change.trade }),
+                      ...(change.state === undefined ? {} : { state: change.state }),
                       updatedAt: input.at,
                     });
                   }
@@ -288,6 +327,50 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
           .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
         return yield* decodeTeams(rows);
       });
+
+      const saveTradeStates = Effect.fn("TransactionProposalRepository.saveTradeStates")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly changes: ReadonlyArray<ProposalTradeCommand>;
+        }) {
+          const changes = [...input.changes];
+          if (!Array.isArrayNonEmpty(changes)) {
+            return [];
+          }
+          const byId = new Map(changes.map((change) => [change.itemId, change] as const));
+          const ids = [...byId.keys()];
+          if (!Array.isArrayNonEmpty(ids)) {
+            return [];
+          }
+          return yield* database
+            .transaction((tx) =>
+              mutateRows(tx, transactionProposalItems, {
+                where: eq(transactionProposalItems.userId, input.userId),
+                ids,
+                codec: ProposalItemRow,
+                plan: (locked) =>
+                  Effect.sync(() => {
+                    const planned: Array<ProposalItemRecord> = [];
+                    for (const id of ids) {
+                      const change = byId.get(id);
+                      const record = locked.get(id);
+                      if (change === undefined || record === undefined) {
+                        continue;
+                      }
+                      planned.push({
+                        ...record,
+                        state: change.state,
+                        trade: change.trade,
+                        updatedAt: change.at,
+                      });
+                    }
+                    return planned;
+                  }),
+              }),
+            )
+            .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        },
+      );
 
       const claimSubmission = Effect.fn("TransactionProposalRepository.claimSubmission")(
         function* (input: {
@@ -357,6 +440,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                           outcome: outcome.outcome,
                           outcomeDetail: outcome.detail,
                           outcomeAt: outcome.at,
+                          ...(outcome.trade === undefined ? {} : { trade: outcome.trade }),
                           updatedAt: outcome.at,
                         });
                       }
@@ -447,9 +531,11 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
       return {
         create,
         load,
+        loadItem,
         listTeams,
         loadTeams,
         saveChecks,
+        saveTradeStates,
         claimSubmission,
         recordItemOutcomes,
         completeSubmission,
@@ -504,6 +590,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
 
 const teamColumns = {
   id: providerTeams.id,
+  connectionId: providerTeams.connectionId,
   name: providerTeams.name,
   provider: providerTeams.provider,
   providerLeagueKey: providerTeams.providerLeagueKey,
@@ -514,6 +601,7 @@ const teamColumns = {
 
 const ProposalTeamSelected = Schema.Struct({
   id: Schema.String,
+  connectionId: Schema.String,
   name: Schema.NonEmptyString,
   provider: Schema.String,
   providerLeagueKey: Schema.NonEmptyString,
@@ -532,6 +620,9 @@ function decodeTeams(
       );
       return {
         id: yield* Schema.decodeEffect(TeamId)(team.id),
+        connection: yield* Schema.decodeEffect(ConnectionId)(team.connectionId).pipe(
+          Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+        ),
         name: team.name,
         provider: yield* Schema.decodeEffect(ProviderKey)(team.provider),
         providerLeagueKey: team.providerLeagueKey,

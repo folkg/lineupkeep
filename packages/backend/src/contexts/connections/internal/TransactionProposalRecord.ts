@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
-import { ProviderKey } from "#contexts/connections/Connection.ts";
+import { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
 import { FantasyLeague, FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
   ProposalItemId,
@@ -12,6 +12,7 @@ import {
   ProposalSetProvenance,
   ProposalStaleCode,
   ProposalStalenessStatus,
+  ProposalTradeState,
 } from "#contexts/connections/TransactionProposals.ts";
 
 export const StoredProposalPlayer = Schema.Struct({
@@ -52,15 +53,28 @@ export const ProposalSetRecord = Schema.Struct({
 }).pipe(Schema.toType);
 export type ProposalSetRecord = typeof ProposalSetRecord.Type;
 
+export const StoredProposalTrade = Schema.Struct({
+  providerKey: Schema.NonEmptyString,
+  state: ProposalTradeState,
+  requestedAt: Schema.DateTimeUtc,
+  proposedAt: Schema.optional(Schema.DateTimeUtc),
+  settledAt: Schema.optional(Schema.DateTimeUtc),
+  detail: Schema.optional(Schema.NonEmptyString),
+}).pipe(Schema.toType);
+export type StoredProposalTrade = typeof StoredProposalTrade.Type;
+
 export const ProposalItemRecord = Schema.Struct({
   id: ProposalItemId,
   setId: ProposalSetId,
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   userId: UserId,
   team: TeamId,
+  connection: ConnectionId,
   kind: ProposalItemKind,
   adds: Schema.Array(StoredProposalPlayer),
   drops: Schema.Array(StoredProposalPlayer),
+  counterpartyKey: Schema.optional(Schema.NonEmptyString),
+  counterpartyName: Schema.optional(Schema.NonEmptyString),
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
@@ -68,6 +82,7 @@ export const ProposalItemRecord = Schema.Struct({
   outcome: Schema.optional(ProposalOutcome),
   outcomeDetail: Schema.optional(Schema.NonEmptyString),
   outcomeAt: Schema.optional(Schema.DateTimeUtc),
+  trade: Schema.optional(StoredProposalTrade),
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
 }).pipe(Schema.toType);
@@ -99,6 +114,7 @@ export type StoredReserveMove = {
 
 export type ProposalTeamRecord = {
   readonly id: TeamId;
+  readonly connection: ConnectionId;
   readonly name: string;
   readonly provider: ProviderKey;
   readonly providerLeagueKey: string;

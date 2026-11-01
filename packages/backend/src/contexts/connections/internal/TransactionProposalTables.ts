@@ -12,6 +12,7 @@ import {
 import { Effect, Schema, SchemaParser, SchemaTransformation } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
+import { ConnectionId } from "#contexts/connections/Connection.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
   ProposalItemId,
@@ -20,6 +21,7 @@ import {
   ProposalOutcome,
   ProposalSetId,
   ProposalStalenessStatus,
+  ProposalTradeState,
 } from "#contexts/connections/TransactionProposals.ts";
 
 import {
@@ -65,13 +67,28 @@ export const transactionProposalItems = pgTable(
     position: integer("position").notNull(),
     userId: text("user_id").notNull(),
     teamId: uuid("team_id").notNull(),
-    kind: text("kind", { enum: ["free_agent_add", "waiver_claim", "drop"] }).notNull(),
+    connectionId: text("connection_id").notNull(),
+    kind: text("kind", {
+      enum: ["free_agent_add", "waiver_claim", "drop", "trade"],
+    }).notNull(),
     addPlayers: jsonb("add_players").notNull(),
     dropPlayers: jsonb("drop_players").notNull(),
+    counterpartyTeamKey: text("counterparty_team_key"),
+    counterpartyName: text("counterparty_name"),
     bid: integer("bid"),
     reason: text("reason").notNull(),
     state: text("state", {
-      enum: ["proposed", "executed", "pending", "failed", "skipped", "unknown"],
+      enum: [
+        "proposed",
+        "executed",
+        "pending",
+        "failed",
+        "skipped",
+        "unknown",
+        "accepted",
+        "withdrawn",
+        "expired",
+      ],
     }).notNull(),
     staleness: text("staleness", { enum: ["unchecked", "current", "stale"] }).notNull(),
     staleReasons: jsonb("stale_reasons").notNull(),
@@ -81,6 +98,14 @@ export const transactionProposalItems = pgTable(
     }),
     outcomeDetail: text("outcome_detail"),
     outcomeAt: timestamp("outcome_at", { withTimezone: true }),
+    tradeProviderKey: text("trade_provider_key"),
+    tradeState: text("trade_state", {
+      enum: ["pending", "accepted", "withdrawn", "expired"],
+    }),
+    tradeRequestedAt: timestamp("trade_requested_at", { withTimezone: true }),
+    tradeProposedAt: timestamp("trade_proposed_at", { withTimezone: true }),
+    tradeSettledAt: timestamp("trade_settled_at", { withTimezone: true }),
+    tradeDetail: text("trade_detail"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -192,9 +217,12 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   userId: UserId,
   teamId: TeamId,
+  connectionId: ConnectionId,
   kind: ProposalItemKind,
   addPlayers: Schema.Unknown,
   dropPlayers: Schema.Unknown,
+  counterpartyTeamKey: Schema.NullOr(Schema.NonEmptyString),
+  counterpartyName: Schema.NullOr(Schema.NonEmptyString),
   bid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
@@ -204,6 +232,12 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   outcome: Schema.NullOr(ProposalOutcome),
   outcomeDetail: Schema.NullOr(Schema.NonEmptyString),
   outcomeAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  tradeProviderKey: Schema.NullOr(Schema.NonEmptyString),
+  tradeState: Schema.NullOr(ProposalTradeState),
+  tradeRequestedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  tradeProposedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  tradeSettledAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  tradeDetail: Schema.NullOr(Schema.NonEmptyString),
   createdAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
 });
@@ -238,15 +272,38 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
               new Error("Proposal item staleness must match whether it carries stale reasons"),
             );
           }
+          if (row.kind === "trade" && row.counterpartyTeamKey === null) {
+            return yield* Effect.die(new Error("A trade proposal item requires a counterparty"));
+          }
+          if (row.kind !== "trade" && row.counterpartyTeamKey !== null) {
+            return yield* Effect.die(
+              new Error("Only a trade proposal item can carry a counterparty"),
+            );
+          }
+          if ((row.tradeProviderKey === null) !== (row.tradeState === null)) {
+            return yield* Effect.die(
+              new Error("A trade provider key and trade state must appear together"),
+            );
+          }
+          if (row.tradeState === null && row.tradeRequestedAt !== null) {
+            return yield* Effect.die(
+              new Error("A trade without a provider key cannot carry a request time"),
+            );
+          }
           return {
             id: row.id,
             setId: row.setId,
             position: row.position,
             userId: row.userId,
             team: row.teamId,
+            connection: row.connectionId,
             kind: row.kind,
             adds,
             drops,
+            ...(row.counterpartyTeamKey === null
+              ? {}
+              : { counterpartyKey: row.counterpartyTeamKey }),
+            ...(row.counterpartyName === null ? {} : { counterpartyName: row.counterpartyName }),
             ...(row.bid === null ? {} : { bid: row.bid }),
             reason: row.reason,
             state: row.state,
@@ -258,6 +315,18 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             ...(row.outcome === null ? {} : { outcome: row.outcome }),
             ...(row.outcomeDetail === null ? {} : { outcomeDetail: row.outcomeDetail }),
             ...(row.outcomeAt === null ? {} : { outcomeAt: row.outcomeAt }),
+            ...(row.tradeProviderKey === null || row.tradeState === null
+              ? {}
+              : {
+                  trade: {
+                    providerKey: row.tradeProviderKey,
+                    state: row.tradeState,
+                    requestedAt: row.tradeRequestedAt ?? row.createdAt,
+                    ...(row.tradeProposedAt === null ? {} : { proposedAt: row.tradeProposedAt }),
+                    ...(row.tradeSettledAt === null ? {} : { settledAt: row.tradeSettledAt }),
+                    ...(row.tradeDetail === null ? {} : { detail: row.tradeDetail }),
+                  },
+                }),
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
           };
@@ -279,9 +348,12 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             position: record.position,
             userId: record.userId,
             teamId: record.team,
+            connectionId: record.connection,
             kind: record.kind,
             addPlayers: adds,
             dropPlayers: drops,
+            counterpartyTeamKey: record.counterpartyKey ?? null,
+            counterpartyName: record.counterpartyName ?? null,
             bid: record.bid ?? null,
             reason: record.reason,
             state: record.state,
@@ -291,6 +363,12 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             outcome: record.outcome ?? null,
             outcomeDetail: record.outcomeDetail ?? null,
             outcomeAt: record.outcomeAt ?? null,
+            tradeProviderKey: record.trade?.providerKey ?? null,
+            tradeState: record.trade?.state ?? null,
+            tradeRequestedAt: record.trade?.requestedAt ?? null,
+            tradeProposedAt: record.trade?.proposedAt ?? null,
+            tradeSettledAt: record.trade?.settledAt ?? null,
+            tradeDetail: record.trade?.detail ?? null,
             createdAt: record.createdAt,
             updatedAt: record.updatedAt,
           };

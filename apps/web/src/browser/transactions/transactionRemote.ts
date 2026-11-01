@@ -1,7 +1,12 @@
-import type { TransactionReviewView } from "#contracts/connections/transactionContract.ts";
+import type {
+  TransactionReviewView,
+  WithdrawTradeData,
+  WithdrawTradeRequest,
+} from "#contracts/connections/transactionContract.ts";
 import {
   readTransactionReviewServerFn,
   submitTransactionReviewServerFn,
+  withdrawTradeServerFn,
 } from "#server-functions/connections/transactionServerFunctions.ts";
 
 import { requireTransactionSuccess } from "./transactionFailure";
@@ -15,6 +20,10 @@ export const transactionRemote: TransactionRemote = {
     submitTransactionReviewServerFn({ data: input, signal: options?.signal }).then(
       (result) => requireTransactionSuccess(result).review,
     ),
+  withdraw: (input, options) =>
+    withdrawTradeServerFn({ data: input, signal: options?.signal }).then((result) =>
+      requireTransactionSuccess(result),
+    ),
 };
 
 export type TransactionRemote = {
@@ -26,4 +35,8 @@ export type TransactionRemote = {
     input: { readonly set: string; readonly include: ReadonlyArray<string> },
     options?: { readonly signal?: AbortSignal },
   ) => Promise<TransactionReviewView>;
+  readonly withdraw: (
+    input: WithdrawTradeRequest,
+    options?: { readonly signal?: AbortSignal },
+  ) => Promise<WithdrawTradeData>;
 };

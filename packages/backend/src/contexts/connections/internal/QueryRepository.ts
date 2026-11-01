@@ -249,28 +249,43 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         return owned;
       });
 
+      const recordSessionRejectedMany = Effect.fn("QueryRepository.recordSessionRejectedMany")(
+        function* (userId: UserId, teams: ReadonlyArray<OwnedTeam>) {
+          if (teams.length === 0) {
+            return;
+          }
+          yield* connections
+            .markReconnectRequired(
+              userId,
+              teams.map((team) => ({
+                id: team.connection.id,
+                expectedGeneration: team.connection.generation,
+              })),
+            )
+            .pipe(
+              Effect.asVoid,
+              Effect.catch((error: ConnectionError) =>
+                Effect.annotateCurrentSpan("query.reconnect_mark_failed", error._tag).pipe(
+                  Effect.asVoid,
+                ),
+              ),
+            );
+        },
+      );
+
       const recordSessionRejected = Effect.fn("QueryRepository.recordSessionRejected")(function* (
         userId: UserId,
         team: OwnedTeam,
       ) {
-        yield* connections
-          .markReconnectRequired(userId, [
-            {
-              id: team.connection.id,
-              expectedGeneration: team.connection.generation,
-            },
-          ])
-          .pipe(
-            Effect.asVoid,
-            Effect.catch((error: ConnectionError) =>
-              Effect.annotateCurrentSpan("query.reconnect_mark_failed", error._tag).pipe(
-                Effect.asVoid,
-              ),
-            ),
-          );
+        yield* recordSessionRejectedMany(userId, [team]);
       });
 
-      return { loadOwnedTeam, loadOwnedTeams, recordSessionRejected };
+      return {
+        loadOwnedTeam,
+        loadOwnedTeams,
+        recordSessionRejected,
+        recordSessionRejectedMany,
+      };
     }),
   },
 ) {

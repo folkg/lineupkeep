@@ -34,6 +34,55 @@ export type TransactionFailureDescription = {
   readonly message: string;
 };
 
+export function describeTradeWithdrawalFailure(error: unknown): TransactionFailureDescription {
+  if (error instanceof TransactionReviewAuthenticationFailure) {
+    return {
+      kind: "authentication",
+      message: "Your session ended before the withdrawal could be sent. Sign in again to continue.",
+    };
+  }
+  if (error instanceof TransactionReviewFailure) {
+    switch (error.reason) {
+      case "transactions.trade_not_pending":
+        return {
+          kind: "conflict",
+          message:
+            "The provider no longer lists this offer as pending, so nothing was withdrawn. Reload to read its current state.",
+        };
+      case "transactions.trade_not_found":
+        return {
+          kind: "failure",
+          message: "That trade offer is not available for this team. Reload the review.",
+        };
+      case "transactions.unavailable":
+        return {
+          kind: "failure",
+          message:
+            "The withdrawal could not be confirmed, so it may or may not have applied. Check the provider's trade page before trying again.",
+        };
+      case "transactions.set_not_found":
+      case "transactions.input_invalid":
+        return {
+          kind: "failure",
+          message: "This trade is not available to the current account, so nothing was withdrawn.",
+        };
+      case "transactions.already_submitted":
+      case "transactions.set_expired":
+      case "transactions.nothing_included":
+      case "transactions.persistence_failed":
+        return {
+          kind: "failure",
+          message:
+            "The withdrawal could not be completed. Reload the review to see whether the offer is still pending.",
+        };
+    }
+  }
+  return {
+    kind: "failure",
+    message: "The withdrawal could not be sent. Reload the review before deciding what to do next.",
+  };
+}
+
 export function describeTransactionSubmissionFailure(
   error: unknown,
 ): TransactionFailureDescription {
@@ -62,6 +111,17 @@ export function describeTransactionSubmissionFailure(
         return {
           kind: "failure",
           message: "No move was included. Select at least one current move and submit again.",
+        };
+      case "transactions.trade_not_found":
+        return {
+          kind: "failure",
+          message: "That trade offer is not available for this team. Reload the review.",
+        };
+      case "transactions.trade_not_pending":
+        return {
+          kind: "conflict",
+          message:
+            "The provider no longer lists this offer as pending, so nothing was withdrawn. Reload to read its current state.",
         };
       case "transactions.set_not_found":
       case "transactions.input_invalid":

@@ -10,6 +10,7 @@ import type {
   ProviderPlayerDetail,
   ProviderReadFailure,
   ProviderRoster,
+  ProviderTransaction,
   ProviderTransactionTeam,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
@@ -46,10 +47,14 @@ import {
   ProposalSetReview as ProposalSetReviewSchema,
   ProposalTeam as ProposalTeamSchema,
   ProposalTeamNotFound,
+  ProposalTradeNotFound,
+  ProposalTradeNotPending,
   ProposeTransactionsInput,
   ProposeTransactionsResult as ProposeTransactionsResultSchema,
   SubmitTransactionProposalInput,
   TransactionProposals,
+  WithdrawTradeInput,
+  WithdrawTradeResult as WithdrawTradeResultSchema,
 } from "#contexts/connections/TransactionProposals.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
@@ -62,8 +67,10 @@ import type {
   ProposalSetRecord,
   ProposalStepRecord,
   ProposalTeamRecord,
+  StoredProposalPlayer,
   StoredProposalStaleReason,
   StoredProposalStaleness,
+  StoredProposalTrade,
   StoredReserveMove,
 } from "./TransactionProposalRecord.ts";
 import { TransactionProposalRepository } from "./TransactionProposalRepository.ts";
@@ -75,7 +82,7 @@ import type {
 } from "./TransactionProposalRepository.ts";
 
 const contentInvalidDetail =
-  "A proposal set needs one to twenty items. Each item names an owned team, a kind, the players to add or drop, an optional FAAB bid of 0 or more, and a reason of at most 500 characters. A drop item adds nobody, a free-agent add carries no bid, and a waiver claim requires a bid.";
+  "A proposal set needs one to twenty items. Each item names an owned team, a kind, the players to add or drop, an optional FAAB bid of 0 or more, and a reason of at most 500 characters. A drop item adds nobody, a free-agent add carries no bid, a waiver claim requires a bid, and a trade names a counterparty with at least one player going out and one coming back. A trade carries no bid and no draft picks.";
 
 const submitInvalidDetail =
   "A submission names one proposal set and one to twenty of its move ids. Reload the review and submit again.";
@@ -105,12 +112,35 @@ type AcceptedDraft = {
   readonly command: ProposalItemCommand;
 };
 
+type OpenedDraft = {
+  readonly index: number;
+  readonly team: ProposalTeamRecord;
+  readonly draft: ProposalItemDraft;
+  readonly adds: ReadonlyArray<string>;
+  readonly drops: ReadonlyArray<string>;
+  readonly counterpartyKey: string | undefined;
+};
+
+type StagedTrade =
+  | {
+      readonly outcome: "staged";
+      readonly counterpartyKey: string;
+      readonly counterpartyName: string | undefined;
+      readonly adds: ReadonlyArray<StoredProposalPlayer>;
+      readonly drops: ReadonlyArray<StoredProposalPlayer>;
+    }
+  | {
+      readonly outcome: "refused";
+      readonly refusal: ProposalItemRefused;
+    };
+
 type TeamFacts = {
   readonly league: ProviderLeagueSettings;
   readonly roster: ProviderRoster;
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
   readonly providerTeamKey: string;
   readonly players: ReadonlyMap<string, ProviderPlayerDetail>;
+  readonly tradeRosters: ReadonlyMap<string, ProviderRoster>;
 };
 
 type TeamCheck = {
@@ -120,12 +150,20 @@ type TeamCheck = {
   readonly facts?: TeamFacts;
   readonly context?: TeamContext;
   readonly changes: ReadonlyArray<ProposalItemChange>;
+  readonly tradeFeed?: TradeFeed;
+};
+
+type TradeFeed = {
+  readonly pending: ReadonlyArray<ProviderPendingTrade>;
+  readonly completed: ReadonlyArray<ProviderTransaction>;
+  readonly completedUnavailable: boolean;
 };
 
 type ItemExecution = {
   readonly outcome: ProposalOutcome;
   readonly detail?: string;
   readonly steps: ReadonlyArray<ProposalStepCommand>;
+  readonly trade?: StoredProposalTrade;
 };
 
 export const TransactionProposalsLive = Layer.effect(
@@ -199,7 +237,43 @@ export const TransactionProposalsLive = Layer.effect(
           offset += count;
         }
       }
+      const counterpartyByLeague = new Map<
+        string,
+        ReadonlyArray<{ readonly index: number; readonly ref: CounterpartyRef }>
+      >();
+      for (const entry of prepared) {
+        const ref = entry.draft.kind === "trade" ? entry.draft.counterparty : null;
+        if (ref === null || ref === undefined) {
+          continue;
+        }
+        const current = counterpartyByLeague.get(entry.team.providerLeagueKey) ?? [];
+        counterpartyByLeague.set(entry.team.providerLeagueKey, [
+          ...current,
+          { index: entry.index, ref },
+        ]);
+      }
+      const openedCounterpartyGroups = yield* tokens.openCounterpartyRefGroups({
+        userId,
+        groups: [...counterpartyByLeague.entries()].map(([leagueKey, entries]) => ({
+          leagueKey,
+          refs: entries.map((entry) => entry.ref),
+        })),
+      });
+      const counterpartyByIndex = new Map<number, string>();
+      const counterpartyInvalid = new Set<number>();
+      for (const [groupIndex, entries] of [...counterpartyByLeague.values()].entries()) {
+        const opened = Array.getUnsafe(openedCounterpartyGroups, groupIndex);
+        for (const [entryIndex, entry] of entries.entries()) {
+          const key = Array.getUnsafe(opened, entryIndex);
+          if (key === undefined) {
+            counterpartyInvalid.add(entry.index);
+          } else {
+            counterpartyByIndex.set(entry.index, key);
+          }
+        }
+      }
 
+      const candidates: Array<OpenedDraft> = [];
       for (const { index, team, draft } of prepared) {
         const opened = openedByIndex.get(index) ?? [];
         const addKeys = opened.slice(0, draft.adds.length);
@@ -215,6 +289,53 @@ export const TransactionProposalsLive = Layer.effect(
           });
           continue;
         }
+        if (
+          draft.kind === "trade" &&
+          (draft.counterparty === undefined || draft.counterparty === null)
+        ) {
+          refusals.push({
+            index,
+            outcome: "refused",
+            refusal: "kind_invalid",
+            detail: `Item ${String(index + 1)} is a trade without a counterparty team. Name the team the offer goes to.`,
+          });
+          continue;
+        }
+        if (counterpartyInvalid.has(index)) {
+          refusals.push({
+            index,
+            outcome: "refused",
+            refusal: "reference_invalid",
+            detail: `Item ${String(index + 1)} carries a counterparty reference this account did not receive from a read of that team's league. Read the league's teams again and name the counterparty from that read.`,
+          });
+          continue;
+        }
+        candidates.push({
+          index,
+          team,
+          draft,
+          adds,
+          drops,
+          counterpartyKey: draft.kind === "trade" ? counterpartyByIndex.get(index) : undefined,
+        });
+      }
+
+      const tradeCandidates = candidates.filter((entry) => entry.draft.kind === "trade");
+      const stagedTrades = yield* stageTrades(userId, tradeCandidates);
+
+      for (const candidate of candidates) {
+        const { index, team, draft } = candidate;
+        const staged = stagedTrades.get(index);
+        if (staged?.outcome === "refused") {
+          refusals.push(staged.refusal);
+          continue;
+        }
+        const adds =
+          staged?.outcome === "staged" ? staged.adds.map((player) => player.key) : candidate.adds;
+        const drops =
+          staged?.outcome === "staged" ? staged.drops.map((player) => player.key) : candidate.drops;
+        const counterpartyKey =
+          staged?.outcome === "staged" ? staged.counterpartyKey : candidate.counterpartyKey;
         const both = adds.find((key) => drops.includes(key));
         if (both !== undefined) {
           refusals.push({
@@ -228,6 +349,7 @@ export const TransactionProposalsLive = Layer.effect(
         const key = proposalItemKey({
           team: draft.team,
           kind: draft.kind,
+          counterpartyKey,
           adds,
           drops,
           bid: draft.bid ?? undefined,
@@ -236,6 +358,7 @@ export const TransactionProposalsLive = Layer.effect(
         const moveKey = proposalMoveKey(
           draft.team,
           draft.kind,
+          counterpartyKey,
           adds,
           drops,
           draft.bid ?? undefined,
@@ -257,9 +380,13 @@ export const TransactionProposalsLive = Layer.effect(
           key,
           command: {
             team: draft.team,
+            connection: team.connection,
             kind: draft.kind,
-            adds: adds.map((add) => ({ key: add })),
-            drops: drops.map((drop) => ({ key: drop })),
+            adds: staged?.outcome === "staged" ? staged.adds : adds.map((add) => ({ key: add })),
+            drops:
+              staged?.outcome === "staged" ? staged.drops : drops.map((drop) => ({ key: drop })),
+            counterpartyKey,
+            counterpartyName: staged?.outcome === "staged" ? staged.counterpartyName : undefined,
             bid: draft.bid ?? undefined,
             reason: draft.reason,
           },
@@ -349,19 +476,8 @@ export const TransactionProposalsLive = Layer.effect(
       if (loaded === undefined) {
         return yield* ProposalSetNotFound.make({ set: input.set });
       }
-      if (loaded.set.submittedAt !== undefined) {
-        const submittedTeams = yield* repository.loadTeams(userId, loaded.set.teams);
-        return yield* buildReview(
-          tokens,
-          userId,
-          submittedTeams,
-          loaded.set,
-          loaded.items,
-          loaded.steps,
-          now,
-        );
-      }
-      if (isExpired(loaded.set, now)) {
+      const submitted = loaded.set.submittedAt !== undefined;
+      if (!submitted && isExpired(loaded.set, now)) {
         return yield* ProposalSetExpired.make({
           set: loaded.set.id,
           expiresAt: loaded.set.expiresAt,
@@ -369,9 +485,13 @@ export const TransactionProposalsLive = Layer.effect(
       }
       const teams = yield* repository.loadTeams(userId, loaded.set.teams);
       const teamsById = new Map(teams.map((team) => [team.id, team] as const));
-      const openItems = loaded.items.filter((item) => isOpen(item.state));
+      const openItems = submitted ? [] : loaded.items.filter((item) => isOpen(item.state));
+      const tradeItems = loaded.items.filter((item) => item.kind === "trade");
+      const checkedItems = [
+        ...new Map([...openItems, ...tradeItems].map((item) => [item.id, item] as const)).values(),
+      ];
       const itemsByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
-      for (const item of openItems) {
+      for (const item of checkedItems) {
         const current = itemsByTeam.get(item.team) ?? [];
         current.push(item);
         itemsByTeam.set(item.team, current);
@@ -394,10 +514,12 @@ export const TransactionProposalsLive = Layer.effect(
       const savedById = new Map(saved.map((item) => [item.id, item] as const));
       const checkedByTeam = new Map(checks.map((check) => [check.team, check] as const));
       const items = loaded.items.map((item) => savedById.get(item.id) ?? item);
+      const offersByTeam = yield* loadPendingOffers(userId, loaded.set.teams, teamsById);
       yield* Effect.annotateCurrentSpan({
-        "proposal.items_checked": openItems.length,
+        "proposal.items_checked": checkedItems.length,
         "proposal.teams_checked": checks.length,
         "proposal.teams_failed": checks.filter((check) => check.failure !== undefined).length,
+        "proposal.pending_offers": [...offersByTeam.values()].flat().length,
       });
       return yield* buildReview(
         tokens,
@@ -408,6 +530,7 @@ export const TransactionProposalsLive = Layer.effect(
         loaded.steps,
         now,
         checkedByTeam,
+        offersByTeam,
       );
     });
 
@@ -576,6 +699,7 @@ export const TransactionProposalsLive = Layer.effect(
             detail: execution.detail,
             at: yield* DateTime.now,
             steps: execution.steps,
+            ...(execution.trade === undefined ? {} : { trade: execution.trade }),
           });
           if (execution.outcome !== "executed") {
             stopped.set(teamId, stoppedDetailFor(current, execution.outcome));
@@ -631,6 +755,17 @@ export const TransactionProposalsLive = Layer.effect(
       readonly context: TeamContext;
     }): Effect.Effect<ItemExecution> {
       return Effect.gen(function* () {
+        if (input.item.connection !== input.context.owned.connection.id) {
+          return {
+            outcome: "skipped",
+            detail:
+              "This team now belongs to a different provider connection than the one the move was staged against, so nothing was sent with another connection's session.",
+            steps: [],
+          };
+        }
+        if (input.item.kind === "trade") {
+          return yield* executeTradeItem(input);
+        }
         const steps: Array<ProposalStepCommand> = [];
         const movementSteps = (
           outcome: ProposalOutcome,
@@ -764,6 +899,99 @@ export const TransactionProposalsLive = Layer.effect(
       });
     }
 
+    function executeTradeItem(input: {
+      readonly userId: UserId;
+      readonly item: ProposalItemRecord;
+      readonly change: ProposalItemChange;
+      readonly facts: TeamFacts;
+      readonly context: TeamContext;
+    }): Effect.Effect<ItemExecution> {
+      return Effect.gen(function* () {
+        const counterpartyKey = input.item.counterpartyKey;
+        if (counterpartyKey === undefined) {
+          return {
+            outcome: "failed",
+            detail: "This trade names no counterparty, so no offer was sent.",
+            steps: [],
+          };
+        }
+        const send = input.change.drops.map((drop) => drop.key);
+        const receive = input.change.adds.map((add) => add.key);
+        if (send.length === 0 || receive.length === 0) {
+          return {
+            outcome: "failed",
+            detail:
+              "A trade needs at least one player going out and one coming back, so no offer was sent.",
+            steps: [],
+          };
+        }
+        const requestedAt = yield* DateTime.now;
+        const sent = yield* Effect.result(
+          input.context.provider.proposeTrade({
+            ...providerIdentity(input.context),
+            providerLeagueKey: input.facts.league.providerLeagueKey,
+            providerTeamKey: input.facts.providerTeamKey,
+            counterpartyTeamKey: counterpartyKey,
+            send,
+            receive,
+            note: undefined,
+          }),
+        );
+        const decidedAt = yield* DateTime.now;
+        if (sent._tag === "Failure") {
+          if (sent.failure._tag === "provider.session_rejected") {
+            yield* queries.recordSessionRejected(input.userId, input.context.owned);
+          }
+          return {
+            outcome: "failed",
+            detail: sessionFailureDetail(sent.failure._tag, "transaction"),
+            steps: [],
+          };
+        }
+        switch (sent.success.status) {
+          case "accepted":
+            return {
+              outcome: "pending",
+              detail: `Offer sent to ${input.item.counterpartyName ?? "the counterparty"}. The other manager decides; we cannot accept on their behalf.`,
+              steps: [],
+              trade: {
+                providerKey: sent.success.transactionKey,
+                state: "pending",
+                requestedAt,
+                detail: `Offer created ${DateTime.formatIso(decidedAt)}.`,
+              },
+            };
+          case "unknown":
+            return {
+              outcome: "unknown",
+              detail:
+                "The provider did not confirm the trade offer, so it may or may not exist. It was not retried. Check the provider's trade page before proposing again.",
+              steps: [],
+            };
+          case "rejected":
+            return {
+              outcome: "failed",
+              detail: clamped(
+                sent.success.detail ??
+                  "The provider rejected the trade offer without saying why. Nothing was retried.",
+              ),
+              steps: [],
+            };
+          case "not_sent":
+            return {
+              outcome: "failed",
+              detail: clamped(
+                sent.success.detail ??
+                  (sent.success.reason === "session_incomplete"
+                    ? "The request was not sent because the provider did not issue a write token."
+                    : "The request was not sent to the provider."),
+              ),
+              steps: [],
+            };
+        }
+      });
+    }
+
     const readPendingOffers: TransactionProposals["Service"]["readPendingOffers"] = Effect.fn(
       "TransactionProposals.readPendingOffers",
     )(function* (userId: UserId, input) {
@@ -837,12 +1065,12 @@ export const TransactionProposalsLive = Layer.effect(
             "This provider publishes no pending trade offers for this read, so none are shown rather than an empty success.",
         }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
       }
-      const offers: Array<PendingTradeOffer> = [];
-      for (const trade of outcome.trades) {
-        offers.push(
-          yield* toPendingTradeOffer(tokens, userId, context.owned.team.providerLeagueKey, trade),
-        );
-      }
+      const offers = yield* toPendingTradeOffers(
+        tokens,
+        userId,
+        context.owned.team.providerLeagueKey,
+        outcome.trades,
+      );
       return yield* Schema.decodeEffect(PendingTradeOffersResultSchema)({
         status: "available",
         team,
@@ -857,11 +1085,514 @@ export const TransactionProposalsLive = Layer.effect(
           },
         ],
         detail:
-          "Read-only. These are this team's pending trade offers as the provider publishes them to this account. Lineupkeep cannot accept, reject, or cancel an offer.",
+          "Read-only. These are this team's pending trade offers as the provider publishes them to this account. Lineupkeep cannot accept, reject, or vote on an offer; a signed-in person can withdraw an offer this account made from the review page.",
       }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
     });
 
-    return TransactionProposals.of({ propose, revalidate, read, submit, readPendingOffers });
+    function loadPendingOffers(
+      userId: UserId,
+      teamIds: ReadonlyArray<TeamId>,
+      teamsById: ReadonlyMap<TeamId, ProposalTeamRecord>,
+    ): Effect.Effect<
+      ReadonlyMap<TeamId, ReadonlyArray<PendingTradeOffer>>,
+      ProposalPersistenceFailed
+    > {
+      return Effect.gen(function* () {
+        const rejected: Array<Parameters<typeof queries.recordSessionRejected>[1]> = [];
+        const feeds = yield* Effect.forEach(
+          [...new Set(teamIds)],
+          (teamId) =>
+            Effect.gen(function* () {
+              const team = teamsById.get(teamId);
+              if (team === undefined) {
+                return { teamId, leagueKey: undefined, trades: [] } as const;
+              }
+              const loaded = yield* Effect.result(
+                loadTeamContext(queries, encryption, registry, userId, teamId),
+              );
+              if (loaded._tag === "Failure") {
+                return { teamId, leagueKey: undefined, trades: [] } as const;
+              }
+              const context = loaded.success;
+              const offers = yield* Effect.result(
+                context.provider.readPendingTrades({
+                  ...providerIdentity(context),
+                  providerLeagueKey: team.providerLeagueKey,
+                  providerTeamKey: context.owned.team.providerTeamKey,
+                }),
+              );
+              if (offers._tag === "Failure") {
+                if (offers.failure._tag === "provider.session_rejected") {
+                  rejected.push(context.owned);
+                }
+                return { teamId, leagueKey: undefined, trades: [] } as const;
+              }
+              return {
+                teamId,
+                leagueKey: team.providerLeagueKey,
+                trades: offers.success,
+              } as const;
+            }),
+          { concurrency: 3 },
+        );
+        yield* queries.recordSessionRejectedMany(userId, rejected);
+        const withTrades = feeds.filter(
+          (
+            feed,
+          ): feed is {
+            readonly teamId: TeamId;
+            readonly leagueKey: string;
+            readonly trades: ReadonlyArray<ProviderPendingTrade>;
+          } => feed.leagueKey !== undefined && feed.trades.length > 0,
+        );
+        const mappedGroups = yield* toPendingTradeOffersGroups(
+          tokens,
+          userId,
+          withTrades.map((feed) => ({ leagueKey: feed.leagueKey, trades: feed.trades })),
+        );
+        const mappedByTeam = new Map<TeamId, ReadonlyArray<PendingTradeOffer>>();
+        for (const [feedIndex, feed] of withTrades.entries()) {
+          mappedByTeam.set(feed.teamId, Array.getUnsafe(mappedGroups, feedIndex));
+        }
+        return new Map(
+          feeds.map((feed) => [feed.teamId, mappedByTeam.get(feed.teamId) ?? []] as const),
+        );
+      });
+    }
+
+    const withdrawTrade: TransactionProposals["Service"]["withdrawTrade"] = Effect.fn(
+      "TransactionProposals.withdrawTrade",
+    )(function* (userId: UserId, input) {
+      const decoded = yield* Schema.decodeEffect(WithdrawTradeInput)(input).pipe(
+        Effect.mapError(() =>
+          ProposalContentInvalid.make({
+            detail:
+              "A withdrawal names one owned team and exactly one pending offer, either a stored proposal item or a provider pending offer.",
+          }),
+        ),
+      );
+      if ((decoded.item === undefined) === (decoded.offer === undefined)) {
+        return yield* ProposalContentInvalid.make({
+          detail:
+            "A withdrawal names exactly one target: a proposal item id or a provider pending offer reference.",
+        });
+      }
+      const loaded = yield* Effect.result(
+        loadTeamContext(queries, encryption, registry, userId, decoded.team),
+      );
+      if (loaded._tag === "Failure") {
+        switch (loaded.failure._tag) {
+          case "query.team_not_found":
+            return yield* ProposalTeamNotFound.make({ team: decoded.team });
+          case "query.connection_not_ready":
+            return yield* ProposalConnectionNotReady.make({
+              team: decoded.team,
+              status: loaded.failure.status,
+            });
+          case "query.cursor_invalid":
+          case "query.reference_invalid":
+          case "query.selection_invalid":
+          case "query.persistence_failed":
+            return yield* ProposalPersistenceFailed.make({ cause: loaded.failure });
+        }
+      }
+      const context = loaded.success;
+      let transactionKey: string;
+      let item: ProposalItemRecord | undefined;
+      if (decoded.item !== undefined) {
+        item = yield* repository.loadItem(userId, decoded.item);
+        if (item === undefined || item.kind !== "trade" || item.team !== decoded.team) {
+          return yield* ProposalTradeNotFound.make({
+            detail:
+              "That trade proposal is not available for this team. Reload the review and try again.",
+          });
+        }
+        if (item.connection !== context.owned.connection.id) {
+          return yield* ProposalTradeNotPending.make({
+            state: item.trade?.state ?? "pending",
+            detail:
+              "This team now belongs to a different provider connection, so the offer was not withdrawn with the stored session. Reload and read the provider's trade page.",
+          });
+        }
+        if (item.trade === undefined || item.trade.state !== "pending") {
+          return yield* ProposalTradeNotPending.make({
+            state: item.trade?.state ?? "expired",
+            detail:
+              item.trade === undefined
+                ? "This trade was never proposed to the provider, so there is nothing to withdraw."
+                : `This offer is ${item.trade.state}, so it is no longer pending.`,
+          });
+        }
+        transactionKey = item.trade.providerKey;
+      } else {
+        if (decoded.offer === undefined) {
+          return yield* ProposalTradeNotFound.make({
+            detail:
+              "That pending offer reference did not come from a read of this team's league. Read the pending offers again.",
+          });
+        }
+        const opened = yield* Effect.result(
+          tokens.openTradeOfferRef({
+            userId,
+            leagueKey: context.owned.team.providerLeagueKey,
+            ref: decoded.offer,
+          }),
+        );
+        if (opened._tag === "Failure") {
+          return yield* ProposalTradeNotFound.make({
+            detail:
+              "That pending offer reference did not come from a read of this team's league. Read the pending offers again.",
+          });
+        }
+        transactionKey = opened.success;
+      }
+      const before = yield* Effect.result(
+        context.provider.readPendingTrades({
+          ...providerIdentity(context),
+          providerLeagueKey: context.owned.team.providerLeagueKey,
+          providerTeamKey: context.owned.team.providerTeamKey,
+        }),
+      );
+      if (before._tag === "Failure") {
+        if (before.failure._tag === "provider.session_rejected") {
+          yield* queries.recordSessionRejected(userId, context.owned);
+        }
+        return yield* ProposalProviderUnavailable.make({
+          detail:
+            "The provider's pending trade offers could not be read, so nothing was withdrawn. Check the provider's trade page before trying again.",
+        });
+      }
+      if (!before.success.some((offer) => offer.transactionKey === transactionKey)) {
+        return yield* ProposalTradeNotPending.make({
+          state: item?.trade?.state ?? "expired",
+          detail:
+            "The provider does not list this offer as pending, so nothing was withdrawn. Reload to read its current state.",
+        });
+      }
+      const withdrawn = yield* Effect.result(
+        context.provider.withdrawTrade({
+          ...providerIdentity(context),
+          transactionKey,
+        }),
+      );
+      if (withdrawn._tag === "Failure") {
+        if (withdrawn.failure._tag === "provider.session_rejected") {
+          yield* queries.recordSessionRejected(userId, context.owned);
+        }
+        return yield* ProposalProviderUnavailable.make({
+          detail:
+            withdrawn.failure._tag === "provider.session_rejected"
+              ? "The provider rejected the stored session, so the offer was not withdrawn. Reconnect the connection and check its trade page."
+              : "The withdrawal request could not be prepared, so nothing was withdrawn.",
+        });
+      }
+      switch (withdrawn.success.status) {
+        case "accepted": {
+          const after = yield* Effect.result(
+            context.provider.readPendingTrades({
+              ...providerIdentity(context),
+              providerLeagueKey: context.owned.team.providerLeagueKey,
+              providerTeamKey: context.owned.team.providerTeamKey,
+            }),
+          );
+          if (
+            after._tag === "Success" &&
+            after.success.some((offer) => offer.transactionKey === transactionKey)
+          ) {
+            return yield* ProposalProviderUnavailable.make({
+              detail:
+                "The provider accepted the withdrawal but still lists the offer as pending. Nothing else was attempted; check the provider's trade page.",
+            });
+          }
+          const at = yield* DateTime.now;
+          if (item?.trade !== undefined) {
+            yield* repository.saveTradeStates({
+              userId,
+              changes: [
+                {
+                  itemId: item.id,
+                  state: "withdrawn",
+                  trade: {
+                    ...item.trade,
+                    state: "withdrawn",
+                    settledAt: at,
+                    detail: "Withdrawn before acceptance. The provider deletes a withdrawn offer.",
+                  },
+                  at,
+                },
+              ],
+            });
+          }
+          return yield* Schema.decodeEffect(WithdrawTradeResultSchema)({
+            status: "withdrawn",
+            tradeState: "withdrawn",
+            detail:
+              "The provider confirmed the withdrawal and no longer lists the offer. Nothing was accepted on the other manager's behalf.",
+          }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        }
+        case "unknown":
+          return yield* ProposalProviderUnavailable.make({
+            detail:
+              "The provider did not confirm the withdrawal, so it may or may not have applied. It was not retried. Check the provider's trade page.",
+          });
+        case "not_sent":
+        case "rejected":
+          return yield* ProposalProviderUnavailable.make({
+            detail: withdrawalDetail(withdrawn.success),
+          });
+      }
+    });
+
+    return TransactionProposals.of({
+      propose,
+      revalidate,
+      read,
+      submit,
+      readPendingOffers,
+      withdrawTrade,
+    });
+
+    function stageTrades(
+      userId: UserId,
+      candidates: ReadonlyArray<OpenedDraft>,
+    ): Effect.Effect<ReadonlyMap<number, StagedTrade>> {
+      if (candidates.length === 0) {
+        return Effect.succeed(new Map());
+      }
+      const byTeam = new Map<TeamId, Array<OpenedDraft>>();
+      for (const candidate of candidates) {
+        const current = byTeam.get(candidate.team.id) ?? [];
+        current.push(candidate);
+        byTeam.set(candidate.team.id, current);
+      }
+      return Effect.gen(function* () {
+        const groups = yield* Effect.forEach(
+          [...byTeam.entries()],
+          ([teamId, entries]) => stageTeamTrades(userId, teamId, entries),
+          { concurrency: 3 },
+        );
+        return new Map(groups.flatMap((group) => [...group.entries()]));
+      });
+    }
+
+    function stageTeamTrades(
+      userId: UserId,
+      teamId: TeamId,
+      candidates: ReadonlyArray<OpenedDraft>,
+    ): Effect.Effect<ReadonlyMap<number, StagedTrade>> {
+      return Effect.gen(function* () {
+        const refused = new Map<number, StagedTrade>();
+        const context = yield* Effect.result(
+          loadTeamContext(queries, encryption, registry, userId, teamId),
+        );
+        if (context._tag === "Failure") {
+          for (const candidate of candidates) {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                "trade_state_unavailable",
+                `Item ${String(candidate.index + 1)} cannot be checked because ${queryFailureDetail(context.failure)}`,
+              ),
+            });
+          }
+          return refused;
+        }
+        const owned = context.success;
+        const leagueKey = owned.owned.team.providerLeagueKey;
+        const identity = providerIdentity(owned);
+        const [leagueResult, rosterResult, teamsResult] = yield* Effect.all(
+          [
+            Effect.result(
+              owned.provider.readLeague({
+                ...identity,
+                providerLeagueKey: leagueKey,
+                sport: owned.owned.team.sport,
+              }),
+            ),
+            Effect.result(
+              owned.provider.readRoster({
+                ...identity,
+                providerTeamKey: owned.owned.team.providerTeamKey,
+                period: undefined,
+              }),
+            ),
+            Effect.result(
+              owned.provider.readLeagueTeams({ ...identity, providerLeagueKey: leagueKey }),
+            ),
+          ] as const,
+          { concurrency: "unbounded" },
+        );
+        if (
+          leagueResult._tag === "Failure" ||
+          rosterResult._tag === "Failure" ||
+          teamsResult._tag === "Failure"
+        ) {
+          const failure =
+            leagueResult._tag === "Failure"
+              ? leagueResult.failure._tag
+              : rosterResult._tag === "Failure"
+                ? rosterResult.failure._tag
+                : teamsResult._tag === "Failure"
+                  ? teamsResult.failure._tag
+                  : "unknown";
+          if (failure === "provider.session_rejected") {
+            yield* queries.recordSessionRejected(userId, owned.owned);
+          }
+          for (const candidate of candidates) {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                "trade_state_unavailable",
+                `Item ${String(candidate.index + 1)} cannot be checked against the provider (${failure}).`,
+              ),
+            });
+          }
+          return refused;
+        }
+        const league = leagueResult.success;
+        const roster = rosterResult.success;
+        const leagueTeams = teamsResult.success;
+        const rosterByPlayer = new Map(
+          roster.players.map((player) => [player.providerPlayerKey, player] as const),
+        );
+        const teamByKey = new Map(leagueTeams.map((team) => [team.providerTeamKey, team] as const));
+        const counterpartyKeys = [
+          ...new Set(
+            candidates.flatMap((candidate) =>
+              candidate.counterpartyKey === undefined ? [] : [candidate.counterpartyKey],
+            ),
+          ),
+        ];
+        const opponentRosters = yield* Effect.forEach(
+          counterpartyKeys,
+          (key) =>
+            Effect.result(
+              owned.provider.readRoster({
+                ...identity,
+                providerTeamKey: key,
+                period: undefined,
+              }),
+            ).pipe(Effect.map((result) => [key, result] as const)),
+          { concurrency: 3 },
+        );
+        const opponentByKey = new Map(opponentRosters);
+        const windowClosed = tradeWindowClosed(league);
+        for (const candidate of candidates) {
+          const counterpartyKey = candidate.counterpartyKey;
+          if (
+            counterpartyKey === undefined ||
+            counterpartyKey === owned.owned.team.providerTeamKey
+          ) {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                "trade_counterparty_invalid",
+                `Item ${String(candidate.index + 1)} names a counterparty that is not another team in this league.`,
+              ),
+            });
+            continue;
+          }
+          const counterparty = teamByKey.get(counterpartyKey);
+          if (counterparty === undefined) {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                "trade_counterparty_invalid",
+                `Item ${String(candidate.index + 1)} names a counterparty in another league. Read this league's teams and name one of them.`,
+              ),
+            });
+            continue;
+          }
+          if (league.tradeEndDate === undefined || league.currentDate === undefined) {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                "trade_state_unavailable",
+                `Item ${String(candidate.index + 1)} cannot be checked because the league publishes no trade end date or current date.`,
+              ),
+            });
+            continue;
+          }
+          if (windowClosed) {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                "trade_window_closed",
+                `Item ${String(candidate.index + 1)} cannot be proposed because the league's trade window closed on ${league.tradeEndDate}.`,
+              ),
+            });
+            continue;
+          }
+          const opponent = opponentByKey.get(counterpartyKey);
+          if (opponent?._tag === "Failure") {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                "trade_state_unavailable",
+                `Item ${String(candidate.index + 1)} cannot be checked because the counterparty's roster could not be read.`,
+              ),
+            });
+            continue;
+          }
+          const opponentPlayers = new Map(
+            opponent?.success.players.map(
+              (player) => [player.providerPlayerKey, player] as const,
+            ) ?? [],
+          );
+          const missingDrop = candidate.drops.find((key) => !rosterByPlayer.has(key));
+          if (missingDrop !== undefined) {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                "trade_player_not_rostered",
+                `Item ${String(candidate.index + 1)} sends a player who is not on this team's roster.`,
+              ),
+            });
+            continue;
+          }
+          const missingAdd = candidate.adds.find((key) => !opponentPlayers.has(key));
+          if (missingAdd !== undefined) {
+            refused.set(candidate.index, {
+              outcome: "refused",
+              refusal: tradeRefusal(
+                candidate.index,
+                "trade_player_not_rostered",
+                `Item ${String(candidate.index + 1)} asks for a player who is not on ${counterparty.name}'s roster.`,
+              ),
+            });
+            continue;
+          }
+          refused.set(candidate.index, {
+            outcome: "staged",
+            counterpartyKey,
+            counterpartyName: counterparty.name,
+            adds: candidate.adds.map((key) => {
+              const player = opponentPlayers.get(key);
+              if (player === undefined) {
+                throw new Error("A staged trade add lost its roster row");
+              }
+              return proposalPlayerOf(player);
+            }),
+            drops: candidate.drops.map((key) => {
+              const player = rosterByPlayer.get(key);
+              if (player === undefined) {
+                throw new Error("A staged trade drop lost its roster row");
+              }
+              return proposalPlayerOf(player);
+            }),
+          });
+        }
+        return refused;
+      });
+    }
 
     function checkTeam(
       userId: UserId,
@@ -902,8 +1633,24 @@ export const TransactionProposalsLive = Layer.effect(
           return yield* providerFailedCheck(userId, context, items, league.failure._tag, at);
         }
         const settings = league.success;
-        const addKeys = [...new Set(items.flatMap((item) => item.adds.map((add) => add.key)))];
+        const addKeys = [
+          ...new Set(
+            items
+              .filter((item) => item.kind !== "trade")
+              .flatMap((item) => item.adds.map((add) => add.key)),
+          ),
+        ];
         const needsBudget = items.some((item) => item.bid !== undefined);
+        const needsTrade = items.some((item) => item.kind === "trade");
+        const counterpartyKeys = [
+          ...new Set(
+            items.flatMap((item) =>
+              item.kind === "trade" && item.counterpartyKey !== undefined
+                ? [item.counterpartyKey]
+                : [],
+            ),
+          ),
+        ].filter((key) => key !== context.owned.team.providerTeamKey);
         const roster: Effect.Effect<Result.Result<ProviderRoster, ProviderReadFailure>> =
           Effect.result(
             context.provider.readRoster({
@@ -914,14 +1661,15 @@ export const TransactionProposalsLive = Layer.effect(
           );
         const leagueTeams: Effect.Effect<
           Result.Result<ReadonlyArray<ProviderLeagueTeam>, ProviderReadFailure>
-        > = needsBudget
-          ? Effect.result(
-              context.provider.readLeagueTeams({
-                ...providerIdentity(context),
-                providerLeagueKey: context.owned.team.providerLeagueKey,
-              }),
-            )
-          : Effect.succeed(Result.succeed<ReadonlyArray<ProviderLeagueTeam>>([]));
+        > =
+          needsBudget || needsTrade
+            ? Effect.result(
+                context.provider.readLeagueTeams({
+                  ...providerIdentity(context),
+                  providerLeagueKey: context.owned.team.providerLeagueKey,
+                }),
+              )
+            : Effect.succeed(Result.succeed<ReadonlyArray<ProviderLeagueTeam>>([]));
         const details: Effect.Effect<
           Result.Result<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure>
         > =
@@ -939,10 +1687,62 @@ export const TransactionProposalsLive = Layer.effect(
                   seasonEnd: settings.endDate,
                 }),
               );
-        const [rosterResult, teamsResult, detailsResult] = yield* Effect.all(
-          [roster, leagueTeams, details] as const,
-          { concurrency: "unbounded" },
-        );
+        const tradeRosters: Effect.Effect<
+          ReadonlyMap<string, Result.Result<ProviderRoster, ProviderReadFailure>>
+        > =
+          counterpartyKeys.length === 0
+            ? Effect.succeed(new Map())
+            : Effect.forEach(
+                counterpartyKeys,
+                (key) =>
+                  Effect.result(
+                    context.provider.readRoster({
+                      ...providerIdentity(context),
+                      providerTeamKey: key,
+                      period: undefined,
+                    }),
+                  ).pipe(Effect.map((result) => [key, result] as const)),
+                { concurrency: 3 },
+              ).pipe(Effect.map((entries) => new Map(entries)));
+        const noTradeFeed: TradeFeed | undefined = undefined;
+        const tradeFeed: Effect.Effect<TradeFeed | undefined> = !needsTrade
+          ? Effect.succeed(noTradeFeed)
+          : Effect.gen(function* () {
+              const pending = yield* Effect.result(
+                context.provider.readPendingTrades({
+                  ...providerIdentity(context),
+                  providerLeagueKey: context.owned.team.providerLeagueKey,
+                  providerTeamKey: context.owned.team.providerTeamKey,
+                }),
+              );
+              if (pending._tag === "Failure") {
+                if (pending.failure._tag === "provider.session_rejected") {
+                  yield* queries.recordSessionRejected(userId, context.owned);
+                }
+                return {
+                  pending: [],
+                  completed: [],
+                  completedUnavailable: true,
+                } satisfies TradeFeed;
+              }
+              const completed = yield* Effect.result(
+                context.provider.readCompletedTrades({
+                  ...providerIdentity(context),
+                  providerLeagueKey: context.owned.team.providerLeagueKey,
+                  providerTeamKey: context.owned.team.providerTeamKey,
+                  limit: 50,
+                }),
+              );
+              return {
+                pending: pending.success,
+                completed: completed._tag === "Success" ? completed.success : [],
+                completedUnavailable: completed._tag === "Failure",
+              } satisfies TradeFeed;
+            });
+        const [rosterResult, teamsResult, detailsResult, tradeRostersResult, feed] =
+          yield* Effect.all([roster, leagueTeams, details, tradeRosters, tradeFeed] as const, {
+            concurrency: "unbounded",
+          });
         if (rosterResult._tag === "Failure") {
           return yield* providerFailedCheck(userId, context, items, rosterResult.failure._tag, at);
         }
@@ -960,6 +1760,11 @@ export const TransactionProposalsLive = Layer.effect(
           players: new Map(
             detailsResult.success.map((detail) => [detail.providerPlayerKey, detail] as const),
           ),
+          tradeRosters: new Map(
+            [...tradeRostersResult.entries()].flatMap(([key, result]) =>
+              result._tag === "Success" ? [[key, result.success] as const] : [],
+            ),
+          ),
         };
         const budget = budgetOf(facts, items);
         return {
@@ -967,7 +1772,8 @@ export const TransactionProposalsLive = Layer.effect(
           ...(budget === undefined ? {} : { budget }),
           facts,
           context,
-          changes: items.map((item) => evaluateItem(item, facts, budget, at)),
+          ...(feed === undefined ? {} : { tradeFeed: feed }),
+          changes: items.map((item) => evaluateItem(item, facts, budget, at, feed)),
         };
       });
     }
@@ -1001,6 +1807,7 @@ function buildReview(
   steps: ReadonlyArray<ProposalStepRecord>,
   now: DateTime.Utc,
   checks?: ReadonlyMap<TeamId, TeamCheck>,
+  offersByTeam?: ReadonlyMap<TeamId, ReadonlyArray<PendingTradeOffer>>,
 ): Effect.Effect<ProposalSetReview, ProposalPersistenceFailed> {
   return Effect.gen(function* () {
     const teamsById = new Map(teams.map((team) => [team.id, team] as const));
@@ -1041,8 +1848,24 @@ function buildReview(
         yield* Schema.decodeEffect(ProposalTeamSchema)({
           team: teamView(team),
           ...(check?.budget === undefined ? {} : { budget: check.budget }),
+          ...(check?.facts === undefined
+            ? {}
+            : {
+                tradeRules: {
+                  ...(check.facts.league.tradeEndDate === undefined
+                    ? {}
+                    : { endDate: check.facts.league.tradeEndDate }),
+                  ...(check.facts.league.tradeRatification === undefined
+                    ? {}
+                    : { ratification: check.facts.league.tradeRatification }),
+                  ...(check.facts.league.tradeObjectionDays === undefined
+                    ? {}
+                    : { objectionDays: check.facts.league.tradeObjectionDays }),
+                },
+              }),
           ...(check?.failure === undefined ? {} : { failure: check.failure }),
           items: teamItems,
+          pendingOffers: offersByTeam?.get(teamId) ?? [],
         }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause }))),
       );
     }
@@ -1058,7 +1881,11 @@ function evaluateItem(
   facts: TeamFacts,
   budget: ProposalBudget | undefined,
   at: DateTime.Utc,
+  feed: TradeFeed | undefined,
 ): ProposalItemChange {
+  if (item.kind === "trade") {
+    return evaluateTradeItem(item, facts, at, feed);
+  }
   const reasons: Array<StoredProposalStaleReason> = [];
   const adds = item.adds.map((add) => ({ ...add }));
   const drops = item.drops.map((drop) => ({ ...drop }));
@@ -1184,6 +2011,232 @@ function evaluateItem(
   };
 }
 
+function evaluateTradeItem(
+  item: ProposalItemRecord,
+  facts: TeamFacts,
+  at: DateTime.Utc,
+  feed: TradeFeed | undefined,
+): ProposalItemChange {
+  const adds = item.adds.map((add) => ({ ...add }));
+  const drops = item.drops.map((drop) => ({ ...drop }));
+  const counterpartyName = item.counterpartyName ?? "the counterparty";
+  if (item.trade !== undefined && item.trade.state !== "pending") {
+    return { id: item.id, adds, drops, staleness: item.staleness };
+  }
+  if (item.trade !== undefined) {
+    const trade = refreshedTrade(item, item.trade, facts, feed, at);
+    return {
+      id: item.id,
+      adds,
+      drops,
+      staleness: item.staleness,
+      trade: trade.trade,
+      state: trade.state,
+    };
+  }
+  const reasons: Array<StoredProposalStaleReason> = [];
+  const counterpartyKey = item.counterpartyKey;
+  const counterparty =
+    counterpartyKey === undefined
+      ? undefined
+      : facts.leagueTeams.find((team) => team.providerTeamKey === counterpartyKey);
+  if (counterpartyKey === undefined || counterparty === undefined) {
+    reasons.push({
+      code: "trade_counterparty_missing",
+      detail: `${counterpartyName} is no longer a team in this league, so this offer cannot be made.`,
+    });
+  }
+  if (tradeWindowClosed(facts.league)) {
+    reasons.push({
+      code: "trade_window_closed",
+      detail: `The league's trade window closed on ${facts.league.tradeEndDate ?? "an unpublished date"}, so this offer cannot be made.`,
+    });
+  }
+  const rostered = new Map(
+    facts.roster.players.map((player) => [player.providerPlayerKey, player] as const),
+  );
+  for (const drop of drops) {
+    const player = rostered.get(drop.key);
+    if (player === undefined) {
+      reasons.push({
+        code: "trade_player_not_rostered",
+        playerKey: drop.key,
+        detail: `${drop.name ?? "A player you are sending"} is no longer on your roster.`,
+      });
+      continue;
+    }
+    drop.name = player.name;
+    drop.position = player.displayPosition;
+    if (player.proTeamAbbreviation !== undefined) {
+      drop.proTeam = player.proTeamAbbreviation;
+    }
+    const availability = player.injuryDetail ?? player.injuryCode;
+    if (availability !== undefined) {
+      drop.availability = availability;
+    }
+  }
+  const opponent =
+    counterpartyKey === undefined ? undefined : facts.tradeRosters.get(counterpartyKey);
+  if (counterpartyKey !== undefined && opponent === undefined) {
+    reasons.push({
+      code: "state_unavailable",
+      detail: `${counterpartyName}'s roster could not be read, so the players coming back cannot be checked.`,
+    });
+  }
+  const opponentPlayers = new Map(
+    (opponent?.players ?? []).map((player) => [player.providerPlayerKey, player] as const),
+  );
+  for (const add of adds) {
+    const player = opponentPlayers.get(add.key);
+    if (player === undefined) {
+      reasons.push({
+        code: "trade_player_not_rostered",
+        playerKey: add.key,
+        detail: `${add.name ?? "A player you asked for"} is no longer on ${counterpartyName}'s roster.`,
+      });
+      continue;
+    }
+    add.name = player.name;
+    add.position = player.displayPosition;
+    if (player.proTeamAbbreviation !== undefined) {
+      add.proTeam = player.proTeamAbbreviation;
+    }
+    const availability = player.injuryDetail ?? player.injuryCode;
+    if (availability !== undefined) {
+      add.availability = availability;
+    }
+  }
+  const capacity = facts.league.rosterPositions.reduce(
+    (total, position) => (position.kind === "reserve" ? total : total + position.count),
+    0,
+  );
+  const reserveNames = new Set(
+    facts.league.rosterPositions
+      .filter((position) => position.kind === "reserve")
+      .map((position) => position.position),
+  );
+  const inReserve = facts.roster.players.filter(
+    (player) => player.slot.status === "verified" && reserveNames.has(player.slot.slot),
+  );
+  const occupied = facts.roster.players.length - inReserve.length;
+  const dropped = drops.filter((drop) => rostered.has(drop.key)).length;
+  const current = adds.filter((add) => opponentPlayers.has(add.key)).length;
+  if (capacity > 0 && occupied - dropped + current > capacity) {
+    reasons.push({
+      code: "roster_full",
+      detail: `This trade would leave ${String(occupied - dropped + current)} roster players and the league allows ${String(capacity)}.`,
+    });
+  }
+  return {
+    id: item.id,
+    adds,
+    drops,
+    staleness: reasons.length === 0 ? currentCheck(at) : staleCheck(reasons, at),
+  };
+}
+
+function refreshedTrade(
+  item: ProposalItemRecord,
+  trade: StoredProposalTrade,
+  facts: TeamFacts,
+  feed: TradeFeed | undefined,
+  at: DateTime.Utc,
+): { readonly trade: StoredProposalTrade; readonly state: ProposalItemState } {
+  if (feed === undefined) {
+    return { trade, state: item.state };
+  }
+  const pending = feed.pending.find((offer) => offer.transactionKey === trade.providerKey);
+  if (pending !== undefined) {
+    const proposedAt = Schema.decodeOption(Schema.DateTimeUtcFromString)(pending.proposedAt);
+    return {
+      trade: {
+        ...trade,
+        state: "pending",
+        ...(proposedAt._tag === "Some" ? { proposedAt: proposedAt.value } : {}),
+        detail: undefined,
+      },
+      state: "pending",
+    };
+  }
+  if (feed.completedUnavailable) {
+    return {
+      trade: {
+        ...trade,
+        detail:
+          "The provider no longer lists this offer, and its completed trades could not be read. Check the provider's trade page.",
+      },
+      state: "pending",
+    };
+  }
+  const accepted = feed.completed.find((transaction) =>
+    matchesAcceptedTrade(item, trade, facts, transaction),
+  );
+  if (accepted !== undefined) {
+    return {
+      trade: {
+        ...trade,
+        state: "accepted",
+        settledAt: at,
+        detail: `${item.counterpartyName ?? "The other manager"} accepted this offer. It is no longer waiting for a response.`,
+      },
+      state: "accepted",
+    };
+  }
+  if (tradeWindowClosed(facts.league)) {
+    return {
+      trade: {
+        ...trade,
+        state: "expired",
+        settledAt: at,
+        detail: `The provider no longer lists this offer and the league's trade window closed on ${facts.league.tradeEndDate ?? "an unpublished date"}.`,
+      },
+      state: "expired",
+    };
+  }
+  return {
+    trade: {
+      ...trade,
+      state: "expired",
+      settledAt: at,
+      detail:
+        "The provider no longer lists this offer and it is not among its completed trades. The provider publishes no ended record, so it was withdrawn or expired elsewhere.",
+    },
+    state: "expired",
+  };
+}
+
+function matchesAcceptedTrade(
+  item: ProposalItemRecord,
+  trade: StoredProposalTrade,
+  facts: TeamFacts,
+  transaction: ProviderTransaction,
+): boolean {
+  if (transaction.type !== "trade" || item.counterpartyKey === undefined) {
+    return false;
+  }
+  if (Date.parse(transaction.occurredAt) + 300_000 < DateTime.toEpochMillis(trade.requestedAt)) {
+    return false;
+  }
+  const own = facts.providerTeamKey;
+  const counterparty = item.counterpartyKey;
+  const involves = (teamKey: string): boolean =>
+    transaction.teams.some((team) => team.providerTeamKey === teamKey);
+  if (!involves(own) || !involves(counterparty)) {
+    return false;
+  }
+  const movement = (playerKey: string, from: string, to: string): boolean =>
+    transaction.players.some(
+      (player) =>
+        player.providerPlayerKey === playerKey &&
+        player.movement.from?.providerTeamKey === from &&
+        player.movement.to?.providerTeamKey === to,
+    );
+  return (
+    item.drops.every((drop) => movement(drop.key, own, counterparty)) &&
+    item.adds.every((add) => movement(add.key, counterparty, own))
+  );
+}
+
 function budgetOf(
   facts: TeamFacts,
   items: ReadonlyArray<ProposalItemRecord>,
@@ -1207,6 +2260,51 @@ function budgetOf(
 
 function currentCheck(at: DateTime.Utc): StoredProposalStaleness {
   return { status: "current", checkedAt: at, reasons: [] };
+}
+
+function tradeWindowClosed(league: ProviderLeagueSettings): boolean {
+  return (
+    league.tradeEndDate !== undefined &&
+    league.currentDate !== undefined &&
+    league.currentDate > league.tradeEndDate
+  );
+}
+
+function tradeRefusal(
+  index: number,
+  refusal: ProposalItemRefused["refusal"],
+  detail: string,
+): ProposalItemRefused {
+  return { index, outcome: "refused", refusal, detail };
+}
+
+function proposalPlayerOf(player: ProviderRoster["players"][number]): StoredProposalPlayer {
+  const availability = player.injuryDetail ?? player.injuryCode;
+  return {
+    key: player.providerPlayerKey,
+    name: player.name,
+    position: player.displayPosition,
+    ...(player.proTeamAbbreviation === undefined ? {} : { proTeam: player.proTeamAbbreviation }),
+    ...(availability === undefined ? {} : { availability }),
+  };
+}
+
+function withdrawalDetail(write: ProviderWriteResult): string {
+  switch (write.status) {
+    case "accepted":
+      return "The provider accepted the withdrawal.";
+    case "rejected":
+      return clamped(write.detail ?? "The provider rejected the withdrawal without saying why.");
+    case "not_sent":
+      return clamped(
+        write.detail ??
+          (write.reason === "session_incomplete"
+            ? "The withdrawal was not sent because the provider did not issue a write token."
+            : "The withdrawal was not sent to the provider."),
+      );
+    case "unknown":
+      return "The provider did not confirm the withdrawal, so it may or may not have applied. It was not retried. Check the provider's trade page.";
+  }
 }
 
 function addAvailability(detail: ProviderPlayerDetail): string | undefined {
@@ -1298,12 +2396,27 @@ function proposalShape(
       return bid === undefined
         ? { refusal: "bid_invalid", detail: "A waiver claim requires a FAAB bid." }
         : undefined;
+    case "trade":
+      if (draft.adds.length === 0 || draft.drops.length === 0) {
+        return {
+          refusal: "kind_invalid",
+          detail:
+            "A trade names at least one player going out and at least one player coming back. Draft picks are not part of a trade item.",
+        };
+      }
+      return bid === undefined
+        ? undefined
+        : {
+            refusal: "bid_invalid",
+            detail: "A trade carries no FAAB bid. Use a waiver claim to spend a bid.",
+          };
   }
 }
 
 function proposalItemKey(input: {
   readonly team: string;
   readonly kind: string;
+  readonly counterpartyKey: string | undefined;
   readonly adds: ReadonlyArray<string>;
   readonly drops: ReadonlyArray<string>;
   readonly bid: number | undefined;
@@ -1312,6 +2425,7 @@ function proposalItemKey(input: {
   return JSON.stringify([
     input.team,
     input.kind,
+    input.counterpartyKey ?? null,
     [...input.adds].sort(),
     [...input.drops].sort(),
     input.bid ?? null,
@@ -1322,17 +2436,26 @@ function proposalItemKey(input: {
 function proposalMoveKey(
   team: string,
   kind: string,
+  counterpartyKey: string | undefined,
   adds: ReadonlyArray<string>,
   drops: ReadonlyArray<string>,
   bid: number | undefined,
 ): string {
-  return JSON.stringify([team, kind, [...adds].sort(), [...drops].sort(), bid ?? null]);
+  return JSON.stringify([
+    team,
+    kind,
+    counterpartyKey ?? null,
+    [...adds].sort(),
+    [...drops].sort(),
+    bid ?? null,
+  ]);
 }
 
 function recordItemKey(item: ProposalItemRecord): string {
   return proposalItemKey({
     team: item.team,
     kind: item.kind,
+    counterpartyKey: item.counterpartyKey,
     adds: item.adds.map((add) => add.key),
     drops: item.drops.map((drop) => drop.key),
     bid: item.bid,
@@ -1367,7 +2490,14 @@ function reviewPath(set: string): string {
   return `/transactions/${set}`;
 }
 
-function teamView(team: ProposalTeamRecord): QueryTeam {
+function teamView(team: {
+  readonly id: TeamId;
+  readonly name: string;
+  readonly provider: ProposalTeamRecord["provider"];
+  readonly league: ProposalTeamRecord["league"];
+  readonly sport: ProposalTeamRecord["sport"];
+  readonly season: number;
+}): QueryTeam {
   return {
     id: team.id,
     name: team.name,
@@ -1434,6 +2564,23 @@ function toItem(
     const rostered = new Map(
       (facts?.roster.players ?? []).map((player) => [player.providerPlayerKey, player] as const),
     );
+    const counterpartyRoster =
+      record.counterpartyKey === undefined
+        ? undefined
+        : facts?.tradeRosters.get(record.counterpartyKey);
+    const counterpartyPlayers = new Map(
+      (counterpartyRoster?.players ?? []).map(
+        (player) => [player.providerPlayerKey, player] as const,
+      ),
+    );
+    const counterpartyRef =
+      record.counterpartyKey === undefined
+        ? undefined
+        : yield* tokens.sealCounterpartyRef({
+            userId,
+            leagueKey,
+            teamKey: record.counterpartyKey,
+          });
     let reasonOffset = 0;
     const execution: ProposalItem["execution"] =
       record.outcome === undefined
@@ -1465,16 +2612,22 @@ function toItem(
       kind: record.kind,
       adds: record.adds.map((add, index) => {
         const detail = facts?.players.get(add.key);
-        const availability = detail === undefined ? add.availability : addAvailability(detail);
+        const tradePlayer = counterpartyPlayers.get(add.key);
+        const availability =
+          detail !== undefined
+            ? addAvailability(detail)
+            : tradePlayer === undefined
+              ? add.availability
+              : (tradePlayer.injuryDetail ?? tradePlayer.injuryCode);
+        const position = displayValue(detail?.displayPosition, add.position);
+        const proTeam = displayValue(detail?.proTeam, add.proTeam);
+        const tradePosition = tradePlayer?.displayPosition ?? position;
+        const tradeProTeam = tradePlayer?.proTeamAbbreviation ?? proTeam;
         return {
           ref: Array.getUnsafe(addRefs, index),
           ...(add.name === undefined ? {} : { name: add.name }),
-          ...(displayValue(detail?.displayPosition, add.position) === undefined
-            ? {}
-            : { position: displayValue(detail?.displayPosition, add.position) }),
-          ...(displayValue(detail?.proTeam, add.proTeam) === undefined
-            ? {}
-            : { proTeam: displayValue(detail?.proTeam, add.proTeam) }),
+          ...(tradePosition === undefined ? {} : { position: tradePosition }),
+          ...(tradeProTeam === undefined ? {} : { proTeam: tradeProTeam }),
           ...(availability === undefined ? {} : { availability }),
         };
       }),
@@ -1513,6 +2666,38 @@ function toItem(
       },
       ...(execution === undefined ? {} : { execution }),
       ...(reserve === undefined ? {} : { reserveMove: reserve }),
+      ...(counterpartyRef === undefined
+        ? {}
+        : {
+            counterparty: {
+              ref: counterpartyRef,
+              ...(record.counterpartyName === undefined ? {} : { name: record.counterpartyName }),
+              ...(record.counterpartyKey === undefined ||
+              facts?.leagueTeams.find((entry) => entry.providerTeamKey === record.counterpartyKey)
+                ?.managerName === undefined
+                ? {}
+                : {
+                    managerName: facts.leagueTeams.find(
+                      (entry) => entry.providerTeamKey === record.counterpartyKey,
+                    )?.managerName,
+                  }),
+            },
+          }),
+      ...(record.trade === undefined
+        ? {}
+        : {
+            trade: {
+              state: record.trade.state,
+              requestedAt: record.trade.requestedAt,
+              ...(record.trade.proposedAt === undefined
+                ? {}
+                : { proposedAt: record.trade.proposedAt }),
+              ...(record.trade.settledAt === undefined
+                ? {}
+                : { settledAt: record.trade.settledAt }),
+              ...(record.trade.detail === undefined ? {} : { detail: record.trade.detail }),
+            },
+          }),
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
@@ -1556,6 +2741,15 @@ function executableRefusal(item: ProposalItemRecord): string | undefined {
   if (item.adds.length + item.drops.length === 0) {
     return "This move names no player to add or drop, so there is nothing to send.";
   }
+  if (item.kind === "trade") {
+    if (item.counterpartyKey === undefined) {
+      return "This trade names no counterparty, so there is nobody to make the offer to.";
+    }
+    if (item.adds.length === 0 || item.drops.length === 0) {
+      return "A trade needs at least one player going out and one coming back before it can be sent.";
+    }
+    return undefined;
+  }
   if (item.adds.length > 1 || item.drops.length > 1) {
     return `The provider's transaction request carries one add and one drop, and this move names ${String(item.adds.length)} to add and ${String(item.drops.length)} to drop. Split it into separate items and propose a fresh set.`;
   }
@@ -1583,6 +2777,9 @@ function stoppedDetailFor(item: ProposalItemRecord, outcome: ProposalOutcome): s
 function moveLabel(item: ProposalItemRecord): string {
   const adds = item.adds.flatMap((add) => (add.name === undefined ? [] : [add.name]));
   const drops = item.drops.flatMap((drop) => (drop.name === undefined ? [] : [drop.name]));
+  if (item.kind === "trade" && adds.length > 0 && drops.length > 0) {
+    return `Trading ${drops.join(", ")} to ${item.counterpartyName ?? "the counterparty"} for ${adds.join(", ")}`;
+  }
   if (adds.length > 0 && drops.length > 0) {
     return `Adding ${adds.join(", ")} and dropping ${drops.join(", ")}`;
   }
@@ -1729,97 +2926,147 @@ function planReserveMove(
   };
 }
 
-function toPendingTradeOffer(
+function toPendingTradeOffers(
   tokens: QueryTokens["Service"],
   userId: UserId,
   leagueKey: string,
-  trade: ProviderPendingTrade,
-): Effect.Effect<PendingTradeOffer, ProposalPersistenceFailed> {
+  trades: ReadonlyArray<ProviderPendingTrade>,
+): Effect.Effect<ReadonlyArray<PendingTradeOffer>, ProposalPersistenceFailed> {
+  return toPendingTradeOffersGroups(tokens, userId, [{ leagueKey, trades }]).pipe(
+    Effect.map((groups) => Array.getUnsafe(groups, 0)),
+  );
+}
+
+function toPendingTradeOffersGroups(
+  tokens: QueryTokens["Service"],
+  userId: UserId,
+  groups: ReadonlyArray<{
+    readonly leagueKey: string;
+    readonly trades: ReadonlyArray<ProviderPendingTrade>;
+  }>,
+): Effect.Effect<ReadonlyArray<ReadonlyArray<PendingTradeOffer>>, ProposalPersistenceFailed> {
   return Effect.gen(function* () {
-    const playerRefs = yield* tokens.sealPlayerRefs({
-      userId,
-      leagueKey,
-      playerKeys: trade.players.map((player) => player.providerPlayerKey),
-    });
-    const nameByTeam = new Map<string, string | undefined>();
-    const remember = (team: ProviderTransactionTeam | undefined): void => {
-      if (team !== undefined && !nameByTeam.has(team.providerTeamKey)) {
-        nameByTeam.set(team.providerTeamKey, team.name);
-      }
-    };
-    remember(trade.proposer);
-    remember(trade.receiver);
-    for (const player of trade.players) {
-      remember(player.movement.from);
-      remember(player.movement.to);
-    }
-    for (const pick of trade.picks) {
-      remember(pick.from);
-      remember(pick.to);
-      remember(pick.original);
-    }
-    const teamKeys = [...nameByTeam.keys()];
-    const teamRefs = yield* tokens.sealCounterpartyRefs({ userId, leagueKey, teamKeys });
-    const partyByTeam = new Map(
-      teamKeys.map((key, index) => [key, Array.getUnsafe(teamRefs, index)] as const),
+    const playerKeysByGroup = groups.map((group) =>
+      group.trades.flatMap((trade) => trade.players.map((player) => player.providerPlayerKey)),
     );
-    const partyOf = (team: ProviderTransactionTeam | undefined): PendingParty | undefined => {
-      if (team === undefined) {
-        return undefined;
-      }
-      const ref = partyByTeam.get(team.providerTeamKey);
-      if (ref === undefined) {
-        throw new Error("A pending trade party is missing its reference");
-      }
-      return team.name === undefined ? { ref } : { ref, name: team.name };
-    };
-    const proposedAt = yield* Schema.decodeEffect(Schema.DateTimeUtcFromString)(
-      trade.proposedAt,
-    ).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
-    const proposingTeam = partyOf(trade.proposer);
-    const receivingTeam = partyOf(trade.receiver);
-    return {
-      proposedAt,
-      ...(trade.note === undefined ? {} : { note: trade.note }),
-      canRespond: trade.canRespond,
-      ...(proposingTeam === undefined ? {} : { proposingTeam }),
-      ...(receivingTeam === undefined ? {} : { receivingTeam }),
-      players: trade.players.map((player, index) => {
-        const from = partyOf(player.movement.from);
-        const to = partyOf(player.movement.to);
-        return {
-          player: Array.getUnsafe(playerRefs, index),
-          ...(player.name === undefined ? {} : { name: player.name }),
-          ...(player.displayPosition === undefined
-            ? {}
-            : { displayPosition: player.displayPosition }),
-          ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
-          ...(from === undefined ? {} : { from }),
-          ...(to === undefined ? {} : { to }),
+    const teamKeysByGroup = groups.map((group) => {
+      const keys = new Set<string>();
+      for (const trade of group.trades) {
+        const remember = (team: ProviderTransactionTeam | undefined): void => {
+          if (team !== undefined) {
+            keys.add(team.providerTeamKey);
+          }
         };
-      }),
-      picks: trade.picks.map((pick) => {
-        const from = partyOf(pick.from);
-        const to = partyOf(pick.to);
-        const original = partyOf(pick.original);
-        return {
-          round: pick.round,
-          ...(from === undefined ? {} : { from }),
-          ...(to === undefined ? {} : { to }),
-          ...(original === undefined ? {} : { original }),
-        };
-      }),
-      ...(trade.incomplete === undefined
-        ? {}
-        : {
-            incomplete: {
-              code:
-                trade.incomplete.code === "no_movements"
-                  ? ("no_movements" as const)
-                  : ("movement_missing_party" as const),
-              detail: trade.incomplete.detail,
-            },
+        remember(trade.proposer);
+        remember(trade.receiver);
+        for (const player of trade.players) {
+          remember(player.movement.from);
+          remember(player.movement.to);
+        }
+        for (const pick of trade.picks) {
+          remember(pick.from);
+          remember(pick.to);
+          remember(pick.original);
+        }
+      }
+      return [...keys];
+    });
+    const playerRefsByGroup = yield* tokens.sealPlayerRefGroups({
+      userId,
+      groups: groups.map((group, index) => ({
+        leagueKey: group.leagueKey,
+        playerKeys: Array.getUnsafe(playerKeysByGroup, index),
+      })),
+    });
+    const teamRefsByGroup = yield* tokens.sealCounterpartyRefGroups({
+      userId,
+      groups: groups.map((group, index) => ({
+        leagueKey: group.leagueKey,
+        teamKeys: Array.getUnsafe(teamKeysByGroup, index),
+      })),
+    });
+    const offerRefsByGroup = yield* tokens.sealTradeOfferRefGroups({
+      userId,
+      groups: groups.map((group) => ({
+        leagueKey: group.leagueKey,
+        transactionKeys: group.trades.map((trade) => trade.transactionKey),
+      })),
+    });
+    const result: Array<ReadonlyArray<PendingTradeOffer>> = [];
+    for (const [groupIndex, group] of groups.entries()) {
+      const playerRefs = Array.getUnsafe(playerRefsByGroup, groupIndex);
+      const teamRefs = Array.getUnsafe(teamRefsByGroup, groupIndex);
+      const offerRefs = Array.getUnsafe(offerRefsByGroup, groupIndex);
+      const teamKeys = Array.getUnsafe(teamKeysByGroup, groupIndex);
+      const partyByTeam = new Map(
+        teamKeys.map((key, index) => [key, Array.getUnsafe(teamRefs, index)] as const),
+      );
+      const partyOf = (team: ProviderTransactionTeam | undefined): PendingParty | undefined => {
+        if (team === undefined) {
+          return undefined;
+        }
+        const ref = partyByTeam.get(team.providerTeamKey);
+        if (ref === undefined) {
+          throw new Error("A pending trade party is missing its reference");
+        }
+        return team.name === undefined ? { ref } : { ref, name: team.name };
+      };
+      const offers: Array<PendingTradeOffer> = [];
+      let playerOffset = 0;
+      for (const [tradeIndex, trade] of group.trades.entries()) {
+        const proposedAt = yield* Schema.decodeEffect(Schema.DateTimeUtcFromString)(
+          trade.proposedAt,
+        ).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        const proposingTeam = partyOf(trade.proposer);
+        const receivingTeam = partyOf(trade.receiver);
+        offers.push({
+          offerRef: Array.getUnsafe(offerRefs, tradeIndex),
+          proposedAt,
+          ...(trade.note === undefined ? {} : { note: trade.note }),
+          canRespond: trade.canRespond,
+          ...(proposingTeam === undefined ? {} : { proposingTeam }),
+          ...(receivingTeam === undefined ? {} : { receivingTeam }),
+          players: trade.players.map((player, playerIndex) => {
+            const from = partyOf(player.movement.from);
+            const to = partyOf(player.movement.to);
+            return {
+              player: Array.getUnsafe(playerRefs, playerOffset + playerIndex),
+              ...(player.name === undefined ? {} : { name: player.name }),
+              ...(player.displayPosition === undefined
+                ? {}
+                : { displayPosition: player.displayPosition }),
+              ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
+              ...(from === undefined ? {} : { from }),
+              ...(to === undefined ? {} : { to }),
+            };
           }),
-    };
+          picks: trade.picks.map((pick) => {
+            const from = partyOf(pick.from);
+            const to = partyOf(pick.to);
+            const original = partyOf(pick.original);
+            return {
+              round: pick.round,
+              ...(from === undefined ? {} : { from }),
+              ...(to === undefined ? {} : { to }),
+              ...(original === undefined ? {} : { original }),
+            };
+          }),
+          ...(trade.incomplete === undefined
+            ? {}
+            : {
+                incomplete: {
+                  code:
+                    trade.incomplete.code === "no_movements"
+                      ? ("no_movements" as const)
+                      : ("movement_missing_party" as const),
+                  detail: trade.incomplete.detail,
+                },
+              }),
+        });
+        playerOffset += trade.players.length;
+      }
+      result.push(offers);
+    }
+    return result;
   });
 }

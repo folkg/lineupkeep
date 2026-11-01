@@ -91,6 +91,12 @@ export const CounterpartyRef = Schema.String.pipe(
 );
 export type CounterpartyRef = typeof CounterpartyRef.Type;
 
+export const TradeOfferRef = Schema.String.pipe(
+  Schema.check(Schema.isMinLength(1), Schema.isMaxLength(2_048)),
+  Schema.brand("TradeOfferRef"),
+);
+export type TradeOfferRef = typeof TradeOfferRef.Type;
+
 export const StatRef = Schema.String.pipe(
   Schema.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
   Schema.brand("StatRef"),

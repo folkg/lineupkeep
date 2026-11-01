@@ -4186,6 +4186,7 @@ function transaction(fields: {
   readonly incomplete?: ProviderTransaction["incomplete"];
 }): ProviderTransaction {
   return {
+    transactionKey: undefined,
     occurredAt: fields.occurredAt,
     type: fields.type,
     status: "successful",

@@ -1,0 +1,250 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "0b3a0872-b75a-4f18-a47a-38db0fe67fd9",
+  "prevIds": ["ec46ee8f-91fd-486e-b119-2ac6d9d707ea"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "connection_id"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.connection_id",
+        "n|col|public.transaction_proposal_items.connection_id",
+        "e|col|public.transaction_proposal_items.connection_id"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "transaction_proposal_items",
+        "counterparty_team_key"
+      ],
+      "writes": [
+        "s|col|public.transaction_proposal_items.counterparty_team_key",
+        "n|col|public.transaction_proposal_items.counterparty_team_key",
+        "e|col|public.transaction_proposal_items.counterparty_team_key"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "counterparty_name"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.counterparty_name",
+        "n|col|public.transaction_proposal_items.counterparty_name",
+        "e|col|public.transaction_proposal_items.counterparty_name"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "trade_provider_key"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.trade_provider_key",
+        "n|col|public.transaction_proposal_items.trade_provider_key",
+        "e|col|public.transaction_proposal_items.trade_provider_key"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "trade_state"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.trade_state",
+        "n|col|public.transaction_proposal_items.trade_state",
+        "e|col|public.transaction_proposal_items.trade_state"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "trade_requested_at"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.trade_requested_at",
+        "n|col|public.transaction_proposal_items.trade_requested_at",
+        "e|col|public.transaction_proposal_items.trade_requested_at"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "trade_proposed_at"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.trade_proposed_at",
+        "n|col|public.transaction_proposal_items.trade_proposed_at",
+        "e|col|public.transaction_proposal_items.trade_proposed_at"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "trade_settled_at"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.trade_settled_at",
+        "n|col|public.transaction_proposal_items.trade_settled_at",
+        "e|col|public.transaction_proposal_items.trade_settled_at"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "trade_detail"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.trade_detail",
+        "n|col|public.transaction_proposal_items.trade_detail",
+        "e|col|public.transaction_proposal_items.trade_detail"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "connection_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "counterparty_team_key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "counterparty_name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "trade_provider_key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "trade_state",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "trade_requested_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "trade_proposed_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "trade_settled_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "trade_detail",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

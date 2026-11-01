@@ -9,6 +9,7 @@ import type {
   TransactionReviewItemView,
   TransactionReviewPlayerView,
   TransactionReviewStaleReasonView,
+  TransactionReviewPendingOfferView,
   TransactionReviewTeamView,
   TransactionReviewView,
 } from "#contracts/connections/transactionContract.ts";
@@ -59,8 +60,22 @@ function toTeamView(team: ProposalSetReview["teams"][number]): TransactionReview
       : team.budget.status === "published"
         ? { budget: { status: "published" as const, remaining: team.budget.remaining } }
         : { budget: { status: "not_published" as const, detail: team.budget.detail } }),
+    ...(team.tradeRules === undefined
+      ? {}
+      : {
+          tradeRules: {
+            ...(team.tradeRules.endDate === undefined ? {} : { endDate: team.tradeRules.endDate }),
+            ...(team.tradeRules.ratification === undefined
+              ? {}
+              : { ratification: team.tradeRules.ratification }),
+            ...(team.tradeRules.objectionDays === undefined
+              ? {}
+              : { objectionDays: team.tradeRules.objectionDays }),
+          },
+        }),
     ...(team.failure === undefined ? {} : { failure: unreadableTeamDetail }),
     items: team.items.map(toItemView),
+    pendingOffers: team.pendingOffers.map(toPendingOfferView),
   };
 }
 
@@ -111,6 +126,106 @@ function toItemView(
             toSlot: item.reserveMove.toSlot,
           },
         }),
+    ...(item.counterparty === undefined
+      ? {}
+      : {
+          counterparty: {
+            ref: item.counterparty.ref,
+            ...(item.counterparty.name === undefined ? {} : { name: item.counterparty.name }),
+            ...(item.counterparty.managerName === undefined
+              ? {}
+              : { managerName: item.counterparty.managerName }),
+          },
+        }),
+    ...(item.trade === undefined
+      ? {}
+      : {
+          trade: {
+            state: item.trade.state,
+            requestedAt: DateTime.formatIso(item.trade.requestedAt),
+            ...(item.trade.proposedAt === undefined
+              ? {}
+              : { proposedAt: DateTime.formatIso(item.trade.proposedAt) }),
+            ...(item.trade.settledAt === undefined
+              ? {}
+              : { settledAt: DateTime.formatIso(item.trade.settledAt) }),
+            ...(item.trade.detail === undefined ? {} : { detail: item.trade.detail }),
+          },
+        }),
+  };
+}
+
+function toPendingOfferView(
+  offer: ProposalSetReview["teams"][number]["pendingOffers"][number],
+): TransactionReviewPendingOfferView {
+  return {
+    offerRef: offer.offerRef,
+    proposedAt: DateTime.formatIso(offer.proposedAt),
+    ...(offer.note === undefined ? {} : { note: offer.note }),
+    canRespond: offer.canRespond,
+    ...(offer.proposingTeam === undefined
+      ? {}
+      : {
+          proposingTeam: {
+            ref: offer.proposingTeam.ref,
+            ...(offer.proposingTeam.name === undefined ? {} : { name: offer.proposingTeam.name }),
+          },
+        }),
+    ...(offer.receivingTeam === undefined
+      ? {}
+      : {
+          receivingTeam: {
+            ref: offer.receivingTeam.ref,
+            ...(offer.receivingTeam.name === undefined ? {} : { name: offer.receivingTeam.name }),
+          },
+        }),
+    players: offer.players.map((player) => ({
+      player: player.player,
+      ...(player.name === undefined ? {} : { name: player.name }),
+      ...(player.displayPosition === undefined ? {} : { displayPosition: player.displayPosition }),
+      ...(player.proTeam === undefined ? {} : { proTeam: player.proTeam }),
+      ...(player.from === undefined
+        ? {}
+        : {
+            from: {
+              ref: player.from.ref,
+              ...(player.from.name === undefined ? {} : { name: player.from.name }),
+            },
+          }),
+      ...(player.to === undefined
+        ? {}
+        : {
+            to: {
+              ref: player.to.ref,
+              ...(player.to.name === undefined ? {} : { name: player.to.name }),
+            },
+          }),
+    })),
+    picks: offer.picks.map((pick) => ({
+      round: pick.round,
+      ...(pick.from === undefined
+        ? {}
+        : {
+            from: {
+              ref: pick.from.ref,
+              ...(pick.from.name === undefined ? {} : { name: pick.from.name }),
+            },
+          }),
+      ...(pick.to === undefined
+        ? {}
+        : {
+            to: { ref: pick.to.ref, ...(pick.to.name === undefined ? {} : { name: pick.to.name }) },
+          }),
+      ...(pick.original === undefined
+        ? {}
+        : {
+            original: {
+              ref: pick.original.ref,
+              ...(pick.original.name === undefined ? {} : { name: pick.original.name }),
+            },
+          }),
+    })),
+    ...(offer.incomplete === undefined ? {} : { incomplete: offer.incomplete.detail }),
   };
 }
 
@@ -147,6 +262,8 @@ export function mapTransactionReviewError(
   | "transactions.set_expired"
   | "transactions.already_submitted"
   | "transactions.nothing_included"
+  | "transactions.trade_not_found"
+  | "transactions.trade_not_pending"
 > {
   switch (error._tag) {
     case "proposal.set_not_found":
@@ -156,6 +273,10 @@ export function mapTransactionReviewError(
       return { type: "transactions.input_invalid", outcome: "rejected" };
     case "proposal.nothing_included":
       return { type: "transactions.nothing_included", outcome: "rejected" };
+    case "proposal.trade_not_found":
+      return { type: "transactions.trade_not_found", outcome: "rejected" };
+    case "proposal.trade_not_pending":
+      return { type: "transactions.trade_not_pending", outcome: "conflict" };
     case "proposal.set_expired":
       return { type: "transactions.set_expired", outcome: "rejected" };
     case "proposal.already_submitted":
