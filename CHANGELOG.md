@@ -10,9 +10,9 @@ revisions that carried each change.
   connections, teams, leagues, players, transaction history, lineup-run status, and feedback
   reports. `get_lineup_runs` moved from `lineups:write` to `fantasy:read` because reading a run is a
   read; `submit_feedback` and `list_feedback` moved with the connections read scope.
-- `feedback:manage` and the public `triage_feedback` tool are gone. Acknowledging and closing are an
-  internal domain operation with no scope a client can request; submission and read-back stay under
-  `fantasy:read`.
+- `feedback:manage` and the public `triage_feedback` tool are gone, along with the internal triage
+  operation. A report is filed `open`, read back with its stored status, and closed when the work
+  lands; no tool or scope changes it. Submission and read-back stay under `fantasy:read`.
 - Retired names are accepted but never advertised: a token whose claim says `connections:read`
   reaches every `fantasy:read` tool, and a stored registration that still asks for it authorizes and
   consents normally. A token that still holds `feedback:manage` keeps working for every other scope

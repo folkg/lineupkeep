@@ -61,11 +61,11 @@ Feedback is one owner-scoped record for a bug, data issue, friction report, or w
 
 Filing a report and reading back what happened to it both need only `fantasy:read`, the scope every client holds; a submitter could otherwise never confirm what happened to what it filed, which is the channel's whole purpose. Ownership is the boundary: every query is filtered to the acting account, so a submitter sees their own items and never anyone else's, and a foreign report id is `not_found`, not a forbidden-with-details response. There is no agent-wide, operator, or support queue.
 
-Triage is not part of the public surface. Acknowledging, resolving with a note, and closing as not planned are an internal domain operation in the backend, with no MCP tool and no scope a client can request. `feedback:manage` is therefore retired: no tool requires it, it is absent from both discovery documents, and a token minted while it existed keeps working for every tool it holds another scope for.
+The surface is submit and read-back only. A report is filed `open`; a report's status is set when the work lands, not through a tool, so no client can acknowledge, resolve, close, or otherwise change a report. `feedback:manage` is therefore retired: no tool requires it, it is absent from both discovery documents, and a token minted while it existed keeps working for every tool it holds another scope for.
 
-Status is `open`, `acknowledged`, `resolved`, or `wontfix`. The internal operation's `resolve` requires a resolution note and sets the closure time; `wontfix` accepts an optional note. Repeating the current action is an `unchanged` no-op with the resulting record, and an action that contradicts a closed report is `rejected`: closure is final, so report the problem again if it returns.
+Status is `open`, `acknowledged`, `resolved`, or `wontfix`, and it is stored history. A stored status, optional resolution note, and closure time are read back as they were recorded; nothing in the application writes them now.
 
-Submission is bounded and rate-limited: title ≤ 120 characters, body ≤ 4000, note ≤ 2000, control characters removed, and user text always returned as plain text. An account may submit 20 reports per clock hour and one acting client label may submit 10; the per-account limit is the backstop, so a client that renames itself cannot exceed it, and a refusal names the retry delay in seconds. Reports must never contain passwords, provider cookies, account identifiers, or raw provider payloads. Open and acknowledged reports are retained as current work; resolved and not-planned reports are deleted 180 days after closure.
+Submission is bounded and rate-limited: title ≤ 120 characters, body ≤ 4000, control characters removed, and user text always returned as plain text. An account may submit 20 reports per clock hour and one acting client label may submit 10; the per-account limit is the backstop, so a client that renames itself cannot exceed it, and a refusal names the retry delay in seconds. Reports must never contain passwords, provider cookies, account identifiers, or raw provider payloads. Open reports are retained; resolved and not-planned reports already stored are deleted 180 days after closure.
 
 ## Budgets and paging
 
@@ -763,7 +763,7 @@ scoping as before, and it is the channel for reporting the scope problem itself,
 behind a scope the client cannot request. Read-back follows submission for the same reason: a
 submitter that cannot read its own report's status cannot confirm the report was received or
 resolved. Both are owner-filtered, so neither widens access to another account's reports. There is
-no public triage tool; acknowledging and closing are an internal operation, as the Feedback
+no tool that changes a report's status; a report closes when the work lands, as the Feedback
 behavior section states.
 
 ### Retired scope names
@@ -773,10 +773,10 @@ advertised**: a token or authorization request that carries one is resolved to t
 the enforcement boundary, and neither discovery document, the onboarding baseline, nor a new client
 registration names one.
 
-| Retired name       | Accepted as    | Why it went                                                                                     |
-| ------------------ | -------------- | ----------------------------------------------------------------------------------------------- |
-| `connections:read` | `fantasy:read` | Reading a connection and reading a team are the same act of reading the owner's own data.       |
-| `feedback:manage`  | none           | Triage is not public. A token that still holds it keeps working for every other scope it holds. |
+| Retired name       | Accepted as    | Why it went                                                                                                             |
+| ------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `connections:read` | `fantasy:read` | Reading a connection and reading a team are the same act of reading the owner's own data.                               |
+| `feedback:manage`  | none           | The feedback surface is submit-and-read only. A token that still holds it keeps working for every other scope it holds. |
 
 `connections:read` is accepted in a token's `scope` claim, in an authorization request, and on the
 consent screen; the consent screen shows the description of the scope it resolves to. A stored
@@ -830,8 +830,8 @@ covers every read.
 
 ### Manage-scope connection failure (2026-10-29 investigation)
 
-Status note: `feedback:manage` has since been retired with the public triage tool. The investigation
-below is the record of what was tested at the time; `teams:manage` is still advertised.
+Status note: the feedback surface is submit-and-read only, so `feedback:manage` is retired. The
+investigation below is the record of what was tested at the time; `teams:manage` is still advertised.
 
 A client reported that a connect flow asking for `teams:manage` and `feedback:manage` reached the
 hosted consent page and then failed with a generic error that named no scope. The investigation did

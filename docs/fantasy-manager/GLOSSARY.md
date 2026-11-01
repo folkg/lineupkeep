@@ -213,7 +213,7 @@ A bug, data issue, friction report, or wishlist item submitted by a signed-in pe
 _Avoid_: Ticket, issue, comment thread
 
 **Feedback status**:
-The lifecycle state of a feedback report. An open report is unreviewed; an acknowledged report is being worked on; a resolved or not-planned report is closed with an optional note and cannot change again.
+The stored lifecycle state of a feedback report: open, acknowledged, resolved, or not planned. A report is filed open, and its status is set when the work lands, not through a tool; the stored status, optional note, and closure time are read back as recorded and are never rewritten by the application.
 _Avoid_: Priority, milestone
 
 **Feedback submission quota**:

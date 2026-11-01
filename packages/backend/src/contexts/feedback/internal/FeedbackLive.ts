@@ -6,7 +6,6 @@ import {
   FeedbackContentInvalid,
   FeedbackRateLimited,
   FeedbackSubmission,
-  FeedbackTriageInput,
   feedbackLimits,
 } from "#contexts/feedback/Feedback.ts";
 import type {
@@ -14,18 +13,15 @@ import type {
   FeedbackReport,
   FeedbackSubmission as FeedbackSubmissionType,
   FeedbackSubmitter,
-  FeedbackTriageInput as FeedbackTriageInputType,
-  FeedbackTriageResult,
 } from "#contexts/feedback/Feedback.ts";
 
 import type { FeedbackRecord } from "./FeedbackRecord.ts";
 import { FeedbackRepository } from "./FeedbackRepository.ts";
-import type { FeedbackTriageRecord } from "./FeedbackRepository.ts";
-import { normalizedSubmission, normalizedTriage } from "./FeedbackText.ts";
+import { normalizedSubmission } from "./FeedbackText.ts";
 
 const windowMillis = 60 * 60 * 1000;
 const contentInvalidDetail =
-  "A report needs a visible title of at most 120 characters and a body of at most 4000. A resolution note allows up to 2000.";
+  "A report needs a visible title of at most 120 characters and a body of at most 4000.";
 
 export const FeedbackLive = Layer.effect(
   Feedback,
@@ -101,28 +97,7 @@ export const FeedbackLive = Layer.effect(
       return records.map(toFeedbackReport);
     });
 
-    const triage: Feedback["Service"]["triage"] = Effect.fn("Feedback.triage")(function* (
-      userId: UserId,
-      inputs: ReadonlyArray<FeedbackTriageInputType>,
-    ) {
-      const accepted = yield* Effect.forEach(inputs, acceptTriage);
-      const records = yield* repository.triage({
-        userId,
-        triage: accepted,
-        at: yield* DateTime.now,
-      });
-      const results = records.map(toTriageResult);
-      yield* Effect.annotateCurrentSpan({
-        "feedback.triaged": results.length,
-        "feedback.changed": countOutcome(results, "changed"),
-        "feedback.unchanged": countOutcome(results, "unchanged"),
-        "feedback.rejected": countOutcome(results, "rejected"),
-        "feedback.not_found": countOutcome(results, "not_found"),
-      });
-      return results;
-    });
-
-    return Feedback.of({ submit, list, triage });
+    return Feedback.of({ submit, list });
   }),
 );
 
@@ -130,14 +105,6 @@ function acceptSubmission(
   submission: FeedbackSubmissionType,
 ): Effect.Effect<FeedbackSubmissionType, FeedbackContentInvalid> {
   return Schema.decodeEffect(FeedbackSubmission)(normalizedSubmission(submission)).pipe(
-    Effect.mapError(() => FeedbackContentInvalid.make({ detail: contentInvalidDetail })),
-  );
-}
-
-function acceptTriage(
-  input: FeedbackTriageInputType,
-): Effect.Effect<FeedbackTriageInputType, FeedbackContentInvalid> {
-  return Schema.decodeEffect(FeedbackTriageInput)(normalizedTriage(input)).pipe(
     Effect.mapError(() => FeedbackContentInvalid.make({ detail: contentInvalidDetail })),
   );
 }
@@ -156,70 +123,4 @@ function toFeedbackReport(record: FeedbackRecord): FeedbackReport {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
-}
-
-function toTriageResult(record: FeedbackTriageRecord): FeedbackTriageResult {
-  if (record.outcome === "not_found") {
-    return {
-      outcome: "not_found",
-      feedback: record.feedback,
-      action: record.action,
-      detail: "The selected report is not available to this account. List your reports again.",
-    };
-  }
-  const feedback = toFeedbackReport(record.feedback);
-  switch (record.outcome) {
-    case "changed":
-      return {
-        outcome: "changed",
-        feedback,
-        action: record.action,
-        detail: changedDetail(record.action),
-      };
-    case "unchanged":
-      return {
-        outcome: "unchanged",
-        feedback,
-        action: record.action,
-        detail: unchangedDetail(record.action),
-      };
-    case "rejected":
-      return {
-        outcome: "rejected",
-        feedback,
-        action: record.action,
-        rejection: "already-closed",
-        detail:
-          "A resolved or not-planned report is final. Report the problem again if it returns.",
-      };
-  }
-}
-
-function changedDetail(action: FeedbackTriageResult["action"]): string {
-  switch (action) {
-    case "acknowledge":
-      return "The report is acknowledged.";
-    case "resolve":
-      return "The report is resolved with its note.";
-    case "wontfix":
-      return "The report is closed as not planned.";
-  }
-}
-
-function unchangedDetail(action: FeedbackTriageResult["action"]): string {
-  switch (action) {
-    case "acknowledge":
-      return "The report is already acknowledged.";
-    case "resolve":
-      return "The report is already resolved; its existing note is unchanged.";
-    case "wontfix":
-      return "The report is already closed as not planned.";
-  }
-}
-
-function countOutcome(
-  results: ReadonlyArray<FeedbackTriageResult>,
-  outcome: FeedbackTriageResult["outcome"],
-): number {
-  return results.filter((result) => result.outcome === outcome).length;
 }

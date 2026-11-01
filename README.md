@@ -95,9 +95,9 @@ publishes the complete set—`fantasy:read transactions:review lineups:write tea
 protected-resource metadata publishes the four resource scopes, because `offline_access` buys a
 refresh token from the authorization server rather than access to the resource. Two retired scope
 names are accepted but never advertised: `connections:read` is read as `fantasy:read`, so a token
-minted before the rename keeps working, and `feedback:manage` has no successor because triage is
-not public. The full per-tool table, the retired-name mapping, and the incremental-authorization
-behaviour are in the [MCP contract](docs/fantasy-manager/MCP.md#per-tool-scopes).
+minted before the rename keeps working, and `feedback:manage` has no successor because the feedback
+surface is submit-and-read only. The full per-tool table, the retired-name mapping, and the
+incremental-authorization behaviour are in the [MCP contract](docs/fantasy-manager/MCP.md#per-tool-scopes).
 
 Every tool call also spends a limit per acting client and per account: a read is generous, a write is
 small, and `set_lineup` is the smallest. A refusal is `429` with `Retry-After` and a JSON-RPC error, so

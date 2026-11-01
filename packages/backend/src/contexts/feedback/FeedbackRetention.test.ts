@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
-import { Array, DateTime, Effect, Layer } from "effect";
+import { DateTime, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
 import { Feedback } from "./Feedback.ts";
@@ -11,23 +11,31 @@ import { FeedbackDatabaseTest } from "./internal/FeedbackDatabaseTest.ts";
 import { FeedbackLive } from "./internal/FeedbackLive.ts";
 import { FeedbackRepository } from "./internal/FeedbackRepository.ts";
 import { FeedbackRetentionLive } from "./internal/FeedbackRetentionLive.ts";
-import { feedbackQuota } from "./internal/FeedbackTables.ts";
+import { feedback as feedbackTable, feedbackQuota } from "./internal/FeedbackTables.ts";
 
 it.effect("removes closed reports once their retention window ends", () =>
   Effect.gen(function* () {
     const feedback = yield* Feedback;
+    const database = yield* FeedbackDatabase;
     const retention = yield* FeedbackRetention;
-    const submitted = yield* feedback.submit(user, { kind: "user", reference: "web" }, [
+    yield* feedback.submit(user, { kind: "user", reference: "web" }, [
       { kind: "wishlist", title: "Keep this", body: "An open wishlist item." },
-      { kind: "bug", title: "Drop this", body: "A closed bug report." },
     ]);
-    yield* feedback.triage(user, [
-      {
-        feedback: Array.getUnsafe(submitted, 1).id,
-        action: "resolve",
-        note: "Fixed and deployed.",
-      },
-    ]);
+    const closedAt = DateTime.toDateUtc(yield* DateTime.now);
+    yield* database.insert(feedbackTable).values({
+      id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b3",
+      userId: user,
+      submitterKind: "user",
+      submitterReference: "web",
+      kind: "bug",
+      status: "resolved",
+      title: "Drop this",
+      body: "A closed bug report.",
+      resolutionNote: "Fixed and deployed.",
+      closedAt,
+      createdAt: closedAt,
+      updatedAt: closedAt,
+    });
 
     yield* TestClock.adjust(closedReportRetentionMillis - 1_000);
     const retained = yield* retention.run(10, yield* DateTime.now);

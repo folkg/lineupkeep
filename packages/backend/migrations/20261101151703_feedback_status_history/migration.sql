@@ -1,0 +1,1 @@
+COMMENT ON COLUMN "feedback"."status" IS 'Retained history: the stored lifecycle state of a report. No application code writes this column; a report is filed open, and its status records closure when the work lands.';

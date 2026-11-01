@@ -4,14 +4,11 @@ import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect"
 import type { UserId } from "#contexts/auth/User.ts";
 import type {
   FeedbackFilter,
-  FeedbackId,
   FeedbackSubmission,
   FeedbackSubmitter,
-  FeedbackTriageAction,
-  FeedbackTriageInput,
 } from "#contexts/feedback/Feedback.ts";
 import { FeedbackPersistenceFailed } from "#contexts/feedback/Feedback.ts";
-import { addedToExcluded, anyOf, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
+import { addedToExcluded, anyOf, maxInsertRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
 
 import { FeedbackDatabase } from "./FeedbackDatabase.ts";
@@ -28,23 +25,6 @@ type QuotaReservation = {
   readonly limit: number;
   readonly windowStartedAt: DateTime.Utc;
 };
-
-export type FeedbackTriageRecord =
-  | {
-      readonly outcome: "changed" | "unchanged";
-      readonly feedback: FeedbackRecord;
-      readonly action: FeedbackTriageAction;
-    }
-  | {
-      readonly outcome: "rejected";
-      readonly feedback: FeedbackRecord;
-      readonly action: FeedbackTriageAction;
-    }
-  | {
-      readonly outcome: "not_found";
-      readonly feedback: FeedbackId;
-      readonly action: FeedbackTriageAction;
-    };
 
 export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
   "@lineupkeep/backend/contexts/feedback/internal/FeedbackRepository",
@@ -151,67 +131,6 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
         );
       });
 
-      const triage = Effect.fn("FeedbackRepository.triage")(function* (input: {
-        readonly userId: UserId;
-        readonly triage: ReadonlyArray<FeedbackTriageInput>;
-        readonly at: DateTime.Utc;
-      }) {
-        const ids = [...new Set(input.triage.map((entry) => entry.feedback))];
-        if (!Array.isArrayNonEmpty(ids)) {
-          return [];
-        }
-        const results = new Map<FeedbackId, FeedbackTriageRecord>();
-        yield* database
-          .transaction((tx) =>
-            mutateRows(tx, feedback, {
-              where: eq(feedback.userId, input.userId),
-              ids,
-              codec: FeedbackRow,
-              plan: (locked) =>
-                Effect.sync(() => {
-                  const planned: Array<FeedbackRecord> = [];
-                  for (const id of ids) {
-                    const entry = input.triage.find((candidate) => candidate.feedback === id);
-                    if (entry === undefined) {
-                      continue;
-                    }
-                    const record = locked.get(id);
-                    if (record === undefined) {
-                      results.set(id, { outcome: "not_found", feedback: id, action: entry.action });
-                      continue;
-                    }
-                    const transition = planTransition(record, entry, input.at);
-                    const next = transition._tag === "Changed" ? transition.record : record;
-                    planned.push(next);
-                    results.set(id, {
-                      outcome:
-                        transition._tag === "Changed"
-                          ? "changed"
-                          : transition._tag === "Unchanged"
-                            ? "unchanged"
-                            : "rejected",
-                      feedback: next,
-                      action: entry.action,
-                    });
-                  }
-                  return planned;
-                }),
-            }),
-          )
-          .pipe(Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })));
-        const ordered: Array<FeedbackTriageRecord> = [];
-        for (const entry of input.triage) {
-          const result = results.get(entry.feedback);
-          if (result === undefined) {
-            throw new Error("A triaged feedback record has no result");
-          }
-          if (!ordered.includes(result)) {
-            ordered.push(result);
-          }
-        }
-        return ordered;
-      });
-
       const expired = Effect.fn("FeedbackRepository.expired")(function* (input: {
         readonly closedBefore: DateTime.Utc;
         readonly quotasBefore: DateTime.Utc;
@@ -253,17 +172,12 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
         }).pipe(Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })));
       });
 
-      return { reserve, create, list, triage, expired };
+      return { reserve, create, list, expired };
     }),
   },
 ) {
   static readonly layer = Layer.effect(this)(this.make);
 }
-
-type TransitionPlan =
-  | { readonly _tag: "Changed"; readonly record: FeedbackRecord }
-  | { readonly _tag: "Unchanged" }
-  | { readonly _tag: "Rejected" };
 
 function nonEmpty<A>(
   values: ReadonlyArray<A> | undefined,
@@ -273,55 +187,6 @@ function nonEmpty<A>(
   }
   const first = values[0];
   return first === undefined ? undefined : [first, ...values.slice(1)];
-}
-
-function planTransition(
-  record: FeedbackRecord,
-  input: FeedbackTriageInput,
-  at: DateTime.Utc,
-): TransitionPlan {
-  const closed = record.status === "resolved" || record.status === "wontfix";
-  if (closed) {
-    return sameAction(record.status, input.action) ? { _tag: "Unchanged" } : { _tag: "Rejected" };
-  }
-  switch (input.action) {
-    case "acknowledge":
-      return record.status === "acknowledged"
-        ? { _tag: "Unchanged" }
-        : { _tag: "Changed", record: { ...record, status: "acknowledged", updatedAt: at } };
-    case "resolve":
-      return {
-        _tag: "Changed",
-        record: {
-          ...record,
-          status: "resolved",
-          resolutionNote: input.note,
-          closedAt: at,
-          updatedAt: at,
-        },
-      };
-    case "wontfix":
-      return {
-        _tag: "Changed",
-        record: {
-          ...record,
-          status: "wontfix",
-          ...(input.note === undefined ? {} : { resolutionNote: input.note }),
-          closedAt: at,
-          updatedAt: at,
-        },
-      };
-  }
-}
-
-function sameAction(
-  status: FeedbackRecord["status"],
-  action: FeedbackTriageInput["action"],
-): boolean {
-  return (
-    (status === "resolved" && action === "resolve") ||
-    (status === "wontfix" && action === "wontfix")
-  );
 }
 
 function toRow(

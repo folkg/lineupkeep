@@ -2,7 +2,6 @@ import type {
   FeedbackContext,
   FeedbackContextInput,
   FeedbackSubmission,
-  FeedbackTriageInput,
 } from "#contexts/feedback/Feedback.ts";
 
 export function normalizedSubmission(submission: FeedbackSubmission): FeedbackSubmission {
@@ -13,17 +12,6 @@ export function normalizedSubmission(submission: FeedbackSubmission): FeedbackSu
     body: multiLine(submission.body),
     ...(context === undefined ? {} : { context }),
   };
-}
-
-export function normalizedTriage(input: FeedbackTriageInput): FeedbackTriageInput {
-  switch (input.action) {
-    case "acknowledge":
-      return input;
-    case "resolve":
-      return { ...input, note: multiLine(input.note) };
-    case "wontfix":
-      return input.note === undefined ? input : { ...input, note: multiLine(input.note) };
-  }
 }
 
 function normalizedContext(

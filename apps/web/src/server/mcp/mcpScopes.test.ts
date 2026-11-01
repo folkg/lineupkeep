@@ -119,5 +119,4 @@ it("reads a connection, a team, and a lineup run under the same read scope", () 
   expect(scopeOf.get("get_lineup_runs")).toBe("fantasy:read");
   expect(scopeOf.get("set_lineup")).toBe("lineups:write");
   expect(scopeOf.get("submit_feedback")).toBe("fantasy:read");
-  expect(toolScopes.map(({ name }) => name)).not.toContain("triage_feedback");
 });

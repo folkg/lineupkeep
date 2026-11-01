@@ -27,9 +27,6 @@ export const FeedbackSurface = Schema.Literals([
 ]);
 export type FeedbackSurface = typeof FeedbackSurface.Type;
 
-export const FeedbackTriageAction = Schema.Literals(["acknowledge", "resolve", "wontfix"]);
-export type FeedbackTriageAction = typeof FeedbackTriageAction.Type;
-
 export const feedbackLimits = {
   owner: { window: "1 hour", max: 20 },
   client: { window: "1 hour", max: 10 },
@@ -47,11 +44,6 @@ type FeedbackBody = typeof FeedbackBody.Type;
 
 const FeedbackLabel = Schema.Trim.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(60)));
 type FeedbackLabel = typeof FeedbackLabel.Type;
-
-const FeedbackResolutionNote = Schema.Trim.pipe(
-  Schema.check(Schema.isMinLength(1), Schema.isMaxLength(2_000)),
-);
-type FeedbackResolutionNote = typeof FeedbackResolutionNote.Type;
 
 export const TeamReference = Schema.String.pipe(
   Schema.check(Schema.isUUID()),
@@ -114,47 +106,6 @@ export const FeedbackFilter = Schema.Struct({
 });
 export type FeedbackFilter = typeof FeedbackFilter.Type;
 
-export const FeedbackTriageInput = Schema.Union([
-  Schema.Struct({
-    feedback: FeedbackId,
-    action: Schema.Literal("acknowledge"),
-  }),
-  Schema.Struct({
-    feedback: FeedbackId,
-    action: Schema.Literal("resolve"),
-    note: FeedbackResolutionNote,
-  }),
-  Schema.Struct({
-    feedback: FeedbackId,
-    action: Schema.Literal("wontfix"),
-    note: Schema.optional(FeedbackResolutionNote),
-  }),
-]);
-export type FeedbackTriageInput = typeof FeedbackTriageInput.Type;
-
-const TriagedReport = Schema.Struct({
-  feedback: FeedbackReport,
-  action: FeedbackTriageAction,
-  detail: Schema.NonEmptyString,
-});
-
-export const FeedbackTriageResult = Schema.Union([
-  Schema.Struct({ outcome: Schema.Literal("changed"), ...TriagedReport.fields }),
-  Schema.Struct({ outcome: Schema.Literal("unchanged"), ...TriagedReport.fields }),
-  Schema.Struct({
-    outcome: Schema.Literal("rejected"),
-    ...TriagedReport.fields,
-    rejection: Schema.Literal("already-closed"),
-  }),
-  Schema.Struct({
-    outcome: Schema.Literal("not_found"),
-    feedback: FeedbackId,
-    action: FeedbackTriageAction,
-    detail: Schema.NonEmptyString,
-  }),
-]);
-export type FeedbackTriageResult = typeof FeedbackTriageResult.Type;
-
 export class Feedback extends Context.Service<Feedback, FeedbackShape>()(
   "@lineupkeep/backend/contexts/feedback/Feedback",
 ) {}
@@ -170,16 +121,9 @@ export type FeedbackShape = {
     userId: UserId,
     filter: FeedbackFilter,
   ) => Effect.Effect<ReadonlyArray<FeedbackReport>, FeedbackPersistenceFailed>;
-
-  readonly triage: (
-    userId: UserId,
-    inputs: ReadonlyArray<FeedbackTriageInput>,
-  ) => Effect.Effect<ReadonlyArray<FeedbackTriageResult>, FeedbackTriageError>;
 };
 
 type FeedbackSubmitError = FeedbackContentInvalid | FeedbackRateLimited | FeedbackPersistenceFailed;
-
-type FeedbackTriageError = FeedbackContentInvalid | FeedbackPersistenceFailed;
 
 export class FeedbackContentInvalid extends Schema.TaggedError<
   FeedbackContentInvalid,

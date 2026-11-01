@@ -1323,7 +1323,6 @@ const unavailableTeams: TeamsShape = {
 const unavailableFeedback: FeedbackShape = {
   submit: () => Effect.die(new Error("feedback unavailable")),
   list: () => Effect.die(new Error("feedback unavailable")),
-  triage: () => Effect.die(new Error("feedback unavailable")),
 };
 
 function request(
