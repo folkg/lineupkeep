@@ -2,13 +2,8 @@ import { DateTime, Effect, Layer } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { currentFantasyDayStart } from "#contexts/connections/FantasyDay.ts";
-import {
-  describeUnavailableTeam,
-  observedTeamAvailability,
-} from "#contexts/connections/FantasyTeam.ts";
 import type { TeamAutomation } from "#contexts/connections/FantasyTeam.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
-import type { TeamAvailability } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupRun } from "#contexts/connections/LineupRun.ts";
 import type { ProviderFantasyDay } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
@@ -18,7 +13,6 @@ import {
   TeamNotFound,
   TeamPersistenceFailed,
   TeamNoteRejected,
-  TeamUnavailable,
   Teams,
 } from "#contexts/connections/Teams.ts";
 import type {
@@ -74,10 +68,7 @@ export const TeamsLive = Layer.effect(
             .filter((run) => DateTime.toEpochMillis(run.createdAt) >= DateTime.toEpochMillis(since))
             .map(toLineupRun);
           return {
-            team: {
-              ...record.team,
-              availability: observedTeamAvailability(record.team.availability, now),
-            },
+            team: record.team,
             connectionStatus: record.connection.status,
             recentRuns,
             ...(teamActivity === undefined ? {} : { lastRun: toLineupRun(teamActivity.latest) }),
@@ -106,18 +97,13 @@ export const TeamsLive = Layer.effect(
       inputs: ReadonlyArray<TeamControlInput>,
     ) {
       const records = yield* teams.control(userId, inputs);
-      const now = yield* DateTime.now;
-      const results = records.map((record) => toControlResult(record, now));
+      const results = records.map(toControlResult);
       yield* Effect.annotateCurrentSpan({
         "automation.requested": results.length,
         "automation.changed": countOutcome(results, "changed"),
         "automation.unchanged": countOutcome(results, "unchanged"),
         "automation.rejected": countOutcome(results, "rejected"),
         "automation.not_found": countOutcome(results, "not_found"),
-        "automation.unavailable": results.filter(
-          (result) =>
-            result.outcome !== "not_found" && result.availability.status === "unavailable",
-        ).length,
       });
       return results;
     });
@@ -147,14 +133,6 @@ export const TeamsLive = Layer.effect(
     const readRoster: TeamsShape["readRoster"] = (userId, team) =>
       Effect.gen(function* () {
         const access = yield* teams.loadProviderAccess(userId, team);
-        if (access.team.availability.status === "unavailable") {
-          return yield* TeamUnavailable.make({
-            team,
-            reason: access.team.availability.reason,
-            detail: access.team.availability.detail,
-            observedAt: access.team.availability.observedAt,
-          });
-        }
         const provider = registry.get(access.connection.provider);
         if (provider === undefined) {
           return yield* TeamPersistenceFailed.make({
@@ -218,7 +196,7 @@ function fantasyDayOf(registry: ProviderRegistryShape, team: FantasyTeam): Provi
   return provider.capabilities.fantasyDay;
 }
 
-function toControlResult(record: TeamControlRecord, now: DateTime.Utc): TeamControlResult {
+function toControlResult(record: TeamControlRecord): TeamControlResult {
   if (record.outcome === "not_found") {
     return {
       outcome: "not_found",
@@ -227,28 +205,22 @@ function toControlResult(record: TeamControlRecord, now: DateTime.Utc): TeamCont
       detail: "The selected team is not available to this account. List your teams again.",
     };
   }
-  const availability = observedTeamAvailability(record.teamState.availability, now);
   const automation = record.teamState.automation;
   return {
     outcome: record.outcome,
     team: record.team,
     action: record.action,
     enrolled: automation.status !== "disabled",
-    availability,
+    availability: record.teamState.availability,
     automation,
-    detail: controlDetail(record, availability),
+    detail: controlDetail(record),
   };
 }
 
 function controlDetail(
   record: Exclude<TeamControlRecord, { readonly outcome: "not_found" }>,
-  availability: TeamAvailability,
 ): string {
-  const automation = record.teamState.automation;
-  const detail = controlOutcomeDetail(record, automation);
-  return availability.status === "unavailable"
-    ? `${detail} Lineupkeep cannot read this team, so scheduled checks skip it until it can. ${describeUnavailableTeam(availability)}`
-    : detail;
+  return controlOutcomeDetail(record, record.teamState.automation);
 }
 
 function controlOutcomeDetail(

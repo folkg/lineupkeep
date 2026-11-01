@@ -7,7 +7,6 @@ import {
   TeamAutomation,
   TeamAvailability,
   TeamId,
-  TeamUnavailabilityReason,
 } from "./FantasyTeam.ts";
 
 export const queryCursorTtlMillis = 15 * 60 * 1000;
@@ -198,7 +197,6 @@ export const PageLimit = Schema.Int.check(
 
 export type QueryError =
   | QueryTeamNotFound
-  | QueryTeamUnavailable
   | QueryConnectionNotReady
   | QueryCursorInvalid
   | QueryReferenceInvalid
@@ -210,16 +208,6 @@ export class QueryTeamNotFound extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("query.team_not_found", {
   team: TeamId,
-}) {}
-
-export class QueryTeamUnavailable extends Schema.TaggedError<
-  QueryTeamUnavailable,
-  { readonly brand: unique symbol }
->()("query.team_unavailable", {
-  team: TeamId,
-  reason: TeamUnavailabilityReason,
-  detail: Schema.NonEmptyString,
-  observedAt: Schema.DateTimeUtc,
 }) {}
 
 export class QueryConnectionNotReady extends Schema.TaggedError<

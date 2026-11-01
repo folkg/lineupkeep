@@ -91,10 +91,6 @@ export function describeControlFailure(error: unknown): TeamFailure {
   return classifyTeamFailure(error, "control");
 }
 
-export function describeCheckFailure(error: unknown): TeamFailure {
-  return classifyTeamFailure(error, "check");
-}
-
 export function describeNoteFailure(error: unknown): TeamFailure {
   if (error instanceof AuthenticationRequestFailure) {
     return {
@@ -126,10 +122,7 @@ export function describeNoteFailure(error: unknown): TeamFailure {
   };
 }
 
-function classifyTeamFailure(
-  error: unknown,
-  surface: "control" | "refresh" | "check",
-): TeamFailure {
+function classifyTeamFailure(error: unknown, surface: "control" | "refresh"): TeamFailure {
   if (error instanceof AuthenticationRequestFailure) {
     return {
       kind: "authentication",
@@ -160,31 +153,17 @@ function classifyTeamFailure(
       case "team.refresh_failed":
         return {
           kind: "unconfirmed",
-          message:
-            surface === "check"
-              ? `We could not check this team with ${defaultProviderName()}. Try again.`
-              : `We could not refresh teams from ${defaultProviderName()}. Try again.`,
+          message: `We could not refresh teams from ${defaultProviderName()}. Try again.`,
         };
     }
   }
-  switch (surface) {
-    case "control":
-      return {
-        kind: "unconfirmed",
-        message:
-          "We could not confirm the change, so the control returned to the last known state. Check the latest list before trying again.",
-      };
-    case "refresh":
-      return {
-        kind: "unconfirmed",
-        message: "We could not confirm the change. Check the latest list before retrying.",
-      };
-    case "check":
-      return {
-        kind: "unconfirmed",
-        message: "We could not confirm the check. Check the latest list before trying again.",
-      };
-  }
+  return {
+    kind: "unconfirmed",
+    message:
+      surface === "control"
+        ? "We could not confirm the change, so the control returned to the last known state. Check the latest list before trying again."
+        : "We could not confirm the change. Check the latest list before retrying.",
+  };
 }
 
 export function describeRunFailure(error: unknown): string {

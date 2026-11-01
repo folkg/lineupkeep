@@ -3,48 +3,6 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
-## Unreleased — observed availability for every stored team
-
-- The hourly automation check now sweeps the availability of every stored team before it selects
-  work, including teams with automation off. It groups stored teams by connection and makes one
-  league-level read per held league, so the cost grows with held leagues rather than teams. A team
-  the sweep cannot read no longer waits for someone to open it: the football team the provider
-  refuses as "not in this league" is marked unavailable on the next hourly check.
-- `availability` always carries its observation: `{status: "available", observedAt}` when the last
-  check read the team within three hours, `{status: "stale", observedAt}` when it is older than
-  that, and `{status: "unobserved"}` when no check has recorded a read. A stale or unobserved team
-  is never presented as healthy. `{status: "unavailable", reason, detail, observedAt,
-  consecutiveRefusals}` keeps the provider's own wording, names when it was seen, and counts
-  consecutive provider refusals, so one refusal is not presented as a permanent fact.
-- The team list shows an unreadable team without opening it, repeats the provider's wording, says
-  what that reason means, names when it was seen and how many consecutive checks saw it, and offers
-  **Check this team again** from the list as well as the team page. The block names the next action:
-  check first, then confirm on the provider that the team is still in the league under the connected
-  account, and connect the owning account if it is a different one. A stale team says when it was
-  last checked and why that is not current; an unobserved team says it has not been checked yet.
-- A transient provider failure during the sweep records nothing and leaves the previous observation
-  in place; only a provider refusal, a missing team, or an unusable connection changes the state. A
-  refused or failed read still never deletes a team, its note, its runs, or its history.
-
-## Unreleased — unreadable team state
-
-- A stored team now carries the provider's own read state, observed at a time: `{status: "available"}`
-  or `{status: "unavailable", reason, detail, observedAt}`. `provider_refused` keeps the provider's
-  own wording, `not_listed` means the account's own team list no longer includes the team, and
-  `connection_unavailable` means the connection cannot be used. Team discovery now reads each held
-  league as well as the account's own team list, so linking and refresh record whether the team can
-  actually be read instead of assuming it from the listing. A team is never deleted because a read
-  failed, and a transient provider failure records nothing.
-- `list_teams` rows report that state, and every per-team tool refuses an unavailable team with
-  `team_unavailable`, the recorded reason, and its observation time instead of making a provider
-  read that would be refused. `set_lineup` refuses it with `lineup.selection_invalid` and the same
-  reason without creating a run. Scheduled checks already skip it, and a run that reaches an
-  unavailable team blocks with the reason rather than failing.
-- The team list and team page say plainly that Lineupkeep cannot read the team, repeat the
-  provider's wording, name when it was observed, and offer **Check this team again**, which re-reads
-  the account's team list and that league for the team's connection. A provider refusal is now
-  distinct from an owner's pause, which is unchanged.
-
 ## Unreleased — round-9 MCP fixes (schedule window, roster key, search team)
 
 - `get_team_summary` accepts a `window` of inclusive dates or a `days` count for the `schedule`

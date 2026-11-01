@@ -19,7 +19,7 @@ import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
-import { providerTeams, teamAvailabilityColumns } from "./internal/ConnectionTables.ts";
+import { providerTeams } from "./internal/ConnectionTables.ts";
 import { LineupDeliveryLocal } from "./internal/LineupDeliveryLocal.ts";
 import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
@@ -61,7 +61,7 @@ it.effect("enrolls, disables, and re-enrolls a team without deleting its configu
 
     const current = yield* teams.get(owner, seeded);
     assert.strictEqual(current.team.name, "Alpha");
-    assert.strictEqual(current.team.availability.status, "available");
+    assert.strictEqual(current.team.availability, "available");
   }).pipe(Effect.provide(TeamsTestLayer)),
 );
 
@@ -150,15 +150,7 @@ it.effect("keeps availability separate from the automation setting", () =>
     const seeded = yield* seedTeam(fake);
     yield* database
       .update(providerTeams)
-      .set(
-        teamAvailabilityColumns({
-          status: "unavailable",
-          reason: "provider_refused",
-          detail: "You are not allowed to view this page because you are not in this league.",
-          observedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
-          consecutiveRefusals: 1,
-        }),
-      )
+      .set({ availability: "unavailable" })
       .where(and(eq(providerTeams.userId, owner), eq(providerTeams.id, seeded)));
 
     const enabled = found(yield* control(teams, seeded, "enable"));
@@ -168,19 +160,19 @@ it.effect("keeps availability separate from the automation setting", () =>
 
     assert.strictEqual(enabled.outcome, "changed");
     assert.strictEqual(enabled.enrolled, true);
-    assert.strictEqual(enabled.availability.status, "unavailable");
-    assert.include(enabled.detail, "not in this league");
+    assert.strictEqual(enabled.availability, "unavailable");
+    assert.ok(!enabled.detail.includes("unavailable"));
     assert.strictEqual(repeated.outcome, "unchanged");
-    assert.strictEqual(repeated.availability.status, "unavailable");
+    assert.strictEqual(repeated.availability, "unavailable");
     assert.strictEqual(paused.outcome, "changed");
     assert.strictEqual(paused.automation.status, "paused-until-fantasy-day-end");
-    assert.strictEqual(paused.availability.status, "unavailable");
-    assert.include(paused.detail, "cannot read this team");
+    assert.strictEqual(paused.availability, "unavailable");
+    assert.ok(!paused.detail.includes("unavailable"));
     assert.strictEqual(resumed.outcome, "changed");
     assert.strictEqual(resumed.automation.status, "enabled");
-    assert.strictEqual(resumed.availability.status, "unavailable");
+    assert.strictEqual(resumed.availability, "unavailable");
     const current = yield* teams.get(owner, seeded);
-    assert.strictEqual(current.team.availability.status, "unavailable");
+    assert.strictEqual(current.team.availability, "unavailable");
     assert.strictEqual(current.team.automation.status, "enabled");
   }).pipe(Effect.provide(TeamsTestLayer)),
 );

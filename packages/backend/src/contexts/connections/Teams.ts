@@ -9,7 +9,6 @@ import {
   TeamAutomation,
   TeamAutomationStatus,
   TeamId,
-  TeamUnavailabilityReason,
 } from "./FantasyTeam.ts";
 import { LineupRun } from "./LineupRun.ts";
 import type { ProviderReadFailure } from "./Provider.ts";
@@ -105,7 +104,6 @@ export type TeamNoteError = TeamNotFound | TeamNoteRejected | TeamPersistenceFai
 
 type TeamRosterError =
   | TeamNotFound
-  | TeamUnavailable
   | TeamConnectionNotReady
   | TeamPersistenceFailed
   | ProviderReadFailure;
@@ -123,16 +121,6 @@ export class TeamControlRejected extends Schema.TaggedError<
 >()("team.control_rejected", {
   team: TeamId,
   status: TeamAutomationStatus,
-}) {}
-
-export class TeamUnavailable extends Schema.TaggedError<
-  TeamUnavailable,
-  { readonly brand: unique symbol }
->()("team.unavailable", {
-  team: TeamId,
-  reason: TeamUnavailabilityReason,
-  detail: Schema.NonEmptyString,
-  observedAt: Schema.DateTimeUtc,
 }) {}
 
 export class TeamConnectionNotReady extends Schema.TaggedError<

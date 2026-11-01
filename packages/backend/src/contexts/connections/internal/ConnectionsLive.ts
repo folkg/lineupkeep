@@ -23,7 +23,6 @@ import type {
 } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
-import { observedTeamAvailability } from "#contexts/connections/FantasyTeam.ts";
 import type { ProviderFailure } from "#contexts/connections/Provider.ts";
 import type { ProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
@@ -35,7 +34,7 @@ import type {
   CompleteLinkingCommand,
   ReadyCredential,
   ReconnectCommand,
-  TeamCheck,
+  TeamDiscovery,
 } from "./ConnectionRepository.ts";
 
 export const ConnectionsLive = Layer.effect(
@@ -227,16 +226,11 @@ export const ConnectionsLive = Layer.effect(
     const listTeams = (
       userId: UserId,
     ): Effect.Effect<ReadonlyArray<FantasyTeam>, ConnectionError> =>
-      Effect.gen(function* () {
-        const teams = yield* repository.listTeams(userId);
-        const now = yield* DateTime.now;
-        const observed = teams.map((team) => ({
-          ...team,
-          availability: observedTeamAvailability(team.availability, now),
-        }));
-        yield* Effect.annotateCurrentSpan("connections.team_count", observed.length);
-        return observed;
-      });
+      repository
+        .listTeams(userId)
+        .pipe(
+          Effect.tap((teams) => Effect.annotateCurrentSpan("connections.team_count", teams.length)),
+        );
 
     const discoverTeams = (
       userId: UserId,
@@ -272,22 +266,22 @@ export const ConnectionsLive = Layer.effect(
           }
         }
         const at = yield* DateTime.now;
-        const checks = yield* Effect.forEach(
+        const discoveries = yield* Effect.forEach(
           credentials,
-          (credential) => checkConnection(userId, credential, at),
+          (credential) => discoverConnection(userId, credential, at),
           { concurrency: 1 },
         );
-        yield* repository.recordTeamCheck(userId, checks, at);
+        yield* repository.recordDiscoveries(userId, discoveries, at);
         const teams = yield* repository.listTeamsForConnections(userId, ids);
         yield* Effect.annotateCurrentSpan("connections.team_count", teams.length);
         return teams;
       });
 
-    const checkConnection = (
+    const discoverConnection = (
       userId: UserId,
       credential: ReadyCredential,
       at: DateTime.Utc,
-    ): Effect.Effect<TeamCheck, ConnectionError> =>
+    ): Effect.Effect<TeamDiscovery, ConnectionError> =>
       Effect.gen(function* () {
         const session = yield* encryption
           .decrypt({
@@ -300,31 +294,40 @@ export const ConnectionsLive = Layer.effect(
         const provider = yield* registry
           .requireProvider(credential.provider)
           .pipe(Effect.mapError(() => credentialPersistenceFailure()));
-        const material = { provider: credential.provider, session };
-        const checked = yield* Effect.result(
-          Effect.gen(function* () {
-            const teams = yield* provider.discoverTeams(material);
-            const providerLeagueKeys = [...new Set(teams.map((team) => team.providerLeagueKey))];
-            const access =
-              providerLeagueKeys.length === 0
-                ? []
-                : yield* provider.checkLeagueAccess({ ...material, providerLeagueKeys });
-            return { teams, access };
-          }),
-        );
-        if (checked._tag === "Success") {
-          return { connectionId: credential.connectionId, ...checked.success };
-        }
-        const error = checked.failure;
-        if (error._tag !== "provider.session_rejected") {
-          return yield* connectionProviderError(credential.connectionId, error);
-        }
-        return yield* repository.rejectSession(
-          userId,
-          credential.connectionId,
-          credential.generation,
-          at,
-        );
+        const teams = yield* provider
+          .discoverTeams({ provider: credential.provider, session })
+          .pipe(
+            Effect.catch((error) => {
+              if (error._tag !== "provider.session_rejected") {
+                return Effect.fail(connectionProviderError(credential.connectionId, error));
+              }
+              return Effect.gen(function* () {
+                const marked = yield* Effect.result(
+                  repository.markReconnectRequired(userId, [
+                    {
+                      id: credential.connectionId,
+                      expectedGeneration: credential.generation,
+                    },
+                  ]),
+                );
+                if (marked._tag === "Failure") {
+                  if (marked.failure._tag !== "connection.credential_generation_stale") {
+                    return yield* marked.failure;
+                  }
+                  return yield* ConnectionProviderRejected.make({
+                    id: credential.connectionId,
+                  });
+                }
+                yield* repository.recordDiscoveries(
+                  userId,
+                  [{ connectionId: credential.connectionId, teams: [] }],
+                  at,
+                );
+                return yield* ConnectionProviderRejected.make({ id: credential.connectionId });
+              });
+            }),
+          );
+        return { connectionId: credential.connectionId, teams };
       });
 
     return Connections.of({

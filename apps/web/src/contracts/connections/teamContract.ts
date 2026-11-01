@@ -2,8 +2,8 @@ import type { ConnectionStatus } from "@lineupkeep/backend/connections/Connectio
 import type {
   FantasyLeague,
   FantasySport,
+  TeamAvailability,
   TeamAutomationStatus,
-  TeamUnavailabilityReason,
 } from "@lineupkeep/backend/connections/FantasyTeam";
 import type {
   LineupRunStatus,
@@ -25,18 +25,6 @@ export type TeamAutomationView = {
   readonly fantasyDayVersion?: string;
 };
 
-export type TeamAvailabilityView =
-  | { readonly status: "unobserved" }
-  | { readonly status: "available"; readonly observedAt: string }
-  | { readonly status: "stale"; readonly observedAt: string }
-  | {
-      readonly status: "unavailable";
-      readonly reason: TeamUnavailabilityReason;
-      readonly detail: string;
-      readonly observedAt: string;
-      readonly consecutiveRefusals: number;
-    };
-
 export type TeamView = {
   readonly id: string;
   readonly connectionId: string;
@@ -47,7 +35,7 @@ export type TeamView = {
   readonly sport: FantasySport;
   readonly season: number;
   readonly name: string;
-  readonly availability: TeamAvailabilityView;
+  readonly availability: TeamAvailability;
   readonly automation: TeamAutomationView;
   readonly ownerNote: string | null;
   readonly ownerNoteUpdatedAt: string | null;

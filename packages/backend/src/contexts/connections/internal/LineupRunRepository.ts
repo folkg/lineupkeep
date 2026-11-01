@@ -639,7 +639,6 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
               }
               const control = yield* tx
                 .select({
-                  availability: providerTeams.availability,
                   automationState: providerTeams.automationState,
                 })
                 .from(providerTeams)
@@ -656,7 +655,6 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                     ).pipe(Effect.mapError(mapPersistenceFailure));
               if (
                 ownedControl === undefined ||
-                ownedControl.availability !== "available" ||
                 (record.trigger === "scheduled" && automation?._tag !== "Enabled")
               ) {
                 return { status: "blocked" as const, reason: "controls_changed" as const };

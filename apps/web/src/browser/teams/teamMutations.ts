@@ -24,12 +24,6 @@ export const teamMutations = {
       mutationFn: remote.refresh,
       onSuccess: storeRefreshedTeamList,
     }),
-  check: (remote: TeamRemote) =>
-    mutationOptions({
-      mutationKey: ["teams", "check"],
-      mutationFn: remote.check,
-      onSuccess: storeRefreshedTeamList,
-    }),
   saveNote: (remote: TeamRemote) =>
     mutationOptions({
       mutationKey: ["teams", "note"],

@@ -1,4 +1,4 @@
-import { DateTime, Schema } from "effect";
+import { Schema } from "effect";
 
 import { ConnectionId, ProviderKey } from "./Connection.ts";
 
@@ -12,59 +12,8 @@ export type FantasyLeague = typeof FantasyLeague.Type;
 export const FantasySport = Schema.Literals(["football", "hockey", "baseball", "basketball"]);
 export type FantasySport = typeof FantasySport.Type;
 
-export const TeamUnavailabilityReason = Schema.Literals([
-  "provider_refused",
-  "not_listed",
-  "connection_unavailable",
-]);
-export type TeamUnavailabilityReason = typeof TeamUnavailabilityReason.Type;
-
-const teamAvailabilityStaleAfterMillis = 3 * 60 * 60 * 1000;
-
-export const TeamAvailability = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("unobserved") }),
-  Schema.Struct({
-    status: Schema.Literal("available"),
-    observedAt: Schema.DateTimeUtc,
-  }),
-  Schema.Struct({
-    status: Schema.Literal("stale"),
-    observedAt: Schema.DateTimeUtc,
-  }),
-  Schema.Struct({
-    status: Schema.Literal("unavailable"),
-    reason: TeamUnavailabilityReason,
-    detail: Schema.NonEmptyString,
-    observedAt: Schema.DateTimeUtc,
-    consecutiveRefusals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  }),
-]);
+export const TeamAvailability = Schema.Literals(["available", "unavailable"]);
 export type TeamAvailability = typeof TeamAvailability.Type;
-
-export function observedTeamAvailability(
-  availability: TeamAvailability,
-  now: DateTime.Utc,
-): TeamAvailability {
-  if (availability.status !== "available") {
-    return availability;
-  }
-  const age = DateTime.toEpochMillis(now) - DateTime.toEpochMillis(availability.observedAt);
-  return age > teamAvailabilityStaleAfterMillis
-    ? { status: "stale", observedAt: availability.observedAt }
-    : availability;
-}
-
-export function describeUnavailableTeam(
-  availability: Extract<TeamAvailability, { readonly status: "unavailable" }>,
-): string {
-  const seen =
-    availability.reason !== "provider_refused"
-      ? ""
-      : availability.consecutiveRefusals > 1
-        ? `Seen on ${String(availability.consecutiveRefusals)} consecutive checks.`
-        : "Seen once. The next check will try again. ";
-  return `${availability.detail} ${seen}Last observed ${DateTime.formatIso(availability.observedAt)}.`;
-}
 
 export const TeamAutomationStatus = Schema.Literals([
   "disabled",

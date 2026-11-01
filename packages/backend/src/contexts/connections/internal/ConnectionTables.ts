@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { DateTime, Effect, Schema, SchemaParser, SchemaTransformation, Struct } from "effect";
+import { Effect, Schema, SchemaParser, SchemaTransformation, Struct } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
 import {
@@ -25,7 +25,6 @@ import {
   TeamAutomationStatus,
   TeamAvailability,
   TeamId,
-  TeamUnavailabilityReason,
 } from "#contexts/connections/FantasyTeam.ts";
 
 import { ConnectionLifecycleState } from "./ConnectionLifecycleWorkflow.ts";
@@ -87,12 +86,6 @@ export const providerTeams = pgTable(
     availability: text("availability", { enum: ["available", "unavailable"] })
       .notNull()
       .default("available"),
-    unavailableReason: text("unavailable_reason", {
-      enum: ["provider_refused", "not_listed", "connection_unavailable"],
-    }),
-    unavailableDetail: text("unavailable_detail"),
-    availabilityObservedAt: timestamp("availability_observed_at", { withTimezone: true }),
-    availabilityRefusals: integer("availability_refusals").notNull().default(0),
     automationState: jsonb("automation_state").notNull(),
     automationStatus: text("automation_status", {
       enum: ["disabled", "enabled", "paused-until-fantasy-day-end"],
@@ -115,42 +108,6 @@ export const providerTeams = pgTable(
   ],
 );
 
-export function teamAvailabilityColumns(availability: TeamAvailability): {
-  readonly availability: "available" | "unavailable";
-  readonly unavailableReason: TeamUnavailabilityReason | null;
-  readonly unavailableDetail: string | null;
-  readonly availabilityObservedAt: Date | null;
-  readonly availabilityRefusals: number;
-} {
-  switch (availability.status) {
-    case "unobserved":
-      return {
-        availability: "available",
-        unavailableReason: null,
-        unavailableDetail: null,
-        availabilityObservedAt: null,
-        availabilityRefusals: 0,
-      };
-    case "available":
-    case "stale":
-      return {
-        availability: "available",
-        unavailableReason: null,
-        unavailableDetail: null,
-        availabilityObservedAt: DateTime.toDateUtc(availability.observedAt),
-        availabilityRefusals: 0,
-      };
-    case "unavailable":
-      return {
-        availability: "unavailable",
-        unavailableReason: availability.reason,
-        unavailableDetail: availability.detail,
-        availabilityObservedAt: DateTime.toDateUtc(availability.observedAt),
-        availabilityRefusals: availability.consecutiveRefusals,
-      };
-  }
-}
-
 const FantasyTeamSelect = createSelectSchema(providerTeams, {
   id: TeamId,
   connectionId: ConnectionId,
@@ -162,11 +119,7 @@ const FantasyTeamSelect = createSelectSchema(providerTeams, {
   sport: FantasySport,
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
   name: Schema.NonEmptyString,
-  availability: Schema.Literals(["available", "unavailable"]),
-  unavailableReason: Schema.NullOr(TeamUnavailabilityReason),
-  unavailableDetail: Schema.NullOr(Schema.String),
-  availabilityObservedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
-  availabilityRefusals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  availability: TeamAvailability,
   automationState: Schema.Unknown,
   automationStatus: TeamAutomationStatus,
   ownerNote: Schema.NullOr(Schema.NonEmptyString),
@@ -219,7 +172,7 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
             sport: row.sport,
             season: row.season,
             name: row.name,
-            availability: availabilityView(row),
+            availability: row.availability,
             automation: automationView(state),
             ownerNote: row.ownerNote,
             ownerNoteUpdatedAt: row.ownerNoteUpdatedAt,
@@ -234,24 +187,8 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
           const automationState = yield* SchemaParser.encodeEffect(
             Schema.toCodecJson(TeamAutomationState),
           )(state);
-          const observedAt =
-            team.availability.status === "available" || team.availability.status === "stale"
-              ? team.availability.observedAt
-              : team.availability.status === "unavailable"
-                ? team.availability.observedAt
-                : null;
           return {
             ...team,
-            availability: team.availability.status === "unavailable" ? "unavailable" : "available",
-            unavailableReason:
-              team.availability.status === "unavailable" ? team.availability.reason : null,
-            unavailableDetail:
-              team.availability.status === "unavailable" ? team.availability.detail : null,
-            availabilityObservedAt: observedAt,
-            availabilityRefusals:
-              team.availability.status === "unavailable"
-                ? team.availability.consecutiveRefusals
-                : 0,
             automationState,
             automationStatus: teamAutomationStateStatus(state),
           };
@@ -259,37 +196,6 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
     }),
   ),
 );
-
-function availabilityView(row: {
-  readonly availability: "available" | "unavailable";
-  readonly unavailableReason: TeamUnavailabilityReason | null;
-  readonly unavailableDetail: string | null;
-  readonly availabilityObservedAt: DateTime.Utc | null;
-  readonly availabilityRefusals: number;
-}): TeamAvailability {
-  if (row.availability === "available") {
-    if (row.unavailableReason !== null || row.unavailableDetail !== null) {
-      throw new Error("An available team carries an unavailable reason");
-    }
-    return row.availabilityObservedAt === null
-      ? { status: "unobserved" }
-      : { status: "available", observedAt: row.availabilityObservedAt };
-  }
-  if (
-    row.unavailableReason === null ||
-    row.unavailableDetail === null ||
-    row.availabilityObservedAt === null
-  ) {
-    throw new Error("An unavailable team is missing the reason it was observed");
-  }
-  return {
-    status: "unavailable",
-    reason: row.unavailableReason,
-    detail: row.unavailableDetail,
-    observedAt: row.availabilityObservedAt,
-    consecutiveRefusals: row.availabilityRefusals,
-  };
-}
 
 function teamAutomationStateStatus(state: TeamAutomationState): TeamAutomationStatus {
   switch (state._tag) {

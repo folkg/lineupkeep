@@ -24,16 +24,6 @@ Start enables this automatically for browser writes through server functions. Lo
 
 With the current integration, await the main data fetch in the loader so it finishes before the response copies the cache. Waiting does not enable single-flight; it ensures the response includes fresh data.
 
-## Development server
-
-With the pinned framework versions, the Vite development server cannot encode a write's flight
-payload: the Query integration dehydrates a `queryStream`, and the development build of the serializer
-resolves its `seroval` and `seroval-plugins` copies separately, so the stream fails the plugin's own
-`instanceof` check. Every browser write then answers "Something went wrong" even though the server
-completed it; the built application bundles one copy and is unaffected. Verify writes against a built
-app or the end-to-end suite, not the development server, and treat a development-only write failure as
-this transport limitation rather than a product regression.
-
 ## Framework updates
 
 Keep serialization and cache transfer in framework integrations, not application code. See [release readiness](release-readiness.md) for dated upstream statuses and adoption gates.

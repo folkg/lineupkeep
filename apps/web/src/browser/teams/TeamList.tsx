@@ -108,7 +108,7 @@ function TeamRow(props: TeamRowProps): JSX.Element {
             </Text>
           )}
         </Show>
-        <TeamAttention remote={props.remote} team={props.team} />
+        <TeamAttention team={props.team} />
       </Stack>
       <TeamControls team={props.team} remote={props.remote} />
     </RuleListItem>

@@ -2,8 +2,6 @@ import type { BackendPlatform } from "@lineupkeep/backend/runtime/BackendPlatfor
 import { BackendRuntime as Runtime } from "@lineupkeep/backend/runtime/BackendRuntime";
 import { PublicInternet } from "@lineupkeep/backend/runtime/PublicInternet";
 
-const refusedLeagueSession = "A1=e2e-refused-league-session";
-
 export const BackendRuntime = {
   make: (platform: BackendPlatform) =>
     Runtime.make({
@@ -21,12 +19,7 @@ export const BackendRuntime = {
             }),
           );
         }
-        const url = new URL(request.url);
-        const refusal = refusalResponse(request, url);
-        if (refusal !== undefined) {
-          return Promise.resolve(refusal);
-        }
-        const yahoo = yahooResponse(url);
+        const yahoo = yahooResponse(new URL(request.url));
         if (yahoo !== undefined) {
           return Promise.resolve(Response.json(yahoo));
         }
@@ -36,27 +29,6 @@ export const BackendRuntime = {
       }),
     }),
 };
-
-function refusalResponse(request: Request, url: URL): Response | undefined {
-  const session = request.headers.get("cookie") ?? "";
-  if (!session.includes(refusedLeagueSession)) {
-    return undefined;
-  }
-  if (url.origin !== "https://pub-api-ro.fantasysports.yahoo.com") {
-    return undefined;
-  }
-  if (!/^\/fantasy\/v2\/league\/[^/]+\/teams$/u.test(url.pathname)) {
-    return undefined;
-  }
-  return Response.json(
-    {
-      error: {
-        description: "You are not allowed to view this page because you are not in this league.",
-      },
-    },
-    { status: 403 },
-  );
-}
 
 function yahooResponse(url: URL): unknown {
   if (url.origin === "https://pub-api.fantasysports.yahoo.com") {
@@ -85,10 +57,6 @@ function yahooResponse(url: URL): unknown {
   const league = match?.[1];
   if (league === "nfl" || league === "nhl") {
     return teamsPayload(league);
-  }
-  const leagueTeams = /^\/fantasy\/v2\/league\/([^/]+)\/teams$/u.exec(url.pathname);
-  if (leagueTeams?.[1] !== undefined) {
-    return leagueTeamsPayload(leagueTeams[1]);
   }
   const settings = /^\/fantasy\/v2\/league\/([^/]+)\/settings$/u.exec(url.pathname);
   if (settings?.[1] !== undefined) {
@@ -325,19 +293,6 @@ function teamsPayload(league: "nfl" | "nhl"): unknown {
         },
         count: 1,
       },
-    },
-  };
-}
-
-function leagueTeamsPayload(leagueKey: string): unknown {
-  const teamKey = leagueKey === "461.l.9000" ? "461.l.9000.t.1" : "465.l.9100.t.2";
-  const name = leagueKey === "461.l.9000" ? "Embedded Browser Team" : "Hosted Hockey Team";
-  return {
-    fantasy_content: {
-      league: [
-        { league_key: leagueKey },
-        { teams: { "0": { team: { team_key: teamKey, name } }, count: 1 } },
-      ],
     },
   };
 }

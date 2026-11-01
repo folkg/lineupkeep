@@ -18,11 +18,7 @@ import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
-import {
-  providerCredentials,
-  providerTeams,
-  teamAvailabilityColumns,
-} from "./internal/ConnectionTables.ts";
+import { providerCredentials, providerTeams } from "./internal/ConnectionTables.ts";
 import { LineupDeliveryLocal } from "./internal/LineupDeliveryLocal.ts";
 import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
@@ -1001,39 +997,6 @@ it.effect("blocks an explicit write when the scoring week changes during plannin
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-it.effect("refuses a selected team it cannot read and names the provider's refusal", () =>
-  Effect.gen(function* () {
-    const runs = yield* LineupRuns;
-    const connections = yield* Connections;
-    const database = yield* ConnectionsDatabase;
-    const fake = yield* FakeProviderWorld;
-    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
-    const connection = Array.getUnsafe(yield* connections.list(owner), 0);
-    const refusal = "You are not allowed to view this page because you are not in this league.";
-    yield* fake.refuseLeague("461.l.1000", refusal);
-    yield* connections.discoverTeams(owner, [{ id: connection.id }]);
-    const runsBefore = yield* database
-      .select({ id: lineupRuns.id })
-      .from(lineupRuns)
-      .where(eq(lineupRuns.teamId, team.id));
-
-    const refused = yield* Effect.flip(runs.submit(owner, lineupRequest(team.id, requestId)));
-
-    assert.strictEqual(refused._tag, "lineup.selection_invalid");
-    if (refused._tag === "lineup.selection_invalid") {
-      assert.include(refused.detail, refusal);
-    }
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
-    assert.lengthOf(
-      yield* database
-        .select({ id: lineupRuns.id })
-        .from(lineupRuns)
-        .where(eq(lineupRuns.teamId, team.id)),
-      runsBefore.length,
-    );
-  }).pipe(Effect.provide(LineupTestLayer)),
-);
-
 it.effect("lets a manual run bypass pause and enrollment after observation", () =>
   Effect.gen(function* () {
     const runs = yield* LineupRuns;
@@ -1159,7 +1122,6 @@ it.effect("serializes duplicate workers and does not replay a completed team", (
 it.effect("keeps a partial multi-team batch honest and never replays a completed team", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;
-    const database = yield* ConnectionsDatabase;
     const worker = yield* LineupWorker;
     const fake = yield* FakeProviderWorld;
     yield* refuseCustomPlanning(fake);
@@ -1171,18 +1133,6 @@ it.effect("keeps a partial multi-team batch honest and never replays a completed
     if (first === undefined || second === undefined) {
       return;
     }
-    yield* database
-      .update(providerTeams)
-      .set(
-        teamAvailabilityColumns({
-          status: "unavailable",
-          reason: "provider_refused",
-          detail: "You are not allowed to view this page because you are not in this league.",
-          observedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
-          consecutiveRefusals: 1,
-        }),
-      )
-      .where(and(eq(providerTeams.userId, owner), eq(providerTeams.id, second.id)));
     const created = yield* repository.createRequest({
       userId: owner,
       requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a5",
@@ -1197,7 +1147,7 @@ it.effect("keeps a partial multi-team batch honest and never replays a completed
         {
           team: second.id,
           connectionId: second.connectionId,
-          target: { coverage: "week", week: 3 },
+          target: { coverage: "week", week: 99 },
           trigger: "manual",
         },
       ],

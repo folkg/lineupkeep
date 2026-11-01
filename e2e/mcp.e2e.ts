@@ -584,7 +584,7 @@ test("changes automation over MCP and reports it through list_teams", async ({
       Schema.Struct({
         id: Schema.String,
         name: Schema.String,
-        availability: Schema.Literal("available"),
+        availability: Schema.String,
         automation: Schema.Struct({ status: Schema.String }),
       }),
     ),
@@ -606,7 +606,7 @@ test("changes automation over MCP and reports it through list_teams", async ({
   const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
   const initial = await client.callTool("list_teams", {});
   expect(teamAutomation(initial, team)).toMatchObject({
-    availability: { status: "available" },
+    availability: "available",
     automation: { status: "disabled" },
   });
 
@@ -621,7 +621,7 @@ test("changes automation over MCP and reports it through list_teams", async ({
         action: "enable",
         outcome: "changed",
         enrolled: true,
-        availability: { status: "available" },
+        availability: "available",
         automation: { status: "enabled" },
       },
     ],
@@ -923,7 +923,7 @@ function teamAutomation(
   },
   team: string,
 ): {
-  readonly availability?: { readonly status?: string } | undefined;
+  readonly availability?: string | undefined;
   readonly outcome?: string | undefined;
   readonly enrolled?: boolean | undefined;
   readonly automation?: { readonly status?: string; readonly resumesAt?: string } | undefined;
@@ -932,7 +932,7 @@ function teamAutomation(
     | {
         readonly teams?: ReadonlyArray<{
           readonly team?: string;
-          readonly availability?: { readonly status?: string };
+          readonly availability?: string;
           readonly outcome?: string;
           readonly enrolled?: boolean;
           readonly automation?: { readonly status?: string; readonly resumesAt?: string };

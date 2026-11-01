@@ -15,7 +15,6 @@ import {
   PlayerRef,
   QueryCursorInvalid,
   QuerySelectionInvalid,
-  QueryTeamUnavailable,
 } from "@lineupkeep/backend/connections/QueryValues";
 import type { TeamsShape } from "@lineupkeep/backend/connections/Teams";
 import { Teams } from "@lineupkeep/backend/connections/Teams";
@@ -436,49 +435,6 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
   });
   expect(invalid.status).toBe(400);
   expect(await json(invalid)).toMatchObject({ error: { code: -32602 } });
-});
-
-it("reports an unreadable team instead of attempting the refused provider read", async () => {
-  const at = DateTime.makeUnsafe("2026-10-31T16:20:00Z");
-  const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164c1");
-  let providerReads = 0;
-  const queries: FantasyQueriesShape = {
-    ...unavailableQueries,
-    getRosters: () => {
-      providerReads += 1;
-      return Effect.fail(
-        QueryTeamUnavailable.make({
-          team,
-          reason: "provider_refused",
-          detail: "You are not allowed to view this page because you are not in this league.",
-          observedAt: at,
-        }),
-      );
-    },
-  };
-  const services = Layer.mergeAll(
-    authentication,
-    Layer.succeed(Connections)(unavailableConnections),
-    Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
-    Layer.succeed(LineupRuns)(unavailableLineups),
-    Layer.succeed(Teams)(unavailableTeams),
-    Layer.succeed(Feedback)(unavailableFeedback),
-  );
-
-  const response = await handleMcpRequest(
-    request("tools/call", { name: "get_rosters", arguments: { team } }, "fantasy"),
-    (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
-  );
-  const body = JSON.stringify(await json(response));
-
-  expect(body).toContain('"isError":true');
-  expect(body).toContain(
-    "You are not allowed to view this page because you are not in this league.",
-  );
-  expect(body).toContain("team_unavailable");
-  expect(providerReads).toBe(1);
 });
 
 it("reaches search_players with an empty query and returns the remedy instead of invalid-params", async () => {
@@ -934,10 +890,7 @@ it("requires teams:manage and changes automation through the shared team service
             team: input.team,
             action: input.action,
             enrolled: enabled,
-            availability: {
-              status: "available" as const,
-              observedAt: DateTime.makeUnsafe("2026-10-25T11:55:00Z"),
-            },
+            availability: "available" as const,
             automation: {
               status: enabled ? ("enabled" as const) : ("disabled" as const),
               changedAt: at,
@@ -984,7 +937,7 @@ it("requires teams:manage and changes automation through the shared team service
           {
             outcome: "changed",
             enrolled: true,
-            availability: { status: "available" },
+            availability: "available",
             automation: { status: "enabled" },
           },
         ],

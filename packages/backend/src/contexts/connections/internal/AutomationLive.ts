@@ -6,7 +6,6 @@ import type { AutomationSummary } from "#contexts/connections/Automation.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import { LineupDispatcher } from "#contexts/connections/LineupWork.ts";
 import { RetentionSweep } from "#contexts/connections/Retention.ts";
-import { TeamAvailabilitySweep } from "#contexts/connections/TeamAvailabilitySweep.ts";
 
 import { LineupRunRepository } from "./LineupRunRepository.ts";
 import type { NewScheduledLineupRun } from "./LineupRunRepository.ts";
@@ -19,11 +18,9 @@ export const AutomationLive = Layer.effect(
     const runs = yield* LineupRunRepository;
     const dispatcher = yield* LineupDispatcher;
     const retention = yield* RetentionSweep;
-    const availability = yield* TeamAvailabilitySweep;
 
     const run = Effect.fn("Automation.run")(function* (limit: number) {
       const now = yield* DateTime.now;
-      const availabilitySweep = yield* availability.run(limit);
       const pausesExpired = yield* teams.expirePauses(limit, now);
       const eligible = yield* teams.eligible(limit);
       const busy = yield* runs.scheduledTeamIds(eligible.map((entry) => entry.team.id));
@@ -48,7 +45,6 @@ export const AutomationLive = Layer.effect(
         scheduledRuns,
         delivered: repaired.delivered,
         pending: repaired.pending,
-        availability: availabilitySweep,
         retention: retained,
       };
       yield* Effect.annotateCurrentSpan({

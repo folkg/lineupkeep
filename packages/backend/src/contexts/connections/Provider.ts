@@ -9,7 +9,6 @@ import type { LeagueFormat, StatPeriodKind } from "./QueryValues.ts";
 const ProviderOperation = Schema.Literals([
   "validate_session",
   "discover_teams",
-  "check_league_access",
   "read_league",
   "read_standings",
   "read_roster",
@@ -46,17 +45,6 @@ export const ProviderTeam = Schema.Struct({
   name: Schema.NonEmptyString,
 });
 export type ProviderTeam = typeof ProviderTeam.Type;
-
-export type ProviderLeagueAccess =
-  | {
-      readonly status: "listed";
-      readonly providerLeagueKey: string;
-    }
-  | {
-      readonly status: "refused";
-      readonly providerLeagueKey: string;
-      readonly detail: string;
-    };
 
 export const ProviderFantasyDay = Schema.Struct({
   timeZone: Schema.NonEmptyString,
@@ -216,12 +204,6 @@ export type ProviderShape = {
   readonly discoverTeams: (
     input: ProviderSessionMaterial,
   ) => Effect.Effect<ReadonlyArray<ProviderTeam>, ProviderFailure>;
-
-  readonly checkLeagueAccess: (
-    input: ProviderSessionMaterial & {
-      readonly providerLeagueKeys: ReadonlyArray<string>;
-    },
-  ) => Effect.Effect<ReadonlyArray<ProviderLeagueAccess>, ProviderFailure>;
 
   readonly readLeague: (
     input: ProviderSessionMaterial & {

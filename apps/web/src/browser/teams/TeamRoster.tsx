@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { Errored, For, Show } from "solid-js";
+import { For, Show } from "solid-js";
 
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
@@ -12,7 +12,6 @@ import { Time } from "#browser/shared-ui/Time.tsx";
 import type {
   TeamRosterPlayerView,
   TeamRosterTrendView,
-  TeamSummaryView,
 } from "#contracts/connections/teamContract.ts";
 
 import { rosterTrendLabel } from "./teamLabels";
@@ -20,6 +19,11 @@ import type { TeamRemote } from "./teamRemote";
 import { useTeamRoster } from "./useTeamRoster";
 
 export function TeamRoster(props: TeamRosterProps): JSX.Element {
+  const roster = useTeamRoster({
+    teamId: () => props.teamId,
+    remote: () => props.remote,
+  });
+
   return (
     <Stack as="section" gap="sm" labelledBy="team-roster-title">
       <Heading id="team-roster-title" level={2} size="section">
@@ -29,34 +33,6 @@ export function TeamRoster(props: TeamRosterProps): JSX.Element {
         Adds and drops are the provider's counts for its current day, across all of its leagues.
         They are not percent owned.
       </Text>
-      <Show
-        fallback={
-          <EmptyState title="Roster unavailable.">
-            Lineupkeep cannot read this team, so it cannot show the roster.
-          </EmptyState>
-        }
-        when={props.team.team.availability.status === "available"}
-      >
-        <RosterBody remote={props.remote} teamId={props.team.team.id} />
-      </Show>
-    </Stack>
-  );
-}
-
-function RosterBody(props: RosterBodyProps): JSX.Element {
-  const roster = useTeamRoster({
-    teamId: () => props.teamId,
-    remote: () => props.remote,
-  });
-
-  return (
-    <Errored
-      fallback={
-        <EmptyState title="Roster unavailable.">
-          We could not read this roster from the provider. Try again in a moment.
-        </EmptyState>
-      }
-    >
       <Show
         fallback={<LoadingState label="Loading roster">Loading this roster…</LoadingState>}
         when={!roster.isPending}
@@ -97,7 +73,7 @@ function RosterBody(props: RosterBodyProps): JSX.Element {
           )}
         </Show>
       </Show>
-    </Errored>
+    </Stack>
   );
 }
 
@@ -181,11 +157,6 @@ function injuryLine(player: TeamRosterPlayerView): string {
 }
 
 type TeamRosterProps = {
-  readonly team: TeamSummaryView;
-  readonly remote: TeamRemote;
-};
-
-type RosterBodyProps = {
   readonly teamId: string;
   readonly remote: TeamRemote;
 };

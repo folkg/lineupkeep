@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, beforeEach, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
+import { eq } from "drizzle-orm";
 import { Array, Config, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { DateTime } from "effect";
 import { TestClock } from "effect/testing";
@@ -19,6 +20,7 @@ import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
+import { providerTeams } from "./internal/ConnectionTables.ts";
 import { LineupDeliveryLocal } from "./internal/LineupDeliveryLocal.ts";
 import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
@@ -31,7 +33,6 @@ import {
 } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { RetentionSweepLive } from "./internal/RetentionSweepRepository.ts";
-import { TeamAvailabilitySweepLive } from "./internal/TeamAvailabilitySweepLive.ts";
 import { TeamRepository } from "./internal/TeamRepository.ts";
 import { TeamsLive } from "./internal/TeamsLive.ts";
 import { LineupRequestInput } from "./LineupRun.ts";
@@ -137,151 +138,39 @@ it.effect("collapses several missed hourly ticks into one current run", () =>
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
-it.effect("excludes disabled, paused, unavailable, and reconnecting teams", () =>
+it.effect("excludes disabled and paused teams but still schedules an available-flag team", () =>
   Effect.gen(function* () {
     const automation = yield* Automation;
     const fake = yield* FakeProviderWorld;
     const teams = yield* Teams;
+    const database = yield* ConnectionsDatabase;
     const disabled = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
     const paused = yield* seedTeam(fake, "461.l.1000.t.2", "Beta");
-    const unavailable = yield* seedTeam(fake, "462.l.2000.t.3", "Gamma", refusedTeamShape);
-    yield* fake.refuseLeague("462.l.2000", refusal);
+    const unavailableKey = "461.l.1000.t.3";
+    const unavailable = yield* seedTeam(fake, unavailableKey, "Gamma", {
+      team: teamFixture,
+      league,
+      roster: { ...roster, providerTeamKey: unavailableKey },
+      nativeAfter: { ...nativeAfter, providerTeamKey: unavailableKey },
+    });
+    yield* refuseCustomPlanning(fake);
     yield* teams.control(owner, [
       { team: paused, action: "enable" },
       { team: unavailable, action: "enable" },
     ]);
     yield* teams.control(owner, [{ team: paused, action: "pause-today" }]);
+    yield* database
+      .update(providerTeams)
+      .set({ availability: "unavailable" })
+      .where(eq(providerTeams.id, unavailable));
 
     const summary = yield* automation.run(10);
 
-    assert.strictEqual(summary.eligibleTeams, 0);
-    assert.strictEqual(summary.scheduledRuns, 0);
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
+    assert.strictEqual(summary.eligibleTeams, 1);
+    assert.strictEqual(summary.scheduledRuns, 1);
+    assert.strictEqual(summary.delivered, 1);
+    assert.strictEqual(yield* fake.nativeCallCount, 1);
     assert.notStrictEqual(disabled, paused);
-  }).pipe(Effect.provide(AutomationTestLayer)),
-);
-
-it.effect("skips a team the provider refuses and records the refusal", () =>
-  Effect.gen(function* () {
-    const automation = yield* Automation;
-    const connections = yield* Connections;
-    const teams = yield* Teams;
-    const fake = yield* FakeProviderWorld;
-    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
-    yield* teams.control(owner, [{ team, action: "enable" }]);
-    const connection = Array.getUnsafe(yield* connections.list(owner), 0);
-
-    yield* fake.refuseLeague("461.l.1000", refusal);
-    const checked = yield* connections.discoverTeams(owner, [{ id: connection.id }]);
-    const summary = yield* automation.run(10);
-
-    assert.lengthOf(checked, 1);
-    assert.deepInclude(Array.getUnsafe(checked, 0).availability, {
-      status: "unavailable",
-      reason: "provider_refused",
-      detail: refusal,
-    });
-    assert.strictEqual(summary.eligibleTeams, 0);
-    assert.strictEqual(summary.scheduledRuns, 0);
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
-    assert.strictEqual((yield* teams.get(owner, team)).team.automation.status, "enabled");
-  }).pipe(Effect.provide(AutomationTestLayer)),
-);
-
-it.effect("sweeps every stored team with automation off and batches one call per connection", () =>
-  Effect.gen(function* () {
-    const automation = yield* Automation;
-    const connections = yield* Connections;
-    const runs = yield* LineupRuns;
-    const teams = yield* Teams;
-    const fake = yield* FakeProviderWorld;
-    yield* fake.setTeams([
-      teamFixture,
-      {
-        ...teamFixture,
-        providerTeamKey: "461.l.1001.t.1",
-        providerLeagueKey: "461.l.1001",
-        name: "Beta",
-      },
-    ]);
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [{ provider: decodeProviderKey("yahoo"), session }]),
-      0,
-    );
-    yield* connections.discoverTeams(owner, [{ id: linked.id }]);
-    const callsBefore = (yield* fake.leagueAccessCalls).length;
-
-    const first = yield* automation.run(10);
-    const readable = yield* teams.list(owner);
-
-    assert.deepStrictEqual((yield* fake.leagueAccessCalls).slice(callsBefore), [
-      ["461.l.1000", "461.l.1001"],
-    ]);
-    assert.strictEqual(first.availability.connectionsChecked, 1);
-    assert.strictEqual(first.availability.leaguesChecked, 2);
-    assert.strictEqual(first.availability.teamsObserved, 2);
-    assert.strictEqual(first.scheduledRuns, 0);
-    assert.isTrue(readable.every((entry) => entry.team.availability.status === "available"));
-
-    yield* fake.refuseLeague("461.l.1000", refusal);
-    yield* fake.refuseLeague("461.l.1001", refusal);
-    const second = yield* automation.run(10);
-    const unreadable = yield* teams.list(owner);
-
-    assert.deepStrictEqual((yield* fake.leagueAccessCalls).slice(callsBefore), [
-      ["461.l.1000", "461.l.1001"],
-      ["461.l.1000", "461.l.1001"],
-    ]);
-    assert.strictEqual(second.availability.teamsObserved, 2);
-    assert.strictEqual(second.availability.teamsUnavailable, 2);
-    assert.strictEqual(second.eligibleTeams, 0);
-    assert.strictEqual(second.scheduledRuns, 0);
-    for (const entry of unreadable) {
-      assert.deepInclude(entry.team.availability, {
-        status: "unavailable",
-        reason: "provider_refused",
-        detail: refusal,
-        consecutiveRefusals: 1,
-      });
-      assert.strictEqual(entry.team.automation.status, "disabled");
-    }
-    assert.strictEqual((yield* runs.get(owner, { limit: 50 })).runs.length, 0);
-    assert.strictEqual(yield* fake.nativeCallCount, 0);
-  }).pipe(Effect.provide(AutomationTestLayer)),
-);
-
-it.effect("counts consecutive refusals but leaves a transient failure uncertain", () =>
-  Effect.gen(function* () {
-    const automation = yield* Automation;
-    const teams = yield* Teams;
-    const fake = yield* FakeProviderWorld;
-    const team = yield* seedTeam(fake, "461.l.1000.t.1", "Alpha");
-    yield* fake.refuseLeague("461.l.1000", refusal);
-
-    yield* TestClock.adjust(3_600_000);
-    const first = yield* automation.run(10);
-    const once = (yield* teams.get(owner, team)).team.availability;
-    assert.strictEqual(first.availability.teamsUnavailable, 1);
-    assert.deepInclude(once, { status: "unavailable", consecutiveRefusals: 1 });
-
-    yield* TestClock.adjust(3_600_000);
-    yield* fake.failRequests("unavailable");
-    const skipped = yield* automation.run(10);
-    const afterFailure = (yield* teams.get(owner, team)).team.availability;
-    assert.strictEqual(skipped.availability.connectionsSkipped, 1);
-    assert.deepStrictEqual(afterFailure, once);
-
-    yield* fake.failRequests(undefined);
-    yield* TestClock.adjust(3_600_000);
-    yield* automation.run(10);
-    const twice = (yield* teams.get(owner, team)).team.availability;
-    assert.deepInclude(twice, { status: "unavailable", consecutiveRefusals: 2 });
-
-    yield* fake.refuseLeague("461.l.1000", undefined);
-    yield* TestClock.adjust(3_600_000);
-    yield* automation.run(10);
-    const recovered = (yield* teams.get(owner, team)).team.availability;
-    assert.strictEqual(recovered.status, "available");
   }).pipe(Effect.provide(AutomationTestLayer)),
 );
 
@@ -477,8 +366,6 @@ beforeEach(() => {
   owner = decodeUserId(`automation-tick-owner-${String(ownerSerial)}`);
 });
 
-const refusal = "You are not allowed to view this page because you are not in this league.";
-
 const teamFixture: ProviderTeam = {
   provider: decodeProviderKey("yahoo"),
   providerTeamKey: "461.l.1000.t.1",
@@ -581,26 +468,6 @@ const nativeAfter: ProviderRoster = {
     ...player,
     slot: { status: "verified", slot: index === 0 ? "BN" : "QB" },
   })),
-};
-
-const refusedTeamShape: SeedShape = {
-  team: {
-    ...teamFixture,
-    providerTeamKey: "462.l.2000.t.3",
-    providerLeagueKey: "462.l.2000",
-    name: "Gamma",
-  },
-  league: { ...league, providerLeagueKey: "462.l.2000" },
-  roster: {
-    ...roster,
-    providerTeamKey: "462.l.2000.t.3",
-    providerLeagueKey: "462.l.2000",
-  },
-  nativeAfter: {
-    ...nativeAfter,
-    providerTeamKey: "462.l.2000.t.3",
-    providerLeagueKey: "462.l.2000",
-  },
 };
 
 const hockeyTeamFixture: ProviderTeam = {
@@ -759,17 +626,11 @@ const TeamsTest = TeamsLive.pipe(
   Layer.provide(LineupRepositoryTest),
 );
 const RetentionTest = RetentionSweepLive.pipe(Layer.provide(DatabaseLayer));
-const AvailabilitySweepTest = TeamAvailabilitySweepLive.pipe(
-  Layer.provide(ConnectionRepositoryTest),
-  Layer.provide(ProviderFakeTest),
-  Layer.provide(EncryptionTestLayer),
-);
 const AutomationTest = AutomationLive.pipe(
   Layer.provide(TeamRepositoryTest),
   Layer.provide(LineupRepositoryTest),
   Layer.provide(DispatcherTest),
   Layer.provide(RetentionTest),
-  Layer.provide(AvailabilitySweepTest),
 );
 const AutomationTestLayer = Layer.mergeAll(
   AutomationTest,
@@ -778,7 +639,6 @@ const AutomationTestLayer = Layer.mergeAll(
   RunsTest,
   ConnectionsTest,
   RetentionTest,
-  AvailabilitySweepTest,
   LineupRepositoryTest,
 ).pipe(
   Layer.provideMerge(DatabaseLayer),

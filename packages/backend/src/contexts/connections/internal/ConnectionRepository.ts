@@ -11,7 +11,6 @@ import {
   ConnectionLinkRejected,
   ConnectionNotFound,
   ConnectionPersistenceFailed,
-  ConnectionProviderRejected,
   ProviderKey,
   decodeConnectionId,
 } from "#contexts/connections/Connection.ts";
@@ -27,11 +26,9 @@ import {
   connectionLinkingWindowMillis,
   connectionListLimit,
 } from "#contexts/connections/ConnectionLimits.ts";
-import type { FantasyTeam, TeamAvailability } from "#contexts/connections/FantasyTeam.ts";
+import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
-import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
-import type { TeamUnavailabilityReason } from "#contexts/connections/FantasyTeam.ts";
-import type { ProviderLeagueAccess, ProviderTeam } from "#contexts/connections/Provider.ts";
+import type { ProviderTeam } from "#contexts/connections/Provider.ts";
 import { anyOf, excludedValues, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
 import { planBatch, snapshotOf } from "#utilities/machine.ts";
@@ -49,15 +46,9 @@ import {
   providerConnections,
   providerCredentials,
   providerTeams,
-  teamAvailabilityColumns,
 } from "./ConnectionTables.ts";
 import { connectionIncidents, notifications } from "./IncidentTables.ts";
 import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
-
-const notListedDetail = "The provider no longer lists this team through its connection.";
-const disconnectedDetail = "The connection is disconnected, so Lineupkeep cannot read this team.";
-const rejectedSessionDetail =
-  "The provider rejected this connection's sign-in, so Lineupkeep cannot read this team.";
 
 type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transaction"]>[0]>[0];
 
@@ -83,40 +74,9 @@ export type ReadyCredential = {
   readonly envelope: string;
 };
 
-export type TeamCheck = {
+export type TeamDiscovery = {
   readonly connectionId: ConnectionId;
   readonly teams: ReadonlyArray<ProviderTeam>;
-  readonly access: ReadonlyArray<ProviderLeagueAccess>;
-};
-
-export type AvailabilityTargetTeam = {
-  readonly id: TeamId;
-  readonly providerLeagueKey: string;
-  readonly consecutiveRefusals: number;
-};
-
-export type AvailabilityTarget = {
-  readonly connectionId: ConnectionId;
-  readonly userId: UserId;
-  readonly status: ConnectionStatus;
-  readonly credential:
-    | {
-        readonly provider: ProviderKey;
-        readonly generation: ConnectionCredentialGeneration;
-        readonly envelope: string;
-      }
-    | undefined;
-  readonly teams: ReadonlyArray<AvailabilityTargetTeam>;
-};
-
-export type TeamAvailabilityObservation = {
-  readonly team: TeamId;
-  readonly availability: TeamAvailability;
-};
-
-export type TeamAvailabilityUpdate = {
-  readonly userId: UserId;
-  readonly observations: ReadonlyArray<TeamAvailabilityObservation>;
 };
 
 export class ConnectionRepository extends Context.Service<ConnectionRepository>()(
@@ -567,14 +527,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                 );
               yield* transaction
                 .update(providerTeams)
-                .set({
-                  availability: "unavailable",
-                  unavailableReason: "connection_unavailable",
-                  unavailableDetail: disconnectedDetail,
-                  availabilityObservedAt: DateTime.toDateUtc(at),
-                  availabilityRefusals: 0,
-                  updatedAt: DateTime.toDateUtc(at),
-                })
+                .set({ availability: "unavailable", updatedAt: DateTime.toDateUtc(at) })
                 .where(
                   and(eq(providerTeams.userId, userId), anyOf(providerTeams.connectionId, ids)),
                 );
@@ -794,67 +747,53 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         });
       });
 
-      const recordTeamCheck = Effect.fn("ConnectionRepository.recordTeamCheck")(function* (
+      const recordDiscoveries = Effect.fn("ConnectionRepository.recordDiscoveries")(function* (
         userId: UserId,
-        checks: ReadonlyArray<TeamCheck>,
+        discoveries: ReadonlyArray<TeamDiscovery>,
         at: DateTime.Utc,
       ) {
-        if (checks.length === 0) {
+        if (discoveries.length === 0) {
           return;
         }
-        const ids = [...new Set(checks.map((check) => check.connectionId))];
+        const ids = [...new Set(discoveries.map((discovery) => discovery.connectionId))];
         if (!Array.isArrayNonEmpty(ids)) {
           return;
         }
         const atDate = DateTime.toDateUtc(at);
-        const rows: Array<typeof providerTeams.$inferInsert> = [];
-        for (const { connectionId, teams, access } of checks) {
-          const accessByLeague = new Map(access.map((entry) => [entry.providerLeagueKey, entry]));
-          for (const team of teams) {
-            const observed = accessByLeague.get(team.providerLeagueKey);
-            if (observed === undefined) {
-              throw new Error(
-                `The check for connection ${connectionId} did not read league ${team.providerLeagueKey}`,
-              );
-            }
-            const availability: TeamAvailability =
-              observed.status === "listed"
-                ? { status: "available", observedAt: at }
-                : {
-                    status: "unavailable",
-                    reason: "provider_refused",
-                    detail: observed.detail,
-                    observedAt: at,
-                    consecutiveRefusals: 0,
-                  };
-            const id = yield* crypto
-              .randomUUIDv7()
-              .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-            const automationState = yield* Schema.encodeEffect(
-              Schema.toCodecJson(TeamAutomationState),
-            )({ _tag: "Disabled" as const, changedAt: at }).pipe(
-              Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-            );
-            rows.push({
-              id: decodeTeamId(id),
-              connectionId,
-              userId,
-              provider: team.provider,
-              providerTeamKey: team.providerTeamKey,
-              providerLeagueKey: team.providerLeagueKey,
-              league: team.league,
-              sport: team.sport,
-              season: team.season,
-              name: team.name,
-              ...teamAvailabilityColumns(availability),
-              automationState,
-              automationStatus: "disabled" as const,
-              lastSeenAt: atDate,
-              createdAt: atDate,
-              updatedAt: atDate,
-            });
-          }
-        }
+        const rows = yield* Effect.forEach(
+          discoveries,
+          ({ connectionId, teams }) =>
+            Effect.forEach(
+              teams,
+              (team) =>
+                crypto.randomUUIDv7().pipe(
+                  Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                  Effect.map((id) => ({
+                    id: decodeTeamId(id),
+                    connectionId,
+                    userId,
+                    provider: team.provider,
+                    providerTeamKey: team.providerTeamKey,
+                    providerLeagueKey: team.providerLeagueKey,
+                    league: team.league,
+                    sport: team.sport,
+                    season: team.season,
+                    name: team.name,
+                    availability: "available" as const,
+                    automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
+                      _tag: "Disabled" as const,
+                      changedAt: at,
+                    }),
+                    automationStatus: "disabled" as const,
+                    lastSeenAt: atDate,
+                    createdAt: atDate,
+                    updatedAt: atDate,
+                  })),
+                ),
+              { concurrency: 1 },
+            ),
+          { concurrency: 1 },
+        ).pipe(Effect.map((nested) => nested.flat()));
         yield* database
           .transaction((tx) =>
             Effect.gen(function* () {
@@ -871,7 +810,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                 }
               }
               if (rows.length > 0) {
-                const stored = yield* chunked(rows, maxInsertRows(providerTeams), (chunk) =>
+                yield* chunked(rows, maxInsertRows(providerTeams), (chunk) =>
                   tx
                     .insert(providerTeams)
                     .values(chunk)
@@ -884,72 +823,18 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                         "season",
                         "name",
                         "availability",
-                        "unavailableReason",
-                        "unavailableDetail",
-                        "availabilityObservedAt",
                         "lastSeenAt",
                         "updatedAt",
                       ]),
                     })
-                    .returning({
-                      id: providerTeams.id,
-                      connectionId: providerTeams.connectionId,
-                      providerTeamKey: providerTeams.providerTeamKey,
-                      consecutiveRefusals: providerTeams.availabilityRefusals,
-                    }),
+                    .returning(),
                 );
-                const storedByKey = new Map(
-                  stored.map((row) => [
-                    `${row.connectionId}:${row.providerTeamKey}`,
-                    { id: row.id, consecutiveRefusals: row.consecutiveRefusals },
-                  ]),
-                );
-                const observations = checks.flatMap(({ connectionId, teams, access }) => {
-                  const accessByLeague = new Map(
-                    access.map((entry) => [entry.providerLeagueKey, entry]),
-                  );
-                  return teams.map((team): TeamAvailabilityObservation => {
-                    const stored = storedByKey.get(`${connectionId}:${team.providerTeamKey}`);
-                    if (stored === undefined) {
-                      throw new Error(
-                        `The check for connection ${connectionId} did not store league ${team.providerLeagueKey}`,
-                      );
-                    }
-                    const observed = accessByLeague.get(team.providerLeagueKey);
-                    if (observed === undefined) {
-                      throw new Error(
-                        `The check for connection ${connectionId} did not read league ${team.providerLeagueKey}`,
-                      );
-                    }
-                    return {
-                      team: decodeTeamId(stored.id),
-                      availability:
-                        observed.status === "listed"
-                          ? { status: "available", observedAt: at }
-                          : {
-                              status: "unavailable",
-                              reason: "provider_refused",
-                              detail: observed.detail,
-                              observedAt: at,
-                              consecutiveRefusals: stored.consecutiveRefusals + 1,
-                            },
-                    };
-                  });
-                });
-                yield* recordAvailabilityObservations(tx, userId, observations, at);
               }
-              for (const { connectionId, teams } of checks) {
+              for (const { connectionId, teams } of discoveries) {
                 const keys = teams.map((team) => team.providerTeamKey);
                 yield* tx
                   .update(providerTeams)
-                  .set({
-                    availability: "unavailable",
-                    unavailableReason: "not_listed",
-                    unavailableDetail: notListedDetail,
-                    availabilityObservedAt: atDate,
-                    availabilityRefusals: 0,
-                    updatedAt: atDate,
-                  })
+                  .set({ availability: "unavailable", updatedAt: atDate })
                   .where(
                     keys.length === 0
                       ? and(
@@ -967,160 +852,6 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
           )
           .pipe(mapTransactionError);
       });
-
-      const markTeamsUnavailable = Effect.fn("ConnectionRepository.markTeamsUnavailable")(
-        function* (
-          userId: UserId,
-          command: {
-            readonly connectionIds: ReadonlyArray<ConnectionId>;
-            readonly reason: TeamUnavailabilityReason;
-            readonly detail: string;
-          },
-          at: DateTime.Utc,
-        ) {
-          const ids = [...new Set(command.connectionIds)];
-          if (!Array.isArrayNonEmpty(ids)) {
-            return;
-          }
-          yield* database
-            .update(providerTeams)
-            .set({
-              availability: "unavailable",
-              unavailableReason: command.reason,
-              unavailableDetail: command.detail,
-              availabilityObservedAt: DateTime.toDateUtc(at),
-              availabilityRefusals: 0,
-              updatedAt: DateTime.toDateUtc(at),
-            })
-            .where(and(eq(providerTeams.userId, userId), anyOf(providerTeams.connectionId, ids)))
-            .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-        },
-      );
-
-      const rejectSession = Effect.fn("ConnectionRepository.rejectSession")(function* (
-        userId: UserId,
-        id: ConnectionId,
-        expectedGeneration: ConnectionCredentialGeneration,
-        at: DateTime.Utc,
-      ) {
-        const marked = yield* Effect.result(
-          markReconnectRequired(userId, [{ id, expectedGeneration }]),
-        );
-        if (marked._tag === "Failure") {
-          if (marked.failure._tag !== "connection.credential_generation_stale") {
-            return yield* marked.failure;
-          }
-          return yield* ConnectionProviderRejected.make({ id });
-        }
-        yield* markTeamsUnavailable(
-          userId,
-          {
-            connectionIds: [id],
-            reason: "connection_unavailable",
-            detail: rejectedSessionDetail,
-          },
-          at,
-        );
-        return yield* ConnectionProviderRejected.make({ id });
-      });
-
-      const loadAvailabilityTargets = Effect.fn("ConnectionRepository.loadAvailabilityTargets")(
-        function* (limit: number) {
-          if (limit <= 0) {
-            return [];
-          }
-          const connectionRows = yield* database
-            .select({
-              id: providerConnections.id,
-              userId: providerConnections.userId,
-              status: providerConnections.status,
-            })
-            .from(providerConnections)
-            .orderBy(asc(providerConnections.id))
-            .limit(limit)
-            .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-          const ids = connectionRows.map((row) => row.id);
-          if (!Array.isArrayNonEmpty(ids)) {
-            return [];
-          }
-          const credentials = yield* database
-            .select({
-              connectionId: providerCredentials.connectionId,
-              provider: providerCredentials.provider,
-              generation: providerCredentials.generation,
-              envelope: providerCredentials.envelope,
-            })
-            .from(providerCredentials)
-            .where(anyOf(providerCredentials.connectionId, ids))
-            .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-          const teamRows = yield* database
-            .select({
-              id: providerTeams.id,
-              connectionId: providerTeams.connectionId,
-              providerLeagueKey: providerTeams.providerLeagueKey,
-              consecutiveRefusals: providerTeams.availabilityRefusals,
-            })
-            .from(providerTeams)
-            .where(anyOf(providerTeams.connectionId, ids))
-            .orderBy(asc(providerTeams.id))
-            .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-          const credentialByConnection = new Map(
-            yield* Effect.forEach(credentials, (row) =>
-              Schema.decodeEffect(ReadyCredentialRow)(row).pipe(
-                Effect.map((credential) => [credential.connectionId, credential] as const),
-                Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
-              ),
-            ),
-          );
-          const teamsByConnection = new Map<string, Array<AvailabilityTargetTeam>>();
-          for (const row of teamRows) {
-            const teams = teamsByConnection.get(row.connectionId) ?? [];
-            teams.push({
-              id: decodeTeamId(row.id),
-              providerLeagueKey: row.providerLeagueKey,
-              consecutiveRefusals: row.consecutiveRefusals,
-            });
-            teamsByConnection.set(row.connectionId, teams);
-          }
-          return yield* Effect.forEach(connectionRows, (row) =>
-            Effect.gen(function* () {
-              const connectionId = yield* Schema.decodeEffect(ConnectionId)(row.id);
-              const userId = yield* Schema.decodeEffect(UserId)(row.userId);
-              const status = yield* Schema.decodeEffect(ConnectionStatus)(row.status);
-              const credential = credentialByConnection.get(connectionId);
-              return {
-                connectionId,
-                userId,
-                status,
-                credential:
-                  credential === undefined
-                    ? undefined
-                    : {
-                        provider: credential.provider,
-                        generation: credential.generation,
-                        envelope: credential.envelope,
-                      },
-                teams: teamsByConnection.get(connectionId) ?? [],
-              } satisfies AvailabilityTarget;
-            }).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
-          );
-        },
-      );
-
-      const recordTeamAvailability = Effect.fn("ConnectionRepository.recordTeamAvailability")(
-        function* (updates: ReadonlyArray<TeamAvailabilityUpdate>, at: DateTime.Utc) {
-          if (updates.length === 0) {
-            return;
-          }
-          yield* database
-            .transaction((tx) =>
-              Effect.forEach(updates, (update) =>
-                recordAvailabilityObservations(tx, update.userId, update.observations, at),
-              ),
-            )
-            .pipe(mapTransactionError);
-        },
-      );
 
       const listTeams = Effect.fn("ConnectionRepository.listTeams")(function* (userId: UserId) {
         const rows = yield* database
@@ -1161,11 +892,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         disconnect,
         markReconnectRequired,
         loadCredentials,
-        recordTeamCheck,
-        markTeamsUnavailable,
-        rejectSession,
-        loadAvailabilityTargets,
-        recordTeamAvailability,
+        recordDiscoveries,
         listTeams,
         listTeamsForConnections,
       };
@@ -1173,110 +900,6 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
   },
 ) {
   static readonly layer = Layer.effect(this)(this.make);
-}
-
-function recordAvailabilityObservations(
-  tx: Transaction,
-  userId: UserId,
-  observations: ReadonlyArray<TeamAvailabilityObservation>,
-  at: DateTime.Utc,
-): Effect.Effect<void, ConnectionPersistenceFailed> {
-  const atDate = DateTime.toDateUtc(at);
-  const available: Array<TeamId> = [];
-  const refused = new Map<
-    string,
-    {
-      readonly detail: string;
-      readonly consecutiveRefusals: number;
-      readonly teams: Array<TeamId>;
-    }
-  >();
-  const other = new Map<
-    string,
-    {
-      readonly reason: TeamUnavailabilityReason;
-      readonly detail: string;
-      readonly teams: Array<TeamId>;
-    }
-  >();
-  for (const { team, availability } of observations) {
-    switch (availability.status) {
-      case "unobserved":
-        throw new Error("An observation cannot record an unobserved team");
-      case "available":
-      case "stale":
-        available.push(team);
-        break;
-      case "unavailable":
-        if (availability.reason === "provider_refused") {
-          const key = `${availability.detail}:${String(availability.consecutiveRefusals)}`;
-          const entry = refused.get(key) ?? {
-            detail: availability.detail,
-            consecutiveRefusals: availability.consecutiveRefusals,
-            teams: [],
-          };
-          entry.teams.push(team);
-          refused.set(key, entry);
-        } else {
-          const key = `${availability.reason}:${availability.detail}`;
-          const entry = other.get(key) ?? {
-            reason: availability.reason,
-            detail: availability.detail,
-            teams: [],
-          };
-          entry.teams.push(team);
-          other.set(key, entry);
-        }
-        break;
-    }
-  }
-  return Effect.gen(function* () {
-    if (Array.isArrayNonEmpty(available)) {
-      yield* tx
-        .update(providerTeams)
-        .set({
-          availability: "available",
-          unavailableReason: null,
-          unavailableDetail: null,
-          availabilityObservedAt: atDate,
-          availabilityRefusals: 0,
-          updatedAt: atDate,
-        })
-        .where(and(eq(providerTeams.userId, userId), anyOf(providerTeams.id, available)));
-    }
-    for (const { detail, consecutiveRefusals, teams } of refused.values()) {
-      if (!Array.isArrayNonEmpty(teams)) {
-        continue;
-      }
-      yield* tx
-        .update(providerTeams)
-        .set({
-          availability: "unavailable",
-          unavailableReason: "provider_refused",
-          unavailableDetail: detail,
-          availabilityObservedAt: atDate,
-          availabilityRefusals: consecutiveRefusals,
-          updatedAt: atDate,
-        })
-        .where(and(eq(providerTeams.userId, userId), anyOf(providerTeams.id, teams)));
-    }
-    for (const { reason, detail, teams } of other.values()) {
-      if (!Array.isArrayNonEmpty(teams)) {
-        continue;
-      }
-      yield* tx
-        .update(providerTeams)
-        .set({
-          availability: "unavailable",
-          unavailableReason: reason,
-          unavailableDetail: detail,
-          availabilityObservedAt: atDate,
-          availabilityRefusals: 0,
-          updatedAt: atDate,
-        })
-        .where(and(eq(providerTeams.userId, userId), anyOf(providerTeams.id, teams)));
-    }
-  }).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
 }
 
 function resolveIncidents(

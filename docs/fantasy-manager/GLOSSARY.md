@@ -42,24 +42,7 @@ A provider's stable identifier for a fantasy team within one provider connection
 A provider's stable identifier for the league that contains a fantasy team.
 
 **Team availability**:
-Whether the provider currently lets a stored fantasy team be read through its connection, as one
-observed fact with its time. A team is available when a check read it within the last three hours;
-its last observation is stale when the read is older than that and is not presented as current
-health; it is unobserved when no check has recorded a read. It is unavailable when the provider
-refused the read, the account's own team list no longer includes it, or its connection cannot be
-used, and the recorded reason, the provider's own wording, and the number of consecutive checks that
-saw the same refusal are kept. Every stored team is swept on the hourly check, including teams with
-automation off. An unavailable team keeps its configuration, note, and runs, is skipped by
-automation, and is never treated as deleted. It is separate from a paused team, which the owner
-suspended.
-_Avoid_: Connection status when the team's own read state is meant; paused when the provider refused
-
-**Availability sweep**:
-The hourly check's read of every stored team's availability through its connection, whether or not
-the team is enrolled in automation. It groups stored teams by connection and makes one league-level
-read per held league, rather than one provider request per team. A transient failure records
-nothing and leaves the previous observation in place.
-_Avoid_: Team refresh when only the owner's explicit discovery is meant; health check
+Whether the provider still reports a discovered fantasy team through its connection. An unavailable team keeps its configuration and is not treated as deleted.
 
 **Roster**:
 The players held by a fantasy team, including starters, bench players, and reserve players.

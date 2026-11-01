@@ -1,5 +1,4 @@
 import type { ConnectionError } from "@lineupkeep/backend/connections/Connection";
-import type { TeamAvailability } from "@lineupkeep/backend/connections/FantasyTeam";
 import type { LineupRun } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupError } from "@lineupkeep/backend/connections/LineupRun";
 import { teamNoteLimit } from "@lineupkeep/backend/connections/TeamNote";
@@ -14,7 +13,6 @@ import { DateTime, Schema } from "effect";
 
 import type {
   LineupRunView,
-  TeamAvailabilityView,
   TeamMutationError,
   TeamNoteSaveResult,
   TeamRosterView,
@@ -78,7 +76,7 @@ function toTeamView(summary: TeamSummary["team"]): TeamView {
     sport: summary.sport,
     season: summary.season,
     name: summary.name,
-    availability: toAvailabilityView(summary.availability),
+    availability: summary.availability,
     automation: {
       status: summary.automation.status,
       changedAt: DateTime.formatIso(summary.automation.changedAt),
@@ -106,27 +104,6 @@ function toTeamView(summary: TeamSummary["team"]): TeamView {
     createdAt: DateTime.formatIso(summary.createdAt),
     updatedAt: DateTime.formatIso(summary.updatedAt),
   };
-}
-
-function toAvailabilityView(availability: TeamAvailability): TeamAvailabilityView {
-  switch (availability.status) {
-    case "unobserved":
-      return { status: "unobserved" };
-    case "available":
-    case "stale":
-      return {
-        status: availability.status,
-        observedAt: DateTime.formatIso(availability.observedAt),
-      };
-    case "unavailable":
-      return {
-        status: "unavailable",
-        reason: availability.reason,
-        detail: availability.detail,
-        observedAt: DateTime.formatIso(availability.observedAt),
-        consecutiveRefusals: availability.consecutiveRefusals,
-      };
-  }
 }
 
 export function mapTeamError(error: TeamError): ExpectedFailure<TeamMutationError["type"]> {
