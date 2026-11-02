@@ -27,7 +27,7 @@ it("terminates stalled shutdown and removes its directory before native teardown
   const cancellation = new AbortController();
   context.onTestFinished(async () => {
     try {
-      expect(() => process.kill(-fixture.pid, 0)).toThrow();
+      await expect.poll(() => processGroupExists(fixture.pid), { timeout: 5_000 }).toBe(false);
       expect(existsSync(fixture.directory)).toBe(false);
     } finally {
       await fixture[Symbol.asyncDispose]();
@@ -170,4 +170,16 @@ async function developmentInterruptFixture(
     exited: interruptedExit,
     [Symbol.asyncDispose]: dispose,
   };
+}
+
+function processGroupExists(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ESRCH") {
+      return false;
+    }
+    throw error;
+  }
 }
