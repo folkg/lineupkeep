@@ -175,9 +175,16 @@ missing schedules, an unmapped roster team, and a sport with no game source. `M`
 
 ### C1 — Repository remote and CI
 
-There is no remote and no CI. Staging, dual deployments and review workflows all wait on this.
+Staging, dual deployments and review workflows all wait on this.
 
-- [ ] Create the repository and push the history.
+- [x] Create the repository and push the history. It lives under the personal account `folkg`, which owns
+      the author identity `graemefolk@gmail.com` these commits carry. An earlier copy under the work account
+      `graemefolk` still exists and needs a token with the `delete_repo` scope to remove.
+- [ ] **Never repoint `origin` at an empty repository and fetch.** Jujutsu treats the missing remote bookmark
+      as a deletion, reconciles the working copy against an empty remote, and removes tracked files from
+      disk. Recover with `jj op log` then `jj op restore <operation>`, raising
+      `snapshot.max-new-file-size` for that command if untracked build output is too large to snapshot. Push
+      to a fresh repository by removing and re-adding the remote instead.
 - [ ] CI runs checks and all three end-to-end targets on a clean Linux runner.
 - [ ] **decide** the staging model: a long-lived environment, or one per branch destroyed after review.
 - [ ] Deploy production only from a merge, preserving the traffic-pinning step.
