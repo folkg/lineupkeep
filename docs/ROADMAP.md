@@ -118,6 +118,18 @@ is a free roster spot.
 
 **Verify**: the owner's four known cases classify correctly, including the one that must not qualify. `M`
 
+- [x] **Owner's ruling, 2026-11-02**: a player in a slot he is no longer eligible for may stay there, and must
+      never block the rest of the lineup. He is named in the run summary for information.
+- [ ] The ruling also says he is not frozen: if a legal slot for him exists, including swapping him with a
+      player who qualifies for the reserve slot, the plan moves him. Only when no complete legal plan exists
+      does he stay. Nothing may hardcode a reserve slot's name, because other sports call theirs IL or IL+.
+
+Proven in production on 2026-11-02 for the team **Meier? I barely know her!**, which had refused every
+scheduled write with "No complete legal assignment of this roster exists" because one player made a complete
+assignment impossible. After the change the same run reports `left_in_place = "Travis Konecny (IR)"`, sets
+everyone else, and the provider accepts the write. That also answers what the code could not: the provider
+accepts roster changes while an ineligible player sits in reserve.
+
 ## B. GCP configuration and cost
 
 Settings changes, not projects.
@@ -272,47 +284,65 @@ replace it, and retention removes a window after 30 days. Conflict reporting rem
 
 ### F1.2 — Record the provider's own scheduled games
 
-- [ ] Record the provider opponent the roster reads already publish, one observation per fantasy team per
+- [x] Record the provider opponent the roster reads already publish, one observation per fantasy team per
       date, with the fantasy-day maximum age.
-- [ ] Serve the schedule window from the store, refreshing once per fantasy day per linked team instead of
+- [x] Serve the schedule window from the store, refreshing once per fantasy day per linked team instead of
       once per automation tick.
 
 **Verify**: a week of live reads matches the direct provider read for every rostered player's dates, opponents
 and home or away, and the request count over the same week is recorded. `M`.
 
+Measured before the store existed: 360 provider reads a day became 5. Production holds one
+`provider_opponent` observation per linked team per fantasy day, last written at 08:55 UTC on 2026-11-02.
+
 ### F1.3 — Professional-team identity from provider-published pairs
 
-- [ ] Store the canonical professional team on the provider's key, with the league and the display
+- [x] Store the canonical professional team on the provider's key, with the league and the display
       abbreviation kept as display text only.
-- [ ] Attach a source identifier only through a key/abbreviation pair observed on one roster row, recorded
+- [x] Attach a source identifier only through a key/abbreviation pair observed on one roster row, recorded
       with its source and instant; scope it to the league and refuse a one-to-many mapping.
-- [ ] Leave an unmatched source team unresolved and unserved for any canonical team.
+- [x] Leave an unmatched source team unresolved and unserved for any canonical team.
+- [ ] **Open, found in production on 2026-11-02**: only pairs seen on a roster row are known, so 7 of the
+      league's clubs (Boston, San Jose, Tampa Bay, New Jersey, Edmonton, Anaheim, Los Angeles) have no
+      identity, every game involving them stays unattributed, and the gate has to fail open with
+      `provider_game_missing_from_source`. Learn the pairs from a wider provider read, the league player
+      pool, instead of only from rosters we happen to read.
 
 **Verify**: a deliberate one-to-many mapping is refused, and an unknown abbreviation produces no canonical
-team. `S`.
+team. `S`. Produced 54 identity rows over 29 distinct provider keys in production.
 
 ### F1.4 — The schedule read and the source registry
 
-- [ ] Add `ScheduleObservations.require({ subject, observationKind, window, maximumAge })` returning the
-      observation with its instant, source, confidence, and window, or a named refusal.
-- [ ] Add the `ScheduleSource` registry injected at the composition root, with declared sport coverage,
-      observation kinds, horizon, and request budget. No generic module names or imports a source.
-- [ ] Move the existing schedule reads onto the hook, so a caller asks for an observation and not for a read.
+- [x] Read a stored observation with its instant, source, confidence, and window, or a named refusal. This
+      is `ScheduleObservationRepository`, whose typed reads validate the stored value and return the window
+      with it, rather than a single generic `require`.
+- [x] Add the source registry injected at the composition root, with declared sport coverage, horizon, and
+      what the source publishes. This is `GameSourceRegistry`, keyed by league, registered once in
+      `ApplicationLayer`; no generic module names or imports a source.
+- [x] Move the existing schedule reads onto the store, so a caller asks for an observation and not for a
+      read.
 
 **Verify**: a fake source with different coverage and horizon needs no generic edit, and the provider adapter
-is the only module that names the provider. `M`.
+is the only module that names the provider. `M`. `SecondProviderFakeTest` proves the fake source needs no
+generic edit; the two lint and dependency rules prove no generic module names a sport or provider vocabulary.
 
 ### F1.5 — The NHL external source
 
-- [ ] Add the `api-web.nhle.com` source: the league-week read for start times, venue and status, and the
-      team-season read for the fixture skeleton.
-- [ ] Ask for a concrete season id, never the `/now` alias, which redirects and is refused by our egress
-      policy.
-- [ ] Decode the status field so an unrecognised value is `unknown`, never `on`, and an empty games array is a
-      empty week while a missing one is a fault.
+- [x] Add the `api-web.nhle.com` source: the league-week read for start times, venue and status.
+- [ ] The team-season read for the fixture skeleton is not built; nothing needs it yet.
+- [x] Ask for a concrete date, one league week per request, never the `/now` alias, which redirects and is
+      refused by our egress policy.
+- [x] Decode the status field so an unrecognised value is `unknown`, never `on`, and an empty games array is
+      an empty week while a missing one is a fault.
 
 **Verify**: one live week matches the league's own page for every NHL team's dates, start times, venues and
 home or away, and the request count for a week is recorded. `M`, depends on F1.1, F1.3, F1.4.
+
+Verified in production on 2026-11-02: 51 games stored for the week of 2 to 8 November, one request for the
+whole league week. The first attempt failed for a reason worth recording: the source closed the request scope
+and then read the response body, and the transport ties the body to that scope, so every read died with a
+request error carrying no status and the gate could only say unavailable. A throwaway Cloud Run job proved the
+network was never at fault, reading the same URL in 112 ms with a 200 over IPv6.
 
 ### F1.6 — Coverage, conflicts, and the postponed signal
 
