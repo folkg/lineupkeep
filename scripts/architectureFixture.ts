@@ -51,7 +51,7 @@ export async function checkLint(
   return withFixture(files, async (cwd) => ({
     ...(await runTool(cwd, join(repositoryRoot, "node_modules/oxlint/bin/oxlint"), [
       "--format",
-      "default",
+      "agent",
       ...(fix ? ["--fix"] : []),
       "--config",
       "oxlint.config.ts",
