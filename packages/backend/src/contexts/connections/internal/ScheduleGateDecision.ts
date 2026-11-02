@@ -1,9 +1,11 @@
 import { DateTime } from "effect";
 
+import type { LineupRun } from "#contexts/connections/LineupRun.ts";
 import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
 import type {
   ScheduleGateDecision,
   ScheduleGateRunReason,
+  TodayLineupRun,
 } from "#contexts/connections/ScheduleGate.ts";
 
 import { gameCanBePlayed, gameInvolvesTeam, nextGameForTeams } from "./LeagueSchedule.ts";
@@ -12,6 +14,22 @@ const lineupTickIntervalMinutes = 60;
 
 export function nextLineupTick(now: DateTime.Utc): DateTime.Utc {
   return DateTime.add(now, { minutes: lineupTickIntervalMinutes });
+}
+
+export function todayRunOf(runs: ReadonlyArray<LineupRun>): TodayLineupRun {
+  const verified = runs.some(
+    (run) =>
+      run.outcome?.verified === true &&
+      (run.outcome.kind === "changed" || run.outcome.kind === "no_op"),
+  );
+  if (verified) {
+    return { kind: "verified" };
+  }
+  const latest = runs[0];
+  if (latest === undefined) {
+    return { kind: "none" };
+  }
+  return latest.outcome?.kind === "blocked" ? { kind: "blocked" } : { kind: "unverified" };
 }
 
 export function decideScheduleGate(input: {
@@ -24,6 +42,7 @@ export function decideScheduleGate(input: {
   readonly games: ReadonlyArray<ProfessionalGame>;
   readonly providerGameKeys: ReadonlySet<string>;
   readonly teamKeys: ReadonlySet<string>;
+  readonly todayRun: TodayLineupRun;
 }): ScheduleGateDecision {
   for (const key of input.providerGameKeys) {
     const games = input.games.filter(
@@ -63,6 +82,17 @@ export function decideScheduleGate(input: {
     ) {
       return run("game_before_next_tick");
     }
+  }
+
+  switch (input.todayRun.kind) {
+    case "none":
+      return run("no_run_today");
+    case "blocked":
+      return run("last_run_blocked");
+    case "unverified":
+      return run("last_run_unverified");
+    case "verified":
+      break;
   }
 
   const nextGame = nextGameForTeams({

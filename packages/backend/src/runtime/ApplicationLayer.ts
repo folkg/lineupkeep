@@ -148,6 +148,7 @@ const ScheduleGateLayer = ScheduleGateLive.pipe(
   Layer.provide(ScheduleObservationRepositoryLayer),
   Layer.provide(ProfessionalCalendarLayer),
   Layer.provide(GameSourceLayer),
+  Layer.provide(LineupRepositoryLayer),
 );
 const LineupWorkerLayer = LineupWorkerLive.pipe(
   Layer.provide(LineupRepositoryLayer),

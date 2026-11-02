@@ -47,6 +47,7 @@ import type {
 } from "./LineupRunTables.ts";
 
 export type { LineupWriteIntentRecord };
+import { toLineupRun } from "./LineupRunViewRepository.ts";
 import {
   LineupPlan,
   LineupRunState,
@@ -465,6 +466,31 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         }
         return activity;
       });
+
+      const loadTeamRunsSince = Effect.fn("LineupRunRepository.loadTeamRunsSince")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly team: TeamId;
+          readonly since: DateTime.Utc;
+          readonly excluding: LineupRunId;
+        }) {
+          const rows = yield* database
+            .select()
+            .from(lineupRuns)
+            .where(
+              and(
+                eq(lineupRuns.userId, input.userId),
+                eq(lineupRuns.teamId, input.team),
+                gte(lineupRuns.createdAt, DateTime.toDateUtc(input.since)),
+                ne(lineupRuns.id, input.excluding),
+              ),
+            )
+            .orderBy(desc(lineupRuns.createdAt), asc(lineupRuns.id))
+            .pipe(Effect.mapError(mapPersistenceFailure));
+          const records = yield* Effect.forEach(rows, (row) => decodeRun(row));
+          return records.map(toLineupRun);
+        },
+      );
 
       const claim = Effect.fn("LineupRunRepository.claim")(function* (
         runId: LineupRunId,
@@ -1264,6 +1290,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         scheduledTeamIds,
         loadRuns,
         loadTeamActivity,
+        loadTeamRunsSince,
         claim,
         loadWriteIntent,
         unresolvedWriteIntent,

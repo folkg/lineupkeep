@@ -1,6 +1,7 @@
 import { DateTime, Effect } from "effect";
 import type { Redacted } from "effect";
 
+import type { UserId } from "#contexts/auth/User.ts";
 import {
   currentFantasyDayStart,
   fantasyDayLabel,
@@ -8,6 +9,7 @@ import {
 } from "#contexts/connections/FantasyDay.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import type { GameSourceFailure } from "#contexts/connections/GameSource.ts";
+import type { LineupRunId } from "#contexts/connections/LineupRun.ts";
 import type { ProfessionalCalendar } from "#contexts/connections/ProfessionalCalendar.ts";
 import type { ProfessionalCalendarUnavailable } from "#contexts/connections/ProfessionalCalendar.ts";
 import type { ProfessionalGameFactStale } from "#contexts/connections/ProfessionalCalendar.ts";
@@ -18,8 +20,9 @@ import type {
   ScheduleGateRunReason,
 } from "#contexts/connections/ScheduleGate.ts";
 
+import type { LineupRunRepository } from "./LineupRunRepository.ts";
 import { readProviderOpponent } from "./ProviderOpponentFacts.ts";
-import { decideScheduleGate, nextLineupTick } from "./ScheduleGateDecision.ts";
+import { decideScheduleGate, nextLineupTick, todayRunOf } from "./ScheduleGateDecision.ts";
 import type { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
 
 type CalendarFailure =
@@ -31,11 +34,14 @@ type CalendarFailure =
 export function evaluateScheduleGate(input: {
   readonly store: ScheduleObservationRepository["Service"];
   readonly calendar: ProfessionalCalendar["Service"];
+  readonly runs: LineupRunRepository["Service"];
   readonly team: FantasyTeam;
   readonly provider: ProviderShape;
   readonly session: Redacted.Redacted<string>;
   readonly now: DateTime.Utc;
   readonly hasGameSource: boolean;
+  readonly userId: UserId;
+  readonly excludingRun: LineupRunId;
 }): Effect.Effect<ScheduleGateDecision, never> {
   return evaluate(input).pipe(
     Effect.catch((reason) => Effect.succeed(run(reason))),
@@ -46,11 +52,14 @@ export function evaluateScheduleGate(input: {
 function evaluate(input: {
   readonly store: ScheduleObservationRepository["Service"];
   readonly calendar: ProfessionalCalendar["Service"];
+  readonly runs: LineupRunRepository["Service"];
   readonly team: FantasyTeam;
   readonly provider: ProviderShape;
   readonly session: Redacted.Redacted<string>;
   readonly now: DateTime.Utc;
   readonly hasGameSource: boolean;
+  readonly userId: UserId;
+  readonly excludingRun: LineupRunId;
 }): Effect.Effect<ScheduleGateDecision, ScheduleGateRunReason> {
   return Effect.gen(function* () {
     if (!input.hasGameSource) {
@@ -119,6 +128,18 @@ function evaluate(input: {
       return yield* Effect.fail("game_observation_stale" as const);
     }
 
+    const todayRuns = yield* Effect.result(
+      input.runs.loadTeamRunsSince({
+        userId: input.userId,
+        team: input.team.id,
+        since: dayStartedAt,
+        excluding: input.excludingRun,
+      }),
+    );
+    if (todayRuns._tag === "Failure") {
+      return yield* Effect.fail("run_state_unavailable" as const);
+    }
+
     return decideScheduleGate({
       now: input.now,
       dayStartedAt,
@@ -129,6 +150,7 @@ function evaluate(input: {
       games: calendarRead.success.games.map((fact) => fact.game),
       providerGameKeys,
       teamKeys,
+      todayRun: todayRunOf(todayRuns.success),
     });
   });
 }

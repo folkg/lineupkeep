@@ -1,7 +1,10 @@
 import { Context } from "effect";
 import type { DateTime, Effect, Redacted } from "effect";
 
+import type { UserId } from "#contexts/auth/User.ts";
+
 import type { FantasyTeam } from "./FantasyTeam.ts";
+import type { LineupRunId } from "./LineupRun.ts";
 import type { ProviderShape } from "./Provider.ts";
 
 export type ScheduleGateRunReason =
@@ -15,7 +18,17 @@ export type ScheduleGateRunReason =
   | "game_start_unknown"
   | "game_before_next_tick"
   | "invalid_window"
-  | "unexpected_error";
+  | "unexpected_error"
+  | "no_run_today"
+  | "last_run_blocked"
+  | "last_run_unverified"
+  | "run_state_unavailable";
+
+export type TodayLineupRun =
+  | { readonly kind: "none" }
+  | { readonly kind: "verified" }
+  | { readonly kind: "blocked" }
+  | { readonly kind: "unverified" };
 
 export type ScheduleGateDecision =
   | { readonly kind: "run"; readonly reason: ScheduleGateRunReason }
@@ -30,6 +43,8 @@ type ScheduleGateInput = {
   readonly provider: ProviderShape;
   readonly session: Redacted.Redacted<string>;
   readonly now: DateTime.Utc;
+  readonly userId: UserId;
+  readonly excludingRun: LineupRunId;
 };
 
 export class ScheduleGate extends Context.Service<ScheduleGate, ScheduleGateShape>()(

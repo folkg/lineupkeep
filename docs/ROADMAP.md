@@ -145,6 +145,8 @@ Memory peaks at 41 to 42 percent of the limits and 849 MiB in a real Chromium se
 
 - [x] Return early only when the cached calendar says no rostered player has a game before the next tick
       **and** that date was observed after the fantasy day began.
+- [x] Return early only when the team already has a verified run for the fantasy day: a team with no run
+      today, or whose last run was blocked or unverified, runs even when the calendar is quiet.
 - [x] Fail open: an unknown, stale or incomplete calendar runs as usual, and a manual `set_lineup` bypasses
       the gate.
 - [x] Record a skipped outcome with its reason.

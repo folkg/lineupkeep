@@ -185,9 +185,10 @@ _Avoid_: Light night (that is a per-roster count), bye
 
 **Schedule gate**:
 The scheduled-run early return that skips provider work only when a fresh professional calendar, observed
-after the fantasy day began, shows no rostered team game starting before the next tick. Unknown, stale, or
-unmapped data runs the check; a manual `set_lineup` bypasses the gate and the skip is recorded with its
-reason.
+after the fantasy day began, shows no rostered team game starting before the next tick and the team already
+has a verified lineup run for the fantasy day, one that ended `changed` or `no_op`. Unknown, stale, or
+unmapped schedule data runs the check, and so does a team with no run today, a blocked last run, or an
+unverified last run; a manual `set_lineup` bypasses the gate and the skip is recorded with its reason.
 _Avoid_: Precheck, cache miss
 
 **Professional team identity**:

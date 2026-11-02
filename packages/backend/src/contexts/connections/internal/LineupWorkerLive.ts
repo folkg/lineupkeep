@@ -126,6 +126,8 @@ export const LineupWorkerLive = Layer.effect(
           provider,
           session,
           now,
+          userId: run.record.userId,
+          excludingRun: run.record.id,
         });
         yield* Effect.annotateCurrentSpan({
           "schedule.gate": decision.kind,
