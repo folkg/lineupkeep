@@ -15,8 +15,10 @@ import {
   lineupRuns,
   lineupWriteIntents,
 } from "./LineupRunTables.ts";
+import { observedFacts } from "./ObservedFactTables.ts";
 
 const outcomeRetentionMillis = 30 * 24 * 60 * 60 * 1000;
+const observedFactRetentionMillis = 30 * 24 * 60 * 60 * 1000;
 const terminalOutcomeStatuses = [
   "completed",
   "skipped",
@@ -33,6 +35,9 @@ export const RetentionSweepLive = Layer.effect(
     const run = Effect.fn("RetentionSweep.run")(function* (limit: number, now: DateTime.Utc) {
       const outcomesBefore = DateTime.toDateUtc(
         DateTime.subtractDuration(now, outcomeRetentionMillis),
+      );
+      const factsBefore = DateTime.formatIsoDate(
+        DateTime.subtractDuration(now, observedFactRetentionMillis),
       );
       return yield* database
         .transaction((tx) =>
@@ -94,6 +99,15 @@ export const RetentionSweepLive = Layer.effect(
               requests = yield* deleteRequestIds(tx, orphanRequests);
             }
 
+            const facts = yield* tx
+              .delete(observedFacts)
+              .where(lte(observedFacts.coversTo, factsBefore))
+              .returning({ subjectKey: observedFacts.subjectKey })
+              .pipe(
+                Effect.orDie,
+                Effect.map((deleted) => deleted.length),
+              );
+
             const summary: RetentionSummary = {
               diagnostics: diagnostics + runDiagnostics,
               attempts,
@@ -101,11 +115,13 @@ export const RetentionSweepLive = Layer.effect(
               runs,
               requests,
               deliveries,
+              facts,
             };
             yield* Effect.annotateCurrentSpan({
               "retention.diagnostics": summary.diagnostics,
               "retention.runs": summary.runs,
               "retention.requests": summary.requests,
+              "retention.facts": summary.facts,
             });
             return summary;
           }),

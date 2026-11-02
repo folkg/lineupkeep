@@ -5,7 +5,7 @@ import type { ProviderKey } from "#contexts/connections/Connection.ts";
 import type { FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
 import { QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
-import { anyOf, maxInsertRows } from "#database/dbUtilities.ts";
+import { anyOf, excludedValues, incomingIsNewer, maxInsertRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
@@ -107,25 +107,34 @@ export class ObservedFactRepository extends Context.Service<ObservedFactReposito
         readonly confidence: ObservedFactConfidence;
         readonly observations: ReadonlyArray<FactObservationWrite<unknown>>;
       }): Effect.Effect<void, QueryPersistenceFailed> => {
-        const rows = input.observations
-          .map((observation) => ({
-            source: input.source,
-            subjectKind: input.subjectKind,
-            subjectKey: observation.subjectKey,
-            factKind: input.factKind,
-            coversFrom: observation.window.from,
-            coversTo: observation.window.to,
-            value: observation.value,
-            observedAt: DateTime.toDateUtc(observation.observedAt),
-            confidence: input.confidence,
-            sourceReference: observation.sourceReference,
-          }))
-          .toSorted((left, right) => observationKey(left).localeCompare(observationKey(right)));
+        const observations = input.observations.map((observation) => ({
+          source: input.source,
+          subjectKind: input.subjectKind,
+          subjectKey: observation.subjectKey,
+          factKind: input.factKind,
+          coversFrom: observation.window.from,
+          coversTo: observation.window.to,
+          value: observation.value,
+          observedAt: DateTime.toDateUtc(observation.observedAt),
+          confidence: input.confidence,
+          sourceReference: observation.sourceReference,
+        }));
+        const newestByWindow = new Map<string, (typeof observations)[number]>();
+        for (const observation of observations) {
+          const key = factWindowKey(observation);
+          const previous = newestByWindow.get(key);
+          if (previous === undefined || isNewerObservation(observation, previous)) {
+            newestByWindow.set(key, observation);
+          }
+        }
+        const rows = [...newestByWindow.values()].toSorted((left, right) =>
+          observationKey(left).localeCompare(observationKey(right)),
+        );
         return chunked(rows, maxInsertRows(observedFacts), (chunk) =>
           database
             .insert(observedFacts)
             .values([...chunk])
-            .onConflictDoNothing({
+            .onConflictDoUpdate({
               target: [
                 observedFacts.source,
                 observedFacts.subjectKind,
@@ -133,8 +142,14 @@ export class ObservedFactRepository extends Context.Service<ObservedFactReposito
                 observedFacts.factKind,
                 observedFacts.coversFrom,
                 observedFacts.coversTo,
-                observedFacts.observedAt,
               ],
+              set: excludedValues(observedFacts, [
+                "value",
+                "observedAt",
+                "confidence",
+                "sourceReference",
+              ]),
+              setWhere: incomingIsNewer(observedFacts.observedAt),
             })
             .returning({ observedAt: observedFacts.observedAt }),
         ).pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
@@ -319,6 +334,34 @@ const decodeTeamIdentity = (
       observedAt: decoded.observedAt,
     })),
   );
+
+function factWindowKey(row: {
+  readonly source: string;
+  readonly subjectKind: string;
+  readonly subjectKey: string;
+  readonly factKind: string;
+  readonly coversFrom: string;
+  readonly coversTo: string;
+}): string {
+  return JSON.stringify([
+    row.source,
+    row.subjectKind,
+    row.subjectKey,
+    row.factKind,
+    row.coversFrom,
+    row.coversTo,
+  ]);
+}
+
+function isNewerObservation(
+  candidate: { readonly observedAt: Date; readonly sourceReference: string },
+  previous: { readonly observedAt: Date; readonly sourceReference: string },
+): boolean {
+  const difference = candidate.observedAt.getTime() - previous.observedAt.getTime();
+  return (
+    difference > 0 || (difference === 0 && candidate.sourceReference > previous.sourceReference)
+  );
+}
 
 function observationKey(row: {
   readonly source: string;

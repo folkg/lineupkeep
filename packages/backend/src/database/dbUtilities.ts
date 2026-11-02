@@ -23,6 +23,10 @@ function excludedColumn(column: PgColumn): SQL {
   return sql`excluded.${sql.identifier(column.name)}`;
 }
 
+export function incomingIsNewer(column: PgColumn): SQL<boolean> {
+  return sql`${column} < ${excludedColumn(column)}`;
+}
+
 export function incrementedWindowCounter(table: {
   readonly windowStartedAt: PgColumn;
   readonly count: PgColumn;

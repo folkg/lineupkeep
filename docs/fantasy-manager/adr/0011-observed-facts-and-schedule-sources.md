@@ -45,10 +45,12 @@ hook. External sources are added per sport, and only where the terms permit.**
 
 1. **Observed facts, not truth.** Every cached fact is an observation carrying its subject, the fact kind, the
    window it covers, the value, the observation instant, the source, a confidence of `authoritative`,
-   `corroborated`, or `reported`, and the upstream identifier. Observations are append-only; the read path
-   takes the newest inside the requested age, a tie on time resolves to the higher confidence, and two
-   authoritative observations that disagree are a recorded conflict rather than a silent pick. Retention keeps
-   the newest observation per key plus the previous one where the value changed.
+   `corroborated`, or `reported`, and the upstream identifier. Each source, subject, fact kind, and covered
+   window has one stored observation: a newer observation replaces an older one for that window, an older
+   observation cannot overwrite a newer one, and the read path takes the stored row. This answers "when did we
+   learn this" but not "what did it used to say". Retention prunes a window once it ended more than 30 days
+   ago. Conflict reporting is not implemented; a disagreement between two authoritative sources is not
+   recoverable from this table, and if it is needed it gets its own record rather than whole history.
 
 2. **A refresh policy per fact kind, not per table and not per job.** League season state: 24 hours. A game
    fixture: 7 days. A start time: 6 hours inside 48 hours, 7 days beyond. Game status: 30 minutes inside 12
@@ -139,6 +141,10 @@ hook. External sources are added per sport, and only where the terms permit.**
   is the intended failure.
 - **Request-count estimates assume five linked teams and two leagues.** More teams or more leagues scale the
   provider reads linearly and the external reads barely at all.
+
+- **Conflict history is not stored.** One row per key means two authoritative sources that disagree leave
+  only the newest value. A later conflict feature needs its own bounded record or a deliberate retention
+  change; the current table cannot reconstruct the disagreement.
 
 ## Revisit when
 

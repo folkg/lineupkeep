@@ -539,11 +539,11 @@ Confidence is defined by rule, not by feel:
 - **corroborated** — two independent sources agree on the same fact for the same window.
 - **reported** — one non-authoritative source.
 
-The read path takes the newest observation per subject, fact kind, and window; a tie on time resolves to the
-higher confidence, and two authoritative observations that disagree are a recorded conflict rather than a
-silent pick. Observations are append-only, so "when did we learn this" and "what did it used to say" are both
-answerable. Retention keeps the newest observation per key plus the previous one where the value changed, so
-the history is bounded by real changes rather than by polling.
+Each source, subject, fact kind, and covered window has one stored observation; a newer observation replaces
+an older one for that window, and an older observation cannot overwrite a newer one. The read path takes that
+row, so "when did we learn this" is answerable but "what did it used to say" is not. A disagreement between two
+authoritative sources is not recorded; conflict reporting is not implemented. Retention prunes a window once it
+ended more than 30 days ago, so growth is bounded by live and recent windows rather than by polling.
 
 ### A refresh policy per fact type
 

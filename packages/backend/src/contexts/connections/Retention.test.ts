@@ -8,6 +8,7 @@ import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 
 import { Connections } from "./Connections.ts";
+import { decodeTeamId } from "./FantasyTeam.ts";
 import type { TeamId } from "./FantasyTeam.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
@@ -20,6 +21,7 @@ import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
 import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
+import { ObservedFactRepository } from "./internal/ObservedFactRepository.ts";
 import {
   FakeProviderWorld,
   ProviderFakeTest,
@@ -75,6 +77,7 @@ it.effect("removes expired diagnostics and outcomes without touching unresolved 
       runs: 0,
       requests: 0,
       deliveries: 0,
+      facts: 0,
     });
     assert.strictEqual(sevenDays.diagnostics, 1);
     assert.strictEqual(sevenDays.runs, 0);
@@ -88,10 +91,51 @@ it.effect("removes expired diagnostics and outcomes without touching unresolved 
       runs: 0,
       requests: 0,
       deliveries: 0,
+      facts: 0,
     });
     assert.strictEqual(remaining.runs.length, 1);
     assert.strictEqual(remaining.runs[0]?.run, queued.runs[0]?.id);
     assert.strictEqual(remaining.runs[0]?.status, "queued");
+  }).pipe(Effect.provide(RetentionTestLayer)),
+);
+
+it.effect("prunes observed facts only after their window has been over for 30 days", () =>
+  Effect.gen(function* () {
+    const facts = yield* ObservedFactRepository;
+    const retention = yield* RetentionSweep;
+    const team = decodeTeamId("00000000-0000-7000-8000-000000000002");
+    const startedAt = yield* DateTime.now;
+    const factDate = DateTime.formatIsoDate(DateTime.subtractDuration(startedAt, 20 * 86_400_000));
+    yield* facts.recordProviderOpponents({
+      subjectKey: team,
+      source: decodeProviderKey("yahoo"),
+      confidence: "authoritative",
+      observations: [
+        {
+          window: { from: factDate, to: factDate },
+          value: { players: [] },
+          observedAt: startedAt,
+          sourceReference: "retention-fixture",
+        },
+      ],
+    });
+
+    const sixDays = yield* retention.run(10, DateTime.addDuration(startedAt, 6 * 86_400_000));
+    assert.strictEqual(sixDays.facts, 0);
+    assert.lengthOf(
+      yield* facts.readProviderOpponents({ subjectKey: team, from: factDate, to: factDate }),
+      1,
+    );
+
+    const thirtyDays = yield* retention.run(
+      10,
+      DateTime.addDuration(startedAt, 30 * 86_400_000 + 60_000),
+    );
+    assert.strictEqual(thirtyDays.facts, 1);
+    assert.lengthOf(
+      yield* facts.readProviderOpponents({ subjectKey: team, from: factDate, to: factDate }),
+      0,
+    );
   }).pipe(Effect.provide(RetentionTestLayer)),
 );
 
@@ -287,12 +331,14 @@ const ConnectionsTest = ConnectionsLive.pipe(
   Layer.provide(EncryptionTestLayer),
 );
 const RetentionTest = RetentionSweepLive.pipe(Layer.provide(DatabaseLayer));
+const ObservedFactRepositoryTest = ObservedFactRepository.layer.pipe(Layer.provide(DatabaseLayer));
 const RetentionTestLayer = Layer.mergeAll(
   RetentionTest,
   RunsTest,
   ConnectionsTest,
   ProviderFakeTest,
   LineupRepositoryTest,
+  ObservedFactRepositoryTest,
 ).pipe(
   Layer.provideMerge(DatabaseLayer),
   Layer.provideMerge(ProviderFakeTest),

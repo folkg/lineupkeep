@@ -257,14 +257,15 @@ player per date or scoring week.
 
 ### F1.1 — Observed-facts store and read view
 
-- [ ] Add the append-only observation store: subject, fact kind, the window it covers, value, observation
-      instant, source, confidence (`authoritative` / `corroborated` / `reported`), and the upstream reference.
-- [ ] Add the read view that takes the newest observation inside a requested age, resolves a tie on time to
-      the higher confidence, and reports a disagreement between two authoritative observations as a conflict.
-- [ ] Keep the newest observation per key plus the previous one where the value changed, and nothing else.
+- [x] Add the observation store: subject, fact kind, the window it covers, value, observation instant,
+      source, confidence (`authoritative` / `corroborated` / `reported`), and the upstream reference.
+- [ ] Add the read view that reports a disagreement between two authoritative observations as a conflict; the
+      current read takes the stored newest observation and cannot reconstruct a disagreement.
+- [x] Keep one row per source, subject, fact kind, and window, and prune windows that ended more than 30 days
+      ago.
 
-**Verify**: a fixture that changes value yields two observations, the read returns the newer one, and a
-conflicting authoritative pair is reported rather than resolved. `S`.
+**Verify**: a fixture that changes value leaves one row with the newer observation, an older observation cannot
+replace it, and retention removes a window after 30 days. Conflict reporting remains open. `S`.
 
 ### F1.2 — Record the provider's own schedule facts
 

@@ -42,7 +42,6 @@ export const observedFacts = pgTable(
       table.factKind,
       table.coversFrom,
       table.coversTo,
-      table.observedAt,
     ),
     index("observed_facts_subject_window_idx").on(
       table.subjectKind,
@@ -51,6 +50,7 @@ export const observedFacts = pgTable(
       table.coversFrom,
       table.coversTo,
     ),
+    index("observed_facts_expiry_idx").on(table.coversTo),
   ],
 );
 

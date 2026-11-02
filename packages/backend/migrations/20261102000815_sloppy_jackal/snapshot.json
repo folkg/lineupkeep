@@ -1,0 +1,124 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "89536084-3081-4430-98b2-99674f30ad8e",
+  "prevIds": ["cf0f63d6-3451-4c65-8a2c-163117f9a6fe"],
+  "footprints": [
+    {
+      "statementType": "recreate_index",
+      "statementTarget": ["index", "public", "observed_facts", "observed_facts_observation_idx"],
+      "writes": [
+        "s|idx|public.observed_facts_observation_idx",
+        "n|idx|public.observed_facts_observation_idx",
+        "e|idx|public.observed_facts_observation_idx",
+        "n|rel|public.observed_facts_observation_idx"
+      ],
+      "reads": [
+        "n|tbl|public.observed_facts",
+        "n|sch|public",
+        "n|col|public.observed_facts.source",
+        "n|col|public.observed_facts.subject_kind",
+        "n|col|public.observed_facts.subject_key",
+        "n|col|public.observed_facts.fact_kind",
+        "n|col|public.observed_facts.covers_from",
+        "n|col|public.observed_facts.covers_to"
+      ],
+      "sharedWrites": [
+        "e|uniqueness|public.observed_facts.covers_from.covers_to.fact_kind.observed_at.source.subject_key.subject_kind"
+      ],
+      "sqlHash": "e1e41a359db82c78"
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "observed_facts", "observed_facts_expiry_idx"],
+      "writes": [
+        "s|idx|public.observed_facts_expiry_idx",
+        "n|idx|public.observed_facts_expiry_idx",
+        "e|idx|public.observed_facts_expiry_idx",
+        "n|rel|public.observed_facts_expiry_idx"
+      ],
+      "reads": [
+        "n|tbl|public.observed_facts",
+        "n|sch|public",
+        "n|col|public.observed_facts.covers_to"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "observed_facts",
+        "name": "observed_facts_expiry_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "covers_to",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "indexes\u0000[\"public\",\"observed_facts_observation_idx\"]",
+      "set": {
+        "columns": [
+          {
+            "value": "source",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "subject_kind",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "subject_key",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "fact_kind",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "covers_from",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "covers_to",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ]
+      }
+    }
+  ]
+}

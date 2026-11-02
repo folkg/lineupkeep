@@ -148,6 +148,70 @@ it.effect("produces a fact for every game of one league-week request with teams 
   }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
+it.effect("keeps one row per game and window and never replaces a newer observation", () => {
+  const calls: Array<URL> = [];
+  return Effect.gen(function* () {
+    const calendar = yield* ProfessionalCalendar;
+    const facts = yield* ObservedFactRepository;
+    const later = DateTime.makeUnsafe("2026-11-01T13:00:00.000Z");
+    yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
+    yield* seedProviderPairs(facts);
+
+    yield* calendar.readLeagueWeek({
+      league: "nhl",
+      weekStart: "2026-11-01",
+      freshness: "calendar",
+    });
+    yield* TestClock.setTime(DateTime.toEpochMillis(later));
+    yield* calendar.readLeagueWeek({
+      league: "nhl",
+      weekStart: "2026-11-01",
+      freshness: "calendar",
+      notBefore: later,
+    });
+
+    assert.strictEqual(calls.length, 2);
+    const stored = yield* facts.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
+    assert.strictEqual(stored.length, 50);
+    assert.isTrue(
+      stored.every((row) => DateTime.formatIso(row.observedAt) === "2026-11-01T13:00:00.000Z"),
+    );
+
+    const base = stored[0];
+    if (base === undefined) {
+      throw new Error("The stored week has no games");
+    }
+    const newer = {
+      ...base,
+      observedAt: DateTime.makeUnsafe("2026-11-01T14:00:00.000Z"),
+      value: { ...base.value, venue: "Newer Venue" },
+    };
+    const older = {
+      ...base,
+      observedAt: DateTime.makeUnsafe("2026-11-01T13:30:00.000Z"),
+      value: { ...base.value, venue: "Older Venue" },
+    };
+    yield* facts.recordProfessionalGames({
+      source: "nhl-web",
+      confidence: "authoritative",
+      observations: [newer],
+    });
+    yield* facts.recordProfessionalGames({
+      source: "nhl-web",
+      confidence: "authoritative",
+      observations: [older],
+    });
+
+    const after = yield* facts.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
+    const row = after.find((candidate) => candidate.subjectKey === base.subjectKey);
+    assert.strictEqual(
+      row === undefined ? undefined : DateTime.formatIso(row.observedAt),
+      "2026-11-01T14:00:00.000Z",
+    );
+    assert.strictEqual(row?.value.venue, "Newer Venue");
+  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+});
+
 it.effect("stores an unmapped team's game and reports it unresolved instead of dropping it", () => {
   const calls: Array<URL> = [];
   return Effect.gen(function* () {
