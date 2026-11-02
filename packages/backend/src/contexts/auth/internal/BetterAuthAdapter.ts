@@ -8,6 +8,7 @@ import { getSessionCookie } from "better-auth/cookies";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
+import { eq } from "drizzle-orm";
 import {
   Cause,
   Config,
@@ -45,6 +46,7 @@ import { PublicInternet, PublicInternetUnavailable } from "#runtime/PublicIntern
 
 import { AuthDatabase } from "./AuthDatabase.ts";
 import * as authSchema from "./AuthTables.ts";
+import { user as authUser } from "./AuthTables.ts";
 import { OAuthClientRepository } from "./OAuthClientRepository.ts";
 import * as oauthSchema from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
@@ -245,6 +247,18 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           claims.value.cnf !== undefined ||
           (expectedClientId !== undefined && claims.value.client_id !== expectedClientId)
         ) {
+          return { status: "invalid" };
+        }
+        const storedUser = yield* Effect.tryPromise({
+          try: () =>
+            database
+              .select({ id: authUser.id })
+              .from(authUser)
+              .where(eq(authUser.id, claims.value.sub))
+              .limit(1),
+          catch: (cause) => AuthenticationUnavailable.make({ cause }),
+        });
+        if (storedUser.length === 0) {
           return { status: "invalid" };
         }
         const granted = claims.value.scope.split(" ").filter(Boolean).map(currentScope);

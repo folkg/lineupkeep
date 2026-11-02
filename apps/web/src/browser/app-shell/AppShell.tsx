@@ -37,6 +37,7 @@ function PrimaryNavigation(): JSX.Element {
         <NavLink to="/teams">Teams</NavLink>
         <NavLink to="/connections">Connections</NavLink>
         <NavLink to="/feedback">Feedback</NavLink>
+        <NavLink to="/account">Your data</NavLink>
         <Button
           pending={session.isSigningOut()}
           pendingLabel="Signing out…"

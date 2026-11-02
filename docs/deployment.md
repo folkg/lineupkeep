@@ -1145,7 +1145,11 @@ Review and record the resulting changes before apply; verify that the applicable
 
 Keep application data, protected infrastructure state, and disposable verification resources on separate lifecycles; retained development data is not verification storage. Run near the database and reconcile runtime pools, concurrency, and instance limits with its real connection budget. Keep Hyperdrive query caching disabled for read-after-write consistency. Process and isolate resource lifetimes differ; use `BackgroundWork` for response-independent work and a durable queue/job system for work that must survive instance loss.
 
-Entities use soft deletion; legal erasure needs a future purge or retention job.
+Entities use soft deletion for ordinary removal. An account erasure request is handled in the request
+by `AccountErasure` in `contexts/privacy`, which deletes the account's rows in one transaction; the hourly
+retention sweep is a separate promise and does not cover erasure. An export is one JSON document from
+`/api/account/export`, downloadable from Your data. Erasure requires an export recorded within the last
+hour, and it deletes that export record in the same transaction.
 
 ## Adding feature resources
 

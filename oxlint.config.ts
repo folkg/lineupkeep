@@ -662,7 +662,12 @@ export default defineConfig({
     },
     {
       files: ["packages/backend/src/contexts/**/*.ts"],
-      excludeFiles: ["**/internal/**/*Table.ts", "**/internal/**/*Tables.ts"],
+      excludeFiles: [
+        "**/internal/**/*Table.ts",
+        "**/internal/**/*Tables.ts",
+        "**/internal/*Table.ts",
+        "**/internal/*Tables.ts",
+      ],
       rules: imports(storageImports),
     },
     {
@@ -907,6 +912,42 @@ export default defineConfig({
       rules: {
         "effecttsgo/strict-effect-provide": "off",
         "effecttsgo/async-function": "off",
+      },
+    },
+    {
+      files: [
+        "packages/backend/src/contexts/privacy/internal/AccountDataTables.ts",
+        "packages/backend/src/contexts/privacy/internal/OwnedAccountSeedRepository.ts",
+      ],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            paths: [
+              {
+                name: "drizzle-orm",
+                importNames: ["inArray"],
+                message:
+                  "ID-list predicates must use one bind parameter; import anyOf from database/dbUtilities.ts instead of inArray.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      files: [
+        "packages/backend/src/contexts/privacy/internal/AccountDataRepository.ts",
+        "packages/backend/src/contexts/privacy/internal/PrivacyDatabase.ts",
+        "packages/backend/src/contexts/privacy/internal/OwnedAccountSeedRepository.ts",
+        "packages/backend/src/contexts/privacy/*.test.ts",
+      ],
+      rules: {
+        "no-restricted-properties": [
+          "error",
+          ...backendProperties,
+          ...persistenceProperties.filter((restriction) => restriction.property !== "execute"),
+        ],
       },
     },
     {
