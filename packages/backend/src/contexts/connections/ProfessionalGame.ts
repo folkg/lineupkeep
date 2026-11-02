@@ -12,15 +12,7 @@ const professionalGameStatuses = [
 ] as const;
 export type ProfessionalGameStatus = (typeof professionalGameStatuses)[number];
 
-export const ProfessionalGameTeam = Schema.Struct({
-  providerTeamKey: Schema.NullOr(Schema.NonEmptyString),
-  sourceTeamIdentifier: Schema.NonEmptyString,
-  sourceTeamAbbreviation: Schema.NonEmptyString,
-  sourceTeamName: Schema.NonEmptyString,
-});
-export type ProfessionalGameTeam = typeof ProfessionalGameTeam.Type;
-
-export const ProfessionalGame = Schema.Struct({
+const professionalGameFields = {
   league: FantasyLeague,
   date: Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u))),
   startTime: Schema.NullOr(
@@ -29,10 +21,36 @@ export const ProfessionalGame = Schema.Struct({
       timeZone: Schema.NonEmptyString,
     }),
   ),
-  home: ProfessionalGameTeam,
-  away: ProfessionalGameTeam,
   venue: Schema.NullOr(Schema.NonEmptyString),
   status: Schema.Literals(professionalGameStatuses),
+} as const;
+
+const publishedProfessionalGameTeamFields = {
+  sourceTeamIdentifier: Schema.NonEmptyString,
+  sourceTeamAbbreviation: Schema.NonEmptyString,
+  sourceTeamName: Schema.NonEmptyString,
+} as const;
+
+export const PublishedProfessionalGameTeam = Schema.Struct(publishedProfessionalGameTeamFields);
+export type PublishedProfessionalGameTeam = typeof PublishedProfessionalGameTeam.Type;
+
+export const ProfessionalGameTeam = Schema.Struct({
+  providerTeamKey: Schema.NullOr(Schema.NonEmptyString),
+  ...publishedProfessionalGameTeamFields,
+});
+export type ProfessionalGameTeam = typeof ProfessionalGameTeam.Type;
+
+export const PublishedProfessionalGame = Schema.Struct({
+  ...professionalGameFields,
+  home: PublishedProfessionalGameTeam,
+  away: PublishedProfessionalGameTeam,
+});
+export type PublishedProfessionalGame = typeof PublishedProfessionalGame.Type;
+
+export const ProfessionalGame = Schema.Struct({
+  ...professionalGameFields,
+  home: ProfessionalGameTeam,
+  away: ProfessionalGameTeam,
 });
 export type ProfessionalGame = typeof ProfessionalGame.Type;
 
@@ -67,7 +85,7 @@ const refreshAspects = {
 } as const satisfies Record<ProfessionalGameFreshness, ReadonlyArray<ProfessionalGameAspect>>;
 
 export function professionalGameIsFresh(input: {
-  readonly game: ProfessionalGame;
+  readonly game: ProfessionalGameAspects;
   readonly observedAt: DateTime.Utc;
   readonly now: DateTime.Utc;
   readonly freshness: ProfessionalGameFreshness;
@@ -88,7 +106,7 @@ export function professionalGameIsFresh(input: {
 
 function maximumAgeMinutes(
   aspect: ProfessionalGameAspect,
-  game: ProfessionalGame,
+  game: ProfessionalGameAspects,
   now: number,
 ): number {
   switch (aspect) {
@@ -101,7 +119,7 @@ function maximumAgeMinutes(
   }
 }
 
-function startTimeMaximumAgeMinutes(game: ProfessionalGame, now: number): number {
+function startTimeMaximumAgeMinutes(game: ProfessionalGameAspects, now: number): number {
   const policy = professionalGameRefreshPolicy.startTime;
   const start = startMillis(game);
   return start !== undefined && start >= now && start - now <= policy.withinHours * 3_600_000
@@ -109,7 +127,7 @@ function startTimeMaximumAgeMinutes(game: ProfessionalGame, now: number): number
     : policy.otherwiseMaximumAgeMinutes;
 }
 
-function statusMaximumAgeMinutes(game: ProfessionalGame, now: number): number {
+function statusMaximumAgeMinutes(game: ProfessionalGameAspects, now: number): number {
   const policy = professionalGameRefreshPolicy.status;
   const start = startMillis(game);
   const unsettled = game.status !== "final" && game.status !== "cancelled";
@@ -120,6 +138,8 @@ function statusMaximumAgeMinutes(game: ProfessionalGame, now: number): number {
     : policy.otherwiseMaximumAgeMinutes;
 }
 
-function startMillis(game: ProfessionalGame): number | undefined {
+function startMillis(game: ProfessionalGameAspects): number | undefined {
   return game.startTime === null ? undefined : DateTime.toEpochMillis(game.startTime.instant);
 }
+
+type ProfessionalGameAspects = Pick<ProfessionalGame, "date" | "startTime" | "status">;

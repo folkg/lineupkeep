@@ -3,7 +3,7 @@ import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
 
 import type { ProviderKey } from "#contexts/connections/Connection.ts";
 import type { FantasySport, TeamId } from "#contexts/connections/FantasyTeam.ts";
-import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
+import type { PublishedProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
 import { QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
 import { anyOf, excludedValues, incomingIsNewer, maxInsertRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
@@ -16,7 +16,7 @@ import type {
   ScheduleObservationSubjectKind,
   ProviderOpponentValue,
 } from "./ScheduleObservations.ts";
-import { professionalGameValue, providerOpponentValue } from "./ScheduleObservations.ts";
+import { publishedProfessionalGameValue, providerOpponentValue } from "./ScheduleObservations.ts";
 import {
   scheduleObservations,
   professionalTeamIdentities,
@@ -39,8 +39,8 @@ export type ProviderOpponentObservationWrite = Omit<
   ScheduleObservationWrite<ProviderOpponentValue>,
   "subjectKey"
 >;
-export type ProfessionalGameObservation = ScheduleObservation<ProfessionalGame>;
-export type ProfessionalGameObservationWrite = ScheduleObservationWrite<ProfessionalGame>;
+export type ProfessionalGameObservation = ScheduleObservation<PublishedProfessionalGame>;
+export type ProfessionalGameObservationWrite = ScheduleObservationWrite<PublishedProfessionalGame>;
 
 export type TeamIdentity = {
   readonly sport: FantasySport;
@@ -225,7 +225,7 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
             confidence: input.confidence,
             observations: input.observations.map((observation) => ({
               ...observation,
-              value: Schema.encodeSync(professionalGameValue)(observation.value),
+              value: Schema.encodeSync(publishedProfessionalGameValue)(observation.value),
             })),
           }),
       );
@@ -314,7 +314,7 @@ export class ScheduleObservationRepository extends Context.Service<ScheduleObser
 const decodeProfessionalGame = (
   row: typeof scheduleObservations.$inferSelect,
 ): Effect.Effect<ProfessionalGameObservation, QueryPersistenceFailed> =>
-  Schema.decodeUnknownEffect(professionalGameValue)(row.value).pipe(
+  Schema.decodeUnknownEffect(publishedProfessionalGameValue)(row.value).pipe(
     Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
     Effect.map((value): ProfessionalGameObservation => ({
       source: row.source,

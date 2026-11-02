@@ -24,6 +24,7 @@ import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest
 import { decideScheduleGate, nextLineupTick } from "./internal/ScheduleGateDecision.ts";
 import { ScheduleGateLive } from "./internal/ScheduleGateLive.ts";
 import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
+import { scheduleObservations } from "./internal/ScheduleObservationTables.ts";
 import { LineupRunId } from "./LineupRun.ts";
 import type { ProfessionalGame } from "./ProfessionalGame.ts";
 import type { Provider, ProviderRosterSchedule, ProviderUnregistered } from "./Provider.ts";
@@ -220,6 +221,64 @@ it.effect("fails open when the provider schedule or a roster team is unknown", (
       excludingRun: currentRun,
     });
     assert.deepStrictEqual(unmapped, { kind: "run", reason: "roster_team_unmapped" });
+  }).pipe(Effect.provide(GateTest)),
+);
+
+it.effect("places a team from a stored game whose club the map knows", () =>
+  Effect.gen(function* () {
+    const gate = yield* ScheduleGate;
+    const fake = yield* FakeProviderWorld;
+    const provider = yield* providerOf(decodeProviderKey("yahoo"));
+    const now = DateTime.makeUnsafe("2026-11-02T12:00:00.000Z");
+    yield* TestClock.setTime(DateTime.toEpochMillis(now));
+    yield* fake.setSchedule({
+      ...providerSchedule(),
+      players: [
+        {
+          providerPlayerKey: "465.p.1",
+          name: "Synthetic Skater",
+          proTeamKey: "nhl.t.21",
+          proTeamAbbreviation: "TOR",
+          games: [{ date: "2026-11-02", opponent: "BOS", home: true }],
+        },
+      ],
+    });
+    yield* seedStoredGame({
+      home: {
+        identifier: "10",
+        abbreviation: "TOR",
+        name: "Toronto Maple Leafs",
+        providerTeamKey: null,
+      },
+      away: {
+        identifier: "6",
+        abbreviation: "BOS",
+        name: "Boston Bruins",
+        providerTeamKey: "nhl.t.60",
+      },
+      observedAt: now,
+    });
+    yield* seedRun({
+      id: runId(9),
+      outcome: "verified",
+      at: DateTime.makeUnsafe("2026-11-02T08:05:00.000Z"),
+    });
+
+    const decision = yield* gate.evaluate({
+      team: teamFixture(),
+      provider,
+      session: Redacted.make("A1=fake-session"),
+      now,
+      userId: owner,
+      excludingRun: currentRun,
+    });
+    assert.isFalse(
+      decision.kind === "run" && decision.reason === "provider_game_missing_from_source",
+    );
+    assert.strictEqual(decision.kind, "skip");
+    if (decision.kind === "skip") {
+      assert.include(decision.summary, "The next game is Monday 2026-11-02");
+    }
   }).pipe(Effect.provide(GateTest)),
 );
 
@@ -612,6 +671,52 @@ function teamFixture(): FantasyTeam {
     lastSeenAt: DateTime.makeUnsafe("2026-10-01T00:00:00.000Z"),
     createdAt: DateTime.makeUnsafe("2026-10-01T00:00:00.000Z"),
     updatedAt: DateTime.makeUnsafe("2026-10-01T00:00:00.000Z"),
+  };
+}
+
+function seedStoredGame(input: {
+  readonly home: StoredClub;
+  readonly away: StoredClub;
+  readonly observedAt: DateTime.Utc;
+}): Effect.Effect<void, never, ConnectionsDatabase> {
+  return Effect.gen(function* () {
+    const database = yield* ConnectionsDatabase;
+    yield* database.insert(scheduleObservations).values({
+      source: "nhl-web",
+      subjectKind: "professional_game",
+      subjectKey: "nhl:2026020201",
+      observationKind: "professional_game",
+      coversFrom: "2026-11-02",
+      coversTo: "2026-11-08",
+      value: {
+        league: "nhl",
+        date: "2026-11-02",
+        startTime: { instant: "2026-11-02T23:00:00.000Z", timeZone: "US/Eastern" },
+        home: storedClub(input.home),
+        away: storedClub(input.away),
+        venue: "Scotiabank Arena",
+        status: "scheduled",
+      },
+      observedAt: DateTime.toDateUtc(input.observedAt),
+      confidence: "authoritative",
+      sourceReference: "2026020201",
+    });
+  }).pipe(Effect.orDie);
+}
+
+type StoredClub = {
+  readonly identifier: string;
+  readonly abbreviation: string;
+  readonly name: string;
+  readonly providerTeamKey: string | null;
+};
+
+function storedClub(club: StoredClub): unknown {
+  return {
+    providerTeamKey: club.providerTeamKey,
+    sourceTeamIdentifier: club.identifier,
+    sourceTeamAbbreviation: club.abbreviation,
+    sourceTeamName: club.name,
   };
 }
 

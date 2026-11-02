@@ -16,14 +16,15 @@ import type {
 } from "#contexts/connections/ProfessionalCalendar.ts";
 import { ProfessionalGameFactStale } from "#contexts/connections/ProfessionalCalendar.ts";
 import type {
-  ProfessionalGame,
   ProfessionalGameFreshness,
   ProfessionalGameTeam,
+  PublishedProfessionalGame,
+  PublishedProfessionalGameTeam,
 } from "#contexts/connections/ProfessionalGame.ts";
 import { professionalGameIsFresh } from "#contexts/connections/ProfessionalGame.ts";
 import type { QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
 
-import { resolveProfessionalTeams } from "./ProfessionalTeamIdentity.ts";
+import type { ProfessionalTeamMatch } from "./ProfessionalTeamMap.ts";
 import { matchProfessionalTeam } from "./ProfessionalTeamMap.ts";
 import type {
   ScheduleObservationRepository,
@@ -68,7 +69,7 @@ export function readProfessionalGameWeek(input: {
       );
     if (settled) {
       return servedWeek({
-        games: current.map((row) => gameFactOf(input.source.key, row)),
+        observations: current,
         observedAt: newestObservedAt(current),
         league: input.league,
         weekStart: input.weekStart,
@@ -93,17 +94,12 @@ export function readProfessionalGameWeek(input: {
     yield* assertWeek(week, input.weekStart, weekEnd, input.source.key);
 
     const observedAt = yield* DateTime.now;
-    const resolved = resolveProfessionalTeams({
-      league: week.league,
-      teams: week.games.flatMap((game) => [game.home, game.away]),
-    });
     const observations = week.games.map((game) =>
       observationOf({
         game,
         league: week.league,
         weekStart: input.weekStart,
         weekEnd,
-        sourceTeam: (team) => professionalTeamOf(team, resolved),
         observedAt,
       }),
     );
@@ -113,7 +109,7 @@ export function readProfessionalGameWeek(input: {
       observations,
     });
     return servedWeek({
-      games: observations.map((row) => gameFactOf(input.source.key, row)),
+      observations,
       observedAt,
       league: input.league,
       weekStart: input.weekStart,
@@ -129,7 +125,6 @@ function observationOf(input: {
   readonly league: FantasyLeague;
   readonly weekStart: string;
   readonly weekEnd: string;
-  readonly sourceTeam: (team: GameSourceTeam) => ProfessionalGameTeam;
   readonly observedAt: DateTime.Utc;
 }): ProfessionalGameObservationWrite {
   return {
@@ -139,8 +134,8 @@ function observationOf(input: {
       league: input.league,
       date: input.game.date,
       startTime: input.game.startTime,
-      home: input.sourceTeam(input.game.home),
-      away: input.sourceTeam(input.game.away),
+      home: publishedTeamOf(input.game.home),
+      away: publishedTeamOf(input.game.away),
       venue: input.game.venue,
       status: input.game.status,
     },
@@ -149,32 +144,107 @@ function observationOf(input: {
   };
 }
 
-function professionalTeamOf(
-  team: GameSourceTeam,
-  resolved: ReadonlyMap<string, string | null>,
-): ProfessionalGameTeam {
+function publishedTeamOf(team: GameSourceTeam): PublishedProfessionalGameTeam {
   return {
-    providerTeamKey: resolved.get(team.identifier) ?? null,
     sourceTeamIdentifier: team.identifier,
     sourceTeamAbbreviation: team.abbreviation,
     sourceTeamName: team.name,
   };
 }
 
-function gameFactOf(
-  source: GameSourceKey,
-  observation: {
-    readonly value: ProfessionalGame;
-    readonly observedAt: DateTime.Utc;
-    readonly sourceReference: string;
-  },
-): ProfessionalGameFact {
+function servedWeek(input: {
+  readonly observations: ReadonlyArray<ObservedGame>;
+  readonly observedAt: DateTime.Utc;
+  readonly league: FantasyLeague;
+  readonly weekStart: string;
+  readonly weekEnd: string;
+  readonly source: GameSourceKey;
+}): ProfessionalGameWeek {
+  const served = input.observations
+    .map((observation) => servedGame({ league: input.league, source: input.source, observation }))
+    .toSorted(
+      (left, right) =>
+        left.fact.game.date.localeCompare(right.fact.game.date) ||
+        left.fact.sourceReference.localeCompare(right.fact.sourceReference),
+    );
   return {
-    game: observation.value,
-    source,
-    sourceReference: observation.sourceReference,
-    observedAt: observation.observedAt,
+    league: input.league,
+    weekStart: input.weekStart,
+    weekEnd: input.weekEnd,
+    source: input.source,
+    observedAt: input.observedAt,
+    games: served.map((entry) => entry.fact),
+    unresolvedTeams: served.flatMap((entry) => entry.unresolvedTeams),
   };
+}
+
+function servedGame(input: {
+  readonly league: FantasyLeague;
+  readonly source: GameSourceKey;
+  readonly observation: ObservedGame;
+}): ServedGame {
+  const home = resolveSide(input.league, input.observation.value.home);
+  const away = resolveSide(input.league, input.observation.value.away);
+  return {
+    fact: {
+      game: { ...input.observation.value, home: home.team, away: away.team },
+      source: input.source,
+      sourceReference: input.observation.sourceReference,
+      observedAt: input.observation.observedAt,
+    },
+    unresolvedTeams: [
+      ...unresolvedSide(input.observation.sourceReference, "home", home),
+      ...unresolvedSide(input.observation.sourceReference, "away", away),
+    ],
+  };
+}
+
+function resolveSide(league: FantasyLeague, team: PublishedProfessionalGameTeam): ResolvedSide {
+  const match = matchProfessionalTeam({
+    league,
+    identifier: team.sourceTeamIdentifier,
+    abbreviation: team.sourceTeamAbbreviation,
+    name: team.sourceTeamName,
+  });
+  return {
+    team: {
+      providerTeamKey: match.kind === "mapped" ? match.providerTeamKey : null,
+      ...team,
+    },
+    reason: unmappedReason(match),
+  };
+}
+
+function unmappedReason(
+  match: ProfessionalTeamMatch,
+): UnresolvedProfessionalTeam["reason"] | undefined {
+  switch (match.kind) {
+    case "mapped":
+      return undefined;
+    case "not_mapped":
+      return "no_map_entry";
+    case "disagrees":
+      return "map_disagrees";
+  }
+}
+
+function unresolvedSide(
+  game: string,
+  side: "home" | "away",
+  resolved: ResolvedSide,
+): ReadonlyArray<UnresolvedProfessionalTeam> {
+  if (resolved.reason === undefined) {
+    return [];
+  }
+  return [
+    {
+      game,
+      side,
+      identifier: resolved.team.sourceTeamIdentifier,
+      name: resolved.team.sourceTeamName,
+      reason: resolved.reason,
+    },
+  ];
 }
 
 function assertWeek(
@@ -192,65 +262,6 @@ function assertWeek(
     }
   }
   return Effect.void;
-}
-
-function servedWeek(input: {
-  readonly games: ReadonlyArray<ProfessionalGameFact>;
-  readonly observedAt: DateTime.Utc;
-  readonly league: FantasyLeague;
-  readonly weekStart: string;
-  readonly weekEnd: string;
-  readonly source: GameSourceKey;
-}): ProfessionalGameWeek {
-  const games = input.games.toSorted(
-    (left, right) =>
-      left.game.date.localeCompare(right.game.date) ||
-      left.sourceReference.localeCompare(right.sourceReference),
-  );
-  return {
-    league: input.league,
-    weekStart: input.weekStart,
-    weekEnd: input.weekEnd,
-    source: input.source,
-    observedAt: input.observedAt,
-    games,
-    unresolvedTeams: games.flatMap((fact) => unresolvedTeamsOfFact(fact)),
-  };
-}
-
-function unresolvedTeamsOfFact(
-  fact: ProfessionalGameFact,
-): ReadonlyArray<UnresolvedProfessionalTeam> {
-  const sides = [
-    { side: "home" as const, team: fact.game.home },
-    { side: "away" as const, team: fact.game.away },
-  ];
-  return sides.flatMap(({ side, team }) =>
-    team.providerTeamKey === null
-      ? [
-          {
-            game: fact.sourceReference,
-            side,
-            identifier: team.sourceTeamIdentifier,
-            name: team.sourceTeamName,
-            reason: unmappedReason(fact.game.league, team),
-          },
-        ]
-      : [],
-  );
-}
-
-function unmappedReason(
-  league: FantasyLeague,
-  team: ProfessionalGameTeam,
-): UnresolvedProfessionalTeam["reason"] {
-  const match = matchProfessionalTeam({
-    league,
-    identifier: team.sourceTeamIdentifier,
-    abbreviation: team.sourceTeamAbbreviation,
-    name: team.sourceTeamName,
-  });
-  return match.kind === "not_mapped" ? "no_map_entry" : "map_disagrees";
 }
 
 function newestObservation(
@@ -284,3 +295,19 @@ function addDays(date: string, days: number): string {
   const parsed = DateTime.makeUnsafe(`${date}T00:00:00.000Z`);
   return DateTime.formatIsoDate(DateTime.add(parsed, { days }));
 }
+
+type ObservedGame = {
+  readonly value: PublishedProfessionalGame;
+  readonly observedAt: DateTime.Utc;
+  readonly sourceReference: string;
+};
+
+type ServedGame = {
+  readonly fact: ProfessionalGameFact;
+  readonly unresolvedTeams: ReadonlyArray<UnresolvedProfessionalTeam>;
+};
+
+type ResolvedSide = {
+  readonly team: ProfessionalGameTeam;
+  readonly reason: UnresolvedProfessionalTeam["reason"] | undefined;
+};

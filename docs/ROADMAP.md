@@ -308,6 +308,10 @@ Measured before the store existed: 360 provider reads a day became 5. Production
       gate had to fail open with `provider_game_missing_from_source`. The complete 32-club map is now checked
       in, paired from the provider's whole hockey player pool against the league's own week read; the calendar
       resolves every club from it and reports a club it cannot match as `no_map_entry` or `map_disagrees`.
+- [x] Resolve a stored game's clubs when it is read, not when it is written. A week written before the map
+      existed kept its unresolved clubs until its fantasy day ended, so the gate still reported
+      `provider_game_missing_from_source` after the map shipped. The observation now keeps the source's own
+      identifier, abbreviation, and name, and every read resolves it through the map.
 
 **Verify**: a deliberate one-to-many mapping is refused, and an unknown abbreviation produces no canonical
 team. `S`. Produced 54 identity rows over 29 distinct provider keys in production.

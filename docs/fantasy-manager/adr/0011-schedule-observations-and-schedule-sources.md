@@ -67,13 +67,13 @@ path. External sources are added per sport, and only where the terms permit.**
    a day for the owner's two leagues and five linked teams, against up to 360 today.
 
    One professional game is stored as one observation carrying its date, start instant with its venue time
-   zone, its two teams, its venue, and its status, because one league-week request refreshes all of them at
-   once. Its covered window is the league week that was read, so a stored slate is served only for the week it
+   zone, its two source teams, its venue, and its status, because one league-week request refreshes all of them
+   at once. Its covered window is the league week that was read, so a stored slate is served only for the week it
    was read for and a shifted week is a new read rather than a partial answer. The three game ages are named
    aspects of that observation rather than three observation kinds: a **calendar** read needs the fixture and
-   start-time aspects, and a **status** read needs the status aspect. A read of a game whose team has no settled identity
-   is not settled either, so a provider pairing learned after the games were stored is picked up by the next
-   read instead of waiting out the fixture age.
+   start-time aspects, and a **status** read needs the status aspect. A club is resolved from the stored source
+   identifier each time the game is read, so a corrected map applies to games that are already stored and
+   identity is never part of the observation's freshness.
 
 3. **Identity is the provider's professional-team key.** Abbreviations are display text and are never a join.
    A new source's identifiers are attached to the canonical team only through a pair the provider itself

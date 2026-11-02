@@ -13,11 +13,13 @@ import {
 import type { ProfessionalGameFact } from "#contexts/connections/ProfessionalCalendar.ts";
 import { PublicInternet } from "#runtime/PublicInternet.ts";
 
+import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./ConnectionsDatabaseTest.ts";
 import { nhlGameSource } from "./game-sources/nhl/NhlGameSource.ts";
 import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
 import { ProfessionalCalendarLive } from "./ProfessionalCalendarLive.ts";
 import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
+import { scheduleObservations } from "./ScheduleObservationTables.ts";
 
 const leagueWeek = fixture("league-week.json");
 const relocatedWeek = fixture("relocated-week.json");
@@ -25,6 +27,8 @@ const openerId = "2026020227";
 const carolinaKey = "nhl.t.7";
 const winnipegKey = "nhl.t.28";
 const edmontonKey = "nhl.t.6";
+const torontoKey = "nhl.t.21";
+const bostonKey = "nhl.t.1";
 const observedAt = DateTime.makeUnsafe("2026-11-01T12:00:00.000Z");
 
 const ScheduleObservationRepositoryTest = ScheduleObservationRepository.layer.pipe(
@@ -112,11 +116,9 @@ it.effect("produces a fact for every game of one league-week request with teams 
 
     const stored = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
     assert.strictEqual(stored.length, 50);
-    assert.isTrue(
-      stored.every(
-        (row) => row.value.home.providerTeamKey !== null && row.value.away.providerTeamKey !== null,
-      ),
-    );
+    const storedOpener = stored.find((row) => row.sourceReference === openerId);
+    assert.strictEqual(storedOpener?.value.home.sourceTeamIdentifier, "12");
+    assert.strictEqual(storedOpener?.value.home.sourceTeamName, "Carolina Hurricanes");
   }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
 });
 
@@ -213,7 +215,7 @@ it.effect(
 
       const stored = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
       assert.strictEqual(stored.length, 1);
-      assert.isNull(Array.getUnsafe(stored, 0).value.home.providerTeamKey);
+      assert.strictEqual(Array.getUnsafe(stored, 0).value.home.sourceTeamIdentifier, "999");
     }).pipe(
       Effect.provide(
         calendarLayer(
@@ -232,6 +234,139 @@ it.effect(
     );
   },
 );
+
+it.effect("reads a stored game with no provider key back resolved from the map", () => {
+  const calls: Array<URL> = [];
+  return Effect.gen(function* () {
+    const calendar = yield* ProfessionalCalendar;
+    yield* storePublishedGame({
+      value: publishedGame(
+        { identifier: "10", abbreviation: "TOR", name: "Toronto Maple Leafs" },
+        { identifier: "6", abbreviation: "BOS", name: "Boston Bruins" },
+      ),
+      observedAt,
+    });
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
+    const week = yield* calendar.readLeagueWeek({
+      league: "nhl",
+      weekStart: "2026-11-01",
+      freshness: "calendar",
+    });
+
+    assert.strictEqual(calls.length, 0);
+    assert.strictEqual(week.games.length, 1);
+    const game = Array.getUnsafe(week.games, 0);
+    assert.strictEqual(game.game.home.providerTeamKey, torontoKey);
+    assert.strictEqual(game.game.away.providerTeamKey, bostonKey);
+    assert.deepStrictEqual(week.unresolvedTeams, []);
+  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+});
+
+it.effect(
+  "reads a stored game with a stale provider key back resolved to what the map says",
+  () => {
+    const calls: Array<URL> = [];
+    const value = publishedGame(
+      {
+        identifier: "10",
+        abbreviation: "TOR",
+        name: "Toronto Maple Leafs",
+        providerTeamKey: "nhl.t.60",
+      },
+      { identifier: "6", abbreviation: "BOS", name: "Boston Bruins", providerTeamKey: null },
+    );
+    return Effect.gen(function* () {
+      const calendar = yield* ProfessionalCalendar;
+      const database = yield* ConnectionsDatabase;
+      yield* storePublishedGame({ value, observedAt });
+
+      yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
+      const week = yield* calendar.readLeagueWeek({
+        league: "nhl",
+        weekStart: "2026-11-01",
+        freshness: "calendar",
+      });
+
+      assert.strictEqual(calls.length, 0);
+      const game = Array.getUnsafe(week.games, 0);
+      assert.strictEqual(game.game.home.providerTeamKey, torontoKey);
+      assert.strictEqual(game.game.away.providerTeamKey, bostonKey);
+      assert.deepStrictEqual(week.unresolvedTeams, []);
+
+      const rows = yield* database.select().from(scheduleObservations);
+      assert.deepStrictEqual(Array.getUnsafe(rows, 0).value, value);
+    }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+  },
+);
+
+it.effect("reads a stored game whose club the map does not hold back unresolved", () => {
+  const calls: Array<URL> = [];
+  return Effect.gen(function* () {
+    const calendar = yield* ProfessionalCalendar;
+    yield* storePublishedGame({
+      value: publishedGame(
+        { identifier: "999", abbreviation: "CAR", name: "Carolina Hurricanes" },
+        { identifier: "52", abbreviation: "WPG", name: "Winnipeg Jets" },
+      ),
+      observedAt,
+    });
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
+    const week = yield* calendar.readLeagueWeek({
+      league: "nhl",
+      weekStart: "2026-11-01",
+      freshness: "calendar",
+    });
+
+    const game = Array.getUnsafe(week.games, 0);
+    assert.isNull(game.game.home.providerTeamKey);
+    assert.strictEqual(game.game.away.providerTeamKey, winnipegKey);
+    assert.deepStrictEqual(week.unresolvedTeams, [
+      {
+        game: game.sourceReference,
+        side: "home",
+        identifier: "999",
+        name: "Carolina Hurricanes",
+        reason: "no_map_entry",
+      },
+    ]);
+  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+});
+
+it.effect("reads a stored game whose club the map names differently back unresolved", () => {
+  const calls: Array<URL> = [];
+  return Effect.gen(function* () {
+    const calendar = yield* ProfessionalCalendar;
+    yield* storePublishedGame({
+      value: publishedGame(
+        { identifier: "12", abbreviation: "CAR", name: "Carolina Whalers" },
+        { identifier: "52", abbreviation: "WPG", name: "Winnipeg Jets" },
+      ),
+      observedAt,
+    });
+
+    yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
+    const week = yield* calendar.readLeagueWeek({
+      league: "nhl",
+      weekStart: "2026-11-01",
+      freshness: "calendar",
+    });
+
+    const game = Array.getUnsafe(week.games, 0);
+    assert.isNull(game.game.home.providerTeamKey);
+    assert.strictEqual(game.game.away.providerTeamKey, winnipegKey);
+    assert.deepStrictEqual(week.unresolvedTeams, [
+      {
+        game: game.sourceReference,
+        side: "home",
+        identifier: "12",
+        name: "Carolina Whalers",
+        reason: "map_disagrees",
+      },
+    ]);
+  }).pipe(Effect.provide(calendarLayer(() => jsonResponse(leagueWeek), calls)));
+});
 
 it.effect("stores a postponed game with its status and serves it with it", () => {
   const calls: Array<URL> = [];
@@ -565,7 +700,7 @@ function addDays(date: string, days: number): string {
 function calendarLayer(
   respond: (weekStart: string) => Response,
   calls: Array<URL>,
-): Layer.Layer<ProfessionalCalendar | ScheduleObservationRepository> {
+): Layer.Layer<ProfessionalCalendar | ScheduleObservationRepository | ConnectionsDatabase> {
   const internet = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.sync(() => {
@@ -580,6 +715,7 @@ function calendarLayer(
   return ProfessionalCalendarLive.pipe(
     Layer.provideMerge(ScheduleObservationRepositoryTest),
     Layer.provide(sources),
+    Layer.provideMerge(ConnectionsDatabaseTest),
     Layer.orDie,
   );
 }
@@ -625,6 +761,55 @@ type ClubPayload = {
   readonly abbrev: string;
   readonly name: string;
 };
+
+type StoredClub = {
+  readonly identifier: string;
+  readonly abbreviation: string;
+  readonly name: string;
+  readonly providerTeamKey?: string | null;
+};
+
+function publishedGame(home: StoredClub, away: StoredClub): unknown {
+  return {
+    league: "nhl",
+    date: "2026-11-01",
+    startTime: { instant: "2026-11-01T23:00:00.000Z", timeZone: "US/Eastern" },
+    home: storedClub(home),
+    away: storedClub(away),
+    venue: "Scotiabank Arena",
+    status: "scheduled",
+  };
+}
+
+function storedClub(club: StoredClub): unknown {
+  return {
+    ...(club.providerTeamKey === undefined ? {} : { providerTeamKey: club.providerTeamKey }),
+    sourceTeamIdentifier: club.identifier,
+    sourceTeamAbbreviation: club.abbreviation,
+    sourceTeamName: club.name,
+  };
+}
+
+function storePublishedGame(input: {
+  readonly value: unknown;
+  readonly observedAt: DateTime.Utc;
+}): Effect.Effect<void, never, ConnectionsDatabase> {
+  return Effect.gen(function* () {
+    const database = yield* ConnectionsDatabase;
+    yield* database.insert(scheduleObservations).values({
+      source: "nhl-web",
+      subjectKind: "professional_game",
+      subjectKey: "nhl:2026020300",
+      observationKind: "professional_game",
+      coversFrom: "2026-11-01",
+      coversTo: "2026-11-07",
+      value: input.value,
+      observedAt: DateTime.toDateUtc(input.observedAt),
+      confidence: "authoritative",
+      sourceReference: "2026020300",
+    });
+  }).pipe(Effect.orDie);
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status });

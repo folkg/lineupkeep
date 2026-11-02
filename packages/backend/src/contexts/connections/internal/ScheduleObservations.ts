@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import type { DateTime } from "effect";
 
 import { endOfFantasyDay } from "#contexts/connections/FantasyDay.ts";
-import { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
+import { PublishedProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
 import type { ProviderFantasyDay } from "#contexts/connections/Provider.ts";
 
 export const scheduleObservationSubjectKinds = [
@@ -70,4 +70,4 @@ export const providerOpponentValue = Schema.Struct({
 });
 export type ProviderOpponentValue = typeof providerOpponentValue.Type;
 
-export const professionalGameValue = ProfessionalGame;
+export const publishedProfessionalGameValue = PublishedProfessionalGame;

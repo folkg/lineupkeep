@@ -519,7 +519,9 @@ The complete map is now checked in as `hockeyProfessionalTeamMap` in
 `packages/backend/src/contexts/connections/internal/ProfessionalTeamMap.ts`: one row per club, carrying the
 league, the provider's professional-team key, the league's team identifier, the league's abbreviation, and the
 club name. The calendar resolves a club from that table by league and league identifier and never from a stored
-pair, so the table is data rather than a cache.
+pair, so the table is data rather than a cache. A stored professional game keeps the source's identifier,
+abbreviation, and name, and the calendar resolves its clubs when it reads the observation, so a corrected map
+reaches a week that is already stored.
 
 Every pair was read from two recorded source reads.
 
