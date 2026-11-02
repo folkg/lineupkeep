@@ -51,6 +51,10 @@ The players held by a fantasy team, including starters, bench players, and reser
 The assignment of a fantasy team's rostered players to its roster slots for a particular period.
 _Avoid_: Roster when referring only to assignments
 
+**Left in place**:
+A roster player the plan does not move because the league's slots cannot hold them legally, such as a player still listed in a reserve slot they are no longer eligible for. They keep the slot the provider reports, and the rest of the lineup is planned around them. It is not a plan failure, and it is not a missing assignment.
+_Avoid_: Unassigned, orphan, invalid player, benched when the plan did not choose the bench
+
 **Unverified slot**:
 A roster row whose provider-published lineup slot names no slot the league declares, such as an
 empty selected position. It keeps the provider's raw value and a readable reason, is never treated

@@ -316,6 +316,73 @@ it.effect("writes a reserve transit instead of blocking the team", () =>
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
+it.effect("leaves a reserve player in place and writes only the rest of the lineup", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* fake.setLeague(parkedLeague);
+    yield* fake.setRoster(parkedRoster);
+    yield* fake.setPlayerScores(parkedScores);
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.status, "completed");
+    assert.strictEqual(run.state._tag, "Completed");
+    if (run.state._tag !== "Completed") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.kind, "changed");
+    assert.deepStrictEqual(run.state.outcome.leftInPlace, [
+      {
+        name: "Healthy Skater",
+        slot: "IR",
+        reason:
+          "The league no longer lists them as eligible for this reserve slot, so the plan leaves them there.",
+      },
+    ]);
+    const requests = yield* fake.explicitRequests;
+    assert.strictEqual(yield* fake.explicitCallCount, 1);
+    assert.deepStrictEqual(
+      requests[0]?.map((assignment) => assignment.providerPlayerKey),
+      ["461.p.20002", "461.p.20003"],
+    );
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect("reports the provider's own words when it refuses the lineup and never retries", () =>
+  Effect.gen(function* () {
+    const repository = yield* LineupRunRepository;
+    const worker = yield* LineupWorker;
+    const fake = yield* FakeProviderWorld;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    yield* fake.setLeague(parkedLeague);
+    yield* fake.setRoster(parkedRoster);
+    yield* fake.setPlayerScores(parkedScores);
+    yield* fake.setExplicitAction("reject", "There is no room on the roster.");
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* worker.deliver([runId]);
+
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.status, "failed");
+    assert.strictEqual(run.state._tag, "Failed");
+    if (run.state._tag !== "Failed") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.kind, "failed");
+    assert.match(run.state.outcome.summary, /There is no room on the roster\./u);
+    assert.deepStrictEqual(
+      run.state.outcome.leftInPlace?.map((player) => player.name),
+      ["Healthy Skater"],
+    );
+    assert.strictEqual(yield* fake.explicitCallCount, 1);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
 it.effect("never writes a player whose slot is unverified and does not mismatch on readback", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;
@@ -1389,6 +1456,33 @@ const reserveScores: ReadonlyArray<TestScore> = [
   { providerPlayerKey: "461.p.20001", score: 20, availability: "will-not-play" },
   { providerPlayerKey: "461.p.20002", score: 30, availability: "will-play" },
   { providerPlayerKey: "461.p.20003", score: 5, availability: "will-play" },
+];
+
+const parkedLeague: ProviderLeagueSettings = {
+  ...customLeague,
+  rosterPositions: [
+    { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
+    { position: "RB", positionType: "O", count: 1, kind: "starting", eligibility: ["RB"] },
+    { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
+    { position: "IR", positionType: "I", count: 1, kind: "reserve", eligibility: ["IR"] },
+  ],
+};
+
+const parkedRoster: ProviderRoster = {
+  ...customRoster,
+  players: [
+    customPlayer("461.p.20001", "Healthy Skater", "QB", "IR"),
+    customPlayer("461.p.20002", "Starting Runner", "RB", "RB"),
+    customPlayer("461.p.20003", "Bench Runner", "RB", "BN"),
+    customPlayer("461.p.20004", "Bench Passer", "QB", "QB"),
+  ],
+};
+
+const parkedScores: ReadonlyArray<TestScore> = [
+  { providerPlayerKey: "461.p.20001", score: 9000, availability: "will-play" },
+  { providerPlayerKey: "461.p.20002", score: 500, availability: "will-play" },
+  { providerPlayerKey: "461.p.20003", score: 800, availability: "will-play" },
+  { providerPlayerKey: "461.p.20004", score: 100, availability: "will-play" },
 ];
 
 const capacityLeague: ProviderLeagueSettings = {

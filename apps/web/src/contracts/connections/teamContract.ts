@@ -80,6 +80,11 @@ export type LineupRunView = {
       readonly expected: string;
       readonly actual: string;
     }>;
+    readonly leftInPlace?: ReadonlyArray<{
+      readonly name: string;
+      readonly slot: string;
+      readonly reason: string;
+    }>;
     readonly implementation?: "provider_native" | "custom_policy";
     readonly provenance?:
       | { readonly kind: "planned"; readonly label: string }

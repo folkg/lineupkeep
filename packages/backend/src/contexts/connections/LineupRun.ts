@@ -72,6 +72,13 @@ export const LineupRunDifference = Schema.Struct({
 });
 export type LineupRunDifference = typeof LineupRunDifference.Type;
 
+export const LineupLeftInPlacePlayer = Schema.Struct({
+  name: Schema.NonEmptyString,
+  slot: Schema.NonEmptyString,
+  reason: Schema.NonEmptyString,
+});
+export type LineupLeftInPlacePlayer = typeof LineupLeftInPlacePlayer.Type;
+
 const IsoDate = Schema.String.pipe(
   Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
   Schema.brand("LineupTargetDate"),
@@ -153,6 +160,7 @@ export const LineupRunOutcome = Schema.Struct({
   observedAt: Schema.DateTimeUtc,
   changes: Schema.Array(LineupRunChange),
   differences: Schema.optional(Schema.Array(LineupRunDifference)),
+  leftInPlace: Schema.optional(Schema.Array(LineupLeftInPlacePlayer)),
   implementation: Schema.optional(LineupImplementation),
   provenance: Schema.optional(LineupPlanProvenance),
   lockedPlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

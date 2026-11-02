@@ -5,6 +5,7 @@ import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type {
   LineupImplementation,
+  LineupLeftInPlacePlayer,
   LineupPlanProvenance,
   LineupPlanRefusalProvenance,
   LineupRunDifference,
@@ -336,6 +337,12 @@ export const LineupWorkerLive = Layer.effect(
         yield* block(run, "assignment_refused", placed.detail, plannedRecordOf(replanned));
         return { kind: "blocked" as const };
       }
+      yield* Effect.annotateCurrentSpan(
+        "lineup.left_in_place",
+        placed.leftInPlace.length === 0
+          ? "none"
+          : placed.leftInPlace.map((player) => `${player.name} (${player.slot})`).join(", "),
+      );
       return {
         kind: "prepared" as const,
         plan: explicitPlan(
@@ -344,6 +351,7 @@ export const LineupWorkerLive = Layer.effect(
           placed.assignments,
           replanned.provenance,
           !sameLineup(observation.players, revalidated),
+          placed.leftInPlace,
         ),
         before: freshObservation.players,
       };
@@ -487,7 +495,17 @@ export const LineupWorkerLive = Layer.effect(
             false,
           );
         case "rejected":
-          return yield* fail(run, intent, "provider_rejected", wording.rejected, "rejected");
+          yield* Effect.annotateCurrentSpan(
+            "lineup.provider_rejection",
+            result.detail ?? "unstated",
+          );
+          return yield* fail(
+            run,
+            intent,
+            "provider_rejected",
+            rejectionSummary(wording.rejected, result.detail),
+            "rejected",
+          );
         case "accepted":
         case "unknown":
           yield* repository.recordApplyResponse({
@@ -516,9 +534,12 @@ export const LineupWorkerLive = Layer.effect(
           kind: "no_op",
           verified: true,
           reconciled: false,
-          summary: changed
-            ? "The roster changed before the write; the lineup already matched the recomputed plan, so no write was needed."
-            : "The lineup already matched the explicit plan; no provider write was needed.",
+          summary: explicitSummary(
+            intent.plan,
+            changed
+              ? "The roster changed before the write; the lineup already matched the recomputed plan, so no write was needed."
+              : "The lineup already matched the explicit plan; no provider write was needed.",
+          ),
           observedAt: at,
           changes: [],
           differences: [],
@@ -664,13 +685,15 @@ export const LineupWorkerLive = Layer.effect(
               kind: comparison.changes.length > 0 ? "changed" : "no_op",
               verified: true,
               reconciled: false,
-              summary:
+              summary: explicitSummary(
+                plan,
                 (plan.sourceChanged
                   ? "The roster changed before the write, so the plan was recomputed. "
                   : "") +
-                (comparison.changes.length > 0
-                  ? `Verified ${String(comparison.changes.length)} explicit lineup change(s).`
-                  : "Verified that the explicit request left the lineup unchanged."),
+                  (comparison.changes.length > 0
+                    ? `Verified ${String(comparison.changes.length)} explicit lineup change(s).`
+                    : "Verified that the explicit request left the lineup unchanged."),
+              ),
               observedAt,
               changes: comparison.changes,
               differences: [],
@@ -693,10 +716,12 @@ export const LineupWorkerLive = Layer.effect(
               kind: comparison.changes.length > 0 ? "changed" : "no_op",
               verified: true,
               reconciled: true,
-              summary:
+              summary: explicitSummary(
+                plan,
                 (plan.sourceChanged
                   ? "The roster changed before the write, so the plan was recomputed. "
                   : "") + "Reconciled a lost provider response with the planned explicit lineup.",
+              ),
               observedAt,
               changes: comparison.changes,
               differences: [],
@@ -995,6 +1020,7 @@ export const LineupWorkerLive = Layer.effect(
       const provenance = planRecordOf(intent?.plan);
       const implementation = record.implementation ?? provenance.implementation;
       const recordedProvenance = record.provenance ?? provenance.provenance;
+      const leftInPlace = record.leftInPlace ?? provenance.leftInPlace;
       yield* repository.recordFailed({
         runId: run.record.id,
         lease: run.lease,
@@ -1006,6 +1032,7 @@ export const LineupWorkerLive = Layer.effect(
           observedAt: at,
           changes: record.changes ?? [],
           ...(record.differences === undefined ? {} : { differences: record.differences }),
+          ...(leftInPlace === undefined ? {} : { leftInPlace }),
           ...(implementation === undefined ? {} : { implementation }),
           ...(recordedProvenance === undefined ? {} : { provenance: recordedProvenance }),
           lockedPlayers: record.lockedPlayers ?? 0,
@@ -1075,6 +1102,7 @@ export const LineupWorkerLive = Layer.effect(
           observedAt: at,
           changes: record.changes ?? [],
           ...(record.differences === undefined ? {} : { differences: record.differences }),
+          ...(record.leftInPlace === undefined ? {} : { leftInPlace: record.leftInPlace }),
           ...(record.implementation === undefined ? {} : { implementation: record.implementation }),
           ...(record.provenance === undefined ? {} : { provenance: record.provenance }),
           lockedPlayers: record.lockedPlayers ?? 0,
@@ -1127,6 +1155,7 @@ type AttemptRecord = {
   readonly implementation?: LineupImplementation;
   readonly provenance?: LineupPlanProvenance | LineupPlanRefusalProvenance;
   readonly differences?: ReadonlyArray<LineupRunDifference>;
+  readonly leftInPlace?: ReadonlyArray<LineupLeftInPlacePlayer>;
 };
 
 type FailureRecord = AttemptRecord & {
@@ -1268,6 +1297,7 @@ function explicitPlan(
   assignments: ReadonlyArray<ProviderLineupAssignment>,
   provenance: string,
   sourceChanged: boolean,
+  leftInPlace: ReadonlyArray<LineupLeftInPlacePlayer>,
 ): LineupPlan {
   return {
     _tag: "explicit_assignments",
@@ -1280,6 +1310,7 @@ function explicitPlan(
       playerKey: assignment.providerPlayerKey,
       slot: assignment.slot,
     })),
+    ...(leftInPlace.length === 0 ? {} : { leftInPlace }),
     sourceChanged,
   };
 }
@@ -1312,12 +1343,34 @@ function planRecordOf(plan: LineupPlan | undefined): AttemptRecord {
   if (plan === undefined) {
     return {};
   }
-  return plan._tag === "explicit_assignments"
-    ? { implementation: customLineupImplementation, provenance: plan.provenance }
-    : {
-        implementation: nativeLineupImplementation,
-        ...(plan.provenance === undefined ? {} : { provenance: plan.provenance }),
-      };
+  if (plan._tag === "native_action") {
+    return {
+      implementation: nativeLineupImplementation,
+      ...(plan.provenance === undefined ? {} : { provenance: plan.provenance }),
+    };
+  }
+  return {
+    implementation: customLineupImplementation,
+    provenance: plan.provenance,
+    ...(plan.leftInPlace === undefined ? {} : { leftInPlace: plan.leftInPlace }),
+  };
+}
+
+function explicitSummary(plan: LineupPlan | undefined, verified: string): string {
+  const leftInPlace = plan?._tag === "explicit_assignments" ? (plan.leftInPlace ?? []) : [];
+  const note =
+    leftInPlace.length === 0
+      ? undefined
+      : `${leftInPlace.map((player) => `${player.name} (${player.slot})`).join(", ")} ${leftInPlace.length === 1 ? "was" : "were"} left in place.`;
+  return clampSummary(note === undefined ? verified : `${note} ${verified}`);
+}
+
+function rejectionSummary(wording: string, detail: string | undefined): string {
+  return detail === undefined ? wording : clampSummary(`${wording} The provider said: ${detail}`);
+}
+
+function clampSummary(summary: string): string {
+  return summary.length <= 500 ? summary : `${summary.slice(0, 497)}...`;
 }
 
 function implementationOf(plan: LineupPlan): LineupImplementation {

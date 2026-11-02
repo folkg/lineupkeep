@@ -4,6 +4,7 @@ import { Schema, SchemaTransformation } from "effect";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
   LineupImplementation,
+  LineupLeftInPlacePlayer,
   LineupPlanProvenance,
   LineupPlanRefusalProvenance,
   LineupRunOutcome,
@@ -70,6 +71,7 @@ export const LineupPlan = Schema.TaggedUnion({
     editablePlayers: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     provenance: LineupPlanProvenance,
     assignments: Schema.Array(LineupPlannedAssignment),
+    leftInPlace: Schema.optional(Schema.Array(LineupLeftInPlacePlayer)),
     sourceChanged: Schema.Boolean,
   },
 });

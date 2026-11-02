@@ -145,6 +145,34 @@ function RunDetail(props: {
                 </For>
               </RuleList>
             </Show>
+            <Show when={outcome().leftInPlace}>
+              {(leftInPlace) => (
+                <Stack gap="sm">
+                  <Heading level={3} size="item">
+                    Left in place
+                  </Heading>
+                  <RuleList>
+                    <For each={leftInPlace()}>
+                      {(player) => (
+                        <RuleListItem>
+                          <Inline gap="sm" align="baseline">
+                            <Text size="caption" weight="semibold">
+                              {player.name}
+                            </Text>
+                            <Text size="caption" tone="faint">
+                              {player.slot}
+                            </Text>
+                          </Inline>
+                          <Text size="caption" tone="muted">
+                            {player.reason}
+                          </Text>
+                        </RuleListItem>
+                      )}
+                    </For>
+                  </RuleList>
+                </Stack>
+              )}
+            </Show>
             <Text size="caption" tone="faint">
               {outcome().lockedPlayers} locked · {outcome().editablePlayers} editable players
             </Text>

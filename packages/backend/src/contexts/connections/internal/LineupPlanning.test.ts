@@ -498,6 +498,70 @@ describe("provider-neutral lineup placement", () => {
     expect(result.assignments).toEqual([{ providerPlayerKey: "c1", slot: "BN" }]);
   });
 
+  it("leaves a reserve player the league no longer accepts in place and plans everyone else", () => {
+    const result = planned(
+      planAssignments({
+        gamesPlayed: [],
+        league: league([
+          { position: "C", kind: "starting", count: 1, eligibility: ["C"] },
+          { position: "LW", kind: "starting", count: 1, eligibility: ["LW"] },
+          { position: "BN", kind: "bench", count: 1, eligibility: [] },
+          { position: "IR", kind: "reserve", count: 1, eligibility: ["IR"] },
+        ]),
+        roster: roster([
+          { ...member("healthy", "C", "IR", ["C", "LW"]), name: "Healthy Skater" },
+          member("center", "C", "C", ["C"]),
+          member("winger", "LW", "LW", ["LW"]),
+          member("bench", "C", "BN", ["C"]),
+        ]),
+        values: values([
+          ["healthy", 9000],
+          ["center", 100],
+          ["winger", 500],
+          ["bench", 800],
+        ]),
+      }),
+    );
+
+    expect(result.assignments).toEqual([
+      { providerPlayerKey: "center", slot: "BN" },
+      { providerPlayerKey: "bench", slot: "C" },
+    ]);
+    expect(result.leftInPlace).toEqual([
+      {
+        name: "Healthy Skater",
+        slot: "IR",
+        reason:
+          "The league no longer lists them as eligible for this reserve slot, so the plan leaves them there.",
+      },
+    ]);
+  });
+
+  it("still refuses when locked players exceed a slot's declared capacity", () => {
+    const result = planAssignments({
+      gamesPlayed: [],
+      league: league(),
+      roster: roster([
+        { ...member("a", "QB", "QB", ["QB"]), isEditable: false },
+        { ...member("b", "QB", "QB", ["QB"]), isEditable: false },
+        member("c", "QB", "BN", ["QB"]),
+      ]),
+      values: values([
+        ["a", 100],
+        ["b", 200],
+        ["c", 300],
+      ]),
+    });
+
+    expect(result.kind).toBe("refused");
+    if (result.kind !== "refused") {
+      return;
+    }
+    expect(result.detail).toBe(
+      "Locked players exceed a slot's declared capacity, so the lineup cannot be planned.",
+    );
+  });
+
   it("refuses when a required starting slot has no eligible player", () => {
     const result = planAssignments({
       gamesPlayed: [],

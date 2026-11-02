@@ -102,6 +102,7 @@ type FakeProviderState = {
   readonly nativeTargets: ReadonlyArray<ProviderNativeTarget>;
   readonly nativeCalls: number;
   readonly explicitAction: FakeWriteAction;
+  readonly explicitDetail: string | undefined;
   readonly explicitAfter: ProviderRoster | undefined;
   readonly explicitRequests: ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>;
   readonly explicitCalls: number;
@@ -173,7 +174,7 @@ export type FakeProviderWorldShape = {
   readonly nativeCallCount: Effect.Effect<number>;
   readonly providerCalls: Effect.Effect<number>;
   readonly providerReads: Effect.Effect<number>;
-  readonly setExplicitAction: (action: FakeWriteAction) => Effect.Effect<void>;
+  readonly setExplicitAction: (action: FakeWriteAction, detail?: string) => Effect.Effect<void>;
   readonly setExplicitAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly explicitRequests: Effect.Effect<ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>>;
   readonly explicitCallCount: Effect.Effect<number>;
@@ -246,6 +247,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         nativeTargets: [],
         nativeCalls: 0,
         explicitAction: "accept",
+        explicitDetail: undefined,
         explicitAfter: undefined,
         explicitRequests: [],
         explicitCalls: 0,
@@ -339,8 +341,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         nativeCallCount: Effect.map(Ref.get(state), (current) => current.nativeCalls),
         providerCalls: Effect.map(Ref.get(state), (current) => current.providerCalls),
         providerReads: Effect.map(Ref.get(state), (current) => current.providerReads),
-        setExplicitAction: (explicitAction) =>
-          modify((current) => ({ ...current, explicitAction })),
+        setExplicitAction: (explicitAction, explicitDetail) =>
+          modify((current) => ({ ...current, explicitAction, explicitDetail })),
         setExplicitAfter: (explicitAfter) => modify((current) => ({ ...current, explicitAfter })),
         explicitRequests: Effect.map(Ref.get(state), (current) => current.explicitRequests),
         explicitCallCount: Effect.map(Ref.get(state), (current) => current.explicitCalls),
@@ -607,7 +609,10 @@ const providerFake = Effect.gen(function* () {
           operation: "apply_explicit_assignments",
         });
       }
-      const result: ProviderWriteResult = writeResult(current.explicitAction);
+      const result: ProviderWriteResult = writeResult(
+        current.explicitAction,
+        current.explicitDetail,
+      );
       if (current.explicitAction === "accept" || current.explicitAction === "lost_response") {
         const after = current.explicitAfter ?? applyAssignments(current.roster, input.assignments);
         yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));

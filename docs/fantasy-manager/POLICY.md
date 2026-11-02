@@ -397,7 +397,10 @@ position name means:
   provider accepted a reserve transit in both directions on 2026-10-27
   ([record](RESEARCH.md#reserve-transit-acceptance-2026-10-27)), so the plan writes reserve moves the
   same way it writes starting and bench moves. A player can be moved onto a named reserve list they
-  are eligible for, and off one they are not. Nothing is inferred from the injury code.
+  are eligible for, and off one they are not. Nothing is inferred from the injury code. A player the
+  league no longer lists as eligible for the reserve slot they hold is moved out when the rest of the
+  roster has room; when it does not, the plan leaves them in place, keeps that slot occupied, and
+  plans everyone else, and the run names them.
 
 Two readings the provider evidence does not settle, stated so they can be corrected:
 
