@@ -65,6 +65,12 @@ import { FeedbackDatabase } from "#contexts/feedback/internal/FeedbackDatabase.t
 import { FeedbackLive } from "#contexts/feedback/internal/FeedbackLive.ts";
 import { FeedbackRepository } from "#contexts/feedback/internal/FeedbackRepository.ts";
 import { FeedbackRetentionLive } from "#contexts/feedback/internal/FeedbackRetentionLive.ts";
+import type { AccountErasure } from "#contexts/privacy/AccountErasure.ts";
+import type { AccountExport } from "#contexts/privacy/AccountExport.ts";
+import { AccountDataRepository } from "#contexts/privacy/internal/AccountDataRepository.ts";
+import { AccountErasureLive } from "#contexts/privacy/internal/AccountErasureLive.ts";
+import { AccountExportLive } from "#contexts/privacy/internal/AccountExportLive.ts";
+import { PrivacyDatabase } from "#contexts/privacy/internal/PrivacyDatabase.ts";
 import { ToolCallQuotaDatabase } from "#contexts/toolCalls/internal/ToolCallQuotaDatabase.ts";
 import { ToolCallQuotaLive } from "#contexts/toolCalls/internal/ToolCallQuotaLive.ts";
 import { ToolCallQuotaRepository } from "#contexts/toolCalls/internal/ToolCallQuotaRepository.ts";
@@ -220,6 +226,11 @@ const ToolCallQuotaLayer = ToolCallQuotaLive.pipe(
   Layer.provide(ToolCallQuotaRepository.layer),
   Layer.provide(ToolCallQuotaDatabase.layer),
 );
+const AccountDataRepositoryLayer = AccountDataRepository.layer.pipe(
+  Layer.provide(PrivacyDatabase.layer),
+);
+const AccountErasureLayer = AccountErasureLive.pipe(Layer.provide(AccountDataRepositoryLayer));
+const AccountExportLayer = AccountExportLive.pipe(Layer.provide(AccountDataRepositoryLayer));
 export const ApplicationLayer = Layer.mergeAll(
   ConnectionsLayer,
   HostedLinkingLayer,
@@ -237,6 +248,8 @@ export const ApplicationLayer = Layer.mergeAll(
   FeedbackLayer,
   FeedbackRetentionLayer,
   ToolCallQuotaLayer,
+  AccountErasureLayer,
+  AccountExportLayer,
   SignInSessionsLayer,
   AuthLayer,
   ProviderLayer,
@@ -266,4 +279,6 @@ export type BackendServices =
   | LineupWorker
   | Feedback
   | FeedbackRetention
-  | ToolCallQuota;
+  | ToolCallQuota
+  | AccountErasure
+  | AccountExport;

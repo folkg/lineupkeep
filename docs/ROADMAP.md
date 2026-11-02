@@ -565,7 +565,7 @@ erasure or export path for a person's data.
 
 - [x] Cap live dynamic registrations and age out ones that never completed an authorization.
 - [x] Make the scope-widening update set-based instead of loading and rewriting every row.
-- [ ] Add one owner-scoped erasure routine and one owner-scoped export over the tables in the audit's
+- [x] Add one owner-scoped erasure routine and one owner-scoped export over the tables in the audit's
       inventory, in transaction order, with the cascade gaps closed.
 - [x] Sweep `session`, `verification`, `oauth_consent`, and `hosted_linking_sessions` once they expire or pass
       their approved window.
@@ -573,6 +573,16 @@ erasure or export path for a person's data.
 
 **Verify**: an erasure leaves no row carrying the owner id anywhere in the database, an export round-trips,
 and a registration loop is refused at the cap. `L`, split registration from erasure before delegating.
+
+**Verified 2026-11-02.** `AccountErasure` (`contexts/privacy`) deletes the owner's rows in one transaction,
+children before parents, and returns a plain-word summary. `AccountExport` produces one versioned JSON
+document over the same inventory and names every withheld credential with its reason. Your data
+(`/account`) offers both; erasure requires the typed phrase `erase my account`, signs the browser out, and
+lands on `/erased`. Access-token resolution now refuses a token whose user row no longer exists, so an
+agent's JWT stops working as soon as the erasure commits instead of at its expiry. The erasure test
+enumerates owner columns from `information_schema` so a new table cannot be missed, seeds and removes every
+class, proves a second call is a no-op, and proves a failure partway through leaves the account unchanged.
+The E2E test proves a cookie captured before erasure cannot reach `/teams` afterwards.
 
 **Owner's windows, 2026-11-02**: 90 days for lineup runs, attempts and write intents after the run ends; 14
 days for stored schedule observations after the covered window ends; 7 days for registrations that never

@@ -86,6 +86,8 @@ const productionTestSeams: Record<string, Array<"exports" | "types">> = {
   "tools/local-stack/*.ts": ["exports", "types"],
   "packages/backend/src/**/*Test.ts": ["exports", "types"],
   "packages/backend/src/contexts/connections/internal/ProfessionalTeamMap.ts": ["exports", "types"],
+  "packages/backend/src/contexts/privacy/internal/AccountDataTables.ts": ["exports"],
+  "packages/backend/src/contexts/privacy/internal/OwnedAccountSeedRepository.ts": ["exports"],
   "packages/backend/src/contexts/connections/internal/yahoo/YahooLineup.ts": ["exports", "types"],
   "packages/backend/src/database/dbUtilities.ts": ["exports"],
   "packages/backend/src/contexts/auth/User.ts": ["exports"],

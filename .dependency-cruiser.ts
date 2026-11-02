@@ -8,6 +8,7 @@ const permittedContextImports = {
     "contexts/auth/UserDirectory.ts",
   ],
   feedback: ["contexts/auth/User.ts"],
+  privacy: ["contexts/auth/SignInCodeQuotaKey.ts", "contexts/auth/User.ts"],
   toolCalls: ["contexts/auth/User.ts"],
 };
 

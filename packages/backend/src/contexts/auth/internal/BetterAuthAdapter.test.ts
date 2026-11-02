@@ -510,11 +510,18 @@ it.effect(
 );
 
 it.effect(
-  "resolves only unexpired local access tokens for the resource and required scopes",
+  "resolves only unexpired local access tokens and refuses a token for a deleted user",
   () =>
     Effect.gen(function* () {
       const adapter = yield* BetterAuthAdapter;
       const database = yield* AuthDatabase;
+      yield* Effect.promise(() =>
+        database.insert(user).values({
+          id: "reader",
+          name: "Reader",
+          email: "reader@example.test",
+        }),
+      );
       const signer = betterAuth({
         baseURL: baseConfig.BETTER_AUTH_URL,
         secret: baseConfig.BETTER_AUTH_SECRET,
@@ -575,6 +582,11 @@ it.effect(
           status: "invalid",
         });
       }
+
+      yield* Effect.promise(() => database.delete(user).where(eq(user.id, "reader")));
+      assert.deepStrictEqual(yield* adapter.resolveAccessToken(valid.token, ["connections:read"]), {
+        status: "invalid",
+      });
     }).pipe(Effect.provide(adapterLayer(baseConfig))),
   databaseTestTimeout,
 );
@@ -731,6 +743,13 @@ it.effect(
     Effect.gen(function* () {
       const adapter = yield* BetterAuthAdapter;
       const database = yield* AuthDatabase;
+      yield* Effect.promise(() =>
+        database.insert(user).values({
+          id: "reader",
+          name: "Reader",
+          email: "reader@example.test",
+        }),
+      );
       const signer = betterAuth({
         baseURL: baseConfig.BETTER_AUTH_URL,
         secret: baseConfig.BETTER_AUTH_SECRET,

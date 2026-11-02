@@ -18,6 +18,7 @@
 - `apps/web/src/browser/brand-ui/`, `apps/web/src/theme/`: Lineupkeep foundation and generic primitives.
 - `apps/web/src/server/`: server functions, session/auth adapters, hosted linking, stateless starter MCP.
 - `packages/backend/src/contexts/auth/`: application authentication.
+- `packages/backend/src/contexts/privacy/`: owner-scoped account erasure and export over the audited inventory.
 - `packages/backend/src/contexts/connections/`: connection lifecycle, encrypted provider credentials, and exact team discovery.
 - `packages/backend/src/retention/RetentionPolicy.ts`: approved retention windows for runs, observations, registrations, consents, linking sessions, and feedback.
 - `packages/backend/src/runtime/`: runtime composition and PublicInternet.

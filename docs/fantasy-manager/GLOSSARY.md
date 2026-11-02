@@ -274,6 +274,14 @@ _Avoid_: Login, device, browser session when the account's other sessions are me
 The short browser-and-system phrase derived from a sign-in session's stored user agent, such as "Chrome on macOS". It never carries the full user agent, a made-up device name, or a location we did not receive.
 _Avoid_: Device name, location, user agent
 
+**Account erasure**:
+The immediate, owner-scoped deletion of every row that carries a person's identity, directly or through a parent row, in one transaction. It ends every sign-in session and hosted linking session, and revokes every grant an agent holds. It has no hold window, no retained copy, and no undo.
+_Avoid_: Account deletion when the immediate, complete operation is meant, purge, anonymisation
+
+**Account export**:
+One versioned JSON document of the same classes an account erasure removes, taken by the signed-in owner. Credentials are named as withheld with the reason, never included in a form that could act for the person.
+_Avoid_: Data dump, backup, subject access request when the product action is meant
+
 ## Feedback
 
 **Feedback report**:

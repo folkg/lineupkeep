@@ -1,9 +1,10 @@
 # Security and privacy audit
 
-Status: written findings for review. Six findings are fixed, nine are deferred with the reason they
-were not taken, and one is accepted as designed. F1 and F5 were fixed in follow-up changes once their
-product decisions were made; the rest of this document is unchanged from the audit revision. This document contains
-no secret, token, cookie, crumb, or personal datum; every credential is referred to by shape only.
+Status: written findings for review. Eight findings are fixed, seven are deferred with the reason they
+were not taken, and one is accepted as designed. Several findings were fixed in follow-up changes once
+their product decisions were made; each names its fix. The personal-data inventory and closing notes are
+updated where the fixes changed them. This document contains no secret, token, cookie, crumb, or personal
+datum; every credential is referred to by shape only.
 
 Date: 2026-11-01. Baseline: `5871f3e8` (`mcp: reduce the scope set to four resource scopes`).
 
@@ -53,7 +54,7 @@ reviewer to schedule.
 | F1  | No rate limit or cost ceiling on the expensive and destructive MCP tools                   | High     | **Fixed** |
 | F2  | Dynamic client registration is unauthenticated, uncapped and never cleaned up              | Medium   | **Fixed** |
 | F3  | Session revocation lags up to five minutes and there is no session inventory or revoke-all | Medium   | **Fixed** |
-| F4  | No erasure or export path for personal data, and some tables have no retention at all      | Medium   | Deferred  |
+| F4  | No erasure or export path for personal data, and some tables have no retention at all      | Medium   | **Fixed** |
 | F5  | A connection-key compromise has no fast remediation                                        | Medium   | **Fixed** |
 | F6  | Google sign-in would store provider OAuth tokens unencrypted                               | Medium   | Deferred  |
 | F7  | `/api/telemetry` has a process-global budget and no authentication                         | Low      | Deferred  |
@@ -67,7 +68,7 @@ reviewer to schedule.
 | F15 | The egress proxy records an unbounded number of distinct refusals per session              | Low      | **Fixed** |
 | F16 | The hosted browser can reach Lineupkeep's own public origin                                | Low      | Accepted  |
 
-Count: 0 critical, 1 high, 5 medium, 10 low. Seven fixed, one accepted as designed, eight deferred.
+Count: 0 critical, 1 high, 5 medium, 10 low. Eight fixed, one accepted as designed, seven deferred.
 
 ## Findings
 
@@ -219,11 +220,12 @@ still the seven-day default: shortening it is a product decision and is not part
 
 ### F4 — No erasure or export path for personal data, and some tables have no retention
 
-**Severity: Medium. Deferred: this is a product and policy gap, not a code defect.**
+**Severity: Medium. Fixed in a follow-up change.**
 
 Evidence. Nothing in the repository deletes an account or exports its data: there is no `deleteUser` call,
-no erasure service, and no operator surface. `deployment.md` states the position plainly — "Entities use
-soft deletion; legal erasure needs a future purge or retention job." The retention that does exist is narrow:
+no erasure service, and no operator surface. `deployment.md` stated the position plainly before this
+fix: entities use soft deletion, and legal erasure needed a future job. The retention that does exist is
+narrow:
 `internal/RetentionSweepRepository.ts:20` sweeps terminal lineup runs older than thirty days, their
 attempts, write intents, diagnostics, and orphan requests and deliveries;
 `FeedbackRetentionLive` sweeps resolved and not-planned reports after 180 days and expired quota rows. Not
@@ -236,8 +238,8 @@ Two consequences are specific:
   transition out of `uncertain` that the sweep would then pick up, so a run whose write outcome was never
   settled retains its outcome, its connection reference, and its plan forever. That is defensible as "an
   unresolved incident is current work", but nothing resolves it, so "current" is unbounded.
-- A subject access request today means hand-written SQL across seven tables, and an erasure request means
-  deleting rows that other rows reference by `userId` text with no cascade
+- Before this fix, a subject access request meant hand-written SQL across seven tables, and an erasure
+  request meant deleting rows that other rows reference by `userId` text with no cascade
   (`AuthTables.ts` has `onDelete: "cascade"` only from `session` and `account`).
 
 **What an attacker gains.** Nothing directly. This is a legal and privacy exposure, and the risk of an
@@ -253,8 +255,28 @@ decisions, and the change wants a migration. Recorded as roadmap group J2.
 
 **Retention fixed.** The hourly sweep now removes expired sessions and verification rows, consents unused for
 180 days, hosted linking sessions one day after they end, and unapproved dynamic registrations after seven
-days. The windows live in `packages/backend/src/retention/RetentionPolicy.ts`. Erasure and export remain open,
-and `uncertain` runs still have no resolution transition.
+days. The windows live in `packages/backend/src/retention/RetentionPolicy.ts`.
+
+**Fixed.** `AccountErasure` (`contexts/privacy`) deletes every row that carries the owner, directly or
+through a parent row, in one transaction. It removes children before parents, ends sign-in sessions and
+hosted linking sessions, revokes access and refresh tokens together with consents and the owner's client
+registrations, deletes the sign-in codes and the sign-in code quota keyed by a hash of the address, and
+deletes the account row last. Access-token resolution now also refuses a token whose user row no longer
+exists, so a JWT minted before the erasure stops working when the transaction commits rather than when it
+expires. The routine is idempotent: a second call reports nothing removed. A failure
+partway through rolls the whole transaction back. `AccountExport` produces one JSON document with
+`schemaVersion: 1` over the same inventory; credential fields are never included and are named in a
+`withheld` list with the reason. The Your data surface (`/account`) offers the download and the erasure;
+erasure requires the typed phrase `erase my account` on the client and again on the server, signs the
+browser out, and lands on `/erased`.
+
+The erasure test enumerates owner-carrying columns from `information_schema` and refuses to pass when a
+table is not named in the inventory, so a table added later cannot be missed silently. It seeds every class,
+erases, then queries every enumerated owner column and every inventory class for a remaining row, and it
+checks that a second owner's rows are untouched. A trigger that refuses a delete proves the transaction
+leaves the account exactly as it was. The export round-trips through its schema, and the E2E test proves a
+sign-in cookie captured before erasure cannot reach a protected page afterwards. `uncertain` runs still have
+no resolution transition (F10).
 
 ### F5 — A connection-key compromise has no fast remediation
 
@@ -572,8 +594,8 @@ submitted, and the honest recovery is to look at the provider, not to retry blin
 
 | Data                                                | Where                                                                           | Retention today                                                                               | What deletes it                                                                                |
 | --------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Sign-in address                                     | `user.email` (unique)                                                           | Until the account is deleted; no deletion path exists                                         | Nothing today (F4)                                                                             |
-| Display name                                        | `user.name`                                                                     | Same                                                                                          | Same                                                                                           |
+| Sign-in address                                     | `user.email` (unique)                                                           | Until the account is deleted                                                                  | Account erasure                                                                                |
+| Display name                                        | `user.name`                                                                     | Same                                                                                          | Account erasure                                                                                |
 | Session rows, with IP address and user agent        | `session.ipAddress`, `session.userAgent`                                        | Seven days, sliding                                                                           | Sign-out, or ending one on Connections, deletes its row; the hourly sweep removes expired rows |
 | Sign-in code                                        | `verification.value`, stored hashed by `emailOTP`                               | Ten minutes to expiry; attempts capped at three                                               | Deleted on use by the plugin; the hourly sweep removes expired rows                            |
 | Sign-in code quota                                  | `sign_in_code_quota.key` — SHA-256 of the lowercased address                    | One-hour window; the row is reused or replaced, and stale rows are deleted on the next insert | The quota repository's own delete-then-insert path                                             |
@@ -583,13 +605,13 @@ submitted, and the honest recovery is to look at the provider, not to retry blin
 | OAuth signing keys                                  | `jwks.private_key`                                                              | No expiry, no sweep                                                                           | Nothing; rotating them invalidates every live token                                            |
 | Dynamic client registration                         | `oauth_client` (name, URIs, contacts, metadata)                                 | Unapproved registrations 7 days; at most 100 may be live                                      | The hourly sweep removes unapproved registrations; at the cap, registration is refused         |
 | Provider session (the fantasy account's own cookie) | `provider_credentials.envelope` — AES-GCM ciphertext                            | Until disconnect or reconnect                                                                 | Disconnect hard-deletes it; reconnect replaces it and bumps the generation                     |
-| Team identity and configuration                     | `provider_teams` (provider team and league keys, slots, automation, owner note) | Until disconnect sets availability, or the account is deleted                                 | Disconnect clears availability; nothing deletes the row (F4)                                   |
+| Team identity and configuration                     | `provider_teams` (provider team and league keys, slots, automation, owner note) | Until disconnect sets availability, or the account is deleted                                 | Disconnect clears availability; account erasure deletes the row                                |
 | Lineup run outcome and plan                         | `lineup_runs`, `lineup_run_attempts`, `lineup_write_intents`                    | Ninety days after a terminal outcome                                                          | `RetentionSweep` — except `uncertain` rows, which never age out (F10)                          |
 | Run diagnostics                                     | `lineup_run_diagnostics`                                                        | Seven days by `expiresAt`                                                                     | `RetentionSweep`                                                                               |
 | Feedback report                                     | `feedback` (title, body, optional tool, team reference, client label)           | Open and acknowledged stay; resolved and not-planned are deleted 365 days after closing       | `FeedbackRetention`                                                                            |
 | Feedback quota                                      | `feedback_quota`                                                                | Until its hour can no longer accept a report                                                  | `FeedbackRetention`                                                                            |
 | Hosted linking session                              | `hosted_linking_sessions` — status, timestamps, ticket **hash**                 | One day after the session ends                                                                | The hourly sweep removes terminal rows; cancelled and expired rows no longer stay              |
-| Google identity tokens (only if Google is enabled)  | `account.access_token`, `refresh_token`, `id_token`                             | Until the account row changes                                                                 | Nothing (F6)                                                                                   |
+| Google identity tokens (only if Google is enabled)  | `account.access_token`, `refresh_token`, `id_token`                             | Until the account row changes                                                                 | Account erasure; the storage encryption remains F6                                             |
 | Telemetry and traces                                | Cloud Logging wide events and Cloud Trace spans                                 | Cloud Run / Logging retention, owned by the platform                                          | Platform retention only                                                                        |
 | Artifacts                                           | Container images in Artifact Registry; no user data                             | One image per package by the cleanup policy                                                   | Registry policy                                                                                |
 
@@ -602,9 +624,9 @@ suffix keys `cookie`, `crumb`, `token`, `secret`, `password`, `email`, `note`, `
 or feedback body is annotated on any span in `packages/backend/src` or `apps/web/src` — checked by reading
 every `annotateCurrentSpan` call site.
 
-A subject access request today: the address, the sessions, the reconciliations, the stored connection
-metadata, the teams, the run history, the feedback, and the consents exist, and assembling them is
-hand-written SQL. An erasure request: nothing exists (F4).
+A subject access request is one export from Your data, and an erasure request is one typed confirmation
+there. Both are owner-scoped and cover the same inventory. The table's retention windows are independent:
+an erasure does not wait for any of them.
 
 ## Checked and found sound
 

@@ -1,8 +1,8 @@
 import { and, eq, lt } from "drizzle-orm";
 import { Context, Crypto, DateTime, Duration, Effect, Layer } from "effect";
-import { Hex } from "effect/encoding";
 
 import { AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
+import { signInCodeQuotaKeyFor } from "#contexts/auth/SignInCodeQuotaKey.ts";
 
 import { AuthDatabase } from "./AuthDatabase.ts";
 import { signInCodeQuota } from "./AuthTables.ts";
@@ -22,12 +22,8 @@ export class SignInCodeQuotaRepository extends Context.Service<SignInCodeQuotaRe
           catch: (cause) => AuthenticationUnavailable.make({ cause }),
         });
 
-      const keyFor = Effect.fn("SignInCodeQuotaRepository.keyFor")(function* (email: string) {
-        const digest = yield* crypto
-          .digest("SHA-256", new TextEncoder().encode(email.trim().toLowerCase()))
-          .pipe(Effect.mapError((cause) => AuthenticationUnavailable.make({ cause })));
-        return `email:${Hex.encode(digest)}`;
-      });
+      const keyFor = (email: string): Effect.Effect<string, AuthenticationUnavailable> =>
+        signInCodeQuotaKeyFor(crypto, email);
 
       const attempt = Effect.fn("SignInCodeQuotaRepository.attempt")(function* (
         key: string,

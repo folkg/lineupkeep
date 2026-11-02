@@ -10,9 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ConnectionsRouteImport } from './routes/connections'
 import { Route as ConsentRouteImport } from './routes/consent'
+import { Route as ErasedRouteImport } from './routes/erased'
 import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known.$'
@@ -21,6 +23,7 @@ import { Route as RunsRunIdRouteImport } from './routes/runs.$runId'
 import { Route as TeamsIndexRouteImport } from './routes/teams.index'
 import { Route as TeamsTeamIdRouteImport } from './routes/teams.$teamId'
 import { Route as TransactionsSetIdRouteImport } from './routes/transactions.$setId'
+import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDevProviderLoginRouteImport } from './routes/api/dev/provider-login'
 import { Route as ApiInternalLineupWorkerRouteImport } from './routes/api/internal/lineup-worker'
@@ -28,6 +31,11 @@ import { Route as ApiInternalLineupWorkerRouteImport } from './routes/api/intern
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -43,6 +51,11 @@ const ConnectionsRoute = ConnectionsRouteImport.update({
 const ConsentRoute = ConsentRouteImport.update({
   id: '/consent',
   path: '/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ErasedRoute = ErasedRouteImport.update({
+  id: '/erased',
+  path: '/erased',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FeedbackRoute = FeedbackRouteImport.update({
@@ -85,6 +98,11 @@ const TransactionsSetIdRoute = TransactionsSetIdRouteImport.update({
   path: '/transactions/$setId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAccountExportRoute = ApiAccountExportRouteImport.update({
+  id: '/api/account/export',
+  path: '/api/account/export',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -103,9 +121,11 @@ const ApiInternalLineupWorkerRoute = ApiInternalLineupWorkerRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/auth': typeof AuthRoute
   '/connections': typeof ConnectionsRoute
   '/consent': typeof ConsentRoute
+  '/erased': typeof ErasedRoute
   '/feedback': typeof FeedbackRoute
   '/mcp': typeof McpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
@@ -114,15 +134,18 @@ export interface FileRoutesByFullPath {
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams/': typeof TeamsIndexRoute
+  '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/auth': typeof AuthRoute
   '/connections': typeof ConnectionsRoute
   '/consent': typeof ConsentRoute
+  '/erased': typeof ErasedRoute
   '/feedback': typeof FeedbackRoute
   '/mcp': typeof McpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
@@ -131,6 +154,7 @@ export interface FileRoutesByTo {
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams': typeof TeamsIndexRoute
+  '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
@@ -138,9 +162,11 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/auth': typeof AuthRoute
   '/connections': typeof ConnectionsRoute
   '/consent': typeof ConsentRoute
+  '/erased': typeof ErasedRoute
   '/feedback': typeof FeedbackRoute
   '/mcp': typeof McpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
@@ -149,6 +175,7 @@ export interface FileRoutesById {
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/transactions/$setId': typeof TransactionsSetIdRoute
   '/teams/': typeof TeamsIndexRoute
+  '/api/account/export': typeof ApiAccountExportRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/dev/provider-login': typeof ApiDevProviderLoginRoute
   '/api/internal/lineup-worker': typeof ApiInternalLineupWorkerRoute
@@ -157,9 +184,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/auth'
     | '/connections'
     | '/consent'
+    | '/erased'
     | '/feedback'
     | '/mcp'
     | '/.well-known/$'
@@ -168,15 +197,18 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/transactions/$setId'
     | '/teams/'
+    | '/api/account/export'
     | '/api/auth/$'
     | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/auth'
     | '/connections'
     | '/consent'
+    | '/erased'
     | '/feedback'
     | '/mcp'
     | '/.well-known/$'
@@ -185,15 +217,18 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/transactions/$setId'
     | '/teams'
+    | '/api/account/export'
     | '/api/auth/$'
     | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/auth'
     | '/connections'
     | '/consent'
+    | '/erased'
     | '/feedback'
     | '/mcp'
     | '/.well-known/$'
@@ -202,6 +237,7 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/transactions/$setId'
     | '/teams/'
+    | '/api/account/export'
     | '/api/auth/$'
     | '/api/dev/provider-login'
     | '/api/internal/lineup-worker'
@@ -209,9 +245,11 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   AuthRoute: typeof AuthRoute
   ConnectionsRoute: typeof ConnectionsRoute
   ConsentRoute: typeof ConsentRoute
+  ErasedRoute: typeof ErasedRoute
   FeedbackRoute: typeof FeedbackRoute
   McpRoute: typeof McpRoute
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
@@ -220,6 +258,7 @@ export interface RootRouteChildren {
   TeamsTeamIdRoute: typeof TeamsTeamIdRoute
   TransactionsSetIdRoute: typeof TransactionsSetIdRoute
   TeamsIndexRoute: typeof TeamsIndexRoute
+  ApiAccountExportRoute: typeof ApiAccountExportRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDevProviderLoginRoute: typeof ApiDevProviderLoginRoute
   ApiInternalLineupWorkerRoute: typeof ApiInternalLineupWorkerRoute
@@ -232,6 +271,13 @@ declare module '@tanstack/solid-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -253,6 +299,13 @@ declare module '@tanstack/solid-router' {
       path: '/consent'
       fullPath: '/consent'
       preLoaderRoute: typeof ConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/erased': {
+      id: '/erased'
+      path: '/erased'
+      fullPath: '/erased'
+      preLoaderRoute: typeof ErasedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/feedback': {
@@ -311,6 +364,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof TransactionsSetIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/account/export': {
+      id: '/api/account/export'
+      path: '/api/account/export'
+      fullPath: '/api/account/export'
+      preLoaderRoute: typeof ApiAccountExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -337,9 +397,11 @@ declare module '@tanstack/solid-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   AuthRoute: AuthRoute,
   ConnectionsRoute: ConnectionsRoute,
   ConsentRoute: ConsentRoute,
+  ErasedRoute: ErasedRoute,
   FeedbackRoute: FeedbackRoute,
   McpRoute: McpRoute,
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
@@ -348,6 +410,7 @@ const rootRouteChildren: RootRouteChildren = {
   TeamsTeamIdRoute: TeamsTeamIdRoute,
   TransactionsSetIdRoute: TransactionsSetIdRoute,
   TeamsIndexRoute: TeamsIndexRoute,
+  ApiAccountExportRoute: ApiAccountExportRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDevProviderLoginRoute: ApiDevProviderLoginRoute,
   ApiInternalLineupWorkerRoute: ApiInternalLineupWorkerRoute,
