@@ -1,5 +1,4 @@
-import { isIP } from "node:net";
-import { networkInterfaces } from "node:os";
+import { createServer, isIP } from "node:net";
 
 import * as Command from "alchemy/Command";
 import * as Docker from "alchemy/Docker";
@@ -30,13 +29,11 @@ export function localContainerHost(
       const bridge = Schema.decodeUnknownSync(BridgeNetwork)(
         yield* docker.network.inspect("bridge").pipe(Effect.orDie),
       );
-      const relayNetwork = containerRelayNetwork(
-        process.platform,
-        bridge.IPAM.Config.flatMap(({ Gateway }) => (Gateway === undefined ? [] : [Gateway])),
-        Object.values(networkInterfaces()).flatMap(
-          (interfaces) => interfaces?.map(({ address }) => address) ?? [],
-        ),
+      const gateways = bridge.IPAM.Config.flatMap(({ Gateway }) =>
+        Gateway === undefined || Gateway === "" ? [] : [Gateway],
       );
+      const ownedAddresses = yield* Effect.promise(() => bindableAddresses(gateways));
+      const relayNetwork = containerRelayNetwork(process.platform, gateways, ownedAddresses);
       const image = yield* buildNodeImage(options.programs);
       const containerEnvironment = { ...environment };
 
@@ -130,20 +127,41 @@ export function localContainerHost(
 export function containerRelayNetwork(
   platform: NodeJS.Platform,
   gateways: ReadonlyArray<string>,
-  hostAddresses: ReadonlyArray<string>,
+  ownedAddresses: ReadonlyArray<string>,
 ): { readonly bind: string; readonly host: string } {
   if (platform === "darwin") {
     return { bind: "127.0.0.1", host: "host-gateway" };
   }
   const gateway = gateways.find(
-    (address) => isIP(address) === 4 && address !== "0.0.0.0" && hostAddresses.includes(address),
+    (address) => isIP(address) === 4 && address !== "0.0.0.0" && ownedAddresses.includes(address),
   );
   if (platform !== "linux" || gateway === undefined) {
     throw new Error(
-      "Cannot determine a safe Docker bridge relay address on this host; local Docker with an assigned IPv4 bridge gateway is required",
+      `Cannot determine a safe Docker bridge relay address on this host; inspected bridge gateways: ${describeAddresses(gateways)}; addresses the host could bind: ${describeAddresses(ownedAddresses)}`,
     );
   }
-  return { bind: gateway, host: gateway };
+  return { bind: gateway, host: "host-gateway" };
+}
+
+async function bindableAddresses(addresses: ReadonlyArray<string>): Promise<ReadonlyArray<string>> {
+  const attempts = await Promise.all(
+    addresses.map(async (address) => ((await canListenOn(address)) ? address : undefined)),
+  );
+  return attempts.filter((address): address is string => address !== undefined);
+}
+
+function canListenOn(address: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer((socket) => socket.destroy());
+    server.once("error", () => resolve(false));
+    server.listen(0, address, () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+function describeAddresses(addresses: ReadonlyArray<string>): string {
+  return addresses.length === 0 ? "none" : addresses.join(", ");
 }
 
 const BridgeNetwork = Schema.Struct({

@@ -34,7 +34,7 @@ Source is fingerprinted before/after runs. Do not edit or launch competing build
 
 All targets use non-deployable test composition: `PublicInternet` metadata routing and an authenticated service route with selected scenario programs. Normal builds exclude them; target verification rejects compiled test markers. **Never deploy test artifacts.** Auth, database, domain services, and protocol handlers otherwise retain production composition.
 
-Container verification packages the production Node image. Its loopback dependencies use run-scoped relays via `host.docker.internal`. macOS requires Docker Desktop host-gateway support. Linux requires a host-assigned IPv4 Docker bridge gateway and firewall permission for bridge traffic; relays bind only to the inspected gateway, never wildcard/LAN addresses. Missing/unsafe gateways fail closed. Remote Docker engines are unsupported. Application publication remains host-loopback only. Only plain Node provides server CPU profiles.
+Container verification packages the production Node image. Its loopback dependencies use run-scoped relays via `host.docker.internal`, which Docker resolves through `host-gateway` on Docker Desktop and Linux. On Linux the relay binds the inspected IPv4 bridge gateway after trying to bind that address, because Docker's bridge interface can be down and absent from `os.networkInterfaces()` until a container attaches. Relays bind only to an inspected, bindable IPv4 gateway, never wildcard or LAN addresses; unsafe gateways fail closed with the inspected values. Remote Docker engines are unsupported. Application publication remains host-loopback only. Only plain Node provides server CPU profiles.
 
 ## Criteria and claims
 

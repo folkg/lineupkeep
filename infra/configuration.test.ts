@@ -45,28 +45,36 @@ it("selects build/runtime semantics once per named stage", () => {
 });
 
 it("binds macOS container relays only to loopback through Docker Desktop", () => {
-  const network = containerRelayNetwork("darwin", ["10.89.0.1"], ["127.0.0.1"]);
+  const network = containerRelayNetwork("darwin", ["172.17.0.1"], []);
 
   expect(network).toEqual({ bind: "127.0.0.1", host: "host-gateway" });
 });
 
-it("binds Linux container relays to the inspected bridge gateway on this host", () => {
-  const network = containerRelayNetwork("linux", ["10.89.0.1"], ["127.0.0.1", "10.89.0.1"]);
+it("binds a Linux container relay to the owned IPv4 bridge gateway", () => {
+  const network = containerRelayNetwork("linux", ["::", "0.0.0.0", "172.17.0.1"], ["172.17.0.1"]);
 
-  expect(network).toEqual({ bind: "10.89.0.1", host: "10.89.0.1" });
+  expect(network).toEqual({ bind: "172.17.0.1", host: "host-gateway" });
+});
+
+it("rejects a Linux bridge gateway the host cannot bind", () => {
+  expect(() => containerRelayNetwork("linux", ["10.89.0.2"], ["10.89.0.1"])).toThrow(
+    "inspected bridge gateways: 10.89.0.2; addresses the host could bind: 10.89.0.1",
+  );
 });
 
 it.each([
-  { gateways: [] },
-  { gateways: ["0.0.0.0"] },
-  { gateways: ["::"] },
-  { gateways: ["not-an-address"] },
-  { gateways: ["10.89.0.2"] },
-])("rejects an unavailable or wildcard Linux bridge gateway: $gateways", ({ gateways }) => {
-  expect(() => containerRelayNetwork("linux", gateways, ["0.0.0.0", "::", "10.89.0.1"])).toThrow(
-    "safe Docker bridge relay address",
-  );
-});
+  { gateways: [], inspected: "none" },
+  { gateways: ["0.0.0.0"], inspected: "0.0.0.0" },
+  { gateways: ["::"], inspected: "::" },
+  { gateways: ["not-an-address"], inspected: "not-an-address" },
+])(
+  "rejects an unavailable or wildcard Linux bridge gateway: $gateways",
+  ({ gateways, inspected }) => {
+    expect(() => containerRelayNetwork("linux", gateways, ["0.0.0.0", "::", "10.89.0.1"])).toThrow(
+      `inspected bridge gateways: ${inspected}`,
+    );
+  },
+);
 
 it("keeps Cloud Run request-billed with CPU allocated only during requests", () => {
   const container = cloudRunContainer();
