@@ -1,9 +1,11 @@
 name: Checks
 
+# Pull requests and manual runs only while the project is solo: a push to main has
+# nothing to protect that a pull request would not catch later. Add push back when a
+# second contributor arrives.
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: checks-${{ github.ref }}
