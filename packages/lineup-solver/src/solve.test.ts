@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isLegalPlan } from "./lineup.ts";
+import { isLegalPlan, planViolations } from "./lineup.ts";
 import { solveLineup } from "./solve.ts";
 import {
   knownSelection,
@@ -743,6 +743,156 @@ describe("lineup refusals", () => {
     expect(plan.totalSelectionValue).toBe(1);
   });
 
+  it("leaves an unplaceable reserve player in place when the roster is full", () => {
+    const problem = lineupProblem(
+      [
+        startingSlot("C", 1, "required", ["C"]),
+        startingSlot("LW", 1, "required", ["LW"]),
+        benchSlot("BN", 1),
+        reserveSlot("IR", 1, { kind: "positions", positions: ["IR"] }),
+      ],
+      [
+        player("parked", 9000, {
+          positions: ["C", "LW"],
+          currentSlotId: slotId("IR"),
+          mayBeLeftInPlace: true,
+        }),
+        player("center", 100, { positions: ["C"], currentSlotId: slotId("C") }),
+        player("winger", 500, { positions: ["LW"], currentSlotId: slotId("LW") }),
+        player("bench", 800, { positions: ["C"], currentSlotId: slotId("BN") }),
+      ],
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.leftInPlace).toEqual([playerId("parked")]);
+    expect(plan.assignments).toEqual([
+      assignment("bench", "C"),
+      assignment("center", "BN"),
+      assignment("winger", "LW"),
+    ]);
+    expect(plan.totalSelectionValue).toBe(1300);
+    expect(plan.filledStartingPositions).toBe(2);
+    expect(plan.comparison.slotChanges).toEqual([
+      { playerId: playerId("bench"), fromSlotId: slotId("BN"), toSlotId: slotId("C") },
+      { playerId: playerId("center"), fromSlotId: slotId("C"), toSlotId: slotId("BN") },
+    ]);
+    expect(isLegalPlan(problem, plan)).toBe(true);
+  });
+
+  it("moves a flagged reserve player out when a complete legal plan exists", () => {
+    const problem = lineupProblem(
+      [
+        startingSlot("C", 1, "required", ["C"]),
+        benchSlot("BN", 1),
+        reserveSlot("IR", 1, { kind: "positions", positions: ["IR"] }),
+      ],
+      [
+        player("parked", 100, {
+          positions: ["C"],
+          currentSlotId: slotId("IR"),
+          mayBeLeftInPlace: true,
+        }),
+        player("center", 900, { positions: ["C"], currentSlotId: slotId("C") }),
+      ],
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.leftInPlace).toEqual([]);
+    expect(plan.assignments).toEqual([assignment("center", "C"), assignment("parked", "BN")]);
+    expect(isLegalPlan(problem, plan)).toBe(true);
+  });
+
+  it("leaves the fewest players and keeps the higher-value one", () => {
+    const problem = lineupProblem(
+      [
+        startingSlot("C", 1, "required", ["C"]),
+        benchSlot("BN", 3),
+        reserveSlot("IR", 1, { kind: "positions", positions: ["IR"] }),
+        reserveSlot("IR+", 1, { kind: "positions", positions: ["IR+"] }),
+      ],
+      [
+        player("low", 10, {
+          positions: ["C"],
+          currentSlotId: slotId("IR"),
+          mayBeLeftInPlace: true,
+        }),
+        player("high", 900, {
+          positions: ["C"],
+          currentSlotId: slotId("IR+"),
+          mayBeLeftInPlace: true,
+        }),
+        player("starter", 100, { positions: ["C"], currentSlotId: slotId("C") }),
+        player("bench-a", 50, { positions: ["C"], currentSlotId: slotId("BN") }),
+        player("bench-b", 40, { positions: ["C"], currentSlotId: slotId("BN") }),
+      ],
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.leftInPlace).toEqual([playerId("low")]);
+    expect(plan.totalSelectionValue).toBe(900);
+    expect(isLegalPlan(problem, plan)).toBe(true);
+  });
+
+  it("leaves a flagged locked player in a reserve slot they are not eligible for", () => {
+    const problem = lineupProblem(
+      [
+        startingSlot("C", 1, "required", ["C"]),
+        benchSlot("BN", 1),
+        reserveSlot("IR", 1, { kind: "positions", positions: ["IR"] }),
+      ],
+      [
+        player("starter", 100, { positions: ["C"], currentSlotId: slotId("C") }),
+        player("parked", 50, {
+          positions: ["C"],
+          currentSlotId: slotId("IR"),
+          lockedSlotId: slotId("IR"),
+          mayBeLeftInPlace: true,
+        }),
+      ],
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.leftInPlace).toEqual([playerId("parked")]);
+    expect(plan.assignments).toEqual([assignment("starter", "C")]);
+    expect(isLegalPlan(problem, plan)).toBe(true);
+  });
+
+  it("leaves a flagged player whose current slot this league does not declare", () => {
+    const problem = lineupProblem(
+      [startingSlot("C", 1, "required", ["C"])],
+      [
+        player("starter", 100, { positions: ["C"], currentSlotId: slotId("C") }),
+        player("outside", 50, { positions: ["C"], mayBeLeftInPlace: true }),
+      ],
+    );
+
+    const plan = planFrom(solveLineup(problem));
+
+    expect(plan.leftInPlace).toEqual([playerId("outside")]);
+    expect(plan.assignments).toEqual([assignment("starter", "C")]);
+    expect(isLegalPlan(problem, plan)).toBe(true);
+  });
+
+  it("refuses a left-in-place player the problem does not allow", () => {
+    const problem = lineupProblem(
+      [startingSlot("C", 1, "required", ["C"]), benchSlot("BN", 1)],
+      [
+        player("starter", 100, { positions: ["C"], currentSlotId: slotId("C") }),
+        player("bench", 50, { positions: ["C"], currentSlotId: slotId("BN") }),
+      ],
+    );
+    const plan = planFrom(solveLineup(problem));
+
+    expect(planViolations(problem, { ...plan, leftInPlace: [playerId("bench")] })).toContainEqual({
+      reason: "left-in-place-not-allowed",
+      playerId: playerId("bench"),
+    });
+  });
+
   it("refuses a reserve-ineligible player with no bench destination", () => {
     const refusal = refusalFrom(
       solveLineup(
@@ -791,8 +941,12 @@ function benchSlot(
   return { kind: "bench", id: slotId(id), capacity, eligibility };
 }
 
-function reserveSlot(id: string, capacity: number): RosterSlot {
-  return { kind: "reserve", id: slotId(id), capacity, eligibility: { kind: "any" } };
+function reserveSlot(
+  id: string,
+  capacity: number,
+  eligibility: SlotEligibility = { kind: "any" },
+): RosterSlot {
+  return { kind: "reserve", id: slotId(id), capacity, eligibility };
 }
 
 function player(
@@ -805,6 +959,7 @@ function player(
     readonly reserveEligible?: boolean;
     readonly lockedSlotId?: SlotId;
     readonly currentSlotId?: SlotId;
+    readonly mayBeLeftInPlace?: boolean;
   } = {},
 ): RosterPlayer {
   return {
@@ -815,6 +970,7 @@ function player(
     reserveEligible: options.reserveEligible ?? false,
     lockedSlotId: options.lockedSlotId,
     currentSlotId: options.currentSlotId,
+    mayBeLeftInPlace: options.mayBeLeftInPlace,
   };
 }
 

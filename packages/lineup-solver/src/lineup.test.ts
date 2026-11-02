@@ -416,6 +416,7 @@ function legalPlan(
   return {
     selectionBasis: problem.selectionBasis,
     assignments,
+    leftInPlace: [],
     totalSelectionValue: value ?? 0,
     filledStartingPositions: assignments.filter((item) => startingSlots.has(item.slotId)).length,
     requiredStartingPositions: problem.slots

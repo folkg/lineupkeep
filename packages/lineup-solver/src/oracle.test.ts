@@ -83,6 +83,20 @@ describe("exhaustive oracle agreement", () => {
     );
   });
 
+  it("agrees with the exhaustive oracle when players may be left in place", () => {
+    let generatedProblems = 0;
+
+    fc.assert(
+      fc.property(generatedRetentionProblemArbitrary(), (problem) => {
+        generatedProblems += 1;
+        expectRetentionAgreement(problem);
+      }),
+      { numRuns: 3000, seed: 20261102 },
+    );
+
+    expect(generatedProblems).toBe(3000);
+  });
+
   it("finds a known optimum and a known infeasibility", () => {
     const optimal = lineupProblem(
       [startingSlot("S1", 1, "optional", ["A"]), startingSlot("S2", 1, "optional", ["A"])],
@@ -367,6 +381,251 @@ function adversarialCases(): ReadonlyArray<{
       ),
     },
   ];
+}
+
+function generatedRetentionProblemArbitrary(): fc.Arbitrary<LineupProblem> {
+  return fc
+    .tuple(
+      fc.array(
+        slotArbitrary.map((spec) => ({ ...spec, capacity: Math.min(spec.capacity, 2) })),
+        { minLength: 1, maxLength: 2 },
+      ),
+      fc.array(playerArbitrary, { minLength: 1, maxLength: 3 }),
+    )
+    .map(([slotSpecs, playerSpecs]) => {
+      const slots = slotSpecs.map((spec, index) => slotFromSpec(spec, index, "mixed"));
+      const slotIds = slots.map((slot) => slot.id);
+      const players: ReadonlyArray<RosterPlayer> = playerSpecs.map((spec, index) => ({
+        id: playerId(`P${index}`),
+        eligiblePositions: positionsFromSpec(spec.positions),
+        availabilityTier: tiers[spec.tierOffset % 3] ?? willPlay,
+        selection: knownSelection(basis, spec.units),
+        reserveEligible: spec.reserveEligible,
+        lockedSlotId: undefined,
+        currentSlotId:
+          spec.currentOffset === undefined || slotIds.length === 0
+            ? undefined
+            : slotIds[spec.currentOffset % slotIds.length],
+        mayBeLeftInPlace: true,
+      }));
+      return { selectionBasis: basis, availabilityTiers: tiers, slots, players };
+    });
+}
+
+function expectRetentionAgreement(problem: LineupProblem): void {
+  const result = solveLineup(problem);
+  const oracle = solveTinyWithRetention(problem);
+
+  if (oracle.kind === "infeasible") {
+    if (result.kind !== "refusal") {
+      throw new Error(
+        `Solver returned a plan but the retention oracle found no assignment: ${JSON.stringify(problem)}`,
+      );
+    }
+    return;
+  }
+
+  if (result.kind !== "plan") {
+    throw new Error(
+      `Solver refused (${result.refusal.reason}) but the retention oracle found a plan: ${JSON.stringify(problem)}`,
+    );
+  }
+
+  expect(isLegalPlan(problem, result.plan)).toBe(true);
+  expect(result.plan.leftInPlace.length).toBe(oracle.leftCount);
+  expect(startingTierCounts(problem, result.plan.assignments)).toEqual(oracle.tierCounts);
+  expect(result.plan.totalSelectionValue).toBe(oracle.value);
+  expect(zeroStartingPlayers(problem, result.plan.assignments)).toBe(oracle.zeroStarters);
+  expect(result.plan.comparison.slotChanges).toHaveLength(oracle.changes);
+}
+
+type RetentionOracleResult =
+  | {
+      readonly kind: "optimal";
+      readonly leftCount: number;
+      readonly tierCounts: ReadonlyArray<number>;
+      readonly value: number;
+      readonly zeroStarters: number;
+      readonly changes: number;
+    }
+  | { readonly kind: "infeasible" };
+
+type RetentionCandidate = {
+  readonly leftCount: number;
+  readonly tierCounts: ReadonlyArray<number>;
+  readonly value: number;
+  readonly zeroStarters: number;
+  readonly changes: number;
+  readonly assignments: ReadonlyArray<LineupAssignment>;
+};
+
+function solveTinyWithRetention(problem: LineupProblem): RetentionOracleResult {
+  const players = [...problem.players].sort((left, right) => compareText(left.id, right.id));
+  if (players.some((player) => player.selection.kind !== "known")) {
+    throw new Error("The exhaustive oracle requires known selection values.");
+  }
+
+  const units: Array<RosterSlot> = [];
+  for (const slot of problem.slots) {
+    for (let index = 0; index < slot.capacity; index += 1) {
+      units.push(slot);
+    }
+  }
+
+  const unassigned = new Set(players.map((player) => player.id));
+  const assignment = new Map<PlayerId, SlotId>();
+  const empty = new Map<SlotId, number>();
+  let best: RetentionCandidate | undefined;
+
+  const search = (unitIndex: number): void => {
+    if (unitIndex === units.length) {
+      const left = players.filter((player) => unassigned.has(player.id));
+      if (!retentionLeavesPossible(problem, left, empty)) {
+        return;
+      }
+      const candidate = evaluateRetentionAssignment(problem, players, assignment, left.length);
+      if (best === undefined || compareRetentionCandidates(candidate, best) < 0) {
+        best = candidate;
+      }
+      return;
+    }
+
+    const slot = units[unitIndex];
+    if (slot === undefined) {
+      return;
+    }
+
+    for (const player of players) {
+      if (!unassigned.has(player.id) || !oracleMayOccupy(player, slot)) {
+        continue;
+      }
+      unassigned.delete(player.id);
+      assignment.set(player.id, slot.id);
+      search(unitIndex + 1);
+      assignment.delete(player.id);
+      unassigned.add(player.id);
+    }
+
+    if (oracleMayStayEmpty(slot)) {
+      empty.set(slot.id, (empty.get(slot.id) ?? 0) + 1);
+      search(unitIndex + 1);
+      empty.set(slot.id, (empty.get(slot.id) ?? 0) - 1);
+    }
+  };
+
+  search(0);
+
+  return best === undefined
+    ? { kind: "infeasible" }
+    : {
+        kind: "optimal",
+        leftCount: best.leftCount,
+        tierCounts: best.tierCounts,
+        value: best.value,
+        zeroStarters: best.zeroStarters,
+        changes: best.changes,
+      };
+}
+
+function retentionLeavesPossible(
+  problem: LineupProblem,
+  left: ReadonlyArray<RosterPlayer>,
+  empty: ReadonlyMap<SlotId, number>,
+): boolean {
+  const needed = new Map<SlotId, number>();
+  for (const player of left) {
+    if (player.mayBeLeftInPlace !== true) {
+      return false;
+    }
+    if (player.currentSlotId === undefined) {
+      continue;
+    }
+    const slot = problem.slots.find((candidate) => candidate.id === player.currentSlotId);
+    if (
+      slot === undefined ||
+      oracleMayOccupy(player, slot) ||
+      (slot.kind === "starting" && slot.requirement === "required")
+    ) {
+      return false;
+    }
+    needed.set(slot.id, (needed.get(slot.id) ?? 0) + 1);
+  }
+
+  for (const [slotId, count] of needed) {
+    if ((empty.get(slotId) ?? 0) < count) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function evaluateRetentionAssignment(
+  problem: LineupProblem,
+  players: ReadonlyArray<RosterPlayer>,
+  assignment: ReadonlyMap<PlayerId, SlotId>,
+  leftCount: number,
+): RetentionCandidate {
+  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
+  const tierCounts = problem.availabilityTiers.map(() => 0);
+  let value = 0;
+  let zeroStarters = 0;
+  let changes = 0;
+  const assignments: Array<LineupAssignment> = [];
+
+  for (const player of players) {
+    const assignedSlotId = assignment.get(player.id);
+    if (assignedSlotId === undefined) {
+      continue;
+    }
+    const slot = slotsById.get(assignedSlotId);
+    if (slot === undefined) {
+      throw new Error("The retention oracle produced an unknown slot assignment.");
+    }
+    if (player.selection.kind !== "known") {
+      throw new Error("The exhaustive oracle requires known selection values.");
+    }
+    if (slot.kind === "starting") {
+      value += player.selection.units;
+      if (player.selection.units === 0) {
+        zeroStarters += 1;
+      }
+      if (player.selection.units >= 0) {
+        const rank = problem.availabilityTiers.indexOf(player.availabilityTier);
+        tierCounts[rank] = (tierCounts[rank] ?? 0) + 1;
+      }
+    }
+    if (player.currentSlotId !== assignedSlotId) {
+      changes += 1;
+    }
+    assignments.push({ playerId: player.id, slotId: assignedSlotId });
+  }
+
+  assignments.sort(compareAssignments);
+  return { leftCount, tierCounts, value, zeroStarters, changes, assignments };
+}
+
+function compareRetentionCandidates(left: RetentionCandidate, right: RetentionCandidate): number {
+  if (left.leftCount !== right.leftCount) {
+    return left.leftCount - right.leftCount;
+  }
+  for (let rank = 0; rank < left.tierCounts.length; rank += 1) {
+    const leftCount = left.tierCounts[rank] ?? 0;
+    const rightCount = right.tierCounts[rank] ?? 0;
+    if (leftCount !== rightCount) {
+      return rightCount - leftCount;
+    }
+  }
+  if (left.value !== right.value) {
+    return right.value - left.value;
+  }
+  if (left.zeroStarters !== right.zeroStarters) {
+    return right.zeroStarters - left.zeroStarters;
+  }
+  if (left.changes !== right.changes) {
+    return left.changes - right.changes;
+  }
+  return compareAssignmentLists(left.assignments, right.assignments);
 }
 
 function generatedProblemArbitrary(): fc.Arbitrary<LineupProblem> {

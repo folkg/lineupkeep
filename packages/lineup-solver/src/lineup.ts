@@ -29,16 +29,21 @@ export function playerMayOccupySlot(player: RosterPlayer, slot: RosterSlot): boo
 export function compareWithCurrentLineup(
   problem: LineupProblem,
   assignments: ReadonlyArray<LineupAssignment>,
+  leftInPlace: ReadonlyArray<PlayerId> = [],
 ): LineupComparison {
   const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
   const assignedSlotByPlayer = new Map(
     assignments.map((assignment) => [assignment.playerId, assignment.slotId]),
   );
+  const left = new Set(leftInPlace);
   const addedStarters: Array<PlayerId> = [];
   const removedStarters: Array<PlayerId> = [];
   const slotChanges: Array<SlotChange> = [];
 
   for (const player of sortedPlayers(problem.players)) {
+    if (left.has(player.id)) {
+      continue;
+    }
     const currentSlotId = player.currentSlotId;
     const nextSlotId = assignedSlotByPlayer.get(player.id);
     const currentIsStarting =
@@ -90,6 +95,116 @@ export function lineupViolations(
   problem: LineupProblem,
   assignments: ReadonlyArray<LineupAssignment>,
 ): ReadonlyArray<PlanViolation> {
+  const checked = assignmentViolations(problem, assignments, new Map());
+  const violations = [...checked.violations];
+
+  for (const player of sortedPlayers(problem.players)) {
+    const count = checked.assignmentsByPlayer.get(player.id) ?? 0;
+    if (count === 0) {
+      violations.push({ reason: "player-not-assigned", playerId: player.id });
+    }
+    if (count > 1) {
+      violations.push({ reason: "player-assigned-more-than-once", playerId: player.id });
+    }
+  }
+
+  return violations;
+}
+
+export function isLegalLineup(
+  problem: LineupProblem,
+  assignments: ReadonlyArray<LineupAssignment>,
+): boolean {
+  return lineupViolations(problem, assignments).length === 0;
+}
+
+export function planViolations(
+  problem: LineupProblem,
+  plan: LineupPlan,
+): ReadonlyArray<PlanViolation> {
+  const playersById = new Map(problem.players.map((player) => [player.id, player]));
+  const leftInPlace = new Map<PlayerId, number>();
+  const occupiedElsewhere = new Map<string, number>();
+  const violations: Array<PlanViolation> = [];
+
+  for (const playerId of plan.leftInPlace) {
+    leftInPlace.set(playerId, (leftInPlace.get(playerId) ?? 0) + 1);
+  }
+  for (const [playerId, count] of leftInPlace) {
+    const player = playersById.get(playerId);
+    if (player === undefined) {
+      violations.push({ reason: "unknown-player", playerId });
+      continue;
+    }
+    if (player.mayBeLeftInPlace !== true) {
+      violations.push({ reason: "left-in-place-not-allowed", playerId });
+    }
+    if (player.currentSlotId !== undefined) {
+      occupiedElsewhere.set(
+        player.currentSlotId,
+        (occupiedElsewhere.get(player.currentSlotId) ?? 0) + count,
+      );
+    }
+  }
+
+  const checked = assignmentViolations(problem, plan.assignments, occupiedElsewhere);
+  for (const violation of checked.violations) {
+    violations.push(violation);
+  }
+
+  for (const player of sortedPlayers(problem.players)) {
+    const assigned = checked.assignmentsByPlayer.get(player.id) ?? 0;
+    const left = leftInPlace.get(player.id) ?? 0;
+    if (assigned + left === 0) {
+      violations.push({ reason: "player-not-assigned", playerId: player.id });
+    }
+    if (assigned + left > 1) {
+      violations.push({ reason: "player-assigned-more-than-once", playerId: player.id });
+    }
+  }
+
+  const recomputedValue = startingSelectionValue(problem, plan.assignments);
+
+  if (plan.selectionBasis !== problem.selectionBasis) {
+    violations.push({
+      reason: "plan-selection-basis-mismatch",
+      problemBasis: problem.selectionBasis,
+      planBasis: plan.selectionBasis,
+    });
+  }
+
+  if (recomputedValue !== undefined && recomputedValue !== plan.totalSelectionValue) {
+    violations.push({
+      reason: "selection-value-mismatch",
+      stated: plan.totalSelectionValue,
+      recomputed: recomputedValue,
+    });
+  }
+
+  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
+  const filledStartingPositions = plan.assignments.filter(
+    (assignment) => slotsById.get(assignment.slotId)?.kind === "starting",
+  ).length;
+
+  if (filledStartingPositions !== plan.filledStartingPositions) {
+    violations.push({
+      reason: "filled-starting-position-count-mismatch",
+      stated: plan.filledStartingPositions,
+      recomputed: filledStartingPositions,
+    });
+  }
+
+  return violations;
+}
+
+function assignmentViolations(
+  problem: LineupProblem,
+  assignments: ReadonlyArray<LineupAssignment>,
+  occupiedElsewhere: ReadonlyMap<string, number>,
+): {
+  readonly violations: ReadonlyArray<PlanViolation>;
+  readonly assignmentsByPlayer: ReadonlyMap<PlayerId, number>;
+} {
   const playersById = new Map(problem.players.map((player) => [player.id, player]));
   const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
   const orderedAssignments = [...assignments].sort(compareAssignments);
@@ -154,83 +269,28 @@ export function lineupViolations(
     }
   }
 
-  for (const player of sortedPlayers(problem.players)) {
-    const count = assignmentsByPlayer.get(player.id) ?? 0;
-    if (count === 0) {
-      violations.push({ reason: "player-not-assigned", playerId: player.id });
-    }
-    if (count > 1) {
-      violations.push({ reason: "player-assigned-more-than-once", playerId: player.id });
-    }
-  }
-
   for (const slot of sortedSlots(problem.slots)) {
-    const count = assignmentsBySlot.get(slot.id) ?? 0;
-    if (count > slot.capacity) {
+    const assigned = assignmentsBySlot.get(slot.id) ?? 0;
+    const occupied = assigned + (occupiedElsewhere.get(slot.id) ?? 0);
+    if (occupied > slot.capacity) {
       violations.push({
         reason: "slot-capacity-exceeded",
         slotId: slot.id,
         capacity: slot.capacity,
-        assignedPlayers: count,
+        assignedPlayers: occupied,
       });
     }
-    if (slot.kind === "starting" && slot.requirement === "required" && count < slot.capacity) {
+    if (slot.kind === "starting" && slot.requirement === "required" && assigned < slot.capacity) {
       violations.push({
         reason: "required-starting-position-unfilled",
         slotId: slot.id,
         capacity: slot.capacity,
-        filled: count,
+        filled: assigned,
       });
     }
   }
 
-  return violations;
-}
-
-export function isLegalLineup(
-  problem: LineupProblem,
-  assignments: ReadonlyArray<LineupAssignment>,
-): boolean {
-  return lineupViolations(problem, assignments).length === 0;
-}
-
-export function planViolations(
-  problem: LineupProblem,
-  plan: LineupPlan,
-): ReadonlyArray<PlanViolation> {
-  const violations = [...lineupViolations(problem, plan.assignments)];
-  const recomputedValue = startingSelectionValue(problem, plan.assignments);
-
-  if (plan.selectionBasis !== problem.selectionBasis) {
-    violations.push({
-      reason: "plan-selection-basis-mismatch",
-      problemBasis: problem.selectionBasis,
-      planBasis: plan.selectionBasis,
-    });
-  }
-
-  if (recomputedValue !== undefined && recomputedValue !== plan.totalSelectionValue) {
-    violations.push({
-      reason: "selection-value-mismatch",
-      stated: plan.totalSelectionValue,
-      recomputed: recomputedValue,
-    });
-  }
-
-  const slotsById = new Map(problem.slots.map((slot) => [slot.id, slot]));
-  const filledStartingPositions = plan.assignments.filter(
-    (assignment) => slotsById.get(assignment.slotId)?.kind === "starting",
-  ).length;
-
-  if (filledStartingPositions !== plan.filledStartingPositions) {
-    violations.push({
-      reason: "filled-starting-position-count-mismatch",
-      stated: plan.filledStartingPositions,
-      recomputed: filledStartingPositions,
-    });
-  }
-
-  return violations;
+  return { violations, assignmentsByPlayer };
 }
 
 export function isLegalPlan(problem: LineupProblem, plan: LineupPlan): boolean {

@@ -45,8 +45,8 @@ type StartingSlot = {
 ```
 
 A player has the positions they may occupy, one availability tier for this period, one signed
-selection value, whether the reserve list accepts them, an optional provider lock, and the slot they
-currently occupy.
+selection value, whether the reserve list accepts them, an optional provider lock, the slot they
+currently occupy, and whether the caller permits leaving them in place.
 
 ```ts
 type RosterPlayer = {
@@ -57,6 +57,7 @@ type RosterPlayer = {
   readonly reserveEligible: boolean;
   readonly lockedSlotId: SlotId | undefined;
   readonly currentSlotId: SlotId | undefined;
+  readonly mayBeLeftInPlace?: boolean;
 };
 ```
 
@@ -79,7 +80,10 @@ type PlayerSelection =
 
 Selection values are relative benefits, not projections. They are comparable only within the problem's one `selectionBasis`, such as the one score set a provider published for one period. The solver rejects a problem whose players carry a different basis. `units` is a safe integer so the optimization stays exact and tie-breaks cannot be overturned by floating-point noise.
 
-The player list is the retained roster. There is no drop or add action in this package. Every player must be assigned to exactly one slot, and a player with no legal destination produces a refusal rather than being omitted.
+The player list is the retained roster. There is no drop or add action in this package. A player is
+either assigned to exactly one slot or left in place. Only a player the caller marks
+`mayBeLeftInPlace` may be left, and the solver leaves the fewest such players it can. A player with no
+legal destination and no permission to remain produces a refusal rather than being omitted.
 
 ### Position eligibility
 
@@ -109,6 +113,7 @@ A lock names one slot. The player may not be placed anywhere else. Several playe
 type LineupPlan = {
   readonly selectionBasis: SelectionBasis;
   readonly assignments: ReadonlyArray<LineupAssignment>;
+  readonly leftInPlace: ReadonlyArray<PlayerId>;
   readonly totalSelectionValue: number;
   readonly filledStartingPositions: number;
   readonly requiredStartingPositions: number;
@@ -116,15 +121,24 @@ type LineupPlan = {
 };
 ```
 
-`assignments` contains every roster player exactly once. Assigning two players to one slot is legal up to that slot's capacity. The comparison names players entering and leaving starting positions and every player whose slot ID changes.
+`assignments` contains every assigned roster player exactly once, and `leftInPlace` contains every
+other roster player exactly once. The two lists are disjoint and together cover the roster. A player is
+left in place only when the caller marks them `mayBeLeftInPlace`, and their current slot stays occupied:
+the solver reserves one unit of that slot for them, so nobody else is moved into it. A player whose
+`currentSlotId` is absent consumes no modelled capacity.
+
+Assigning two players to one slot is legal up to that slot's capacity. The comparison treats a
+left-in-place player as unchanged and names players entering and leaving starting positions and every
+assigned player whose slot ID changes.
 
 ## Objective
 
 The optimization is lexicographic, in this order:
 
 1. **Required starting positions are filled.** Every unit of a required starting slot must be occupied. This is a hard legality condition, not a soft score. If required positions cannot all be filled, the solver refuses. A required position is never traded away for value.
-2. **Availability is maximized, most available tier first.** For each tier in the declared ladder order, maximize the number of starting positions occupied by players of that tier. The higher tier's count is compared first, so no amount of value below it can overturn it.
-3. **Total selection value is maximized.** The sum covers players assigned to starting positions, across every tier. Bench and reserve assignments contribute zero. Only required slots must be filled; optional starting slots may be left empty.
+2. **The fewest players are left in place.** A plan that leaves nobody always beats a plan that leaves somebody, whatever the values. Among plans that leave the same number, the ones below decide.
+3. **Availability is maximized, most available tier first.** For each tier in the declared ladder order, maximize the number of starting positions occupied by players of that tier. The higher tier's count is compared first, so no amount of value below it can overturn it.
+4. **Total selection value is maximized.** The sum covers players assigned to starting positions, across every tier. Bench and reserve assignments contribute zero. Only required slots must be filled; optional starting slots may be left empty.
 
 A starter counts towards their tier's term only when their selection value is not negative. A player
 below zero is worse than an empty optional position, so they are not credited for occupying it; zero is
@@ -169,17 +183,23 @@ The solver reduces the problem to a square minimum-cost assignment.
 1. Expand every slot into one column per capacity unit. A slot with `k` locked players contributes `k` reserved units followed by `capacity - k` open units.
 2. Add one row per player. Add `totalUnits - playerCount` dummy rows for unused capacity.
 3. Add a legal edge from a player to a unit when the player may occupy that unit's slot. A locked player can use only their slot's reserved units. A non-locked player can use only open units. Reserve eligibility and position eligibility apply to every edge.
-4. A dummy row represents an empty unit. Dummies may fill open optional starting units and open bench or reserve units. They may not fill reserved units or any unit of a required starting slot.
-5. Run the exact minimum-cost assignment on the square matrix.
+4. Add a **retention edge** for a player marked `mayBeLeftInPlace` to each available unit of their current slot when that slot does not accept them and leaving them there is allowed. A retention edge keeps them out of `assignments`, puts them in `leftInPlace`, and consumes the unit so nobody else can take it. Retention is not allowed for a required starting slot.
+5. A dummy row represents an empty unit. Dummies may fill open optional starting units and open bench or reserve units. They may not fill reserved units or any unit of a required starting slot.
+6. Run the exact minimum-cost assignment on the square matrix.
 
-A perfect matching in this matrix is exactly a legal plan: every player appears once, slot capacities are respected, every required starting unit is occupied, locks are honoured, and every roster member is retained. A legal plan exists exactly when a perfect matching using no forbidden edge exists. If every perfect matching needs a forbidden edge, the problem is infeasible.
+A perfect matching in this matrix is exactly a legal plan: every player is assigned or left in place, slot capacities are respected, every required starting unit is occupied, locks are honoured, and every roster member is retained. A legal plan exists exactly when a perfect matching using no forbidden edge exists. If every perfect matching needs a forbidden edge, the problem is infeasible.
+
+A player marked `mayBeLeftInPlace` with no `currentSlotId` has no modelled occupancy to reserve, so
+the solver may leave them without consuming a unit. That covers a provider slot the league model does
+not declare.
 
 ### Lexicographic cost encoding
 
 All costs are `bigint`. For a plan, the cost is:
 
 ```text
-sum over tiers of (-tierStartingCount) * tierWeight[tier]
+(retainedCount) * retainWeight
++ sum over tiers of (-tierStartingCount) * tierWeight[tier]
 + (-totalSelectionValue) * valueWeight
 + (-zeroStartingOccupancy) * occupancyWeight
 + (changedPlayerCount) * changeWeight
@@ -197,10 +217,13 @@ tierWeight[last] > maximum value difference + occupancy + change + canonical dif
 tierWeight[t]    > unitCount * tierWeight[t + 1] + (everything below tierWeight[t + 1])
 ```
 
-The tier weights are built from the bottom of the ladder upwards, each one larger than every term it
-must outrank, so one more available starter always costs less than the whole rest of the plan can
-recover. Availability dominance is therefore exact rather than a large penalty: a single rung moved
-outweighs the largest possible value, occupancy, change, and canonical difference combined.
+`retainWeight` is larger than the entire range of the rest of a plan, so one fewer left-in-place player
+always wins. The tier weights are built from the bottom of the ladder upwards, each one larger than
+every term it must outrank, so one more available starter always costs less than the whole rest of the
+plan can recover. Availability dominance is therefore exact rather than a large penalty: a single rung
+moved outweighs the largest possible value, occupancy, change, and canonical difference combined. A
+retention edge contributes `retainWeight` and its canonical cost, with no value, availability, or change
+term, because the player is not starting and does not move.
 
 `canonicalCost` is the base-`(unitCount + 1)` number whose digits are the unit indices assigned to players in player-ID order. The base is larger than every unit index, so minimizing the sum is exactly lexicographic minimization of that digit sequence.
 
@@ -235,16 +258,16 @@ The package does not import provider, database, worker, HTTP, Effect service, or
 
 A refusal is a value with a specific subject, not a thrown string.
 
-| Reason                                  | Meaning                                                                                                                    |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `unusable-selection-value`              | One or more players have no usable selection value and cannot be benched away from a starting slot.                        |
-| `lock-references-unknown-slot`          | A player is locked to a slot that is not in the problem.                                                                   |
-| `locked-player-ineligible-for-slot`     | A locked player's position or reserve eligibility excludes the locked slot.                                                |
-| `lock-capacity-exceeded`                | More players are locked to a slot than its capacity.                                                                       |
-| `roster-exceeds-slot-capacity`          | The retained roster is larger than the total slot capacity.                                                                |
-| `player-has-no-legal-slot`              | One or more players have no legal destination at all. This is also the "player cannot be retained" refusal.                |
-| `required-starting-position-unfillable` | A required starting slot cannot be fully occupied in a complete legal assignment.                                          |
-| `no-legal-assignment`                   | A complete legal assignment does not exist for a less specific conflict; the refusal names the players and slots involved. |
+| Reason                                  | Meaning                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `unusable-selection-value`              | One or more players have no usable selection value and cannot be benched away from a starting slot.                             |
+| `lock-references-unknown-slot`          | A player is locked to a slot that is not in the problem.                                                                        |
+| `locked-player-ineligible-for-slot`     | A locked player's position or reserve eligibility excludes the locked slot.                                                     |
+| `lock-capacity-exceeded`                | More players are locked to a slot than its capacity.                                                                            |
+| `roster-exceeds-slot-capacity`          | The retained roster is larger than the total slot capacity.                                                                     |
+| `player-has-no-legal-slot`              | One or more players have no legal destination and no permitted retention. This is also the "player cannot be retained" refusal. |
+| `required-starting-position-unfillable` | A required starting slot cannot be fully occupied in a complete legal assignment.                                               |
+| `no-legal-assignment`                   | A complete legal assignment does not exist for a less specific conflict; the refusal names the players and slots involved.      |
 
 Malformed problems — duplicate IDs, non-positive capacity, unsafe selection units, a different selection basis, no availability tier, a duplicate tier, a player on an undeclared tier, or a current slot not present in the problem — throw an error. They are caller contract failures, not league-feasibility refusals.
 
@@ -252,7 +275,8 @@ Malformed problems — duplicate IDs, non-positive capacity, unsafe selection un
 
 `lineupViolations` and `planViolations` are pure checks shared by the solver, callers, and tests. A returned plan satisfies all of them:
 
-- Every roster player appears exactly once; no player is invented or dropped.
+- Every roster player appears exactly once, assigned or left in place; no player is invented or dropped.
+- A player left in place carries `mayBeLeftInPlace`, and their current slot keeps its occupancy when they have one.
 - Every assignment references a known player and a known slot.
 - Slot capacity is respected.
 - Position eligibility, reserve eligibility, and locks are respected.

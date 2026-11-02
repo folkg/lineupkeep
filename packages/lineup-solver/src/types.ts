@@ -12,6 +12,7 @@ export type LineupSolveResult =
 export type LineupPlan = {
   readonly selectionBasis: SelectionBasis;
   readonly assignments: ReadonlyArray<LineupAssignment>;
+  readonly leftInPlace: ReadonlyArray<PlayerId>;
   readonly totalSelectionValue: number;
   readonly filledStartingPositions: number;
   readonly requiredStartingPositions: number;
@@ -101,6 +102,7 @@ export type PlanViolation =
       readonly filled: number;
     }
   | { readonly reason: "unusable-selection-value-started"; readonly playerId: PlayerId }
+  | { readonly reason: "left-in-place-not-allowed"; readonly playerId: PlayerId }
   | {
       readonly reason: "selection-value-mismatch";
       readonly stated: number;
@@ -167,6 +169,7 @@ export type RosterPlayer = {
   readonly reserveEligible: boolean;
   readonly lockedSlotId: SlotId | undefined;
   readonly currentSlotId: SlotId | undefined;
+  readonly mayBeLeftInPlace?: boolean;
 };
 
 export type PlayerSelection =
