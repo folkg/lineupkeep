@@ -7,7 +7,7 @@ import type { ProfessionalGameStatus } from "./ProfessionalGame.ts";
 export const GameSourceKey = Schema.Literals(["nhl-web"]);
 export type GameSourceKey = typeof GameSourceKey.Type;
 
-export type GameSourceCoverage = {
+type GameSourceCoverage = {
   readonly league: FantasyLeague;
   readonly sport: FantasySport;
   readonly teamCount: number;

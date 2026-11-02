@@ -1,0 +1,173 @@
+{
+  "read": {
+    "source": "the fantasy provider's own hockey game player pool, which publishes each player's professional team key, abbreviation, and full name",
+    "url": "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/game/nhl/players;start={start};count=200?format=json",
+    "pages": 9,
+    "players": 1608,
+    "bytes": 6985226,
+    "observedAt": "2026-11-02T16:42:42.000Z",
+    "note": "One game player pool, paged by 200 from start=0 to start=1600. Every team below was read at least once; the pairs are the provider's own, not inferred."
+  },
+  "teams": [
+    {
+      "providerTeamKey": "nhl.t.1",
+      "abbreviation": "BOS",
+      "displayName": "Boston Bruins"
+    },
+    {
+      "providerTeamKey": "nhl.t.2",
+      "abbreviation": "BUF",
+      "displayName": "Buffalo Sabres"
+    },
+    {
+      "providerTeamKey": "nhl.t.3",
+      "abbreviation": "CGY",
+      "displayName": "Calgary Flames"
+    },
+    {
+      "providerTeamKey": "nhl.t.4",
+      "abbreviation": "CHI",
+      "displayName": "Chicago Blackhawks"
+    },
+    {
+      "providerTeamKey": "nhl.t.5",
+      "abbreviation": "DET",
+      "displayName": "Detroit Red Wings"
+    },
+    {
+      "providerTeamKey": "nhl.t.6",
+      "abbreviation": "EDM",
+      "displayName": "Edmonton Oilers"
+    },
+    {
+      "providerTeamKey": "nhl.t.7",
+      "abbreviation": "CAR",
+      "displayName": "Carolina Hurricanes"
+    },
+    {
+      "providerTeamKey": "nhl.t.8",
+      "abbreviation": "LA",
+      "displayName": "Los Angeles Kings"
+    },
+    {
+      "providerTeamKey": "nhl.t.9",
+      "abbreviation": "DAL",
+      "displayName": "Dallas Stars"
+    },
+    {
+      "providerTeamKey": "nhl.t.10",
+      "abbreviation": "MTL",
+      "displayName": "Montreal Canadiens"
+    },
+    {
+      "providerTeamKey": "nhl.t.11",
+      "abbreviation": "NJ",
+      "displayName": "New Jersey Devils"
+    },
+    {
+      "providerTeamKey": "nhl.t.12",
+      "abbreviation": "NYI",
+      "displayName": "New York Islanders"
+    },
+    {
+      "providerTeamKey": "nhl.t.13",
+      "abbreviation": "NYR",
+      "displayName": "New York Rangers"
+    },
+    {
+      "providerTeamKey": "nhl.t.14",
+      "abbreviation": "OTT",
+      "displayName": "Ottawa Senators"
+    },
+    {
+      "providerTeamKey": "nhl.t.15",
+      "abbreviation": "PHI",
+      "displayName": "Philadelphia Flyers"
+    },
+    {
+      "providerTeamKey": "nhl.t.16",
+      "abbreviation": "PIT",
+      "displayName": "Pittsburgh Penguins"
+    },
+    {
+      "providerTeamKey": "nhl.t.17",
+      "abbreviation": "COL",
+      "displayName": "Colorado Avalanche"
+    },
+    {
+      "providerTeamKey": "nhl.t.18",
+      "abbreviation": "SJ",
+      "displayName": "San Jose Sharks"
+    },
+    {
+      "providerTeamKey": "nhl.t.19",
+      "abbreviation": "STL",
+      "displayName": "St. Louis Blues"
+    },
+    {
+      "providerTeamKey": "nhl.t.20",
+      "abbreviation": "TB",
+      "displayName": "Tampa Bay Lightning"
+    },
+    {
+      "providerTeamKey": "nhl.t.21",
+      "abbreviation": "TOR",
+      "displayName": "Toronto Maple Leafs"
+    },
+    {
+      "providerTeamKey": "nhl.t.22",
+      "abbreviation": "VAN",
+      "displayName": "Vancouver Canucks"
+    },
+    {
+      "providerTeamKey": "nhl.t.23",
+      "abbreviation": "WSH",
+      "displayName": "Washington Capitals"
+    },
+    {
+      "providerTeamKey": "nhl.t.25",
+      "abbreviation": "ANA",
+      "displayName": "Anaheim Ducks"
+    },
+    {
+      "providerTeamKey": "nhl.t.26",
+      "abbreviation": "FLA",
+      "displayName": "Florida Panthers"
+    },
+    {
+      "providerTeamKey": "nhl.t.27",
+      "abbreviation": "NSH",
+      "displayName": "Nashville Predators"
+    },
+    {
+      "providerTeamKey": "nhl.t.28",
+      "abbreviation": "WPG",
+      "displayName": "Winnipeg Jets"
+    },
+    {
+      "providerTeamKey": "nhl.t.29",
+      "abbreviation": "CBJ",
+      "displayName": "Columbus Blue Jackets"
+    },
+    {
+      "providerTeamKey": "nhl.t.30",
+      "abbreviation": "MIN",
+      "displayName": "Minnesota Wild"
+    },
+    {
+      "providerTeamKey": "nhl.t.58",
+      "abbreviation": "VGK",
+      "displayName": "Vegas Golden Knights"
+    },
+    {
+      "providerTeamKey": "nhl.t.59",
+      "abbreviation": "SEA",
+      "displayName": "Seattle Kraken"
+    },
+    {
+      "providerTeamKey": "nhl.t.60",
+      "abbreviation": "UTA",
+      "displayName": "Utah Mammoth"
+    }
+  ]
+}

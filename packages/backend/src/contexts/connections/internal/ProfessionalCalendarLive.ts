@@ -61,7 +61,6 @@ export const ProfessionalCalendarLive = Layer.effect(
       return yield* readProfessionalGameWeek({
         store,
         source: covered.source,
-        coverage: covered.coverage,
         league: input.league,
         weekStart,
         freshness: input.freshness,
@@ -101,7 +100,6 @@ export const ProfessionalCalendarLive = Layer.effect(
           yield* readProfessionalGameWeek({
             store,
             source: covered.source,
-            coverage: covered.coverage,
             league: input.league,
             weekStart,
             freshness: input.freshness,

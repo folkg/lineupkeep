@@ -509,6 +509,46 @@ Three rules make that safe:
 3. **An unmatched identifier stays unresolved.** It is stored, visible, and never guessed. A missing
    observation is an honest refusal; a wrong observation is a wrong lineup.
 
+### The professional-team map
+
+Learning pairs from roster rows was too narrow. Measured in production on 2026-11-02: 54 identity rows over 29
+provider keys, which left seven clubs (Boston, San Jose, Tampa Bay, New Jersey, Edmonton, Anaheim, Los Angeles)
+with no identity, so every game involving them was unattributed and the schedule gate had to fail open.
+
+The complete map is now checked in as `hockeyProfessionalTeamMap` in
+`packages/backend/src/contexts/connections/internal/ProfessionalTeamMap.ts`: one row per club, carrying the
+league, the provider's professional-team key, the league's team identifier, the league's abbreviation, and the
+club name. The calendar resolves a club from that table by league and league identifier and never from a stored
+pair, so the table is data rather than a cache.
+
+Every pair was read from two recorded source reads.
+
+| Side     | Request                                                                                        | Requests | Bytes     |
+| -------- | ---------------------------------------------------------------------------------------------- | -------- | --------- |
+| Provider | `GET https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/game/nhl/players;start=0;count=200` | 9        | 6,985,226 |
+| League   | `GET https://api-web.nhle.com/v1/schedule/2026-11-01`                                          | 1        | 98,285    |
+
+The provider URL above is the first page; the read paged `start` by 200 through `start=1600`. It needed no
+session, which is what makes one request per league affordable for a reference table. It is not affordable at
+run time, and it is not read at run time: the table is checked in, and the read was a one-off.
+
+The provider side is its hockey game player pool, which prints `editorial_team_key`, `editorial_team_abbr`, and
+`editorial_team_full_name` on every player row. It is one pool rather than five rosters: 1,608 player rows, and
+the first page of 100 named only 28 clubs. That read is recorded with its URL, instant, request count, and byte
+count in `packages/backend/src/contexts/connections/internal/fixtures/provider-hockey-teams.json`. The league
+side is recorded in `game-sources/nhl/fixtures/league-week.json`.
+
+The two lists share no identifier. The provider's `nhl.t.1` is Boston and the league's Boston is `6`, and the
+numbering has no relation in either direction. The club name is the only vocabulary both reads share, and it
+pairs the two lists 32 to 32 with nothing left over. Abbreviations cannot do that job: the league spells four
+clubs `LAK`, `NJD`, `SJS`, and `TBL` where the provider spells them `LA`, `NJ`, `SJ`, and `TB`. A test records
+those four disagreements so nobody replaces the identifier lookup with an abbreviation match.
+
+A club the map does not hold, or holds with a different abbreviation or name from the one the read publishes,
+stays unresolved. The read reports which of the two it is (`no_map_entry` or `map_disagrees`), so a club that
+moved or was renamed is a visible defect instead of an old pairing repeated quietly. The map is never rewritten
+from a read, and a stored identity row is never used to fill a gap in it.
+
 A source that publishes the provider's own key — as graphite does — needs no mapping at all, and that is the
 single strongest technical argument for it.
 

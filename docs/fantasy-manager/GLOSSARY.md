@@ -195,6 +195,10 @@ _Avoid_: Precheck, cache miss
 A stored pairing of a source's team identifier to a professional team's provider key, learned from a pairing the provider itself publishes and scoped to its sport. A pairing that resolves an identifier to two teams is not used, and an identifier with no pairing stays unresolved.
 _Avoid_: Team alias, abbreviation map
 
+**Professional team map**:
+The checked-in list of a league's professional teams, each paired with the provider's professional-team key and carrying the league's identifier, abbreviation, and the club's name. It is read as data, never discovered at run time: a club it does not hold, or describes differently from the source's own read, stays unresolved and is reported.
+_Avoid_: Team cache, identity table when the stored observations are meant, abbreviation map
+
 **Game source**:
 An external service that publishes professional games, such as the NHL's own API, reached through one provider-neutral interface and selected by the league it declares. It is not a `Provider`, which is the fantasy platform.
 _Avoid_: Feed, scraper, schedule API

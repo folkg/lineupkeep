@@ -923,7 +923,7 @@ it.effect("counts a pool player's games from its professional team key without a
         source: provider,
         sourceTeamIdentifier: "TOR",
         provider,
-        providerTeamKey: "465.t.1",
+        providerTeamKey: "nhl.t.21",
         observedAt,
       },
       {
@@ -931,7 +931,7 @@ it.effect("counts a pool player's games from its professional team key without a
         source: provider,
         sourceTeamIdentifier: "BOS",
         provider,
-        providerTeamKey: "465.t.2",
+        providerTeamKey: "nhl.t.1",
         observedAt,
       },
     ]);
@@ -948,7 +948,7 @@ it.effect("counts a pool player's games from its professional team key without a
         percentStarted: 0,
         percentStartedChange: 0,
         proTeam: "TOR",
-        proTeamKey: "465.t.1",
+        proTeamKey: "nhl.t.21",
       }),
       searchFixture({
         providerPlayerKey: "465.p.2",
@@ -988,7 +988,7 @@ it.effect("counts a pool player's games from its professional team key without a
         percentStarted: 0,
         percentStartedChange: 0,
         proTeam: "ZZZ",
-        proTeamKey: "465.t.3",
+        proTeamKey: "nhl.t.13",
       }),
     ]);
     yield* games.setGames([
@@ -3295,7 +3295,7 @@ it.effect(
             {
               key: "461.p.10001",
               name: "Synthetic Two Games",
-              proTeamKey: "465.t.1",
+              proTeamKey: "nhl.t.21",
               proTeamAbbreviation: "TOR",
               games: [
                 { date: "2026-10-19", opponent: "BOS", home: true },
@@ -3305,14 +3305,14 @@ it.effect(
             {
               key: "461.p.10002",
               name: "Synthetic One Game",
-              proTeamKey: "465.t.2",
+              proTeamKey: "nhl.t.1",
               proTeamAbbreviation: "BOS",
               games: [{ date: "2026-10-20", opponent: "NYR", home: true }],
             },
             {
               key: "461.p.10003",
               name: "Synthetic No Games",
-              proTeamKey: "465.t.3",
+              proTeamKey: "nhl.t.13",
               proTeamAbbreviation: "NYR",
               games: [],
             },
@@ -5040,21 +5040,32 @@ function calendarGame(
   home: string,
   away: string,
 ): ReturnType<typeof fakeGame> {
-  const team = (
-    abbreviation: string,
-  ): { identifier: string; abbreviation: string; name: string } => ({
-    identifier: `nhl.t.${abbreviation}`,
-    abbreviation,
-    name: abbreviation,
-  });
   return fakeGame({
     id,
     date,
     startTime: `${date}T23:00:00.000Z`,
-    home: team(home),
-    away: team(away),
+    home: leagueClub(home),
+    away: leagueClub(away),
   });
 }
+
+function leagueClub(abbreviation: string): {
+  identifier: string;
+  abbreviation: string;
+  name: string;
+} {
+  const club = hockeyClubs[abbreviation];
+  return club === undefined
+    ? { identifier: "999", abbreviation, name: abbreviation }
+    : { identifier: club.identifier, abbreviation, name: club.name };
+}
+
+const hockeyClubs: Readonly<Record<string, { identifier: string; name: string }>> = {
+  BOS: { identifier: "6", name: "Boston Bruins" },
+  LA: { identifier: "26", name: "Los Angeles Kings" },
+  NYR: { identifier: "3", name: "New York Rangers" },
+  TOR: { identifier: "10", name: "Toronto Maple Leafs" },
+};
 
 function matchupFixture(input: {
   readonly period: number;

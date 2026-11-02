@@ -302,11 +302,12 @@ Measured before the store existed: 360 provider reads a day became 5. Production
 - [x] Attach a source identifier only through a key/abbreviation pair observed on one roster row, recorded
       with its source and instant; scope it to the league and refuse a one-to-many mapping.
 - [x] Leave an unmatched source team unresolved and unserved for any canonical team.
-- [ ] **Open, found in production on 2026-11-02**: only pairs seen on a roster row are known, so 7 of the
-      league's clubs (Boston, San Jose, Tampa Bay, New Jersey, Edmonton, Anaheim, Los Angeles) have no
-      identity, every game involving them stays unattributed, and the gate has to fail open with
-      `provider_game_missing_from_source`. Learn the pairs from a wider provider read, the league player
-      pool, instead of only from rosters we happen to read.
+- [x] Learn the pairs from a wider provider read instead of only from rosters we happen to read. Only pairs
+      seen on a roster row were known, so 7 of the league's clubs (Boston, San Jose, Tampa Bay, New Jersey,
+      Edmonton, Anaheim, Los Angeles) had no identity, every game involving them stayed unattributed, and the
+      gate had to fail open with `provider_game_missing_from_source`. The complete 32-club map is now checked
+      in, paired from the provider's whole hockey player pool against the league's own week read; the calendar
+      resolves every club from it and reports a club it cannot match as `no_map_entry` or `map_disagrees`.
 
 **Verify**: a deliberate one-to-many mapping is refused, and an unknown abbreviation produces no canonical
 team. `S`. Produced 54 identity rows over 29 distinct provider keys in production.

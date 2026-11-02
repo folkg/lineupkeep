@@ -2,7 +2,6 @@ import { DateTime, Effect } from "effect";
 
 import type { FantasyLeague } from "#contexts/connections/FantasyTeam.ts";
 import type {
-  GameSourceCoverage,
   GameSourceGame,
   GameSourceLeagueWeek,
   GameSourceShape,
@@ -25,6 +24,7 @@ import { professionalGameIsFresh } from "#contexts/connections/ProfessionalGame.
 import type { QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
 
 import { resolveProfessionalTeams } from "./ProfessionalTeamIdentity.ts";
+import { matchProfessionalTeam } from "./ProfessionalTeamMap.ts";
 import type {
   ScheduleObservationRepository,
   ProfessionalGameObservation,
@@ -34,7 +34,6 @@ import type {
 export function readProfessionalGameWeek(input: {
   readonly store: ScheduleObservationRepository["Service"];
   readonly source: GameSourceShape;
-  readonly coverage: GameSourceCoverage;
   readonly league: FantasyLeague;
   readonly weekStart: string;
   readonly freshness: ProfessionalGameFreshness;
@@ -56,16 +55,8 @@ export function readProfessionalGameWeek(input: {
         row.window.to === weekEnd,
     );
     const current = newestObservation(stored);
-    const unresolved = current.flatMap(unresolvedTeamsOf);
-    const awaitingMapping =
-      unresolved.length > 0 &&
-      (yield* input.store.readProviderTeamIdentities({
-        sport: input.coverage.sport,
-        identifiers: unresolved.map((team) => team.sourceTeamAbbreviation),
-      })).length > 0;
     const settled =
       current.length > 0 &&
-      !awaitingMapping &&
       current.every((row) =>
         professionalGameIsFresh({
           game: row.value,
@@ -102,11 +93,8 @@ export function readProfessionalGameWeek(input: {
     yield* assertWeek(week, input.weekStart, weekEnd, input.source.key);
 
     const observedAt = yield* DateTime.now;
-    const resolution = yield* resolveProfessionalTeams({
-      store: input.store,
-      sport: input.coverage.sport,
-      source: input.source.key,
-      now: observedAt,
+    const resolved = resolveProfessionalTeams({
+      league: week.league,
       teams: week.games.flatMap((game) => [game.home, game.away]),
     });
     const observations = week.games.map((game) =>
@@ -115,7 +103,7 @@ export function readProfessionalGameWeek(input: {
         league: week.league,
         weekStart: input.weekStart,
         weekEnd,
-        sourceTeam: (team) => professionalTeamOf(team, resolution.bySourceIdentifier),
+        sourceTeam: (team) => professionalTeamOf(team, resolved),
         observedAt,
       }),
     );
@@ -245,18 +233,24 @@ function unresolvedTeamsOfFact(
             side,
             identifier: team.sourceTeamIdentifier,
             name: team.sourceTeamName,
+            reason: unmappedReason(fact.game.league, team),
           },
         ]
       : [],
   );
 }
 
-function unresolvedTeamsOf(observation: ProfessionalGameObservation): ReadonlyArray<{
-  readonly sourceTeamAbbreviation: string;
-}> {
-  return [observation.value.home, observation.value.away].flatMap((team) =>
-    team.providerTeamKey === null ? [{ sourceTeamAbbreviation: team.sourceTeamAbbreviation }] : [],
-  );
+function unmappedReason(
+  league: FantasyLeague,
+  team: ProfessionalGameTeam,
+): UnresolvedProfessionalTeam["reason"] {
+  const match = matchProfessionalTeam({
+    league,
+    identifier: team.sourceTeamIdentifier,
+    abbreviation: team.sourceTeamAbbreviation,
+    name: team.sourceTeamName,
+  });
+  return match.kind === "not_mapped" ? "no_map_entry" : "map_disagrees";
 }
 
 function newestObservation(

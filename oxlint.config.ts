@@ -605,6 +605,7 @@ const hostedBrowserShellTests = [
 const migrationTests = ["packages/backend/src/database/MigrationOrdering.test.ts"];
 const fixtureReadingTests = [
   "packages/backend/src/contexts/connections/internal/ProfessionalCalendar.test.ts",
+  "packages/backend/src/contexts/connections/internal/ProfessionalTeamMap.test.ts",
   "packages/backend/src/contexts/connections/internal/game-sources/nhl/NhlGameSource.test.ts",
 ];
 const isolateTransport = ["packages/backend/src/runtime/public-internet/transport/isolate/**/*.ts"];

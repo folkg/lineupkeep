@@ -77,11 +77,18 @@ path. External sources are added per sport, and only where the terms permit.**
 
 3. **Identity is the provider's professional-team key.** Abbreviations are display text and are never a join.
    A new source's identifiers are attached to the canonical team only through a pair the provider itself
-   publishes on one roster row — `editorial_team_key` beside `editorial_team_abbr` — recorded with its source
-   and observation instant. A mapping is scoped to its league, is one-to-one or is not used, and an unmatched
-   source team stays unresolved and is never served for a canonical team. The mappings are stored, one row per
-   observed pairing, keyed by the sport, the source, and the source's own team identifier; the bridge from a
-   game source's identifier to the provider's key is a second observed pairing, never a request-time compare.
+   publishes. A mapping is scoped to its league, is one-to-one or is not used, and an unmatched source team
+   stays unresolved and is never served for a canonical team.
+
+   The complete map for a league is checked in as one module, not learned from whichever rosters were read:
+   each row carries the league, the league's team identifier, the league's abbreviation, the club name, and the
+   provider's professional-team key. Learning it lazily was incomplete in production, which held 29 of the 32
+   provider keys and had no identity for seven clubs. The map was researched once by reading the provider's
+   whole hockey player pool and the league's own team list and pairing them by club name, the only vocabulary
+   the two reads share. A stored identity row remains the record of an observation and never seeds, fills, or
+   rewrites the module. A club the module does not hold, or describes differently from the read, stays
+   unresolved and is reported, so a moved or renamed club is a visible defect rather than an old pairing
+   repeated quietly.
 
 4. **One hook, and the consumer never names a source.** `ScheduleObservations.require({ subject, observationKind,
    window, maximumAge })`
@@ -143,9 +150,10 @@ path. External sources are added per sport, and only where the terms permit.**
   unknown for every candidate. The 30-minute maximum age bounds our own staleness, not the source's.
 - **A 7-day fixture age assumes fixtures are stable.** A league can move a game a week out. The 6-hour start
   time age inside 48 hours catches it, but a fixture added inside the week is only found by the daily sweep.
-- **The mapping depends on the provider continuing to publish key and abbreviation together.** It does today on
-  every roster row. If it stops, new teams stay unresolved until a mapping is established another way, which
-  is the intended failure.
+- **The checked-in map is a snapshot of two reads.** A relocation or rename is refused at the club, not
+  misattributed, but it stays unresolved until the module is updated from a fresh read of the provider's list
+  and the league's own list. Nothing refreshes it automatically, and a test can only prove it against the
+  recorded reads, not against what the sources publish tomorrow.
 - **Request-count estimates assume five linked teams and two leagues.** More teams or more leagues scale the
   provider reads linearly and the external reads barely at all.
 

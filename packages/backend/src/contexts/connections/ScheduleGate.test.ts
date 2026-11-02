@@ -633,7 +633,7 @@ function providerSchedule(): ProviderRosterSchedule {
       {
         providerPlayerKey: "465.p.1",
         name: "Synthetic Skater",
-        proTeamKey: "465.t.1",
+        proTeamKey: "nhl.t.21",
         proTeamAbbreviation: "TOR",
         games: [{ date: "2026-11-03", opponent: "BOS", home: true }],
       },
@@ -646,8 +646,8 @@ function professionalGameInput(startTime: string): Parameters<typeof fakeGame>[0
     id: "g1",
     date: "2026-11-03",
     startTime,
-    home: { identifier: "nhl.t.TOR", abbreviation: "TOR", name: "Toronto" },
-    away: { identifier: "nhl.t.BOS", abbreviation: "BOS", name: "Boston" },
+    home: { identifier: "10", abbreviation: "TOR", name: "Toronto Maple Leafs" },
+    away: { identifier: "6", abbreviation: "BOS", name: "Boston Bruins" },
   };
 }
 

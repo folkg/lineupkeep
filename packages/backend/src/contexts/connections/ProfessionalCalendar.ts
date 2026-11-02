@@ -19,6 +19,7 @@ export type UnresolvedProfessionalTeam = {
   readonly side: "home" | "away";
   readonly identifier: string;
   readonly name: string;
+  readonly reason: "no_map_entry" | "map_disagrees";
 };
 
 export type ProfessionalGameWeek = {
