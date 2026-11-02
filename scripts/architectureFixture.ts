@@ -50,6 +50,8 @@ export async function checkLint(
 ): Promise<CommandResult & { readonly sources: Readonly<Record<string, string>> }> {
   return withFixture(files, async (cwd) => ({
     ...(await runTool(cwd, join(repositoryRoot, "node_modules/oxlint/bin/oxlint"), [
+      "--format",
+      "default",
       ...(fix ? ["--fix"] : []),
       "--config",
       "oxlint.config.ts",
