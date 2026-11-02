@@ -1,7 +1,7 @@
 # Schedule sources
 
 What the professional-team schedule can come from, what each candidate actually publishes, what its terms
-permit, and how a cached fact should be stored, refreshed, joined, and served. This is an investigation and a
+permit, and how a schedule observation should be stored, refreshed, joined, and served. This is an investigation and a
 recommendation; it implements nothing. The decision it supports is recorded in
 [ADR 0011](fantasy-manager/adr/0011-schedule-observations-and-schedule-sources.md) and the work is sliced in
 [ROADMAP F1](ROADMAP.md#f1--the-professional-team-calendar).
@@ -429,8 +429,8 @@ not re-read an observation merely because a page was viewed.
 
 ### Measured cost of the declared game policy
 
-The professional-game observation stores one row per game, and **one league-week request refreshes every game
-and every aspect in that week**. That makes the cost of a read independent of how many fantasy leagues share the
+The professional-game observation stores one row per game and covered window, and **one league-week request
+refreshes every game and every aspect in that week**. That makes the cost of a read independent of how many fantasy leagues share the
 sport: the source is the NHL's league week, not a fantasy team. Measured 2026-11-01 against the real
 `2026-11-01` league week checked in as the adapter fixture:
 
@@ -548,8 +548,8 @@ ended more than 30 days ago, so growth is bounded by live and recent windows rat
 
 ### A freshness policy per aspect
 
-Each aspect declares its maximum age, its refresh trigger, and its failure behaviour, as the table above. The policy lives beside the aspect, not beside a table and not in a job: professional-game
-freshness applies to every sport and every game source, and the provider-opponent policy is the fantasy-day
+Each aspect declares its maximum age, its refresh trigger, and its failure behaviour, as the table above.
+The policy lives beside the aspect, not beside a table and not in a job: professional-game freshness applies to every sport and every game source, and the provider-opponent policy is the fantasy-day
 boundary. A source may narrow a policy it cannot satisfy — a weekly dataset cannot promise a 30-minute status —
 and the narrower bound is what the reader sees.
 

@@ -116,8 +116,8 @@ path. External sources are added per sport, and only where the terms permit.**
   current period, and a cancellation state — rather than buying efficiency. One league-week read costs one
   request and refreshes every game in that week for every fantasy league on that sport; measured against a real
   NHL week it is 7 requests over 7 daily sweeps (1 a day) and 28 requests over 168 hourly reads (4 a day).
-- Every cached fact can answer "when did we learn this", which is what makes a stale value showable instead of
-  hidden, and what makes a conflict recordable instead of silent.
+- Every schedule observation can answer "when did we learn this", which is what makes a stale value showable
+  instead of hidden, and what makes a conflict recordable instead of silent.
 - One generic hook and one registry serve schedules, season state, and whatever fact is added next, so a later
   feature does not learn where a fact came from.
 - The identity rule survives the second source without amendment: the mapping comes from a pairing the
@@ -182,5 +182,5 @@ path. External sources are added per sport, and only where the terms permit.**
   announced at 4 pm is worthless at 7 pm. One cadence is either too expensive or too stale, and usually both.
 - **Keep deriving everything from our own reads.** It answers "does this player's team play today" and nothing
   else, and it is the reason the reads are expensive in the first place.
-- **A generic cache with no fact vocabulary.** It would accept anything, refresh nothing deliberately, and
-  answer questions it cannot substantiate.
+- **A generic cache with no observation vocabulary.** It would accept anything, refresh nothing deliberately,
+  and answer questions it cannot substantiate.
