@@ -574,6 +574,16 @@ erasure or export path for a person's data.
 **Verify**: an erasure leaves no row carrying the owner id anywhere in the database, an export round-trips,
 and a registration loop is refused at the cap. `L`, split registration from erasure before delegating.
 
+**Owner's windows, 2026-11-02**: 90 days for lineup runs, attempts and write intents after the run ends; 14
+days for stored schedule observations after the covered window ends; 7 days for registrations that never
+completed an authorization, with 100 live at once; 180 days for consents after last use; 1 day for hosted
+linking sessions; 7 days for run diagnostics; owner notes never expire; closed feedback reports after a year.
+`RetentionPolicy` states them and the hourly sweep applies them.
+
+Verified in production on 2026-11-02 by the first sweep after deploy: `retention.diagnostics=5`,
+`retention.hosted_linking_sessions=4`, `retention.registrations=1`, every other class zero, and an in-flight
+run survived the same sweep. Erasure and export remain open.
+
 ### J3 — Session revocation and a session inventory
 
 - [x] Choose the trade: the cookie cache is off, so a revoked session is refused on the next request at the
