@@ -51,7 +51,7 @@ reviewer to schedule.
 | #   | Finding                                                                                    | Severity | Status    |
 | --- | ------------------------------------------------------------------------------------------ | -------- | --------- |
 | F1  | No rate limit or cost ceiling on the expensive and destructive MCP tools                   | High     | **Fixed** |
-| F2  | Dynamic client registration is unauthenticated, uncapped and never cleaned up              | Medium   | Deferred  |
+| F2  | Dynamic client registration is unauthenticated, uncapped and never cleaned up              | Medium   | **Fixed** |
 | F3  | Session revocation lags up to five minutes and there is no session inventory or revoke-all | Medium   | **Fixed** |
 | F4  | No erasure or export path for personal data, and some tables have no retention at all      | Medium   | Deferred  |
 | F5  | A connection-key compromise has no fast remediation                                        | Medium   | **Fixed** |
@@ -67,7 +67,7 @@ reviewer to schedule.
 | F15 | The egress proxy records an unbounded number of distinct refusals per session              | Low      | **Fixed** |
 | F16 | The hosted browser can reach Lineupkeep's own public origin                                | Low      | Accepted  |
 
-Count: 0 critical, 1 high, 5 medium, 10 low. Six fixed, one accepted as designed, nine deferred.
+Count: 0 critical, 1 high, 5 medium, 10 low. Seven fixed, one accepted as designed, eight deferred.
 
 ## Findings
 
@@ -120,7 +120,7 @@ the refusal shape.
 
 ### F2 — Dynamic client registration is unauthenticated, uncapped and never cleaned up
 
-**Severity: Medium. Deferred: a cap needs a policy decision and a retention migration.**
+**Severity: Medium. Fixed in a follow-up change.**
 
 Evidence. `packages/backend/src/contexts/auth/internal/BetterAuthAdapter.ts:429-431` sets
 `allowDynamicClientRegistration`, `allowUnauthenticatedClientRegistration`, and `allowPublicClientPrelogin`.
@@ -169,6 +169,13 @@ registration that holds a scope we no longer advertise.
 timestamps before and after over a mixed set: a strict subset, the same set in another order, a retired
 scope, an owner's client, a discovered client, a resource client, and a row with no scopes. The ceiling and
 the retention rule remain open.
+
+**Fixed.** A dynamic registration counts as unapproved when it has no consent, access token, or refresh token.
+At most 100 may be live; a registration request at the cap is refused with `temporarily_unavailable` and a
+message that names the limit. The hourly sweep removes unapproved registrations seven days after they
+registered in one set-based delete and reports the count as `registrations`. The scope-widening update is
+set-based, as described above. Retention windows are named in
+`packages/backend/src/retention/RetentionPolicy.ts`.
 
 ### F3 — Session revocation lags up to five minutes, and there is no session inventory
 
@@ -243,6 +250,11 @@ refresh tokens and sessions, then the user row; plus a read-only export of the s
 
 **Why not here.** Ordering, what must survive for an incident record, and the retention promise are policy
 decisions, and the change wants a migration. Recorded as roadmap group J2.
+
+**Retention fixed.** The hourly sweep now removes expired sessions and verification rows, consents unused for
+180 days, hosted linking sessions one day after they end, and unapproved dynamic registrations after seven
+days. The windows live in `packages/backend/src/retention/RetentionPolicy.ts`. Erasure and export remain open,
+and `uncertain` runs still have no resolution transition.
 
 ### F5 — A connection-key compromise has no fast remediation
 
@@ -558,28 +570,28 @@ submitted, and the honest recovery is to look at the provider, not to retry blin
 
 ## Personal data inventory
 
-| Data                                                | Where                                                                           | Retention today                                                                               | What deletes it                                                                           |
-| --------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Sign-in address                                     | `user.email` (unique)                                                           | Until the account is deleted; no deletion path exists                                         | Nothing today (F4)                                                                        |
-| Display name                                        | `user.name`                                                                     | Same                                                                                          | Same                                                                                      |
-| Session rows, with IP address and user agent        | `session.ipAddress`, `session.userAgent`                                        | Seven days, sliding; no sweep                                                                 | Sign-out, or ending one on Connections, deletes its row; nothing sweeps expired rows (F4) |
-| Sign-in code                                        | `verification.value`, stored hashed by `emailOTP`                               | Ten minutes to expiry; attempts capped at three                                               | Deleted on use by the plugin; expired rows are not swept                                  |
-| Sign-in code quota                                  | `sign_in_code_quota.key` — SHA-256 of the lowercased address                    | One-hour window; the row is reused or replaced, and stale rows are deleted on the next insert | The quota repository's own delete-then-insert path                                        |
-| MCP refresh token                                   | `oauth_refresh_token.token` — hashed by the provider plugin                     | Thirty days from issue or last rotation, then revoked                                         | Rotation, revocation, or expiry; no sweep of consumed rows                                |
-| MCP refresh-token rotation replay window            | `oauth_refresh_token.rotation_replay_response`                                  | Up to thirty seconds                                                                          | Replaced on the next rotation; encrypted with `BETTER_AUTH_SECRET`                        |
-| MCP consent record                                  | `oauth_consent`                                                                 | No expiry, no sweep                                                                           | Nothing today (F4)                                                                        |
-| OAuth signing keys                                  | `jwks.private_key`                                                              | No expiry, no sweep                                                                           | Nothing; rotating them invalidates every live token                                       |
-| Dynamic client registration                         | `oauth_client` (name, URIs, contacts, metadata)                                 | No expiry, no sweep                                                                           | Nothing today (F2)                                                                        |
-| Provider session (the fantasy account's own cookie) | `provider_credentials.envelope` — AES-GCM ciphertext                            | Until disconnect or reconnect                                                                 | Disconnect hard-deletes it; reconnect replaces it and bumps the generation                |
-| Team identity and configuration                     | `provider_teams` (provider team and league keys, slots, automation, owner note) | Until disconnect sets availability, or the account is deleted                                 | Disconnect clears availability; nothing deletes the row (F4)                              |
-| Lineup run outcome and plan                         | `lineup_runs`, `lineup_run_attempts`, `lineup_write_intents`                    | Thirty days after a terminal outcome                                                          | `RetentionSweep` — except `uncertain` rows, which never age out (F10)                     |
-| Run diagnostics                                     | `lineup_run_diagnostics`                                                        | Seven days by `expiresAt`                                                                     | `RetentionSweep`                                                                          |
-| Feedback report                                     | `feedback` (title, body, optional tool, team reference, client label)           | Open and acknowledged stay; resolved and not-planned are deleted 180 days after closing       | `FeedbackRetention`                                                                       |
-| Feedback quota                                      | `feedback_quota`                                                                | Until its hour can no longer accept a report                                                  | `FeedbackRetention`                                                                       |
-| Hosted linking session                              | `hosted_linking_sessions` — status, timestamps, ticket **hash**                 | No expiry, no sweep; the ticket itself is never stored                                        | Nothing; cancelled and expired rows stay (F4)                                             |
-| Google identity tokens (only if Google is enabled)  | `account.access_token`, `refresh_token`, `id_token`                             | Until the account row changes                                                                 | Nothing (F6)                                                                              |
-| Telemetry and traces                                | Cloud Logging wide events and Cloud Trace spans                                 | Cloud Run / Logging retention, owned by the platform                                          | Platform retention only                                                                   |
-| Artifacts                                           | Container images in Artifact Registry; no user data                             | One image per package by the cleanup policy                                                   | Registry policy                                                                           |
+| Data                                                | Where                                                                           | Retention today                                                                               | What deletes it                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Sign-in address                                     | `user.email` (unique)                                                           | Until the account is deleted; no deletion path exists                                         | Nothing today (F4)                                                                             |
+| Display name                                        | `user.name`                                                                     | Same                                                                                          | Same                                                                                           |
+| Session rows, with IP address and user agent        | `session.ipAddress`, `session.userAgent`                                        | Seven days, sliding                                                                           | Sign-out, or ending one on Connections, deletes its row; the hourly sweep removes expired rows |
+| Sign-in code                                        | `verification.value`, stored hashed by `emailOTP`                               | Ten minutes to expiry; attempts capped at three                                               | Deleted on use by the plugin; the hourly sweep removes expired rows                            |
+| Sign-in code quota                                  | `sign_in_code_quota.key` — SHA-256 of the lowercased address                    | One-hour window; the row is reused or replaced, and stale rows are deleted on the next insert | The quota repository's own delete-then-insert path                                             |
+| MCP refresh token                                   | `oauth_refresh_token.token` — hashed by the provider plugin                     | Thirty days from issue or last rotation, then revoked                                         | Rotation, revocation, or expiry; no sweep of consumed rows                                     |
+| MCP refresh-token rotation replay window            | `oauth_refresh_token.rotation_replay_response`                                  | Up to thirty seconds                                                                          | Replaced on the next rotation; encrypted with `BETTER_AUTH_SECRET`                             |
+| MCP consent record                                  | `oauth_consent`                                                                 | 180 days after the last consent interaction                                                   | The hourly sweep removes consents past the window                                              |
+| OAuth signing keys                                  | `jwks.private_key`                                                              | No expiry, no sweep                                                                           | Nothing; rotating them invalidates every live token                                            |
+| Dynamic client registration                         | `oauth_client` (name, URIs, contacts, metadata)                                 | Unapproved registrations 7 days; at most 100 may be live                                      | The hourly sweep removes unapproved registrations; at the cap, registration is refused         |
+| Provider session (the fantasy account's own cookie) | `provider_credentials.envelope` — AES-GCM ciphertext                            | Until disconnect or reconnect                                                                 | Disconnect hard-deletes it; reconnect replaces it and bumps the generation                     |
+| Team identity and configuration                     | `provider_teams` (provider team and league keys, slots, automation, owner note) | Until disconnect sets availability, or the account is deleted                                 | Disconnect clears availability; nothing deletes the row (F4)                                   |
+| Lineup run outcome and plan                         | `lineup_runs`, `lineup_run_attempts`, `lineup_write_intents`                    | Ninety days after a terminal outcome                                                          | `RetentionSweep` — except `uncertain` rows, which never age out (F10)                          |
+| Run diagnostics                                     | `lineup_run_diagnostics`                                                        | Seven days by `expiresAt`                                                                     | `RetentionSweep`                                                                               |
+| Feedback report                                     | `feedback` (title, body, optional tool, team reference, client label)           | Open and acknowledged stay; resolved and not-planned are deleted 365 days after closing       | `FeedbackRetention`                                                                            |
+| Feedback quota                                      | `feedback_quota`                                                                | Until its hour can no longer accept a report                                                  | `FeedbackRetention`                                                                            |
+| Hosted linking session                              | `hosted_linking_sessions` — status, timestamps, ticket **hash**                 | One day after the session ends                                                                | The hourly sweep removes terminal rows; cancelled and expired rows no longer stay              |
+| Google identity tokens (only if Google is enabled)  | `account.access_token`, `refresh_token`, `id_token`                             | Until the account row changes                                                                 | Nothing (F6)                                                                                   |
+| Telemetry and traces                                | Cloud Logging wide events and Cloud Trace spans                                 | Cloud Run / Logging retention, owned by the platform                                          | Platform retention only                                                                        |
+| Artifacts                                           | Container images in Artifact Registry; no user data                             | One image per package by the cleanup policy                                                   | Registry policy                                                                                |
 
 What is deliberately absent, verified by reading the code that would carry it: no provider cookie, crumb,
 page content, screenshot, keystroke, or password is logged, traced, recorded, or persisted; the hosted

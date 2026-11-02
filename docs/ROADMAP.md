@@ -283,11 +283,11 @@ player per date or scoring week.
       source, confidence (`authoritative` / `corroborated` / `reported`), and the upstream reference.
 - [ ] Add the read view that reports a disagreement between two authoritative observations as a conflict; the
       current read takes the stored newest observation and cannot reconstruct a disagreement.
-- [x] Keep one row per source, subject, observation kind, and window, and prune windows that ended more than 30 days
+- [x] Keep one row per source, subject, observation kind, and window, and prune windows that ended more than 14 days
       ago.
 
 **Verify**: a fixture that changes value leaves one row with the newer observation, an older observation cannot
-replace it, and retention removes a window after 30 days. Conflict reporting remains open. `S`.
+replace it, and retention removes a window after 14 days. Conflict reporting remains open. `S`.
 
 ### F1.2 — Record the provider's own scheduled games
 
@@ -563,12 +563,13 @@ done.
 Findings F2 and F4, Medium. Dynamic registration is unauthenticated and never cleaned up, and there is no
 erasure or export path for a person's data.
 
-- [ ] Cap live dynamic registrations and age out ones that never completed an authorization.
-- [ ] Make the scope-widening update set-based instead of loading and rewriting every row.
+- [x] Cap live dynamic registrations and age out ones that never completed an authorization.
+- [x] Make the scope-widening update set-based instead of loading and rewriting every row.
 - [ ] Add one owner-scoped erasure routine and one owner-scoped export over the tables in the audit's
       inventory, in transaction order, with the cascade gaps closed.
-- [ ] Sweep `session`, `verification`, `oauth_consent`, `hosted_linking_sessions`, and `uncertain` runs once
-      they have a resolution.
+- [x] Sweep `session`, `verification`, `oauth_consent`, and `hosted_linking_sessions` once they expire or pass
+      their approved window.
+- [ ] Give `uncertain` runs a resolution transition and a clock before they can age out.
 
 **Verify**: an erasure leaves no row carrying the owner id anywhere in the database, an export round-trips,
 and a registration loop is refused at the cap. `L`, split registration from erasure before delegating.

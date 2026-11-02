@@ -19,6 +19,7 @@
 - `apps/web/src/server/`: server functions, session/auth adapters, hosted linking, stateless starter MCP.
 - `packages/backend/src/contexts/auth/`: application authentication.
 - `packages/backend/src/contexts/connections/`: connection lifecycle, encrypted provider credentials, and exact team discovery.
+- `packages/backend/src/retention/RetentionPolicy.ts`: approved retention windows for runs, observations, registrations, consents, linking sessions, and feedback.
 - `packages/backend/src/runtime/`: runtime composition and PublicInternet.
 - `packages/backend/src/utilities/machine.ts`: starter machine convention, not a durable side-effect engine.
 - `packages/brand/src/product.ts`: shared product identity.

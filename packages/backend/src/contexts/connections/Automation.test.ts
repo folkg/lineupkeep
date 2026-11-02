@@ -6,6 +6,7 @@ import { Array, Config, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { DateTime } from "effect";
 import { TestClock } from "effect/testing";
 
+import { AccountRetention } from "#contexts/auth/AccountRetention.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
@@ -645,7 +646,14 @@ const TeamsTest = TeamsLive.pipe(
   Layer.provide(TeamRepositoryTest),
   Layer.provide(LineupRepositoryTest),
 );
-const RetentionTest = RetentionSweepLive.pipe(Layer.provide(DatabaseLayer));
+const RetentionTest = RetentionSweepLive.pipe(
+  Layer.provide(DatabaseLayer),
+  Layer.provide(
+    Layer.succeed(AccountRetention)({
+      run: () => Effect.succeed({ sessions: 0, verifications: 0, consents: 0, registrations: 0 }),
+    }),
+  ),
+);
 const CredentialRepositoryTest = ConnectionCredentialRepository.layer.pipe(
   Layer.provide(DatabaseLayer),
 );

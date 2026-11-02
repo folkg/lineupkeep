@@ -784,6 +784,40 @@ it.effect(
 );
 
 it.effect(
+  "refuses a dynamic registration once 100 unapproved registrations are live",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const database = yield* AuthDatabase;
+      const registeredAt = yield* DateTime.nowAsDate;
+      yield* Effect.promise(() =>
+        database.insert(oauthClient).values(
+          Array.from({ length: 99 }, (_, index) => ({
+            id: `waiting-${String(index)}`,
+            clientId: `waiting-client-${String(index)}`,
+            redirectUris: ["http://127.0.0.1:19999/callback"],
+            createdAt: registeredAt,
+            updatedAt: registeredAt,
+          })),
+        ),
+      );
+
+      const accepted = yield* adapter.handle(dynamicRegistrationRequest("accepted"));
+      const refused = yield* adapter.handle(dynamicRegistrationRequest("refused"));
+
+      assert.strictEqual(accepted.status, 201);
+      assert.strictEqual(refused.status, 429);
+      const body = yield* jsonOf(
+        refused,
+        Schema.Struct({ error: Schema.String, error_description: Schema.String }),
+      );
+      assert.strictEqual(body.error, "temporarily_unavailable");
+      assert.include(body.error_description, "100");
+    }).pipe(Effect.provide(adapterLayer(baseConfig))),
+  databaseTestTimeout,
+);
+
+it.effect(
   "lets a dynamic registration step up to a scope advertised after it registered",
   () =>
     Effect.gen(function* () {
@@ -1342,6 +1376,21 @@ function metadataClientAuthorization(): Request {
       code_challenge_method: "S256",
     })}`,
   );
+}
+
+function dynamicRegistrationRequest(clientName: string): Request {
+  return new Request("http://localhost:5173/api/auth/oauth2/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      client_name: clientName,
+      redirect_uris: ["http://127.0.0.1:19999/callback"],
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      application_type: "native",
+    }),
+  });
 }
 
 function latestCode(email: string): Effect.Effect<string, never, EmailOutbox> {

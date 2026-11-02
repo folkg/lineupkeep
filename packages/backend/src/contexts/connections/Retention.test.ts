@@ -3,6 +3,11 @@ import { assert, beforeEach, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { Array, Config, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 
+import { AccountRetentionLive } from "#contexts/auth/internal/AccountRetentionLive.ts";
+import { AccountRetentionRepository } from "#contexts/auth/internal/AccountRetentionRepository.ts";
+import { AuthDatabase } from "#contexts/auth/internal/AuthDatabase.ts";
+import { AuthDatabaseTest } from "#contexts/auth/internal/AuthDatabaseTest.ts";
+import { OAuthClientRepository } from "#contexts/auth/internal/OAuthClientRepository.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
@@ -16,10 +21,12 @@ import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
+import { hostedLinkingSessions } from "./internal/HostedLinkingTables.ts";
 import { LineupDeliveryLocal } from "./internal/LineupDeliveryLocal.ts";
 import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
 import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
 import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
+import { lineupRunAttempts, lineupRuns, lineupWriteIntents } from "./internal/LineupRunTables.ts";
 import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
 import {
   FakeProviderWorld,
@@ -60,94 +67,251 @@ it.effect("removes expired diagnostics and outcomes without touching unresolved 
       10,
       DateTime.addDuration(startedAt, 7 * 86_400_000 + 60_000),
     );
-    const thirtyDays = yield* retention.run(
+    const ninetyDays = yield* retention.run(
       10,
-      DateTime.addDuration(startedAt, 30 * 86_400_000 + 60_000),
+      DateTime.addDuration(startedAt, 90 * 86_400_000 + 60_000),
     );
     const repeated = yield* retention.run(
       10,
-      DateTime.addDuration(startedAt, 30 * 86_400_000 + 60_000),
+      DateTime.addDuration(startedAt, 90 * 86_400_000 + 60_000),
     );
     const remaining = yield* runs.get(owner, { team });
 
-    assert.deepStrictEqual(sixDays, {
-      diagnostics: 0,
-      attempts: 0,
-      writeIntents: 0,
-      runs: 0,
-      requests: 0,
-      deliveries: 0,
-      scheduleObservations: 0,
-    });
+    assert.strictEqual(sixDays.diagnostics, 0);
+    assert.strictEqual(sixDays.runs, 0);
     assert.strictEqual(sevenDays.diagnostics, 1);
     assert.strictEqual(sevenDays.runs, 0);
-    assert.strictEqual(thirtyDays.runs, 1);
-    assert.strictEqual(thirtyDays.requests, 1);
-    assert.strictEqual(thirtyDays.deliveries, 1);
-    assert.deepStrictEqual(repeated, {
-      diagnostics: 0,
-      attempts: 0,
-      writeIntents: 0,
-      runs: 0,
-      requests: 0,
-      deliveries: 0,
-      scheduleObservations: 0,
-    });
+    assert.strictEqual(ninetyDays.runs, 1);
+    assert.strictEqual(ninetyDays.requests, 1);
+    assert.strictEqual(ninetyDays.deliveries, 1);
+    assert.strictEqual(repeated.runs, 0);
+    assert.strictEqual(repeated.requests, 0);
+    assert.strictEqual(repeated.deliveries, 0);
     assert.strictEqual(remaining.runs.length, 1);
     assert.strictEqual(remaining.runs[0]?.run, queued.runs[0]?.id);
     assert.strictEqual(remaining.runs[0]?.status, "queued");
   }).pipe(Effect.provide(RetentionTestLayer)),
 );
 
-it.effect("prunes schedule observations only after their window has been over for 30 days", () =>
+it.effect(
+  "removes a terminal run, its attempts and its write intents after 90 whole days and keeps a run at 89 days",
+  () =>
+    Effect.gen(function* () {
+      const database = yield* ConnectionsDatabase;
+      const retention = yield* RetentionSweep;
+      const at = DateTime.makeUnsafe("2026-06-30T12:00:00.000Z");
+      const removedAt = DateTime.subtractDuration(at, 90 * 86_400_000);
+      const keptAt = DateTime.subtractDuration(at, 89 * 86_400_000);
+      const removedRun = "018f79ea-7d86-7c18-9b4a-8b4d0c916001";
+      const keptRun = "018f79ea-7d86-7c18-9b4a-8b4d0c916002";
+
+      yield* database
+        .insert(lineupRuns)
+        .values([terminalRun(removedRun, removedAt), terminalRun(keptRun, keptAt)]);
+      yield* database
+        .insert(lineupRunAttempts)
+        .values([attemptOf(removedRun, removedAt), attemptOf(keptRun, keptAt)]);
+      yield* database
+        .insert(lineupWriteIntents)
+        .values([writeIntentOf(removedRun, removedAt), writeIntentOf(keptRun, keptAt)]);
+
+      const summary = yield* retention.run(10, at);
+      const runs = yield* database.select({ id: lineupRuns.id }).from(lineupRuns);
+      const intents = yield* database
+        .select({ runId: lineupWriteIntents.runId })
+        .from(lineupWriteIntents);
+
+      assert.strictEqual(summary.runs, 1);
+      assert.strictEqual(summary.attempts, 1);
+      assert.strictEqual(summary.writeIntents, 1);
+      assert.deepStrictEqual(
+        runs.map((run) => run.id),
+        [keptRun],
+      );
+      assert.deepStrictEqual(
+        intents.map((intent) => intent.runId),
+        [keptRun],
+      );
+    }).pipe(Effect.provide(RetentionTestLayer)),
+);
+
+it.effect("prunes schedule observations 14 days after their covered window ends", () =>
   Effect.gen(function* () {
     const store = yield* ScheduleObservationRepository;
     const retention = yield* RetentionSweep;
     const team = decodeTeamId("00000000-0000-7000-8000-000000000002");
-    const startedAt = yield* DateTime.now;
-    const observationDate = DateTime.formatIsoDate(
-      DateTime.subtractDuration(startedAt, 20 * 86_400_000),
+    const at = DateTime.makeUnsafe("2026-06-30T12:00:00.000Z");
+    const windows = [15, 14, 13].map((days) =>
+      DateTime.formatIsoDate(DateTime.subtractDuration(at, days * 86_400_000)),
     );
     yield* store.recordProviderOpponents({
       subjectKey: team,
       source: decodeProviderKey("yahoo"),
       confidence: "authoritative",
-      observations: [
-        {
-          window: { from: observationDate, to: observationDate },
-          value: { players: [] },
-          observedAt: startedAt,
-          sourceReference: "retention-fixture",
-        },
-      ],
+      observations: windows.map((window) => ({
+        window: { from: window, to: window },
+        value: { players: [] },
+        observedAt: at,
+        sourceReference: "retention-fixture",
+      })),
     });
 
-    const sixDays = yield* retention.run(10, DateTime.addDuration(startedAt, 6 * 86_400_000));
-    assert.strictEqual(sixDays.scheduleObservations, 0);
-    assert.lengthOf(
-      yield* store.readProviderOpponents({
-        subjectKey: team,
-        from: observationDate,
-        to: observationDate,
-      }),
-      1,
-    );
+    const summary = yield* retention.run(10, at);
+    assert.strictEqual(summary.scheduleObservations, 2);
 
-    const thirtyDays = yield* retention.run(
-      10,
-      DateTime.addDuration(startedAt, 30 * 86_400_000 + 60_000),
+    const remaining = yield* Effect.forEach(windows, (window) =>
+      store.readProviderOpponents({ subjectKey: team, from: window, to: window }),
     );
-    assert.strictEqual(thirtyDays.scheduleObservations, 1);
-    assert.lengthOf(
-      yield* store.readProviderOpponents({
-        subjectKey: team,
-        from: observationDate,
-        to: observationDate,
-      }),
-      0,
+    assert.deepStrictEqual(
+      remaining.map((rows) => rows.length),
+      [0, 0, 1],
     );
   }).pipe(Effect.provide(RetentionTestLayer)),
 );
+
+it.effect("removes finished hosted linking sessions after a day and keeps a live one", () =>
+  Effect.gen(function* () {
+    const database = yield* ConnectionsDatabase;
+    const retention = yield* RetentionSweep;
+    const at = DateTime.makeUnsafe("2026-06-30T12:00:00.000Z");
+    const startedAt = DateTime.subtractDuration(at, 3 * 86_400_000);
+    const finishedAt = DateTime.subtractDuration(at, 2 * 86_400_000);
+    const boundaryAt = DateTime.subtractDuration(at, 86_400_000);
+    const liveStartedAt = DateTime.subtractDuration(at, 60_000);
+
+    yield* database
+      .insert(hostedLinkingSessions)
+      .values([
+        hostedLinkingSession("finished-session", "completed", startedAt, finishedAt),
+        hostedLinkingSession("expired-session", "expired", startedAt, finishedAt),
+        hostedLinkingSession("boundary-session", "completed", startedAt, boundaryAt),
+        hostedLinkingSession("live-session", "active", liveStartedAt, at),
+      ]);
+
+    const summary = yield* retention.run(10, at);
+    const remaining = yield* database
+      .select({ id: hostedLinkingSessions.id })
+      .from(hostedLinkingSessions);
+
+    assert.strictEqual(summary.hostedLinkingSessions, 3);
+    assert.deepStrictEqual(
+      remaining.map((session) => session.id),
+      ["live-session"],
+    );
+  }).pipe(Effect.provide(RetentionTestLayer)),
+);
+
+it.effect("keeps an in-flight run and its write intent at the retention boundary", () =>
+  Effect.gen(function* () {
+    const database = yield* ConnectionsDatabase;
+    const retention = yield* RetentionSweep;
+    const at = DateTime.makeUnsafe("2026-06-30T12:00:00.000Z");
+    const boundary = DateTime.subtractDuration(at, 90 * 86_400_000);
+    const inFlightRun = "018f79ea-7d86-7c18-9b4a-8b4d0c916003";
+
+    yield* database
+      .insert(lineupRuns)
+      .values([{ ...terminalRun(inFlightRun, boundary), status: "applying" }]);
+    yield* database.insert(lineupWriteIntents).values([writeIntentOf(inFlightRun, boundary)]);
+
+    const summary = yield* retention.run(10, at);
+    const runs = yield* database.select({ id: lineupRuns.id }).from(lineupRuns);
+    const intents = yield* database
+      .select({ runId: lineupWriteIntents.runId })
+      .from(lineupWriteIntents);
+
+    assert.strictEqual(summary.runs, 0);
+    assert.strictEqual(summary.writeIntents, 0);
+    assert.deepStrictEqual(
+      runs.map((run) => run.id),
+      [inFlightRun],
+    );
+    assert.deepStrictEqual(
+      intents.map((intent) => intent.runId),
+      [inFlightRun],
+    );
+  }).pipe(Effect.provide(RetentionTestLayer)),
+);
+
+function terminalRun(id: string, at: DateTime.Utc): typeof lineupRuns.$inferInsert {
+  return {
+    id,
+    userId: owner,
+    requestId: "018f79ea-7d86-7c18-9b4a-8b4d0c9169e2",
+    teamId: decodeTeamId("00000000-0000-7000-8000-000000000021"),
+    connectionId: "connection-1",
+    trigger: "manual",
+    scheduleKey: null,
+    target: { coverage: "current" },
+    status: "completed",
+    state: {},
+    implementation: "custom_policy",
+    implementationVersion: "custom-policy/2",
+    attempts: 1,
+    nextActionAt: null,
+    createdAt: DateTime.toDateUtc(at),
+    updatedAt: DateTime.toDateUtc(at),
+  };
+}
+
+function attemptOf(runId: string, at: DateTime.Utc): typeof lineupRunAttempts.$inferInsert {
+  return {
+    runId,
+    attempt: 1,
+    leaseToken: "018f79ea-7d86-7c18-9b4a-8b4d0c916010",
+    leaseGeneration: 1,
+    startedAt: DateTime.toDateUtc(at),
+    finishedAt: DateTime.toDateUtc(at),
+    outcome: "completed",
+  };
+}
+
+function writeIntentOf(runId: string, at: DateTime.Utc): typeof lineupWriteIntents.$inferInsert {
+  return {
+    runId,
+    attempt: 1,
+    userId: owner,
+    teamId: decodeTeamId("00000000-0000-7000-8000-000000000021"),
+    connectionId: "connection-1",
+    connectionGeneration: 1,
+    leaseToken: "018f79ea-7d86-7c18-9b4a-8b4d0c916010",
+    leaseGeneration: 1,
+    action: "native_action",
+    target: { coverage: "current" },
+    before: {},
+    plan: null,
+    status: "verified_changed",
+    createdAt: DateTime.toDateUtc(at),
+    updatedAt: DateTime.toDateUtc(at),
+  };
+}
+
+function hostedLinkingSession(
+  id: string,
+  status: "completed" | "expired" | "active",
+  startedAt: DateTime.Utc,
+  endedAt: DateTime.Utc,
+): typeof hostedLinkingSessions.$inferInsert {
+  return {
+    id,
+    userId: owner,
+    connectionId: status === "completed" ? "connection-1" : null,
+    provider: "yahoo",
+    status,
+    ticketHash: `hash-${id}`,
+    startedAt: DateTime.toDateUtc(startedAt),
+    expiresAt: DateTime.toDateUtc(
+      status === "active" ? DateTime.addDuration(startedAt, 600_000) : endedAt,
+    ),
+    completedAt: status === "completed" ? DateTime.toDateUtc(endedAt) : null,
+    cancelledAt: null,
+    expiredAt: status === "expired" ? DateTime.toDateUtc(endedAt) : null,
+    failedAt: null,
+    failureReason: null,
+    createdAt: DateTime.toDateUtc(startedAt),
+    updatedAt: DateTime.toDateUtc(endedAt),
+  };
+}
 
 function lineupRequest(team: TeamId): LineupRequestInput {
   return Schema.decodeSync(LineupRequestInput)({
@@ -340,12 +504,28 @@ const ConnectionsTest = ConnectionsLive.pipe(
   Layer.provideMerge(ProviderFakeTest),
   Layer.provide(EncryptionTestLayer),
 );
-const RetentionTest = RetentionSweepLive.pipe(Layer.provide(DatabaseLayer));
 const ScheduleObservationRepositoryTest = ScheduleObservationRepository.layer.pipe(
   Layer.provide(DatabaseLayer),
 );
+const AuthDatabaseLayer =
+  databaseUrl === undefined
+    ? AuthDatabaseTest.pipe(Layer.orDie)
+    : AuthDatabase.layer.pipe(
+        Layer.provide(
+          DatabaseConnection.fromConnectionString({
+            connectionString: () => databaseUrl,
+            prepareStatements: true,
+          }),
+        ),
+        Layer.orDie,
+      );
+const AccountRetentionTest = AccountRetentionLive.pipe(
+  Layer.provide(OAuthClientRepository.layer),
+  Layer.provide(AccountRetentionRepository.layer),
+  Layer.provide(AuthDatabaseLayer),
+);
 const RetentionTestLayer = Layer.mergeAll(
-  RetentionTest,
+  RetentionSweepLive.pipe(Layer.provide(AccountRetentionTest), Layer.provide(DatabaseLayer)),
   RunsTest,
   ConnectionsTest,
   ProviderFakeTest,

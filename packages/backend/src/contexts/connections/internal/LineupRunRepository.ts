@@ -23,6 +23,7 @@ import type {
   LineupTrigger,
 } from "#contexts/connections/LineupRun.ts";
 import { anyOf, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
+import { retentionPolicy } from "#retention/RetentionPolicy.ts";
 import { chunked } from "#utilities/collections.ts";
 import { snapshotOf } from "#utilities/machine.ts";
 
@@ -60,7 +61,6 @@ import { TeamAutomationState } from "./TeamAutomationWorkflow.ts";
 
 const lineupLeaseDurationMillis = 45_000;
 const lineupDeliveryStaleMillis = 60_000;
-const lineupDiagnosticRetentionMillis = 7 * 24 * 60 * 60 * 1000;
 
 export type NewLineupRun = {
   readonly team: TeamId;
@@ -802,7 +802,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                   data: observationData,
                   createdAt: DateTime.toDateUtc(input.at),
                   expiresAt: DateTime.toDateUtc(
-                    DateTime.addDuration(input.at, lineupDiagnosticRetentionMillis),
+                    DateTime.addDuration(input.at, retentionPolicy.lineupDiagnostic.millis),
                   ),
                 })
                 .pipe(Effect.mapError(mapPersistenceFailure));

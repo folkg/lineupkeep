@@ -5,7 +5,7 @@ import { DateTime, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
 import { Feedback } from "./Feedback.ts";
-import { FeedbackRetention, closedReportRetentionMillis } from "./FeedbackRetention.ts";
+import { FeedbackRetention } from "./FeedbackRetention.ts";
 import { FeedbackDatabase } from "./internal/FeedbackDatabase.ts";
 import { FeedbackDatabaseTest } from "./internal/FeedbackDatabaseTest.ts";
 import { FeedbackLive } from "./internal/FeedbackLive.ts";
@@ -37,7 +37,7 @@ it.effect("removes closed reports once their retention window ends", () =>
       updatedAt: closedAt,
     });
 
-    yield* TestClock.adjust(closedReportRetentionMillis - 1_000);
+    yield* TestClock.adjust(aYearMillis - 1_000);
     const retained = yield* retention.run(10, yield* DateTime.now);
     assert.deepStrictEqual(retained.reports, 0);
     assert.strictEqual((yield* feedback.list(user, {})).length, 2);
@@ -75,6 +75,7 @@ it.effect("removes quota windows that can no longer accept submissions", () =>
 );
 
 const user = decodeUserId("owner");
+const aYearMillis = 365 * 24 * 60 * 60 * 1000;
 const FeedbackRetentionTestLayer = Layer.mergeAll(FeedbackLive, FeedbackRetentionLive).pipe(
   Layer.provide(FeedbackRepository.layer),
   Layer.provideMerge(FeedbackDatabaseTest),

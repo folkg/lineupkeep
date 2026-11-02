@@ -1,10 +1,7 @@
 import { DateTime, Effect, Layer } from "effect";
 
-import {
-  FeedbackRetention,
-  closedReportRetentionMillis,
-  quotaWindowRetentionMillis,
-} from "#contexts/feedback/FeedbackRetention.ts";
+import { FeedbackRetention } from "#contexts/feedback/FeedbackRetention.ts";
+import { retentionPolicy } from "#retention/RetentionPolicy.ts";
 
 import { FeedbackRepository } from "./FeedbackRepository.ts";
 
@@ -15,8 +12,8 @@ export const FeedbackRetentionLive = Layer.effect(
 
     const run = Effect.fn("FeedbackRetention.run")(function* (limit: number, now: DateTime.Utc) {
       const retained = yield* repository.expired({
-        closedBefore: DateTime.subtractDuration(now, closedReportRetentionMillis),
-        quotasBefore: DateTime.subtractDuration(now, quotaWindowRetentionMillis),
+        closedBefore: DateTime.subtractDuration(now, retentionPolicy.closedFeedbackReport.millis),
+        quotasBefore: DateTime.subtractDuration(now, retentionPolicy.feedbackQuota.millis),
         limit,
       });
       yield* Effect.annotateCurrentSpan({

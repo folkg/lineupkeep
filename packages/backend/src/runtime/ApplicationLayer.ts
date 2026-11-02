@@ -4,6 +4,8 @@ import { FetchHttpClient } from "effect/http";
 
 import type { AuthService } from "#contexts/auth/Auth.ts";
 import { AuthorizationScopes } from "#contexts/auth/AuthorizationScopes.ts";
+import { AccountRetentionLive } from "#contexts/auth/internal/AccountRetentionLive.ts";
+import { AccountRetentionRepository } from "#contexts/auth/internal/AccountRetentionRepository.ts";
 import { AuthDatabase } from "#contexts/auth/internal/AuthDatabase.ts";
 import { AuthLive } from "#contexts/auth/internal/AuthLive.ts";
 import { BetterAuthAdapter } from "#contexts/auth/internal/BetterAuthAdapter.ts";
@@ -186,7 +188,16 @@ const TeamsLayer = TeamsLive.pipe(
   Layer.provide(ProviderLayer),
   Layer.provide(CredentialEncryptionLayer),
 );
-const RetentionSweepLayer = RetentionSweepLive.pipe(Layer.provide(ConnectionsDatabase.layer));
+const RetentionSweepLayer = RetentionSweepLive.pipe(
+  Layer.provide(ConnectionsDatabase.layer),
+  Layer.provide(
+    AccountRetentionLive.pipe(
+      Layer.provide(OAuthClientRepository.layer),
+      Layer.provide(AccountRetentionRepository.layer),
+      Layer.provide(AuthDatabase.layer),
+    ),
+  ),
+);
 const AutomationLayer = AutomationLive.pipe(
   Layer.provide(TeamRepositoryLayer),
   Layer.provide(LineupRepositoryLayer),

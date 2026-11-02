@@ -1,12 +1,15 @@
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Array, DateTime, Effect, Layer } from "effect";
 
+import { AccountRetention } from "#contexts/auth/AccountRetention.ts";
 import type { LineupRunStatus } from "#contexts/connections/LineupRun.ts";
 import { RetentionPersistenceFailed, RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { RetentionSummary } from "#contexts/connections/Retention.ts";
 import { anyOf } from "#database/dbUtilities.ts";
+import { retentionPolicy } from "#retention/RetentionPolicy.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
+import { hostedLinkingSessions } from "./HostedLinkingTables.ts";
 import {
   lineupDeliveries,
   lineupRequests,
@@ -17,8 +20,6 @@ import {
 } from "./LineupRunTables.ts";
 import { scheduleObservations } from "./ScheduleObservationTables.ts";
 
-const outcomeRetentionMillis = 30 * 24 * 60 * 60 * 1000;
-const scheduleObservationRetentionMillis = 30 * 24 * 60 * 60 * 1000;
 const terminalOutcomeStatuses = [
   "completed",
   "skipped",
@@ -26,20 +27,25 @@ const terminalOutcomeStatuses = [
   "failed",
   "superseded",
 ] as const satisfies ReadonlyArray<LineupRunStatus>;
+const terminalHostedLinkingStatuses = ["completed", "cancelled", "expired", "failed"] as const;
 
 export const RetentionSweepLive = Layer.effect(
   RetentionSweep,
   Effect.gen(function* () {
     const database = yield* ConnectionsDatabase;
+    const accountRetention = yield* AccountRetention;
 
     const run = Effect.fn("RetentionSweep.run")(function* (limit: number, now: DateTime.Utc) {
       const outcomesBefore = DateTime.toDateUtc(
-        DateTime.subtractDuration(now, outcomeRetentionMillis),
+        DateTime.subtractDuration(now, retentionPolicy.lineupRun.millis),
       );
       const observationsBefore = DateTime.formatIsoDate(
-        DateTime.subtractDuration(now, scheduleObservationRetentionMillis),
+        DateTime.subtractDuration(now, retentionPolicy.scheduleObservation.millis),
       );
-      return yield* database
+      const hostedLinkingBefore = DateTime.toDateUtc(
+        DateTime.subtractDuration(now, retentionPolicy.hostedLinkingSession.millis),
+      );
+      const connections = yield* database
         .transaction((tx) =>
           Effect.gen(function* () {
             const diagnosticIds = yield* tx
@@ -108,7 +114,20 @@ export const RetentionSweepLive = Layer.effect(
                 Effect.map((deleted) => deleted.length),
               );
 
-            const summary: RetentionSummary = {
+            const oldHostedLinkingSessions = yield* tx
+              .select({ id: hostedLinkingSessions.id })
+              .from(hostedLinkingSessions)
+              .where(
+                and(
+                  anyOf(hostedLinkingSessions.status, terminalHostedLinkingStatuses),
+                  lte(hostedLinkingSessions.updatedAt, hostedLinkingBefore),
+                ),
+              )
+              .orderBy(hostedLinkingSessions.updatedAt)
+              .limit(limit);
+            const hosted = yield* deleteIds(tx, hostedLinkingSessions, oldHostedLinkingSessions);
+
+            const summary = {
               diagnostics: diagnostics + runDiagnostics,
               attempts,
               writeIntents,
@@ -116,17 +135,30 @@ export const RetentionSweepLive = Layer.effect(
               requests,
               deliveries,
               scheduleObservations: observations,
+              hostedLinkingSessions: hosted,
             };
-            yield* Effect.annotateCurrentSpan({
-              "retention.diagnostics": summary.diagnostics,
-              "retention.runs": summary.runs,
-              "retention.requests": summary.requests,
-              "retention.schedule_observations": summary.scheduleObservations,
-            });
             return summary;
           }),
         )
         .pipe(Effect.mapError((cause) => RetentionPersistenceFailed.make({ cause })));
+
+      const account = yield* accountRetention
+        .run(limit, now)
+        .pipe(Effect.mapError((cause) => RetentionPersistenceFailed.make({ cause })));
+
+      const summary: RetentionSummary = { ...connections, ...account };
+      yield* Effect.annotateCurrentSpan({
+        "retention.diagnostics": summary.diagnostics,
+        "retention.runs": summary.runs,
+        "retention.requests": summary.requests,
+        "retention.schedule_observations": summary.scheduleObservations,
+        "retention.hosted_linking_sessions": summary.hostedLinkingSessions,
+        "retention.sessions": summary.sessions,
+        "retention.verifications": summary.verifications,
+        "retention.consents": summary.consents,
+        "retention.registrations": summary.registrations,
+      });
+      return summary;
     });
 
     return RetentionSweep.of({ run });
@@ -137,7 +169,11 @@ type Transaction = Parameters<Parameters<ConnectionsDatabase["Service"]["transac
 
 function deleteIds(
   tx: Transaction,
-  table: typeof lineupRunDiagnostics | typeof lineupRuns | typeof lineupDeliveries,
+  table:
+    | typeof lineupRunDiagnostics
+    | typeof lineupRuns
+    | typeof lineupDeliveries
+    | typeof hostedLinkingSessions,
   rows: ReadonlyArray<{ readonly id: string }>,
 ): Effect.Effect<number, never> {
   const ids = rows.map((row) => row.id);

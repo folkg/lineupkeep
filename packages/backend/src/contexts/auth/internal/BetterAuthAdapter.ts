@@ -14,6 +14,7 @@ import {
   Data,
   ConfigProvider,
   Context,
+  DateTime,
   Duration,
   Effect,
   Exit,
@@ -37,6 +38,7 @@ import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import { UserId } from "#contexts/auth/User.ts";
 import { EmailDelivery } from "#email/EmailDelivery.ts";
 import type { EmailDeliveryFailed, EmailMessage } from "#email/EmailDelivery.ts";
+import { unapprovedRegistrationLimit } from "#retention/RetentionPolicy.ts";
 import { onboardingScopes } from "#runtime/ApplicationScopes.ts";
 import { BackgroundWork } from "#runtime/BackgroundWork.ts";
 import { PublicInternet, PublicInternetUnavailable } from "#runtime/PublicInternet.ts";
@@ -75,6 +77,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         return target !== name && advertisedScopeNames.includes(target) ? target : name;
       };
       const oauthResource = new URL("/mcp", baseUrl).href;
+      const registrationPath = new URL("/api/auth/oauth2/register", baseUrl).pathname;
 
       const rateLimitEnabled = environment !== "development";
 
@@ -161,12 +164,34 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           ),
         );
 
+      const refuseExcessRegistrations = Effect.fn("AuthService.refuseExcessRegistrations")(
+        function* (request: Request) {
+          if (request.method !== "POST" || new URL(request.url).pathname !== registrationPath) {
+            return undefined;
+          }
+          const live = yield* oauthClients.liveUnapprovedCount(yield* DateTime.now);
+          if (live < unapprovedRegistrationLimit) {
+            return undefined;
+          }
+          yield* Effect.annotateCurrentSpan(
+            "auth.client_registration.outcome",
+            "registration_limit",
+          );
+          return registrationLimitResponse();
+        },
+      );
+
       const handle = Effect.fn("AuthService.handle")(function* (request: Request) {
         if (rateLimitEnabled && isSignInCodeRequest(request)) {
           const refusal = yield* refuseExcessCodes(request);
           if (refusal !== undefined) {
             return refusal;
           }
+        }
+
+        const registrationRefusal = yield* refuseExcessRegistrations(request);
+        if (registrationRefusal !== undefined) {
+          return registrationRefusal;
         }
 
         const response = yield* runAuthHandler(request);
@@ -506,6 +531,18 @@ function isSignInCodeRequest(request: Request): boolean {
   return (
     request.method === "POST" &&
     new URL(request.url).pathname.endsWith("/email-otp/send-verification-otp")
+  );
+}
+
+function registrationLimitResponse(): Response {
+  return Response.json(
+    {
+      error: "temporarily_unavailable",
+      error_description: `Client registration is at its limit of ${String(
+        unapprovedRegistrationLimit,
+      )} registrations waiting for authorization. Try again later.`,
+    },
+    { status: 429, headers: { "retry-after": "3600" } },
   );
 }
 

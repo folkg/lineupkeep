@@ -1001,6 +1001,34 @@ it("allows Connections to consume the published identity module", async () => {
   expect(result.status, result.output).toBe(0);
 });
 
+it("allows Connections to sweep through the published account retention contract", async () => {
+  const files = {
+    "packages/backend/src/contexts/connections/internal/RetentionSweepRepository.ts":
+      'export { AccountRetention } from "#contexts/auth/AccountRetention.ts";',
+    "packages/backend/src/contexts/auth/AccountRetention.ts": "export const AccountRetention = {};",
+  };
+
+  const result = await checkArchitecture(files);
+
+  expect(result.status, result.output).toBe(0);
+});
+
+it("rejects another Auth public contract from Connections", async () => {
+  const files = {
+    "packages/backend/src/contexts/connections/internal/RetentionSweepRepository.ts":
+      'export { SignInSessions } from "#contexts/auth/SignInSessions.ts";',
+    "packages/backend/src/contexts/auth/SignInSessions.ts": "export const SignInSessions = {};",
+  };
+
+  const result = await checkArchitecture(files);
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("context-dependencies-connections");
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+    "declare only the needed public contract in permittedContextImports",
+  );
+});
+
 it("denies cross-context dependencies from an unlisted context", async () => {
   const files = {
     "packages/backend/src/contexts/workspaces/Workspace.ts":

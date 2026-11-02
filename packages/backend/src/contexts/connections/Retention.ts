@@ -9,6 +9,11 @@ export const RetentionSummary = Schema.Struct({
   requests: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   deliveries: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   scheduleObservations: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  hostedLinkingSessions: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  sessions: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  verifications: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  consents: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  registrations: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 export type RetentionSummary = typeof RetentionSummary.Type;
 

@@ -9,9 +9,6 @@ const FeedbackRetentionSummary = Schema.Struct({
 });
 type FeedbackRetentionSummary = typeof FeedbackRetentionSummary.Type;
 
-export const closedReportRetentionMillis = 180 * 24 * 60 * 60 * 1000;
-export const quotaWindowRetentionMillis = 24 * 60 * 60 * 1000;
-
 export class FeedbackRetention extends Context.Service<FeedbackRetention, FeedbackRetentionShape>()(
   "@lineupkeep/backend/contexts/feedback/FeedbackRetention",
 ) {}

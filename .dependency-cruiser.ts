@@ -2,7 +2,11 @@ import type { IConfiguration, IRegularForbiddenRuleType } from "dependency-cruis
 
 const permittedContextImports = {
   auth: [],
-  connections: ["contexts/auth/User.ts", "contexts/auth/UserDirectory.ts"],
+  connections: [
+    "contexts/auth/AccountRetention.ts",
+    "contexts/auth/User.ts",
+    "contexts/auth/UserDirectory.ts",
+  ],
   feedback: ["contexts/auth/User.ts"],
   toolCalls: ["contexts/auth/User.ts"],
 };

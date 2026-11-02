@@ -204,7 +204,7 @@ An external service that publishes professional games, such as the NHL's own API
 _Avoid_: Feed, scraper, schedule API
 
 **Schedule observation**:
-A professional game or the provider's scheduled game, stored with the window it covers, when it was observed, which source produced it, and how strongly it is held (`authoritative`, `corroborated`, or `reported`). The schedule store keeps one row per source, subject, observation kind, and window; a newer observation replaces an older one, and retention removes windows that ended more than 30 days ago.
+A professional game or the provider's scheduled game, stored with the window it covers, when it was observed, which source produced it, and how strongly it is held (`authoritative`, `corroborated`, or `reported`). The schedule store keeps one row per source, subject, observation kind, and window; a newer observation replaces an older one, and retention removes windows that ended more than 14 days ago.
 _Avoid_: Observed fact, cache entry, truth
 
 **Schedule source**:

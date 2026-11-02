@@ -8,6 +8,7 @@
     "#runtime/*": "./src/runtime/*",
     "#config/*": "./src/config/*",
     "#email/*": "./src/email/*",
+    "#retention/*": "./src/retention/*",
     "#utilities/*": "./src/utilities/*",
     "#backend/*": "./src/*"
   },
