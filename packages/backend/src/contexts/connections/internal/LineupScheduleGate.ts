@@ -147,7 +147,10 @@ function providerMaterial(input: {
 function gameFailureAttributes(failure: CalendarFailure): Record<string, string> {
   switch (failure._tag) {
     case "game_source.request_failed":
-      return withStatus({ "schedule.gate.failure": failure._tag }, failure.status);
+      return {
+        ...withStatus({ "schedule.gate.failure": failure._tag }, failure.status),
+        ...(failure.detail === undefined ? {} : { "schedule.gate.failure_detail": failure.detail }),
+      };
     case "game_source.response_invalid":
       return {
         "schedule.gate.failure": failure._tag,
@@ -158,7 +161,14 @@ function gameFailureAttributes(failure: CalendarFailure): Record<string, string>
       return {
         "schedule.gate.failure": failure._tag,
         "schedule.gate.failure_cause": cause._tag,
-        ...(cause._tag === "game_source.request_failed" ? withStatus({}, cause.status) : {}),
+        ...(cause._tag === "game_source.request_failed"
+          ? {
+              ...withStatus({}, cause.status),
+              ...(cause.detail === undefined
+                ? {}
+                : { "schedule.gate.failure_cause_detail": cause.detail }),
+            }
+          : {}),
         ...(cause._tag === "game_source.response_invalid" && cause.field !== undefined
           ? { "schedule.gate.failure_cause_field": cause.field }
           : {}),

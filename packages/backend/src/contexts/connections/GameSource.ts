@@ -54,6 +54,7 @@ export class GameSourceRequestFailed extends Schema.TaggedError<
 >()("game_source.request_failed", {
   source: GameSourceKey,
   status: Schema.optional(Schema.Int),
+  detail: Schema.optional(Schema.String),
 }) {}
 
 export class GameSourceResponseInvalid extends Schema.TaggedError<

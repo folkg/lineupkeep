@@ -40,13 +40,12 @@ export const nhlGameSource: Effect.Effect<GameSourceShape, never, PublicInternet
             { timeoutMs: requestTimeoutMillis, maxResponseBytes: maximumResponseBytes },
           )
           .pipe(
-            Effect.tapError((error) =>
-              Effect.annotateCurrentSpan({
-                "game_source.transport_failure": error._tag,
-                "game_source.transport_reason": error.reason ?? "none",
+            Effect.mapError((error) =>
+              GameSourceRequestFailed.make({
+                source: sourceKey,
+                detail: error.reason ?? error._tag,
               }),
             ),
-            Effect.mapError(() => GameSourceRequestFailed.make({ source: sourceKey })),
           ),
       );
 
