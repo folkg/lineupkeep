@@ -7,8 +7,8 @@ import { ProfessionalCalendarUnavailable } from "#contexts/connections/Professio
 import { ProfessionalCalendar } from "#contexts/connections/ProfessionalCalendar.ts";
 import { professionalGameFreshness } from "#contexts/connections/ProfessionalGame.ts";
 
-import { ObservedFactRepository } from "./ObservedFactRepository.ts";
 import { readProfessionalGameWeek } from "./ProfessionalGameFacts.ts";
+import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
 
 const CalendarDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
 
@@ -30,7 +30,7 @@ const ReadGames = Schema.Struct({
 export const ProfessionalCalendarLive = Layer.effect(
   ProfessionalCalendar,
   Effect.gen(function* () {
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     const sources = yield* GameSourceRegistry;
 
     const readLeagueWeek: ProfessionalCalendar["Service"]["readLeagueWeek"] = Effect.fn(
@@ -59,7 +59,7 @@ export const ProfessionalCalendarLive = Layer.effect(
         });
       }
       return yield* readProfessionalGameWeek({
-        facts,
+        store,
         source: covered.source,
         coverage: covered.coverage,
         league: input.league,
@@ -99,7 +99,7 @@ export const ProfessionalCalendarLive = Layer.effect(
       for (let weekStart = from; weekStart <= to;) {
         weeks.push(
           yield* readProfessionalGameWeek({
-            facts,
+            store,
             source: covered.source,
             coverage: covered.coverage,
             league: input.league,

@@ -143,6 +143,10 @@ _Avoid_: Pick ownership when referring to a traded pick
 A game the provider publishes for a rostered player in a scoring period: the opponent's professional-team abbreviation and whether the game is home or away, on a date in a date-scoped league, or as the period's opponent when the league's coverage is a scoring week. It carries no start time.
 _Avoid_: Fixture, matchup (a matchup is between fantasy teams), game time
 
+**Provider opponent**:
+The stored form of a `Scheduled game`: the provider's own schedule observation for a rostered player on a fantasy date. It is used when professional games cannot answer.
+_Avoid_: Professional game, matchup
+
 **Scoring-period schedule**:
 Every rostered player's scheduled games in one scoring period, with each player's games-in-period count and a per-date count across the roster so a light night needs no arithmetic. A league whose provider publishes no period window has no scoring-period schedule; its schedule is read over a schedule window instead, and the result names the source.
 _Avoid_: Season schedule, full schedule, light night when the per-date count is meant
@@ -160,7 +164,7 @@ A game between two professional teams, with a date, an optional start time and i
 _Avoid_: Fixture, event, scheduled game when the provider's fact is not meant
 
 **Games remaining**:
-The number of professional games a player's team plays in the schedule window, counted from observed
+The number of professional games a player's team plays in the schedule window, counted from the league's
 professional games. When those are unavailable for a rostered player, the provider's own roster schedule
 supplies the count and the answer names `provider_opponent`; a pool player has no such roster schedule and
 reports `unavailable` rather than zero. When neither is available the answer refuses with a reason rather
@@ -190,21 +194,21 @@ _Avoid_: Team alias, abbreviation map
 An external service that publishes professional games, such as the NHL's own API, reached through one provider-neutral interface and selected by the league it declares. It is not a `Provider`, which is the fantasy platform.
 _Avoid_: Feed, scraper, schedule API
 
-**Observed fact**:
-A value cached with what it is about, the window it covers, when it was observed, which source produced it, and how strongly it is held (`authoritative`, `corroborated`, or `reported`). Facts are stored as observations, so a later value does not erase what was learned earlier.
-_Avoid_: Cache entry, cached value, truth when a single observation is meant
+**Schedule observation**:
+A professional game or the provider's scheduled game, stored with the window it covers, when it was observed, which source produced it, and how strongly it is held (`authoritative`, `corroborated`, or `reported`). The schedule store keeps one row per source, subject, observation kind, and window; a newer observation replaces an older one, and retention removes windows that ended more than 30 days ago.
+_Avoid_: Observed fact, cache entry, truth
 
-**Fact source**:
-A declared origin of observed facts: the provider for what it publishes, or an external service for a professional game's date, start time, venue, or status. A source declares which sports and fact kinds it serves, its horizon, and its request budget.
-_Avoid_: Feed, provider (a provider is the fantasy platform), data vendor
+**Schedule source**:
+A declared origin of schedule observations: the provider for its scheduled games, or a game source for professional games. Every observation records the source that produced it.
+_Avoid_: Fact source, feed, data vendor
 
-**Refresh policy**:
-The maximum age a fact kind may have before a read must re-observe it, and what a read does when the re-observation fails. It is declared per fact kind, not per table and not per job.
+**Schedule freshness**:
+The maximum age an observation or one of its aspects may have before a read must re-observe it, and what a read does when the re-observation fails. Professional-game calendar, start-time, and status aspects and the provider opponent have separate rules.
 _Avoid_: Cache TTL, polling interval, sync schedule
 
-**Fact hook**:
-The one call a consumer makes to obtain an observed fact, naming what it needs and how stale it may be, never which source it comes from.
-_Avoid_: Cache lookup, fact repository, data service
+**Schedule read**:
+A read that serves a schedule window from stored schedule observations, refreshing from its source only when no sufficiently fresh observation exists. The result names the window, source, and observation time it served.
+_Avoid_: Fact hook, cache lookup, source call
 
 ## Automation
 

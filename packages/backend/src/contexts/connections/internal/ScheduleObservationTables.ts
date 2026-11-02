@@ -15,42 +15,42 @@ import { FantasySport, fantasySports } from "#contexts/connections/FantasyTeam.t
 import { ProviderKey } from "#contexts/connections/ProviderKey.ts";
 
 import {
-  observedFactConfidences,
-  observedFactKinds,
-  observedFactSubjectKinds,
-} from "./ObservedFacts.ts";
+  scheduleObservationConfidences,
+  scheduleObservationKinds,
+  scheduleObservationSubjectKinds,
+} from "./ScheduleObservations.ts";
 
-export const observedFacts = pgTable(
-  "observed_facts",
+export const scheduleObservations = pgTable(
+  "schedule_observations",
   {
     source: text("source").notNull(),
-    subjectKind: text("subject_kind", { enum: observedFactSubjectKinds }).notNull(),
+    subjectKind: text("subject_kind", { enum: scheduleObservationSubjectKinds }).notNull(),
     subjectKey: text("subject_key").notNull(),
-    factKind: text("fact_kind", { enum: observedFactKinds }).notNull(),
+    observationKind: text("observation_kind", { enum: scheduleObservationKinds }).notNull(),
     coversFrom: date("covers_from").notNull(),
     coversTo: date("covers_to").notNull(),
     value: jsonb("value").notNull(),
     observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
-    confidence: text("confidence", { enum: observedFactConfidences }).notNull(),
+    confidence: text("confidence", { enum: scheduleObservationConfidences }).notNull(),
     sourceReference: text("source_reference").notNull(),
   },
   (table) => [
-    uniqueIndex("observed_facts_observation_idx").on(
+    uniqueIndex("schedule_observations_observation_idx").on(
       table.source,
       table.subjectKind,
       table.subjectKey,
-      table.factKind,
+      table.observationKind,
       table.coversFrom,
       table.coversTo,
     ),
-    index("observed_facts_subject_window_idx").on(
+    index("schedule_observations_subject_window_idx").on(
       table.subjectKind,
       table.subjectKey,
-      table.factKind,
+      table.observationKind,
       table.coversFrom,
       table.coversTo,
     ),
-    index("observed_facts_expiry_idx").on(table.coversTo),
+    index("schedule_observations_expiry_idx").on(table.coversTo),
   ],
 );
 

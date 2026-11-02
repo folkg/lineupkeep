@@ -16,10 +16,10 @@ import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { FantasyQueriesLive } from "./internal/FantasyQueriesLive.ts";
 import { planAssignments } from "./internal/LineupPlanning.ts";
 import { resolveTarget } from "./internal/LineupTarget.ts";
-import { ObservedFactRepository } from "./internal/ObservedFactRepository.ts";
 import { ProfessionalCalendarLive } from "./internal/ProfessionalCalendarLive.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
+import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
 import {
   secondProvider,
   secondProviderCapabilities,
@@ -34,12 +34,12 @@ const ConnectionRepositoryTest = ConnectionRepository.layer.pipe(
   Layer.provideMerge(ConnectionsDatabaseTest),
 );
 
-const ObservedFactRepositoryTest = ObservedFactRepository.layer.pipe(
+const ScheduleObservationRepositoryTest = ScheduleObservationRepository.layer.pipe(
   Layer.provide(ConnectionsDatabaseTest),
 );
 const EmptyGameSourceTest = Layer.succeed(GameSourceRegistry)(gameSourceRegistryOf([]));
 const ProfessionalCalendarTest = ProfessionalCalendarLive.pipe(
-  Layer.provideMerge(ObservedFactRepositoryTest),
+  Layer.provideMerge(ScheduleObservationRepositoryTest),
   Layer.provide(EmptyGameSourceTest),
 );
 
@@ -52,7 +52,7 @@ const SecondProviderTestLayer = FantasyQueriesLive.pipe(
       Effect.succeed(ProviderRegistry.of(providerRegistryOf([secondProvider]))),
     ),
   ),
-  Layer.provideMerge(ObservedFactRepositoryTest),
+  Layer.provideMerge(ScheduleObservationRepositoryTest),
   Layer.provide(EmptyGameSourceTest),
   Layer.provideMerge(ProfessionalCalendarTest),
   Layer.provide(

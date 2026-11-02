@@ -3,7 +3,7 @@
 What the professional-team schedule can come from, what each candidate actually publishes, what its terms
 permit, and how a cached fact should be stored, refreshed, joined, and served. This is an investigation and a
 recommendation; it implements nothing. The decision it supports is recorded in
-[ADR 0011](fantasy-manager/adr/0011-observed-facts-and-schedule-sources.md) and the work is sliced in
+[ADR 0011](fantasy-manager/adr/0011-schedule-observations-and-schedule-sources.md) and the work is sliced in
 [ROADMAP F1](ROADMAP.md#f1--the-professional-team-calendar).
 
 Probed 2026-11-01. Every request below was read-only, unauthenticated unless stated, and issued from this
@@ -41,7 +41,7 @@ in two separate clauses, quoted below. It is not a grey area and it is not a rat
 
 So the recommendation is three-part:
 
-1. **Cache our own reads now**, in an observed-facts store with a per-fact refresh policy. This is the
+1. **Cache our own reads now**, in a schedule-observation store with a per-observation freshness policy. This is the
    efficiency win the owner asked for and it needs no external dependency.
 2. **Add the NHL's own API as the first external source**, for the facts the provider does not publish, using
    the same store and the same identity rule.
@@ -400,13 +400,13 @@ of feed, which is second-hand and unverified. It is not recommended.
 | Terms                   | **prohibited**                         | none found            | `Allow: /`, `use=reference`      | **non-commercial, non-bulk** | unlicensed                | no prohibition found                   | CC-BY-4.0         |
 | Cost                    | $0                                     | $0                    | $0                               | $0                           | $0                        | $0 / $9 / **$20 per month**            | $0                |
 
-## Refresh policy per fact
+## Freshness policy per aspect
 
 A single sweep cadence is the wrong shape: a fixture that was published in July does not need re-reading
-every hour, and a postponement announced at 4 pm is worthless at 7 pm. Each fact type gets its own maximum
+every hour, and a postponement announced at 4 pm is worthless at 7 pm. Each aspect gets its own maximum
 age, and the cost is counted in requests per day for the owner's two leagues and five linked teams.
 
-| Fact                | What it is                                          | Maximum age                       | When it is re-read                       | Requests per day                            |
+| Aspect              | What it is                                          | Maximum age                       | When it is re-read                       | Requests per day                            |
 | ------------------- | --------------------------------------------------- | --------------------------------- | ---------------------------------------- | ------------------------------------------- |
 | League season state | current season, phase, week                         | 24 h                              | once daily                               | 1 (both leagues in one call)                |
 | Game fixture        | a game exists, its date, home and away              | 7 days                            | weekly, and on season rollover           | 0.4 in season (32 + 32 team-seasons a year) |
@@ -425,11 +425,11 @@ target: the league-week sweep that supplies it runs once a day, so in practice a
 within a day unless a game is imminent.
 
 What this deliberately does not do: it does not poll a live scoreboard, does not chase in-game state, and does
-not re-read a fact merely because a page was viewed.
+not re-read an observation merely because a page was viewed.
 
 ### Measured cost of the declared game policy
 
-The game fact stores one observation per professional game, and **one league-week request refreshes every game
+The professional-game observation stores one row per game, and **one league-week request refreshes every game
 and every aspect in that week**. That makes the cost of a read independent of how many fantasy leagues share the
 sport: the source is the NHL's league week, not a fantasy team. Measured 2026-11-01 against the real
 `2026-11-01` league week checked in as the adapter fixture:
@@ -445,11 +445,12 @@ playing week, so an observation older than 6 hours is re-read. The status aspect
 (24 requests that day), which is one league-week request per read rather than a poll of a scoreboard. A caller
 that only needs "is this game still on today" should read status at the league-day sweep, not on every tick.
 
-The earlier per-fact rows below count _reads_ under the assumption that each aspect is fetched separately. That
+The earlier per-aspect rows below count _reads_ under the assumption that each aspect is fetched separately. That
 assumption is wrong for this source: the league-week response carries all of them.
 
-A league week with no games stores no game fact, because a fact is stored per game. Reading such a week is
-still a fact — the week is served with an empty games list — but the next read of that week re-requests it
+A league week with no games stores no professional-game observation, because an observation is stored per
+game. Reading such a week is still a read — the week is served with an empty games list — but the next read of
+that week re-requests it
 rather than serving nothing as if it were stored. That is one request per read during a break or the
 off-season, and it is the honest cost of having no row to point at.
 
@@ -469,17 +470,17 @@ sources are not authorities over the same thing:
 - "When does the game start, where is it, has it been postponed" — the external source wins, because the
   provider publishes nothing for those questions.
 - The sources disagree on whether a game exists at all — the provider wins for the current fantasy date, the
-  conflict is stored with both observations and surfaced in the fact's detail, and neither observation is
+  conflict is stored with both observations and surfaced in the observation's detail, and neither observation is
   deleted. A conflict that repeats for the same fixture is a mapping error and stops that fixture being
   served until it is fixed.
 
-**The source returns a team we cannot map.** The fact is stored against the source's own identifier with the
+**The source returns a team we cannot map.** The observation is stored against the source's own identifier with the
 canonical team left unset, and it is **not** served for any canonical team. No name match, no abbreviation
 match, no prefix match, no cross-league inference. The consumer receives a refusal that names the unmapped
 source team.
 
 **The source returns a shape the adapter does not recognise.** Fail the read with a named error and keep the
-last good observation. A renamed field must not decode as "no games": an empty games array is a fact, a
+last good observation. A renamed field must not decode as "no games": an empty games array is a valid empty week, a
 missing games key is a fault. The graphite gateway makes this distinction load-bearing in both directions —
 `{"teams":[]}` means the team key is wrong, `games: []` means the season is genuinely empty — and it accepts a
 team key from another league without complaint, so the adapter must verify the returned team and league before
@@ -505,8 +506,8 @@ Three rules make that safe:
    mapping key is (source, league, source identifier), and a lookup outside its league returns nothing.
 2. **A mapping is one-to-one or it is not used.** The same source identifier observed against two canonical
    teams is a recorded error; neither team is served from that source until it is resolved.
-3. **An unmatched identifier stays unresolved.** It is stored, visible, and never guessed. A missing fact is
-   an honest refusal; a wrong fact is a wrong lineup.
+3. **An unmatched identifier stays unresolved.** It is stored, visible, and never guessed. A missing
+   observation is an honest refusal; a wrong observation is a wrong lineup.
 
 A source that publishes the provider's own key — as graphite does — needs no mapping at all, and that is the
 single strongest technical argument for it.
@@ -516,22 +517,22 @@ single strongest technical argument for it.
 The owner asked for a view that generalises, because the same machinery should carry any useful fact we want
 upfront and cached. The shape is four small pieces, and nothing else.
 
-### A store for observed facts
+### A store for schedule observations
 
-Facts are stored as **observations**, not as truth. Every row says what was seen, when, from where, how
+Schedule observations are stored as **observations**, not as truth. Every row says what was seen, when, from where, how
 strongly, and what window it covers.
 
-| Column                     | Meaning                                                                                              |
-| -------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `subject_kind`             | `professional_team`, `professional_game`, or `fantasy_team`                                          |
-| `subject_key`              | the canonical subject: a provider team key, a game id, or a fantasy team key                         |
-| `fact_kind`                | `league_season`, `game_fixture`, `game_start_time`, `game_status`, `game_venue`, `provider_opponent` |
-| `covers_from`, `covers_to` | the window the fact covers: a date, a game, or a season                                              |
-| `value`                    | the typed payload for the fact kind                                                                  |
-| `observed_at`              | when we learned it                                                                                   |
-| `source`                   | the source key that produced it                                                                      |
-| `confidence`               | `authoritative`, `corroborated`, or `reported`                                                       |
-| `source_reference`         | the upstream identifier, so a later observation can be matched to the same thing                     |
+| Column                     | Meaning                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `subject_kind`             | `professional_team`, `professional_game`, or `fantasy_team`                      |
+| `subject_key`              | the canonical subject: a provider team key, a game id, or a fantasy team key     |
+| `observation_kind`         | `league_season`, `professional_game`, or `provider_opponent`                     |
+| `covers_from`, `covers_to` | the window the observation covers: a date, a game, or a season                   |
+| `value`                    | the typed payload for the observation kind                                       |
+| `observed_at`              | when we learned it                                                               |
+| `source`                   | the source key that produced it                                                  |
+| `confidence`               | `authoritative`, `corroborated`, or `reported`                                   |
+| `source_reference`         | the upstream identifier, so a later observation can be matched to the same thing |
 
 Confidence is defined by rule, not by feel:
 
@@ -539,18 +540,18 @@ Confidence is defined by rule, not by feel:
 - **corroborated** — two independent sources agree on the same fact for the same window.
 - **reported** — one non-authoritative source.
 
-Each source, subject, fact kind, and covered window has one stored observation; a newer observation replaces
+Each source, subject, observation kind, and covered window has one stored observation; a newer observation replaces
 an older one for that window, and an older observation cannot overwrite a newer one. The read path takes that
 row, so "when did we learn this" is answerable but "what did it used to say" is not. A disagreement between two
 authoritative sources is not recorded; conflict reporting is not implemented. Retention prunes a window once it
 ended more than 30 days ago, so growth is bounded by live and recent windows rather than by polling.
 
-### A refresh policy per fact type
+### A freshness policy per aspect
 
-Each fact kind declares its maximum age, its refresh trigger, and its failure behaviour, as the table above.
-The policy lives beside the fact kind, not beside a table and not in a job: the same `game_status` policy
-applies to every sport and every source. A source may narrow a policy it cannot satisfy — a weekly dataset
-cannot promise a 30-minute status — and the narrower bound is what the reader sees.
+Each aspect declares its maximum age, its refresh trigger, and its failure behaviour, as the table above. The policy lives beside the aspect, not beside a table and not in a job: professional-game
+freshness applies to every sport and every game source, and the provider-opponent policy is the fantasy-day
+boundary. A source may narrow a policy it cannot satisfy — a weekly dataset cannot promise a 30-minute status —
+and the narrower bound is what the reader sees.
 
 ### Identity matching
 
@@ -558,12 +559,14 @@ As above: provider keys, league-scoped mappings, one-to-one or unused, unmatched
 
 ### A hook point
 
-One application service answers a question a consumer asks, and the consumer never names a source:
+This is the target shape from ADR 0011, still roadmap F1.4; the current read path is
+`ProfessionalCalendar.readGames` and `ProviderOpponentFacts.read`, with no generic hook. One application
+service answers a question a consumer asks, and the consumer never names a source:
 
 ```
-Facts.require({
+ScheduleObservations.require({
   subject,            // professional team, game, or fantasy team
-  fact,               // the fact kind
+  observationKind,    // professional_game or provider_opponent
   window,             // the dates or the game it covers
   maximumAge,         // how stale the answer may be, or a named policy
 })
@@ -571,23 +574,24 @@ Facts.require({
 
 The service resolves the canonical subject, reads the newest observation inside the requested age, and — only
 if none qualifies — asks the source registry for it, batching across every subject the caller asked about in
-one call. It records what came back and returns the fact with `observedAt`, `source`, `confidence`, and the
-window, or a named refusal that says which of those was missing.
+one call. It records what came back and returns the observation with `observedAt`, `source`, `confidence`, and
+the window, or a named refusal that says which of those was missing.
 
 The source registry mirrors the provider registry from [ADR 0007](fantasy-manager/adr/0007-provider-registry-and-planner-capability.md):
-a `FactSource` shape with declared capabilities — which sports and fact kinds it serves, its coverage horizon,
+a `ScheduleSource` shape with declared capabilities — which sports and observation kinds it serves, its coverage horizon,
 whether it publishes start times or venue time zones, and its own request budget — injected at the composition
 root. Adding a source is a new module plus one registry entry. Generic code never names a source, and no
 generic module imports a source module.
 
 ### What this deliberately does not do
 
-- **It is not a general cache.** It stores facts a feature asked for, with the window they cover. It is not a
-  key-value store, not an HTTP cache, and not a place to put anything that is convenient.
+- **It is not a general cache.** It stores schedule observations a feature asked for, with the window they
+  cover. It is not a key-value store, not an HTTP cache, and not a place to put anything that is convenient.
 - **It is not a live scoreboard.** It does not poll in-game state, and it has no subscription or push path.
 - **It is not an archive.** It keeps what was asked for, not everything every source publishes, and it does
-  not retain a fact nobody reads.
-- **It is not a scheduler.** It does not decide when to run. The existing tick and the per-fact policy decide,
+  not retain an observation nobody reads.
+- **It is not a scheduler.** It does not decide when to run. The existing tick and the per-observation policy
+  decide,
   and a read either satisfies the age or triggers a refresh.
 - **It is not an identity-resolution engine.** No fuzzy matching, no name normalisation, no cross-league
   inference, no fallback to an abbreviation.

@@ -99,7 +99,6 @@ import {
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
-import { ObservedFactRepository } from "./ObservedFactRepository.ts";
 import { uniqueProviderTeamKeys } from "./ProfessionalTeamIdentity.ts";
 import { ProviderOpponentFactStale, readProviderOpponent } from "./ProviderOpponentFacts.ts";
 import { fitPage, queryBudget, summaryBudget } from "./QueryBudget.ts";
@@ -108,6 +107,7 @@ import type { TeamContext } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 import type { OwnedTeam } from "./QueryRepository.ts";
 import { QueryTokens } from "./QueryTokens.ts";
+import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
 
 const defaultLeagueGroups: ReadonlyArray<LeagueGroup> = ["overview", "scoring", "roster_rules"];
 const defaultPlayerGroups: ReadonlyArray<PlayerGroup> = ["identity", "availability", "eligibility"];
@@ -151,7 +151,7 @@ export const FantasyQueriesLive = Layer.effect(
     const registry = yield* ProviderRegistry;
     const encryption = yield* ConnectionCredentialEncryption;
     const tokens = yield* QueryTokens;
-    const observedFacts = yield* ObservedFactRepository;
+    const scheduleObservations = yield* ScheduleObservationRepository;
     const calendar = yield* ProfessionalCalendar;
     const gameSources = yield* GameSourceRegistry;
 
@@ -1065,7 +1065,7 @@ export const FantasyQueriesLive = Layer.effect(
       const proTeamIdentities =
         missingProTeamKeys.length === 0
           ? []
-          : yield* observedFacts.readProviderTeamIdentities({
+          : yield* scheduleObservations.readProviderTeamIdentities({
               sport: context.owned.team.sport,
               identifiers: missingProTeamKeys,
             });
@@ -2326,7 +2326,7 @@ export const FantasyQueriesLive = Layer.effect(
               context,
               "schedule",
               readProviderOpponent({
-                facts: observedFacts,
+                store: scheduleObservations,
                 provider: context.provider,
                 material: providerIdentity(context),
                 teamId: context.owned.team.id,

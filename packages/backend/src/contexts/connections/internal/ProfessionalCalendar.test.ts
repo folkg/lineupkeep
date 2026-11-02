@@ -18,8 +18,8 @@ import { PublicInternet } from "#runtime/PublicInternet.ts";
 import { ConnectionsDatabaseTest } from "./ConnectionsDatabaseTest.ts";
 import { nhlGameSource } from "./game-sources/nhl/NhlGameSource.ts";
 import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
-import { ObservedFactRepository } from "./ObservedFactRepository.ts";
 import { ProfessionalCalendarLive } from "./ProfessionalCalendarLive.ts";
+import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
 
 const ProviderTeamPairsFixture = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -40,7 +40,7 @@ const pairByAbbreviation = new Map(
 const openerId = "2026020227";
 const observedAt = DateTime.makeUnsafe("2026-11-01T12:00:00.000Z");
 
-const ObservedFactRepositoryTest = ObservedFactRepository.layer.pipe(
+const ScheduleObservationRepositoryTest = ScheduleObservationRepository.layer.pipe(
   Layer.provide(ConnectionsDatabaseTest),
 );
 
@@ -48,9 +48,9 @@ it.effect("counts a real hockey week's games and marks its off nights", () => {
   const calls: Array<URL> = [];
   return Effect.gen(function* () {
     const calendar = yield* ProfessionalCalendar;
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
-    yield* seedProviderPairs(facts);
+    yield* seedProviderPairs(store);
 
     const window = yield* calendar.readGames({
       league: "nhl",
@@ -104,9 +104,9 @@ it.effect("produces a fact for every game of one league-week request with teams 
   const calls: Array<URL> = [];
   return Effect.gen(function* () {
     const calendar = yield* ProfessionalCalendar;
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
-    yield* seedProviderPairs(facts);
+    yield* seedProviderPairs(store);
 
     const week = yield* calendar.readLeagueWeek({
       league: "nhl",
@@ -128,7 +128,7 @@ it.effect("produces a fact for every game of one league-week request with teams 
     assert.strictEqual(opener.game.startTime?.timeZone, "US/Eastern");
     assert.strictEqual(opener.game.venue, "Lenovo Center");
 
-    const stored = yield* facts.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
+    const stored = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
     assert.strictEqual(stored.length, 50);
     assert.isTrue(
       stored.every(
@@ -136,7 +136,7 @@ it.effect("produces a fact for every game of one league-week request with teams 
       ),
     );
 
-    const identities = yield* facts.readSourceTeamIdentities({
+    const identities = yield* store.readSourceTeamIdentities({
       sport: "hockey",
       source: "nhl-web",
     });
@@ -152,10 +152,10 @@ it.effect("keeps one row per game and window and never replaces a newer observat
   const calls: Array<URL> = [];
   return Effect.gen(function* () {
     const calendar = yield* ProfessionalCalendar;
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     const later = DateTime.makeUnsafe("2026-11-01T13:00:00.000Z");
     yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
-    yield* seedProviderPairs(facts);
+    yield* seedProviderPairs(store);
 
     yield* calendar.readLeagueWeek({
       league: "nhl",
@@ -171,7 +171,7 @@ it.effect("keeps one row per game and window and never replaces a newer observat
     });
 
     assert.strictEqual(calls.length, 2);
-    const stored = yield* facts.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
+    const stored = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
     assert.strictEqual(stored.length, 50);
     assert.isTrue(
       stored.every((row) => DateTime.formatIso(row.observedAt) === "2026-11-01T13:00:00.000Z"),
@@ -191,18 +191,18 @@ it.effect("keeps one row per game and window and never replaces a newer observat
       observedAt: DateTime.makeUnsafe("2026-11-01T13:30:00.000Z"),
       value: { ...base.value, venue: "Older Venue" },
     };
-    yield* facts.recordProfessionalGames({
+    yield* store.recordProfessionalGames({
       source: "nhl-web",
       confidence: "authoritative",
       observations: [newer],
     });
-    yield* facts.recordProfessionalGames({
+    yield* store.recordProfessionalGames({
       source: "nhl-web",
       confidence: "authoritative",
       observations: [older],
     });
 
-    const after = yield* facts.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
+    const after = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
     const row = after.find((candidate) => candidate.subjectKey === base.subjectKey);
     assert.strictEqual(
       row === undefined ? undefined : DateTime.formatIso(row.observedAt),
@@ -216,10 +216,10 @@ it.effect("stores an unmapped team's game and reports it unresolved instead of d
   const calls: Array<URL> = [];
   return Effect.gen(function* () {
     const calendar = yield* ProfessionalCalendar;
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
     yield* seedProviderPairs(
-      facts,
+      store,
       providerPairs.filter((pair) => pair.abbreviation !== "CAR" && pair.abbreviation !== "WPG"),
     );
 
@@ -251,12 +251,12 @@ it.effect("stores an unmapped team's game and reports it unresolved instead of d
       ],
     );
 
-    const stored = yield* facts.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
+    const stored = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
     assert.strictEqual(stored.length, 50);
     const storedOpener = stored.find((row) => row.sourceReference === openerId);
     assert.isNull(storedOpener === undefined ? undefined : storedOpener.value.home.providerTeamKey);
 
-    const identities = yield* facts.readSourceTeamIdentities({
+    const identities = yield* store.readSourceTeamIdentities({
       sport: "hockey",
       source: "nhl-web",
     });
@@ -269,9 +269,9 @@ it.effect("stores a postponed game with its status and serves it with it", () =>
   const calls: Array<URL> = [];
   return Effect.gen(function* () {
     const calendar = yield* ProfessionalCalendar;
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
-    yield* seedProviderPairs(facts);
+    yield* seedProviderPairs(store);
 
     const week = yield* calendar.readLeagueWeek({
       league: "nhl",
@@ -288,7 +288,7 @@ it.effect("stores a postponed game with its status and serves it with it", () =>
         ["2026020304", "final"],
       ],
     );
-    const stored = yield* facts.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
+    const stored = yield* store.readProfessionalGames({ from: "2026-11-01", to: "2026-11-07" });
     assert.deepStrictEqual(
       stored.map((row) => [row.sourceReference, row.value.status, row.value.date]),
       [
@@ -366,9 +366,9 @@ it.effect("reads a shifted week instead of serving another week's slate", () => 
   const calls: Array<URL> = [];
   return Effect.gen(function* () {
     const calendar = yield* ProfessionalCalendar;
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
-    yield* seedProviderPairs(facts);
+    yield* seedProviderPairs(store);
 
     const first = yield* calendar.readLeagueWeek({
       league: "nhl",
@@ -396,14 +396,14 @@ it.effect("reads a shifted week instead of serving another week's slate", () => 
     });
     assert.strictEqual(calls.length, 2);
 
-    const stored = yield* facts.readProfessionalGames({ from: "2026-11-02", to: "2026-11-08" });
+    const stored = yield* store.readProfessionalGames({ from: "2026-11-02", to: "2026-11-08" });
     assert.isTrue(
       stored.some((row) => row.window.from === "2026-11-02" && row.window.to === "2026-11-08"),
     );
     assert.isTrue(
       stored.some((row) => row.window.from === "2026-11-01" && row.window.to === "2026-11-07"),
     );
-    const identities = yield* facts.readSourceTeamIdentities({
+    const identities = yield* store.readSourceTeamIdentities({
       sport: "hockey",
       source: "nhl-web",
     });
@@ -471,9 +471,9 @@ it.effect("refuses an abbreviation the provider publishes for two teams", () => 
   const calls: Array<URL> = [];
   return Effect.gen(function* () {
     const calendar = yield* ProfessionalCalendar;
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
-    yield* seedProviderPairs(facts, [
+    yield* seedProviderPairs(store, [
       ...providerPairs.filter((pair) => pair.abbreviation !== "CAR"),
       { providerTeamKey: "fixture.t.100", abbreviation: "CAR" },
       { providerTeamKey: "fixture.t.101", abbreviation: "CAR" },
@@ -488,7 +488,7 @@ it.effect("refuses an abbreviation the provider publishes for two teams", () => 
     const opener = factOf(week.games, openerId);
     assert.isNull(opener.game.home.providerTeamKey);
     assert.strictEqual(opener.game.away.providerTeamKey, pairByAbbreviation.get("WPG"));
-    const identities = yield* facts.readSourceTeamIdentities({
+    const identities = yield* store.readSourceTeamIdentities({
       sport: "hockey",
       source: "nhl-web",
     });
@@ -501,9 +501,9 @@ it.effect("leaves a team unresolved when the provider abbreviates it differently
   const calls: Array<URL> = [];
   return Effect.gen(function* () {
     const calendar = yield* ProfessionalCalendar;
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     yield* TestClock.setTime(DateTime.toEpochMillis(observedAt));
-    yield* seedProviderPairs(facts, [
+    yield* seedProviderPairs(store, [
       ...providerPairs.filter((pair) => pair.abbreviation !== "LAK"),
       { providerTeamKey: "fixture.t.200", abbreviation: "LA" },
     ]);
@@ -620,7 +620,7 @@ function addDays(date: string, days: number): string {
 function calendarLayer(
   respond: (weekStart: string) => Response,
   calls: Array<URL>,
-): Layer.Layer<ProfessionalCalendar | ObservedFactRepository> {
+): Layer.Layer<ProfessionalCalendar | ScheduleObservationRepository> {
   const internet = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.sync(() => {
@@ -633,21 +633,21 @@ function calendarLayer(
     Effect.map(nhlGameSource, (source) => GameSourceRegistry.of(gameSourceRegistryOf([source]))),
   ).pipe(Layer.provide(internet));
   return ProfessionalCalendarLive.pipe(
-    Layer.provideMerge(ObservedFactRepositoryTest),
+    Layer.provideMerge(ScheduleObservationRepositoryTest),
     Layer.provide(sources),
     Layer.orDie,
   );
 }
 
 function seedProviderPairs(
-  facts: ObservedFactRepository["Service"],
+  store: ScheduleObservationRepository["Service"],
   pairs: ReadonlyArray<{
     readonly providerTeamKey: string;
     readonly abbreviation: string;
   }> = providerPairs,
 ): Effect.Effect<void, QueryPersistenceFailed> {
   const provider = decodeProviderKey("yahoo");
-  return facts.recordTeamIdentities(
+  return store.recordTeamIdentities(
     pairs.map((pair) => ({
       sport: "hockey",
       source: provider,

@@ -5,12 +5,12 @@ import { ProfessionalCalendar } from "#contexts/connections/ProfessionalCalendar
 import { ScheduleGate } from "#contexts/connections/ScheduleGate.ts";
 
 import { evaluateScheduleGate } from "./LineupScheduleGate.ts";
-import { ObservedFactRepository } from "./ObservedFactRepository.ts";
+import { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
 
 export const ScheduleGateLive = Layer.effect(
   ScheduleGate,
   Effect.gen(function* () {
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     const calendar = yield* ProfessionalCalendar;
     const sources = yield* GameSourceRegistry;
 
@@ -18,7 +18,7 @@ export const ScheduleGateLive = Layer.effect(
       evaluate: (input) =>
         evaluateScheduleGate({
           ...input,
-          facts,
+          store,
           calendar,
           hasGameSource: sources.sourceFor(input.team.league) !== undefined,
         }),

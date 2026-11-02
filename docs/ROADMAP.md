@@ -233,44 +233,45 @@ numbers. `M`, depends on C1.
 
 ## F. Schedule cache
 
-The provider publishes no season or team schedule; the only schedule fact is one opponent per rostered
+The provider publishes no season or team schedule; the only schedule data is one opponent per rostered
 player per date or scoring week.
 
 ### F1 — The professional-team calendar
 
-**The source decision is settled** ([SCHEDULE-SOURCES.md](SCHEDULE-SOURCES.md), [ADR 0011](fantasy-manager/adr/0011-observed-facts-and-schedule-sources.md)):
+**The source decision is settled** ([SCHEDULE-SOURCES.md](SCHEDULE-SOURCES.md), [ADR 0011](fantasy-manager/adr/0011-schedule-observations-and-schedule-sources.md)):
 
-- Cache what our own reads already publish, as observed facts with a per-fact refresh policy. Caching is what
-  makes the reads efficient — up to 360 provider reads a day for the same answers becomes five.
+- Cache what our own reads already publish, as schedule observations with a per-observation freshness
+  policy. Caching is what makes the reads efficient — up to 360 provider reads a day for the same answers
+  becomes five.
 - Add the **NHL's own API** (`api-web.nhle.com`) as the first external source, for start times, venues, a
   horizon beyond the current period, and postponement state. It is free, keyless, one 100 KB request per
   league week, and its `robots.txt` allows the site with `use=reference`.
 - **Do not use Yahoo graphite** without written permission: it is technically the best candidate and Yahoo's
   Universal Terms of Service prohibit both the automated collection and the database it would create.
-- **Do not add an NFL source yet.** The provider's own opponent fact answers the automation question. If a
-  feature needs one, TheSportsDB at $20/month is the cheapest licensed option, and that cost is stated before
-  it is recommended.
+- **Do not add an NFL source yet.** The provider opponent answers the automation question. If a feature
+  needs one, TheSportsDB at $20/month is the cheapest licensed option, and that cost is stated before it is
+  recommended.
 - **Never join on an abbreviation.** Roster rows carry a professional-team key, observed as `nhl.t.26`. League
   abbreviations differ from the provider's (`LAK` against `LA`). A mapping comes only from a pair the provider
   publishes on one roster row, is scoped to its league, is one-to-one or is unused, and an unmatched team stays
   unresolved rather than guessed.
 
-### F1.1 — Observed-facts store and read view
+### F1.1 — Schedule-observation store and read view
 
-- [x] Add the observation store: subject, fact kind, the window it covers, value, observation instant,
+- [x] Add the observation store: subject, observation kind, the window it covers, value, observation instant,
       source, confidence (`authoritative` / `corroborated` / `reported`), and the upstream reference.
 - [ ] Add the read view that reports a disagreement between two authoritative observations as a conflict; the
       current read takes the stored newest observation and cannot reconstruct a disagreement.
-- [x] Keep one row per source, subject, fact kind, and window, and prune windows that ended more than 30 days
+- [x] Keep one row per source, subject, observation kind, and window, and prune windows that ended more than 30 days
       ago.
 
 **Verify**: a fixture that changes value leaves one row with the newer observation, an older observation cannot
 replace it, and retention removes a window after 30 days. Conflict reporting remains open. `S`.
 
-### F1.2 — Record the provider's own schedule facts
+### F1.2 — Record the provider's own scheduled games
 
-- [ ] Record the opponent fact the roster reads already publish, one observation per fantasy team per date,
-      with the fantasy-day maximum age.
+- [ ] Record the provider opponent the roster reads already publish, one observation per fantasy team per
+      date, with the fantasy-day maximum age.
 - [ ] Serve the schedule window from the store, refreshing once per fantasy day per linked team instead of
       once per automation tick.
 
@@ -288,13 +289,13 @@ and home or away, and the request count over the same week is recorded. `M`.
 **Verify**: a deliberate one-to-many mapping is refused, and an unknown abbreviation produces no canonical
 team. `S`.
 
-### F1.4 — The fact hook and the source registry
+### F1.4 — The schedule read and the source registry
 
-- [ ] Add `Facts.require({ subject, fact, window, maximumAge })` returning the fact with its observation
-      instant, source, confidence, and window, or a named refusal.
-- [ ] Add the `FactSource` registry injected at the composition root, with declared sport coverage, fact
-      kinds, horizon, and request budget. No generic module names or imports a source.
-- [ ] Move the existing schedule reads onto the hook, so a caller asks for a fact and not for a read.
+- [ ] Add `ScheduleObservations.require({ subject, observationKind, window, maximumAge })` returning the
+      observation with its instant, source, confidence, and window, or a named refusal.
+- [ ] Add the `ScheduleSource` registry injected at the composition root, with declared sport coverage,
+      observation kinds, horizon, and request budget. No generic module names or imports a source.
+- [ ] Move the existing schedule reads onto the hook, so a caller asks for an observation and not for a read.
 
 **Verify**: a fake source with different coverage and horizon needs no generic edit, and the provider adapter
 is the only module that names the provider. `M`.
@@ -306,7 +307,7 @@ is the only module that names the provider. `M`.
 - [ ] Ask for a concrete season id, never the `/now` alias, which redirects and is refused by our egress
       policy.
 - [ ] Decode the status field so an unrecognised value is `unknown`, never `on`, and an empty games array is a
-      fact while a missing one is a fault.
+      empty week while a missing one is a fault.
 
 **Verify**: one live week matches the league's own page for every NHL team's dates, start times, venues and
 home or away, and the request count for a week is recorded. `M`, depends on F1.1, F1.3, F1.4.

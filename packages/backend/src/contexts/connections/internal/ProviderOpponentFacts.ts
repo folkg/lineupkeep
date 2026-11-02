@@ -17,13 +17,13 @@ import type {
 import type { QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
 
 import type {
-  ObservedFactRepository,
+  ScheduleObservationRepository,
   ProviderOpponentObservation,
   ProviderOpponentObservationWrite,
   TeamIdentity,
-} from "./ObservedFactRepository.ts";
-import type { FactWindow, ProviderOpponentValue } from "./ObservedFacts.ts";
-import { factRefreshPolicies } from "./ObservedFacts.ts";
+} from "./ScheduleObservationRepository.ts";
+import type { ScheduleObservationWindow, ProviderOpponentValue } from "./ScheduleObservations.ts";
+import { scheduleObservationRefreshPolicies } from "./ScheduleObservations.ts";
 
 export type ProviderOpponentRead = {
   readonly schedule: ProviderRosterSchedule;
@@ -40,7 +40,7 @@ export class ProviderOpponentFactStale extends Schema.TaggedError<
 }) {}
 
 export function readProviderOpponent(input: {
-  readonly facts: ObservedFactRepository["Service"];
+  readonly store: ScheduleObservationRepository["Service"];
   readonly provider: ProviderShape;
   readonly material: ProviderSessionMaterial;
   readonly teamId: TeamId;
@@ -61,13 +61,13 @@ export function readProviderOpponent(input: {
         period: input.period,
       });
       const observedAt = yield* DateTime.now;
-      yield* input.facts.recordTeamIdentities(observedTeamIdentities(input, schedule, observedAt));
+      yield* input.store.recordTeamIdentities(observedTeamIdentities(input, schedule, observedAt));
       return { schedule, observedAt };
     }
 
     const dates = datesBetween(input.period.start, input.period.end);
     const now = yield* DateTime.now;
-    const stored = yield* input.facts.readProviderOpponents({
+    const stored = yield* input.store.readProviderOpponents({
       subjectKey: input.teamId,
       from: input.period.start,
       to: input.period.end,
@@ -101,7 +101,7 @@ export function readProviderOpponent(input: {
         range,
         previousObservedAt: oldestObservedAt(range, latestByDate),
       });
-      yield* input.facts.recordTeamIdentities(
+      yield* input.store.recordTeamIdentities(
         observedTeamIdentities(input, read.schedule, read.observedAt),
       );
       for (const observation of observationsFor(
@@ -113,7 +113,7 @@ export function readProviderOpponent(input: {
         observed.push(observation);
       }
     }
-    yield* input.facts.recordProviderOpponents({
+    yield* input.store.recordProviderOpponents({
       subjectKey: input.teamId,
       source: input.material.provider,
       confidence: "authoritative",
@@ -175,7 +175,7 @@ function isFresh(
   fantasyDay: ProviderFantasyDay,
   notBefore: DateTime.Utc | undefined,
 ): boolean {
-  const policy = factRefreshPolicies.provider_opponent;
+  const policy = scheduleObservationRefreshPolicies.provider_opponent;
   return (
     (notBefore === undefined ||
       DateTime.toEpochMillis(observation.observedAt) >= DateTime.toEpochMillis(notBefore)) &&
@@ -189,7 +189,7 @@ function readRange(input: {
   readonly provider: ProviderShape;
   readonly material: ProviderSessionMaterial;
   readonly providerTeamKey: string;
-  readonly range: FactWindow;
+  readonly range: ScheduleObservationWindow;
   readonly previousObservedAt: DateTime.Utc | undefined;
 }): Effect.Effect<
   { readonly schedule: ProviderRosterSchedule; readonly observedAt: DateTime.Utc },
@@ -220,7 +220,7 @@ function readRange(input: {
 
 function assertCoversRange(
   schedule: ProviderRosterSchedule,
-  range: FactWindow,
+  range: ScheduleObservationWindow,
 ): Effect.Effect<void, ProviderResponseInvalid> {
   const expected = new Set(datesBetween(range.from, range.to));
   for (const date of expected) {
@@ -246,7 +246,7 @@ function assertCoversRange(
 
 function observationsFor(
   schedule: ProviderRosterSchedule,
-  range: FactWindow,
+  range: ScheduleObservationWindow,
   providerTeamKey: string,
   observedAt: DateTime.Utc,
 ): ReadonlyArray<ProviderOpponentObservationWrite> {
@@ -326,7 +326,7 @@ function latestObservationByDate(
 }
 
 function oldestObservedAt(
-  range: FactWindow,
+  range: ScheduleObservationWindow,
   observations: ReadonlyMap<string, ProviderOpponentObservation>,
 ): DateTime.Utc | undefined {
   let oldest: DateTime.Utc | undefined;
@@ -366,8 +366,8 @@ function oldestObservationInstant(
   return oldest;
 }
 
-function contiguousRanges(dates: ReadonlyArray<string>): ReadonlyArray<FactWindow> {
-  const ranges: Array<FactWindow> = [];
+function contiguousRanges(dates: ReadonlyArray<string>): ReadonlyArray<ScheduleObservationWindow> {
+  const ranges: Array<ScheduleObservationWindow> = [];
   for (const date of dates) {
     const current = ranges.at(-1);
     if (current !== undefined && nextDate(current.to) === date) {

@@ -197,6 +197,16 @@ type RecordedRequest = {
   readonly options: Parameters<PublicInternet["Service"]["request"]>[1];
 };
 
+it.effect("reads the response body before the request scope closes", () => {
+  const internet = scopedInternet(() => jsonResponse(leagueWeek));
+  return Effect.gen(function* () {
+    const source = yield* nhlGameSource;
+    const week = yield* source.readLeagueWeek({ league: "nhl", weekStart: "2026-11-01" });
+
+    assert.strictEqual(week.games.length, 50);
+  }).pipe(Effect.provide(internet));
+});
+
 function recordingInternet(respond: () => Response): Layer.Layer<PublicInternet> & {
   readonly calls: ReadonlyArray<RecordedRequest>;
 } {
@@ -214,6 +224,18 @@ function recordingInternet(respond: () => Response): Layer.Layer<PublicInternet>
       }),
   });
   return Object.assign(layer, { calls });
+}
+
+function scopedInternet(respond: () => Response): Layer.Layer<PublicInternet> {
+  return Layer.succeed(PublicInternet)({
+    request: () =>
+      Effect.gen(function* () {
+        const signal = yield* Effect.abortSignal;
+        const response = respond();
+        const body = response.body?.pipeThrough(new TransformStream(), { signal });
+        return new Response(body ?? null, { status: response.status, headers: response.headers });
+      }),
+  });
 }
 
 function jsonResponse(body: unknown, status = 200): Response {

@@ -18,9 +18,9 @@ import type {
   ScheduleGateRunReason,
 } from "#contexts/connections/ScheduleGate.ts";
 
-import type { ObservedFactRepository } from "./ObservedFactRepository.ts";
 import { readProviderOpponent } from "./ProviderOpponentFacts.ts";
 import { decideScheduleGate, nextLineupTick } from "./ScheduleGateDecision.ts";
+import type { ScheduleObservationRepository } from "./ScheduleObservationRepository.ts";
 
 type CalendarFailure =
   | ProfessionalCalendarUnavailable
@@ -29,7 +29,7 @@ type CalendarFailure =
   | QueryPersistenceFailed;
 
 export function evaluateScheduleGate(input: {
-  readonly facts: ObservedFactRepository["Service"];
+  readonly store: ScheduleObservationRepository["Service"];
   readonly calendar: ProfessionalCalendar["Service"];
   readonly team: FantasyTeam;
   readonly provider: ProviderShape;
@@ -44,7 +44,7 @@ export function evaluateScheduleGate(input: {
 }
 
 function evaluate(input: {
-  readonly facts: ObservedFactRepository["Service"];
+  readonly store: ScheduleObservationRepository["Service"];
   readonly calendar: ProfessionalCalendar["Service"];
   readonly team: FantasyTeam;
   readonly provider: ProviderShape;
@@ -64,7 +64,7 @@ function evaluate(input: {
 
     const providerRead = yield* Effect.result(
       readProviderOpponent({
-        facts: input.facts,
+        store: input.store,
         provider: input.provider,
         material: providerMaterial(input),
         teamId: input.team.id,

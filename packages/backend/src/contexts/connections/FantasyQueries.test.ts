@@ -23,12 +23,12 @@ import {
   fakeGameSourceLayer,
 } from "./internal/FakeGameSourceTest.ts";
 import { FantasyQueriesLive } from "./internal/FantasyQueriesLive.ts";
-import { ObservedFactRepository } from "./internal/ObservedFactRepository.ts";
 import { ProfessionalCalendarLive } from "./internal/ProfessionalCalendarLive.ts";
 import { FakeProviderWorld } from "./internal/ProviderFakeTest.ts";
 import { ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
+import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
 import { TransactionReviewsLive } from "./internal/TransactionReviewsLive.ts";
 import { ProfessionalCalendar } from "./ProfessionalCalendar.ts";
 import type {
@@ -909,7 +909,7 @@ it.effect("counts a pool player's games from its professional team key without a
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const games = yield* FakeGameSourceWorld;
-    const facts = yield* ObservedFactRepository;
+    const store = yield* ScheduleObservationRepository;
     const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
       league: hockeyLeagueFixture,
     });
@@ -917,7 +917,7 @@ it.effect("counts a pool player's games from its professional team key without a
     yield* fake.setMatchups([matchupFixture({ period: 3 })]);
     const provider = decodeProviderKey("yahoo");
     const observedAt = DateTime.makeUnsafe("2026-10-19T12:00:00.000Z");
-    yield* facts.recordTeamIdentities([
+    yield* store.recordTeamIdentities([
       {
         sport: "hockey",
         source: provider,
@@ -3581,8 +3581,8 @@ it.effect("serves a repeated schedule window from stored opponent facts", () =>
     );
     assert.deepStrictEqual(secondSchedule.dates, firstSchedule.dates);
 
-    const facts = yield* ObservedFactRepository;
-    const identities = yield* facts.readSourceTeamIdentities({
+    const store = yield* ScheduleObservationRepository;
+    const identities = yield* store.readSourceTeamIdentities({
       sport: "hockey",
       source: "yahoo",
     });
@@ -5512,7 +5512,7 @@ const ConnectionRepositoryTest = ConnectionRepository.layer.pipe(
   Layer.provideMerge(ConnectionsDatabaseTest),
 );
 const QueryRepositoryTest = QueryRepository.layer.pipe(Layer.provide(ConnectionRepositoryTest));
-const ObservedFactRepositoryTest = ObservedFactRepository.layer.pipe(
+const ScheduleObservationRepositoryTest = ScheduleObservationRepository.layer.pipe(
   Layer.provide(ConnectionsDatabaseTest),
 );
 const EmptyGameSourceTest = Layer.succeed(GameSourceRegistry)(gameSourceRegistryOf([]));
@@ -5527,13 +5527,13 @@ const queriesTestLayer = (
   | ConnectionRepository
   | ProviderRegistry
   | FakeProviderWorld
-  | ObservedFactRepository
+  | ScheduleObservationRepository
   | GameSourceRegistry
   | ProfessionalCalendar
   | ConnectionsDatabase
 > => {
   const calendar = ProfessionalCalendarLive.pipe(
-    Layer.provideMerge(ObservedFactRepositoryTest),
+    Layer.provideMerge(ScheduleObservationRepositoryTest),
     Layer.provide(gameSource),
   );
   return Layer.merge(FantasyQueriesLive, TransactionReviewsLive).pipe(
@@ -5541,7 +5541,7 @@ const queriesTestLayer = (
     Layer.provideMerge(QueryRepositoryTest),
     Layer.provideMerge(ConnectionRepositoryTest),
     Layer.provideMerge(ProviderFakeTest),
-    Layer.provideMerge(ObservedFactRepositoryTest),
+    Layer.provideMerge(ScheduleObservationRepositoryTest),
     Layer.provideMerge(gameSource),
     Layer.provideMerge(calendar),
     Layer.provide(EncryptionTestLayer),
@@ -5561,7 +5561,7 @@ const queriesTestLayerWithGames = (
   | ConnectionRepository
   | ProviderRegistry
   | FakeProviderWorld
-  | ObservedFactRepository
+  | ScheduleObservationRepository
   | GameSourceRegistry
   | ProfessionalCalendar
   | FakeGameSourceWorld

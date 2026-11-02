@@ -15,10 +15,10 @@ import {
   lineupRuns,
   lineupWriteIntents,
 } from "./LineupRunTables.ts";
-import { observedFacts } from "./ObservedFactTables.ts";
+import { scheduleObservations } from "./ScheduleObservationTables.ts";
 
 const outcomeRetentionMillis = 30 * 24 * 60 * 60 * 1000;
-const observedFactRetentionMillis = 30 * 24 * 60 * 60 * 1000;
+const scheduleObservationRetentionMillis = 30 * 24 * 60 * 60 * 1000;
 const terminalOutcomeStatuses = [
   "completed",
   "skipped",
@@ -36,8 +36,8 @@ export const RetentionSweepLive = Layer.effect(
       const outcomesBefore = DateTime.toDateUtc(
         DateTime.subtractDuration(now, outcomeRetentionMillis),
       );
-      const factsBefore = DateTime.formatIsoDate(
-        DateTime.subtractDuration(now, observedFactRetentionMillis),
+      const observationsBefore = DateTime.formatIsoDate(
+        DateTime.subtractDuration(now, scheduleObservationRetentionMillis),
       );
       return yield* database
         .transaction((tx) =>
@@ -99,10 +99,10 @@ export const RetentionSweepLive = Layer.effect(
               requests = yield* deleteRequestIds(tx, orphanRequests);
             }
 
-            const facts = yield* tx
-              .delete(observedFacts)
-              .where(lte(observedFacts.coversTo, factsBefore))
-              .returning({ subjectKey: observedFacts.subjectKey })
+            const observations = yield* tx
+              .delete(scheduleObservations)
+              .where(lte(scheduleObservations.coversTo, observationsBefore))
+              .returning({ subjectKey: scheduleObservations.subjectKey })
               .pipe(
                 Effect.orDie,
                 Effect.map((deleted) => deleted.length),
@@ -115,13 +115,13 @@ export const RetentionSweepLive = Layer.effect(
               runs,
               requests,
               deliveries,
-              facts,
+              scheduleObservations: observations,
             };
             yield* Effect.annotateCurrentSpan({
               "retention.diagnostics": summary.diagnostics,
               "retention.runs": summary.runs,
               "retention.requests": summary.requests,
-              "retention.facts": summary.facts,
+              "retention.schedule_observations": summary.scheduleObservations,
             });
             return summary;
           }),

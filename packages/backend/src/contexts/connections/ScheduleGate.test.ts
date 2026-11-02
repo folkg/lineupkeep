@@ -12,11 +12,11 @@ import {
   fakeGame,
   fakeGameSourceLayer,
 } from "./internal/FakeGameSourceTest.ts";
-import { ObservedFactRepository } from "./internal/ObservedFactRepository.ts";
 import { ProfessionalCalendarLive } from "./internal/ProfessionalCalendarLive.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { decideScheduleGate, nextLineupTick } from "./internal/ScheduleGateDecision.ts";
 import { ScheduleGateLive } from "./internal/ScheduleGateLive.ts";
+import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
 import type { ProfessionalGame } from "./ProfessionalGame.ts";
 import type { Provider, ProviderRosterSchedule, ProviderUnregistered } from "./Provider.ts";
 import { decodeProviderKey } from "./ProviderKey.ts";
@@ -25,26 +25,26 @@ import { ScheduleGate } from "./ScheduleGate.ts";
 
 const teamId = decodeTeamId("00000000-0000-7000-8000-000000000001");
 
-const ObservedFactRepositoryTest = ObservedFactRepository.layer.pipe(
+const ScheduleObservationRepositoryTest = ScheduleObservationRepository.layer.pipe(
   Layer.provide(ConnectionsDatabaseTest),
 );
 const GameSourceTest = fakeGameSourceLayer(6);
 const CalendarTest = ProfessionalCalendarLive.pipe(
-  Layer.provideMerge(ObservedFactRepositoryTest),
+  Layer.provideMerge(ScheduleObservationRepositoryTest),
   Layer.provideMerge(GameSourceTest),
 );
 const GateTest = ScheduleGateLive.pipe(
-  Layer.provideMerge(ObservedFactRepositoryTest),
+  Layer.provideMerge(ScheduleObservationRepositoryTest),
   Layer.provideMerge(CalendarTest),
   Layer.provideMerge(ProviderFakeTest),
 );
 const EmptySourceTest = Layer.succeed(GameSourceRegistry)(gameSourceRegistryOf([]));
 const NoSourceCalendarTest = ProfessionalCalendarLive.pipe(
-  Layer.provideMerge(ObservedFactRepositoryTest),
+  Layer.provideMerge(ScheduleObservationRepositoryTest),
   Layer.provideMerge(EmptySourceTest),
 );
 const NoSourceGateTest = ScheduleGateLive.pipe(
-  Layer.provideMerge(ObservedFactRepositoryTest),
+  Layer.provideMerge(ScheduleObservationRepositoryTest),
   Layer.provideMerge(NoSourceCalendarTest),
   Layer.provideMerge(ProviderFakeTest),
 );

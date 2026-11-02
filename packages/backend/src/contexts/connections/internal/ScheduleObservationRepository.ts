@@ -10,37 +10,37 @@ import { chunked } from "#utilities/collections.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import type {
-  FactWindow,
-  ObservedFactConfidence,
-  ObservedFactKind,
-  ObservedFactSubjectKind,
+  ScheduleObservationWindow,
+  ScheduleObservationConfidence,
+  ScheduleObservationKind,
+  ScheduleObservationSubjectKind,
   ProviderOpponentValue,
-} from "./ObservedFacts.ts";
-import { professionalGameValue, providerOpponentValue } from "./ObservedFacts.ts";
+} from "./ScheduleObservations.ts";
+import { professionalGameValue, providerOpponentValue } from "./ScheduleObservations.ts";
 import {
-  observedFacts,
+  scheduleObservations,
   professionalTeamIdentities,
   ProfessionalTeamIdentityRow,
-} from "./ObservedFactTables.ts";
+} from "./ScheduleObservationTables.ts";
 
-type FactObservation<Value> = {
+type ScheduleObservation<Value> = {
   readonly source: string;
   readonly subjectKey: string;
-  readonly window: FactWindow;
+  readonly window: ScheduleObservationWindow;
   readonly value: Value;
   readonly observedAt: DateTime.Utc;
   readonly sourceReference: string;
 };
 
-type FactObservationWrite<Value> = Omit<FactObservation<Value>, "source">;
+type ScheduleObservationWrite<Value> = Omit<ScheduleObservation<Value>, "source">;
 
-export type ProviderOpponentObservation = FactObservation<ProviderOpponentValue>;
+export type ProviderOpponentObservation = ScheduleObservation<ProviderOpponentValue>;
 export type ProviderOpponentObservationWrite = Omit<
-  FactObservationWrite<ProviderOpponentValue>,
+  ScheduleObservationWrite<ProviderOpponentValue>,
   "subjectKey"
 >;
-export type ProfessionalGameObservation = FactObservation<ProfessionalGame>;
-export type ProfessionalGameObservationWrite = FactObservationWrite<ProfessionalGame>;
+export type ProfessionalGameObservation = ScheduleObservation<ProfessionalGame>;
+export type ProfessionalGameObservationWrite = ScheduleObservationWrite<ProfessionalGame>;
 
 export type TeamIdentity = {
   readonly sport: FantasySport;
@@ -51,43 +51,43 @@ export type TeamIdentity = {
   readonly observedAt: DateTime.Utc;
 };
 
-export class ObservedFactRepository extends Context.Service<ObservedFactRepository>()(
-  "@lineupkeep/backend/contexts/connections/internal/ObservedFactRepository",
+export class ScheduleObservationRepository extends Context.Service<ScheduleObservationRepository>()(
+  "@lineupkeep/backend/contexts/connections/internal/ScheduleObservationRepository",
   {
     make: Effect.gen(function* () {
       const database = yield* ConnectionsDatabase;
 
-      const readFacts = <Value>(input: {
-        readonly factKind: ObservedFactKind;
-        readonly subjectKind: ObservedFactSubjectKind;
+      const readObservations = <Value>(input: {
+        readonly observationKind: ScheduleObservationKind;
+        readonly subjectKind: ScheduleObservationSubjectKind;
         readonly subjectKey: string | undefined;
         readonly from: string;
         readonly to: string;
         readonly value: Schema.Codec<Value, unknown, never, never>;
-      }): Effect.Effect<ReadonlyArray<FactObservation<Value>>, QueryPersistenceFailed> =>
+      }): Effect.Effect<ReadonlyArray<ScheduleObservation<Value>>, QueryPersistenceFailed> =>
         database
           .select()
-          .from(observedFacts)
+          .from(scheduleObservations)
           .where(
             and(
-              eq(observedFacts.subjectKind, input.subjectKind),
-              eq(observedFacts.factKind, input.factKind),
-              eq(observedFacts.coversFrom, observedFacts.coversTo),
-              gte(observedFacts.coversFrom, input.from),
-              lte(observedFacts.coversFrom, input.to),
+              eq(scheduleObservations.subjectKind, input.subjectKind),
+              eq(scheduleObservations.observationKind, input.observationKind),
+              eq(scheduleObservations.coversFrom, scheduleObservations.coversTo),
+              gte(scheduleObservations.coversFrom, input.from),
+              lte(scheduleObservations.coversFrom, input.to),
               input.subjectKey === undefined
                 ? undefined
-                : eq(observedFacts.subjectKey, input.subjectKey),
+                : eq(scheduleObservations.subjectKey, input.subjectKey),
             ),
           )
-          .orderBy(desc(observedFacts.observedAt))
+          .orderBy(desc(scheduleObservations.observedAt))
           .pipe(
             Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
             Effect.flatMap((rows) =>
               Effect.forEach(rows, (row) =>
                 Schema.decodeUnknownEffect(input.value)(row.value).pipe(
                   Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
-                  Effect.map((value): FactObservation<Value> => ({
+                  Effect.map((value): ScheduleObservation<Value> => ({
                     source: row.source,
                     subjectKey: row.subjectKey,
                     window: { from: row.coversFrom, to: row.coversTo },
@@ -100,18 +100,18 @@ export class ObservedFactRepository extends Context.Service<ObservedFactReposito
             ),
           );
 
-      const recordFacts = (input: {
-        readonly factKind: ObservedFactKind;
-        readonly subjectKind: ObservedFactSubjectKind;
+      const recordObservations = (input: {
+        readonly observationKind: ScheduleObservationKind;
+        readonly subjectKind: ScheduleObservationSubjectKind;
         readonly source: string;
-        readonly confidence: ObservedFactConfidence;
-        readonly observations: ReadonlyArray<FactObservationWrite<unknown>>;
+        readonly confidence: ScheduleObservationConfidence;
+        readonly observations: ReadonlyArray<ScheduleObservationWrite<unknown>>;
       }): Effect.Effect<void, QueryPersistenceFailed> => {
         const observations = input.observations.map((observation) => ({
           source: input.source,
           subjectKind: input.subjectKind,
           subjectKey: observation.subjectKey,
-          factKind: input.factKind,
+          observationKind: input.observationKind,
           coversFrom: observation.window.from,
           coversTo: observation.window.to,
           value: observation.value,
@@ -121,7 +121,7 @@ export class ObservedFactRepository extends Context.Service<ObservedFactReposito
         }));
         const newestByWindow = new Map<string, (typeof observations)[number]>();
         for (const observation of observations) {
-          const key = factWindowKey(observation);
+          const key = scheduleObservationKey(observation);
           const previous = newestByWindow.get(key);
           if (previous === undefined || isNewerObservation(observation, previous)) {
             newestByWindow.set(key, observation);
@@ -130,52 +130,55 @@ export class ObservedFactRepository extends Context.Service<ObservedFactReposito
         const rows = [...newestByWindow.values()].toSorted((left, right) =>
           observationKey(left).localeCompare(observationKey(right)),
         );
-        return chunked(rows, maxInsertRows(observedFacts), (chunk) =>
+        return chunked(rows, maxInsertRows(scheduleObservations), (chunk) =>
           database
-            .insert(observedFacts)
+            .insert(scheduleObservations)
             .values([...chunk])
             .onConflictDoUpdate({
               target: [
-                observedFacts.source,
-                observedFacts.subjectKind,
-                observedFacts.subjectKey,
-                observedFacts.factKind,
-                observedFacts.coversFrom,
-                observedFacts.coversTo,
+                scheduleObservations.source,
+                scheduleObservations.subjectKind,
+                scheduleObservations.subjectKey,
+                scheduleObservations.observationKind,
+                scheduleObservations.coversFrom,
+                scheduleObservations.coversTo,
               ],
-              set: excludedValues(observedFacts, [
+              set: excludedValues(scheduleObservations, [
                 "value",
                 "observedAt",
                 "confidence",
                 "sourceReference",
               ]),
-              setWhere: incomingIsNewer(observedFacts.observedAt),
+              setWhere: incomingIsNewer(scheduleObservations.observedAt),
             })
-            .returning({ observedAt: observedFacts.observedAt }),
+            .returning({ observedAt: scheduleObservations.observedAt }),
         ).pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
       };
 
-      const readProviderOpponents = Effect.fn("ObservedFactRepository.readProviderOpponents")(
-        (input: { readonly subjectKey: TeamId; readonly from: string; readonly to: string }) =>
-          readFacts({
-            factKind: "provider_opponent",
-            subjectKind: "fantasy_team",
-            subjectKey: input.subjectKey,
-            from: input.from,
-            to: input.to,
-            value: providerOpponentValue,
-          }),
+      const readProviderOpponents = Effect.fn(
+        "ScheduleObservationRepository.readProviderOpponents",
+      )((input: { readonly subjectKey: TeamId; readonly from: string; readonly to: string }) =>
+        readObservations({
+          observationKind: "provider_opponent",
+          subjectKind: "fantasy_team",
+          subjectKey: input.subjectKey,
+          from: input.from,
+          to: input.to,
+          value: providerOpponentValue,
+        }),
       );
 
-      const recordProviderOpponents = Effect.fn("ObservedFactRepository.recordProviderOpponents")(
+      const recordProviderOpponents = Effect.fn(
+        "ScheduleObservationRepository.recordProviderOpponents",
+      )(
         (input: {
           readonly subjectKey: TeamId;
           readonly source: ProviderKey;
-          readonly confidence: ObservedFactConfidence;
+          readonly confidence: ScheduleObservationConfidence;
           readonly observations: ReadonlyArray<ProviderOpponentObservationWrite>;
         }) =>
-          recordFacts({
-            factKind: "provider_opponent",
+          recordObservations({
+            observationKind: "provider_opponent",
             subjectKind: "fantasy_team",
             source: input.source,
             confidence: input.confidence,
@@ -186,34 +189,37 @@ export class ObservedFactRepository extends Context.Service<ObservedFactReposito
           }),
       );
 
-      const readProfessionalGames = Effect.fn("ObservedFactRepository.readProfessionalGames")(
-        (input: { readonly from: string; readonly to: string }) =>
-          database
-            .select()
-            .from(observedFacts)
-            .where(
-              and(
-                eq(observedFacts.subjectKind, "professional_game"),
-                eq(observedFacts.factKind, "professional_game"),
-                lte(observedFacts.coversFrom, input.to),
-                gte(observedFacts.coversTo, input.from),
-              ),
-            )
-            .orderBy(desc(observedFacts.observedAt))
-            .pipe(
-              Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
-              Effect.flatMap((rows) => Effect.forEach(rows, (row) => decodeProfessionalGame(row))),
+      const readProfessionalGames = Effect.fn(
+        "ScheduleObservationRepository.readProfessionalGames",
+      )((input: { readonly from: string; readonly to: string }) =>
+        database
+          .select()
+          .from(scheduleObservations)
+          .where(
+            and(
+              eq(scheduleObservations.subjectKind, "professional_game"),
+              eq(scheduleObservations.observationKind, "professional_game"),
+              lte(scheduleObservations.coversFrom, input.to),
+              gte(scheduleObservations.coversTo, input.from),
             ),
+          )
+          .orderBy(desc(scheduleObservations.observedAt))
+          .pipe(
+            Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
+            Effect.flatMap((rows) => Effect.forEach(rows, (row) => decodeProfessionalGame(row))),
+          ),
       );
 
-      const recordProfessionalGames = Effect.fn("ObservedFactRepository.recordProfessionalGames")(
+      const recordProfessionalGames = Effect.fn(
+        "ScheduleObservationRepository.recordProfessionalGames",
+      )(
         (input: {
           readonly source: string;
-          readonly confidence: ObservedFactConfidence;
+          readonly confidence: ScheduleObservationConfidence;
           readonly observations: ReadonlyArray<ProfessionalGameObservationWrite>;
         }) =>
-          recordFacts({
-            factKind: "professional_game",
+          recordObservations({
+            observationKind: "professional_game",
             subjectKind: "professional_game",
             source: input.source,
             confidence: input.confidence,
@@ -224,28 +230,28 @@ export class ObservedFactRepository extends Context.Service<ObservedFactReposito
           }),
       );
 
-      const readSourceTeamIdentities = Effect.fn("ObservedFactRepository.readSourceTeamIdentities")(
-        function* (input: { readonly sport: FantasySport; readonly source: string }) {
-          const rows = yield* database
-            .select()
-            .from(professionalTeamIdentities)
-            .where(
-              and(
-                eq(professionalTeamIdentities.sport, input.sport),
-                eq(professionalTeamIdentities.source, input.source),
-              ),
-            )
-            .orderBy(
-              asc(professionalTeamIdentities.sourceTeamIdentifier),
-              asc(professionalTeamIdentities.providerTeamKey),
-            )
-            .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
-          return yield* Effect.forEach(rows, decodeTeamIdentity);
-        },
-      );
+      const readSourceTeamIdentities = Effect.fn(
+        "ScheduleObservationRepository.readSourceTeamIdentities",
+      )(function* (input: { readonly sport: FantasySport; readonly source: string }) {
+        const rows = yield* database
+          .select()
+          .from(professionalTeamIdentities)
+          .where(
+            and(
+              eq(professionalTeamIdentities.sport, input.sport),
+              eq(professionalTeamIdentities.source, input.source),
+            ),
+          )
+          .orderBy(
+            asc(professionalTeamIdentities.sourceTeamIdentifier),
+            asc(professionalTeamIdentities.providerTeamKey),
+          )
+          .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
+        return yield* Effect.forEach(rows, decodeTeamIdentity);
+      });
 
       const readProviderTeamIdentities = Effect.fn(
-        "ObservedFactRepository.readProviderTeamIdentities",
+        "ScheduleObservationRepository.readProviderTeamIdentities",
       )(function* (input: {
         readonly sport: FantasySport;
         readonly identifiers: ReadonlyArray<string>;
@@ -268,7 +274,7 @@ export class ObservedFactRepository extends Context.Service<ObservedFactReposito
         return yield* Effect.forEach(rows, decodeTeamIdentity);
       });
 
-      const recordTeamIdentities = Effect.fn("ObservedFactRepository.recordTeamIdentities")(
+      const recordTeamIdentities = Effect.fn("ScheduleObservationRepository.recordTeamIdentities")(
         function* (identities: ReadonlyArray<TeamIdentity>) {
           const rows = identities
             .map((identity) => ({
@@ -306,7 +312,7 @@ export class ObservedFactRepository extends Context.Service<ObservedFactReposito
 }
 
 const decodeProfessionalGame = (
-  row: typeof observedFacts.$inferSelect,
+  row: typeof scheduleObservations.$inferSelect,
 ): Effect.Effect<ProfessionalGameObservation, QueryPersistenceFailed> =>
   Schema.decodeUnknownEffect(professionalGameValue)(row.value).pipe(
     Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
@@ -335,11 +341,11 @@ const decodeTeamIdentity = (
     })),
   );
 
-function factWindowKey(row: {
+function scheduleObservationKey(row: {
   readonly source: string;
   readonly subjectKind: string;
   readonly subjectKey: string;
-  readonly factKind: string;
+  readonly observationKind: string;
   readonly coversFrom: string;
   readonly coversTo: string;
 }): string {
@@ -347,7 +353,7 @@ function factWindowKey(row: {
     row.source,
     row.subjectKind,
     row.subjectKey,
-    row.factKind,
+    row.observationKind,
     row.coversFrom,
     row.coversTo,
   ]);
@@ -367,7 +373,7 @@ function observationKey(row: {
   readonly source: string;
   readonly subjectKind: string;
   readonly subjectKey: string;
-  readonly factKind: string;
+  readonly observationKind: string;
   readonly coversFrom: string;
   readonly coversTo: string;
   readonly observedAt: Date;
@@ -376,7 +382,7 @@ function observationKey(row: {
     row.source,
     row.subjectKind,
     row.subjectKey,
-    row.factKind,
+    row.observationKind,
     row.coversFrom,
     row.coversTo,
     row.observedAt.toISOString(),

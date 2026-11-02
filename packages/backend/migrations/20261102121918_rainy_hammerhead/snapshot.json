@@ -1,0 +1,142 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "07909d1b-ef6c-4aa5-8264-a1fe590f61ee",
+  "prevIds": ["89536084-3081-4430-98b2-99674f30ad8e"],
+  "footprints": [
+    {
+      "statementType": "rename_table",
+      "statementTarget": ["table", "public", "observed_facts"],
+      "writes": [
+        "s|tbl|public.observed_facts",
+        "n|tbl|public.observed_facts",
+        "n|rel|public.observed_facts",
+        "n|type|public.observed_facts",
+        "s|tbl|public.schedule_observations",
+        "n|tbl|public.schedule_observations",
+        "n|rel|public.schedule_observations",
+        "n|type|public.schedule_observations"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "rename_column",
+      "statementTarget": ["column", "public", "schedule_observations", "fact_kind"],
+      "writes": [
+        "s|col|public.schedule_observations.fact_kind",
+        "n|col|public.schedule_observations.fact_kind",
+        "s|col|public.schedule_observations.observation_kind",
+        "n|col|public.schedule_observations.observation_kind"
+      ],
+      "reads": ["n|tbl|public.schedule_observations", "n|sch|public"]
+    },
+    {
+      "statementType": "rename_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "schedule_observations",
+        "observed_facts_observation_idx"
+      ],
+      "writes": [
+        "s|idx|public.observed_facts_observation_idx",
+        "n|idx|public.observed_facts_observation_idx",
+        "n|rel|public.observed_facts_observation_idx",
+        "s|idx|public.schedule_observations_observation_idx",
+        "n|idx|public.schedule_observations_observation_idx",
+        "n|rel|public.schedule_observations_observation_idx"
+      ],
+      "reads": [
+        "e|tbl|public.schedule_observations",
+        "n|sch|public",
+        "e|col|public.schedule_observations.source",
+        "e|col|public.schedule_observations.subject_kind",
+        "e|col|public.schedule_observations.subject_key",
+        "e|col|public.schedule_observations.observation_kind",
+        "e|col|public.schedule_observations.covers_from",
+        "e|col|public.schedule_observations.covers_to"
+      ]
+    },
+    {
+      "statementType": "rename_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "schedule_observations",
+        "observed_facts_subject_window_idx"
+      ],
+      "writes": [
+        "s|idx|public.observed_facts_subject_window_idx",
+        "n|idx|public.observed_facts_subject_window_idx",
+        "n|rel|public.observed_facts_subject_window_idx",
+        "s|idx|public.schedule_observations_subject_window_idx",
+        "n|idx|public.schedule_observations_subject_window_idx",
+        "n|rel|public.schedule_observations_subject_window_idx"
+      ],
+      "reads": [
+        "e|tbl|public.schedule_observations",
+        "n|sch|public",
+        "e|col|public.schedule_observations.subject_kind",
+        "e|col|public.schedule_observations.subject_key",
+        "e|col|public.schedule_observations.observation_kind",
+        "e|col|public.schedule_observations.covers_from",
+        "e|col|public.schedule_observations.covers_to"
+      ]
+    },
+    {
+      "statementType": "rename_index",
+      "statementTarget": ["index", "public", "schedule_observations", "observed_facts_expiry_idx"],
+      "writes": [
+        "s|idx|public.observed_facts_expiry_idx",
+        "n|idx|public.observed_facts_expiry_idx",
+        "n|rel|public.observed_facts_expiry_idx",
+        "s|idx|public.schedule_observations_expiry_idx",
+        "n|idx|public.schedule_observations_expiry_idx",
+        "n|rel|public.schedule_observations_expiry_idx"
+      ],
+      "reads": [
+        "e|tbl|public.schedule_observations",
+        "n|sch|public",
+        "e|col|public.schedule_observations.covers_to"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "rename",
+      "key": "tables\u0000[\"public\",\"observed_facts\"]",
+      "set": {
+        "name": "schedule_observations"
+      }
+    },
+    {
+      "op": "rename",
+      "key": "columns\u0000[\"public\",\"schedule_observations\",\"fact_kind\"]",
+      "set": {
+        "name": "observation_kind"
+      }
+    },
+    {
+      "op": "rename",
+      "key": "indexes\u0000[\"public\",\"observed_facts_observation_idx\"]",
+      "set": {
+        "name": "schedule_observations_observation_idx"
+      }
+    },
+    {
+      "op": "rename",
+      "key": "indexes\u0000[\"public\",\"observed_facts_subject_window_idx\"]",
+      "set": {
+        "name": "schedule_observations_subject_window_idx"
+      }
+    },
+    {
+      "op": "rename",
+      "key": "indexes\u0000[\"public\",\"observed_facts_expiry_idx\"]",
+      "set": {
+        "name": "schedule_observations_expiry_idx"
+      }
+    }
+  ]
+}

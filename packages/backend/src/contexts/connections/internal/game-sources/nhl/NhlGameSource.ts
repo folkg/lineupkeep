@@ -30,37 +30,41 @@ export const nhlGameSource: Effect.Effect<GameSourceShape, never, PublicInternet
       "NhlGameSource.readLeagueWeek",
     )(function* (input) {
       const url = scheduleUrl(input.weekStart);
-      const response = yield* Effect.scoped(
-        internet
-          .request(
-            new Request(url, {
-              method: "GET",
-              headers: { accept: "application/json", "user-agent": userAgent },
-            }),
-            { timeoutMs: requestTimeoutMillis, maxResponseBytes: maximumResponseBytes },
-          )
-          .pipe(
-            Effect.mapError((error) =>
-              GameSourceRequestFailed.make({
-                source: sourceKey,
-                detail: error.reason ?? error._tag,
+      const text = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const response = yield* internet
+            .request(
+              new Request(url, {
+                method: "GET",
+                headers: { accept: "application/json", "user-agent": userAgent },
               }),
-            ),
-          ),
+              { timeoutMs: requestTimeoutMillis, maxResponseBytes: maximumResponseBytes },
+            )
+            .pipe(
+              Effect.mapError((error) =>
+                GameSourceRequestFailed.make({
+                  source: sourceKey,
+                  detail: error.reason ?? error._tag,
+                }),
+              ),
+            );
+
+          if (!response.ok) {
+            yield* Effect.tryPromise(() => response.body?.cancel() ?? Promise.resolve()).pipe(
+              Effect.ignore,
+            );
+            return yield* GameSourceRequestFailed.make({
+              source: sourceKey,
+              status: response.status,
+            });
+          }
+
+          return yield* Effect.tryPromise({
+            try: () => response.text(),
+            catch: () => GameSourceRequestFailed.make({ source: sourceKey, detail: "body_read" }),
+          });
+        }),
       );
-
-      if (!response.ok) {
-        yield* Effect.tryPromise({
-          try: () => response.body?.cancel() ?? Promise.resolve(),
-          catch: () => GameSourceRequestFailed.make({ source: sourceKey }),
-        }).pipe(Effect.ignore);
-        return yield* GameSourceRequestFailed.make({ source: sourceKey, status: response.status });
-      }
-
-      const text = yield* Effect.tryPromise({
-        try: () => response.text(),
-        catch: () => GameSourceRequestFailed.make({ source: sourceKey }),
-      });
       const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(SchedulePayload))(text).pipe(
         Effect.mapError(() =>
           GameSourceResponseInvalid.make({ source: sourceKey, field: "payload" }),

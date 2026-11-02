@@ -36,12 +36,12 @@ import { LineupRunRepository } from "#contexts/connections/internal/LineupRunRep
 import { LineupRunsLive } from "#contexts/connections/internal/LineupRunsLive.ts";
 import { LineupWorkerLive } from "#contexts/connections/internal/LineupWorkerLive.ts";
 import { NotificationsLive } from "#contexts/connections/internal/NotificationsRepository.ts";
-import { ObservedFactRepository } from "#contexts/connections/internal/ObservedFactRepository.ts";
 import { ProfessionalCalendarLive } from "#contexts/connections/internal/ProfessionalCalendarLive.ts";
 import { QueryRepository } from "#contexts/connections/internal/QueryRepository.ts";
 import { QueryTokens } from "#contexts/connections/internal/QueryTokens.ts";
 import { RetentionSweepLive } from "#contexts/connections/internal/RetentionSweepRepository.ts";
 import { ScheduleGateLive } from "#contexts/connections/internal/ScheduleGateLive.ts";
+import { ScheduleObservationRepository } from "#contexts/connections/internal/ScheduleObservationRepository.ts";
 import { TeamRepository } from "#contexts/connections/internal/TeamRepository.ts";
 import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
 import { TransactionProposalRepository } from "#contexts/connections/internal/TransactionProposalRepository.ts";
@@ -114,16 +114,16 @@ const QueryRepositoryLayer = QueryRepository.layer.pipe(
   Layer.provide(RepositoryLayer),
   Layer.provide(ConnectionsDatabase.layer),
 );
-const ObservedFactRepositoryLayer = ObservedFactRepository.layer.pipe(
+const ScheduleObservationRepositoryLayer = ScheduleObservationRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
 );
 const ProfessionalCalendarLayer = ProfessionalCalendarLive.pipe(
-  Layer.provide(ObservedFactRepositoryLayer),
+  Layer.provide(ScheduleObservationRepositoryLayer),
   Layer.provide(GameSourceLayer),
 );
 const QueriesLayer = Layer.merge(FantasyQueriesLive, TransactionReviewsLive).pipe(
   Layer.provide(QueryRepositoryLayer),
-  Layer.provide(ObservedFactRepositoryLayer),
+  Layer.provide(ScheduleObservationRepositoryLayer),
   Layer.provide(ProfessionalCalendarLayer),
   Layer.provide(GameSourceLayer),
   Layer.provide(ConnectionsLayer),
@@ -145,7 +145,7 @@ const LineupRepositoryLayer = LineupRunRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
 );
 const ScheduleGateLayer = ScheduleGateLive.pipe(
-  Layer.provide(ObservedFactRepositoryLayer),
+  Layer.provide(ScheduleObservationRepositoryLayer),
   Layer.provide(ProfessionalCalendarLayer),
   Layer.provide(GameSourceLayer),
 );

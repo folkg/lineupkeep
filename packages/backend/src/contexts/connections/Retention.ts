@@ -8,7 +8,7 @@ export const RetentionSummary = Schema.Struct({
   runs: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   requests: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   deliveries: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  facts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  scheduleObservations: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 export type RetentionSummary = typeof RetentionSummary.Type;
 

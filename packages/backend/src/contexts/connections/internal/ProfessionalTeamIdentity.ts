@@ -4,7 +4,10 @@ import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import type { GameSourceTeam } from "#contexts/connections/GameSource.ts";
 import type { QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
 
-import type { ObservedFactRepository, TeamIdentity } from "./ObservedFactRepository.ts";
+import type {
+  ScheduleObservationRepository,
+  TeamIdentity,
+} from "./ScheduleObservationRepository.ts";
 
 export type ProfessionalTeamResolution = {
   readonly bySourceIdentifier: ReadonlyMap<string, string | null>;
@@ -32,7 +35,7 @@ type TeamClaim = {
 };
 
 export function resolveProfessionalTeams(input: {
-  readonly facts: ObservedFactRepository["Service"];
+  readonly store: ScheduleObservationRepository["Service"];
   readonly sport: FantasySport;
   readonly source: string;
   readonly now: DateTime.Utc;
@@ -40,7 +43,7 @@ export function resolveProfessionalTeams(input: {
 }): Effect.Effect<ProfessionalTeamResolution, QueryPersistenceFailed> {
   return Effect.gen(function* () {
     const teams = uniqueTeams(input.teams);
-    const stored = yield* input.facts.readSourceTeamIdentities({
+    const stored = yield* input.store.readSourceTeamIdentities({
       sport: input.sport,
       source: input.source,
     });
@@ -59,7 +62,7 @@ export function resolveProfessionalTeams(input: {
       return { bySourceIdentifier, recorded: [] };
     }
 
-    const published = yield* input.facts.readProviderTeamIdentities({
+    const published = yield* input.store.readProviderTeamIdentities({
       sport: input.sport,
       identifiers: unpublished.map((team) => team.abbreviation),
     });
@@ -90,7 +93,7 @@ export function resolveProfessionalTeams(input: {
         });
       }
     }
-    yield* input.facts.recordTeamIdentities(recorded);
+    yield* input.store.recordTeamIdentities(recorded);
     return { bySourceIdentifier, recorded };
   });
 }

@@ -24,15 +24,15 @@ import type {
 import { professionalGameIsFresh } from "#contexts/connections/ProfessionalGame.ts";
 import type { QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
 
+import { resolveProfessionalTeams } from "./ProfessionalTeamIdentity.ts";
 import type {
-  ObservedFactRepository,
+  ScheduleObservationRepository,
   ProfessionalGameObservation,
   ProfessionalGameObservationWrite,
-} from "./ObservedFactRepository.ts";
-import { resolveProfessionalTeams } from "./ProfessionalTeamIdentity.ts";
+} from "./ScheduleObservationRepository.ts";
 
 export function readProfessionalGameWeek(input: {
-  readonly facts: ObservedFactRepository["Service"];
+  readonly store: ScheduleObservationRepository["Service"];
   readonly source: GameSourceShape;
   readonly coverage: GameSourceCoverage;
   readonly league: FantasyLeague;
@@ -46,7 +46,7 @@ export function readProfessionalGameWeek(input: {
   const weekEnd = addDays(input.weekStart, input.source.capabilities.weekDays - 1);
   const read = Effect.fn("ProfessionalGameFacts.readLeagueWeek")(function* () {
     const now = yield* DateTime.now;
-    const stored = (yield* input.facts.readProfessionalGames({
+    const stored = (yield* input.store.readProfessionalGames({
       from: input.weekStart,
       to: weekEnd,
     })).filter(
@@ -59,7 +59,7 @@ export function readProfessionalGameWeek(input: {
     const unresolved = current.flatMap(unresolvedTeamsOf);
     const awaitingMapping =
       unresolved.length > 0 &&
-      (yield* input.facts.readProviderTeamIdentities({
+      (yield* input.store.readProviderTeamIdentities({
         sport: input.coverage.sport,
         identifiers: unresolved.map((team) => team.sourceTeamAbbreviation),
       })).length > 0;
@@ -103,7 +103,7 @@ export function readProfessionalGameWeek(input: {
 
     const observedAt = yield* DateTime.now;
     const resolution = yield* resolveProfessionalTeams({
-      facts: input.facts,
+      store: input.store,
       sport: input.coverage.sport,
       source: input.source.key,
       now: observedAt,
@@ -119,7 +119,7 @@ export function readProfessionalGameWeek(input: {
         observedAt,
       }),
     );
-    yield* input.facts.recordProfessionalGames({
+    yield* input.store.recordProfessionalGames({
       source: input.source.key,
       confidence: "authoritative",
       observations,

@@ -1,4 +1,9 @@
-# Observed facts, a refresh policy per fact, and schedule sources
+# Schedule observations, freshness policies, and schedule sources
+
+> **Terminology and status:** the store is implemented as `schedule_observations`, and its rows are
+> **schedule observations**. The generic `Facts.require` hook and source registry described in item 4 are
+> still roadmap F1.4, not current code; the current reads use `ProfessionalCalendar` and
+> `ProviderOpponentFacts`.
 
 ## Context
 
@@ -40,23 +45,24 @@ results. nflverse is CC-BY-4.0 but publishes abbreviations only, which is the on
 
 ## Decision
 
-**Facts are stored as observations, refreshed per fact type, joined on provider keys, and read through one
-hook. External sources are added per sport, and only where the terms permit.**
+**Schedule observations are stored with their freshness policy, joined on provider keys, and read through one
+path. External sources are added per sport, and only where the terms permit.**
 
-1. **Observed facts, not truth.** Every cached fact is an observation carrying its subject, the fact kind, the
+1. **Schedule observations, not truth.** Every stored observation carries its subject, its observation kind, the
    window it covers, the value, the observation instant, the source, a confidence of `authoritative`,
-   `corroborated`, or `reported`, and the upstream identifier. Each source, subject, fact kind, and covered
+   `corroborated`, or `reported`, and the upstream identifier. Each source, subject, observation kind, and covered
    window has one stored observation: a newer observation replaces an older one for that window, an older
    observation cannot overwrite a newer one, and the read path takes the stored row. This answers "when did we
    learn this" but not "what did it used to say". Retention prunes a window once it ended more than 30 days
    ago. Conflict reporting is not implemented; a disagreement between two authoritative sources is not
    recoverable from this table, and if it is needed it gets its own record rather than whole history.
 
-2. **A refresh policy per fact kind, not per table and not per job.** League season state: 24 hours. A game
-   fixture: 7 days. A start time: 6 hours inside 48 hours, 7 days beyond. Game status: 30 minutes inside 12
-   hours, 6 hours otherwise. Venue: 7 days. The provider's own opponent fact: the fantasy day boundary. Because
-   that fact covers one fantasy date, its bound is the end of the day it covers: a date observed once while it
-   is in the window is trusted through that date and re-read only after the date has ended. A source may narrow
+2. **A freshness policy per observation kind, not per table and not per job.** League season state: 24 hours. A
+   professional-game calendar read: 7 days. A start time: 6 hours inside 48 hours, 7 days beyond. Game status:
+   30 minutes inside 12 hours, 6 hours otherwise. Venue: 7 days. The provider's own scheduled game: the fantasy
+   day boundary. Because that observation covers one fantasy date, its bound is the end of the day it covers: a
+   date observed once while it is in the window is trusted through that date and re-read only after the date has
+   ended. A source may narrow
    a policy it cannot satisfy, and the narrowed bound is what the reader sees. Steady state is 8 to 10 requests
    a day for the owner's two leagues and five linked teams, against up to 360 today.
 
@@ -64,8 +70,8 @@ hook. External sources are added per sport, and only where the terms permit.**
    zone, its two teams, its venue, and its status, because one league-week request refreshes all of them at
    once. Its covered window is the league week that was read, so a stored slate is served only for the week it
    was read for and a shifted week is a new read rather than a partial answer. The three game ages are named
-   aspects of that fact rather than three fact kinds: a **calendar** read needs the fixture and start-time
-   aspects, and a **status** read needs the status aspect. A read of a game whose team has no settled identity
+   aspects of that observation rather than three observation kinds: a **calendar** read needs the fixture and
+   start-time aspects, and a **status** read needs the status aspect. A read of a game whose team has no settled identity
    is not settled either, so a provider pairing learned after the games were stored is picked up by the next
    read instead of waiting out the fixture age.
 
@@ -77,10 +83,11 @@ hook. External sources are added per sport, and only where the terms permit.**
    observed pairing, keyed by the sport, the source, and the source's own team identifier; the bridge from a
    game source's identifier to the provider's key is a second observed pairing, never a request-time compare.
 
-4. **One hook, and the consumer never names a source.** `Facts.require({ subject, fact, window, maximumAge })`
+4. **One hook, and the consumer never names a source.** `ScheduleObservations.require({ subject, observationKind,
+   window, maximumAge })`
    resolves the canonical subject, reads the newest qualifying observation, and asks the source registry only
-   when none qualifies, batching every subject in one call. It returns the fact with its observation instant,
-   source, confidence, and window, or a named refusal. Sources are a keyed registry injected at the composition
+   when none qualifies, batching every subject in one call. It returns the observation with its instant, source,
+   confidence, and window, or a named refusal. Sources are a keyed registry injected at the composition
    root, mirroring [ADR 0007](0007-provider-registry-and-planner-capability.md); adding one is a module plus an
    entry.
 
