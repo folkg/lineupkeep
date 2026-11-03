@@ -17,7 +17,13 @@ import { defaultProviderName, providerDisplayName } from "#contracts/connections
 import type { LineupRunView } from "#contracts/connections/teamContract.ts";
 
 import { describeRunFailure } from "./teamFailure";
-import { runExplanation, runStatusLabel, targetLabel, triggerLabel } from "./teamLabels";
+import {
+  provenanceExplanation,
+  runExplanation,
+  runStatusLabel,
+  targetLabel,
+  triggerLabel,
+} from "./teamLabels";
 import type { TeamListQueryOptions, TeamRunQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 import { useRunPage } from "./useRunPage";
@@ -118,6 +124,13 @@ function RunDetail(props: {
             <Heading level={2} size="section">
               What the run found
             </Heading>
+            <Show when={outcome().provenance}>
+              {(provenance) => (
+                <Text size="caption" tone="muted">
+                  {provenanceExplanation(provenance())}
+                </Text>
+              )}
+            </Show>
             <Text size="caption" tone="muted">
               {outcome().verified ? `Confirmed on ${props.providerName}.` : "Not yet confirmed."}
               {outcome().reconciled ? " Checked again after an unconfirmed write." : ""}

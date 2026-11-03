@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { parseExact } from "./Exact.ts";
 import { scoreLineup } from "./LineupScore.ts";
 import type { LineupScoreInput, LineupScoreResult } from "./LineupScore.ts";
-import { scoringProfile } from "./ScoringProfile.ts";
 import type {
   Period,
   PlayerAvailability,
@@ -14,65 +13,57 @@ import type {
 } from "./types.ts";
 
 const target: Period = { kind: "week", week: 7 };
-const window = [3, 4, 5, 6].map((week) => ({ kind: "week" as const, week }));
-const unitRule = scoringProfile({ categories: [], rules: [{ statId: 1, points: "0.01" }] });
 
-describe("scoring from completed periods", () => {
-  it("values a player by the mean of the counted completed periods", () => {
+describe("the period's projection", () => {
+  it("values a player from the provider's projected rank for the target period", () => {
     const result = scored(
       scoreLineup(
         input({
-          sources: [scoringRules([1000, 2000, 2000, 3001])],
-          players: [player("p1")],
+          sources: [projection({ p1: 1, p2: 4 })],
+          players: [player("p1"), player("p2")],
         }),
       ),
     );
 
-    expect(result.players[0]?.units).toBe(2000);
-    expect(result.label).toBe("mean-points-per-period:week:3,week:4,week:5,week:6");
+    expect(result.players.map((entry) => entry.units)).toEqual([4, 1]);
+    expect(result.label).toBe("projected rank for week 7");
   });
 
-  it("skips a completed period the player had no game in", () => {
+  it("ranks the worst projected player on the roster at one unit so every value is positive", () => {
     const result = scored(
       scoreLineup(
         input({
-          sources: [scoringRules([1000, 2000, 2000, 3001])],
-          players: [player("p1", { kind: "available" }, [{ kind: "week", week: 5 }])],
+          sources: [projection({ p1: 124, p2: 48 })],
+          players: [player("p1"), player("p2")],
         }),
       ),
     );
 
-    expect(result.players[0]?.units).toBe(2000);
+    expect(result.players.map((entry) => entry.units)).toEqual([1, 77]);
   });
 
-  it("skips a completed period the provider published no observation for", () => {
+  it("leaves a player without a projection unscored rather than zero", () => {
     const result = scored(
       scoreLineup(
         input({
-          sources: [scoringRules([1000, undefined, 2000, 3000])],
-          players: [player("p1")],
+          sources: [projection({ p1: 12 })],
+          players: [player("p1"), player("p2")],
         }),
       ),
     );
 
-    expect(result.players[0]?.units).toBe(2000);
+    expect(result.players[1]?.units).toBeUndefined();
   });
 
-  it("skips a completed period whose scored total is unknown", () => {
+  it("falls to the started percentage when the projection yields no value at all", () => {
     const result = scored(
       scoreLineup(
         input({
           sources: [
+            projection({}),
             {
-              kind: "scoring-rules",
-              window,
-              scoring: unitRule,
-              observations: observations([
-                { week: 3, stats: [[1, 100]] },
-                { week: 4, stats: [[1, null]] },
-                { week: 5, stats: [[1, 200]] },
-                { week: 6, stats: [[1, 300]] },
-              ]),
+              kind: "community-start-rate",
+              started: [startRate("p1", "43", [{ cut: "platinum", percent: "43" }])],
             },
           ],
           players: [player("p1")],
@@ -80,96 +71,27 @@ describe("scoring from completed periods", () => {
       ),
     );
 
-    expect(result.players[0]?.units).toBe(200);
-  });
-
-  it("values a player with no counted period at zero", () => {
-    const result = scored(
-      scoreLineup(
-        input({
-          sources: [scoringRules([undefined, undefined, undefined, undefined])],
-          players: [player("p1")],
-        }),
-      ),
-    );
-
-    expect(result.players[0]?.units).toBe(0);
-  });
-});
-
-describe("availability", () => {
-  const tiers: ReadonlyArray<readonly [PlayerAvailability, string]> = [
-    [{ kind: "available" }, "will-play"],
-    [{ kind: "uncertain", code: "DTD" }, "might-play"],
-    [{ kind: "unrecognised", code: "PUP-2027" }, "might-play"],
-    [{ kind: "excluded", reason: "out" }, "will-not-play"],
-    [{ kind: "excluded", reason: "injured-reserve" }, "will-not-play"],
-    [{ kind: "excluded", reason: "suspended" }, "will-not-play"],
-    [{ kind: "excluded", reason: "not-active" }, "will-not-play"],
-  ];
-
-  it.each(tiers)("places %j on the %s tier", (availability, tier) => {
-    const result = scored(
-      scoreLineup(
-        input({
-          sources: [scoringRules([1000, 1000, 1000, 1000])],
-          players: [player("p1", availability)],
-        }),
-      ),
-    );
-
-    expect(result.players[0]?.availability).toBe(tier);
-  });
-
-  it("places a player with no game in the target period on the lowest tier", () => {
-    const result = scored(
-      scoreLineup(
-        input({
-          sources: [scoringRules([1000, 1000, 1000, 1000])],
-          players: [player("p1", { kind: "available" }, [{ kind: "week", week: 7 }])],
-        }),
-      ),
-    );
-
-    expect(result.players[0]?.availability).toBe("not-scheduled");
-  });
-
-  it("keeps the same score whatever the availability tier", () => {
-    const available = scored(
-      scoreLineup(
-        input({ sources: [scoringRules([1000, 2000, 3000, 4000])], players: [player("p1")] }),
-      ),
-    );
-    const excluded = scored(
-      scoreLineup(
-        input({
-          sources: [scoringRules([1000, 2000, 3000, 4000])],
-          players: [player("p1", { kind: "excluded", reason: "out" })],
-        }),
-      ),
-    );
-
-    expect(available.players[0]?.units).toBe(excluded.players[0]?.units);
-    expect(available.players[0]?.availability).not.toBe(excluded.players[0]?.availability);
+    expect(result.players[0]?.units).toBe(4300);
+    expect(result.label).toBe("percent started for week 7 (platinum cut)");
   });
 });
 
 describe("the value source ladder", () => {
-  it("takes the most preferred source that yields values", () => {
+  it("prices the plan from the projection, not from the started percentage", () => {
     const result = scored(
       scoreLineup(
         input({
           sources: [
-            { kind: "community-start-rate", started: [startRate("p1", "43")] },
-            scoringRules([1000, 1000, 1000, 1000]),
+            { kind: "community-start-rate", started: [startRate("p1", "91")] },
+            projection({ p1: 2 }),
           ],
           players: [player("p1")],
         }),
       ),
     );
 
-    expect(result.players[0]?.units).toBe(1000);
-    expect(result.label).toBe("mean-points-per-period:week:3,week:4,week:5,week:6");
+    expect(result.players[0]?.units).toBe(1);
+    expect(result.label).toBe("projected rank for week 7");
   });
 
   it("values a started percentage in hundredths and keeps a zero", () => {
@@ -188,7 +110,7 @@ describe("the value source ladder", () => {
     );
 
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 0]);
-    expect(result.label).toBe("community-start-rate:overall:platinum-cut-incomplete:week:7");
+    expect(result.label).toBe("percent started for week 7 (the platinum cut was incomplete)");
   });
 
   it("prices from the populated platinum cut when every measured player carries it", () => {
@@ -207,7 +129,7 @@ describe("the value source ladder", () => {
     );
 
     expect(result.players.map((entry) => entry.units)).toEqual([5100, 800]);
-    expect(result.label).toBe("community-start-rate:cut-platinum:week:7");
+    expect(result.label).toBe("percent started for week 7 (platinum cut)");
   });
 
   it("ignores a cut the request did not ask for", () => {
@@ -226,7 +148,7 @@ describe("the value source ladder", () => {
     );
 
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200]);
-    expect(result.label).toBe("community-start-rate:overall:platinum-cut-incomplete:week:7");
+    expect(result.label).toBe("percent started for week 7 (the platinum cut was incomplete)");
   });
 
   it("records a uniformly zero cut as a finding and prices from the overall percentage", () => {
@@ -244,7 +166,7 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.label).toBe("community-start-rate:overall:platinum-cut-unpopulated:week:7");
+    expect(result.label).toBe("percent started for week 7 (the platinum cut was unpopulated)");
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200]);
   });
 
@@ -264,7 +186,7 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.label).toBe("community-start-rate:overall:platinum-cut-incomplete:week:7");
+    expect(result.label).toBe("percent started for week 7 (the platinum cut was incomplete)");
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200, 4000]);
   });
 
@@ -284,7 +206,7 @@ describe("the value source ladder", () => {
     );
 
     expect(result.players.map((entry) => entry.units)).toEqual([5100, 0]);
-    expect(result.label).toBe("community-start-rate:cut-platinum:week:7");
+    expect(result.label).toBe("percent started for week 7 (platinum cut)");
   });
 
   it("leaves a missing started percentage absent rather than zero", () => {
@@ -306,26 +228,25 @@ describe("the value source ladder", () => {
     expect(result.players[1]?.units).toBeUndefined();
   });
 
-  it("moves past a window with no completed period to the next source", () => {
-    const result = scored(
-      scoreLineup(
-        input({
-          sources: [
-            { kind: "scoring-rules", window: [], scoring: unitRule, observations: [] },
-            { kind: "community-start-rate", started: [startRate("p1", "43")] },
-          ],
-          players: [player("p1")],
-        }),
-      ),
-    );
+  it("refuses transiently, naming the projection, when no projection is published", () => {
+    const verdict = scoreLineup(input({ sources: [projection({})], players: [player("p1")] }));
 
-    expect(result.label).toBe("community-start-rate:overall:platinum-cut-incomplete:week:7");
+    expect(verdict).toEqual({
+      kind: "refused",
+      refusal: "transient",
+      code: "policy:no-projection",
+      detail:
+        "The provider published no projected rank for any player on this roster for this period, so the custom policy cannot value the lineup.",
+    });
   });
 
-  it("refuses transiently when the only source has no completed period", () => {
+  it("refuses transiently, naming the start rate, when neither period signal is published", () => {
     const verdict = scoreLineup(
       input({
-        sources: [{ kind: "scoring-rules", window: [], scoring: unitRule, observations: [] }],
+        sources: [
+          projection({}),
+          { kind: "community-start-rate", started: [startRate("p1", null)] },
+        ],
         players: [player("p1")],
       }),
     );
@@ -333,9 +254,9 @@ describe("the value source ladder", () => {
     expect(verdict).toEqual({
       kind: "refused",
       refusal: "transient",
-      code: "policy:no-observed-periods",
+      code: "policy:no-start-rate",
       detail:
-        "No completed scoring period is available to value the roster, so the custom policy cannot plan a lineup.",
+        "The provider published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
     });
   });
 
@@ -351,70 +272,124 @@ describe("the value source ladder", () => {
   });
 });
 
+describe("availability", () => {
+  const tiers: ReadonlyArray<readonly [PlayerAvailability, string]> = [
+    [{ kind: "available" }, "will-play"],
+    [{ kind: "uncertain", code: "DTD" }, "might-play"],
+    [{ kind: "unrecognised", code: "PUP-2027" }, "might-play"],
+    [{ kind: "excluded", reason: "out" }, "will-not-play"],
+    [{ kind: "excluded", reason: "injured-reserve" }, "will-not-play"],
+    [{ kind: "excluded", reason: "suspended" }, "will-not-play"],
+    [{ kind: "excluded", reason: "not-active" }, "will-not-play"],
+  ];
+
+  it.each(tiers)("places %j on the %s tier", (availability, tier) => {
+    const result = scored(
+      scoreLineup(
+        input({
+          sources: [projection({ p1: 1 })],
+          players: [player("p1", availability)],
+        }),
+      ),
+    );
+
+    expect(result.players[0]?.availability).toBe(tier);
+  });
+
+  it("places a player with no game in the target period on the lowest tier", () => {
+    const result = scored(
+      scoreLineup(
+        input({
+          sources: [projection({ p1: 1 })],
+          players: [player("p1", { kind: "available" }, [{ kind: "week", week: 7 }])],
+        }),
+      ),
+    );
+
+    expect(result.players[0]?.availability).toBe("not-scheduled");
+  });
+
+  it("keeps the same value whatever the availability tier", () => {
+    const available = scored(
+      scoreLineup(
+        input({
+          sources: [projection({ p1: 1, p2: 4 })],
+          players: [player("p1")],
+        }),
+      ),
+    );
+    const excluded = scored(
+      scoreLineup(
+        input({
+          sources: [projection({ p1: 1, p2: 4 })],
+          players: [player("p1", { kind: "excluded", reason: "out" })],
+        }),
+      ),
+    );
+
+    expect(available.players[0]?.units).toBe(excluded.players[0]?.units);
+    expect(available.players[0]?.availability).not.toBe(excluded.players[0]?.availability);
+  });
+});
+
 describe("input consistency", () => {
   it("rejects the same player twice", () => {
     expect(() =>
       scoreLineup(
         input({
-          sources: [scoringRules([1000, 1000, 1000, 1000])],
+          sources: [projection({ p1: 1 })],
           players: [player("p1"), player("p1")],
         }),
       ),
     ).toThrow("A policy roster must not contain the same player twice.");
   });
 
-  it("rejects a target period inside its own observation window", () => {
+  it("rejects a projection that covers a different period", () => {
     expect(() =>
       scoreLineup(
         input({
           sources: [
             {
-              kind: "scoring-rules",
-              window: [target],
-              scoring: unitRule,
-              observations: [observation(target, [[1, 1]])],
+              kind: "projection",
+              period: { kind: "week", week: 6 },
+              players: [{ id: "p1", rank: 1 }],
             },
           ],
           players: [player("p1")],
         }),
       ),
-    ).toThrow("The target period cannot belong to its own observation window.");
+    ).toThrow("A projection for week:6 cannot price a lineup for week:7.");
   });
 
-  it("rejects an observation outside the declared window", () => {
+  it("rejects a projected rank that is not a positive integer", () => {
     expect(() =>
       scoreLineup(
         input({
-          sources: [
-            {
-              kind: "scoring-rules",
-              window: [{ kind: "week", week: 6 }],
-              scoring: unitRule,
-              observations: [observation({ kind: "week", week: 5 }, [[1, 1]])],
-            },
-          ],
+          sources: [{ kind: "projection", period: target, players: [{ id: "p1", rank: 0 }] }],
           players: [player("p1")],
         }),
       ),
-    ).toThrow("Observation period week:5 is outside the declared window.");
+    ).toThrow("A projected rank must be a positive integer, received 0.");
   });
 
-  it("rejects an observation for a player who is not on the roster", () => {
+  it("rejects a player listed twice in one source", () => {
     expect(() =>
       scoreLineup(
         input({
           sources: [
             {
-              kind: "scoring-rules",
-              window: [{ kind: "week", week: 6 }],
-              scoring: unitRule,
-              observations: [observation({ kind: "week", week: 6 }, [[1, 1]], "p9")],
+              kind: "projection",
+              period: target,
+              players: [
+                { id: "p1", rank: 1 },
+                { id: "p1", rank: 2 },
+              ],
             },
           ],
           players: [player("p1")],
         }),
       ),
-    ).toThrow("Observation for player p9 is not on the policy roster.");
+    ).toThrow("Duplicate projection for player p1.");
   });
 });
 
@@ -443,46 +418,13 @@ function player(
   };
 }
 
-function scoringRules(values: ReadonlyArray<number | undefined>): ValueSource {
+function projection(ranks: Readonly<Record<string, number | undefined>>): ValueSource {
   return {
-    kind: "scoring-rules",
-    window,
-    scoring: unitRule,
-    observations: observations(
-      values.map((value, index) => ({
-        week: window[index]?.week ?? 0,
-        stats: [[1, value] as const],
-      })),
+    kind: "projection",
+    period: target,
+    players: Object.entries(ranks).flatMap(([id, rank]) =>
+      rank === undefined ? [] : [{ id, rank }],
     ),
-  };
-}
-
-function observations(
-  entries: ReadonlyArray<{
-    readonly week: number;
-    readonly stats: ReadonlyArray<readonly [number, number | null | undefined]>;
-  }>,
-): Extract<ValueSource, { readonly kind: "scoring-rules" }>["observations"] {
-  return entries.flatMap((entry) => {
-    const stats = entry.stats.flatMap(([statId, value]) =>
-      value === undefined ? [] : [{ statId: String(statId), value }],
-    );
-    return stats.length === 0
-      ? []
-      : [{ period: { kind: "week" as const, week: entry.week }, players: [{ id: "p1", stats }] }];
-  });
-}
-
-function observation(
-  period: Period,
-  stats: ReadonlyArray<readonly [number, number]>,
-  playerId = "p1",
-): Extract<ValueSource, { readonly kind: "scoring-rules" }>["observations"][number] {
-  return {
-    period,
-    players: [
-      { id: playerId, stats: stats.map(([statId, value]) => ({ statId: String(statId), value })) },
-    ],
   };
 }
 

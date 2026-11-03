@@ -683,6 +683,127 @@ than as an empty value. Three signals come out of one mismatch:
 Unparsable started percentages go through the same path. An absent started percentage stays a normal
 absence and parks the player; only a present value the decoder cannot read is a shape change.
 
+## Live Yahoo projection probes (2026-11-03)
+
+Read-only, through the same loopback harness and the committed read origin, no write attempted. The
+question was whether Yahoo publishes a projection for the period being set, for football and for
+hockey, before the lineup policy could depend on one. League keys, player keys, and non-public names
+are not retained; the figures below are request shapes, status codes, key paths, counts, and the two
+players the owner named.
+
+### No projected statistics, in either sport
+
+| Request, three roster players                                                                        | Status                         |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `...players;player_keys=...;out=stats,ownership&stats.type=projected`                                | 400                            |
+| `...&stats.type=projected&stats.week=9` (football)                                                   | 400                            |
+| `...&stats.type=projected&stats.date=2026-11-03` (hockey)                                            | 400                            |
+| `...players;player_keys=...;out=stats,ownership,projection`                                          | 400                            |
+| `...out=stats,ownership,projected_stats`                                                             | 400                            |
+| `...out=stats,projected_points`                                                                      | 400                            |
+| `...out=stats,ownership,percent_started,percent_owned,ranks,opponent,starting_status,draft_analysis` | 200, 0 keys matching `project` |
+
+A future football week is zero-filled, not projected: `stats.type=week&stats.week=9` (current) and
+`week=10` each returned 70 stat values across five players with none nonzero, while `week=8` returned
+23 nonzero. The only `project` key anywhere was `team_projected_points` on the football scoreboard, a
+team total rather than a player one.
+
+### The projected rank exists, and it is league-scoped
+
+`out=ranks` with all seven rank names, for every roster player:
+
+| Sport                             | Numeric ranks              | Dash, meaning not published |
+| --------------------------------- | -------------------------- | --------------------------- |
+| Football, 15 players              | `PW`, `PN4W`, `PSR`, `L4W` | `L30`, `L14`, `PS7`         |
+| Hockey, 21 players in two leagues | `L30`, `L14`, `PS7`, `PSR` | `PW`, `PN4W`, `L4W`         |
+
+`sort=PR;sort_type=week` ordered the football pool strictly by ascending `PW` (1 through 10), so `PR`
+is the projected rank and `PW` is its week basis. Five players appeared in two hockey leagues and all
+five carried different `PS7`, `PSR`, `L30`, and `L14` values in each, so ranks are league-scoped rather
+than global.
+
+Hockey therefore has no projection for a single date: `PW` is not published, and `PS7` covers seven
+days.
+
+### The flex case that prompted the change
+
+Football, Irish Lax, `$G-Money$`, week 9, two players eligible for the flex slot:
+
+| Player        | Slot  | `PW` | Started % | Platinum % | Weeks 5 to 8 league points |
+| ------------- | ----- | ---: | --------: | ---------: | -------------------------- |
+| Khalil Shakir | W/R/T |  124 |        21 |          6 | 11.00, 13.40, bye, 11.40   |
+| Chris Olave   | BN    |   48 |        52 |         25 | 8.60, 14.30, 11.60, bye    |
+
+The retired four-period mean, applied as the adapter applied it, started Shakir at 11.93 against
+Olave's 11.50. Both players had a bye inside the window, on different weeks, which is the owner's
+diagnosis of the case. `PW` and the started percentage both put Olave ahead.
+
+The weekly `player_points.total` figures used above were checked against the league's 33 modifiers: for
+four sampled player weeks the sum of `stat value x modifier` reproduced the published total exactly
+(20.40, 24.00, 28.18, 21.00).
+
+### Second pass: the API has no projected stat type
+
+The owner asked whether projected points might exist behind a shape the first pass missed. They do not,
+and the second pass names the reason:
+
+- `stats.type=projected`, `stats.type=projections`, and `stats.type=proj` answer HTTP 400 with
+  `"Invalid type <type> specified in the URI."` while `stats.type=lastweek` answers 200. The type is
+  not a value the endpoint knows, which is why no shape can read a projected series. The documented
+  valid types are `season`, `average_season`, `lastweek`, `lastmonth`, `date`, and `week`.
+- `out=projection`, `out=projected`, `out=stats,projected`, and `out=stats,projected_points` answer
+  HTTP 400 with `"Invalid player resource <name> requested."`
+- The `fantasysports.yahoo.com` origin, with the same stored cookie, answers 302 to an error page for
+  every path tried, including a valid `stats.type=week` read, so it is not a second read surface.
+- The football scoreboard's `team_projected_points` is
+  `{"coverage_type":"week","week":"9","total":"104.27"}`, a team total with no player breakdown, and
+  it is the only projection-shaped key in the body.
+
+### The projected rank is overall, and its low ranks mean unavailable
+
+`PW` is one overall rank across the player pool, not a rank within a position. The top 50 by
+`sort=PR;sort_type=week` carried distinct `PW` values 1 through 50, and across 184 rostered football
+players the best `PW` per primary position was QB 5, RB 1, WR 2, TE 35, K 113, DEF 147. A per-position
+rank would start every position at 1.
+
+That matters for the reference's Taysom Hill case. AutoCoach scored NFL players as
+`(percent_started / ranks.projectedWeek) * 100`, and its own fixture records Taysom Hill at
+`projectedWeek` 1929 against `next4Weeks` 157 and `restOfSeason` 158 with 8 % of leagues starting him.
+The reference's TODO beside that line asks whether the rank already includes injury, because its injury
+factor then counted the same fact again.
+
+A fresh scan of the linked account on 2026-11-03 shows what the extreme low ranks are. Of 184 rostered
+football players, 166 were available, and every player started by at least 20 % of leagues with a `PW`
+over 400 was out or on bye (`PW` 604 to 1057). No available player started by 20 % or more had a `PW`
+over 300, and no roster player was missing `PW`. Percent started did not reflect those absences: a
+defence on bye in week 9 was still started in 76 % of leagues.
+
+So the one-week rank already encodes availability, and the availability tier decides those players
+before value. The Taysom failure was a one-week rank far below its longer window for a player the crowd
+also barely started, not a position-rank mix-up: `PW` is a single order, so a dual-eligible player's one
+rank is comparable in every slot he is eligible for.
+
+### Hockey's seven-day rank covers a window, not a date
+
+The only hockey projection is `PS7`, the projected rank for the next seven days. It is not a date
+projection, and the difference shows inside one league on 2026-11-03:
+
+- Trevor Connelly carried `PS7` 5 with `PSR` 662 while 7 % of leagues started him.
+- Jakob Chychrun carried `PS7` 270 with `PSR` 57 while 97 % of leagues started him.
+- Brady Tkachuk carried `PS7` 12 with no game that night, and Rasmus Dahlin carried `PS7` 47 with no
+  game, because a seven-day window does not follow the date.
+- On one roster Connor Hellebuyck (`PS7` 23) and Joel Hofer (`PS7` 32) both had a game, and the rank
+  did not say which one would start in goal.
+
+The gap tracks the games each team plays in the window, so a player with four games can outrank a
+better player with two. Across four hockey leagues the started percentage and `PS7` agree closely in
+three (Spearman 0.55, 0.63, 0.86 on the healthy players with a game) and diverge in the fourth (0.18)
+around the Connelly outlier. A date has no projection, so the date's started percentage decides, and
+the availability tier handles byes and confirmed goalie starts. The reference drew the same line: its
+daily NHL score used percent started and percent owned with a starting-goalie factor, while its
+weekly-deadline score used `100 / next7Days`. A weekly hockey league would therefore have a matching
+window, but a date does not.
+
 ## Live Yahoo native write verification (2026-10-25)
 
 The owner authorized one native `set_lineup` run on their own football team and a date-scoped native

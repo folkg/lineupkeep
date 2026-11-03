@@ -1,6 +1,5 @@
 import {
   addExact,
-  averageExact,
   clampExact,
   compareExact,
   divideByInteger,
@@ -10,9 +9,6 @@ import {
   parseExact,
   type Exact,
 } from "./Exact.ts";
-import { containsPeriod, periodKey } from "./Period.ts";
-import { scorePeriod } from "./Scoring.ts";
-import type { StatObservation } from "./types.ts";
 import type {
   CommunityStartRatePopulation,
   Period,
@@ -26,9 +22,9 @@ import type {
 import { selectionUnits } from "./Valuation.ts";
 
 export const valueSourceLadder: ReadonlyArray<ValueSourceKind> = [
-  "scoring-rules",
-  "ownership-composite",
+  "projection",
   "community-start-rate",
+  "ownership-composite",
 ];
 
 const ownershipDeltaBound = parseExact("4");
@@ -52,8 +48,8 @@ export function resolveValueSource(input: {
   readonly period: Period;
 }): ResolvedValueSource {
   switch (input.source.kind) {
-    case "scoring-rules":
-      return scoringRulesSource(input.source);
+    case "projection":
+      return projectionSource(input.source);
     case "community-start-rate":
       return communityStartRateSource(input.source, input.period);
     case "ownership-composite":
@@ -66,32 +62,18 @@ export type ResolvedValueSource = {
   readonly unitsOf: (player: PolicyPlayer) => number | undefined;
 };
 
-type ScoringRulesSource = Extract<ValueSource, { readonly kind: "scoring-rules" }>;
+type ProjectionSource = Extract<ValueSource, { readonly kind: "projection" }>;
 type CommunityStartRateSource = Extract<ValueSource, { readonly kind: "community-start-rate" }>;
 type OwnershipCompositeSource = Extract<ValueSource, { readonly kind: "ownership-composite" }>;
 
-function scoringRulesSource(source: ScoringRulesSource): ResolvedValueSource {
-  const observations = observationsByKey(source.observations);
+function projectionSource(source: ProjectionSource): ResolvedValueSource {
+  const ranks = new Map(source.players.map((player) => [player.id, player.rank]));
+  const worstRank = source.players.reduce((worst, player) => Math.max(worst, player.rank), 0);
   return {
-    label: `mean-points-per-period:${source.window.map(periodKey).join(",")}`,
+    label: `projected rank for ${periodLabel(source.period)}`,
     unitsOf: (player) => {
-      const periodPoints: Array<Exact> = [];
-      for (const windowPeriod of source.window) {
-        if (containsPeriod(player.nonGamePeriods, windowPeriod)) {
-          continue;
-        }
-        const stats = observations.get(observationKey(windowPeriod, player.id));
-        if (stats === undefined) {
-          continue;
-        }
-        const points = scorePeriod(source.scoring, stats);
-        if (points !== undefined) {
-          periodPoints.push(points);
-        }
-      }
-      const average =
-        periodPoints.length === 0 ? undefined : averageExact(periodPoints, source.scoring.scale);
-      return average === undefined ? 0 : selectionUnits(average, source.scoring.scale);
+      const rank = ranks.get(player.id);
+      return rank === undefined ? undefined : worstRank + 1 - rank;
     },
   };
 }
@@ -103,7 +85,7 @@ function communityStartRateSource(
   const population = communityStartRatePopulation(source.started);
   const started = new Map(source.started.map((player) => [player.id, player]));
   return {
-    label: `community-start-rate:${populationKey(population)}:${periodKey(period)}`,
+    label: `percent started for ${periodLabel(period)}${populationFinding(population)}`,
     unitsOf: (player) => {
       const entry = started.get(player.id);
       const percent = entry === undefined ? undefined : percentOf(entry, population);
@@ -121,7 +103,7 @@ function ownershipCompositeSource(
     BigInt(source.teamCount) * BigInt(source.standardRosterSpots),
   );
   return {
-    label: `ownership-composite:no-positional-scarcity:${source.sport}:${periodKey(period)}`,
+    label: `ownership composite for ${source.sport} ${periodLabel(period)} (no positional scarcity)`,
     unitsOf: (player) => {
       const facts = byId.get(player.id);
       const percentOwned = facts?.percentOwned;
@@ -192,27 +174,17 @@ function percentOf(
   }
 }
 
-function populationKey(population: CommunityStartRatePopulation): string {
+function populationFinding(population: CommunityStartRatePopulation): string {
   switch (population.kind) {
     case "cut":
-      return `cut-${population.cut}`;
+      return ` (${population.cut} cut)`;
     case "overall":
-      return `overall:${population.cut}-${population.finding}`;
+      return population.finding === "cut-incomplete"
+        ? ` (the ${population.cut} cut was incomplete)`
+        : ` (the ${population.cut} cut was unpopulated)`;
   }
 }
 
-function observationsByKey(
-  observations: ScoringRulesSource["observations"],
-): ReadonlyMap<string, ReadonlyArray<StatObservation>> {
-  const index = new Map<string, ReadonlyArray<StatObservation>>();
-  for (const entry of observations) {
-    for (const player of entry.players) {
-      index.set(observationKey(entry.period, player.id), player.stats);
-    }
-  }
-  return index;
-}
-
-function observationKey(period: Period, playerId: string): string {
-  return `${periodKey(period)}|${playerId}`;
+function periodLabel(period: Period): string {
+  return period.kind === "week" ? `week ${String(period.week)}` : period.date;
 }

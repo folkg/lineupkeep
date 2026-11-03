@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   addExact,
-  averageExact,
   clampExact,
   compareExact,
   exactFromInteger,
@@ -27,16 +26,6 @@ describe("exact decimals", () => {
     expect(compareExact(parseExact("0.3"), addExact(parseExact("0.1"), parseExact("0.2")))).toBe(0);
     expect(compareExact(parseExact("0.04"), parseExact("0.0401"))).toBe(-1);
     expect(compareExact(parseExact("-2"), parseExact("-1.99"))).toBe(-1);
-  });
-
-  it("averages by rounding halves away from zero", () => {
-    const periodPoints = [parseExact("1"), parseExact("2"), parseExact("2")];
-    expect(averageExact(periodPoints, 2)).toEqual(parseExact("1.67"));
-    expect(averageExact([parseExact("-1"), parseExact("-2")], 2)).toEqual(parseExact("-1.5"));
-    expect(averageExact([parseExact("1"), parseExact("2")], 0)).toEqual(parseExact("2"));
-    expect(averageExact([parseExact("1"), parseExact("1"), parseExact("2")], 0)).toEqual(
-      parseExact("1"),
-    );
   });
 
   it("converts to a declared scale with exact arithmetic", () => {

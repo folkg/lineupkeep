@@ -7,7 +7,3 @@ export function periodKey(period: Period): string {
 export function periodsEqual(left: Period, right: Period): boolean {
   return periodKey(left) === periodKey(right);
 }
-
-export function containsPeriod(periods: ReadonlyArray<Period>, period: Period): boolean {
-  return periods.some((candidate) => periodsEqual(candidate, period));
-}

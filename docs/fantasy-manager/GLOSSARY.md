@@ -92,8 +92,16 @@ The single signed number a provider publishes for one player for a target period
 _Avoid_: Selection value when the seam is meant, projection, crowd points
 
 **Scoring scheme**:
-A provider's own construction of final scores for one league, such as the league's points rules applied to realised statistics or a published crowd share, together with its period window and population. It is provider implementation detail; the generic layer only learns the winner's opaque label.
+A provider's own construction of final scores for one league, such as the league's points rules applied to realised statistics, its projected rank for the period, or a published crowd share, together with its period window and population. It is provider implementation detail; the generic layer only learns the winner's opaque label.
 _Avoid_: Value source, scoring model, lineup policy
+
+**Period projection**:
+The provider's own published projection for the period a lineup is being set, one score per player. It is either projected statistics scored by the league's rules or the provider's projected rank for that period, whichever the provider actually publishes; the recorded label names the period and the measurement. It is never a mean of completed periods, and a period the provider does not project has no projection rather than an estimate.
+_Avoid_: Projected points when the provider published only a rank, trailing mean, expected score
+
+**Projected rank**:
+A provider's ordinal projection for a period, where a better place is a better projection and the number is not points. It is league-scoped, so the same player carries different places in different leagues, and a longer projection window is not a shorter one.
+_Avoid_: Projected points, rank when a points forecast is meant, average rank
 
 **Score behind the plan (provenance)**:
 The opaque, provider-supplied label naming the scoring scheme that produced one plan, recorded on the run so a later reader can tell what happened. Nothing outside the provider parses it.

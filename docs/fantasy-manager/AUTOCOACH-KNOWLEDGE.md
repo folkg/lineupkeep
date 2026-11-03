@@ -539,6 +539,10 @@ Recorded so they are not copied by accident. Severity is my reading; each is sep
 - **J6. Inverted ranks as a stand-in for projections.** `100 / projectedWeek` is the only NFL value
   available, so it was used. It is a popularity/ordering proxy, and the reference's own tests name the
   uncertainty ("Does rank_projected_week factor in injury status already? We might be double counting").
+  The reference's own NFL fixture records Taysom Hill at `projectedWeek` 1929 against `next4Weeks` 157
+  and `restOfSeason` 158 while 8 % of leagues started him, which is the skew the owner remembers. The
+  skew is a one-week rank far below the longer windows; `projectedWeek` is a single overall order, not
+  a separate quarterback and tight-end rank.
 - **J7. The "starting goalie" bonus is `×100`, eyeballed.** `STARTING_FACTOR = 100` is calibrated
   against `percent_started` values in the 1–100 range so a confirmed starter usually beats a
   non-starter outright (a one-percent starter at `×100` ties a hundred-percent non-starter). It is a dominance hack expressed as arithmetic, and it breaks if the base unit changes.

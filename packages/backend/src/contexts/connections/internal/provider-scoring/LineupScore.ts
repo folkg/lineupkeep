@@ -1,48 +1,70 @@
 import { periodKey, periodsEqual } from "./Period.ts";
-import type { AvailabilityTier, Period, PolicyPlayer, ValueSource } from "./types.ts";
+import type {
+  AvailabilityTier,
+  Period,
+  PolicyPlayer,
+  ValueSource,
+  ValueSourceKind,
+} from "./types.ts";
 import { assessAvailability } from "./Valuation.ts";
 import { resolveValueSource, valueSourceLadder } from "./ValueSource.ts";
 
-const noValueSourceRefusalCode = "policy:no-value-source" as const;
-const noValueSourceRefusalDetail =
-  "This league publishes no value source the custom policy can use, so its lineup cannot be valued.";
+const noValueSourceRefusal = {
+  code: "policy:no-value-source",
+  detail:
+    "This league publishes no value source the custom policy can use, so its lineup cannot be valued.",
+} as const;
 
-const noObservedPeriodsRefusalCode = "policy:no-observed-periods" as const;
-const noObservedPeriodsRefusalDetail =
-  "No completed scoring period is available to value the roster, so the custom policy cannot plan a lineup.";
+const emptySourceRefusals: Readonly<
+  Record<ValueSourceKind, { readonly code: string; readonly detail: string }>
+> = {
+  projection: {
+    code: "policy:no-projection",
+    detail:
+      "The provider published no projected rank for any player on this roster for this period, so the custom policy cannot value the lineup.",
+  },
+  "community-start-rate": {
+    code: "policy:no-start-rate",
+    detail:
+      "The provider published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
+  },
+  "ownership-composite": {
+    code: "policy:no-ownership-facts",
+    detail:
+      "The provider published no ownership facts for any player on this roster, so the custom policy cannot value the lineup.",
+  },
+};
 
 export function scoreLineup(input: LineupScoreInput): LineupScoreResult {
   requireConsistentInput(input);
-  let sawEmptyWindow = false;
-  for (const source of orderedSources(input.sources)) {
-    if (source.kind === "scoring-rules" && source.window.length === 0) {
-      sawEmptyWindow = true;
+  const sources = orderedSources(input.sources);
+  for (const source of sources) {
+    const resolved = resolveValueSource({ source, period: input.period });
+    const units = input.players.map((player) => resolved.unitsOf(player));
+    if (units.every((unit) => unit === undefined)) {
       continue;
     }
-    const resolved = resolveValueSource({ source, period: input.period });
     return {
       kind: "scored",
       label: resolved.label,
-      players: input.players.map((player) => ({
+      players: input.players.map((player, index) => ({
         id: player.id,
         availability: assessAvailability(player, input.period),
-        units: resolved.unitsOf(player),
+        units: units[index],
       })),
     };
   }
-  return sawEmptyWindow
-    ? {
-        kind: "refused",
-        refusal: "transient",
-        code: noObservedPeriodsRefusalCode,
-        detail: noObservedPeriodsRefusalDetail,
-      }
-    : {
-        kind: "refused",
-        refusal: "structural",
-        code: noValueSourceRefusalCode,
-        detail: noValueSourceRefusalDetail,
-      };
+  const weakest = sources[sources.length - 1];
+  if (weakest === undefined) {
+    return {
+      kind: "refused",
+      refusal: "structural",
+      code: noValueSourceRefusal.code,
+      detail: noValueSourceRefusal.detail,
+    };
+  }
+  const refusal = emptySourceRefusals[weakest.kind];
+  return { kind: "refused", refusal: "transient", code: refusal.code, detail: refusal.detail };
 }
 
 function orderedSources(sources: ReadonlyArray<ValueSource>): ReadonlyArray<ValueSource> {
@@ -57,40 +79,26 @@ function requireConsistentInput(input: LineupScoreInput): void {
     throw new Error("A policy roster must not contain the same player twice.");
   }
   for (const source of input.sources) {
-    requireConsistentSource(source, input.period, playerIds);
+    requireConsistentSource(source, input.period);
   }
 }
 
-function requireConsistentSource(
-  source: ValueSource,
-  period: Period,
-  playerIds: ReadonlySet<string>,
-): void {
+function requireConsistentSource(source: ValueSource, period: Period): void {
   switch (source.kind) {
-    case "scoring-rules": {
-      requireUniquePeriods(source.window, "observation window");
-      if (source.window.some((candidate) => periodsEqual(candidate, period))) {
-        throw new Error("The target period cannot belong to its own observation window.");
+    case "projection": {
+      if (!periodsEqual(source.period, period)) {
+        throw new Error(
+          `A projection for ${periodKey(source.period)} cannot price a lineup for ${periodKey(period)}.`,
+        );
       }
-      requireUniquePeriods(
-        source.observations.map((observation) => observation.period),
-        "observation period",
+      requireUniqueIds(
+        source.players.map((entry) => entry.id),
+        "projection",
       );
-      for (const observation of source.observations) {
-        if (!source.window.some((candidate) => periodsEqual(candidate, observation.period))) {
+      for (const player of source.players) {
+        if (!Number.isSafeInteger(player.rank) || player.rank < 1) {
           throw new Error(
-            `Observation period ${periodKey(observation.period)} is outside the declared window.`,
-          );
-        }
-        for (const entry of observation.players) {
-          if (!playerIds.has(entry.id)) {
-            throw new Error(`Observation for player ${entry.id} is not on the policy roster.`);
-          }
-        }
-        const observed = new Set(observation.players.map((entry) => entry.id));
-        if (observed.size !== observation.players.length) {
-          throw new Error(
-            `Observation period ${periodKey(observation.period)} lists a player twice.`,
+            `A projected rank must be a positive integer, received ${String(player.rank)}.`,
           );
         }
       }
@@ -120,17 +128,6 @@ function requireUniqueIds(ids: ReadonlyArray<string>, subject: string): void {
       throw new Error(`Duplicate ${subject} for player ${id}.`);
     }
     seen.add(id);
-  }
-}
-
-function requireUniquePeriods(periods: ReadonlyArray<Period>, subject: string): void {
-  const seen = new Set<string>();
-  for (const period of periods) {
-    const key = periodKey(period);
-    if (seen.has(key)) {
-      throw new Error(`Duplicate ${subject} ${key}.`);
-    }
-    seen.add(key);
   }
 }
 

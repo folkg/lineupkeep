@@ -41,6 +41,7 @@ const run: LineupRunView = {
     reconciled: false,
     summary: "Healthy Skater (IR) was left in place. Verified 2 explicit lineup changes.",
     observedAt,
+    provenance: { kind: "planned", label: "yahoo/projected rank for week 3" },
     changes: [
       { name: "Bench Runner", from: "BN", to: "RB" },
       { name: "Starting Runner", from: "RB", to: "BN" },
@@ -98,6 +99,42 @@ it("names the player left in place and says why", async () => {
         "The league no longer lists them as eligible for this reserve slot, so the plan leaves them there.",
       ),
     )
+    .toBeVisible();
+});
+
+it("says which score decided the plan", async () => {
+  using _app = setupRunDetailPage(run);
+
+  await expect
+    .element(page.getByText("Scored from yahoo/projected rank for week 3."))
+    .toBeVisible();
+});
+
+it("names the refusal when the custom policy could not score the league", async () => {
+  using _app = setupRunDetailPage({
+    ...run,
+    status: "blocked",
+    outcome: {
+      kind: "blocked",
+      verified: false,
+      reconciled: false,
+      summary:
+        "The provider published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
+      observedAt,
+      changes: [],
+      provenance: {
+        kind: "refused",
+        label: "yahoo/policy:no-start-rate",
+        detail:
+          "The provider published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
+      },
+      lockedPlayers: 0,
+      editablePlayers: 0,
+    },
+  });
+
+  await expect
+    .element(page.getByText("Not scored by the custom policy (yahoo/policy:no-start-rate)."))
     .toBeVisible();
 });
 

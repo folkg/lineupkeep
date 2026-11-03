@@ -2857,7 +2857,7 @@ it.effect("prices a games-limited league from the ownership composite, not the c
     }
     assert.strictEqual(
       outcome.provenance,
-      "yahoo/ownership-composite:no-positional-scarcity:football:week:6",
+      "yahoo/ownership composite for football week 6 (no positional scarcity)",
     );
     assert.deepStrictEqual(outcome.players, [
       { providerPlayerKey: "466.p.20001", score: 920000, availability: "will-play" },
@@ -2893,7 +2893,7 @@ it.effect("scores a roster from the published started percentage and its platinu
     if (outcome.kind !== "scored") {
       return;
     }
-    assert.strictEqual(outcome.provenance, "yahoo/community-start-rate:cut-platinum:week:6");
+    assert.strictEqual(outcome.provenance, "yahoo/percent started for week 6 (platinum cut)");
     assert.deepStrictEqual(outcome.players, [
       { providerPlayerKey: "466.p.20001", score: 4100, availability: "will-play" },
       { providerPlayerKey: "466.p.20002", score: 6500, availability: "will-play" },
@@ -2926,7 +2926,7 @@ it.effect("uses the overall started percentage and records an unpopulated cut", 
     }
     assert.strictEqual(
       outcome.provenance,
-      "yahoo/community-start-rate:overall:platinum-cut-unpopulated:week:6",
+      "yahoo/percent started for week 6 (the platinum cut was unpopulated)",
     );
     assert.deepStrictEqual(
       outcome.players.map((player) => player.score),

@@ -1,22 +1,18 @@
-import { DateTime, Effect } from "effect";
+import { Effect } from "effect";
 
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
 import { parseExact } from "#contexts/connections/internal/provider-scoring/Exact.ts";
 import { scoreLineup } from "#contexts/connections/internal/provider-scoring/LineupScore.ts";
 import type { ScoredPlayer } from "#contexts/connections/internal/provider-scoring/LineupScore.ts";
-import { periodKey } from "#contexts/connections/internal/provider-scoring/Period.ts";
-import { scoringProfile } from "#contexts/connections/internal/provider-scoring/ScoringProfile.ts";
 import type {
   Exact,
   Period,
-  ScoringProfile,
   PlayerAvailability,
   PlayerCommunityStartRate,
   PlayerOwnership,
   PlayerRank,
   PolicyPlayer,
   StartingLineupRule,
-  StatObservation,
   ValueSource,
 } from "#contexts/connections/internal/provider-scoring/types.ts";
 import type {
@@ -26,17 +22,14 @@ import type {
   ProviderPlayerStatus,
   ProviderScoreOutcome,
   ProviderScoreRequest,
-  ProviderPlayerDetail,
   ProviderPlayerScore,
   ProviderRoster,
   ProviderRosterPlayer,
-  ProviderScoringWeek,
   ProviderPeriodSupport,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderReadFailure } from "#contexts/connections/Provider.ts";
 
 const supportedSports = ["football", "hockey"] as const;
-const observationWindowPeriods = 4;
 
 type SupportedSport = (typeof supportedSports)[number];
 
@@ -117,7 +110,8 @@ export const yahooCapabilities: ProviderCapabilities = {
     },
     {
       subject: "projections",
-      detail: "Yahoo exposes no projected player statistics.",
+      detail:
+        "Yahoo publishes no projected player statistics for either sport. It publishes a league-scoped projected week rank for football only, which the lineup policy reads as the period's projection; a hockey date carries no projected rank.",
     },
     {
       subject: "team_remaining_games",
@@ -170,17 +164,9 @@ export function scoreYahooRoster(
         players: ownershipFactsOf(players, facts),
       });
     } else {
-      if (input.league.statModifiers.length > 0) {
-        const window = yahooObservationWindow(input.league, period);
-        sources.push({
-          kind: "scoring-rules",
-          window,
-          scoring: yahooScoringProfile(input.league),
-          observations: observationsFor(
-            yield* read.readHistory(window.filter((entry) => entry.kind === "week")),
-            window,
-          ),
-        });
+      const projection = projectedRankSource(input, period, facts);
+      if (projection !== undefined) {
+        sources.push(projection);
       }
       sources.push({
         kind: "community-start-rate",
@@ -204,28 +190,6 @@ export function scoreYahooRoster(
       gamesPlayed,
     };
   });
-}
-
-export function yahooScoringProfile(league: ProviderLeagueSettings): ScoringProfile {
-  return scoringProfile({
-    categories: league.statCategories.map((category) => ({
-      statId: category.statId,
-      label: category.name,
-    })),
-    rules: league.statModifiers.map((modifier) => ({
-      statId: modifier.statId,
-      points: modifier.points,
-    })),
-  });
-}
-
-export function yahooObservationWindow(
-  league: ProviderLeagueSettings,
-  target: Period,
-): ReadonlyArray<Period> {
-  return target.kind === "week"
-    ? completedWeeks(league, target.week)
-    : completedDates(league, target.date);
 }
 
 const healthyAvailability: PlayerAvailability = { kind: "available" };
@@ -423,69 +387,23 @@ function exactPercent(percent: number | null): Exact | undefined {
   return percent === null ? undefined : parseExact(String(percent));
 }
 
-function observationsFor(
-  history: ReadonlyArray<YahooPeriodHistory>,
-  window: ReadonlyArray<Period>,
-): ReadonlyArray<{
-  readonly period: Period;
-  readonly players: ReadonlyArray<{
-    readonly id: string;
-    readonly stats: ReadonlyArray<StatObservation>;
-  }>;
-}> {
-  const stats = statsByPeriodAndPlayer(history);
-  return window.map((period) => {
-    const players =
-      stats.get(periodKey(period)) ?? new Map<string, ReadonlyArray<StatObservation>>();
-    return {
-      period,
-      players: [...players].map(([id, observations]) => ({ id, stats: observations })),
-    };
-  });
-}
-
-function statsByPeriodAndPlayer(
-  history: ReadonlyArray<YahooPeriodHistory>,
-): Map<string, Map<string, ReadonlyArray<StatObservation>>> {
-  const index = new Map<string, Map<string, ReadonlyArray<StatObservation>>>();
-  for (const entry of history) {
-    const byPlayer = new Map<string, ReadonlyArray<StatObservation>>();
-    for (const detail of entry.details) {
-      const observations = observationsOf(detail);
-      if (observations !== undefined) {
-        byPlayer.set(detail.providerPlayerKey, observations);
-      }
-    }
-    index.set(periodKey(entry.period), byPlayer);
+function projectedRankSource(
+  input: ProviderScoreRequest,
+  period: Period,
+  facts: ReadonlyArray<YahooPlayerFacts>,
+): ValueSource | undefined {
+  const current = input.league.periodWindow?.current;
+  if (period.kind !== "week" || current !== period.week) {
+    return undefined;
   }
-  return index;
-}
-
-function observationsOf(detail: ProviderPlayerDetail): ReadonlyArray<StatObservation> | undefined {
-  return detail.actual?.stats.map((stat) => ({ statId: String(stat.statId), value: stat.value }));
-}
-
-function completedWeeks(league: ProviderLeagueSettings, targetWeek: number): ReadonlyArray<Period> {
-  const firstWeek = league.periodWindow?.start ?? 1;
-  const periods: Array<Period> = [];
-  for (let week = targetWeek - observationWindowPeriods; week < targetWeek; week += 1) {
-    if (week >= firstWeek) {
-      periods.push({ kind: "week", week });
-    }
-  }
-  return periods;
-}
-
-function completedDates(league: ProviderLeagueSettings, targetDate: string): ReadonlyArray<Period> {
-  const target = DateTime.makeUnsafe(`${targetDate}T00:00:00.000Z`);
-  const periods: Array<Period> = [];
-  for (let offset = observationWindowPeriods; offset >= 1; offset -= 1) {
-    const date = DateTime.formatIsoDate(DateTime.add(target, { days: -offset }));
-    if (league.startDate === undefined || date >= league.startDate) {
-      periods.push({ kind: "date", date });
-    }
-  }
-  return periods;
+  return {
+    kind: "projection",
+    period,
+    players: facts.flatMap((fact) => {
+      const rank = fact.ranks.find((entry) => entry.type === "PW");
+      return rank === undefined ? [] : [{ id: fact.providerPlayerKey, rank: rank.rank }];
+    }),
+  };
 }
 
 function targetPeriod(target: ProviderScoreRequest["target"]): Period {
@@ -525,12 +443,4 @@ export type YahooLineupReader = {
     ReadonlyArray<ProviderGamesPlayed>,
     ProviderReadFailure
   >;
-  readonly readHistory: (
-    periods: ReadonlyArray<ProviderScoringWeek>,
-  ) => Effect.Effect<ReadonlyArray<YahooPeriodHistory>, ProviderReadFailure>;
-};
-
-export type YahooPeriodHistory = {
-  readonly period: Period;
-  readonly details: ReadonlyArray<ProviderPlayerDetail>;
 };

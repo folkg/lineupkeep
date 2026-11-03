@@ -126,6 +126,17 @@ export function runStatusLabel(status: LineupRunView["status"]): string {
   }
 }
 
+export function provenanceExplanation(
+  provenance: NonNullable<NonNullable<LineupRunView["outcome"]>["provenance"]>,
+): string {
+  switch (provenance.kind) {
+    case "planned":
+      return `Scored from ${provenance.label}.`;
+    case "refused":
+      return `Not scored by the custom policy (${provenance.label}).`;
+  }
+}
+
 export function runExplanation(run: LineupRunView): string {
   if (run.outcome !== undefined) {
     return run.outcome.summary;

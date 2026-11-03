@@ -42,7 +42,7 @@ Provider adapters own request batching and period/day semantics. Minimize upstre
 
 ### Opinionated optimization
 
-Policies belong in provider/sport/league-appropriate layers. Prefer the provider's score from the league's own rules when usable; a games-limited league uses the ownership composite, and a crowd-priced league uses its published percent-started evidence, choosing the platinum cohort when it is populated and the overall percentage otherwise. Do not mix raw percentages and points or invent missing scores. If useful evidence is absent, preserve affected choices and explain why. Zero is not missing.
+Policies belong in provider/sport/league-appropriate layers. Prefer the provider's own projection for the target period where it publishes one, then its published percent-started evidence, choosing the platinum cohort when it is populated and the overall percentage otherwise; a games-limited league uses the ownership composite instead. Never decide a lineup from a mean of completed periods. Do not mix raw percentages, ranks, and points, or invent missing scores. If useful evidence is absent, preserve affected choices and explain why. Zero is not missing.
 
 Hard constraints describe legal destinations, roster capacity, reserve eligibility, and locks. Availability/real-world starting status is soft selection evidence, not an automatic exclusion. An injured/unconfirmed player can fill an otherwise empty slot; avoid double adjustments when the provider's score already accounts for participation.
 

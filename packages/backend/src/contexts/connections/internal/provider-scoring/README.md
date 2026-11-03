@@ -13,30 +13,29 @@ persistence, transport, or the solver; the rules for that are
 
 ## What it contains
 
-| Module              | Responsibility                                                                    |
-| ------------------- | --------------------------------------------------------------------------------- |
-| `Exact.ts`          | Decimal arithmetic with no floating-point drift                                   |
-| `ScoringProfile.ts` | A league's categories and points rules, with the scale its modifiers need         |
-| `Scoring.ts`        | One period's statistics scored by those rules, or no complete score               |
-| `Period.ts`         | Weekly and dated periods, their keys, and equality                                |
-| `ValueSource.ts`    | The scoring schemes and how each yields integer units per player                  |
-| `Valuation.ts`      | Provider status facts to one availability tier, and exact values to integer units |
-| `LineupScore.ts`    | Choose a scheme, then produce one final score and tier per player, or a refusal   |
+| Module           | Responsibility                                                                    |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `Exact.ts`       | Decimal arithmetic with no floating-point drift                                   |
+| `Period.ts`      | Weekly and dated periods, their keys, and equality                                |
+| `ValueSource.ts` | The scoring schemes and how each yields integer units per player                  |
+| `Valuation.ts`   | Provider status facts to one availability tier, and exact values to integer units |
+| `LineupScore.ts` | Choose a scheme, then produce one final score and tier per player, or a refusal   |
 
 ## The schemes
 
-A provider contributes the schemes it can compute for a league. The ladder prefers the league's own
-rules applied to realised statistics, then the ownership composite for a league with a per-position
-games limit, then a published crowd share. The first supplied scheme that can be computed wins, and its
-label is recorded as provenance. A scheme that cannot be computed at all is skipped; a present scheme
-never falls through per player, so a missing value is unusable rather than a reason to try a weaker
-scheme. A provider with no usable scheme refuses structurally, and the worker may fall back to the
+A provider contributes the schemes it can compute for a league. The ladder prefers the period's own
+projection, then a published crowd share, then the ownership composite for a league with a per-position
+games limit. The first supplied scheme that can be computed wins, and its label is recorded as
+provenance. A scheme that yields no value for any player is skipped; a present scheme never falls
+through per player, so a missing value is unusable rather than a reason to try a weaker scheme. When no
+supplied scheme yields a value, the refusal names the last one it tried, which blocks transiently,
+unless the provider supplied no scheme at all, which is structural and lets the worker keep the
 provider's own action.
 
 Scores leave here as safe integers in the scheme's own unit. A player without a published value has no
-score — never zero — and the generic planner treats that as unusable. Only the final score, the
-availability tier, and the opaque provenance label cross the seam; the observations, counted periods,
-cuts, and ranks that produced them stay here.
+score, never zero, and the generic planner treats that as unusable. Only the final score, the
+availability tier, and the opaque provenance label cross the seam; the projections, cuts, and ranks
+that produced them stay here.
 
 ## Deliberately outside this module
 

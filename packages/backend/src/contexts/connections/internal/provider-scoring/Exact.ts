@@ -55,16 +55,6 @@ export function compareExact(left: Exact, right: Exact): number {
   return leftUnits === rightUnits ? 0 : leftUnits < rightUnits ? -1 : 1;
 }
 
-export function averageExact(values: ReadonlyArray<Exact>, scale: number): Exact {
-  if (values.length === 0) {
-    throw new Error("An average needs at least one value.");
-  }
-  const total = values.reduce(addExact, exactFromInteger(0n));
-  const divisor = BigInt(values.length);
-  const numerator = unitsAtScale(total, scale + 1);
-  return exact(divideRoundHalfAwayFromZero(numerator, divisor * 10n), scale);
-}
-
 export function exactToUnits(value: Exact, scale: number): bigint {
   return unitsAtScale(value, scale);
 }

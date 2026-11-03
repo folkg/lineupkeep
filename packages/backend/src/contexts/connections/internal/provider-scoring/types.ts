@@ -2,31 +2,6 @@ import type { Exact } from "./Exact.ts";
 
 export type { Exact };
 
-export type StatId = string;
-
-type StatValue = string | number;
-
-export type ScoringCategory = {
-  readonly statId: StatId;
-  readonly label: string;
-};
-
-export type ScoringRule = {
-  readonly statId: StatId;
-  readonly points: Exact;
-};
-
-export type ScoringProfile = {
-  readonly categories: ReadonlyArray<ScoringCategory>;
-  readonly rules: ReadonlyArray<ScoringRule>;
-  readonly scale: number;
-};
-
-export type StatObservation = {
-  readonly statId: StatId;
-  readonly value: StatValue | null;
-};
-
 export type Period =
   | { readonly kind: "week"; readonly week: number }
   | { readonly kind: "date"; readonly date: string };
@@ -39,7 +14,7 @@ export type AvailabilityTier =
   | "will-not-play"
   | "not-scheduled";
 
-export type ValueSourceKind = "scoring-rules" | "community-start-rate" | "ownership-composite";
+export type ValueSourceKind = "projection" | "community-start-rate" | "ownership-composite";
 
 export type CommunityStartRatePopulation =
   | { readonly kind: "cut"; readonly cut: string }
@@ -51,10 +26,9 @@ export type CommunityStartRatePopulation =
 
 export type ValueSource =
   | {
-      readonly kind: "scoring-rules";
-      readonly window: ReadonlyArray<Period>;
-      readonly scoring: ScoringProfile;
-      readonly observations: ReadonlyArray<PeriodObservation>;
+      readonly kind: "projection";
+      readonly period: Period;
+      readonly players: ReadonlyArray<PlayerProjection>;
     }
   | {
       readonly kind: "community-start-rate";
@@ -81,6 +55,11 @@ export type PlayerRank = {
 };
 
 export type RankType = "L30" | "L14" | "PS7" | "PSR" | "L4W" | "PW" | "PN4W";
+
+type PlayerProjection = {
+  readonly id: string;
+  readonly rank: number;
+};
 
 type FantasySport = "football" | "hockey";
 
@@ -114,12 +93,4 @@ export type PolicyPlayer = {
   readonly startingLineupRule: StartingLineupRule;
   readonly scheduled: boolean;
   readonly nonGamePeriods: ReadonlyArray<Period>;
-};
-
-type PeriodObservation = {
-  readonly period: Period;
-  readonly players: ReadonlyArray<{
-    readonly id: string;
-    readonly stats: ReadonlyArray<StatObservation>;
-  }>;
 };

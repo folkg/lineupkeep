@@ -1190,25 +1190,6 @@ export const yahooProvider = Effect.gen(function* () {
             providerTeamKey: input.providerTeamKey,
             pitcherSlot: pitcherSlotOf(input.league),
           }),
-        readHistory: (periods) =>
-          readPlayerHistory({
-            provider: input.provider,
-            session: input.session,
-            providerLeagueKey: input.providerLeagueKey,
-            providerPlayerKeys: input.roster.players.map(
-              (player: ProviderRosterPlayer) => player.providerPlayerKey,
-            ),
-            sport: input.sport,
-            periods: periods.map((period) => ({ week: period.week })),
-            currentPeriod: input.league.periodWindow?.current,
-          }).pipe(
-            Effect.map((entries) =>
-              entries.map((entry) => ({
-                period: { kind: "week" as const, week: entry.period.week },
-                details: entry.details,
-              })),
-            ),
-          ),
       }),
   } satisfies ProviderShape;
 });

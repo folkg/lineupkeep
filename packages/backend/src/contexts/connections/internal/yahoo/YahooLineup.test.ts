@@ -18,31 +18,19 @@ import type {
   ProviderRosterPlayer,
   ProviderStartingLineup,
 } from "#contexts/connections/Provider.ts";
-import type { ProviderPlayerDetail } from "#contexts/connections/Provider.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
 import {
   scoreYahooRoster,
   yahooAvailability,
   yahooInjuryStatusCodes,
-  yahooObservationWindow,
-  yahooScoringProfile,
   yahooTargetPeriod,
 } from "./YahooLineup.ts";
-import type { YahooLineupReader, YahooPeriodHistory, YahooPlayerFacts } from "./YahooLineup.ts";
+import type { YahooLineupReader, YahooPlayerFacts } from "./YahooLineup.ts";
 
-const recordedWeek = 6;
 const targetWeek = 7;
 
 describe("Yahoo scoring translation", () => {
-  it("derives the league's scoring profile and reports its modifier coverage", () => {
-    const profile = yahooScoringProfile(recordedLeague());
-
-    expect(profile.scale).toBe(2);
-    expect(profile.rules).toHaveLength(33);
-    expect(profile.categories).toHaveLength(36);
-  });
-
   it("maps every provider status code to one availability tier", () => {
     const tiers = Object.fromEntries(
       yahooInjuryStatusCodes.map((code) => [
@@ -106,46 +94,6 @@ describe("Yahoo scoring translation", () => {
     ).toEqual({ kind: "date", date: "2026-10-26" });
   });
 
-  it("derives the completed observation window from the target period", () => {
-    expect(yahooObservationWindow(recordedLeague(), { kind: "week", week: targetWeek })).toEqual([
-      { kind: "week", week: 3 },
-      { kind: "week", week: 4 },
-      { kind: "week", week: 5 },
-      { kind: "week", week: 6 },
-    ]);
-    expect(yahooObservationWindow(recordedLeague(), { kind: "date", date: "2026-10-26" })).toEqual([
-      { kind: "date", date: "2026-10-22" },
-      { kind: "date", date: "2026-10-23" },
-      { kind: "date", date: "2026-10-24" },
-      { kind: "date", date: "2026-10-25" },
-    ]);
-  });
-
-  it("publishes one final score per player from the league's own rules", () => {
-    const outcome = runPlan(recordedRequest(), {
-      rates: [],
-      history: [
-        {
-          period: { kind: "week", week: recordedWeek },
-          details: recordedRosterRows.map((row, index) => playerDetail(index, row.stats)),
-        },
-      ],
-    });
-
-    expect(outcome.kind).toBe("scored");
-    if (outcome.kind !== "scored") {
-      throw new Error("Expected scored values.");
-    }
-    expect(outcome.provenance).toBe("yahoo/mean-points-per-period:week:3,week:4,week:5,week:6");
-    expect(outcome.players).toHaveLength(recordedRosterRows.length);
-    expect(outcome.players[0]).toEqual({
-      providerPlayerKey: "player-0",
-      score: 1702,
-      availability: "will-play",
-    });
-    expect(outcome.players[2]?.availability).toBe("not-scheduled");
-  });
-
   it("publishes one final score per player from the started percentage", () => {
     const outcome = runPlan(hockeyRequest(), {
       rates: [
@@ -158,7 +106,7 @@ describe("Yahoo scoring translation", () => {
     if (outcome.kind !== "scored") {
       throw new Error("Expected scored values.");
     }
-    expect(outcome.provenance).toBe("yahoo/community-start-rate:cut-platinum:date:2026-10-26");
+    expect(outcome.provenance).toBe("yahoo/percent started for 2026-10-26 (platinum cut)");
     expect(outcome.players).toEqual([
       { providerPlayerKey: "hockey-player-0", score: 5100, availability: "will-play" },
       { providerPlayerKey: "hockey-player-1", score: 800, availability: "will-play" },
@@ -177,25 +125,6 @@ describe("Yahoo scoring translation", () => {
     expect(outcome.players).toEqual([
       { providerPlayerKey: "hockey-player-0", score: 4300, availability: "will-play" },
       { providerPlayerKey: "hockey-player-1", score: null, availability: "will-play" },
-    ]);
-  });
-
-  it("falls through to the started percentage when no period has been completed", () => {
-    const outcome = runPlan(
-      { ...recordedRequest(), target: weekTarget(1) },
-      { rates: [startRate("player-0", 44, [])] },
-    );
-
-    expect(outcome.kind).toBe("scored");
-    if (outcome.kind !== "scored") {
-      throw new Error("Expected scored values.");
-    }
-    expect(outcome.provenance).toBe(
-      "yahoo/community-start-rate:overall:platinum-cut-incomplete:week:1",
-    );
-    expect(outcome.players.map((player) => player.score)).toEqual([
-      4400,
-      ...recordedRosterRows.slice(1).map(() => null),
     ]);
   });
 
@@ -393,7 +322,7 @@ describe("Yahoo scoring translation", () => {
       return;
     }
     expect(outcome.provenance).toBe(
-      "yahoo/ownership-composite:no-positional-scarcity:hockey:date:2026-10-26",
+      "yahoo/ownership composite for hockey 2026-10-26 (no positional scarcity)",
     );
     expect(outcome.players).toEqual([
       { providerPlayerKey: "crowd", score: 55000, availability: "will-play" },
@@ -556,6 +485,111 @@ describe("Yahoo scoring translation", () => {
     expect(plannedAssignments.every((assignment) => assignment.slot !== "IR")).toBe(true);
   });
 
+  it("starts the better projected player ahead of the one the crowd starts more", () => {
+    const { outcome, decision } = planFlex(flexLeague(), flexRoster(), [
+      projectedFact("starter", 30, 50),
+      projectedFact("history", 124, 90),
+      projectedFact("projected", 48, null),
+    ]);
+
+    expect(outcome.provenance).toBe("yahoo/projected rank for week 7");
+    expect(planned(decision).assignments).toEqual([
+      { providerPlayerKey: "history", slot: "BN" },
+      { providerPlayerKey: "projected", slot: "W/R/T" },
+    ]);
+  });
+
+  it("falls back to the started percentage when the provider publishes no projected rank", () => {
+    const { outcome, decision } = planFlex(
+      flexLeague(),
+      flexRoster({ slots: { starter: "WR", history: "BN", projected: "W/R/T" } }),
+      [
+        projectedFact("starter", undefined, 50),
+        projectedFact("history", undefined, 70),
+        projectedFact("projected", undefined, 10),
+      ],
+    );
+
+    expect(outcome.provenance).toBe("yahoo/percent started for week 7 (platinum cut)");
+    expect(planned(decision).assignments).toEqual([
+      { providerPlayerKey: "history", slot: "W/R/T" },
+      { providerPlayerKey: "projected", slot: "BN" },
+    ]);
+  });
+
+  it("refuses by name when the league publishes neither a projection nor a started percentage", () => {
+    const { outcome, decision } = planFlex(flexLeague(), flexRoster(), [
+      projectedFact("starter", undefined, null),
+      projectedFact("history", undefined, null),
+      projectedFact("projected", undefined, null),
+    ]);
+
+    expect(outcome).toEqual({
+      kind: "refused",
+      refusal: "transient",
+      provenance: "yahoo/policy:no-start-rate",
+      detail:
+        "The provider published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
+    });
+    expect(decision).toBeUndefined();
+  });
+
+  it("plans the same lineup whichever weeks the players were on bye", () => {
+    const league = twoManLeague();
+    const rates = [projectedFact("history", 124, 20), projectedFact("projected", 48, 40)];
+    const first = planFlex(league, twoManRoster(3), rates);
+    const second = planFlex(league, twoManRoster(6), rates);
+
+    expect(planned(second.decision).assignments).toEqual(planned(first.decision).assignments);
+    expect(first.outcome.provenance).toBe("yahoo/projected rank for week 7");
+    expect(second.outcome.provenance).toBe("yahoo/projected rank for week 7");
+    expect(planned(first.decision).assignments).toContainEqual({
+      providerPlayerKey: "projected",
+      slot: "WR",
+    });
+  });
+
+  it("decides a weekly league on the week's projection and a daily league on the day's started percentage", () => {
+    const weekly = planFlex(flexLeague(), flexRoster(), [
+      projectedFact("starter", 30, 50),
+      projectedFact("history", 124, 90),
+      projectedFact("projected", 48, null),
+    ]);
+    const dailyLeague = centerLeague();
+    const dailyRoster = centerRoster([
+      { key: "better projected next week", slot: "C", scheduled: true },
+      { key: "started more today", slot: "BN", scheduled: true },
+    ]);
+    const dailyOutcome = runPlan(
+      { ...hockeyRequest(), league: dailyLeague, roster: dailyRoster },
+      {
+        rates: [
+          projectedFact("better projected next week", 1, 10, "PS7"),
+          projectedFact("started more today", 30, 60, "PS7"),
+        ],
+      },
+    );
+    if (dailyOutcome.kind !== "scored") {
+      throw new Error("Expected scored values.");
+    }
+
+    expect(weekly.outcome.provenance).toBe("yahoo/projected rank for week 7");
+    expect(dailyOutcome.provenance).toBe("yahoo/percent started for 2026-10-26 (platinum cut)");
+    expect(
+      planned(
+        planAssignments({
+          gamesPlayed: dailyOutcome.gamesPlayed,
+          league: dailyLeague,
+          roster: dailyRoster,
+          values: dailyOutcome.players,
+        }),
+      ).assignments,
+    ).toEqual([
+      { providerPlayerKey: "better projected next week", slot: "BN" },
+      { providerPlayerKey: "started more today", slot: "C" },
+    ]);
+  });
+
   it("changes the plan exactly when a player without a game holds a slot a playing player could fill", () => {
     const percents = [
       ["idle", 47],
@@ -615,7 +649,6 @@ function runPlan(
   request: ProviderScoreRequest,
   facts: {
     readonly rates: ReadonlyArray<YahooPlayerFacts>;
-    readonly history?: ReadonlyArray<YahooPeriodHistory>;
     readonly gamesPlayed?: ReadonlyArray<{
       readonly position: string;
       readonly played: number;
@@ -624,11 +657,9 @@ function runPlan(
     }>;
   },
 ): ProviderScoreOutcome {
-  const history = facts.history ?? [];
   const reader: YahooLineupReader = {
     readPlayerFacts: () => Effect.succeed(facts.rates),
     readGamesPlayed: () => Effect.succeed(facts.gamesPlayed ?? []),
-    readHistory: () => Effect.succeed(history),
   };
   return Effect.runSync(scoreYahooRoster(request, reader));
 }
@@ -795,16 +826,134 @@ function planWithLeague(
 }
 
 function planned(
-  result: PlanAssignmentsResult,
+  result: PlanAssignmentsResult | undefined,
 ): Extract<PlanAssignmentsResult, { kind: "planned" }> {
+  if (result === undefined) {
+    throw new Error("Expected a plan, received a refusal.");
+  }
   if (result.kind !== "planned") {
     throw new Error(`Expected a plan, received ${result.detail}.`);
   }
   return result;
 }
 
-function weekTarget(week: number): ProviderScoreRequest["target"] {
-  return Schema.decodeSync(LineupTargetPeriod)({ coverage: "week", week });
+function planFlex(
+  league: ProviderLeagueSettings,
+  roster: ProviderRoster,
+  rates: ReadonlyArray<YahooPlayerFacts>,
+): {
+  readonly outcome: ProviderScoreOutcome;
+  readonly decision: PlanAssignmentsResult | undefined;
+} {
+  const outcome = runPlan({ ...recordedRequest(), league, roster }, { rates });
+  return {
+    outcome,
+    decision:
+      outcome.kind === "scored"
+        ? planAssignments({
+            gamesPlayed: outcome.gamesPlayed,
+            league,
+            roster,
+            values: outcome.players,
+          })
+        : undefined,
+  };
+}
+
+function flexLeague(): ProviderLeagueSettings {
+  return {
+    ...recordedLeague(),
+    rosterPositions: [position("WR", 1), position("W/R/T", 1), position("BN", 2)],
+  };
+}
+
+function twoManLeague(): ProviderLeagueSettings {
+  return {
+    ...recordedLeague(),
+    rosterPositions: [position("WR", 1), position("BN", 2)],
+  };
+}
+
+function twoManRoster(historyBye: number): ProviderRoster {
+  return {
+    providerTeamKey: "recorded-team",
+    providerLeagueKey: "recorded-league",
+    coverage: { type: "week", week: targetWeek },
+    players: [flexPlayer("history", "WR", historyBye), flexPlayer("projected", "BN", null)],
+  };
+}
+
+function flexRoster(
+  options: {
+    readonly slots?: {
+      readonly starter: string;
+      readonly history: string;
+      readonly projected: string;
+    };
+    readonly byes?: {
+      readonly starter: number | null;
+      readonly history: number | null;
+      readonly projected: number | null;
+    };
+  } = {},
+): ProviderRoster {
+  const slots = options.slots ?? { starter: "WR", history: "W/R/T", projected: "BN" };
+  const byes = options.byes ?? { starter: null, history: null, projected: null };
+  const rows = [
+    { key: "starter", slot: slots.starter },
+    { key: "history", slot: slots.history },
+    { key: "projected", slot: slots.projected },
+  ] as const;
+  return {
+    providerTeamKey: "recorded-team",
+    providerLeagueKey: "recorded-league",
+    coverage: { type: "week", week: targetWeek },
+    players: rows.map((row) => flexPlayer(row.key, row.slot, byes[row.key])),
+  };
+}
+
+function flexPlayer(
+  providerPlayerKey: string,
+  slot: string,
+  byeWeek: number | null,
+): ProviderRosterPlayer {
+  return {
+    providerPlayerKey,
+    name: providerPlayerKey,
+    displayPosition: "WR",
+    primaryPosition: "WR",
+    positionType: undefined,
+    proTeamAbbreviation: undefined,
+    eligiblePositions: ["WR", "W/R/T"],
+    slot: { status: "verified", slot },
+    isEditable: true,
+    injuryCode: undefined,
+    injuryDetail: undefined,
+    byeWeek,
+    scheduled: true,
+    startingLineup: "unconfirmed",
+    undroppable: null,
+    transactionTrend: {
+      status: "not_published",
+      reason: "Synthetic absence.",
+    },
+  };
+}
+
+function projectedFact(
+  providerPlayerKey: string,
+  rank: number | undefined,
+  percent: number | null,
+  type: RankType = "PW",
+): YahooPlayerFacts {
+  return {
+    providerPlayerKey,
+    percent,
+    cuts: percent === null ? [] : [{ cut: "platinum", percent }],
+    percentOwned: null,
+    percentOwnedDelta: null,
+    ranks: rank === undefined ? [] : [{ type, rank }],
+  };
 }
 
 function policyPlayerWith(availability: PlayerAvailability): PolicyPlayer {
@@ -886,28 +1035,6 @@ function rosterPlayer(index: number, row: RecordedRow, editable: boolean): Provi
       status: "not_published",
       reason: "Synthetic absence.",
     },
-  };
-}
-
-function playerDetail(
-  index: number,
-  stats: ReadonlyArray<readonly [number, number]>,
-): ProviderPlayerDetail {
-  return {
-    providerPlayerKey: `player-${String(index)}`,
-    name: `Player ${String(index)}`,
-    primaryPosition: recordedRosterRows[index]?.slot ?? "",
-    displayPosition: recordedRosterRows[index]?.slot ?? "",
-    proTeam: undefined,
-    availabilityDetail: undefined,
-    eligiblePositions: undefined,
-    rosterStatus: "rostered",
-    actual: {
-      basis: { type: "week", week: recordedWeek },
-      stats: stats.map(([statId, value]) => ({ statId, value })),
-      notAggregated: [],
-    },
-    projected: undefined,
   };
 }
 
@@ -1033,10 +1160,9 @@ function player(
   injuryCode: string | undefined,
   byeWeek: number,
   isEditable: boolean,
-  stats: ReadonlyArray<readonly [number, number]>,
   scheduled = true,
 ): RecordedRow {
-  return { slot, eligiblePositions, injuryCode, byeWeek, isEditable, stats, scheduled };
+  return { slot, eligiblePositions, injuryCode, byeWeek, isEditable, scheduled };
 }
 
 type RecordedRow = {
@@ -1045,7 +1171,6 @@ type RecordedRow = {
   readonly injuryCode: string | undefined;
   readonly byeWeek: number;
   readonly isEditable: boolean;
-  readonly stats: ReadonlyArray<readonly [number, number]>;
   readonly scheduled: boolean;
 };
 
@@ -1137,238 +1262,19 @@ const recordedRosterPositions: ReadonlyArray<ReturnType<typeof position>> = [
 ];
 
 const recordedRosterRows: ReadonlyArray<ReturnType<typeof player>> = [
-  player("QB", ["QB"], undefined, 9, false, [
-    [4, 253],
-    [5, 2],
-    [6, 1],
-    [8, 1],
-    [9, -1],
-    [10, 0],
-    [78, 0],
-    [11, 0],
-    [12, 0],
-    [13, 0],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("RB", ["RB", "W/R/T"], undefined, 10, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 19],
-    [9, 46],
-    [10, 0],
-    [78, 3],
-    [11, 2],
-    [12, 3],
-    [13, 0],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("RB", ["RB", "W/R/T"], undefined, 7, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 12],
-    [9, 39],
-    [10, 0],
-    [78, 4],
-    [11, 4],
-    [12, 48],
-    [13, 2],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("WR", ["WR", "W/R/T"], undefined, 11, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 0],
-    [9, 0],
-    [10, 0],
-    [78, 10],
-    [11, 4],
-    [12, 62],
-    [13, 0],
-    [15, 0],
-    [16, 1],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("WR", ["WR", "W/R/T"], undefined, 11, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 0],
-    [9, 0],
-    [10, 0],
-    [78, 7],
-    [11, 6],
-    [12, 80],
-    [13, 0],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("TE", ["TE", "W/R/T"], undefined, 11, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 0],
-    [9, 0],
-    [10, 0],
-    [78, 3],
-    [11, 1],
-    [12, 9],
-    [13, 0],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("W/R/T", ["WR", "W/R/T"], undefined, 8, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 0],
-    [9, 0],
-    [10, 0],
-    [78, 7],
-    [11, 4],
-    [12, 43],
-    [13, 1],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("BN", ["WR", "W/R/T"], undefined, 5, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 0],
-    [9, 0],
-    [10, 0],
-    [78, 7],
-    [11, 7],
-    [12, 73],
-    [13, 0],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("BN", ["RB", "W/R/T"], undefined, 11, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 7],
-    [9, 31],
-    [10, 0],
-    [78, 1],
-    [11, 1],
-    [12, 9],
-    [13, 0],
-    [15, 0],
-    [16, 0],
-    [18, 1],
-    [57, 0],
-  ]),
-  player("BN", ["WR", "W/R/T"], undefined, 10, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 0],
-    [9, 0],
-    [10, 0],
-    [78, 3],
-    [11, 2],
-    [12, 19],
-    [13, 0],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("BN", ["WR", "W/R/T", "IR"], "IR", 13, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 0],
-    [9, 0],
-    [10, 0],
-    [78, 0],
-    [11, 0],
-    [12, 0],
-    [13, 0],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("BN", ["RB", "W/R/T"], undefined, 10, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 6],
-    [9, 25],
-    [10, 1],
-    [78, 4],
-    [11, 3],
-    [12, 31],
-    [13, 0],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("BN", ["WR", "W/R/T"], undefined, 7, false, [
-    [4, 0],
-    [5, 0],
-    [6, 0],
-    [8, 0],
-    [9, 0],
-    [10, 0],
-    [78, 6],
-    [11, 4],
-    [12, 34],
-    [13, 1],
-    [15, 0],
-    [16, 0],
-    [18, 0],
-    [57, 0],
-  ]),
-  player("K", ["K"], undefined, 11, false, [
-    [19, 0],
-    [20, 0],
-    [21, 0],
-    [22, 0],
-    [23, 0],
-    [29, 1],
-  ]),
-  player("DEF", ["DEF"], undefined, 11, false, [
-    [31, 19],
-    [32, 3],
-    [33, 1],
-    [34, 0],
-    [35, 0],
-    [36, 0],
-    [37, 0],
-    [49, 0],
-    [50, 0],
-    [51, 0],
-    [52, 0],
-    [53, 1],
-    [54, 0],
-    [55, 0],
-    [56, 0],
-    [82, 0],
-  ]),
+  player("QB", ["QB"], undefined, 9, false),
+  player("RB", ["RB", "W/R/T"], undefined, 10, false),
+  player("RB", ["RB", "W/R/T"], undefined, 7, false),
+  player("WR", ["WR", "W/R/T"], undefined, 11, false),
+  player("WR", ["WR", "W/R/T"], undefined, 11, false),
+  player("TE", ["TE", "W/R/T"], undefined, 11, false),
+  player("W/R/T", ["WR", "W/R/T"], undefined, 8, false),
+  player("BN", ["WR", "W/R/T"], undefined, 5, false),
+  player("BN", ["RB", "W/R/T"], undefined, 11, false),
+  player("BN", ["WR", "W/R/T"], undefined, 10, false),
+  player("BN", ["WR", "W/R/T", "IR"], "IR", 13, false),
+  player("BN", ["RB", "W/R/T"], undefined, 10, false),
+  player("BN", ["WR", "W/R/T"], undefined, 7, false),
+  player("K", ["K"], undefined, 11, false),
+  player("DEF", ["DEF"], undefined, 11, false),
 ];
