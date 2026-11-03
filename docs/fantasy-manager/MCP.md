@@ -663,11 +663,13 @@ A coverage entry has one of three states. `available` means the resource was rea
 
 ## Transaction proposals
 
-`propose_transactions` stores what an agent proposes; it writes nothing to the provider. One call
-covers every team the account has, and the set it creates is grouped by team, so teams with nothing
-proposed still appear as an empty section on the review. Each item names one team, a kind
-(`free_agent_add`, `waiver_claim`, `drop`, or `trade`), the players to add and drop, an optional FAAB
-bid, and a required reason. A trade names `counterparty` from the league's teams read, the players
+`propose_transactions` stores what an agent proposes; it writes nothing to the provider. Before it
+returns, it reads current state once per team, the same check `revalidate_transaction_proposal_set`
+performs, so each accepted item comes back `current` or `stale` with the reasons instead of an
+unchecked promise. One call covers every team the account has, and the set it creates is grouped by
+team, so teams with nothing proposed still appear as an empty section on the review. Each item names
+one team, a kind (`free_agent_add`, `waiver_claim`, `drop`, or `trade`), the players to add and drop,
+an optional FAAB bid, and a required reason. A trade names `counterparty` from the league's teams read, the players
 going out in `drops`, and the players coming back in `adds`; it carries no bid and no draft picks.
 Staging a trade reads the league settings, both rosters, and the league's teams, and refuses the item
 when the counterparty is not another team in the same league, a player is not on the roster they
@@ -684,10 +686,12 @@ A set expires 24 hours after creation. `revalidate_transaction_proposal_set` re-
 once per team (its roster, its league rules, the pool state of the players it adds, and its FAAB
 balance when a bid is present) and marks each open item `current` or `stale` with reasons: the added
 player is no longer in the pool, a dropped player is no longer on the roster, the roster would
-exceed the league's declared capacity, the league's period has closed, the bid exceeds the team's
-remaining budget, the league has no FAAB budget, or the team's state could not be read. A trade is
-re-checked against both rosters, the counterparty's continuing place in the league, and the trade
-window, and carries its current state back to the review. Staleness is
+exceed the league's declared capacity, a player is in a reserve slot the provider treats as
+injured-only while the provider reports no injury, the league's period has closed, the bid exceeds
+the team's remaining budget, the league has no FAAB budget, or the team's state could not be read.
+An item that drops the healthy reserve player is allowed, because that drop resolves the slot. A
+trade is re-checked against both rosters, the counterparty's continuing place in the league, and the
+trade window, and carries its current state back to the review. Staleness is
 recorded beside the item's state and is never a failure; an item stays `proposed`. A team whose
 state cannot be read marks only its own items, and the review reports the failure beside that team.
 An expired set refuses re-validation instead of re-checking or executing, so a set that sat overnight

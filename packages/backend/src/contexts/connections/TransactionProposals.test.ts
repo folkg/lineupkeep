@@ -331,6 +331,117 @@ it.effect("marks each item current or stale with a reason in one read per team",
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("marks a move stale when a healthy player occupies a reserve slot", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: reserveLeague,
+      roster: reserveRosterWith("nhl.l.1.t.1", undefined),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Swap one center for another.",
+        },
+      ],
+    });
+
+    const review = yield* proposals.revalidate(owner, { set: result.set.id });
+    const item = Array.getUnsafe(itemsOf(review), 0);
+    assert.strictEqual(item.staleness.status, "stale");
+    assert.deepStrictEqual(reasonCodes(item), ["reserve_slot_illegal"]);
+    const reason = Array.getUnsafe(item.staleness.reasons, 0);
+    assert.include(reason.detail, "Roster Two");
+    assert.include(reason.detail, "IR");
+    assert.include(reason.detail, "no injury");
+    assert.include(reason.detail, "Move Roster Two to an open active or bench slot");
+
+    const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
+    const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(submittedItem.state, "skipped");
+    assert.include(submittedItem.execution?.detail ?? "", "Roster Two");
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("keeps a move current when the reserve slot holds a reported injury", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: reserveLeague,
+      roster: reserveRosterWith("nhl.l.1.t.1", { code: "O", detail: "Out" }),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Swap one center for another.",
+        },
+      ],
+    });
+
+    const review = yield* proposals.revalidate(owner, { set: result.set.id });
+    const item = Array.getUnsafe(itemsOf(review), 0);
+    assert.strictEqual(item.staleness.status, "current");
+    assert.deepStrictEqual(reasonCodes(item), []);
+
+    const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
+    const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(submittedItem.state, "executed");
+    assert.strictEqual((yield* fake.transactionRequests).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("allows a drop that resolves a healthy player's reserve slot", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: reserveLeague,
+      roster: reserveRosterWith("nhl.l.1.t.1", undefined),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Drop the healthy player who is blocking the reserve slot.",
+        },
+      ],
+    });
+
+    const review = yield* proposals.revalidate(owner, { set: result.set.id });
+    const item = Array.getUnsafe(itemsOf(review), 0);
+    assert.strictEqual(item.staleness.status, "current");
+    assert.deepStrictEqual(reasonCodes(item), []);
+
+    const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
+    const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(submittedItem.state, "executed");
+    assert.strictEqual((yield* fake.transactionRequests).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect(
   "marks a closed period, a missing budget, and an unreadable team without hiding others",
   () =>
@@ -1512,6 +1623,34 @@ function reserveRoster(teamKey: string): ProviderRoster {
     })),
   };
 }
+
+function reserveRosterWith(
+  teamKey: string,
+  injury: { readonly code: string; readonly detail: string } | undefined,
+): ProviderRoster {
+  const roster = rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"], teamKey);
+  return {
+    ...roster,
+    players: roster.players.map((player, index) => ({
+      ...player,
+      slot: {
+        status: "verified" as const,
+        slot: index === 1 ? "IR" : index === 0 ? "C" : "BN",
+      },
+      eligiblePositions: index === 1 ? ["C", "IR"] : ["C"],
+      injuryCode: index === 1 ? injury?.code : undefined,
+      injuryDetail: index === 1 ? injury?.detail : undefined,
+    })),
+  };
+}
+
+const reserveLeague = leagueFixture({
+  rosterPositions: [
+    { position: "C", positionType: "O", count: 2, kind: "starting", eligibility: ["C"] },
+    { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
+    { position: "IR", positionType: "I", count: 1, kind: "reserve", eligibility: ["IR"] },
+  ],
+});
 
 const playerDetails: ReadonlyArray<ProviderPlayerDetail> = [
   detail("nhl.p.90001", "Roster One", "rostered"),

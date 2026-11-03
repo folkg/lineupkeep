@@ -474,6 +474,28 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
   }
 });
 
+it("tells the person what to check when the provider gives no rejection reason", async () => {
+  const review = resultFixture();
+  const alpha = review.teams[0];
+  if (alpha === undefined) {
+    throw new Error("the result fixture has an alpha team");
+  }
+  const item: TransactionReviewItemView = {
+    ...failedAddItem(),
+    execution: {
+      outcome: "failed",
+      detail: "The provider rejected the transaction with HTTP 400 without giving a reason.",
+      decidedAt: now,
+      steps: [],
+    },
+  };
+  using _app = setupReviewPage({ ...review, teams: [{ ...alpha, items: [item] }] });
+
+  await expect.element(page.getByText(/The provider did not give a reason/u)).toBeVisible();
+  await expect.element(page.getByText(/injured-reserve slot who is healthy/u)).toBeVisible();
+  await expect.element(page.getByText(/player who cannot be dropped/u)).toBeVisible();
+});
+
 it("does not send a submission when every move is left out", async () => {
   let submissions = 0;
   using _app = setupReviewPage(reviewFixture(), {

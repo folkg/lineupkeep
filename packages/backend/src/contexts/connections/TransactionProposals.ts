@@ -66,6 +66,7 @@ export const ProposalStaleCode = Schema.Literals([
   "player_unavailable",
   "drop_not_rostered",
   "roster_full",
+  "reserve_slot_illegal",
   "period_closed",
   "bid_exceeds_budget",
   "bid_not_available",

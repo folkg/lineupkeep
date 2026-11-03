@@ -808,6 +808,7 @@ it("proposes a transaction set under the review scope and returns the review lin
     reviewPath: "/transactions/018f79ea-7d86-7c18-9b4a-8b4d0c9164d0",
   };
   const proposed: Array<{ userId: string; proposer: unknown }> = [];
+  let revalidations = 0;
   const proposals: TransactionProposalsShape = {
     ...unavailableProposals,
     propose: (userId, proposer) => {
@@ -820,8 +821,12 @@ it("proposes a transaction set under the review scope and returns the review lin
       } satisfies ProposeTransactionsResult);
     },
     read: () => Effect.succeed({ set, teams: [] } satisfies ProposalSetReview),
-    revalidate: () =>
-      Effect.fail(ProposalSetExpired.make({ set: set.id, expiresAt: set.expiresAt })),
+    revalidate: () => {
+      revalidations += 1;
+      return revalidations === 1
+        ? Effect.succeed({ set, teams: [] } satisfies ProposalSetReview)
+        : Effect.fail(ProposalSetExpired.make({ set: set.id, expiresAt: set.expiresAt }));
+    },
     readPendingOffers: () => Effect.die(new Error("pending offers are not read here")),
   };
   const services = Layer.mergeAll(
@@ -873,6 +878,7 @@ it("proposes a transaction set under the review scope and returns the review lin
       proposer: { kind: "agent", reference: "mcp", surface: "mcp" },
     },
   ]);
+  expect(revalidations).toBe(1);
 
   const read = await call(
     request(

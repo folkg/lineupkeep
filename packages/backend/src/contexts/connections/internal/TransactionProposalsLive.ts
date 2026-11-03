@@ -971,10 +971,9 @@ export const TransactionProposalsLive = Layer.effect(
           case "rejected":
             return {
               outcome: "failed",
-              detail: clamped(
-                sent.success.detail ??
-                  "The provider rejected the trade offer without saying why. Nothing was retried.",
-              ),
+              detail:
+                writeDetail(sent.success, "trade offer") ??
+                "The provider rejected the trade offer. Nothing was retried.",
               steps: [],
             };
           case "not_sent":
@@ -1964,6 +1963,15 @@ function evaluateItem(
     0,
   );
   const occupied = facts.roster.players.length - inReserve.length;
+  const droppedKeys = new Set(drops.map((drop) => drop.key));
+  for (const reason of illegalReserveReasons(
+    facts,
+    reservePositions,
+    occupied < capacity,
+    droppedKeys,
+  )) {
+    reasons.push(reason);
+  }
   const dropped = drops.filter((drop) => rostered.has(drop.key)).length;
   const needed = adds.length - (capacity - (occupied - dropped));
   let reserveMove: StoredReserveMove | undefined;
@@ -2110,15 +2118,23 @@ function evaluateTradeItem(
     (total, position) => (position.kind === "reserve" ? total : total + position.count),
     0,
   );
-  const reserveNames = new Set(
-    facts.league.rosterPositions
-      .filter((position) => position.kind === "reserve")
-      .map((position) => position.position),
+  const reservePositions = facts.league.rosterPositions.filter(
+    (position) => position.kind === "reserve",
   );
+  const reserveNames = new Set(reservePositions.map((position) => position.position));
   const inReserve = facts.roster.players.filter(
     (player) => player.slot.status === "verified" && reserveNames.has(player.slot.slot),
   );
   const occupied = facts.roster.players.length - inReserve.length;
+  const droppedKeys = new Set(drops.map((drop) => drop.key));
+  for (const reason of illegalReserveReasons(
+    facts,
+    reservePositions,
+    occupied < capacity,
+    droppedKeys,
+  )) {
+    reasons.push(reason);
+  }
   const dropped = drops.filter((drop) => rostered.has(drop.key)).length;
   const current = adds.filter((add) => opponentPlayers.has(add.key)).length;
   if (capacity > 0 && occupied - dropped + current > capacity) {
@@ -2294,7 +2310,10 @@ function withdrawalDetail(write: ProviderWriteResult): string {
     case "accepted":
       return "The provider accepted the withdrawal.";
     case "rejected":
-      return clamped(write.detail ?? "The provider rejected the withdrawal without saying why.");
+      return clamped(
+        write.detail ??
+          `The provider rejected the withdrawal${write.httpStatus === undefined ? "" : ` with HTTP ${String(write.httpStatus)}`} without giving a reason.`,
+      );
     case "not_sent":
       return clamped(
         write.detail ??
@@ -2837,13 +2856,16 @@ function writeOutcome(write: ProviderWriteResult): ProposalOutcome {
 
 function writeDetail(
   write: ProviderWriteResult,
-  subject: "reserve move" | "transaction",
+  subject: "reserve move" | "transaction" | "trade offer",
 ): string | undefined {
   switch (write.status) {
     case "accepted":
       return undefined;
     case "rejected":
-      return clamped(write.detail ?? `The provider rejected the ${subject} without saying why.`);
+      return clamped(
+        write.detail ??
+          `The provider rejected the ${subject}${write.httpStatus === undefined ? "" : ` with HTTP ${String(write.httpStatus)}`} without giving a reason.`,
+      );
     case "not_sent":
       return clamped(
         write.detail ??
@@ -2924,6 +2946,42 @@ function planReserveMove(
     fromSlot: chosen.player.slot.slot,
     toSlot: chosen.target,
   };
+}
+
+function illegalReserveReasons(
+  facts: TeamFacts,
+  reserves: ProviderLeagueSettings["rosterPositions"],
+  hasOpenRosterSpot: boolean,
+  droppedKeys: ReadonlySet<string>,
+): ReadonlyArray<StoredProposalStaleReason> {
+  const reserveNames = new Set(reserves.map((position) => position.position));
+  const reasons: Array<StoredProposalStaleReason> = [];
+  for (const player of facts.roster.players) {
+    if (player.slot.status !== "verified" || !reserveNames.has(player.slot.slot)) {
+      continue;
+    }
+    if (droppedKeys.has(player.providerPlayerKey)) {
+      continue;
+    }
+    const healthy =
+      player.status === "healthy" ||
+      (player.status === undefined &&
+        player.injuryCode === undefined &&
+        player.injuryDetail === undefined);
+    if (!healthy) {
+      continue;
+    }
+    reasons.push({
+      code: "reserve_slot_illegal",
+      playerKey: player.providerPlayerKey,
+      detail: `${player.name} is in the ${player.slot.slot} slot, but the provider reports no injury. ${
+        hasOpenRosterSpot
+          ? `Move ${player.name} to an open active or bench slot`
+          : `Drop ${player.name} or another player to open a roster spot`
+      } before proposing this transaction again.`,
+    });
+  }
+  return reasons;
 }
 
 function toPendingTradeOffers(

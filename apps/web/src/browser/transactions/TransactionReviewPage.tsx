@@ -634,9 +634,15 @@ function ExecutionResult(props: {
       <Show when={props.execution.outcome === "failed"}>
         <Notice tone="danger" title="This move failed">
           <Text size="caption" tone="danger">
-            It was attempted once and not retried. Read the provider's wording above before
-            proposing it again.
+            It was attempted once and not retried. Read the detail above before proposing it again.
           </Text>
+          <Show when={props.execution.detail?.toLowerCase().includes("without giving a reason")}>
+            <Text size="caption" tone="danger">
+              The provider did not give a reason. Check the team's roster for a player in an
+              injured-reserve slot who is healthy, a player who cannot be dropped, or a league
+              transaction rule before proposing it again.
+            </Text>
+          </Show>
         </Notice>
       </Show>
       <Show when={props.execution.outcome === "unknown"}>

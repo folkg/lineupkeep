@@ -644,11 +644,21 @@ export const yahooProvider = Effect.gen(function* () {
       const detail = yield* providerErrorDetail(response);
       if (response.status === 404) {
         yield* Effect.annotateCurrentSpan("provider.outcome", "rejected");
-        return { status: "rejected" as const, reason: "not_found" as const, ...detail };
+        return {
+          status: "rejected" as const,
+          reason: "not_found" as const,
+          httpStatus: response.status,
+          ...detail,
+        };
       }
       if (response.status === 408 || response.status === 429) {
         yield* Effect.annotateCurrentSpan("provider.outcome", "not_sent");
-        return { status: "not_sent" as const, reason: "request_failed" as const, ...detail };
+        return {
+          status: "not_sent" as const,
+          reason: "request_failed" as const,
+          httpStatus: response.status,
+          ...detail,
+        };
       }
       if (response.status >= 500) {
         yield* discardBody(response);
@@ -661,6 +671,7 @@ export const yahooProvider = Effect.gen(function* () {
         reason: /premium/iu.test(detail.detail ?? "")
           ? ("premium_required" as const)
           : ("invalid_request" as const),
+        httpStatus: response.status,
         ...detail,
       };
     });
@@ -1558,7 +1569,9 @@ function providerErrorDetail(
 }
 
 function providerDescription(text: string): string | undefined {
-  const xml = /<description>([\s\S]*?)<\/description>/iu.exec(text)?.[1];
+  const xml =
+    /<(?:description|message)>([\s\S]*?)<\/(?:description|message)>/iu.exec(text)?.[1] ??
+    /<error>([\s\S]*?)<\/error>/iu.exec(text)?.[1];
   const json = (() => {
     try {
       const payload: unknown = JSON.parse(text);
@@ -1566,16 +1579,35 @@ function providerDescription(text: string): string | undefined {
         return undefined;
       }
       const error: unknown = Reflect.get(payload, "error");
-      if (typeof error !== "object" || error === null) {
-        return undefined;
-      }
-      const description: unknown = Reflect.get(error, "description");
-      return typeof description === "string" ? description : undefined;
+      const errorCandidates: Array<unknown> =
+        typeof error === "object" && error !== null
+          ? [
+              Reflect.get(error, "description"),
+              Reflect.get(error, "message"),
+              Reflect.get(error, "detail"),
+            ]
+          : [];
+      const candidates: Array<unknown> = [
+        typeof error === "string" ? error : undefined,
+        ...errorCandidates,
+        Reflect.get(payload, "description"),
+        Reflect.get(payload, "message"),
+        Reflect.get(payload, "detail"),
+      ];
+      return candidates.find(
+        (candidate): candidate is string =>
+          typeof candidate === "string" && candidate.trim().length > 0,
+      );
     } catch {
       return undefined;
     }
   })();
-  const raw = xml ?? json;
+  const trimmed = text.trim();
+  const plain =
+    trimmed.startsWith("<") || trimmed.startsWith("{") || trimmed.startsWith("[")
+      ? undefined
+      : trimmed;
+  const raw = xml ?? json ?? plain;
   if (raw === undefined) {
     return undefined;
   }
@@ -2230,6 +2262,7 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
     isEditable: player.is_editable ?? null,
     injuryCode: optionalNonEmpty(player.status),
     injuryDetail: optionalNonEmpty(player.injury_note) ?? optionalNonEmpty(player.status_full),
+    status: yahooPlayerStatus(optionalNonEmpty(player.status)),
     byeWeek: player.bye_weeks?.week ?? null,
     scheduled: scheduledIn(player.opponent),
     startingLineup: startingLineupIn(player.starting_status),

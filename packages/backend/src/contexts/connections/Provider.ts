@@ -468,11 +468,13 @@ export type ProviderWriteResult =
       readonly status: "rejected";
       readonly reason: "invalid_request" | "not_found" | "premium_required";
       readonly detail?: string;
+      readonly httpStatus?: number;
     }
   | {
       readonly status: "not_sent";
       readonly reason: "session_incomplete" | "request_failed";
       readonly detail?: string;
+      readonly httpStatus?: number;
     }
   | { readonly status: "unknown" };
 
@@ -482,11 +484,13 @@ export type ProviderTradeProposalResult =
       readonly status: "rejected";
       readonly reason: "invalid_request" | "not_found" | "premium_required";
       readonly detail?: string;
+      readonly httpStatus?: number;
     }
   | {
       readonly status: "not_sent";
       readonly reason: "session_incomplete" | "request_failed";
       readonly detail?: string;
+      readonly httpStatus?: number;
     }
   | { readonly status: "unknown" };
 
@@ -520,6 +524,7 @@ export type ProviderRosterPlayer = {
   readonly isEditable: boolean | null;
   readonly injuryCode: string | undefined;
   readonly injuryDetail: string | undefined;
+  readonly status?: ProviderPlayerStatus;
   readonly byeWeek: number | null;
   readonly scheduled: boolean;
   readonly startingLineup: ProviderStartingLineup;

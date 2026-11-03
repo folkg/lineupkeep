@@ -312,6 +312,7 @@ it.effect("reports an explicit assignment rejection without retrying a different
       status: "rejected",
       reason: "invalid_request",
       detail: "That position has already been filled.",
+      httpStatus: 400,
     });
   }).pipe(Effect.provide(yahooLayer(layer)));
 });
@@ -608,6 +609,35 @@ it.effect("returns the provider's own wording for a rejected transaction", () =>
       status: "rejected",
       reason: "invalid_request",
       detail: "There is no room on the roster.",
+      httpStatus: 400,
+    });
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
+it.effect("names the HTTP status when a rejected transaction gives no reason", () => {
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.succeed(
+        request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : new Response(null, { status: 400 }),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "461.l.1000",
+      providerTeamKey: "461.l.1000.t.1",
+      adds: ["461.p.10001"],
+      drops: [],
+      faabBid: undefined,
+    });
+    assert.deepStrictEqual(result, {
+      status: "rejected",
+      reason: "invalid_request",
+      httpStatus: 400,
     });
   }).pipe(Effect.provide(yahooLayer(layer)));
 });
@@ -1362,6 +1392,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         isEditable: true,
         injuryCode: undefined,
         injuryDetail: undefined,
+        status: "healthy",
         byeWeek: 7,
         scheduled: true,
         startingLineup: "confirmed-starting",
@@ -1385,6 +1416,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         isEditable: false,
         injuryCode: "O",
         injuryDetail: "Synthetic injury note",
+        status: "out",
         byeWeek: null,
         scheduled: false,
         startingLineup: "unconfirmed",
