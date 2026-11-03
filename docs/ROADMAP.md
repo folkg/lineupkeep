@@ -587,6 +587,11 @@ seeds and removes every class, refuses a missing or stale export, proves a fresh
 proves a failure partway through leaves the account unchanged. The E2E test proves a cookie captured before
 erasure cannot reach `/teams` afterwards.
 
+**Not yet proven in production.** The live path needs a signed-in account, and the only way in is a sign-in
+code to an email the owner controls. Deployed web revision `00076` closes the surface correctly to anonymous
+visitors: `/account` redirects and `/api/account/export` answers 401. The proof to run is a throwaway account:
+sign in, export, erase, then query every table for the id from outside the application.
+
 **Owner's windows, 2026-11-02**: 90 days for lineup runs, attempts and write intents after the run ends; 14
 days for stored schedule observations after the covered window ends; 7 days for registrations that never
 completed an authorization, with 100 live at once; 180 days for consents after last use; 1 day for hosted
