@@ -3267,6 +3267,74 @@ export const yahooNflPlayerDetailsWithPopulatedCut = playerDetailsPayload({
   ],
 });
 
+export const yahooNflPlayerDetailsWithProjectedWeekRanks = playerDetailsPayload({
+  leagueKey: "466.l.4000",
+  leagueName: "Synthetic NFL League",
+  playerKeys: ["466.p.20001", "466.p.20002"],
+  players: [
+    {
+      displayPosition: "QB",
+      primaryPosition: "QB",
+      eligiblePositions: ["QB"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "week", week: "6" },
+        value: 38,
+        cuts: [{ cutType: "platinum", value: 41 }],
+      }),
+      ranks: [
+        { type: "L4W", rank: "3" },
+        { type: "PW", rank: "3", week: "6" },
+        { type: "PN4W", rank: "5" },
+      ],
+    },
+    {
+      displayPosition: "WR",
+      primaryPosition: "WR",
+      eligiblePositions: ["WR"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "week", week: "6" },
+        value: 72,
+        cuts: [{ cutType: "platinum", value: 65 }],
+      }),
+      ranks: [
+        { type: "L4W", rank: "12" },
+        { type: "PW", rank: "8", week: "6" },
+        { type: "PN4W", rank: "9" },
+      ],
+    },
+  ],
+});
+
+export const yahooNflPlayerDetailsWithDefaultRanks = playerDetailsPayload({
+  leagueKey: "466.l.4000",
+  leagueName: "Synthetic NFL League",
+  playerKeys: ["466.p.20001", "466.p.20002"],
+  players: [
+    {
+      displayPosition: "QB",
+      primaryPosition: "QB",
+      eligiblePositions: ["QB"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "week", week: "6" },
+        value: 38,
+        cuts: [{ cutType: "platinum", value: 41 }],
+      }),
+      ranks: [{ type: "OR", rank: "22" }],
+    },
+    {
+      displayPosition: "WR",
+      primaryPosition: "WR",
+      eligiblePositions: ["WR"],
+      percentStarted: percentStartedFragments({
+        coverage: { coverage_type: "week", week: "6" },
+        value: 72,
+        cuts: [{ cutType: "platinum", value: 65 }],
+      }),
+      ranks: [{ type: "OR", rank: "41" }],
+    },
+  ],
+});
+
 export const yahooNflPlayerDetailsWithUnpopulatedCut = playerDetailsPayload({
   leagueKey: "466.l.4000",
   leagueName: "Synthetic NFL League",
@@ -3373,6 +3441,23 @@ export const yahooNflPlayerDetailsWithMismatchedStartedCoverage = playerDetailsP
   ],
 });
 
+function playerRanksPayload(
+  ranks: ReadonlyArray<{ readonly type: string; readonly rank: string; readonly week?: string }>,
+): Record<string, unknown> {
+  const entries: Record<string, unknown> = {};
+  ranks.forEach((rank, index) => {
+    entries[String(index)] = {
+      player_rank: {
+        rank_type: rank.type,
+        rank_value: rank.rank,
+        ...(rank.week === undefined ? {} : { rank_week: rank.week }),
+      },
+    };
+  });
+  entries["count"] = ranks.length;
+  return entries;
+}
+
 function percentStartedFragments(input: {
   readonly coverage: Readonly<Record<string, string>>;
   readonly value?: number | string;
@@ -3409,6 +3494,11 @@ function playerDetailsPayload(input: {
     readonly primaryPosition: string;
     readonly eligiblePositions: ReadonlyArray<string>;
     readonly percentStarted: ReadonlyArray<unknown> | undefined;
+    readonly ranks?: ReadonlyArray<{
+      readonly type: string;
+      readonly rank: string;
+      readonly week?: string;
+    }>;
   }>;
 }): { fantasy_content: Record<string, unknown> } {
   const entries: Record<string, unknown> = {};
@@ -3436,6 +3526,7 @@ function playerDetailsPayload(input: {
         ...(player.percentStarted === undefined
           ? []
           : [{ percent_started: player.percentStarted }]),
+        ...(player.ranks === undefined ? [] : [{ player_ranks: playerRanksPayload(player.ranks) }]),
         {
           ownership: { ownership_type: "team" },
         },

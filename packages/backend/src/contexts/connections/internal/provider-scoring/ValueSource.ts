@@ -177,11 +177,11 @@ function percentOf(
 function populationFinding(population: CommunityStartRatePopulation): string {
   switch (population.kind) {
     case "cut":
-      return ` (${population.cut} cut)`;
+      return ` (${population.cut} managers only)`;
     case "overall":
       return population.finding === "cut-incomplete"
-        ? ` (the ${population.cut} cut was incomplete)`
-        : ` (the ${population.cut} cut was unpopulated)`;
+        ? " (using all managers, because a platinum-only figure was missing for one player)"
+        : " (using all managers, because no platinum manager started any player)";
   }
 }
 

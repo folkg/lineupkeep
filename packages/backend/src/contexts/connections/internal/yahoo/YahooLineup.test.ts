@@ -106,7 +106,9 @@ describe("Yahoo scoring translation", () => {
     if (outcome.kind !== "scored") {
       throw new Error("Expected scored values.");
     }
-    expect(outcome.provenance).toBe("yahoo/percent started for 2026-10-26 (platinum cut)");
+    expect(outcome.provenance).toBe(
+      "yahoo/percent started for 2026-10-26 (platinum managers only)",
+    );
     expect(outcome.players).toEqual([
       { providerPlayerKey: "hockey-player-0", score: 5100, availability: "will-play" },
       { providerPlayerKey: "hockey-player-1", score: 800, availability: "will-play" },
@@ -510,7 +512,7 @@ describe("Yahoo scoring translation", () => {
       ],
     );
 
-    expect(outcome.provenance).toBe("yahoo/percent started for week 7 (platinum cut)");
+    expect(outcome.provenance).toBe("yahoo/percent started for week 7 (platinum managers only)");
     expect(planned(decision).assignments).toEqual([
       { providerPlayerKey: "history", slot: "W/R/T" },
       { providerPlayerKey: "projected", slot: "BN" },
@@ -574,7 +576,9 @@ describe("Yahoo scoring translation", () => {
     }
 
     expect(weekly.outcome.provenance).toBe("yahoo/projected rank for week 7");
-    expect(dailyOutcome.provenance).toBe("yahoo/percent started for 2026-10-26 (platinum cut)");
+    expect(dailyOutcome.provenance).toBe(
+      "yahoo/percent started for 2026-10-26 (platinum managers only)",
+    );
     expect(
       planned(
         planAssignments({

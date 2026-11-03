@@ -804,6 +804,52 @@ daily NHL score used percent started and percent owned with a starting-goalie fa
 weekly-deadline score used `100 / next7Days`. A weekly hockey league would therefore have a matching
 window, but a date does not.
 
+## Live projected-rank delivery evidence (2026-11-03)
+
+Read-only, through the committed adapter with the real transport and the owner's stored session; no
+cookie, player name, or team key was retained.
+
+**The scheduled runs.** The football team in the weekly head-to-head points league `470.l.70271`
+planned at 21:55 and 22:55 UTC from `yahoo/percent started for week 9 (platinum cut)`. Both runs used
+the current target, the league published `current_week` 9, and the roster was scoped to week 9
+throughout, so the projection guard (`periodWindow.current` equals the target week) held: both values
+were 9. The guard did not cause the fallback.
+
+**What the provider publishes.** The player-details read for all fifteen roster players, with all
+seven rank names requested, returned every name: `L30`, `L14`, and `PS7` as a dash (not published for
+football), and `PSR`, `L4W`, `PW`, and `PN4W` as numeric ranks for all fifteen. A published entry:
+
+```json
+{ "player_ranks": [{ "rank_type": "PW", "rank_value": "44", "rank_week": "9" }] }
+```
+
+`PW` therefore exists for the target week. No projected statistics exist: `stats.type=projected`,
+`stats.type=projections`, `out=projection`, `out=stats,projected`, and `out=stats,projected_points`
+each answered HTTP 400, so the rank is the only projection and cannot be re-scored with the league's
+modifiers.
+
+**Why the adapter did not see it.** The adapter sent the rank list as a query value built by
+`URLSearchParams`, which percent-encodes the commas. Yahoo splits the list on literal commas and does
+not decode them, so it silently answers 200 with its default `OR` and `S` ranks. The same request
+with three roster players, measured both ways:
+
+| Rank list as sent              | Status | Rank types returned                             |
+| ------------------------------ | ------ | ----------------------------------------------- |
+| literal commas                 | 200    | `L30`, `L14`, `PS7`, `PSR`, `L4W`, `PW`, `PN4W` |
+| percent-encoded commas (`%2C`) | 200    | `OR` and `S` only, the default ranks            |
+
+The fifteen-player roster request returned `OR` 15 and `S` 45 for exactly this reason: `PW` was never
+in the payload, the projection source was empty, and the ladder fell to the started percentage. The
+same substitution also starved the ownership composite, whose rank score found only unweighted
+`OR`/`S` entries and contributed zero. Sending the list in the path (`;ranks=last30days,...`) returns
+the requested names for football and hockey alike.
+
+After the request moved into the path, the committed adapter priced the same football team from
+`yahoo/projected rank for week 9` with all fifteen players valued, and a live hockey date from
+`yahoo/percent started for 2026-11-03 (platinum managers only)` with 20 of 21 players valued (the
+injured-reserve goalie has no published started percentage). The adapter reads no `rank_week` tag;
+the rung stays tied to the league's current scoring week.
+
 ## Live Yahoo native write verification (2026-10-25)
 
 The owner authorized one native `set_lineup` run on their own football team and a date-scoped native

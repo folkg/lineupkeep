@@ -93,10 +93,12 @@ What the provider actually publishes decides what the rung can be:
   football week returns the requested coverage with every stat value at zero rather than a projection.
   So no projected statistics exist to score with the league's rules, and this policy does not pretend
   that they do.
-- **A projected week rank for football.** `out=ranks&ranks=projected_week` returns `PW` as a numeric
-  rank for all fifteen football roster players. The ranks are league-scoped: the same player carries
-  different values in different leagues, so `PW` is this league's own projected order for its current
-  week.
+- **A projected week rank for football.** `out=ranks;ranks=projected_week` returns `PW` as a numeric
+  rank for all fifteen football roster players. The rank list is a resource selection: Yahoo splits
+  it on literal commas, and a percent-encoded list answers 200 with its default `OR` and `S` ranks
+  instead of the requested ones, so the adapter sends the list beside `out` in the path. The ranks are
+  league-scoped: the same player carries different values in different leagues, so `PW` is this
+  league's own projected order for its current week.
 - **No per-date projection for hockey.** Hockey returns `PW` as a dash, meaning not published, and
   publishes its projected ranks over seven days (`PS7`) and the rest of the season (`PSR`). A
   seven-day rank is not a day's projection, so a hockey date has none.
@@ -117,9 +119,10 @@ below 600 was out or on bye. The availability tier decides those players before 
 the tier cannot disagree about who can appear.
 
 The rung is skipped when it cannot be computed for the roster at all. That is every hockey date, and
-any football target the provider is not currently projecting: the projection is read only when the
-target week is the league's current week, because the provider publishes no coverage marker beside the
-rank, and a rank from another week would decide the wrong period.
+any football target the provider is not currently projecting. A football `PW` rank carries a
+`rank_week` tag, but the adapter does not read it: the rung is restricted to the league's current
+scoring week, which target resolution already requires, so a rank for another week cannot price this
+one.
 
 Using the seven-day rank for a hockey date was considered and rejected. It covers a window, not the
 date, and it counts the games each team plays in that window. In one league a player ranked 5th for
@@ -180,11 +183,12 @@ any measured player records `cut-incomplete`.
 
 The recorded label names the period, the population, and, when it fell back, the finding:
 
-- `percent started for <period> (platinum cut)`: the cut priced the plan.
-- `percent started for <period> (the platinum cut was incomplete)`: at least one measured player was
-  not in the cohort, so the whole plan used the overall percentage.
-- `percent started for <period> (the platinum cut was unpopulated)`: the cut was complete and entirely
-  zero, so the whole plan used the overall percentage.
+- `percent started for <period> (platinum managers only)`: the narrower group priced the plan.
+- `percent started for <period> (using all managers, because a platinum-only figure was missing for
+  one player)`: at least one measured player was not in the cohort, so the whole plan used the overall
+  percentage.
+- `percent started for <period> (using all managers, because no platinum manager started any player)`:
+  the cut was complete and entirely zero, so the whole plan used the overall percentage.
 
 The cost of the rule: a cohort that genuinely excludes a player cannot price that player, so a
 single omission makes the plan less narrow. The alternative — mixing the cut and the overall
@@ -251,9 +255,10 @@ starting slots are filled from the players the crowd does start.
 
 Each plan records the provider's opaque label for the scheme that produced it, prefixed with the
 provider key, for example `yahoo/projected rank for week 9` or
-`yahoo/percent started for 2026-11-03 (platinum cut)`. Rows written before this correction keep the
-label recorded at the time; older verification records show the `yahoo:mean-points-per-period:...`
-and `yahoo/community-start-rate:...` forms.
+`yahoo/percent started for 2026-11-03 (platinum managers only)`. Rows written before this correction
+keep the label recorded at the time; older verification records show the
+`yahoo:mean-points-per-period:...` and `yahoo/community-start-rate:...` forms, and the labels
+`(platinum cut)`, `(the platinum cut was incomplete)`, and `(the platinum cut was unpopulated)`.
 
 **Availability never enters this arithmetic.** The same player is worth the same number whether they
 are healthy, doubtful, or out. Nothing is halved for day to day, nothing is zeroed for out, and no
@@ -482,8 +487,9 @@ The provider published a started percentage for all 21 roster players (4 %–88 
 `coverage_type: date`). This is the pre-correction run: it asked for the diamond cut, which came back
 `0` for every player, so it was priced from the overall percentage and recorded the older label
 `percent-started:overall:date:2026-10-26`. Today the same inputs request platinum and record
-`yahoo/percent started for 2026-10-26 (platinum cut)` when the cut is complete, or
-`yahoo/percent started for 2026-10-26 (the platinum cut was incomplete)` otherwise.
+`yahoo/percent started for 2026-10-26 (platinum managers only)` when the cut is complete, or
+`yahoo/percent started for 2026-10-26 (using all managers, because a platinum-only figure was missing
+for one player)` otherwise.
 
 - value term 758.00 — the sum of the twelve starting started percentages, in hundredths of a percent
 - six slot changes, twelve of twelve required starting slots filled

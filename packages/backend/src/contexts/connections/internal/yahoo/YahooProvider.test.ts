@@ -42,7 +42,9 @@ import {
   yahooNflLeagueTeams,
   yahooNflLeagueTeamsWithFaab,
   yahooNflPlayerDetailsWithMismatchedStartedCoverage,
+  yahooNflPlayerDetailsWithDefaultRanks,
   yahooNflPlayerDetailsWithPopulatedCut,
+  yahooNflPlayerDetailsWithProjectedWeekRanks,
   yahooNflPlayerDetailsWithUnpopulatedCut,
   yahooNflLeagueTeamsForAnotherLeague,
   yahooNflMatchups,
@@ -2864,10 +2866,45 @@ it.effect("prices a games-limited league from the ownership composite, not the c
       { providerPlayerKey: "466.p.20002", score: 125000, availability: "will-play" },
     ]);
     const factsRequest = internet.calls.find((call) => call.url.pathname.includes("/players;"));
-    assert.include(factsRequest?.url.href, ";out=percent_started,percent_owned,ranks");
-    assert.strictEqual(
-      factsRequest?.url.searchParams.get("ranks"),
-      "last30days,last14days,projected_next7days,projected_season_remaining,last4weeks,projected_week,projected_next4weeks",
+    assert.include(factsRequest?.url.pathname, ";out=percent_started,percent_owned,ranks");
+    assert.include(
+      factsRequest?.url.pathname,
+      ";ranks=last30days,last14days,projected_next7days,projected_season_remaining,last4weeks,projected_week,projected_next4weeks",
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("prices a weekly league from the projected week rank the provider publishes", () => {
+  const internet = recordingInternet((request) =>
+    jsonResponse(
+      request.url.search.includes("%2C")
+        ? yahooNflPlayerDetailsWithDefaultRanks
+        : yahooNflPlayerDetailsWithProjectedWeekRanks,
+    ),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const outcome = yield* provider.scoreRoster(
+      planRequest({
+        league: planLeague({ providerLeagueKey: "466.l.4000", rosterCoverage: "week" }),
+        roster: planRoster({
+          providerLeagueKey: "466.l.4000",
+          coverage: weekSix,
+          members: qbAndWideReceiver,
+        }),
+        target: { coverage: "week", week: 6 },
+      }),
+    );
+
+    assert.strictEqual(outcome.kind, "scored");
+    if (outcome.kind !== "scored") {
+      return;
+    }
+    assert.strictEqual(outcome.provenance, "yahoo/projected rank for week 6");
+    assert.deepStrictEqual(
+      outcome.players.map((player) => player.score),
+      [6, 1],
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -2893,7 +2930,10 @@ it.effect("scores a roster from the published started percentage and its platinu
     if (outcome.kind !== "scored") {
       return;
     }
-    assert.strictEqual(outcome.provenance, "yahoo/percent started for week 6 (platinum cut)");
+    assert.strictEqual(
+      outcome.provenance,
+      "yahoo/percent started for week 6 (platinum managers only)",
+    );
     assert.deepStrictEqual(outcome.players, [
       { providerPlayerKey: "466.p.20001", score: 4100, availability: "will-play" },
       { providerPlayerKey: "466.p.20002", score: 6500, availability: "will-play" },
@@ -2926,7 +2966,7 @@ it.effect("uses the overall started percentage and records an unpopulated cut", 
     }
     assert.strictEqual(
       outcome.provenance,
-      "yahoo/percent started for week 6 (the platinum cut was unpopulated)",
+      "yahoo/percent started for week 6 (using all managers, because no platinum manager started any player)",
     );
     assert.deepStrictEqual(
       outcome.players.map((player) => player.score),

@@ -72,7 +72,7 @@ describe("the period's projection", () => {
     );
 
     expect(result.players[0]?.units).toBe(4300);
-    expect(result.label).toBe("percent started for week 7 (platinum cut)");
+    expect(result.label).toBe("percent started for week 7 (platinum managers only)");
   });
 });
 
@@ -110,7 +110,9 @@ describe("the value source ladder", () => {
     );
 
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 0]);
-    expect(result.label).toBe("percent started for week 7 (the platinum cut was incomplete)");
+    expect(result.label).toBe(
+      "percent started for week 7 (using all managers, because a platinum-only figure was missing for one player)",
+    );
   });
 
   it("prices from the populated platinum cut when every measured player carries it", () => {
@@ -129,7 +131,7 @@ describe("the value source ladder", () => {
     );
 
     expect(result.players.map((entry) => entry.units)).toEqual([5100, 800]);
-    expect(result.label).toBe("percent started for week 7 (platinum cut)");
+    expect(result.label).toBe("percent started for week 7 (platinum managers only)");
   });
 
   it("ignores a cut the request did not ask for", () => {
@@ -148,7 +150,9 @@ describe("the value source ladder", () => {
     );
 
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200]);
-    expect(result.label).toBe("percent started for week 7 (the platinum cut was incomplete)");
+    expect(result.label).toBe(
+      "percent started for week 7 (using all managers, because a platinum-only figure was missing for one player)",
+    );
   });
 
   it("records a uniformly zero cut as a finding and prices from the overall percentage", () => {
@@ -166,7 +170,9 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.label).toBe("percent started for week 7 (the platinum cut was unpopulated)");
+    expect(result.label).toBe(
+      "percent started for week 7 (using all managers, because no platinum manager started any player)",
+    );
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200]);
   });
 
@@ -186,7 +192,9 @@ describe("the value source ladder", () => {
       ),
     );
 
-    expect(result.label).toBe("percent started for week 7 (the platinum cut was incomplete)");
+    expect(result.label).toBe(
+      "percent started for week 7 (using all managers, because a platinum-only figure was missing for one player)",
+    );
     expect(result.players.map((entry) => entry.units)).toEqual([4300, 1200, 4000]);
   });
 
@@ -206,7 +214,7 @@ describe("the value source ladder", () => {
     );
 
     expect(result.players.map((entry) => entry.units)).toEqual([5100, 0]);
-    expect(result.label).toBe("percent started for week 7 (platinum cut)");
+    expect(result.label).toBe("percent started for week 7 (platinum managers only)");
   });
 
   it("leaves a missing started percentage absent rather than zero", () => {

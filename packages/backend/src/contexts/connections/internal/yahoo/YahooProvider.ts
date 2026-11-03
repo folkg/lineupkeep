@@ -135,6 +135,15 @@ const rankedSearchSorts = new Set<ProviderPlayerSearchInput["sort"]>([
 const goalsAgainstAverageStatId = 23;
 const savePercentageStatId = 26;
 const maximumSelectedPlayers = 25;
+const playerRankTypes = [
+  "last30days",
+  "last14days",
+  "projected_next7days",
+  "projected_season_remaining",
+  "last4weeks",
+  "projected_week",
+  "projected_next4weeks",
+] as const;
 const maximumHistoryPlayers = 200;
 const maximumUpstreamLimit = 50;
 
@@ -825,12 +834,10 @@ export const yahooProvider = Effect.gen(function* () {
       origin: readOrigin,
       path:
         `/fantasy/v2/league/${leagueKey}/players;player_keys=${playerKeys.join(",")}` +
-        ";out=percent_started,percent_owned,ranks",
+        `;out=percent_started,percent_owned,ranks;ranks=${playerRankTypes.join(",")}`,
       query: {
         format: "json",
         "percent_started.cut_types": communityStartRateCut,
-        ranks:
-          "last30days,last14days,projected_next7days,projected_season_remaining,last4weeks,projected_week,projected_next4weeks",
       },
       cookie,
       normalize: true,
@@ -1314,8 +1321,7 @@ function yahooUrl(origin: URL, path: string, query: Readonly<Record<string, stri
         key !== "stats.type" &&
         key !== "stats.week" &&
         key !== "stats.date" &&
-        key !== "percent_started.cut_types" &&
-        key !== "ranks",
+        key !== "percent_started.cut_types",
     )
   ) {
     throw new Error("Yahoo request contains an unsupported query field");
