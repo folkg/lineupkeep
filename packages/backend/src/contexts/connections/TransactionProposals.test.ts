@@ -658,7 +658,7 @@ it.effect("allows a drop that resolves an illegal reserve player", () =>
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("carries the provider's exact refusal wording into the item result", () =>
+it.effect("names the HTTP status beside the provider's exact refusal wording", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -668,7 +668,7 @@ it.effect("carries the provider's exact refusal wording into the item result", (
       roster: rosterFixture(["nhl.p.90001", "nhl.p.90002"]),
       playerDetails,
     });
-    yield* fake.setTransactionAction("reject", providerRefusal);
+    yield* fake.setTransactionAction("reject", providerRefusal, 400);
     const redLine = teamId(seeded, "nhl.l.1.t.1");
     const result = yield* proposals.propose(owner, proposer, {
       items: [
@@ -686,9 +686,10 @@ it.effect("carries the provider's exact refusal wording into the item result", (
     const item = Array.getUnsafe(itemsOf(review), 0);
     const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
     const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
+    const detail = `The provider rejected the transaction with HTTP 400. It said: ${providerRefusal}`;
     assert.strictEqual(submittedItem.execution?.outcome, "failed");
-    assert.strictEqual(submittedItem.execution?.detail, providerRefusal);
-    assert.strictEqual(submittedItem.execution?.steps[0]?.detail, providerRefusal);
+    assert.strictEqual(submittedItem.execution?.detail, detail);
+    assert.strictEqual(submittedItem.execution?.steps[0]?.detail, detail);
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -1117,7 +1118,11 @@ it.effect("reports a reserve move and a failed add per step, then stops only tha
       failed?.execution?.steps.map((step) => [step.kind, step.outcome, step.detail]),
       [
         ["reserve_move", "executed", undefined],
-        ["add", "failed", "That player can no longer be added."],
+        [
+          "add",
+          "failed",
+          "The provider rejected the transaction. It said: That player can no longer be added.",
+        ],
       ],
     );
     assert.include(items.find((item) => item.id === secondId)?.execution?.detail ?? "", "failed");

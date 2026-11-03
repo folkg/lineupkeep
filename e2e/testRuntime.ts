@@ -2,6 +2,8 @@ import type { BackendPlatform } from "@lineupkeep/backend/runtime/BackendPlatfor
 import { BackendRuntime as Runtime } from "@lineupkeep/backend/runtime/BackendRuntime";
 import { PublicInternet } from "@lineupkeep/backend/runtime/PublicInternet";
 
+import transactionRefusal from "#repo/packages/backend/src/contexts/connections/fixtures/yahoo-transaction-refusal-2026-11-03.json";
+
 export const BackendRuntime = {
   make: (platform: BackendPlatform) =>
     Runtime.make({
@@ -20,6 +22,9 @@ export const BackendRuntime = {
           );
         }
         const yahoo = yahooResponse(new URL(request.url));
+        if (yahoo instanceof Response) {
+          return Promise.resolve(yahoo);
+        }
         if (yahoo !== undefined) {
           return Promise.resolve(Response.json(yahoo));
         }
@@ -38,7 +43,12 @@ function yahooResponse(url: URL): unknown {
   }
   if (url.origin === "https://pub-api-rw.fantasysports.yahoo.com") {
     if (url.pathname.startsWith("/fantasy/v2/league/") && url.pathname.endsWith("/transactions")) {
-      return { fantasy_content: { transaction: { status: "successful" } } };
+      return url.pathname.includes("/465.l.9100/")
+        ? new Response(transactionRefusal.response.body, {
+            status: transactionRefusal.response.status,
+            headers: { "content-type": "application/json" },
+          })
+        : { fantasy_content: { transaction: { status: "successful" } } };
     }
     if (/^\/fantasy\/v2\/team\/[^/]+\/roster$/u.test(url.pathname)) {
       return { fantasy_content: { roster: { status: "success" } } };

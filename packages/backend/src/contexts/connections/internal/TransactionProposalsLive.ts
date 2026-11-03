@@ -2309,10 +2309,7 @@ function withdrawalDetail(write: ProviderWriteResult): string {
     case "accepted":
       return "The provider accepted the withdrawal.";
     case "rejected":
-      return clamped(
-        write.detail ??
-          `The provider rejected the withdrawal${write.httpStatus === undefined ? "" : ` with HTTP ${String(write.httpStatus)}`} without giving a reason.`,
-      );
+      return clamped(rejectionDetail("withdrawal", write));
     case "not_sent":
       return clamped(
         write.detail ??
@@ -2873,10 +2870,7 @@ function writeDetail(
     case "accepted":
       return undefined;
     case "rejected":
-      return clamped(
-        write.detail ??
-          `The provider rejected the ${subject}${write.httpStatus === undefined ? "" : ` with HTTP ${String(write.httpStatus)}`} without giving a reason.`,
-      );
+      return clamped(rejectionDetail(subject, write));
     case "not_sent":
       return clamped(
         write.detail ??
@@ -2887,6 +2881,16 @@ function writeDetail(
     case "unknown":
       return `The provider did not confirm the ${subject}; it may or may not have applied. It was not retried.`;
   }
+}
+
+function rejectionDetail(
+  subject: "reserve move" | "transaction" | "trade offer" | "withdrawal",
+  write: Extract<ProviderWriteResult, { readonly status: "rejected" }>,
+): string {
+  const status = write.httpStatus === undefined ? "" : ` with HTTP ${String(write.httpStatus)}`;
+  return write.detail === undefined
+    ? `The provider rejected the ${subject}${status} without giving a reason.`
+    : `The provider rejected the ${subject}${status}. It said: ${write.detail}`;
 }
 
 function sessionFailureDetail(

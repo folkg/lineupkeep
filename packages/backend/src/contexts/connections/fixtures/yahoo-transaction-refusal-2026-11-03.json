@@ -1,0 +1,31 @@
+{
+  "capture": {
+    "date": "2026-11-03",
+    "observedAt": "2026-11-03T16:33:07Z",
+    "provider": "yahoo",
+    "league": "477.l.5744",
+    "leagueName": "Irish Lacrosse",
+    "team": "477.l.5744.t.6",
+    "teamName": "Meier? I barely know her!",
+    "sport": "hockey",
+    "move": "Add Sean Walker (477.p.7751) and drop Kris Letang (477.p.4064).",
+    "attempts": 1,
+    "outcome": "The provider refused the one submission with HTTP 400 and made no roster change. Nothing was retried, and no second request was sent.",
+    "redaction": "The crumb the provider echoed in yahoo:uri is recorded as <redacted>. The request crumb and the session cookie are not recorded."
+  },
+  "request": {
+    "method": "POST",
+    "url": "https://pub-api-rw.fantasysports.yahoo.com/fantasy/v2/league/477.l.5744/transactions?format=json_f&crumb=<redacted>",
+    "headers": {
+      "accept": "application/json",
+      "content-type": "application/xml",
+      "cookie": "<redacted>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><fantasy_content><transaction><type>add/drop</type><players><player><player_key>477.p.7751</player_key><transaction_data><type>add</type><destination_team_key>477.l.5744.t.6</destination_team_key></transaction_data></player><player><player_key>477.p.4064</player_key><transaction_data><type>drop</type><source_team_key>477.l.5744.t.6</source_team_key></transaction_data></player></players></transaction></fantasy_content>"
+  },
+  "response": {
+    "status": 400,
+    "statusText": "Bad Request",
+    "body": "{\n    \"error\": {\n        \"xml:lang\": \"en-us\",\n        \"yahoo:uri\": \"\\/fantasy\\/v2\\/league\\/477.l.5744\\/transactions?format=json_f&amp;crumb=<redacted>\",\n        \"description\": \"Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR.  Please edit your lineup to activate this player from your IR and then attempt your transaction again.\",\n        \"detail\": null\n    }\n}"
+  }
+}

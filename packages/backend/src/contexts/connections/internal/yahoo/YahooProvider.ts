@@ -472,56 +472,58 @@ export const yahooProvider = Effect.gen(function* () {
         `/fantasy/v2/league/${leagueKey}/transactions`,
         Redacted.value(crumb.success.crumb),
       );
-      const response = yield* Effect.scoped(
-        internet
-          .request(
-            new Request(url, {
-              method: "POST",
-              headers: {
-                accept: "application/json",
-                "content-type": "application/xml",
-                cookie,
-              },
-              body: tradeProposalBody({
-                providerTeamKey: input.providerTeamKey,
-                counterpartyTeamKey: input.counterpartyTeamKey,
-                send,
-                receive,
-                note: input.note,
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const response = yield* internet
+            .request(
+              new Request(url, {
+                method: "POST",
+                headers: {
+                  accept: "application/json",
+                  "content-type": "application/xml",
+                  cookie,
+                },
+                body: tradeProposalBody({
+                  providerTeamKey: input.providerTeamKey,
+                  counterpartyTeamKey: input.counterpartyTeamKey,
+                  send,
+                  receive,
+                  note: input.note,
+                }),
               }),
-            }),
-            {
-              timeoutMs: yahooWriteDeadlineMillis,
-              maxResponseBytes: yahooWriteResponseLimitBytes,
-            },
-          )
-          .pipe(Effect.catchTag("PublicInternetUnavailable", () => Effect.void)),
+              {
+                timeoutMs: yahooWriteDeadlineMillis,
+                maxResponseBytes: yahooWriteResponseLimitBytes,
+              },
+            )
+            .pipe(Effect.catchTag("PublicInternetUnavailable", () => Effect.void));
+          if (response === undefined) {
+            yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
+            return { status: "unknown" as const };
+          }
+          yield* Effect.annotateCurrentSpan("http.response.status_code", response.status);
+          if (response.status === 401 || response.status === 403) {
+            yield* discardBody(response);
+            yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
+            return yield* ProviderSessionRejected.make({ operation: "propose_trade" });
+          }
+          if (!response.ok) {
+            const failure = yield* writeFailureOf(response);
+            return failure.status === "accepted" ? { status: "unknown" as const } : failure;
+          }
+          const text = yield* Effect.tryPromise({
+            try: () => response.text(),
+            catch: () => ProviderResponseInvalid.make({ operation: "propose_trade" }),
+          });
+          const transactionKey = pendingTradeKeyOf(text);
+          if (transactionKey === undefined) {
+            yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
+            return { status: "unknown" as const };
+          }
+          yield* Effect.annotateCurrentSpan("provider.outcome", "accepted");
+          return { status: "accepted" as const, transactionKey };
+        }),
       );
-      if (response === undefined) {
-        yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
-        return { status: "unknown" as const };
-      }
-      yield* Effect.annotateCurrentSpan("http.response.status_code", response.status);
-      if (response.status === 401 || response.status === 403) {
-        yield* discardBody(response);
-        yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
-        return yield* ProviderSessionRejected.make({ operation: "propose_trade" });
-      }
-      if (!response.ok) {
-        const failure = yield* writeFailureOf(response);
-        return failure.status === "accepted" ? { status: "unknown" as const } : failure;
-      }
-      const text = yield* Effect.tryPromise({
-        try: () => response.text(),
-        catch: () => ProviderResponseInvalid.make({ operation: "propose_trade" }),
-      });
-      const transactionKey = pendingTradeKeyOf(text);
-      if (transactionKey === undefined) {
-        yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
-        return { status: "unknown" as const };
-      }
-      yield* Effect.annotateCurrentSpan("provider.outcome", "accepted");
-      return { status: "accepted" as const, transactionKey };
     },
   );
 
@@ -600,41 +602,43 @@ export const yahooProvider = Effect.gen(function* () {
           : { status: "not_sent" as const, reason: "request_failed" as const };
       }
       const url = yahooWriteUrl(path, Redacted.value(crumb.success.crumb));
-      const response = yield* Effect.scoped(
-        internet
-          .request(
-            new Request(url, {
-              method,
-              headers: {
-                accept: "application/json",
-                ...(body === undefined ? {} : { "content-type": "application/xml" }),
-                cookie,
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const response = yield* internet
+            .request(
+              new Request(url, {
+                method,
+                headers: {
+                  accept: "application/json",
+                  ...(body === undefined ? {} : { "content-type": "application/xml" }),
+                  cookie,
+                },
+                ...(body === undefined ? {} : { body }),
+              }),
+              {
+                timeoutMs: yahooWriteDeadlineMillis,
+                maxResponseBytes: yahooWriteResponseLimitBytes,
               },
-              ...(body === undefined ? {} : { body }),
-            }),
-            {
-              timeoutMs: yahooWriteDeadlineMillis,
-              maxResponseBytes: yahooWriteResponseLimitBytes,
-            },
-          )
-          .pipe(Effect.catchTag("PublicInternetUnavailable", () => Effect.void)),
+            )
+            .pipe(Effect.catchTag("PublicInternetUnavailable", () => Effect.void));
+          if (response === undefined) {
+            yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
+            return { status: "unknown" as const };
+          }
+          yield* Effect.annotateCurrentSpan("http.response.status_code", response.status);
+          if (response.status === 401 || response.status === 403) {
+            yield* discardBody(response);
+            yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
+            return yield* ProviderSessionRejected.make({ operation });
+          }
+          if (response.ok) {
+            yield* discardBody(response);
+            yield* Effect.annotateCurrentSpan("provider.outcome", "accepted");
+            return { status: "accepted" as const };
+          }
+          return yield* writeFailureOf(response);
+        }),
       );
-      if (response === undefined) {
-        yield* Effect.annotateCurrentSpan("provider.outcome", "unknown");
-        return { status: "unknown" as const };
-      }
-      yield* Effect.annotateCurrentSpan("http.response.status_code", response.status);
-      if (response.status === 401 || response.status === 403) {
-        yield* discardBody(response);
-        yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
-        return yield* ProviderSessionRejected.make({ operation });
-      }
-      if (response.ok) {
-        yield* discardBody(response);
-        yield* Effect.annotateCurrentSpan("provider.outcome", "accepted");
-        return { status: "accepted" as const };
-      }
-      return yield* writeFailureOf(response);
     });
 
   const writeFailureOf = (
@@ -1569,6 +1573,11 @@ function providerErrorDetail(
 }
 
 function providerDescription(text: string): string | undefined {
+  const readable = withoutProviderSecrets(text);
+  return providerStatement(readable) ?? providerRawText(readable);
+}
+
+function providerStatement(text: string): string | undefined {
   const xml =
     /<(?:description|message)>([\s\S]*?)<\/(?:description|message)>/iu.exec(text)?.[1] ??
     /<error>([\s\S]*?)<\/error>/iu.exec(text)?.[1];
@@ -1602,16 +1611,11 @@ function providerDescription(text: string): string | undefined {
       return undefined;
     }
   })();
-  const trimmed = text.trim();
-  const plain =
-    trimmed.startsWith("<") || trimmed.startsWith("{") || trimmed.startsWith("[")
-      ? undefined
-      : trimmed;
-  const raw = xml ?? json ?? plain;
-  if (raw === undefined) {
+  const statement = xml ?? json;
+  if (statement === undefined) {
     return undefined;
   }
-  const cleaned = raw
+  const cleaned = statement
     .replace(/<[^>]*>/gu, " ")
     .replace(/&amp;/gu, "&")
     .replace(/&lt;/gu, "<")
@@ -1621,6 +1625,17 @@ function providerDescription(text: string): string | undefined {
     .replace(/\s+/gu, " ")
     .trim();
   return cleaned.length === 0 ? undefined : cleaned.slice(0, 300);
+}
+
+function providerRawText(text: string): string | undefined {
+  const readable = text.replace(/\s+/gu, " ").trim();
+  return readable.length === 0 ? undefined : readable.slice(0, 300);
+}
+
+function withoutProviderSecrets(text: string): string {
+  return text
+    .replace(/\bcrumb=[^&"'\s<]*/giu, "crumb=<redacted>")
+    .replace(/("crumb"\s*:\s*")[^"]*(")/giu, "$1<redacted>$2");
 }
 
 function nativeStartActiveBody(target: ProviderNativeTarget): string {

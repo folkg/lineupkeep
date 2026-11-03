@@ -102,7 +102,7 @@ it("starts an illegal move excluded and names the player, slot, and choice", asy
 
 it("shows the provider's exact refusal wording on a failed move", async () => {
   const providerRefusal =
-    "Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR.  Please edit your lineup to activate this player from your IR and then attempt your transaction again.";
+    "The provider rejected the transaction with HTTP 400. It said: Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.";
   using _app = setupReviewPage({
     ...reviewFixture(),
     teams: [
@@ -129,7 +129,7 @@ it("shows the provider's exact refusal wording on a failed move", async () => {
     ],
   });
 
-  await expect.element(page.getByText(/is no longer on the real-life IR/u).first()).toBeVisible();
+  await expect.element(page.getByText(providerRefusal).first()).toBeVisible();
 });
 
 it("updates the tally when a person leaves out a current move", async () => {
@@ -563,6 +563,24 @@ it("tells the person what to check when the provider gives no rejection reason",
   await expect
     .element(page.getByText(/Read the roster and the league's transaction rules/u))
     .toBeVisible();
+});
+
+it("keeps the status and the provider's raw words when the refusal is unreadable", async () => {
+  const review = resultFixture();
+  const alpha = review.teams[0];
+  if (alpha === undefined) {
+    throw new Error("the result fixture has an alpha team");
+  }
+  const detail =
+    'The provider rejected the transaction with HTTP 400. It said: {"unexpected":{"state":"refused"}}';
+  const item: TransactionReviewItemView = {
+    ...failedAddItem(),
+    execution: { outcome: "failed", detail, decidedAt: now, steps: [] },
+  };
+  using _app = setupReviewPage({ ...review, teams: [{ ...alpha, items: [item] }] });
+
+  await expect.element(page.getByText(detail)).toBeVisible();
+  expect(page.getByText(/The provider did not give a reason/u).elements()).toHaveLength(0);
 });
 
 it("does not send a submission when every move is left out", async () => {

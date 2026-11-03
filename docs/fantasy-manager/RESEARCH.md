@@ -2163,3 +2163,67 @@ lacks is the counterparty half — a proposal another manager actually received 
 screen may propose and withdraw, and must hand the rest to the provider. The requirement is to tell
 the owner, before they send, that this puts a real offer in front of another person, and that only
 their counterparty can accept or reject it.
+
+## Live add/drop refusal (2026-11-03)
+
+The owner authorised one controlled submission against the hockey team **Meier? I barely know her!**
+in the league **Irish Lacrosse** (`477.l.5744`, team `477.l.5744.t.6`): add Sean Walker
+(`477.p.7751`) and drop Kris Letang (`477.p.4064`). Two real submissions in the app had failed with
+HTTP 400 while the person was shown no wording from the provider. The probe used the stored,
+encrypted provider session the way the trade probe did, and its only non-`GET` request was this one
+`POST`. **One submission reached the provider and nothing was retried.** The script stopped twice
+before sending: once because the crumb response was an HTML page and once because the crumb payload
+shape was wrong. Neither attempt reached the provider; the third run sent the one submission below.
+
+### The exact request
+
+```http
+POST https://pub-api-rw.fantasysports.yahoo.com/fantasy/v2/league/477.l.5744/transactions?format=json_f&crumb=<redacted>
+accept: application/json
+content-type: application/xml
+cookie: <redacted>
+
+<?xml version="1.0" encoding="UTF-8"?><fantasy_content><transaction><type>add/drop</type><players><player><player_key>477.p.7751</player_key><transaction_data><type>add</type><destination_team_key>477.l.5744.t.6</destination_team_key></transaction_data></player><player><player_key>477.p.4064</player_key><transaction_data><type>drop</type><source_team_key>477.l.5744.t.6</source_team_key></transaction_data></player></players></transaction></fantasy_content>
+```
+
+The captured response is checked in at
+[`yahoo-transaction-refusal-2026-11-03.json`](../../packages/backend/src/contexts/connections/fixtures/yahoo-transaction-refusal-2026-11-03.json).
+That file records the date, the league, the team, the exact request, and the full response body. The
+provider echoed the request URI in `yahoo:uri`; its crumb value is stored as `<redacted>`.
+
+### The refusal
+
+```text
+HTTP 400 Bad Request
+{
+    "error": {
+        "xml:lang": "en-us",
+        "yahoo:uri": "\/fantasy\/v2\/league\/477.l.5744\/transactions?format=json_f&amp;crumb=<redacted>",
+        "description": "Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR.  Please edit your lineup to activate this player from your IR and then attempt your transaction again.",
+        "detail": null
+    }
+}
+```
+
+The move did not happen: HTTP 400 is the provider refusing the whole transaction, so the roster was
+unchanged and nothing needed undoing. The refusal does not name Sean Walker or Kris Letang. It names
+a third player, Travis Konecny, who was sitting in an IR slot while no longer being on the real-life
+IR. The provider refuses every transaction for a team that carries such a player, even a request
+that does not mention him. That is why this move failed.
+
+### What the product now does with it
+
+- A write response is now read inside the request's own scope. Before this, the abort signal behind a
+  write response was released as soon as the request call returned, so the body could not be read at
+  all. A refusal that arrived with a reason looked exactly like a refusal that arrived with nothing.
+  That is the production symptom: the provider did say why, and the app could not hear it.
+- The adapter reads the provider's own sentence from `error.description`, and from an XML
+  `description`, `message`, or `error` element when the provider answers in XML.
+- When no named reason can be read, the adapter keeps the response body's own text, with crumb
+  values replaced by `<redacted>`, instead of discarding it.
+- A refused transaction, withdrawal, reserve move, or trade offer carries one sentence on the review
+  page and in the MCP result: `The provider rejected the transaction with HTTP 400. It said: ...`
+  followed by the provider's words. When the provider sent no words at all, the sentence says so.
+
+This probe did not read the roster back, because the refusal itself establishes that nothing was
+applied. It made no second submission, and no other league or team was touched.

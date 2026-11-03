@@ -108,6 +108,7 @@ type FakeProviderState = {
   readonly explicitCalls: number;
   readonly transactionAction: FakeWriteAction;
   readonly transactionDetail: string | undefined;
+  readonly transactionStatus: number | undefined;
   readonly teamTransactionActions: Readonly<Record<string, FakeWriteAction>>;
   readonly transactionRequests: ReadonlyArray<FakeTransactionRequest>;
   readonly tradeProposalAction: FakeWriteAction;
@@ -178,7 +179,11 @@ export type FakeProviderWorldShape = {
   readonly setExplicitAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly explicitRequests: Effect.Effect<ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>>;
   readonly explicitCallCount: Effect.Effect<number>;
-  readonly setTransactionAction: (action: FakeWriteAction, detail?: string) => Effect.Effect<void>;
+  readonly setTransactionAction: (
+    action: FakeWriteAction,
+    detail?: string,
+    httpStatus?: number,
+  ) => Effect.Effect<void>;
   readonly setTeamTransactionAction: (
     teamKey: string,
     action: FakeWriteAction,
@@ -253,6 +258,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         explicitCalls: 0,
         transactionAction: "accept",
         transactionDetail: undefined,
+        transactionStatus: undefined,
         teamTransactionActions: {},
         transactionRequests: [],
         tradeProposalAction: "accept",
@@ -346,8 +352,13 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setExplicitAfter: (explicitAfter) => modify((current) => ({ ...current, explicitAfter })),
         explicitRequests: Effect.map(Ref.get(state), (current) => current.explicitRequests),
         explicitCallCount: Effect.map(Ref.get(state), (current) => current.explicitCalls),
-        setTransactionAction: (transactionAction, transactionDetail) =>
-          modify((current) => ({ ...current, transactionAction, transactionDetail })),
+        setTransactionAction: (transactionAction, transactionDetail, transactionStatus) =>
+          modify((current) => ({
+            ...current,
+            transactionAction,
+            transactionDetail,
+            transactionStatus,
+          })),
         setTeamTransactionAction: (teamKey, action) =>
           modify((current) => ({
             ...current,
@@ -645,7 +656,7 @@ const providerFake = Effect.gen(function* () {
       if (action === "invalid") {
         return yield* ProviderResponseInvalid.make({ operation: "apply_transaction" });
       }
-      return writeResult(action, current.transactionDetail);
+      return writeResult(action, current.transactionDetail, current.transactionStatus);
     }),
     proposeTrade: Effect.fn("FakeProvider.proposeTrade")(function* (input) {
       const current = yield* prepare(input, "propose_trade").pipe(
@@ -1216,7 +1227,11 @@ function tradeWriteResult(action: Exclude<FakeWriteAction, "accept">): ProviderT
   }
 }
 
-function writeResult(action: FakeWriteAction, detail?: string): ProviderWriteResult {
+function writeResult(
+  action: FakeWriteAction,
+  detail?: string,
+  httpStatus?: number,
+): ProviderWriteResult {
   switch (action) {
     case "accept":
       return { status: "accepted" };
@@ -1233,6 +1248,7 @@ function writeResult(action: FakeWriteAction, detail?: string): ProviderWriteRes
         status: "rejected",
         reason: "invalid_request",
         ...(detail === undefined ? {} : { detail }),
+        ...(httpStatus === undefined ? {} : { httpStatus }),
       };
     case "invalid":
       return {

@@ -809,7 +809,7 @@ it("proposes a transaction set under the review scope and returns the review lin
     reviewPath: "/transactions/018f79ea-7d86-7c18-9b4a-8b4d0c9164d0",
   };
   const providerRefusal =
-    "Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR.  Please edit your lineup to activate this player from your IR and then attempt your transaction again.";
+    "The provider rejected the transaction with HTTP 400. It said: Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.";
   const illegalDetail =
     "Travis Konecny is in the IR slot, but it does not accept his positions (LW, RW). No open slot accepts him, and choosing which player to drop is yours. Drop a player to make room, then propose this transaction again.";
   const failedItem = Schema.decodeSync(ProposalItem)({

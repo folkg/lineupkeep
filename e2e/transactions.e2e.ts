@@ -113,3 +113,100 @@ test("reviews and submits a proposed transaction set across the owner's teams", 
     path: ".artifacts/transactions-review/e2e-result-390-dark.png",
   });
 });
+
+test("shows one provider refusal in the review page and in the MCP result", async ({
+  page,
+  services,
+  mcp,
+}) => {
+  await signUp(page);
+  const discovered = Schema.decodeUnknownSync(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        name: Schema.String,
+      }),
+    ),
+  )(
+    await services.exercise(
+      page,
+      "link the provider fake and discover teams",
+      "connectYahooAndDiscoverTeams",
+      {},
+    ),
+  );
+  const hockey = discovered.find((team) => team.name === "Hosted Hockey Team");
+  expect(hockey, "a hockey team").toBeDefined();
+  if (hockey === undefined) {
+    return;
+  }
+
+  const client = await mcp(["fantasy:read", "transactions:review"], page);
+  const roster = await client.callTool("get_rosters", { team: hockey.id });
+  expect(roster.isError).toBe(false);
+  const players = Schema.decodeUnknownSync(
+    Schema.Struct({ players: Schema.Array(Schema.Struct({ player: Schema.String })) }),
+  )(roster.structuredContent).players;
+  const drop = players[0]?.player;
+  expect(drop, "a rostered player reference").toBeDefined();
+  if (drop === undefined) {
+    return;
+  }
+
+  const proposed = await client.callTool("propose_transactions", {
+    items: [
+      {
+        team: hockey.id,
+        kind: "drop",
+        adds: [],
+        drops: [drop],
+        reason: "Make room for the call-up.",
+      },
+    ],
+  });
+  expect(proposed.isError).toBe(false);
+  const created = Schema.decodeUnknownSync(
+    Schema.Struct({
+      reviewUrl: Schema.String,
+      set: Schema.Struct({ id: Schema.String }),
+    }),
+  )(proposed.structuredContent);
+
+  await page.goto(created.reviewUrl);
+  await expect(page.getByRole("button", { name: "Submit 1 move" })).toBeVisible();
+  await page.getByRole("button", { name: "Submit 1 move" }).click();
+  await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
+
+  const read = await client.callTool("get_transaction_proposal_set", { set: created.set.id });
+  expect(read.isError).toBe(false);
+  const review = Schema.decodeUnknownSync(
+    Schema.Struct({
+      teams: Schema.Array(
+        Schema.Struct({
+          items: Schema.Array(
+            Schema.Struct({
+              execution: Schema.optional(
+                Schema.Struct({
+                  outcome: Schema.String,
+                  detail: Schema.optional(Schema.String),
+                }),
+              ),
+            }),
+          ),
+        }),
+      ),
+    }),
+  )(read.structuredContent);
+  const detail = review.teams
+    .flatMap((team) => team.items)
+    .find((item) => item.execution?.outcome === "failed")?.execution?.detail;
+
+  if (detail === undefined) {
+    throw new Error("the MCP result carries no provider refusal");
+  }
+  expect(detail).toBe(
+    "The provider rejected the transaction with HTTP 400. It said: Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.",
+  );
+  await expect(page.getByText(detail, { exact: true }).first()).toBeVisible();
+  expect(await page.content()).not.toContain("without giving a reason");
+});
