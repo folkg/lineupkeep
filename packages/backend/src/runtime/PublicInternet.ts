@@ -43,6 +43,19 @@ export class PublicInternetUnavailable extends Schema.TaggedError<
   reason: Schema.optional(Schema.Literal("blocked_redirect")),
 }) {}
 
+class PublicInternetBodyUnavailable extends Schema.TaggedError<
+  PublicInternetBodyUnavailable,
+  { readonly brand: unique symbol }
+>()("PublicInternetBodyUnavailable", {
+  reason: Schema.Literals(["scope_closed", "already_read"]),
+}) {
+  override get message(): string {
+    return this.reason === "scope_closed"
+      ? "the response body was read after its request scope closed"
+      : "the response body was already read";
+  }
+}
+
 function decodeLimits(options: PublicInternetOptions): Effect.Effect<
   {
     timeout: number;
@@ -62,7 +75,7 @@ function scopedAbort(timeout: number): Effect.Effect<AbortController, never, Sco
   return Effect.gen(function* () {
     const abort = yield* Effect.acquireRelease(
       Effect.sync(() => new AbortController()),
-      (controller) => Effect.sync(() => controller.abort(PublicInternetUnavailable.make())),
+      (controller) => Effect.sync(() => controller.abort(scopeClosed)),
     );
     yield* Effect.sleep(timeout).pipe(
       Effect.andThen(Effect.sync(() => abort.abort(PublicInternetUnavailable.make()))),
@@ -159,11 +172,61 @@ function limitedResponse(response: Response, maximum: number, signal: AbortSigna
     }),
     { signal },
   );
-  return new Response(publicBody(body, signal), {
-    headers: response.headers,
-    status: response.status,
-    statusText: response.statusText,
+  return readableResponse(
+    new Response(publicBody(body, signal), {
+      headers: response.headers,
+      status: response.status,
+      statusText: response.statusText,
+    }),
+    signal,
+  );
+}
+
+function readableResponse(response: Response, signal: AbortSignal): Response {
+  const read = {
+    arrayBuffer: response.arrayBuffer.bind(response),
+    blob: response.blob.bind(response),
+    bytes: response.bytes.bind(response),
+    formData: response.formData.bind(response),
+    json: response.json.bind(response),
+    text: response.text.bind(response),
+  };
+  const guard =
+    <A>(consume: () => Promise<A>): (() => Promise<A>) =>
+    () => {
+      const failure = unreadableBody(response, signal);
+      return failure === undefined ? consume() : Promise.reject(failure);
+    };
+  return Object.assign(response, {
+    arrayBuffer: guard(read.arrayBuffer),
+    blob: guard(read.blob),
+    bytes: guard(read.bytes),
+    formData: guard(read.formData),
+    json: guard(read.json),
+    text: guard(read.text),
   });
+}
+
+function unreadableBody(
+  response: Response,
+  signal: AbortSignal,
+): PublicInternetBodyUnavailable | undefined {
+  return (
+    scopeClosedFailure(signal) ??
+    (response.bodyUsed ? PublicInternetBodyUnavailable.make({ reason: "already_read" }) : undefined)
+  );
+}
+
+function bodyFailure(
+  signal: AbortSignal,
+): PublicInternetUnavailable | PublicInternetBodyUnavailable {
+  return scopeClosedFailure(signal) ?? PublicInternetUnavailable.make();
+}
+
+function scopeClosedFailure(signal: AbortSignal): PublicInternetBodyUnavailable | undefined {
+  if (signal.reason === scopeClosed) {
+    return PublicInternetBodyUnavailable.make({ reason: "scope_closed" });
+  }
 }
 
 function publicBody(
@@ -173,7 +236,7 @@ function publicBody(
   const reader = body.getReader();
   return new ReadableStream({
     start(controller) {
-      const onAbort = (): void => controller.error(PublicInternetUnavailable.make());
+      const onAbort = (): void => controller.error(bodyFailure(signal));
       const cleanup = (): void => signal.removeEventListener("abort", onAbort);
       signal.addEventListener("abort", onAbort, { once: true });
       if (signal.aborted) {
@@ -181,7 +244,7 @@ function publicBody(
       }
       void reader.closed.then(cleanup, () => {
         cleanup();
-        controller.error(PublicInternetUnavailable.make());
+        controller.error(bodyFailure(signal));
       });
     },
     pull(controller) {
@@ -193,7 +256,7 @@ function publicBody(
             controller.enqueue(value);
           }
         },
-        () => controller.error(PublicInternetUnavailable.make()),
+        () => controller.error(bodyFailure(signal)),
       );
     },
     cancel() {
@@ -217,6 +280,7 @@ function abortable(pending: Promise<Response>, signal: AbortSignal): Promise<Res
 
 const Timeout = Schema.Finite.check(Schema.isGreaterThan(0));
 const ResponseSize = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const scopeClosed = Symbol("PublicInternet.scopeClosed");
 
 export type PublicInternetOptions = {
   readonly timeoutMs?: number;

@@ -163,6 +163,76 @@ it.effect("scrubs streamed failures before callers can export their causes", () 
   ),
 );
 
+it.effect("reads a response body inside its request scope", () =>
+  Effect.gen(function* () {
+    const internet = yield* PublicInternet;
+
+    const response = yield* internet.request(new Request("https://client.test/body"));
+    const text = yield* Effect.promise(() => response.text());
+
+    assert.strictEqual(text, "inside");
+  }).pipe(
+    Effect.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("inside")))),
+  ),
+);
+
+it.effect("names a body read after its request scope closed", () =>
+  Effect.gen(function* () {
+    const internet = yield* PublicInternet;
+    const response = yield* Effect.scoped(
+      internet.request(new Request("https://client.test/outlived")),
+    );
+
+    const error = yield* readFailure(() => response.text());
+
+    assert.include(error.message, "request scope closed");
+    assert.notInclude(error.message, "abort");
+    assert.strictEqual(tagOf(error), "PublicInternetBodyUnavailable");
+  }).pipe(
+    Effect.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("late")))),
+  ),
+);
+
+it.effect("cancels a response body inside its request scope without failing", () =>
+  Effect.gen(function* () {
+    const internet = yield* PublicInternet;
+
+    const result = yield* Effect.exit(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const response = yield* internet.request(new Request("https://client.test/cancel"));
+          yield* Effect.promise(() => response.body?.cancel() ?? Promise.resolve());
+        }),
+      ),
+    );
+
+    assert.isTrue(Exit.isSuccess(result));
+  }).pipe(
+    Effect.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("cancelled")))),
+  ),
+);
+
+it.effect("names a second read of a consumed body as already read", () =>
+  Effect.gen(function* () {
+    const internet = yield* PublicInternet;
+
+    const [first, second] = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const response = yield* internet.request(new Request("https://client.test/twice"));
+        const first = yield* Effect.promise(() => response.text());
+        const second = yield* readFailure(() => response.text());
+        return [first, second] as const;
+      }),
+    );
+
+    assert.strictEqual(first, "twice");
+    assert.include(second.message, "already read");
+    assert.strictEqual(tagOf(second), "PublicInternetBodyUnavailable");
+  }).pipe(
+    Effect.provide(PublicInternet.fromTransport(() => Promise.resolve(new Response("twice")))),
+  ),
+);
+
 it.effect("uses a 15-second deadline when the caller omits one", () => {
   const started = Promise.withResolvers<void>();
   const layer = PublicInternet.fromTransport(() => {
@@ -194,10 +264,10 @@ it.effect("allows only empty responses with a zero-byte cap", () =>
     const nonempty = yield* internet.request(new Request("https://client.test/bytes"), {
       maxResponseBytes: 0,
     });
-    const result = yield* Effect.exit(Effect.tryPromise(() => nonempty.text()));
+    const error = yield* readFailure(() => nonempty.text());
 
     assert.strictEqual(text, "");
-    assert.isTrue(Exit.isFailure(result));
+    assert.strictEqual(tagOf(error), "PublicInternetUnavailable");
   }).pipe(
     Effect.provide(
       PublicInternet.fromTransport((request) =>
@@ -232,3 +302,18 @@ it.effect("rejects invalid limits before invoking a transport", () => {
     }
   }).pipe(Effect.provide(layer));
 });
+
+function readFailure(read: () => Promise<unknown>): Effect.Effect<Error> {
+  return Effect.gen(function* () {
+    const result = yield* Effect.exit(Effect.promise(read));
+    if (Exit.isSuccess(result)) {
+      throw new Error("the response body read was expected to fail");
+    }
+    const cause = Cause.squash(result.cause);
+    return cause instanceof Error ? cause : new Error(String(cause));
+  });
+}
+
+function tagOf(error: Error): string {
+  return "_tag" in error ? String(error._tag) : "";
+}
