@@ -665,8 +665,8 @@ A coverage entry has one of three states. `available` means the resource was rea
 
 `propose_transactions` stores what an agent proposes; it writes nothing to the provider. Before it
 returns, it reads current state once per team, the same check `revalidate_transaction_proposal_set`
-performs, so each accepted item comes back `current` or `stale` with the reasons instead of an
-unchecked promise. One call covers every team the account has, and the set it creates is grouped by
+performs, so each accepted item comes back `current`, `stale`, or `illegal` with the reasons instead
+of an unchecked promise. One call covers every team the account has, and the set it creates is grouped by
 team, so teams with nothing proposed still appear as an empty section on the review. Each item names
 one team, a kind (`free_agent_add`, `waiver_claim`, `drop`, or `trade`), the players to add and drop,
 an optional FAAB bid, and a required reason. A trade names `counterparty` from the league's teams read, the players
@@ -684,21 +684,28 @@ rather than stacking a duplicate.
 
 A set expires 24 hours after creation. `revalidate_transaction_proposal_set` re-reads current state
 once per team (its roster, its league rules, the pool state of the players it adds, and its FAAB
-balance when a bid is present) and marks each open item `current` or `stale` with reasons: the added
-player is no longer in the pool, a dropped player is no longer on the roster, the roster would
-exceed the league's declared capacity, a player is in a reserve slot the provider treats as
-injured-only while the provider reports no injury, the league's period has closed, the bid exceeds
-the team's remaining budget, the league has no FAAB budget, or the team's state could not be read.
-An item that drops the healthy reserve player is allowed, because that drop resolves the slot. A
-trade is re-checked against both rosters, the counterparty's continuing place in the league, and the
-trade window, and carries its current state back to the review. Staleness is
-recorded beside the item's state and is never a failure; an item stays `proposed`. A team whose
-state cannot be read marks only its own items, and the review reports the failure beside that team.
-An expired set refuses re-validation instead of re-checking or executing, so a set that sat overnight
-cannot be executed from facts nobody re-checked. `get_transaction_proposal_set` reads the set back
-with every team, including the teams that had nothing proposed, each item's state, last staleness
-check, and any recorded submission and step outcomes, and the same review link. Another account's set
-is reported as not found.
+balance when a bid is present) and marks each open item `current`, `stale`, or `illegal` with
+reasons: the added player is no longer in the pool, a dropped player is no longer on the roster, the
+roster would exceed the league's declared capacity, a rostered player sits in a slot that does not
+accept him, the league's period has closed, the bid exceeds the team's remaining budget, the league
+has no FAAB budget, or the team's state could not be read. Stale and illegal are different states:
+stale means the facts behind the item changed, while illegal means the roster cannot be submitted as
+it stands. An illegal item names every offending player, his slot, and what resolves it, and the
+check covers every rostered player because one illegal player blocks any transaction for that team.
+When a legal slot has room for an offending player, the item carries a roster move before the
+transaction, and the review reports that move as its own step. When no legal slot is open, the item
+refuses and names the choice only the person can make, which is who to drop. An item that drops the
+offending player is allowed, because that drop resolves the slot. A trade is re-checked against both
+rosters, the counterparty's continuing place in the league, and the trade window, and carries its
+current state back to the review. Staleness and illegality are recorded beside the item's state and
+are never failures; an item stays `proposed`. A team whose state cannot be read marks only its own
+items, and the review reports the failure beside that team. An expired set refuses re-validation
+instead of re-checking or executing, so a set that sat overnight cannot be executed from facts nobody
+re-checked. `get_transaction_proposal_set` reads the set back with every team, including the teams
+that had nothing proposed, each item's state, last check, and any recorded submission and step
+outcomes, and the same review link. A rejected write carries the provider's exact wording, and that
+wording reaches both the review page and this tool result. Another account's set is reported as not
+found.
 
 The item state vocabulary is `proposed`, `executed`, `pending`, `failed`, `skipped`, and `unknown`.
 No MCP tool submits, accepts, or spends anything. Execution happens only when a signed-in owner

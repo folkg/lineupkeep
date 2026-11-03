@@ -2250,6 +2250,7 @@ function scheduleDates(period: {
 }
 
 function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRosterPlayer {
+  const eligiblePositions = (player.eligible_positions ?? []).map(({ position }) => position);
   return {
     providerPlayerKey: player.player_key,
     name: player.name.full,
@@ -2257,7 +2258,7 @@ function toRosterPlayer(player: typeof RosterPlayerPayload.Type): ProviderRoster
     primaryPosition: player.primary_position,
     positionType: optionalNonEmpty(player.position_type),
     proTeamAbbreviation: optionalNonEmpty(player.editorial_team_abbr ?? ""),
-    eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
+    eligiblePositions,
     slot: rosterSlotOf(player.selected_position.position),
     isEditable: player.is_editable ?? null,
     injuryCode: optionalNonEmpty(player.status),

@@ -86,6 +86,52 @@ it("starts a stale move excluded, marks its reason, and does not let it be inclu
     .toBeVisible();
 });
 
+it("starts an illegal move excluded and names the player, slot, and choice", async () => {
+  using _app = setupReviewPage({
+    ...reviewFixture(),
+    teams: [teamFixture(alphaId, "Alpha", "nfl", "football", [waiverItem(), illegalItem()])],
+  });
+
+  const illegal = page.getByRole("checkbox", { name: /Drop Riley Chen/u });
+  await expect.element(illegal).not.toBeChecked();
+  await expect.element(illegal).toBeDisabled();
+  await expect.element(page.getByText("Illegal roster position")).toBeVisible();
+  await expect.element(page.getByText(/Travis Konecny is in the IR slot/u)).toBeVisible();
+  await expect.element(page.getByText(/choosing which player to drop is yours/u)).toBeVisible();
+});
+
+it("shows the provider's exact refusal wording on a failed move", async () => {
+  const providerRefusal =
+    "Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR.  Please edit your lineup to activate this player from your IR and then attempt your transaction again.";
+  using _app = setupReviewPage({
+    ...reviewFixture(),
+    teams: [
+      teamFixture(alphaId, "Alpha", "nfl", "football", [
+        {
+          ...freeAgentItem(),
+          state: "failed",
+          execution: {
+            outcome: "failed",
+            detail: providerRefusal,
+            decidedAt: now,
+            steps: [
+              {
+                kind: "add",
+                playerName: "Mika Olsen",
+                outcome: "failed",
+                detail: providerRefusal,
+                decidedAt: now,
+              },
+            ],
+          },
+        },
+      ]),
+    ],
+  });
+
+  await expect.element(page.getByText(/is no longer on the real-life IR/u).first()).toBeVisible();
+});
+
 it("updates the tally when a person leaves out a current move", async () => {
   using _app = setupReviewPage(reviewFixture());
 
@@ -348,6 +394,28 @@ function staleItem(): TransactionReviewItemView {
   };
 }
 
+function illegalItem(): TransactionReviewItemView {
+  return {
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b7",
+    kind: "drop",
+    adds: [],
+    drops: [player("Riley Chen", "LW", "NYR")],
+    reason: "Open a roster spot.",
+    state: "proposed",
+    staleness: {
+      status: "illegal",
+      checkedAt: now,
+      reasons: [
+        {
+          code: "slot_illegal",
+          detail:
+            "Travis Konecny is in the IR slot, but the provider no longer accepts him there. No open slot accepts him, and choosing which player to drop is yours. Drop a player to make room, then propose this transaction again.",
+        },
+      ],
+    },
+  };
+}
+
 function freeAgentItem(): TransactionReviewItemView {
   return {
     id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b3",
@@ -386,7 +454,7 @@ function player(
   };
 }
 
-it("shows the reserve move that makes room before an add", async () => {
+it("shows a roster move before the transaction", async () => {
   const base = reviewFixture();
   const reservation: TransactionReviewItemView = {
     ...waiverItem(),
@@ -400,7 +468,7 @@ it("shows the reserve move that makes room before an add", async () => {
     ],
   });
 
-  await expect.element(page.getByText("Makes room first")).toBeVisible();
+  await expect.element(page.getByText("Roster move first")).toBeVisible();
   await expect.element(page.getByText(/Move Casey Moss from BN to IR/u)).toBeVisible();
 });
 
@@ -492,8 +560,9 @@ it("tells the person what to check when the provider gives no rejection reason",
   using _app = setupReviewPage({ ...review, teams: [{ ...alpha, items: [item] }] });
 
   await expect.element(page.getByText(/The provider did not give a reason/u)).toBeVisible();
-  await expect.element(page.getByText(/injured-reserve slot who is healthy/u)).toBeVisible();
-  await expect.element(page.getByText(/player who cannot be dropped/u)).toBeVisible();
+  await expect
+    .element(page.getByText(/Read the roster and the league's transaction rules/u))
+    .toBeVisible();
 });
 
 it("does not send a submission when every move is left out", async () => {

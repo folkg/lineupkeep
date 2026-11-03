@@ -156,6 +156,7 @@ function Review(props: ReviewProps): JSX.Element {
               checkedAt={props.model.checkedAt}
               review={props.model.review}
               staleCount={props.model.staleCount}
+              illegalCount={props.model.illegalCount}
               total={props.model.total}
               teamCount={props.model.teamsWithItems.length}
             />
@@ -218,6 +219,7 @@ function Review(props: ReviewProps): JSX.Element {
             faab={props.model.includedFaab}
             included={props.model.includedCount}
             staleCount={props.model.staleCount}
+            illegalCount={props.model.illegalCount}
             submitting={props.submitting}
             total={props.model.total}
             waivers={props.model.includedWaivers}
@@ -266,6 +268,13 @@ function ProposalSummary(props: ProposalSummaryProps): JSX.Element {
             {props.staleCount} of {props.total === 1 ? "1 move" : `${String(props.total)} moves`} no
             longer {props.staleCount === 1 ? "matches" : "match"} current state and{" "}
             {props.staleCount === 1 ? "is" : "are"} excluded.
+          </Text>
+        </Show>
+        <Show when={props.illegalCount > 0}>
+          <Text size="caption" tone="danger" weight="semibold">
+            {props.illegalCount} of {props.total === 1 ? "1 move" : `${String(props.total)} moves`}{" "}
+            {props.illegalCount === 1 ? "sits" : "sit"} on an illegal roster position and{" "}
+            {props.illegalCount === 1 ? "is" : "are"} excluded.
           </Text>
         </Show>
       </Stack>
@@ -391,24 +400,34 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
 
 function ProposalItem(props: ProposalItemProps): JSX.Element {
   const stale = (): boolean => props.item.staleness.status === "stale";
+  const illegal = (): boolean => props.item.staleness.status === "illegal";
+  const blocked = (): boolean => stale() || illegal();
   const result = (): TransactionReviewExecutionView | undefined => props.item.execution;
   const shownResult = (): TransactionReviewExecutionView | undefined => {
     const execution = result();
     return props.item.kind === "trade" && execution?.outcome === "pending" ? undefined : execution;
   };
   const trade = (): TransactionReviewTradeView | undefined => props.item.trade;
-  const staleId = (): string => `stale-${props.item.id}`;
+  const slotIssues = (): ReadonlyArray<string> =>
+    props.item.staleness.reasons
+      .filter((reason) => reason.code === "slot_illegal")
+      .map((reason) => reason.detail);
+  const factIssues = (): ReadonlyArray<string> =>
+    props.item.staleness.reasons
+      .filter((reason) => reason.code !== "slot_illegal")
+      .map((reason) => reason.detail);
+  const checkId = (): string => (illegal() ? `illegal-${props.item.id}` : `stale-${props.item.id}`);
+  const checkLabel = (): string =>
+    illegal() ? "Illegal, not included" : stale() ? "Stale, not included" : "Include";
   return (
-    <RuleListItem
-      layout={props.submitted || props.item.staleness.status === "stale" ? "stack" : "leading"}
-    >
+    <RuleListItem layout={props.submitted || blocked() ? "stack" : "leading"}>
       <Show when={!props.submitted && !props.expired}>
         <CheckboxField
           checked={props.included}
-          disabled={stale() || props.submitting}
-          label={stale() ? "Stale, not included" : "Include"}
-          ariaLabel={`${stale() ? "Stale, not included" : "Include"}: ${moveSummary(props.item)}`}
-          describedBy={stale() ? staleId() : undefined}
+          disabled={blocked() || props.submitting}
+          label={checkLabel()}
+          ariaLabel={`${checkLabel()}: ${moveSummary(props.item)}`}
+          describedBy={blocked() ? checkId() : undefined}
           onChange={props.onToggle}
         />
       </Show>
@@ -480,12 +499,12 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           </Show>
         </Split>
 
-        <Show when={!stale() && result() === undefined && props.item.reserveMove}>
+        <Show when={!blocked() && result() === undefined && props.item.reserveMove}>
           {(move) => (
-            <Notice tone="neutral" title="Makes room first">
+            <Notice tone="neutral" title="Roster move first">
               <Text size="caption" tone="muted">
                 Move {move().playerName ?? "this player"} from {move().fromSlot} to {move().toSlot}{" "}
-                before the add. That reserve move is reported as its own step.
+                before the transaction. That move is reported as its own step.
               </Text>
             </Notice>
           )}
@@ -557,12 +576,21 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           <Text size="body">{props.item.reason}</Text>
         </Quote>
 
-        <Show when={stale()}>
+        <Show when={stale() || factIssues().length > 0}>
           <Notice
-            id={staleId()}
+            id={`stale-${props.item.id}`}
             tone="danger"
             title="No longer current"
-            items={props.item.staleness.reasons.map((reason) => reason.detail)}
+            items={factIssues()}
+          />
+        </Show>
+
+        <Show when={illegal()}>
+          <Notice
+            id={`illegal-${props.item.id}`}
+            tone="danger"
+            title="Illegal roster position"
+            items={slotIssues()}
           />
         </Show>
 
@@ -638,9 +666,8 @@ function ExecutionResult(props: {
           </Text>
           <Show when={props.execution.detail?.toLowerCase().includes("without giving a reason")}>
             <Text size="caption" tone="danger">
-              The provider did not give a reason. Check the team's roster for a player in an
-              injured-reserve slot who is healthy, a player who cannot be dropped, or a league
-              transaction rule before proposing it again.
+              The provider did not give a reason. Read the roster and the league's transaction rules
+              at the provider before proposing it again.
             </Text>
           </Show>
         </Notice>
@@ -876,6 +903,12 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
                   <Text size="caption" tone="muted">
                     {props.staleCount} stale {props.staleCount === 1 ? "move is" : "moves are"}{" "}
                     excluded.
+                  </Text>
+                </Show>
+                <Show when={props.illegalCount > 0}>
+                  <Text size="caption" tone="muted">
+                    {props.illegalCount} illegal{" "}
+                    {props.illegalCount === 1 ? "move is" : "moves are"} excluded.
                   </Text>
                 </Show>
               </Stack>
@@ -1133,6 +1166,7 @@ type ProposalSummaryProps = {
   readonly review: TransactionReviewView;
   readonly checkedAt: string | undefined;
   readonly staleCount: number;
+  readonly illegalCount: number;
   readonly total: number;
   readonly teamCount: number;
 };
@@ -1195,6 +1229,7 @@ type SubmissionPanelProps = {
   readonly waivers: number;
   readonly faab: number;
   readonly staleCount: number;
+  readonly illegalCount: number;
   readonly submitting: boolean;
   readonly onSubmit: () => void;
 };

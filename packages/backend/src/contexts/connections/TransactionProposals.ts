@@ -59,14 +59,19 @@ export const ProposalOutcome = Schema.Literals([
 ]);
 export type ProposalOutcome = typeof ProposalOutcome.Type;
 
-export const ProposalStalenessStatus = Schema.Literals(["unchecked", "current", "stale"]);
+export const ProposalStalenessStatus = Schema.Literals([
+  "unchecked",
+  "current",
+  "stale",
+  "illegal",
+]);
 export type ProposalStalenessStatus = typeof ProposalStalenessStatus.Type;
 
 export const ProposalStaleCode = Schema.Literals([
   "player_unavailable",
   "drop_not_rostered",
   "roster_full",
-  "reserve_slot_illegal",
+  "slot_illegal",
   "period_closed",
   "bid_exceeds_budget",
   "bid_not_available",

@@ -130,6 +130,7 @@ export function useTransactionReviewPage(
     !isSubmitted() &&
     item.state === "proposed" &&
     item.staleness.status !== "stale" &&
+    item.staleness.status !== "illegal" &&
     !excluded().has(item.id);
 
   const toggleItem = (item: string, included: boolean): void => {
@@ -164,6 +165,7 @@ export function useTransactionReviewPage(
       quietTeams: data.teams.filter((team) => team.items.length === 0),
       total: items.length,
       staleCount: items.filter((item) => item.staleness.status === "stale").length,
+      illegalCount: items.filter((item) => item.staleness.status === "illegal").length,
       checkedAt: checkedTimes.sort((left, right) => right.localeCompare(left))[0],
       includedItems: included,
       includedIds: included.map((item) => item.id),
@@ -260,6 +262,7 @@ export type TransactionReviewModel = {
   readonly quietTeams: ReadonlyArray<TransactionReviewTeamView>;
   readonly total: number;
   readonly staleCount: number;
+  readonly illegalCount: number;
   readonly checkedAt: string | undefined;
   readonly includedItems: ReadonlyArray<TransactionReviewItemView>;
   readonly includedIds: ReadonlyArray<string>;

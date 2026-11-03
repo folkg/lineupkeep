@@ -90,7 +90,7 @@ export const transactionProposalItems = pgTable(
         "expired",
       ],
     }).notNull(),
-    staleness: text("staleness", { enum: ["unchecked", "current", "stale"] }).notNull(),
+    staleness: text("staleness", { enum: ["unchecked", "current", "stale", "illegal"] }).notNull(),
     staleReasons: jsonb("stale_reasons").notNull(),
     checkedAt: timestamp("checked_at", { withTimezone: true }),
     outcome: text("outcome", {
@@ -267,9 +267,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
               new Error("A checked proposal item requires the time of its check"),
             );
           }
-          if ((row.staleness === "stale") !== reasons.length > 0) {
+          if ((row.staleness === "stale" || row.staleness === "illegal") !== reasons.length > 0) {
             return yield* Effect.die(
-              new Error("Proposal item staleness must match whether it carries stale reasons"),
+              new Error("A stale or illegal proposal item must carry its reasons"),
             );
           }
           if (row.kind === "trade" && row.counterpartyTeamKey === null) {

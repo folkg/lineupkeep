@@ -38,7 +38,7 @@ type ProposalReview = typeof ProposalReview.Type;
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Propose one set of player transactions across any of this account's teams for a person to review, and return the set id and one review link. Proposing writes nothing to the provider: it stores the set and no transaction is submitted. Before returning, the tool reads current roster, league, and player state for every team, so each accepted item carries `current` or `stale` with the reasons. A stale item is not executable: it names what changed, including an added player who is no longer available, a drop no longer on the roster, a roster that would exceed its capacity, a closed period, a bid above the budget, or a player in a reserve slot the provider treats as injured-only while the provider reports no injury. Fix the reason and propose again. Each item names one team, a kind, the players to add and drop, an optional FAAB bid, and a required reason. `free_agent_add` adds players with no bid, `waiver_claim` adds players with a bid of 0 or more, and `drop` only drops; a drop item cannot add or bid, and a free-agent add cannot bid. A `trade` item names `counterparty` (a team reference from the league's teams read), the players going out in `drops`, and the players coming back in `adds`; it carries no bid and no draft picks. A trade is refused when the counterparty is not another team in the same league, a player is not on the roster they would leave, or the league's trade window has closed, and the refusal names the item. Teams with nothing proposed still appear on the review, so the set covers every team this account has. Player references must come from a read of that team's league; a reference from another account or league, a team this account does not have, a player named in both adds and drops, or the same move repeated is refused and named by its position. Repeating the identical set returns the existing set instead of creating a duplicate. A set expires 24 hours after it is created. Use `revalidate_transaction_proposal_set` to check again later, and `get_transaction_proposal_set` to read the set back. No tool submits, executes, or spends anything: only a signed-in person can submit the included moves from the review page. A submitted trade is a real offer to another manager, who alone decides whether to accept it.",
+      "Propose one set of player transactions across any of this account's teams for a person to review, and return the set id and one review link. Proposing writes nothing to the provider: it stores the set and no transaction is submitted. Before returning, the tool reads current roster, league, and player state for every team, so each accepted item carries `current`, `stale`, or `illegal` with the reasons. A stale item is not executable: it names what changed, including an added player who is no longer available, a drop no longer on the roster, a roster that would exceed its capacity, a closed period, or a bid above the budget. A roster is illegal when a rostered player sits in a slot that does not accept his positions, and that can block a transaction even when the move itself is fine. When an open legal slot accepts that player, the item carries a roster move before the transaction; otherwise it names the choice only the person can make. Fix the reason and propose again. Each item names one team, a kind, the players to add and drop, an optional FAAB bid, and a required reason. `free_agent_add` adds players with no bid, `waiver_claim` adds players with a bid of 0 or more, and `drop` only drops; a drop item cannot add or bid, and a free-agent add cannot bid. A `trade` item names `counterparty` (a team reference from the league's teams read), the players going out in `drops`, and the players coming back in `adds`; it carries no bid and no draft picks. A trade is refused when the counterparty is not another team in the same league, a player is not on the roster they would leave, or the league's trade window has closed, and the refusal names the item. Teams with nothing proposed still appear on the review, so the set covers every team this account has. Player references must come from a read of that team's league; a reference from another account or league, a team this account does not have, a player named in both adds and drops, or the same move repeated is refused and named by its position. Repeating the identical set returns the existing set instead of creating a duplicate. A set expires 24 hours after it is created. Use `revalidate_transaction_proposal_set` to check again later, and `get_transaction_proposal_set` to read the set back. No tool submits, executes, or spends anything: only a signed-in person can submit the included moves from the review page. A submitted trade is a real offer to another manager, who alone decides whether to accept it.",
     parameters: ProposeTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -51,7 +51,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_proposal_set", {
     description:
-      "Read one transaction proposal set owned by this account: the set, every item grouped by its team, teams that had nothing proposed, and each item's state (proposed, executed, pending on waivers, failed, skipped, or unknown) with its last staleness check and reasons. A submitted set also carries who submitted it, when, and the outcome of every step, and cannot be submitted again. The review link is returned beside it. This reads stored proposals only and contacts no provider; use `revalidate_transaction_proposal_set` to re-read current roster, pool, period, and budget state before anyone decides. Another account's set is reported as not found.",
+      "Read one transaction proposal set owned by this account: the set, every item grouped by its team, teams that had nothing proposed, and each item's state (proposed, executed, pending on waivers, failed, skipped, or unknown) with its last check and reasons, including an illegal roster position. A rejected write carries the provider's exact wording. A submitted set also carries who submitted it, when, and the outcome of every step, and cannot be submitted again. The review link is returned beside it. This reads stored proposals only and contacts no provider; use `revalidate_transaction_proposal_set` to re-read current roster, pool, period, and budget state before anyone decides. Another account's set is reported as not found.",
     parameters: ProposalSetInput,
     success: Schema.toCodecJson(ProposalReview),
     failure: ToolFailure,
@@ -64,7 +64,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("revalidate_transaction_proposal_set", {
     description:
-      "Re-read current provider state for one proposal set and mark each open item current or stale with its reasons. It reads each team once for its roster, league rules, and the pool state of the players it adds, so a stale item names what changed: a player is no longer available in the pool, the drop is no longer on the roster, the roster would be over its declared capacity, a player is in a reserve slot the provider treats as injured-only while the provider reports no injury, the league's period has closed, the bid exceeds the team's remaining FAAB budget, or the league does not use a FAAB budget at all. A team whose state cannot be read marks its own items stale and never hides the other teams. Staleness is not a failure: an item keeps its proposed state and carries the reason. An expired set refuses rather than re-validating, so nothing stale can be silently executed.",
+      "Re-read current provider state for one proposal set and mark each open item current, stale, or illegal with its reasons. It reads each team once for its roster, league rules, and the pool state of the players it adds, so a stale item names what changed: a player is no longer available in the pool, the drop is no longer on the roster, the roster would be over its declared capacity, the league's period has closed, the bid exceeds the team's remaining FAAB budget, or the league does not use a FAAB budget at all. An illegal item names a rostered player in a slot that does not accept him; when an open legal slot accepts him the item carries a roster move before the transaction, and when no slot is open it names the choice only the person can make. A team whose state cannot be read marks its own items stale and never hides the other teams. Staleness and illegality are not failures: an item keeps its proposed state and carries the reason. An expired set refuses rather than re-validating, so nothing stale or illegal can be silently executed.",
     parameters: ProposalSetInput,
     success: Schema.toCodecJson(ProposalReview),
     failure: ToolFailure,
@@ -159,18 +159,35 @@ function revalidatedProposal(
       : entry,
   );
   let stale = 0;
+  let illegal = 0;
   for (const entry of items) {
-    if (entry.outcome === "accepted" && entry.item.staleness.status === "stale") {
+    if (entry.outcome !== "accepted") {
+      continue;
+    }
+    if (entry.item.staleness.status === "stale") {
       stale += 1;
     }
+    if (entry.item.staleness.status === "illegal") {
+      illegal += 1;
+    }
   }
+  const notes = [
+    ...(stale === 0
+      ? []
+      : [
+          `${String(stale)} accepted ${stale === 1 ? "item is" : "items are"} stale and names why.`,
+        ]),
+    ...(illegal === 0
+      ? []
+      : [
+          `${String(illegal)} accepted ${illegal === 1 ? "item is" : "items are"} illegal and names the player, the slot, and the choice that resolves it.`,
+        ]),
+  ];
   return {
     ...result,
     items,
     detail: `${result.detail} ${
-      stale === 0
-        ? "Every accepted item is current."
-        : `${String(stale)} accepted ${stale === 1 ? "item is" : "items are"} stale and names why.`
+      notes.length === 0 ? "Every accepted item is current." : notes.join(" ")
     }`,
   };
 }
@@ -205,7 +222,7 @@ function mapFailure<A>(
         case "proposal.set_expired":
           return reject(
             "set_expired",
-            "This proposal set expired and refuses re-validation rather than executing stale moves. Propose the transactions again to create a fresh set.",
+            "This proposal set expired and refuses re-validation rather than executing stale or illegal moves. Propose the transactions again to create a fresh set.",
           );
         case "proposal.trade_not_found":
           return reject(

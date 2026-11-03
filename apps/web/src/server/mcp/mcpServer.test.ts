@@ -26,6 +26,7 @@ import type {
   TransactionProposalsShape,
 } from "@lineupkeep/backend/connections/TransactionProposals";
 import {
+  ProposalItem,
   ProposalSetExpired,
   ProposalSetId,
   TransactionProposals,
@@ -807,6 +808,61 @@ it("proposes a transaction set under the review scope and returns the review lin
     expired: false,
     reviewPath: "/transactions/018f79ea-7d86-7c18-9b4a-8b4d0c9164d0",
   };
+  const providerRefusal =
+    "Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR.  Please edit your lineup to activate this player from your IR and then attempt your transaction again.";
+  const illegalDetail =
+    "Travis Konecny is in the IR slot, but it does not accept his positions (LW, RW). No open slot accepts him, and choosing which player to drop is yours. Drop a player to make room, then propose this transaction again.";
+  const failedItem = Schema.decodeSync(ProposalItem)({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164d1",
+    team,
+    kind: "drop",
+    adds: [],
+    drops: [],
+    reason: "A stated reason.",
+    state: "failed",
+    staleness: { status: "current", checkedAt: at, reasons: [] },
+    execution: {
+      outcome: "failed",
+      detail: providerRefusal,
+      decidedAt: at,
+      steps: [],
+    },
+    createdAt: at,
+    updatedAt: at,
+  });
+  const illegalItem = Schema.decodeSync(ProposalItem)({
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164d2",
+    team,
+    kind: "drop",
+    adds: [],
+    drops: [],
+    reason: "A stated reason.",
+    state: "proposed",
+    staleness: {
+      status: "illegal",
+      checkedAt: at,
+      reasons: [{ code: "slot_illegal", detail: illegalDetail }],
+    },
+    createdAt: at,
+    updatedAt: at,
+  });
+  const review = {
+    set,
+    teams: [
+      {
+        team: {
+          id: team,
+          name: "Alpha",
+          provider: decodeProviderKey("yahoo"),
+          league: "nfl",
+          sport: "football",
+          season: 2026,
+        },
+        items: [failedItem, illegalItem],
+        pendingOffers: [],
+      },
+    ],
+  } satisfies ProposalSetReview;
   const proposed: Array<{ userId: string; proposer: unknown }> = [];
   let revalidations = 0;
   const proposals: TransactionProposalsShape = {
@@ -820,11 +876,11 @@ it("proposes a transaction set under the review scope and returns the review lin
         detail: "Created the set.",
       } satisfies ProposeTransactionsResult);
     },
-    read: () => Effect.succeed({ set, teams: [] } satisfies ProposalSetReview),
+    read: () => Effect.succeed(review),
     revalidate: () => {
       revalidations += 1;
       return revalidations === 1
-        ? Effect.succeed({ set, teams: [] } satisfies ProposalSetReview)
+        ? Effect.succeed(review)
         : Effect.fail(ProposalSetExpired.make({ set: set.id, expiresAt: set.expiresAt }));
     },
     readPendingOffers: () => Effect.die(new Error("pending offers are not read here")),
@@ -888,7 +944,8 @@ it("proposes a transaction set under the review scope and returns the review lin
     ),
   );
   expect(read.status).toBe(200);
-  expect(await json(read)).toMatchObject({
+  const readBody = await json(read);
+  expect(readBody).toMatchObject({
     result: {
       isError: false,
       structuredContent: {
@@ -896,6 +953,8 @@ it("proposes a transaction set under the review scope and returns the review lin
       },
     },
   });
+  expect(JSON.stringify(readBody)).toContain(providerRefusal);
+  expect(JSON.stringify(readBody)).toContain(illegalDetail);
 
   const expired = await call(
     request(

@@ -10,6 +10,7 @@ import type {
   ProviderPlayerDetail,
   ProviderReadFailure,
   ProviderRoster,
+  ProviderRosterPlayer,
   ProviderTransaction,
   ProviderTransactionTeam,
   ProviderWriteResult,
@@ -649,7 +650,7 @@ export const TransactionProposalsLive = Layer.effect(
         }
         const change = changeById.get(item.id);
         if (change === undefined || change.staleness.status !== "current") {
-          outcomes.push(skippedOutcome(current, staleOutcomeDetail(change?.staleness), now));
+          outcomes.push(skippedOutcome(current, checkOutcomeDetail(change?.staleness), now));
         }
       }
 
@@ -1964,27 +1965,29 @@ function evaluateItem(
   );
   const occupied = facts.roster.players.length - inReserve.length;
   const droppedKeys = new Set(drops.map((drop) => drop.key));
-  for (const reason of illegalReserveReasons(
-    facts,
-    reservePositions,
-    occupied < capacity,
-    droppedKeys,
-  )) {
-    reasons.push(reason);
-  }
+  const legality = illegalSlots(facts, droppedKeys, "repair");
+  const repair = legality.reasons.length === 0 ? legality.repair : undefined;
+  const occupiedAfterRepair = occupied + occupancyDelta(repair, facts.league);
   const dropped = drops.filter((drop) => rostered.has(drop.key)).length;
-  const needed = adds.length - (capacity - (occupied - dropped));
-  let reserveMove: StoredReserveMove | undefined;
+  const needed = adds.length - (capacity - (occupiedAfterRepair - dropped));
+  let reserveMove: StoredReserveMove | undefined = repair;
   if (capacity > 0 && needed > 0) {
-    reserveMove = needed === 1 ? planReserveMove(item, facts, reservePositions) : undefined;
-    if (reserveMove === undefined) {
+    if (reserveMove !== undefined) {
       reasons.push({
         code: "roster_full",
-        detail:
-          needed === 1
-            ? `This team holds ${String(occupied)} roster players and the league allows ${String(capacity)}. Adding ${String(adds.length)} while dropping ${String(dropped)} would exceed it, and no roster player is eligible for an open reserve slot.`
-            : `This team holds ${String(occupied)} roster players and the league allows ${String(capacity)}. Adding ${String(adds.length)} while dropping ${String(dropped)} needs ${String(needed)} roster spots, and one item can open only one by moving a player to a reserve slot.`,
+        detail: `This team holds ${String(occupiedAfterRepair)} roster players and the league allows ${String(capacity)}. Adding ${String(adds.length)} while dropping ${String(dropped)} still exceeds it, and this item can send only one roster move.`,
       });
+    } else {
+      reserveMove = needed === 1 ? planReserveMove(item, facts, reservePositions) : undefined;
+      if (reserveMove === undefined) {
+        reasons.push({
+          code: "roster_full",
+          detail:
+            needed === 1
+              ? `This team holds ${String(occupiedAfterRepair)} roster players and the league allows ${String(capacity)}. Adding ${String(adds.length)} while dropping ${String(dropped)} would exceed it, and no roster player is eligible for an open reserve slot.`
+              : `This team holds ${String(occupiedAfterRepair)} roster players and the league allows ${String(capacity)}. Adding ${String(adds.length)} while dropping ${String(dropped)} needs ${String(needed)} roster spots, and one item can open only one by moving a player to a reserve slot.`,
+        });
+      }
     }
   }
   if (
@@ -2015,7 +2018,7 @@ function evaluateItem(
     adds,
     drops,
     ...(reserveMove === undefined ? {} : { reserveMove }),
-    staleness: reasons.length === 0 ? currentCheck(at) : staleCheck(reasons, at),
+    staleness: checked(reasons, legality.reasons, at),
   };
 }
 
@@ -2127,12 +2130,8 @@ function evaluateTradeItem(
   );
   const occupied = facts.roster.players.length - inReserve.length;
   const droppedKeys = new Set(drops.map((drop) => drop.key));
-  for (const reason of illegalReserveReasons(
-    facts,
-    reservePositions,
-    occupied < capacity,
-    droppedKeys,
-  )) {
+  const legality = illegalSlots(facts, droppedKeys, "refuse");
+  for (const reason of legality.reasons) {
     reasons.push(reason);
   }
   const dropped = drops.filter((drop) => rostered.has(drop.key)).length;
@@ -2147,7 +2146,7 @@ function evaluateTradeItem(
     id: item.id,
     adds,
     drops,
-    staleness: reasons.length === 0 ? currentCheck(at) : staleCheck(reasons, at),
+    staleness: checked(reasons, legality.reasons, at),
   };
 }
 
@@ -2347,6 +2346,18 @@ function staleCheck(
   at: DateTime.Utc,
 ): StoredProposalStaleness {
   return { status: "stale", checkedAt: at, reasons };
+}
+
+function checked(
+  staleReasons: ReadonlyArray<StoredProposalStaleReason>,
+  illegalReasons: ReadonlyArray<StoredProposalStaleReason>,
+  at: DateTime.Utc,
+): StoredProposalStaleness {
+  return illegalReasons.length === 0
+    ? staleReasons.length === 0
+      ? currentCheck(at)
+      : staleCheck(staleReasons, at)
+    : { status: "illegal", checkedAt: at, reasons: [...staleReasons, ...illegalReasons] };
 }
 
 function failedCheck(
@@ -2746,7 +2757,7 @@ function displayValue(
   return primary ?? fallback;
 }
 
-function staleOutcomeDetail(staleness: StoredProposalStaleness | undefined): string {
+function checkOutcomeDetail(staleness: StoredProposalStaleness | undefined): string {
   if (staleness === undefined) {
     return "This move could not be checked against current state, so it was not attempted.";
   }
@@ -2905,7 +2916,9 @@ function planReserveMove(
   }
   const open = reserves.flatMap((position) => {
     const remaining = position.count - (occupants.get(position.position) ?? 0);
-    return remaining > 0 ? [{ position: position.position, remaining }] : [];
+    return remaining > 0
+      ? [{ position: position.position, eligibility: position.eligibility, remaining }]
+      : [];
   });
   const addKeys = new Set(item.adds.map((add) => add.key));
   const dropKeys = new Set(item.drops.map((drop) => drop.key));
@@ -2919,7 +2932,11 @@ function planReserveMove(
         !dropKeys.has(player.providerPlayerKey),
     )
     .flatMap((player) => {
-      const target = open.find((entry) => player.eligiblePositions.includes(entry.position));
+      const target = open.find(
+        (entry) =>
+          entry.eligibility.length === 0 ||
+          entry.eligibility.some((position) => player.eligiblePositions.includes(position)),
+      );
       return target === undefined
         ? []
         : [
@@ -2948,40 +2965,118 @@ function planReserveMove(
   };
 }
 
-function illegalReserveReasons(
+function illegalSlots(
   facts: TeamFacts,
-  reserves: ProviderLeagueSettings["rosterPositions"],
-  hasOpenRosterSpot: boolean,
   droppedKeys: ReadonlySet<string>,
-): ReadonlyArray<StoredProposalStaleReason> {
-  const reserveNames = new Set(reserves.map((position) => position.position));
+  mode: "repair" | "refuse",
+): {
+  readonly reasons: ReadonlyArray<StoredProposalStaleReason>;
+  readonly repair: StoredReserveMove | undefined;
+} {
+  const slotsByName = new Map(
+    facts.league.rosterPositions.map((position) => [position.position, position] as const),
+  );
+  const occupancy = slotOccupancy(facts.roster);
   const reasons: Array<StoredProposalStaleReason> = [];
+  let repair: StoredReserveMove | undefined;
   for (const player of facts.roster.players) {
-    if (player.slot.status !== "verified" || !reserveNames.has(player.slot.slot)) {
+    if (player.slot.status !== "verified" || droppedKeys.has(player.providerPlayerKey)) {
       continue;
     }
-    if (droppedKeys.has(player.providerPlayerKey)) {
+    const slot = slotsByName.get(player.slot.slot);
+    if (slot === undefined) {
       continue;
     }
-    const healthy =
-      player.status === "healthy" ||
-      (player.status === undefined &&
-        player.injuryCode === undefined &&
-        player.injuryDetail === undefined);
-    if (!healthy) {
+    const acceptsPositions =
+      slot.eligibility.length === 0 ||
+      slot.eligibility.some((position) => player.eligiblePositions.includes(position));
+    if (acceptsPositions) {
+      continue;
+    }
+    const destination =
+      mode === "repair" && repair === undefined
+        ? openSlotFor(player, facts.league, occupancy)
+        : undefined;
+    if (destination !== undefined) {
+      repair = {
+        playerKey: player.providerPlayerKey,
+        playerName: player.name,
+        fromSlot: player.slot.slot,
+        toSlot: destination.position,
+      };
       continue;
     }
     reasons.push({
-      code: "reserve_slot_illegal",
+      code: "slot_illegal",
       playerKey: player.providerPlayerKey,
-      detail: `${player.name} is in the ${player.slot.slot} slot, but the provider reports no injury. ${
-        hasOpenRosterSpot
-          ? `Move ${player.name} to an open active or bench slot`
-          : `Drop ${player.name} or another player to open a roster spot`
-      } before proposing this transaction again.`,
+      detail: illegalSlotDetail({ player, slot, mode }),
     });
   }
-  return reasons;
+  return { reasons, repair };
+}
+
+function openSlotFor(
+  player: ProviderRosterPlayer,
+  league: ProviderLeagueSettings,
+  occupancy: ReadonlyMap<string, number>,
+): ProviderLeagueSettings["rosterPositions"][number] | undefined {
+  const current = player.slot.status === "verified" ? player.slot.slot : undefined;
+  const kindOrder = { bench: 0, starting: 1, reserve: 2 } as const;
+  return league.rosterPositions
+    .filter((slot) => {
+      if (slot.position === current) {
+        return false;
+      }
+      const acceptsPositions =
+        slot.eligibility.length === 0 ||
+        slot.eligibility.some((position) => player.eligiblePositions.includes(position));
+      return acceptsPositions && (occupancy.get(slot.position) ?? 0) < slot.count;
+    })
+    .sort((left, right) => kindOrder[left.kind] - kindOrder[right.kind])[0];
+}
+
+function slotOccupancy(roster: ProviderRoster): ReadonlyMap<string, number> {
+  const occupancy = new Map<string, number>();
+  for (const player of roster.players) {
+    if (player.slot.status !== "verified") {
+      continue;
+    }
+    occupancy.set(player.slot.slot, (occupancy.get(player.slot.slot) ?? 0) + 1);
+  }
+  return occupancy;
+}
+
+function illegalSlotDetail(input: {
+  readonly player: ProviderRosterPlayer;
+  readonly slot: ProviderLeagueSettings["rosterPositions"][number];
+  readonly mode: "repair" | "refuse";
+}): string {
+  const providerNote =
+    input.player.injuryDetail === undefined
+      ? ""
+      : ` The provider reports "${input.player.injuryDetail}".`;
+  const resolution =
+    input.mode === "repair"
+      ? " No open slot accepts him, and choosing which player to drop is yours. Drop a player to make room, then propose this transaction again."
+      : " Move him to a legal slot at the provider, then revalidate this set.";
+  return `${input.player.name} is in the ${input.slot.position} slot, but it does not accept his positions (${input.player.eligiblePositions.join(", ")}).${providerNote}${resolution}`;
+}
+
+function occupancyDelta(
+  move: StoredReserveMove | undefined,
+  league: ProviderLeagueSettings,
+): number {
+  if (move === undefined) {
+    return 0;
+  }
+  const from = league.rosterPositions.find((position) => position.position === move.fromSlot);
+  const to = league.rosterPositions.find((position) => position.position === move.toSlot);
+  if (from === undefined || to === undefined) {
+    return 0;
+  }
+  const fromReserve = from.kind === "reserve";
+  const toReserve = to.kind === "reserve";
+  return fromReserve === toReserve ? 0 : fromReserve ? 1 : -1;
 }
 
 function toPendingTradeOffers(

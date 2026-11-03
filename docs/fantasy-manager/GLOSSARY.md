@@ -325,7 +325,7 @@ One agent or person's proposed player transactions across any of their own teams
 _Avoid_: Proposal when the whole set is meant, batch, review queue
 
 **Proposal item**:
-One team's proposed transaction inside a proposal set: the players to add, the players to drop, an optional FAAB bid, a required reason, the provider player references, and its state and staleness. A proposal set holds one item per distinct move.
+One team's proposed transaction inside a proposal set: the players to add, the players to drop, an optional FAAB bid, a required reason, the provider player references, and its state and check. A proposal set holds one item per distinct move.
 _Avoid_: Proposal when one item is meant, transaction when it is not yet executed
 
 **Proposal item kind**:
@@ -333,16 +333,20 @@ Which shape a proposal item takes: a free-agent add (players added, no bid), a w
 _Avoid_: Claim when the bid is not part of it, move, action
 
 **Proposal item state**:
-Where a proposal item sits in its lifecycle: proposed (its initial state), executed (the provider accepted the whole move), pending (a waiver claim the provider has not processed, or a trade offer awaiting the other manager), failed (an attempt was made and did not succeed), skipped (a person left it out, it was stale at submit, an earlier move stopped its team, or a team's connection changed), unknown (a request that may or may not have applied), or, for a trade, accepted (the counterparty accepted it), withdrawn (we withdrew it before acceptance), or expired (the provider no longer lists it and did not complete it). Staleness is not a state: a stale item keeps its state and carries the reason it no longer matches current state.
+Where a proposal item sits in its lifecycle: proposed (its initial state), executed (the provider accepted the whole move), pending (a waiver claim the provider has not processed, or a trade offer awaiting the other manager), failed (an attempt was made and did not succeed), skipped (a person left it out, it was stale or illegal at submit, an earlier move stopped its team, or a team's connection changed), unknown (a request that may or may not have applied), or, for a trade, accepted (the counterparty accepted it), withdrawn (we withdrew it before acceptance), or expired (the provider no longer lists it and did not complete it). Staleness and illegality are not states: a stale or illegal item keeps its state and carries the reason it cannot be submitted.
 _Avoid_: Stale as a state, rejected when no attempt was made, done when a waiver is still pending
 
 **Proposal staleness**:
-Whether a proposal item still matches current provider state, recorded as unchecked before any re-validation, current when it does, or stale with one or more reasons. A stale item is never treated as failed and never executes; re-validation marks it again after the state changes.
-_Avoid_: Expired when the provider state changed, failed, invalid
+Whether a proposal item still matches a state the provider would accept, recorded as unchecked before any re-validation, current when it does, stale with one or more reasons when the facts behind it changed, or illegal when a rostered player sits in a slot that does not accept him. A stale or illegal item is never treated as failed and never executes; re-validation marks it again after the facts or the roster change. Stale and illegal are distinct: stale means the facts behind the item changed, illegal means the roster cannot be submitted as it stands.
+_Avoid_: Expired when the provider state changed, failed, invalid, stale when the roster is illegal
 
-**Proposal stale reason**:
-The named cause a proposal item is stale: the added player is no longer available in the pool, a dropped player is no longer on the roster, the roster would exceed its declared capacity, the league's period has closed, the bid exceeds the team's remaining FAAB budget, the league does not use a FAAB budget, or the team's current state could not be read. Each carries a readable detail and, where it names a player, that player's reference.
-_Avoid_: Error, failure, conflict
+**Illegal roster position**:
+A rostered player whose current slot does not accept any of his positions. The league declares each slot's eligibility; a reserve slot is one such slot, not a special case. It blocks every transaction for that team, not only a move that names him. When an open slot accepts him, the proposal carries a roster move before the transaction; otherwise it refuses and names the player, the slot, and the choice only the person can make. It is not a failed move and not staleness.
+_Avoid_: Stale player, invalid player when the slot is meant, unhealthy player when eligibility is meant
+
+**Proposal check reason**:
+The named cause a proposal item is stale or illegal: the added player is no longer available in the pool, a dropped player is no longer on the roster, the roster would exceed its declared capacity, a rostered player's slot does not accept him, the league's period has closed, the bid exceeds the team's remaining FAAB budget, the league does not use a FAAB budget, or the team's current state could not be read. Each carries a readable detail and, where it names a player, that player's reference.
+_Avoid_: Error, failure, conflict, stale reason when an illegal slot is meant
 
 **Proposal set expiry**:
 The 24-hour window after a proposal set is created within which it may be re-validated. An expired set refuses re-validation rather than re-checking or executing, and a person proposes the transactions again to create a fresh set.
@@ -361,7 +365,7 @@ One recorded action inside a proposal item: an optional reserve move that frees 
 _Avoid_: Sub-transaction, retry, hidden precondition
 
 **Proposal review**:
-The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and staleness, and a quiet section for a team with nothing proposed. A signed-in person decides there, selects the current items, and submits them once; after submission it shows each item's and step's outcome in place.
+The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and check, and a quiet section for a team with nothing proposed. A signed-in person decides there, selects the current items, and submits them once; after submission it shows each item's and step's outcome in place.
 _Avoid_: Approvals, cart, confirmation screen
 
 **Pending trade offer**:

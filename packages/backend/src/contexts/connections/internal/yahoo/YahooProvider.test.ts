@@ -614,6 +614,45 @@ it.effect("returns the provider's own wording for a rejected transaction", () =>
   }).pipe(Effect.provide(yahooLayer(layer)));
 });
 
+it.effect("reads the exact wording from the provider's JSON refusal", () => {
+  const refusal = {
+    error: {
+      "xml:lang": "en-us",
+      "yahoo:uri": "/fantasy/v2/league/477.l.5744/transactions?format=json_f&amp;crumb=redacted",
+      description:
+        "Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR.  Please edit your lineup to activate this player from your IR and then attempt your transaction again.",
+      detail: null,
+    },
+  };
+  const layer = Layer.succeed(PublicInternet)({
+    request: (request) =>
+      Effect.succeed(
+        request.url.includes("getCrumb")
+          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+          : jsonResponse(refusal, 400),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "477.l.5744",
+      providerTeamKey: "477.l.5744.t.6",
+      adds: ["477.p.7751"],
+      drops: ["477.p.4064"],
+      faabBid: undefined,
+    });
+    assert.deepStrictEqual(result, {
+      status: "rejected",
+      reason: "invalid_request",
+      httpStatus: 400,
+      detail:
+        "Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.",
+    });
+  }).pipe(Effect.provide(yahooLayer(layer)));
+});
+
 it.effect("names the HTTP status when a rejected transaction gives no reason", () => {
   const layer = Layer.succeed(PublicInternet)({
     request: (request) =>
