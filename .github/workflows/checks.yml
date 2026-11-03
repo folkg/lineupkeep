@@ -62,8 +62,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Node runs Nitro directly; container packages the same artifact; Cloudflare uses workerd.
-        target: [node, cloudflare, container]
+        # The container target is the production artifact, so it is the only end to end
+        # target that runs here. The plain Node target runs the same application and stays
+        # available locally as `bun run test:e2e`. Cloudflare is not a deployment we support,
+        # so its end to end target is not part of this workflow; if it becomes one, its
+        # pieces join here and run when they change.
+        target: [container]
     # Each run starts its own disposable PostgreSQL container with the runner's Docker.
     steps:
       - uses: actions/checkout@v7
