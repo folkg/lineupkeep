@@ -229,6 +229,29 @@ it.effect("reads each discovered league once for every team that shares it", () 
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("keeps discovering teams when a league name cannot be read", () => {
+  const internet = recordingInternet((request) => {
+    if (request.url.pathname.includes("game_keys=nfl")) {
+      return jsonResponse(yahooNflTeamsWithTwoTeams);
+    }
+    if (request.url.pathname.includes("game_keys=nhl")) {
+      return jsonResponse(yahooNhlTeams);
+    }
+    if (request.url.pathname.endsWith("/settings")) {
+      return jsonResponse({ error: "upstream failed" }, 500);
+    }
+    return jsonResponse({}, 404);
+  });
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const teams = yield* provider.discoverTeams(sessionInput);
+
+    assert.strictEqual(teams.length, 3);
+    assert.isTrue(teams.every((team) => team.leagueName === undefined));
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("derives the provider team page url when the payload has none", () => {
   const nhlSettings = yahooNhlLeagueSettingsWith({
     league_key: "466.l.4002",

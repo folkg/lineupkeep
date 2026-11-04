@@ -184,7 +184,7 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "discover_teams");
     const cookie = yield* sessionCookie(input, "discover_teams");
     const teams: ProviderTeam[] = [];
-    const leagueNames = new Map<string, string>();
+    const leagueNames = new Map<string, Option.Option<string>>();
     for (const league of supportedLeagues) {
       const payload = yield* readJson(internet, {
         operation: "discover_teams",
@@ -199,31 +199,36 @@ export const yahooProvider = Effect.gen(function* () {
         return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
       }
       for (const team of yield* teamsFromPayload(decoded, league)) {
-        let leagueName = leagueNames.get(team.providerLeagueKey);
-        if (leagueName === undefined) {
-          const settings = yield* readLeague({
-            ...input,
-            providerLeagueKey: team.providerLeagueKey,
-            sport: team.sport,
-          }).pipe(
-            Effect.mapError((error) =>
-              error._tag === "provider.session_rejected" ||
-              error._tag === "provider.request_failed" ||
-              error._tag === "provider.response_invalid"
-                ? error
-                : ProviderResponseInvalid.make({ operation: "discover_teams" }),
-            ),
-          );
-          leagueName = settings.name;
-          leagueNames.set(team.providerLeagueKey, leagueName);
+        if (!leagueNames.has(team.providerLeagueKey)) {
+          leagueNames.set(team.providerLeagueKey, yield* readLeagueName(input, team));
           yield* Effect.annotateCurrentSpan("provider.operation", "discover_teams");
         }
-        teams.push({ ...team, leagueName });
+        const leagueName = Option.getOrUndefined(
+          leagueNames.get(team.providerLeagueKey) ?? Option.none(),
+        );
+        teams.push({ ...team, ...(leagueName === undefined ? {} : { leagueName }) });
       }
     }
     yield* Effect.annotateCurrentSpan("provider.team_count", teams.length);
     return teams;
   });
+
+  const readLeagueName = (
+    input: ProviderSessionMaterial,
+    team: ProviderTeam,
+  ): Effect.Effect<Option.Option<string>, ProviderSessionRejected> =>
+    readLeague({
+      ...input,
+      providerLeagueKey: team.providerLeagueKey,
+      sport: team.sport,
+    }).pipe(
+      Effect.map((settings) => Option.some(settings.name)),
+      Effect.catchTags({
+        "provider.request_failed": () => Effect.succeed(Option.none<string>()),
+        "provider.response_invalid": () => Effect.succeed(Option.none<string>()),
+        "provider.operation_unsupported": () => Effect.succeed(Option.none<string>()),
+      }),
+    );
 
   const readCrumb = Effect.fn("YahooProvider.readCrumb")(function* (
     input: ProviderSessionMaterial,
