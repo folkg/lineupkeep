@@ -9,7 +9,6 @@ import { useSignInSessions } from "#browser/session/useSignInSessions.ts";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
-import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { ConnectionList } from "./ConnectionList";
 import type { ConnectionListQueryOptions } from "./connectionQueries";
@@ -41,8 +40,8 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
       <Page
         lede={
           hasConnection()
-            ? `Lineupkeep keeps the encrypted ${defaultProviderName()} session, not your password, and lists the teams this account can manage.`
-            : `Connect ${defaultProviderName()} in a private browser. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage.`
+            ? "Lineupkeep keeps the encrypted sign-in session, not your password, and lists the teams this account can manage."
+            : "Connect your fantasy account in a private browser. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage."
         }
         title="Connections"
       >

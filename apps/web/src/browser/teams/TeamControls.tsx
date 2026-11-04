@@ -2,7 +2,9 @@ import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
-import { Button } from "#browser/shared-ui/Button.tsx";
+import { IconButton } from "#browser/shared-ui/IconButton.tsx";
+import { PauseIcon, PlayIcon } from "#browser/shared-ui/icons.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Switch } from "#browser/shared-ui/Switch.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -12,6 +14,10 @@ import { pauseResumeLabel } from "./teamLabels";
 import type { TeamRemote } from "./teamRemote";
 import { useTeamControls } from "./useTeamControls";
 
+const pauseLabel = "Pause lineup checks for the rest of the fantasy day";
+const resumeLabel = "Resume lineup checks";
+const waitForSwitch = "Wait for the lineup checks change to finish before pausing.";
+
 export function TeamControls(props: TeamControlsProps): JSX.Element {
   const controls = useTeamControls({ team: () => props.team, remote: () => props.remote });
   const enabled = (): boolean => controls.automation().status !== "disabled";
@@ -20,39 +26,56 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
     controls.pendingAction() === "enable" || controls.pendingAction() === "disable";
   const pausePending = (): boolean =>
     controls.pendingAction() === "pause-today" || controls.pendingAction() === "resume";
+  const resumeAction = (): boolean =>
+    controls.pendingAction() === "resume"
+      ? true
+      : controls.pendingAction() === "pause-today"
+        ? false
+        : paused();
 
   return (
     <Stack gap="sm" align="start">
-      <Switch
-        busy={controls.pendingAction() !== undefined}
-        checked={enabled()}
-        name={`Lineup checks for ${props.team.team.name}`}
-        onToggle={() => controls.control(enabled() ? "disable" : "enable")}
-      >
-        Lineup checks
-      </Switch>
+      <Inline gap="sm">
+        <Switch
+          busy={controls.pendingAction() !== undefined}
+          checked={enabled()}
+          name={`Lineup checks for ${props.team.team.name}`}
+          onToggle={() => controls.control(enabled() ? "disable" : "enable")}
+        >
+          Lineup checks
+        </Switch>
+        <Show when={enabled()}>
+          <IconButton
+            busy={pausePending()}
+            disabled={controls.pendingAction() !== undefined && !pausePending()}
+            label={resumeAction() ? resumeLabel : pauseLabel}
+            title={
+              controls.pendingAction() !== undefined && !pausePending() ? waitForSwitch : undefined
+            }
+            onClick={() => controls.control(resumeAction() ? "resume" : "pause-today")}
+          >
+            <Show fallback={<PauseIcon size="md" />} when={resumeAction()}>
+              <PlayIcon size="md" />
+            </Show>
+          </IconButton>
+        </Show>
+      </Inline>
       <Show when={switchPending()}>
         <Text role="status" size="caption" tone="muted">
           {controls.pendingAction() === "disable" ? "Turning off…" : "Turning on…"}
         </Text>
       </Show>
-      <Show when={pauseResumeLabel(controls.automation())}>
+      <Show when={pausePending()}>
+        <Text role="status" size="caption" tone="muted">
+          {controls.pendingAction() === "resume" ? "Resuming…" : "Pausing…"}
+        </Text>
+      </Show>
+      <Show when={!pausePending() && pauseResumeLabel(controls.automation())}>
         {(note) => (
           <Text size="caption" tone="muted">
             {note()}
           </Text>
         )}
-      </Show>
-      <Show when={enabled()}>
-        <Button
-          disabled={controls.pendingAction() !== undefined && !pausePending()}
-          pending={pausePending()}
-          pendingLabel={controls.pendingAction() === "resume" ? "Resuming…" : "Pausing…"}
-          variant="quiet"
-          onClick={() => controls.control(paused() ? "resume" : "pause-today")}
-        >
-          {paused() ? "Resume lineup checks" : "Pause for the rest of the fantasy day"}
-        </Button>
       </Show>
       <Show when={controls.feedback()}>{(state) => <ActionFeedback feedback={state()} />}</Show>
     </Stack>

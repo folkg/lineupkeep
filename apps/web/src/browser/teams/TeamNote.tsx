@@ -17,13 +17,11 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
       <Heading id="team-note-title" level={2} size="section">
         Owner note
       </Heading>
-      <Text size="caption" tone="muted">
-        Keeper rules, dynasty cost, salary, or why a player is held. Only this account sees it, and
-        it is not sent to the provider.
+      <Text size="body" tone="muted">
+        Only this account sees this note, and it is not sent to the provider.
       </Text>
       <Form gap="md" onSubmit={props.note.submit}>
         <TextArea
-          description={`Up to ${String(props.note.limit())} characters.`}
           error={props.note.error()}
           label="Note for this team"
           onInput={(event) => props.note.edit(event.currentTarget.value)}
@@ -39,10 +37,6 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
           </Text>
         </Inline>
       </Form>
-      <Text size="caption" tone="faint">
-        Do not store passwords, tokens, or sign-in cookies here. Lineupkeep refuses a note that
-        looks like one.
-      </Text>
       <ActionFeedback feedback={props.note.feedback()} />
     </Stack>
   );

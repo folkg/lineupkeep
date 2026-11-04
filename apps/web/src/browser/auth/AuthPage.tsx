@@ -6,7 +6,6 @@ import { IntroPanel } from "#browser/brand-ui/IntroPanel.tsx";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Spread } from "#browser/shared-ui/Spread.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
-import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { SignInForm } from "./SignInForm";
 import type { SignInMethodsQueryOptions } from "./signInQueries";
@@ -19,7 +18,7 @@ export function AuthPage(props: AuthPageProps): JSX.Element {
         variant="form"
         start={
           <IntroPanel
-            cue={`For ${defaultProviderName()} football and hockey leagues.`}
+            cue="For football and hockey fantasy leagues."
             title={
               <Heading level={1} size="statement">
                 Sign in to Lineupkeep.

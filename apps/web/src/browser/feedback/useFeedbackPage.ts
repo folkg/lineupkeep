@@ -21,7 +21,7 @@ export function useFeedbackPage(options: FeedbackPageOptions): FeedbackPageContr
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
   const [draft, setDraft] = createSignal<FeedbackDraft>(
-    emptyFeedbackDraft(options.initialContext()),
+    emptyFeedbackDraft(options.initialContext(), options.initialTitle()),
   );
   const [errors, setErrors] = createSignal<FeedbackDraftErrors>({});
 
@@ -38,7 +38,7 @@ export function useFeedbackPage(options: FeedbackPageOptions): FeedbackPageContr
     ...feedbackMutations.submit(options.remote()),
     onSuccess: (data, variables, onMutateResult, context) => {
       storeFeedbackSubmission(data, variables, onMutateResult, context);
-      setDraft(emptyFeedbackDraft(options.initialContext()));
+      setDraft(emptyFeedbackDraft(options.initialContext(), options.initialTitle()));
       setErrors({});
       setFeedback({ type: "success", message: "Thanks, your report is recorded." });
     },
@@ -109,5 +109,6 @@ type FeedbackPageOptions = {
   readonly reportsQuery: Accessor<FeedbackListQueryOptions>;
   readonly remote: Accessor<FeedbackRemote>;
   readonly initialContext: Accessor<FeedbackContextView>;
+  readonly initialTitle: Accessor<string>;
   readonly onRefresh: () => Promise<void>;
 };

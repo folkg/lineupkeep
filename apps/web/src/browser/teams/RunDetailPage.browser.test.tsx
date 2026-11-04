@@ -146,7 +146,6 @@ function setupRunDetailPage(lineupRun: LineupRunView): { [Symbol.dispose](): voi
     control: () => Promise.resolve({ changed: [], teams: [team] }),
     readRun: () => Promise.resolve({ run: lineupRun }),
     saveNote: () => Promise.reject(new Error("Unexpected note save")),
-    readRoster: () => Promise.reject(new Error("Unexpected roster read")),
   };
   const sessionRemote: SessionRemote = {
     load: () => Promise.resolve({ status: "anonymous" }),

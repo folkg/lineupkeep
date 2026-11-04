@@ -11,6 +11,8 @@ import {
 import { expect, it } from "vitest";
 import { page } from "vitest/browser";
 
+import "#web/styles.css";
+
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
@@ -18,7 +20,6 @@ import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.
 import type {
   LineupRunView,
   TeamNoteSaveResult,
-  TeamRosterView,
   TeamSummaryView,
 } from "#contracts/connections/teamContract.ts";
 
@@ -143,6 +144,35 @@ it("names the league context and keeps quiet states off the page", async () => {
     .not.toBeInTheDocument();
 });
 
+it("shows the fantasy league name and a provider jump out for the team", async () => {
+  using _app = setupTeamDetailPage({
+    ...team,
+    team: {
+      ...team.team,
+      leagueName: "Irish Lax",
+      providerUrl: "https://provider.example/f1/1000/1",
+    },
+  });
+
+  await expect.element(page.getByText("Irish Lax · Football · NFL 2026")).toBeVisible();
+  const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
+  await expect.element(jumpOut).toHaveAttribute("href", "https://provider.example/f1/1000/1");
+});
+
+it("puts recent activity above the owner note and leaves the roster off the page", async () => {
+  using _app = setupTeamDetailPage(team);
+
+  const activity = page.getByRole("heading", { name: "Recent activity" });
+  const note = page.getByRole("heading", { name: "Owner note" });
+  await expect.element(activity).toBeVisible();
+  await expect.element(note).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Roster" })).not.toBeInTheDocument();
+
+  expect(
+    activity.element().compareDocumentPosition(note.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
 it("names the pause in reader-local time", async () => {
   const paused: TeamSummaryView = {
     ...team,
@@ -170,6 +200,23 @@ it("names the pause in reader-local time", async () => {
       ),
     )
     .toBeVisible();
+});
+
+it("puts the pause icon beside the lineup checks switch with the full sentence", async () => {
+  using _app = setupTeamDetailPage(team);
+
+  const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
+  const pause = page.getByRole("button", {
+    name: "Pause lineup checks for the rest of the fantasy day",
+  });
+  await expect
+    .element(pause)
+    .toHaveAttribute("title", "Pause lineup checks for the rest of the fantasy day");
+
+  const toggleBox = toggle.element().getBoundingClientRect();
+  const pauseBox = pause.element().getBoundingClientRect();
+  expect(Math.abs(toggleBox.top - pauseBox.top)).toBeLessThanOrEqual(2);
+  expect(pauseBox.left).toBeGreaterThanOrEqual(toggleBox.right);
 });
 
 it("folds consecutive checks that changed nothing and keeps the rest on their own", async () => {
@@ -287,6 +334,7 @@ it("links a team report to the feedback form with the team reference", async () 
   expect(url.pathname).toBe("/feedback");
   expect(url.searchParams.get("surface")).toBe("team");
   expect(url.searchParams.get("team")).toBe(teamId);
+  expect(url.searchParams.get("teamName")).toBe("Alpha");
 });
 
 it("saves an owner note explicitly and confirms it", async () => {
@@ -305,6 +353,8 @@ it("saves an owner note explicitly and confirms it", async () => {
   const note = page.getByLabelText("Note for this team");
   await note.fill("Keep both goalies through 2027.");
   await expect.element(page.getByText("31 of 2000 characters")).toBeVisible();
+  await expect.element(page.getByText(/Up to 2000 characters/u)).not.toBeInTheDocument();
+  await expect.element(page.getByText(/does not store passwords/u)).not.toBeInTheDocument();
   await page.getByRole("button", { name: "Save note" }).click();
 
   await expect.element(page.getByText("Note saved.")).toBeVisible();
@@ -327,7 +377,7 @@ it("shows the stored owner note when the team loads", async () => {
     .toHaveValue("Dynasty league. Keeper cost rises by five each season.");
 });
 
-it("warns about a token-shaped note instead of sending it", async () => {
+it("saves a note that contains a token-shaped value", async () => {
   const captured: string[] = [];
   const token =
     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
@@ -335,10 +385,9 @@ it("warns about a token-shaped note instead of sending it", async () => {
     saveNote: (input) => {
       captured.push(input.note);
       return Promise.resolve({
-        outcome: "rejected",
-        reason: "credential_like",
-        message:
-          "This looks like a sign-in token. Lineupkeep does not store passwords, tokens, or provider session material in a team note. Remove it and save again.",
+        outcome: "saved",
+        note: input.note,
+        updatedAt: threeDaysAgo,
       });
     },
   });
@@ -347,13 +396,9 @@ it("warns about a token-shaped note instead of sending it", async () => {
   await note.fill(`Reconnect with ${token}`);
   await page.getByRole("button", { name: "Save note" }).click();
 
-  await expect.element(page.getByText(/does not store passwords/)).toBeVisible();
+  await expect.element(page.getByText("Note saved.")).toBeVisible();
+  await expect.element(page.getByText(/does not store passwords/u)).not.toBeInTheDocument();
   expect(captured).toEqual([`Reconnect with ${token}`]);
-  const control = note.element();
-  expect(control).toBeInstanceOf(HTMLTextAreaElement);
-  if (control instanceof HTMLTextAreaElement) {
-    expect(control.value).toContain(token);
-  }
 });
 
 it("refuses a note past the stated limit", async () => {
@@ -387,87 +432,6 @@ it("confirms before navigation discards an unsaved note", async () => {
     .toHaveValue("Unsaved keeper note");
 });
 
-it("shows a player's day-window trends and states when none are published", async () => {
-  using _app = setupTeamDetailPage(team, {
-    readRoster: () =>
-      Promise.resolve({
-        status: "ok",
-        players: [
-          {
-            name: "Moving Skater",
-            slot: { status: "verified", slot: "QB" },
-            primaryPosition: "QB",
-            displayPosition: "QB",
-            proTeam: "SYN",
-            injury: { reported: false },
-            trend: { status: "published", adds: 37, drops: 3, window: "provider_current_day" },
-          },
-          {
-            name: "Uncounted Skater",
-            slot: { status: "verified", slot: "BN" },
-            primaryPosition: "WR",
-            displayPosition: "WR",
-            proTeam: null,
-            injury: { reported: true, code: "O", detail: "Out" },
-            trend: {
-              status: "not_published",
-              reason: "The provider published no add and drop counts for this player.",
-            },
-          },
-        ],
-        observedAt: "2026-10-30T12:00:00.000Z",
-      }),
-  });
-
-  await expect.element(page.getByText("Moving Skater")).toBeVisible();
-  await expect.element(page.getByText("37 adds and 3 drops today")).toBeVisible();
-  await expect.element(page.getByText("QB · SYN")).toBeVisible();
-  await expect.element(page.getByText("Uncounted Skater")).toBeVisible();
-  await expect
-    .element(
-      page.getByText(
-        "Trends not published. The provider published no add and drop counts for this player.",
-      ),
-    )
-    .toBeVisible();
-});
-
-it("states when a player's lineup slot cannot be verified", async () => {
-  using _app = setupTeamDetailPage(team, {
-    readRoster: () =>
-      Promise.resolve({
-        status: "ok",
-        players: [
-          {
-            name: "Unplaced Skater",
-            slot: {
-              status: "unverified",
-              rawValue: "",
-              reason:
-                "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
-            },
-            primaryPosition: "C",
-            displayPosition: "C",
-            proTeam: "SYN",
-            injury: { reported: false },
-            trend: { status: "not_published", reason: "Synthetic absence." },
-          },
-        ],
-        observedAt: "2026-10-30T12:00:00.000Z",
-      }),
-  });
-
-  await expect.element(page.getByText("Unplaced Skater")).toBeVisible();
-  await expect.element(page.getByText("Slot unverified")).toBeVisible();
-  await expect
-    .element(
-      page.getByText(
-        "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
-      ),
-    )
-    .toBeVisible();
-});
-
 function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
   const span = quietGroupSpan(runs);
   return `${String(span.count)} checks changed nothing between ${formatDateTime(
@@ -477,7 +441,7 @@ function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
 
 function setupTeamDetailPage(
   teamSummary: TeamSummaryView,
-  overrides: Partial<Pick<TeamRemote, "saveNote" | "readRoster">> = {},
+  overrides: Partial<Pick<TeamRemote, "saveNote">> = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
@@ -492,14 +456,6 @@ function setupTeamDetailPage(
           outcome: "saved",
           note: input.note === "" ? null : input.note,
           updatedAt: input.note === "" ? null : threeDaysAgo,
-        })),
-    readRoster:
-      overrides.readRoster ??
-      (() =>
-        Promise.resolve<TeamRosterView>({
-          status: "ok",
-          players: [],
-          observedAt: null,
         })),
   };
   const teamsQuery = teamQueries.list(remote);

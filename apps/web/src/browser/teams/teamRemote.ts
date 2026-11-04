@@ -5,24 +5,17 @@ import type {
   TeamNoteData,
   TeamNoteSaveResult,
   TeamRefreshView,
-  TeamRosterView,
   TeamSummaryView,
 } from "#contracts/connections/teamContract.ts";
 import {
   controlTeamServerFn,
   listTeamsServerFn,
   readLineupRunServerFn,
-  readTeamRosterServerFn,
   refreshTeamsServerFn,
   saveTeamNoteServerFn,
 } from "#server-functions/connections/teamServerFunctions.ts";
 
-import {
-  requireNoteSuccess,
-  requireRosterSuccess,
-  requireRunSuccess,
-  requireTeamSuccess,
-} from "./teamFailure";
+import { requireNoteSuccess, requireRunSuccess, requireTeamSuccess } from "./teamFailure";
 
 export const teamRemote: TeamRemote = {
   list: (options) => listTeamsServerFn({ signal: options.signal }).then(requireTeamSuccess),
@@ -30,7 +23,6 @@ export const teamRemote: TeamRemote = {
   control: (input) => controlTeamServerFn({ data: input }).then(requireTeamSuccess),
   readRun: (input) => readLineupRunServerFn({ data: input }).then(requireRunSuccess),
   saveNote: (input) => saveTeamNoteServerFn({ data: input }).then(requireNoteSuccess),
-  readRoster: (input) => readTeamRosterServerFn({ data: input }).then(requireRosterSuccess),
 };
 
 export type TeamRemote = {
@@ -39,7 +31,6 @@ export type TeamRemote = {
   readonly control: (input: TeamControlData) => Promise<TeamChangeView>;
   readonly readRun: (input: { readonly run: string }) => Promise<LineupRunData>;
   readonly saveNote: (input: TeamNoteData) => Promise<TeamNoteSaveResult>;
-  readonly readRoster: (input: { readonly team: string }) => Promise<TeamRosterView>;
 };
 
 type TeamListRequestOptions = {

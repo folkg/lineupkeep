@@ -418,28 +418,6 @@ it.effect("saves an owner note with the team and reads it back for the owner onl
   }).pipe(Effect.provide(TeamsTestLayer)),
 );
 
-it.effect("reads the owner's roster with provider transaction trends", () =>
-  Effect.gen(function* () {
-    const teams = yield* Teams;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seedTeam(fake);
-
-    const roster = yield* teams.readRoster(owner, seeded);
-    assert.lengthOf(roster.players, 2);
-    assert.strictEqual(roster.players[0]?.name, "Locked Starter");
-    assert.deepStrictEqual(roster.players[0]?.trend, {
-      status: "published",
-      adds: 37,
-      drops: 3,
-      window: "provider_current_day",
-    });
-    assert.strictEqual(roster.players[1]?.trend.status, "not_published");
-
-    const foreign = yield* Effect.flip(teams.readRoster(other, seeded));
-    assert.strictEqual(foreign._tag, "team.not_found");
-  }).pipe(Effect.provide(TeamsTestLayer)),
-);
-
 it.effect("clears an owner note", () =>
   Effect.gen(function* () {
     const teams = yield* Teams;
@@ -470,25 +448,6 @@ it.effect("refuses a note past its limit without storing it", () =>
     assert.instanceOf(rejected, TeamNoteRejected);
     assert.strictEqual(rejected.reason, "too_long");
     assert.ok(rejected.message.includes(String(teamNoteLimit)));
-    assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, null);
-  }).pipe(Effect.provide(TeamsTestLayer)),
-);
-
-it.effect("refuses a credential-shaped note without echoing or storing it", () =>
-  Effect.gen(function* () {
-    const teams = yield* Teams;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seedTeam(fake);
-    const token =
-      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
-
-    const rejected = yield* Effect.flip(
-      teams.saveNote(owner, { team: seeded, note: `Reconnect with ${token}` }),
-    );
-
-    assert.instanceOf(rejected, TeamNoteRejected);
-    assert.strictEqual(rejected.reason, "credential_like");
-    assert.ok(!String(rejected).includes(token));
     assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, null);
   }).pipe(Effect.provide(TeamsTestLayer)),
 );

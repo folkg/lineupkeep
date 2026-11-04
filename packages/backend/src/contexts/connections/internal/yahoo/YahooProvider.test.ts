@@ -50,6 +50,8 @@ import {
   yahooNflMatchups,
   yahooNflRosterWeekMismatch,
   yahooNflTeams,
+  yahooNflTeamsWithTwoTeams,
+  yahooNflTeamsWithoutTeamUrl,
   yahooNhlTeams,
   yahooSession,
   yahooNflSeasonPlayerDetails,
@@ -127,11 +129,24 @@ it.effect("validates a session with one exact read request", () => {
 });
 
 it.effect("discovers both supported leagues with exact batches and stable team identity", () => {
-  const internet = recordingInternet((request) =>
-    request.url.pathname.includes("game_keys=nhl")
-      ? jsonResponse(yahooNhlTeams)
-      : jsonResponse(yahooNflTeams),
-  );
+  const nhlSettings = yahooNhlLeagueSettingsWith({
+    league_key: "466.l.4002",
+    league_id: "4002",
+    name: "Synthetic NHL League",
+    url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
+  });
+  const internet = recordingInternet((request) => {
+    if (request.url.pathname.includes("game_keys=nhl")) {
+      return jsonResponse(yahooNhlTeams);
+    }
+    if (request.url.pathname.endsWith("/466.l.4000/settings")) {
+      return jsonResponse(yahooNflLeagueSettings);
+    }
+    if (request.url.pathname.endsWith("/466.l.4002/settings")) {
+      return jsonResponse(nhlSettings);
+    }
+    return jsonResponse(yahooNflTeams);
+  });
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
@@ -141,7 +156,9 @@ it.effect("discovers both supported leagues with exact batches and stable team i
       internet.calls.map((call) => call.url.href),
       [
         "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl/teams?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/settings?format=json",
         "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nhl/teams?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/settings?format=json",
       ],
     );
     assert.deepStrictEqual(teams, [
@@ -153,6 +170,8 @@ it.effect("discovers both supported leagues with exact batches and stable team i
         sport: "football",
         season: 2026,
         name: "Synthetic NFL Team",
+        leagueName: "Synthetic NFL League",
+        providerUrl: "https://football.fantasysports.yahoo.com/f1/4000/1",
       },
       {
         provider: decodeProviderKey("yahoo"),
@@ -162,10 +181,83 @@ it.effect("discovers both supported leagues with exact batches and stable team i
         sport: "hockey",
         season: 2026,
         name: "Synthetic NHL Team",
+        leagueName: "Synthetic NHL League",
+        providerUrl: "https://hockey.fantasysports.yahoo.com/hockey/4002/3",
       },
     ]);
     assert.isTrue(internet.calls.every((call) => call.options?.timeoutMs === 30_000));
     assert.isTrue(internet.calls.every((call) => call.options?.maxResponseBytes === 4_194_304));
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads each discovered league once for every team that shares it", () => {
+  const nhlSettings = yahooNhlLeagueSettingsWith({
+    league_key: "466.l.4002",
+    league_id: "4002",
+    name: "Synthetic NHL League",
+    url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
+  });
+  const internet = recordingInternet((request) => {
+    if (request.url.pathname.includes("game_keys=nfl")) {
+      return jsonResponse(yahooNflTeamsWithTwoTeams);
+    }
+    if (request.url.pathname.includes("game_keys=nhl")) {
+      return jsonResponse(yahooNhlTeams);
+    }
+    if (request.url.pathname.endsWith("/466.l.4000/settings")) {
+      return jsonResponse(yahooNflLeagueSettings);
+    }
+    if (request.url.pathname.endsWith("/466.l.4002/settings")) {
+      return jsonResponse(nhlSettings);
+    }
+    return jsonResponse({}, 404);
+  });
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const teams = yield* provider.discoverTeams(sessionInput);
+
+    assert.deepStrictEqual(
+      internet.calls
+        .filter((call) => call.url.pathname.endsWith("/settings"))
+        .map((call) => call.url.pathname),
+      ["/fantasy/v2/league/466.l.4000/settings", "/fantasy/v2/league/466.l.4002/settings"],
+    );
+    const footballTeams = teams.filter((team) => team.providerLeagueKey === "466.l.4000");
+    assert.strictEqual(footballTeams.length, 2);
+    assert.isTrue(footballTeams.every((team) => team.leagueName === "Synthetic NFL League"));
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("derives the provider team page url when the payload has none", () => {
+  const nhlSettings = yahooNhlLeagueSettingsWith({
+    league_key: "466.l.4002",
+    league_id: "4002",
+    name: "Synthetic NHL League",
+    url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
+  });
+  const internet = recordingInternet((request) => {
+    if (request.url.pathname.includes("game_keys=nfl")) {
+      return jsonResponse(yahooNflTeamsWithoutTeamUrl);
+    }
+    if (request.url.pathname.includes("game_keys=nhl")) {
+      return jsonResponse(yahooNhlTeams);
+    }
+    if (request.url.pathname.endsWith("/466.l.4000/settings")) {
+      return jsonResponse(yahooNflLeagueSettings);
+    }
+    if (request.url.pathname.endsWith("/466.l.4002/settings")) {
+      return jsonResponse(nhlSettings);
+    }
+    return jsonResponse({}, 404);
+  });
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const teams = yield* provider.discoverTeams(sessionInput);
+    const football = teams.find((team) => team.league === "nfl");
+
+    assert.strictEqual(football?.providerUrl, "https://football.fantasysports.yahoo.com/f1/4000/1");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

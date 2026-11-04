@@ -24,9 +24,7 @@ test("renders the sign-in call to action in the server HTML when signed out", as
   await expect(serverRendered.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(
     0,
   );
-  await expect(
-    serverRendered.getByRole("link", { name: "Sign in to connect Yahoo" }),
-  ).toBeVisible();
+  await expect(serverRendered.getByRole("link", { name: "Sign in to get started" })).toBeVisible();
   await expect(serverRendered.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });
 
@@ -44,7 +42,7 @@ test("returns home on sign-out and back to the account's connections on sign-in"
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL("/");
-  await expect(page.getByRole("link", { name: "Sign in to connect Yahoo" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in to get started" })).toBeVisible();
   await page.goto("/connections");
   await expect(page).toHaveURL("/auth?redirect=%2Fconnections");
   await signIn(page, account);

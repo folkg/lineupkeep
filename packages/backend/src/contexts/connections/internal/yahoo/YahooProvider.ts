@@ -184,6 +184,7 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "discover_teams");
     const cookie = yield* sessionCookie(input, "discover_teams");
     const teams: ProviderTeam[] = [];
+    const leagueNames = new Map<string, string>();
     for (const league of supportedLeagues) {
       const payload = yield* readJson(internet, {
         operation: "discover_teams",
@@ -198,7 +199,26 @@ export const yahooProvider = Effect.gen(function* () {
         return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
       }
       for (const team of yield* teamsFromPayload(decoded, league)) {
-        teams.push(team);
+        let leagueName = leagueNames.get(team.providerLeagueKey);
+        if (leagueName === undefined) {
+          const settings = yield* readLeague({
+            ...input,
+            providerLeagueKey: team.providerLeagueKey,
+            sport: team.sport,
+          }).pipe(
+            Effect.mapError((error) =>
+              error._tag === "provider.session_rejected" ||
+              error._tag === "provider.request_failed" ||
+              error._tag === "provider.response_invalid"
+                ? error
+                : ProviderResponseInvalid.make({ operation: "discover_teams" }),
+            ),
+          );
+          leagueName = settings.name;
+          leagueNames.set(team.providerLeagueKey, leagueName);
+          yield* Effect.annotateCurrentSpan("provider.operation", "discover_teams");
+        }
+        teams.push({ ...team, leagueName });
       }
     }
     yield* Effect.annotateCurrentSpan("provider.team_count", teams.length);
@@ -1735,6 +1755,7 @@ function teamsFromPayload(
           });
         }
         for (const team of game.teams ?? []) {
+          const providerUrl = teamProviderUrl(team, league);
           teams.push({
             provider: key,
             providerTeamKey: team.team_key,
@@ -1743,6 +1764,7 @@ function teamsFromPayload(
             sport: leagueSport[league],
             season: game.season,
             name: team.name,
+            ...(providerUrl === undefined ? {} : { providerUrl }),
           });
         }
       }
@@ -1753,6 +1775,42 @@ function teamsFromPayload(
 
 function providerLeagueKey(teamKey: string): string {
   return teamKey.slice(0, teamKey.lastIndexOf(".t."));
+}
+
+const teamPagePath = {
+  basketball: "basketball",
+  baseball: "baseball",
+  football: "f1",
+  hockey: "hockey",
+} as const satisfies Readonly<Record<FantasySport, string>>;
+
+function teamProviderUrl(
+  team: { readonly team_key: string; readonly url?: string | undefined },
+  league: (typeof supportedLeagues)[number],
+): string | undefined {
+  const payloadUrl = httpsUrl(team.url);
+  if (payloadUrl !== undefined) {
+    return payloadUrl;
+  }
+  const leagueId = team.team_key.slice(
+    team.team_key.indexOf(".l.") + ".l.".length,
+    team.team_key.lastIndexOf(".t."),
+  );
+  const teamId = team.team_key.slice(team.team_key.lastIndexOf(".t.") + ".t.".length);
+  const sport = leagueSport[league];
+  return `https://${reviewHosts[sport]}/${teamPagePath[sport]}/${leagueId}/${teamId}`;
+}
+
+function httpsUrl(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim().length === 0) {
+    return undefined;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function leagueSettings(
@@ -3869,6 +3927,7 @@ const AcquisitionPayload = Schema.Struct({
 const TeamPayload = Schema.Struct({
   team_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[^.]+\.l\.[^.]+\.t\.[^.]+$/u))),
   name: Schema.NonEmptyString,
+  url: Schema.optional(Schema.String),
   managers: Schema.optional(
     Schema.Array(
       Schema.Struct({

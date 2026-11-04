@@ -9,13 +9,8 @@ import { ConnectionStatus, decodeConnectionId } from "#contexts/connections/Conn
 import { fantasyDayLabel, nextFantasyDayBoundary } from "#contexts/connections/FantasyDay.ts";
 import { FantasyTeam, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { ProviderFantasyDay } from "#contexts/connections/Provider.ts";
-import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
-import {
-  TeamConnectionNotReady,
-  TeamNotFound,
-  TeamPersistenceFailed,
-} from "#contexts/connections/Teams.ts";
+import { TeamNotFound, TeamPersistenceFailed } from "#contexts/connections/Teams.ts";
 import type { TeamAutomationAction, TeamControlInput } from "#contexts/connections/Teams.ts";
 import { anyOf, excludedValues } from "#database/dbUtilities.ts";
 import { snapshotOf } from "#utilities/machine.ts";
@@ -35,15 +30,6 @@ const teamListLimit = 100;
 export type TeamRecord = {
   readonly team: FantasyTeam;
   readonly connection: Pick<ProviderConnection, "id" | "status">;
-};
-
-type TeamProviderAccess = {
-  readonly team: FantasyTeam;
-  readonly connection: {
-    readonly id: ReturnType<typeof decodeConnectionId>;
-    readonly provider: ReturnType<typeof decodeProviderKey>;
-    readonly envelope: string;
-  };
 };
 
 type TeamControlRejection = "already-paused" | "not-enabled";
@@ -107,6 +93,8 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
             sport: providerTeams.sport,
             season: providerTeams.season,
             name: providerTeams.name,
+            leagueName: providerTeams.leagueName,
+            providerUrl: providerTeams.providerUrl,
             availability: providerTeams.availability,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
@@ -152,6 +140,8 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
             sport: providerTeams.sport,
             season: providerTeams.season,
             name: providerTeams.name,
+            leagueName: providerTeams.leagueName,
+            providerUrl: providerTeams.providerUrl,
             availability: providerTeams.availability,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
@@ -182,75 +172,6 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
           const record = byId.get(team);
           return record === undefined ? TeamNotFound.make({ team }) : Effect.succeed(record);
         });
-      });
-
-      const loadProviderAccess = Effect.fn("TeamRepository.loadProviderAccess")(function* (
-        userId: UserId,
-        team: TeamId,
-      ) {
-        const rows = yield* database
-          .select({
-            id: providerTeams.id,
-            connectionId: providerTeams.connectionId,
-            userId: providerTeams.userId,
-            provider: providerTeams.provider,
-            providerTeamKey: providerTeams.providerTeamKey,
-            providerLeagueKey: providerTeams.providerLeagueKey,
-            league: providerTeams.league,
-            sport: providerTeams.sport,
-            season: providerTeams.season,
-            name: providerTeams.name,
-            availability: providerTeams.availability,
-            automationState: providerTeams.automationState,
-            automationStatus: providerTeams.automationStatus,
-            ownerNote: providerTeams.ownerNote,
-            ownerNoteUpdatedAt: providerTeams.ownerNoteUpdatedAt,
-            lastSeenAt: providerTeams.lastSeenAt,
-            createdAt: providerTeams.createdAt,
-            updatedAt: providerTeams.updatedAt,
-            connectionStatus: providerConnections.status,
-            credentialProvider: providerCredentials.provider,
-            envelope: providerCredentials.envelope,
-          })
-          .from(providerTeams)
-          .innerJoin(
-            providerConnections,
-            and(
-              eq(providerConnections.id, providerTeams.connectionId),
-              eq(providerConnections.userId, providerTeams.userId),
-            ),
-          )
-          .innerJoin(
-            providerCredentials,
-            and(
-              eq(providerCredentials.connectionId, providerTeams.connectionId),
-              eq(providerCredentials.userId, providerTeams.userId),
-            ),
-          )
-          .where(and(eq(providerTeams.userId, userId), eq(providerTeams.id, team)))
-          .limit(1)
-          .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-        const row = rows[0];
-        if (row === undefined) {
-          return yield* TeamNotFound.make({ team });
-        }
-        const status = yield* Schema.decodeEffect(ConnectionStatus)(row.connectionStatus).pipe(
-          Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
-        );
-        if (status !== "ready") {
-          return yield* TeamConnectionNotReady.make({ team, status });
-        }
-        const decoded = yield* Schema.decodeEffect(FantasyTeamRow)(row).pipe(
-          Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
-        );
-        return {
-          team: decoded,
-          connection: {
-            id: decodeConnectionId(row.connectionId),
-            provider: decodeProviderKey(row.credentialProvider),
-            envelope: row.envelope,
-          },
-        } satisfies TeamProviderAccess;
       });
 
       const control = Effect.fn("TeamRepository.control")(function* (
@@ -456,6 +377,8 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
             providerTeamKey: providerTeams.providerTeamKey,
             providerLeagueKey: providerTeams.providerLeagueKey,
             season: providerTeams.season,
+            leagueName: providerTeams.leagueName,
+            providerUrl: providerTeams.providerUrl,
             availability: providerTeams.availability,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
@@ -494,7 +417,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
         );
       });
 
-      return { list, load, loadProviderAccess, control, saveNote, expirePauses, eligible };
+      return { list, load, control, saveNote, expirePauses, eligible };
     }),
   },
 ) {

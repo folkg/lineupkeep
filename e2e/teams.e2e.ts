@@ -13,7 +13,7 @@ test("renders the empty teams surface and links back to provider linking", async
   ).toBeVisible();
   await expect(page.getByText("Pause a team when you want to take over.")).toBeVisible();
   await expect(page.getByText("No teams yet.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Connect Yahoo" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Connect an account" })).toHaveAttribute(
     "href",
     "/connections",
   );
@@ -43,7 +43,9 @@ test("enables, pauses, resumes, and disables a team through the automation contr
   await expect(page.getByText("No teams are being checked.")).toHaveCount(0);
   await expect(toggle).not.toHaveAttribute("aria-busy");
 
-  await row.getByRole("button", { name: "Pause for the rest of the fantasy day" }).click();
+  await row
+    .getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" })
+    .click();
   await expect(row.getByText(/^Paused for the rest of the fantasy day\./u)).toBeVisible();
   await expect(row.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
 
@@ -54,7 +56,7 @@ test("enables, pauses, resumes, and disables a team through the automation contr
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await expect(
-    row.getByRole("button", { name: "Pause for the rest of the fantasy day" }),
+    row.getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" }),
   ).toHaveCount(0);
 });
 
@@ -71,18 +73,9 @@ test("saves an owner note on the team page and reads it back over MCP", async ({
     {},
   );
   await page.goto("/teams");
-  await page.getByRole("link", { name: "Embedded Browser Team" }).click();
+  await page.getByRole("link", { name: "Embedded Browser Team", exact: true }).click();
   const teamId = new URL(page.url()).pathname.split("/").at(-1);
   expect(teamId).toBeTruthy();
-
-  await test.step("Baseline: the team page shows the roster counts the provider published", async () => {
-    await expect(page.getByText("37 adds and 3 drops today")).toBeVisible();
-    await expect(
-      page.getByText(
-        "Trends not published. The provider published no add and drop counts for this player.",
-      ),
-    ).toBeVisible();
-  });
 
   await test.step("Action: [owner] writes and saves a keeper note", async () => {
     await page
@@ -141,7 +134,7 @@ test("renders the teams surface before client scripts and hydrates its navigatio
   }
 
   await expect(page.getByRole("link", { name: "Teams", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Connect Yahoo" }).click();
+  await page.getByRole("link", { name: "Connect an account" }).click();
   await expect(page).toHaveURL("/connections");
   expect(hydrationWarnings).toEqual([]);
 });
@@ -161,7 +154,7 @@ for (const viewport of [
     await expect(main.getByRole("heading", { name: "Teams", exact: true })).toBeInViewport({
       ratio: 1,
     });
-    await expect(main.getByRole("link", { name: "Connect Yahoo" })).toBeInViewport({
+    await expect(main.getByRole("link", { name: "Connect an account" })).toBeInViewport({
       ratio: 1,
     });
   });

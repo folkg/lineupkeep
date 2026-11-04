@@ -2063,6 +2063,17 @@ const nflTeamEntry = [
   [],
 ];
 
+const nflSecondTeamEntry = [
+  { team_key: "466.l.4000.t.2" },
+  { team_id: "2" },
+  { name: "Synthetic NFL Team Two" },
+  { is_owned_by_current_login: 0 },
+  { url: "https://football.fantasysports.yahoo.com/f1/4000/2" },
+  [],
+  { managers: [{ manager: { manager_id: "2" } }] },
+  [],
+];
+
 const nhlTeamEntry = [
   { team_key: "466.l.4002.t.3" },
   { team_id: "3" },
@@ -2120,6 +2131,56 @@ export const yahooNflTeams = {
     },
   },
 };
+
+function nflTeamsWith(teamEntries: ReadonlyArray<ReadonlyArray<unknown>>): Record<string, unknown> {
+  const teams = Object.fromEntries(
+    teamEntries.map((team, index) => [String(index), { team: [team, []] }]),
+  );
+  return {
+    fantasy_content: {
+      "xml:lang": "en-US",
+      "yahoo:uri": "/fantasy/v2/users;use_login=1/games;game_keys=nfl/teams",
+      users: {
+        "0": {
+          user: [
+            { guid: "SYNTHETICGUID" },
+            {
+              games: {
+                "0": {
+                  game: [
+                    [
+                      { game_key: "466" },
+                      { game_id: "466" },
+                      { name: "Football" },
+                      { code: "nfl" },
+                      { type: "full" },
+                      { url: "https://football.fantasysports.yahoo.com/f1" },
+                      { season: "2026" },
+                      { is_registration_over: 1 },
+                      { is_game_over: 0 },
+                      { is_offseason: 0 },
+                      { is_live_draft_lobby_active: 0 },
+                      [],
+                    ],
+                    { teams: { ...teams, count: teamEntries.length } },
+                  ],
+                },
+                count: 1,
+              },
+            },
+          ],
+        },
+        count: 1,
+      },
+    },
+  };
+}
+
+const nflTeamEntryWithoutUrl = nflTeamEntry.filter((fragment) => !("url" in fragment));
+
+export const yahooNflTeamsWithTwoTeams = nflTeamsWith([nflTeamEntry, nflSecondTeamEntry]);
+
+export const yahooNflTeamsWithoutTeamUrl = nflTeamsWith([nflTeamEntryWithoutUrl]);
 
 export const yahooNhlTeams = {
   fantasy_content: {

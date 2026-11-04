@@ -11,8 +11,6 @@ import {
   TeamId,
 } from "./FantasyTeam.ts";
 import { LineupRun } from "./LineupRun.ts";
-import type { ProviderReadFailure } from "./Provider.ts";
-import { RosterSlot } from "./QueryValues.ts";
 
 export const TeamSummary = Schema.Struct({
   team: FantasyTeam,
@@ -67,46 +65,9 @@ export const TeamNoteSaved = Schema.Struct({
 });
 export type TeamNoteSaved = typeof TeamNoteSaved.Type;
 
-const TeamRosterPlayer = Schema.Struct({
-  name: Schema.NonEmptyString,
-  slot: RosterSlot,
-  primaryPosition: Schema.NonEmptyString,
-  displayPosition: Schema.NonEmptyString,
-  proTeam: Schema.NullOr(Schema.NonEmptyString),
-  injury: Schema.Struct({
-    reported: Schema.Boolean,
-    code: Schema.optional(Schema.String),
-    detail: Schema.optional(Schema.String),
-  }),
-  trend: Schema.Union([
-    Schema.Struct({
-      status: Schema.Literal("published"),
-      adds: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-      drops: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-      window: Schema.Literal("provider_current_day"),
-    }),
-    Schema.Struct({
-      status: Schema.Literal("not_published"),
-      reason: Schema.NonEmptyString,
-    }),
-  ]),
-});
-
-export const TeamRoster = Schema.Struct({
-  observedAt: Schema.DateTimeUtc,
-  players: Schema.Array(TeamRosterPlayer),
-});
-export type TeamRoster = typeof TeamRoster.Type;
-
 export type TeamError = TeamNotFound | TeamControlRejected | TeamPersistenceFailed;
 
 export type TeamNoteError = TeamNotFound | TeamNoteRejected | TeamPersistenceFailed;
-
-type TeamRosterError =
-  | TeamNotFound
-  | TeamConnectionNotReady
-  | TeamPersistenceFailed
-  | ProviderReadFailure;
 
 export class TeamNotFound extends Schema.TaggedError<
   TeamNotFound,
@@ -123,20 +84,12 @@ export class TeamControlRejected extends Schema.TaggedError<
   status: TeamAutomationStatus,
 }) {}
 
-export class TeamConnectionNotReady extends Schema.TaggedError<
-  TeamConnectionNotReady,
-  { readonly brand: unique symbol }
->()("team.connection_not_ready", {
-  team: TeamId,
-  status: ConnectionStatus,
-}) {}
-
 export class TeamNoteRejected extends Schema.TaggedError<
   TeamNoteRejected,
   { readonly brand: unique symbol }
 >()("team.note_rejected", {
   team: TeamId,
-  reason: Schema.Literals(["too_long", "credential_like"]),
+  reason: Schema.Literal("too_long"),
   message: Schema.NonEmptyString,
 }) {}
 
@@ -165,6 +118,4 @@ export type TeamsShape = {
     userId: UserId,
     input: TeamNoteInput,
   ) => Effect.Effect<TeamNoteSaved, TeamNoteError>;
-
-  readonly readRoster: (userId: UserId, team: TeamId) => Effect.Effect<TeamRoster, TeamRosterError>;
 };

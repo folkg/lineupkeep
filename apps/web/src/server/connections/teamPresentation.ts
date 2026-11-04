@@ -2,7 +2,6 @@ import type { ConnectionError } from "@lineupkeep/backend/connections/Connection
 import type { LineupRun } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupError } from "@lineupkeep/backend/connections/LineupRun";
 import { teamNoteLimit } from "@lineupkeep/backend/connections/TeamNote";
-import type { TeamRoster } from "@lineupkeep/backend/connections/Teams";
 import type { TeamSummary } from "@lineupkeep/backend/connections/Teams";
 import type {
   TeamError,
@@ -15,7 +14,6 @@ import type {
   LineupRunView,
   TeamMutationError,
   TeamNoteSaveResult,
-  TeamRosterView,
   TeamSummaryView,
   TeamView,
 } from "#contracts/connections/teamContract.ts";
@@ -76,6 +74,8 @@ function toTeamView(summary: TeamSummary["team"]): TeamView {
     sport: summary.sport,
     season: summary.season,
     name: summary.name,
+    ...(summary.leagueName === undefined ? {} : { leagueName: summary.leagueName }),
+    ...(summary.providerUrl === undefined ? {} : { providerUrl: summary.providerUrl }),
     availability: summary.availability,
     automation: {
       status: summary.automation.status,
@@ -168,22 +168,6 @@ export function toTeamNoteSaveResult(note: TeamNoteSaved): TeamNoteSaveResult {
   };
 }
 
-export function toTeamRosterView(roster: TeamRoster): TeamRosterView {
-  return {
-    status: "ok",
-    players: roster.players.map((player) => ({
-      name: player.name,
-      slot: player.slot,
-      primaryPosition: player.primaryPosition,
-      displayPosition: player.displayPosition,
-      proTeam: player.proTeam,
-      injury: player.injury,
-      trend: player.trend,
-    })),
-    observedAt: DateTime.formatIso(roster.observedAt),
-  };
-}
-
 export function mapTeamNoteError(error: TeamNoteError): ExpectedFailure<TeamNoteErrorCode> {
   switch (error._tag) {
     case "team.not_found":
@@ -196,11 +180,6 @@ export function mapTeamNoteError(error: TeamNoteError): ExpectedFailure<TeamNote
 }
 
 type TeamNoteErrorCode = "team.not_found" | "team.persistence_failed" | "team.input_invalid";
-
-export class TeamRosterUnavailable extends Schema.TaggedError<
-  TeamRosterUnavailable,
-  { readonly brand: unique symbol }
->()("TeamRosterUnavailable", {}) {}
 
 export class LineupRunInputInvalid extends Schema.TaggedError<
   LineupRunInputInvalid,

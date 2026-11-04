@@ -11,6 +11,7 @@ import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -23,9 +24,9 @@ import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { teamContextLabel } from "./teamLabels";
 import { TeamNote } from "./TeamNote";
+import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamListQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
-import { TeamRoster } from "./TeamRoster";
 import { useTeamNote } from "./useTeamNote";
 import { useTeamsPage } from "./useTeamsPage";
 
@@ -80,13 +81,20 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           <TeamAttention team={props.team} />
         </Stack>
         <TeamControls team={props.team} remote={props.remote} />
-        <TextLink search={{ surface: "team", team: props.team.team.id }} to="/feedback">
-          Report a problem with this team
-        </TextLink>
+        <Inline gap="sm">
+          <TextLink
+            search={{
+              surface: "team",
+              team: props.team.team.id,
+              teamName: props.team.team.name,
+            }}
+            to="/feedback"
+          >
+            Report a problem with this team
+          </TextLink>
+          <TeamProviderLink team={props.team.team} />
+        </Inline>
       </Stack>
-
-      <TeamNote note={note} />
-      <TeamRoster remote={props.remote} teamId={props.team.team.id} />
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
         <Heading id="team-activity-title" level={2} size="section">
@@ -102,6 +110,8 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           <RunActivity runs={props.team.recentRuns} />
         </Show>
       </Stack>
+
+      <TeamNote note={note} />
     </Stack>
   );
 }

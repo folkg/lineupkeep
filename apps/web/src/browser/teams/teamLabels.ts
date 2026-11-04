@@ -2,13 +2,13 @@ import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.
 import type {
   LineupRunView,
   TeamAutomationView,
-  TeamRosterTrendView,
   TeamView,
 } from "#contracts/connections/teamContract.ts";
 import { leagueDisplayName, sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
 export function teamContextLabel(team: TeamView): string {
-  return `${sportDisplayName(team.sport)} · ${leagueDisplayName(team.league)} ${String(team.season)}`;
+  const context = `${sportDisplayName(team.sport)} · ${leagueDisplayName(team.league)} ${String(team.season)}`;
+  return team.leagueName === undefined ? context : `${team.leagueName} · ${context}`;
 }
 
 export function lastCheckLine(run: LineupRunView, now?: Date): string {
@@ -184,17 +184,6 @@ export function triggerLabel(run: LineupRunView): string {
 
 function playerCount(count: number): string {
   return count === 1 ? "1 player" : `${String(count)} players`;
-}
-
-export function rosterTrendLabel(trend: TeamRosterTrendView): string {
-  if (trend.status === "not_published") {
-    return "Trends not published";
-  }
-  return `${moveCount(trend.adds, "add")} and ${moveCount(trend.drops, "drop")} today`;
-}
-
-function moveCount(count: number, noun: "add" | "drop"): string {
-  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 export type QuietGroupSpan = {

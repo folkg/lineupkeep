@@ -13,7 +13,7 @@ import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
-import { defaultProviderName, providerDisplayName } from "#contracts/connections/providerLabels.ts";
+import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type { LineupRunView } from "#contracts/connections/teamContract.ts";
 
 import { describeRunFailure } from "./teamFailure";
@@ -34,9 +34,9 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
     teamsQuery: () => props.teamsQuery(),
     onRefresh: () => props.onRefresh(),
   });
-  const providerName = (): string => {
+  const providerName = (): string | undefined => {
     const team = page.team();
-    return team === undefined ? defaultProviderName() : providerDisplayName(team.team.provider);
+    return team === undefined ? undefined : providerDisplayName(team.team.provider);
   };
 
   return (
@@ -83,7 +83,7 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
 
 function RunDetail(props: {
   readonly run: LineupRunView;
-  readonly providerName: string;
+  readonly providerName: string | undefined;
   readonly teamName: string;
   readonly teamId: string;
 }): JSX.Element {
@@ -132,7 +132,7 @@ function RunDetail(props: {
               )}
             </Show>
             <Text size="caption" tone="muted">
-              {outcome().verified ? `Confirmed on ${props.providerName}.` : "Not yet confirmed."}
+              {outcome().verified ? confirmedLine(props.providerName) : "Not yet confirmed."}
               {outcome().reconciled ? " Checked again after an unconfirmed write." : ""}
             </Text>
             <Show
@@ -194,6 +194,10 @@ function RunDetail(props: {
       </Show>
     </Stack>
   );
+}
+
+function confirmedLine(providerName: string | undefined): string {
+  return providerName === undefined ? "Confirmed." : `Confirmed on ${providerName}.`;
 }
 
 type RunDetailPageProps = {

@@ -78,6 +78,30 @@ it("renders timestamps in the reader's locale with the raw value in datetime", a
   expect(expiry?.textContent).toBe(formatReaderTime(fourMinutesFromNow));
 });
 
+it("describes a connected account without naming the provider in the introduction", async () => {
+  using _app = setupConnectionsPage([connected]);
+
+  await expect
+    .element(
+      page.getByText(
+        "Lineupkeep keeps the encrypted sign-in session, not your password, and lists the teams this account can manage.",
+      ),
+    )
+    .toBeVisible();
+});
+
+it("describes the connection step without naming the provider in the introduction", async () => {
+  using _app = setupConnectionsPage([]);
+
+  await expect
+    .element(
+      page.getByText(
+        "Connect your fantasy account in a private browser. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage.",
+      ),
+    )
+    .toBeVisible();
+});
+
 it("keeps setup out of the way when a connection is already present", async () => {
   using _app = setupConnectionsPage([connected]);
 

@@ -56,6 +56,8 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         readonly sport: "football" | "hockey" | "baseball" | "basketball";
         readonly season: number;
         readonly name: string;
+        readonly leagueName: string | null;
+        readonly providerUrl: string | null;
         readonly availability: "available" | "unavailable";
         readonly automationState: unknown;
         readonly automationStatus: "disabled" | "enabled" | "paused-until-fantasy-day-end";
@@ -121,6 +123,8 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
             sport: providerTeams.sport,
             season: providerTeams.season,
             name: providerTeams.name,
+            leagueName: providerTeams.leagueName,
+            providerUrl: providerTeams.providerUrl,
             availability: providerTeams.availability,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,
@@ -207,6 +211,8 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
             sport: providerTeams.sport,
             season: providerTeams.season,
             name: providerTeams.name,
+            leagueName: providerTeams.leagueName,
+            providerUrl: providerTeams.providerUrl,
             availability: providerTeams.availability,
             automationState: providerTeams.automationState,
             automationStatus: providerTeams.automationStatus,

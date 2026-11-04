@@ -9,7 +9,6 @@ import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Spread } from "#browser/shared-ui/Spread.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
-import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 export function LandingPage(): JSX.Element {
   const session = useSessionActions();
@@ -25,19 +24,17 @@ export function LandingPage(): JSX.Element {
                 Lineupkeep sets your fantasy lineup.
               </Heading>
               <Text size="lede" tone="muted">
-                As long as your {defaultProviderName()} connection works, it checks each enabled
-                team every hour and starts the players your league allows.
+                Once your account is connected, it checks each enabled team every hour and starts
+                the players your league allows.
               </Text>
             </Stack>
             <Stack align="start" gap="sm">
               <ButtonLink to={session.isSignedIn() ? "/teams" : "/auth"} variant="accent">
-                {session.isSignedIn()
-                  ? "Open your teams"
-                  : `Sign in to connect ${defaultProviderName()}`}
+                {session.isSignedIn() ? "Open your teams" : "Sign in to get started"}
               </ButtonLink>
               <Show when={!session.isSignedIn()}>
                 <Text size="caption" tone="muted">
-                  The first sign-in creates your account. Connect {defaultProviderName()} next.
+                  The first sign-in creates your account. Connect your fantasy account next.
                 </Text>
               </Show>
             </Stack>
@@ -58,7 +55,7 @@ export function LandingPage(): JSX.Element {
                   </Text>
                 </Stack>
                 <Stack gap="xs">
-                  <Text weight="semibold">{defaultProviderName()}'s lineup rules</Text>
+                  <Text weight="semibold">Your league's lineup rules</Text>
                   <Text size="caption" tone="muted">
                     Lineupkeep works inside your league's rules. It cannot add, drop, or trade a
                     player.

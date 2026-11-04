@@ -1399,7 +1399,6 @@ const unavailableTeams: TeamsShape = {
   get: () => Effect.die(new Error("teams unavailable")),
   control: () => Effect.die(new Error("teams unavailable")),
   saveNote: () => Effect.die(new Error("teams unavailable")),
-  readRoster: () => Effect.die(new Error("teams unavailable")),
 };
 const unavailableFeedback: FeedbackShape = {
   submit: () => Effect.die(new Error("feedback unavailable")),

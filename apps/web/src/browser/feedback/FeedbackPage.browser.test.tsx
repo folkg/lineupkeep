@@ -129,6 +129,22 @@ it("renders report text as text instead of markup", async () => {
   expect(document.body.textContent).toContain("<b>bold</b>");
 });
 
+it("prefills a team report with the team's name as a readable line", async () => {
+  using _app = setupFeedbackPage(
+    [],
+    {},
+    { surface: "team", team },
+    "Problem with Bread Roller",
+    "Bread Roller",
+  );
+
+  await expect.element(page.getByLabelText("Title")).toHaveValue("Problem with Bread Roller");
+  await expect.element(page.getByText("Report about Bread Roller.")).toBeVisible();
+
+  await page.getByLabelText("Title").fill("Problem with waivers");
+  await expect.element(page.getByLabelText("Title")).toHaveValue("Problem with waivers");
+});
+
 it("shows the report's context and sends the linked team reference", async () => {
   const submissions: Array<FeedbackDraftData> = [];
   using _app = setupFeedbackPage(
@@ -147,7 +163,7 @@ it("shows the report's context and sends the linked team reference", async () =>
     { surface: "team", team },
   );
 
-  await expect.element(page.getByText("About this team")).toBeVisible();
+  await expect.element(page.getByText("Report about this team.")).toBeVisible();
   await page.getByLabelText("Kind").selectOptions("data-issue");
   await page.getByLabelText("Title").fill("Standings are wrong");
   await page.getByLabelText("Details").fill("The category totals do not add up.");
@@ -209,6 +225,8 @@ function setupFeedbackPage(
   reports: ReadonlyArray<FeedbackReportView>,
   overrides: Partial<FeedbackRemote> = {},
   initialContext: FeedbackContextView = {},
+  initialTitle = "",
+  teamName?: string,
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: FeedbackRemote = {
@@ -235,6 +253,8 @@ function setupFeedbackPage(
         reportsQuery={() => reportsQuery}
         remote={remote}
         initialContext={() => initialContext}
+        initialTitle={() => initialTitle}
+        teamName={() => teamName}
         onRefresh={() => Promise.resolve()}
       />
     ),

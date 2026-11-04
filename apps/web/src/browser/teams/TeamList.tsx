@@ -12,12 +12,12 @@ import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
-import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
+import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
 
 export function TeamList(props: TeamListProps): JSX.Element {
@@ -66,9 +66,8 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No teams yet.">
-                <TextLink to="/connections">Connect {defaultProviderName()}</TextLink> to import the
-                teams this account can manage. If you join another league on {defaultProviderName()}
-                , refresh to import it.
+                <TextLink to="/connections">Connect an account</TextLink> to import the teams this
+                account can manage. If you join another league, refresh to import it.
               </EmptyState>
             }
             when={props.teams().length > 0}
@@ -118,7 +117,10 @@ function TeamRow(props: TeamRowProps): JSX.Element {
         </Show>
         <TeamAttention team={props.team} />
       </Stack>
-      <TeamControls team={props.team} remote={props.remote} />
+      <Inline gap="sm" align="start">
+        <TeamControls team={props.team} remote={props.remote} />
+        <TeamProviderLink team={props.team.team} />
+      </Inline>
     </RuleListItem>
   );
 }

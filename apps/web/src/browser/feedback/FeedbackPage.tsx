@@ -23,9 +23,11 @@ export function FeedbackPage(props: FeedbackPageProps): JSX.Element {
     reportsQuery: () => props.reportsQuery(),
     remote: () => props.remote,
     initialContext: () => props.initialContext(),
+    initialTitle: () => props.initialTitle(),
     onRefresh: () => props.onRefresh(),
   });
-  const about = (): string | undefined => feedbackContextSummary(props.initialContext());
+  const about = (): string | undefined =>
+    feedbackContextSummary(props.initialContext(), props.teamName());
 
   return (
     <AppShell>
@@ -38,13 +40,7 @@ export function FeedbackPage(props: FeedbackPageProps): JSX.Element {
             <Heading id="feedback-form-title" level={2} size="section">
               Send a report
             </Heading>
-            <Show when={about()}>
-              {(summary) => (
-                <Text size="caption" tone="muted">
-                  {summary()}
-                </Text>
-              )}
-            </Show>
+            <Show when={about()}>{(summary) => <Text size="body">{summary()}</Text>}</Show>
             <FeedbackForm
               draft={page.draft()}
               errors={page.errors()}
@@ -72,5 +68,7 @@ type FeedbackPageProps = {
   readonly reportsQuery: Accessor<FeedbackListQueryOptions>;
   readonly remote: FeedbackRemote;
   readonly initialContext: Accessor<FeedbackContextView>;
+  readonly initialTitle: Accessor<string>;
+  readonly teamName: Accessor<string | undefined>;
   readonly onRefresh: () => Promise<void>;
 };

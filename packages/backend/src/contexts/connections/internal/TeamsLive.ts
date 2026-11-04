@@ -24,7 +24,6 @@ import type {
   TeamsShape,
 } from "#contexts/connections/Teams.ts";
 
-import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { LineupRunRepository } from "./LineupRunRepository.ts";
 import { toLineupRun } from "./LineupRunViewRepository.ts";
 import { TeamRepository } from "./TeamRepository.ts";
@@ -36,7 +35,6 @@ export const TeamsLive = Layer.effect(
     const teams = yield* TeamRepository;
     const runs = yield* LineupRunRepository;
     const registry = yield* ProviderRegistry;
-    const encryption = yield* ConnectionCredentialEncryption;
 
     const summaries = (
       userId: UserId,
@@ -130,63 +128,9 @@ export const TeamsLive = Layer.effect(
         } satisfies TeamNoteSaved;
       });
 
-    const readRoster: TeamsShape["readRoster"] = (userId, team) =>
-      Effect.gen(function* () {
-        const access = yield* teams.loadProviderAccess(userId, team);
-        const provider = registry.get(access.connection.provider);
-        if (provider === undefined) {
-          return yield* TeamPersistenceFailed.make({
-            cause: new Error(`Team ${team} references an unregistered provider`),
-          });
-        }
-        const session = yield* encryption
-          .open({
-            userId,
-            connectionId: access.connection.id,
-            provider: access.connection.provider,
-            envelope: access.connection.envelope,
-          })
-          .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
-        const observedAt = yield* DateTime.now;
-        const roster = yield* provider.readRoster({
-          provider: access.connection.provider,
-          session,
-          providerTeamKey: access.team.providerTeamKey,
-          period: undefined,
-        });
-        yield* Effect.annotateCurrentSpan("provider.player_count", roster.players.length);
-        return {
-          observedAt,
-          players: roster.players.map((player) => ({
-            name: player.name,
-            slot: player.slot,
-            primaryPosition: player.primaryPosition,
-            displayPosition: player.displayPosition,
-            proTeam: player.proTeamAbbreviation ?? null,
-            injury: injuryOf(player),
-            trend: player.transactionTrend,
-          })),
-        };
-      });
-
-    return Teams.of({ list, get, control, saveNote, readRoster });
+    return Teams.of({ list, get, control, saveNote });
   }),
 );
-
-function injuryOf(player: {
-  readonly injuryCode: string | undefined;
-  readonly injuryDetail: string | undefined;
-}): {
-  readonly reported: boolean;
-  readonly code?: string;
-  readonly detail?: string;
-} {
-  return {
-    reported: player.injuryCode !== undefined || player.injuryDetail !== undefined,
-    ...(player.injuryCode === undefined ? {} : { code: player.injuryCode }),
-    ...(player.injuryDetail === undefined ? {} : { detail: player.injuryDetail }),
-  };
-}
 
 function fantasyDayOf(registry: ProviderRegistryShape, team: FantasyTeam): ProviderFantasyDay {
   const provider = registry.get(team.provider);

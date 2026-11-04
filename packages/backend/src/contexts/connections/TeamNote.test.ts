@@ -45,23 +45,18 @@ it("counts a character outside the basic plane once", () => {
   assert.strictEqual(checked.valid, true);
 });
 
-it("refuses a token-shaped value and does not echo it", () => {
+it("accepts a note that contains a token-shaped value", () => {
   const token =
     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
 
-  const rejected = rejection(checkTeamNote(`Reconnect with ${token}`));
+  const checked = checkTeamNote(`Reconnect with ${token}`);
 
-  assert.strictEqual(rejected.reason, "credential_like");
-  assert.ok(!rejected.message.includes(token));
-  assert.ok(rejected.message.includes("does not store"));
+  assert.deepStrictEqual(checked, { valid: true, note: `Reconnect with ${token}` });
 });
 
-it("refuses a password assignment and a provider session cookie", () => {
-  const assignment = rejection(checkTeamNote("password: hunter2000"));
-  const cookie = rejection(checkTeamNote("Y=A1b2C3d4E5f6G7h8I9j0K1l2M3n4"));
-
-  assert.strictEqual(assignment.reason, "credential_like");
-  assert.strictEqual(cookie.reason, "credential_like");
+it("accepts a password assignment and a provider session cookie", () => {
+  assert.strictEqual(checkTeamNote("password: hunter2000").valid, true);
+  assert.strictEqual(checkTeamNote("Y=A1b2C3d4E5f6G7h8I9j0K1l2M3n4").valid, true);
 });
 
 it("leaves ordinary league context alone", () => {

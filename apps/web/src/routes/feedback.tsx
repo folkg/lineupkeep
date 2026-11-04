@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/solid-router";
 import { FeedbackPage } from "#browser/feedback/FeedbackPage.tsx";
 import {
   feedbackContextFromSearch,
+  feedbackTitleFromSearch,
   parseFeedbackSearch,
 } from "#browser/feedback/feedbackPrefill.ts";
 import { feedbackQueries, refreshFeedbackReports } from "#browser/feedback/feedbackQueries.ts";
@@ -32,6 +33,8 @@ function FeedbackRoute(): JSX.Element {
       reportsQuery={() => context().reportsQuery}
       remote={feedbackRemote}
       initialContext={() => feedbackContextFromSearch(search())}
+      initialTitle={() => feedbackTitleFromSearch(search())}
+      teamName={() => search().teamName}
       onRefresh={() => refreshFeedbackReports(context().queryClient)}
     />
   );

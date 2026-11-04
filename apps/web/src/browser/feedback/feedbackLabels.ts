@@ -50,9 +50,12 @@ export function feedbackStatusDetail(report: FeedbackReportView): string {
   }
 }
 
-export function feedbackContextSummary(context: FeedbackContextView): string | undefined {
+export function feedbackContextSummary(
+  context: FeedbackContextView,
+  teamName?: string,
+): string | undefined {
   if (context.surface === "team" || (context.surface === undefined && context.team !== undefined)) {
-    return "About this team";
+    return teamName === undefined ? "Report about this team." : `Report about ${teamName}.`;
   }
   switch (context.surface) {
     case "run":

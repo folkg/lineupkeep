@@ -39,11 +39,12 @@ test("carries a team's context into the feedback form from the team page", async
     {},
   );
   await page.goto("/teams");
-  await page.getByRole("link", { name: "Embedded Browser Team" }).click();
+  await page.getByRole("link", { name: "Embedded Browser Team", exact: true }).click();
   await page.getByRole("link", { name: "Report a problem with this team" }).click();
 
   await expect(page).toHaveURL(/\/feedback\?/u);
-  await expect(page.getByText("About this team")).toBeVisible();
+  await expect(page.getByText("Report about Embedded Browser Team.")).toBeVisible();
+  await expect(page.getByLabel("Title")).toHaveValue("Problem with Embedded Browser Team");
 
   await page.getByLabel("Kind").selectOption("data-issue");
   await page.getByLabel("Title").fill("Roster totals look wrong");
@@ -52,5 +53,5 @@ test("carries a team's context into the feedback form from the team page", async
 
   await expect(page.getByText("Thanks, your report is recorded.")).toBeVisible();
   await expect(page.getByText("Wrong data · Open")).toBeVisible();
-  await expect(page.getByRole("listitem").getByText("About this team")).toBeVisible();
+  await expect(page.getByRole("listitem").getByText("Report about this team.")).toBeVisible();
 });

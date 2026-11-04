@@ -46,6 +46,8 @@ export const ProviderTeam = Schema.Struct({
   sport: FantasySport,
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
   name: Schema.NonEmptyString,
+  leagueName: Schema.optional(Schema.NonEmptyString),
+  providerUrl: Schema.optional(Schema.NonEmptyString),
 });
 export type ProviderTeam = typeof ProviderTeam.Type;
 

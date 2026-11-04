@@ -1,5 +1,4 @@
 import { Connections } from "@lineupkeep/backend/connections/Connections";
-import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import {
@@ -17,20 +16,17 @@ import type {
   TeamChangeView,
   TeamNoteSaveResult,
   TeamRefreshView,
-  TeamRosterView,
 } from "#contracts/connections/teamContract.ts";
 import { runUseCase } from "#server/backendEntry.ts";
 import {
   LineupRunInputInvalid,
   TeamInputInvalid,
-  TeamRosterUnavailable,
   mapLineupError,
   mapTeamError,
   mapTeamNoteError,
   mapTeamRefreshError,
   toLineupRunView,
   toTeamNoteSaveResult,
-  toTeamRosterView,
   toTeamSummaryView,
 } from "#server/connections/teamPresentation.ts";
 
@@ -176,31 +172,5 @@ export const saveTeamNoteServerFn = createServerFn({ method: "POST" })
         error._tag === "TeamInputInvalid"
           ? { type: "team.input_invalid", outcome: "rejected" }
           : mapTeamNoteError(error),
-    );
-  });
-
-export const readTeamRosterServerFn = createServerFn({ method: "POST" })
-  .validator((raw: { readonly team: string }) =>
-    Schema.decodeResult(Schema.Struct({ team: TeamId }))(raw),
-  )
-  .handler(({ data }) => {
-    const request = getRequest();
-    return runUseCase(
-      request,
-      "teams.roster",
-      (userId) =>
-        Effect.gen(function* () {
-          const input = yield* Effect.fromResult(data).pipe(
-            Effect.mapError(() => TeamRosterUnavailable.make({})),
-          );
-          const roster = yield* Teams.use((teams) => teams.readRoster(userId, input.team));
-          return toTeamRosterView(roster) satisfies TeamRosterView;
-        }),
-      (error) =>
-        error._tag === "TeamRosterUnavailable" ||
-        error._tag === "team.not_found" ||
-        error._tag === "team.connection_not_ready"
-          ? { type: "team.roster_unavailable", outcome: "rejected" }
-          : { type: "team.roster_unavailable", outcome: "failure" },
     );
   });

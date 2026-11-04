@@ -35,6 +35,8 @@ export type TeamView = {
   readonly sport: FantasySport;
   readonly season: number;
   readonly name: string;
+  readonly leagueName?: string;
+  readonly providerUrl?: string;
   readonly availability: TeamAvailability;
   readonly automation: TeamAutomationView;
   readonly ownerNote: string | null;
@@ -134,7 +136,7 @@ export type TeamNoteSaveResult =
     }
   | {
       readonly outcome: "rejected";
-      readonly reason: "too_long" | "credential_like";
+      readonly reason: "too_long";
       readonly message: string;
     };
 
@@ -143,42 +145,6 @@ export type TeamNoteError = {
 };
 export type TeamNoteRequestResult<A> =
   | UseCaseResult<A, TeamNoteError["type"]>
-  | { readonly type: "error"; readonly error: AuthenticationFailure };
-
-export type TeamRosterTrendView =
-  | {
-      readonly status: "published";
-      readonly adds: number;
-      readonly drops: number;
-      readonly window: "provider_current_day";
-    }
-  | { readonly status: "not_published"; readonly reason: string };
-
-type TeamRosterSlotView =
-  | { readonly status: "verified"; readonly slot: string }
-  | { readonly status: "unverified"; readonly rawValue: string; readonly reason: string };
-
-export type TeamRosterPlayerView = {
-  readonly name: string;
-  readonly slot: TeamRosterSlotView;
-  readonly primaryPosition: string;
-  readonly displayPosition: string;
-  readonly proTeam: string | null;
-  readonly injury: { readonly reported: boolean; readonly code?: string; readonly detail?: string };
-  readonly trend: TeamRosterTrendView;
-};
-
-export type TeamRosterView = {
-  readonly status: "ok" | "unavailable";
-  readonly players: ReadonlyArray<TeamRosterPlayerView>;
-  readonly observedAt: string | null;
-};
-
-export type TeamRosterError = {
-  readonly type: "team.roster_unavailable";
-};
-export type TeamRosterRequestResult<A> =
-  | UseCaseResult<A, TeamRosterError["type"]>
   | { readonly type: "error"; readonly error: AuthenticationFailure };
 
 export type TeamMutationError = {

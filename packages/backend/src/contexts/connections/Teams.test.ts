@@ -53,6 +53,49 @@ it.effect("discovers multiple teams in one league and persists them disabled", (
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
+it.effect("keeps the fantasy league name and provider url discovered for each team", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    const named = {
+      ...team("nhl.l.1.t.1", "First Skate"),
+      leagueName: "Irish Lax",
+      providerUrl: "https://provider.example/hockey/1/1",
+    };
+    yield* fake.setTeams([named]);
+
+    const discovered = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+
+    assert.strictEqual(Array.getUnsafe(discovered, 0).leagueName, "Irish Lax");
+    assert.strictEqual(
+      Array.getUnsafe(discovered, 0).providerUrl,
+      "https://provider.example/hockey/1/1",
+    );
+    const listed = yield* connections.listTeams(owner);
+    assert.strictEqual(Array.getUnsafe(listed, 0).leagueName, "Irish Lax");
+    assert.strictEqual(
+      Array.getUnsafe(listed, 0).providerUrl,
+      "https://provider.example/hockey/1/1",
+    );
+
+    yield* fake.setTeams([
+      {
+        ...named,
+        leagueName: "Irish Lax Renamed",
+        providerUrl: "https://provider.example/hockey/1/2",
+      },
+    ]);
+    const refreshed = yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+
+    assert.strictEqual(Array.getUnsafe(refreshed, 0).leagueName, "Irish Lax Renamed");
+    assert.strictEqual(
+      Array.getUnsafe(refreshed, 0).providerUrl,
+      "https://provider.example/hockey/1/2",
+    );
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
 it.effect("refreshes availability, restores teams, and preserves configuration", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;

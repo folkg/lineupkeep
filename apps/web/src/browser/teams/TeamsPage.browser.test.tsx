@@ -11,6 +11,8 @@ import {
 import { expect, it } from "vitest";
 import { page } from "vitest/browser";
 
+import "#web/styles.css";
+
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
@@ -223,7 +225,16 @@ it("labels a pause as the rest of the fantasy day and resumes through the contro
       ),
     )
     .toBeVisible();
-  await page.getByRole("button", { name: "Resume lineup checks" }).click();
+  const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
+  const resume = page.getByRole("button", { name: "Resume lineup checks" });
+  await expect.element(resume).toHaveAttribute("title", "Resume lineup checks");
+
+  const toggleBox = toggle.element().getBoundingClientRect();
+  const resumeBox = resume.element().getBoundingClientRect();
+  expect(Math.abs(toggleBox.top - resumeBox.top)).toBeLessThanOrEqual(2);
+  expect(resumeBox.left).toBeGreaterThanOrEqual(toggleBox.right);
+
+  await resume.click();
 
   await expect
     .element(page.getByRole("switch", { name: "Lineup checks for Alpha" }))
@@ -243,7 +254,20 @@ it("pauses an enabled team for the rest of the fantasy day", async () => {
     },
   });
 
-  await page.getByRole("button", { name: "Pause for the rest of the fantasy day" }).click();
+  const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
+  const pause = page.getByRole("button", {
+    name: "Pause lineup checks for the rest of the fantasy day",
+  });
+  await expect
+    .element(pause)
+    .toHaveAttribute("title", "Pause lineup checks for the rest of the fantasy day");
+
+  const toggleBox = toggle.element().getBoundingClientRect();
+  const pauseBox = pause.element().getBoundingClientRect();
+  expect(Math.abs(toggleBox.top - pauseBox.top)).toBeLessThanOrEqual(2);
+  expect(pauseBox.left).toBeGreaterThanOrEqual(toggleBox.right);
+
+  await pause.click();
 
   await expect
     .element(
@@ -256,6 +280,23 @@ it("pauses an enabled team for the rest of the fantasy day", async () => {
     .toBeVisible();
   await expect.element(page.getByRole("button", { name: "Resume lineup checks" })).toBeVisible();
   expect(changes).toEqual([{ team: teamId, action: "pause-today" }]);
+});
+
+it("explains why the pause control is unavailable while the switch is saving", async () => {
+  const answer = Promise.withResolvers<TeamChangeView>();
+  using _app = setupTeamsPage([baseTeam], { control: () => answer.promise });
+
+  await page.getByRole("switch", { name: "Lineup checks for Alpha" }).click();
+
+  const pause = page.getByRole("button", {
+    name: "Pause lineup checks for the rest of the fantasy day",
+  });
+  await expect.element(pause).toHaveAttribute("aria-disabled", "true");
+  await expect
+    .element(pause)
+    .toHaveAttribute("title", "Wait for the lineup checks change to finish before pausing.");
+
+  answer.resolve({ changed: [], teams: [baseTeam] });
 });
 
 it("shows a reconnect action without flattening it into disabled", async () => {
@@ -282,7 +323,10 @@ it("shows a reconnect action without flattening it into disabled", async () => {
 it("keeps quiet rows to league context and the last check", async () => {
   using _app = setupTeamsPage([enabledTeam]);
 
-  await expect.element(page.getByText("Football · NFL 2026")).toBeVisible();
+  const context = page.getByText("Football · NFL 2026");
+  await expect.element(context).toBeVisible();
+  expect(context.element().textContent).toBe("Football · NFL 2026");
+  await expect.element(page.getByText(/^ ·/u)).not.toBeInTheDocument();
   await expect
     .element(page.getByText(`Last check changed nothing · ${formatReaderTime(twoHoursAgo)}`))
     .toBeVisible();
@@ -290,6 +334,25 @@ it("keeps quiet rows to league context and the last check", async () => {
   await expect.element(page.getByText("Connected")).not.toBeInTheDocument();
   await expect.element(page.getByText("Lineup checks on")).not.toBeInTheDocument();
   await expect.element(page.getByText("Reconnect Yahoo")).not.toBeInTheDocument();
+  await expect.element(page.getByRole("link", { name: /^Open /u })).not.toBeInTheDocument();
+});
+
+it("shows the fantasy league name and a provider jump out for the team", async () => {
+  using _app = setupTeamsPage([
+    {
+      ...enabledTeam,
+      team: {
+        ...enabledTeam.team,
+        leagueName: "Irish Lax",
+        providerUrl: "https://provider.example/f1/1000/1",
+      },
+    },
+  ]);
+
+  await expect.element(page.getByText("Irish Lax · Football · NFL 2026")).toBeVisible();
+  const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
+  await expect.element(jumpOut).toHaveAttribute("href", "https://provider.example/f1/1000/1");
+  await expect.element(jumpOut).toHaveAttribute("target", "_blank");
 });
 
 it("says what the last check did and tallies the checks that changed the lineup", async () => {
@@ -306,6 +369,8 @@ it("says what the last check did and tallies the checks that changed the lineup"
 it("shows an empty state before any teams are discovered", async () => {
   using _empty = setupTeamsPage([]);
   await expect.element(page.getByText("No teams yet.")).toBeVisible();
+  await expect.element(page.getByText(/^Connect an account to import/u)).toBeVisible();
+  await expect.element(page.getByText(/Yahoo/u)).not.toBeInTheDocument();
 });
 
 it("shows a recoverable failure instead of an empty team list", async () => {
@@ -334,7 +399,7 @@ it("imports provider teams when the owner refreshes discovery", async () => {
   await page.getByRole("button", { name: "Refresh teams" }).click();
 
   await expect.element(page.getByRole("link", { name: "Beta", exact: true })).toBeVisible();
-  await expect.element(page.getByText("Teams refreshed from Yahoo.")).toBeVisible();
+  await expect.element(page.getByText("Teams refreshed.")).toBeVisible();
 });
 
 it("keeps the list and reports a failed refresh", async () => {
@@ -347,9 +412,7 @@ it("keeps the list and reports a failed refresh", async () => {
 
   await page.getByRole("button", { name: "Refresh teams" }).click();
 
-  await expect
-    .element(page.getByText("We could not refresh teams from Yahoo. Try again."))
-    .toBeVisible();
+  await expect.element(page.getByText("We could not refresh your teams. Try again.")).toBeVisible();
   await expect.element(page.getByRole("link", { name: "Alpha", exact: true })).toBeVisible();
 });
 
@@ -376,7 +439,6 @@ function setupTeamsPage(
     control: overrides.control ?? (() => Promise.resolve({ changed: [], teams })),
     readRun: () => Promise.reject(new Error("Unexpected run read")),
     saveNote: () => Promise.reject(new Error("Unexpected note save")),
-    readRoster: () => Promise.resolve({ status: "ok", players: [], observedAt: null }),
   };
   const teamsQuery = teamQueries.list(remote);
   const sessionRemote: SessionRemote = {

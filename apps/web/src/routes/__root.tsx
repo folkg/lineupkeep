@@ -6,7 +6,6 @@ import type { Element } from "solid-js";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { themeBootstrapScript } from "#browser/app-shell/theme.ts";
 import { sessionQueries } from "#browser/session/sessionQueries.ts";
-import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import "#web/styles.css";
 
@@ -15,10 +14,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: `${productName}: fantasy lineups for ${defaultProviderName()} leagues` },
+      { title: `${productName}: your fantasy lineup, checked every hour` },
       {
         name: "description",
-        content: `Lineupkeep sets fantasy lineups for ${defaultProviderName()} football and hockey teams and shows what changed after each check.`,
+        content:
+          "Lineupkeep sets fantasy lineups for football and hockey teams and shows what changed after each check.",
       },
     ],
     links: [{ rel: "icon", type: "image/svg+xml", href: "/brand/lineupkeep-mark.svg" }],

@@ -33,8 +33,8 @@ export type FeedbackDraftCheck =
 export const titleLimit = 120;
 export const bodyLimit = 4_000;
 
-export function emptyFeedbackDraft(context: FeedbackContextView = {}): FeedbackDraft {
-  return { kind: "", title: "", body: "", context };
+export function emptyFeedbackDraft(context: FeedbackContextView = {}, title = ""): FeedbackDraft {
+  return { kind: "", title, body: "", context };
 }
 
 export function checkFeedbackDraft(draft: FeedbackDraft): FeedbackDraftCheck {

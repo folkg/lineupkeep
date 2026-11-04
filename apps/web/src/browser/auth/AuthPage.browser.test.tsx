@@ -21,6 +21,13 @@ import { SignInFailure } from "./signInFailure";
 import { signInQueries } from "./signInQueries";
 import type { SignInRemote } from "./signInRemote";
 
+it("describes the leagues without naming a provider", async () => {
+  using _app = setupAuthPage({});
+
+  await expect.element(page.getByText("For football and hockey fantasy leagues.")).toBeVisible();
+  expect(document.body.textContent).not.toContain("Yahoo");
+});
+
 it("starts Google sign-in toward the page that asked for it", async () => {
   const started: Array<{ readonly returnTo: string; readonly errorReturnTo: string }> = [];
   using _app = setupAuthPage({

@@ -11,12 +11,6 @@ export const teamQueries = {
       queryKey: ["teams", "list"] as const,
       queryFn: ({ signal }) => remote.list({ signal }),
     }),
-  rosterKey: (team: string) => ["rosters", team] as const,
-  roster: (remote: Pick<TeamRemote, "readRoster">, team: string) =>
-    queryOptions({
-      queryKey: teamQueries.rosterKey(team),
-      queryFn: () => remote.readRoster({ team }),
-    }),
   runKey: (run: string) => ["runs", "detail", run] as const,
   run: (remote: Pick<TeamRemote, "readRun">, run: string) =>
     queryOptions({

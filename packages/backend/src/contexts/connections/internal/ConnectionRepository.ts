@@ -779,6 +779,8 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     sport: team.sport,
                     season: team.season,
                     name: team.name,
+                    leagueName: team.leagueName ?? null,
+                    providerUrl: team.providerUrl ?? null,
                     availability: "available" as const,
                     automationState: Schema.encodeSync(Schema.toCodecJson(TeamAutomationState))({
                       _tag: "Disabled" as const,
@@ -822,6 +824,8 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                         "sport",
                         "season",
                         "name",
+                        "leagueName",
+                        "providerUrl",
                         "availability",
                         "lastSeenAt",
                         "updatedAt",

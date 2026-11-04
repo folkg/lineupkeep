@@ -8,7 +8,6 @@ import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { RuleList } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import type { ConnectionView } from "#contracts/connections/connectionContract.ts";
-import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 
 import { ConnectionCard } from "./ConnectionCard";
 
@@ -43,7 +42,7 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No connections yet.">
-                Connect {defaultProviderName()} above to see the teams this account can manage.
+                Connect an account above to see the teams this account can manage.
               </EmptyState>
             }
             when={props.connections().length > 0}

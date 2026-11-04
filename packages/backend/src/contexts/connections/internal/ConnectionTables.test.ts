@@ -128,6 +128,8 @@ it.effect("round-trips discovered team rows through the codec", () =>
       sport: "football" as const,
       season: 2026,
       name: "Alpha",
+      leagueName: "Irish Lax",
+      providerUrl: "https://provider.example/f1/1000/1",
       availability: "available" as const,
       automationState: yield* Schema.encodeEffect(Schema.toCodecJson(TeamAutomationState))({
         _tag: "Disabled",
@@ -144,6 +146,8 @@ it.effect("round-trips discovered team rows through the codec", () =>
 
     assert.strictEqual(decoded.providerTeamKey, "461.l.1000.t.1");
     assert.strictEqual(decoded.league, "nfl");
+    assert.strictEqual(decoded.leagueName, "Irish Lax");
+    assert.strictEqual(decoded.providerUrl, "https://provider.example/f1/1000/1");
     assert.strictEqual(decoded.automation.status, "disabled");
     assert.deepStrictEqual(decoded.lastSeenAt, at);
     assert.isTrue(

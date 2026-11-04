@@ -1,0 +1,63 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "a8ac81cf-ea32-4609-9ef5-0b8eb713cee8",
+  "prevIds": ["e7b058ab-5894-4118-a8f6-61d4fdf09ee2"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "provider_teams", "league_name"],
+      "writes": [
+        "s|col|public.provider_teams.league_name",
+        "n|col|public.provider_teams.league_name",
+        "e|col|public.provider_teams.league_name"
+      ],
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "provider_teams", "provider_url"],
+      "writes": [
+        "s|col|public.provider_teams.provider_url",
+        "n|col|public.provider_teams.provider_url",
+        "e|col|public.provider_teams.provider_url"
+      ],
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "league_name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_teams",
+        "name": "provider_url",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

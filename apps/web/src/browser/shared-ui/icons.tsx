@@ -10,8 +10,43 @@ import googleG from "./brand/google-g.svg";
 export const ArrowUpRightIcon = icon(ArrowUpRight);
 export const LoaderCircleIcon = icon(LoaderCircle);
 export const MoonIcon = icon(Moon);
+export const PauseIcon = icon(PauseGlyph);
+export const PlayIcon = icon(PlayGlyph);
 export const SunIcon = icon(Sun);
 export const XIcon = icon(X);
+
+function PauseGlyph(props: JSX.SvgSVGAttributes<SVGSVGElement>): JSX.Element {
+  return (
+    <svg
+      {...props}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M9 5v14M15 5v14" />
+    </svg>
+  );
+}
+
+function PlayGlyph(props: JSX.SvgSVGAttributes<SVGSVGElement>): JSX.Element {
+  return (
+    <svg
+      {...props}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="m7 4 12 8-12 8z" />
+    </svg>
+  );
+}
 
 export function GoogleGIcon(): JSX.Element {
   return <img alt="" height={20} src={googleG} width={20} />;

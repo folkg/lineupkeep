@@ -1,5 +1,4 @@
 import { AuthenticationRequestFailure } from "#browser/session/AuthenticationRequestFailure.ts";
-import { defaultProviderName } from "#contracts/connections/providerLabels.ts";
 import type {
   LineupRunError,
   LineupRunRequestResult,
@@ -7,8 +6,6 @@ import type {
   TeamNoteError,
   TeamNoteRequestResult,
   TeamRequestResult,
-  TeamRosterError,
-  TeamRosterRequestResult,
 } from "#contracts/connections/teamContract.ts";
 
 export function requireTeamSuccess<TData>(result: TeamRequestResult<TData>): TData {
@@ -35,18 +32,6 @@ export function requireNoteSuccess<TData>(result: TeamNoteRequestResult<TData>):
   }
 }
 
-export function requireRosterSuccess<TData>(result: TeamRosterRequestResult<TData>): TData {
-  switch (result.type) {
-    case "success":
-      return result.data;
-    case "error":
-      if (result.error.type === "auth.required") {
-        throw new AuthenticationRequestFailure(result.error);
-      }
-      throw new TeamRosterFailure(result.error);
-  }
-}
-
 export function requireRunSuccess<TData>(result: LineupRunRequestResult<TData>): TData {
   switch (result.type) {
     case "success":
@@ -67,12 +52,6 @@ class TeamWriteFailure extends Error {
 
 class TeamNoteFailure extends Error {
   constructor(readonly reason: TeamNoteError) {
-    super(reason.type);
-  }
-}
-
-class TeamRosterFailure extends Error {
-  constructor(readonly reason: TeamRosterError) {
     super(reason.type);
   }
 }
@@ -108,8 +87,7 @@ export function describeNoteFailure(error: unknown): TeamFailure {
       case "team.input_invalid":
         return {
           kind: "rejected",
-          message:
-            "The note was not saved. Check its length and remove anything that looks like a password or token.",
+          message: "The note was not saved. Check its length and try again.",
         };
       case "team.persistence_failed":
         break;
@@ -153,7 +131,7 @@ function classifyTeamFailure(error: unknown, surface: "control" | "refresh"): Te
       case "team.refresh_failed":
         return {
           kind: "unconfirmed",
-          message: `We could not refresh teams from ${defaultProviderName()}. Try again.`,
+          message: "We could not refresh your teams. Try again.",
         };
     }
   }

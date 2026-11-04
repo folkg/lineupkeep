@@ -3,13 +3,13 @@ import { expect, signUp, test } from "./support";
 test("shares product identity across document metadata and home navigation", async ({ page }) => {
   await page.goto("/auth");
 
-  await expect(page).toHaveTitle("Lineupkeep: fantasy lineups for Yahoo leagues");
+  await expect(page).toHaveTitle("Lineupkeep: your fantasy lineup, checked every hour");
   const home = page.getByRole("link", { name: "Lineupkeep home", exact: true });
   await expect(home.getByText("Lineupkeep", { exact: true })).toBeVisible();
   await home.click();
 
   await expect(page).toHaveURL("/");
-  await expect(page).toHaveTitle("Lineupkeep: fantasy lineups for Yahoo leagues");
+  await expect(page).toHaveTitle("Lineupkeep: your fantasy lineup, checked every hour");
   await expect(
     page.getByRole("heading", { name: "Lineupkeep sets your fantasy lineup.", exact: true }),
   ).toBeVisible();
@@ -24,7 +24,7 @@ test("shows no application navigation before sign-in", async ({ page }) => {
 
   await expect(page.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
   await expect(
-    page.getByRole("link", { name: "Sign in to connect Yahoo", exact: true }),
+    page.getByRole("link", { name: "Sign in to get started", exact: true }),
   ).toHaveAttribute("href", "/auth");
   await expect(page.getByRole("link", { name: "Open your teams", exact: true })).toHaveCount(0);
 });
@@ -44,7 +44,7 @@ test("returns a signed-in visitor to their teams from the landing page", async (
     "href",
     "/teams",
   );
-  await expect(page.getByRole("link", { name: "Sign in to connect Yahoo" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Sign in to get started" })).toHaveCount(0);
   await expect(page.getByText("Open development shell")).toHaveCount(0);
 });
 

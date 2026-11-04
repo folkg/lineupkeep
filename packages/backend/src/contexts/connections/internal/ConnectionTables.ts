@@ -83,6 +83,8 @@ export const providerTeams = pgTable(
     sport: text("sport", { enum: ["football", "hockey", "baseball", "basketball"] }).notNull(),
     season: integer("season").notNull(),
     name: text("name").notNull(),
+    leagueName: text("league_name"),
+    providerUrl: text("provider_url"),
     availability: text("availability", { enum: ["available", "unavailable"] })
       .notNull()
       .default("available"),
@@ -119,6 +121,8 @@ const FantasyTeamSelect = createSelectSchema(providerTeams, {
   sport: FantasySport,
   season: Schema.Int.check(Schema.isGreaterThan(1900)),
   name: Schema.NonEmptyString,
+  leagueName: Schema.NullOr(Schema.NonEmptyString),
+  providerUrl: Schema.NullOr(Schema.NonEmptyString),
   availability: TeamAvailability,
   automationState: Schema.Unknown,
   automationStatus: TeamAutomationStatus,
@@ -142,6 +146,8 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
       sport: FantasySport,
       season: Schema.Int.check(Schema.isGreaterThan(1900)),
       name: Schema.NonEmptyString,
+      leagueName: Schema.optional(Schema.NonEmptyString),
+      providerUrl: Schema.optional(Schema.NonEmptyString),
       availability: TeamAvailability,
       automation: TeamAutomation,
       ownerNote: Schema.NullOr(Schema.NonEmptyString),
@@ -172,6 +178,8 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
             sport: row.sport,
             season: row.season,
             name: row.name,
+            ...(row.leagueName === null ? {} : { leagueName: row.leagueName }),
+            ...(row.providerUrl === null ? {} : { providerUrl: row.providerUrl }),
             availability: row.availability,
             automation: automationView(state),
             ownerNote: row.ownerNote,
@@ -189,6 +197,8 @@ export const FantasyTeamRow = FantasyTeamSelect.pipe(
           )(state);
           return {
             ...team,
+            leagueName: team.leagueName ?? null,
+            providerUrl: team.providerUrl ?? null,
             automationState,
             automationStatus: teamAutomationStateStatus(state),
           };
