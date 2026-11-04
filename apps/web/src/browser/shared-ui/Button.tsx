@@ -72,7 +72,7 @@ const quietNeutral = "text-ink-soft hover:text-action";
 export const iconButtonClass = cx(
   buttonBase,
   "group relative -me-2 size-tap-target shrink-0 border-transparent bg-transparent text-ink",
-  "hover:text-action",
+  "hover:text-action aria-disabled:opacity-40",
 );
 
 export const iconButtonFrameClass =

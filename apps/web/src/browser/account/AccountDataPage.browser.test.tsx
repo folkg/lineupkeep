@@ -62,8 +62,9 @@ const staleExportStatus: AccountExportStatusView = {
 it("offers an export and explains what erasure cannot undo", async () => {
   using _app = setupAccountPage();
 
+  await expect.element(page.getByRole("heading", { name: "Account" })).toBeVisible();
   await expect.element(page.getByRole("heading", { name: "Your data" })).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Export" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Sign out" })).toBeVisible();
   const copy = document.body.textContent.replace(/\s+/g, " ");
   expect(copy).toContain(
     "The file includes your account, connections, teams, lineup runs, transaction proposals, feedback, and sign-in records. Provider sessions, passwords, and agent tokens are left out, because a copy should not let anyone sign in as you.",
@@ -147,7 +148,33 @@ it("does nothing when the confirmation phrase does not match", async () => {
     .element(page.getByText("That phrase did not match. Nothing was deleted."))
     .toBeVisible();
   expect(erasures).toEqual([]);
-  await expect.element(page.getByRole("heading", { name: "Your data" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Account" })).toBeVisible();
+});
+
+it("sets the theme from the account page", async () => {
+  using _app = setupAccountPage();
+
+  const theme = page.getByLabelText("Theme");
+  await expect.element(theme).toHaveValue("system");
+  await theme.selectOptions("dark");
+  expect(document.documentElement.classList.contains("dark")).toBe(true);
+  expect(localStorage.getItem("theme-preference")).toBe("dark");
+
+  await theme.selectOptions("light");
+  expect(document.documentElement.classList.contains("dark")).toBe(false);
+  expect(localStorage.getItem("theme-preference")).toBe("light");
+
+  await theme.selectOptions("system");
+  expect(localStorage.getItem("theme-preference")).toBe("system");
+});
+
+it("signs out from the account page", async () => {
+  const app = setupAccountPage();
+
+  await page.getByRole("button", { name: "Sign out this device" }).click();
+
+  await expect.element(page.getByText("Home")).toBeVisible();
+  expect(app.router.state.location.pathname).toBe("/");
 });
 
 it("erases, ends the browser session, and lands on the page that says what happened", async () => {
@@ -222,6 +249,8 @@ beforeEach(() => {
   for (const cleanup of cleanups.splice(0)) {
     cleanup();
   }
+  localStorage.removeItem("theme-preference");
+  document.documentElement.classList.remove("dark");
 });
 
 function setupAccountPage(
@@ -291,9 +320,14 @@ function createAccountRouter(
     path: "/erased",
     component: () => <AccountErasedPage />,
   });
+  const homeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/",
+    component: () => <p>Home</p>,
+  });
   return createRouter({
     context: { queryClient, sessionRemote },
     history: createMemoryHistory({ initialEntries: ["/account"] }),
-    routeTree: rootRoute.addChildren([accountRoute, erasedRoute]),
+    routeTree: rootRoute.addChildren([homeRoute, accountRoute, erasedRoute]),
   });
 }

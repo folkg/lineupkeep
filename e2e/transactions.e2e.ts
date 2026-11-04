@@ -108,7 +108,9 @@ test("reviews and submits a proposed transaction set across the owner's teams", 
   await page.screenshot({
     path: ".artifacts/transactions-review/e2e-result-390-light.png",
   });
-  await page.getByRole("button", { name: "Switch to dark theme" }).click();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
   await page.screenshot({
     path: ".artifacts/transactions-review/e2e-result-390-dark.png",
   });

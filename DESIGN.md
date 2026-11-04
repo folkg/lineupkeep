@@ -247,19 +247,24 @@ left edge. The same artwork is the favicon. Gold appears nowhere else.
 columns genuinely need it; no content runs the viewport width. The masthead, section rules, row
 rules, and controls share the column's left and right edges.
 
-**The masthead** is two rows inside the measure: brand mark and lowercase wordmark left, theme
-toggle right; then primary navigation with the sign-out control at the right. One 1px
-`rule-strong` rule closes the masthead. Navigation labels are 11px caps; the active item carries a
-1px rule that spans the item, not a short bar under the word.
+**The masthead** is two rows inside the measure: the brand mark and lowercase wordmark, then the
+primary navigation. There is no theme control or sign-out utility in the masthead. One 1px
+`rule-strong` rule closes it. Navigation labels are 11px caps; the active item carries a 1px rule
+that spans exactly the item, not a short bar or an overhanging block. At narrow widths the four
+links wrap as whole items, with no utility action left on a line of its own.
 
-**Rows** are two columns from 560px: text at the left, one control cluster at the right. Below
-560px a row stacks: full-width text first, then the controls on their own line, aligned left. A
-long team or league name wraps; it never truncates. Controls never overlap a name.
+**Rows** are two columns from 560px: text at the left, one control cluster at the right. A team
+row puts its provider jump-out beside the team name in the text column; the right cluster carries
+only the checks toggle and pause, so every row has the same control shape. The pause stays in
+place and is disabled while checks are off. Below 560px a row stacks: full-width text first, then
+the controls on their own line, aligned left. A long team or league name wraps; it never
+truncates. Controls never overlap a name.
 
 **Team detail order** is fixed: back link, title, one metadata line (sport and league), one
 control row with toggle, pause, and provider jump-out on the same line, a quiet report link, then
-the activity section behind its rule, then the owner note. Nothing floats to the right of the
-metadata line.
+the activity section behind its rule, then the owner note. The provider jump-out sits in the
+control row here; on the list it sits with the name. Nothing floats to the right of the metadata
+line.
 
 **Activity ranges** omit a repeated date: `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
 single instant, say `at Nov 1, 11:44 AM`; when it crosses the reader's midnight, show both full
@@ -309,14 +314,16 @@ Placeholders are not labels. The caret and selection use action tokens.
 A 40×22 square track with a 16px square knob. On is `action` with an `on-action` knob; off is
 `rule` with a `paper` knob. The track carries a 44px hit area. In a list of teams the label is
 hidden and the row's name identifies the toggle; on a single team the `LINEUP CHECKS` label is
-visible. The pause control sits beside the toggle with its sentence in the title.
+visible. The pause control always sits beside the toggle; when checks are off it is disabled with
+an explanatory title rather than removed.
 
 ### Lists and status
 
 Team and connection rows use 15px text with 12px meta, a 22px name where the row is a primary
 destination, and a bottom hairline. Status is a labelled word in caps, never a colour alone. Team
 rows show what the last check did, when, the recent tally, and a paused sentence in the text
-column. A list never repeats a control label on every row.
+column. A provider jump-out sits beside the team name; the right cluster is the toggle and pause
+only. A list never repeats a control label on every row.
 
 Notices are a 1px leading rule with caps title and 12px detail. Empty and loading states are a
 top rule with a 15px title and soft text. The live status region stays in the accessibility tree
@@ -341,6 +348,13 @@ path.
 
 A run detail shows the target period, trigger, attempts, verified outcome, changes, and pending
 reason without exposing credentials, cookies, provider GUIDs, raw payloads, or raw errors.
+
+### Account
+
+The Account page owns appearance, data export, sign out, and erasure. Appearance offers System,
+Light, and Dark; System follows the device and listens for changes. Sign out is a quiet control on
+Account; it is not in the masthead navigation. The page title and the navigation label are both
+Account.
 
 ### Connections
 
@@ -368,6 +382,7 @@ or connection health.
 - Do apply tabular numerals to comparable numbers only.
 - Do keep the wordmark lowercase and the mark gold.
 - Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.
+- Do keep the provider jump-out with the team name and the pause control in place.
 - Do let long names wrap and rows stack below 560px.
 
 ### Don't
@@ -378,6 +393,7 @@ or connection health.
 - Don't box prose, lists, notices, or empty states.
 - Don't add letter spacing to body text or apply tabular figures to prose.
 - Don't repeat a control label on every row of a list.
+- Don't remove a control or shift the cluster when it becomes unavailable; disable it in place.
 - Don't float controls to the right of a metadata line.
 - Don't use colour alone for connection, automation, or risk.
 - Don't expose credentials, cookies, provider GUIDs, raw payloads, or raw errors.

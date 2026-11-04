@@ -266,7 +266,7 @@
       "tool": "Impeccable",
       "directionSeed": "5547f54d66619d8a2a94b7456b419072",
       "assignedCandidate": 5,
-      "selection": "Owner selected the technical sheet from rendered studies, then corrected punctuation spacing, row stacking, team-detail order, activity ranges, and the masthead mark. Royal violet and gold remain the approved identity; gold is reserved for the mark."
+      "selection": "Owner selected the technical sheet from rendered studies, then corrected punctuation spacing, row stacking, team-detail order, activity ranges, and the masthead mark. The masthead keeps no utility controls: theme and sign out live on the Account page, the active nav rule spans exactly its item, and the team list puts the provider jump-out with the name. Royal violet and gold remain the approved identity; gold is reserved for the mark."
     }
   },
   "components": [
@@ -304,9 +304,9 @@
     {
       "name": "Navigation",
       "kind": "nav",
-      "description": "Caps navigation; the active item carries a full-width rule.",
-      "html": "<nav class=\"ds-nav\" aria-label=\"Primary navigation\"><a href=\"#example\" aria-current=\"page\">Teams</a><a href=\"#example\">Connections</a></nav>",
-      "css": ".ds-nav{display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-nav a{position:relative;display:inline-flex;align-items:center;min-height:44px;color:var(--theme-ink-soft,#5d5d68);text-decoration:none}.ds-nav a::after{content:'';position:absolute;left:-8px;right:-8px;bottom:0;height:1px;background:transparent}.ds-nav a[aria-current]{color:var(--theme-ink,#101014)}.ds-nav a[aria-current]::after{background:var(--theme-rule-strong,#101014)}.ds-nav a:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
+      "description": "Caps navigation; the active item carries a rule across exactly that item.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Primary navigation\"><a href=\"#example\" aria-current=\"page\">Teams</a><a href=\"#example\">Connections</a><a href=\"#example\">Account</a></nav>",
+      "css": ".ds-nav{display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-nav a{position:relative;display:inline-flex;align-items:center;min-height:44px;color:var(--theme-ink-soft,#5d5d68);text-decoration:none}.ds-nav a::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:transparent}.ds-nav a[aria-current]{color:var(--theme-ink,#101014)}.ds-nav a[aria-current]::after{background:var(--theme-rule-strong,#101014)}.ds-nav a:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Metadata Badge",

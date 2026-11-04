@@ -37,9 +37,8 @@ test("returns a signed-in visitor to their teams from the landing page", async (
   await expect(navigation.getByRole("link", { name: "Teams", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Feedback", exact: true })).toBeVisible();
-  await expect(
-    navigation.getByRole("button", { name: "Sign out this device", exact: true }),
-  ).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Account", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Sign out this device" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open your teams", exact: true })).toHaveAttribute(
     "href",
     "/teams",
@@ -58,9 +57,8 @@ test("keeps the signed-in navigation on its own row on a phone", async ({ page }
   await expect(navigation.getByRole("link", { name: "Teams", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Feedback", exact: true })).toBeVisible();
-  await expect(
-    navigation.getByRole("button", { name: "Sign out this device", exact: true }),
-  ).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Account", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Sign out this device" })).toHaveCount(0);
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true);

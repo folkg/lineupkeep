@@ -1,4 +1,6 @@
-export type ThemePreference = "light" | "dark";
+export type ThemePreference = "system" | "light" | "dark";
+
+type ResolvedTheme = "light" | "dark";
 
 const themeStorageKey = "theme-preference";
 
@@ -12,19 +14,23 @@ export const themeBootstrapScript = `(function () {
   document.documentElement.classList.toggle("dark", dark);
 })();`;
 
-export function applyTheme(theme: ThemePreference): void {
-  document.documentElement.classList.toggle("dark", theme === "dark");
+function resolveTheme(preference: ThemePreference): ResolvedTheme {
+  return preference === "system" ? systemTheme() : preference;
+}
+
+export function applyTheme(preference: ThemePreference): void {
+  document.documentElement.classList.toggle("dark", resolveTheme(preference) === "dark");
 }
 
 export function readStoredTheme(): ThemePreference | undefined {
   const stored = localStorage.getItem(themeStorageKey);
-  return stored === "light" || stored === "dark" ? stored : undefined;
+  return stored === "system" || stored === "light" || stored === "dark" ? stored : undefined;
 }
 
-export function storeTheme(theme: ThemePreference): void {
-  localStorage.setItem(themeStorageKey, theme);
+export function storeTheme(preference: ThemePreference): void {
+  localStorage.setItem(themeStorageKey, preference);
 }
 
-export function systemTheme(): ThemePreference {
+function systemTheme(): ResolvedTheme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }

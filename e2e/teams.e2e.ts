@@ -57,7 +57,7 @@ test("enables, pauses, resumes, and disables a team through the automation contr
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await expect(
     row.getByRole("button", { name: "Pause lineup checks for the rest of the fantasy day" }),
-  ).toHaveCount(0);
+  ).toHaveAttribute("aria-disabled", "true");
 });
 
 test("saves an owner note on the team page and reads it back over MCP", async ({

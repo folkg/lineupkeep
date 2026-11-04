@@ -1,25 +1,43 @@
-import { createSignal, onSettled } from "solid-js";
+import { createContext, createSignal, onCleanup, onSettled, useContext } from "solid-js";
+import type { Accessor } from "solid-js";
 
-import { applyTheme, readStoredTheme, storeTheme, systemTheme } from "./theme";
+import { applyTheme, readStoredTheme, storeTheme } from "./theme";
 import type { ThemePreference } from "./theme";
 
-export function useTheme(): {
-  isDark: () => boolean;
-  toggle: () => void;
-} {
-  const [theme, setTheme] = createSignal<ThemePreference>("light");
+export const ThemeContext = createContext<ThemeController>();
+
+export function createThemeController(): ThemeController {
+  const stored = typeof window === "undefined" ? "system" : (readStoredTheme() ?? "system");
+  const [preference, setPreference] = createSignal<ThemePreference>(stored);
+  const media =
+    typeof window === "undefined" ? undefined : window.matchMedia("(prefers-color-scheme: dark)");
+  const onSystemChange = (): void => {
+    if (preference() === "system") {
+      applyTheme("system");
+    }
+  };
 
   onSettled(() => {
-    setTheme(readStoredTheme() ?? systemTheme());
+    applyTheme(preference());
+    media?.addEventListener("change", onSystemChange);
   });
+  onCleanup(() => media?.removeEventListener("change", onSystemChange));
 
   return {
-    isDark: () => theme() === "dark",
-    toggle: () => {
-      const next: ThemePreference = theme() === "dark" ? "light" : "dark";
-      setTheme(next);
+    preference,
+    setPreference: (next) => {
+      setPreference(next);
       storeTheme(next);
       applyTheme(next);
     },
   };
 }
+
+export function useTheme(): ThemeController {
+  return useContext(ThemeContext);
+}
+
+type ThemeController = {
+  readonly preference: Accessor<ThemePreference>;
+  readonly setPreference: (preference: ThemePreference) => void;
+};

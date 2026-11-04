@@ -42,7 +42,7 @@ Do not use hype, exclamation-heavy success messages, “AI-powered” decoration
 
 **Royal violet and gold is the owner-approved palette.** Vivid violet actions and deep violet ink give Lineupkeep fantasy-sports energy without trophies, betting imagery, or theatrical effects. Gold fills the square brand mark and is used nowhere else on a page. This is a custom pairing, not the original site's Material preset. Do not substitute green or reopen palette selection during routine implementation.
 
-[DESIGN.md](../../DESIGN.md) owns the exact semantic palette, typography, components, spacing, states, and accessibility rules. Violet carries everyday interaction; the gold mark carries identity. Colour alone never communicates success or risk. Default light supports daytime checks; dark supports evening use.
+[DESIGN.md](../../DESIGN.md) owns the exact semantic palette, typography, components, spacing, states, and accessibility rules. Violet carries everyday interaction; the gold mark carries identity. Colour alone never communicates success or risk. Light and dark are complete palettes; the Account theme setting defaults to System and follows the device.
 
 The [specimen](preview.html) demonstrates the visual foundation. Any team/control examples are illustrative and do not claim implemented functionality.
 

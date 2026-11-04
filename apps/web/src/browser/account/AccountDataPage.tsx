@@ -2,6 +2,9 @@ import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
+import type { ThemePreference } from "#browser/app-shell/theme.ts";
+import { useSessionActions } from "#browser/app-shell/useSessionActions.ts";
+import { useTheme } from "#browser/app-shell/useTheme.ts";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
@@ -12,6 +15,7 @@ import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
+import { SelectField } from "#browser/shared-ui/SelectField.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
@@ -24,104 +28,144 @@ import { useAccountData } from "./useAccountData";
 type LatestExport = NonNullable<AccountExportStatusView["latest"]>;
 
 export function AccountDataPage(props: AccountDataPageProps): JSX.Element {
+  return (
+    <AppShell>
+      <AccountDataContent onErased={props.onErased} remote={props.remote} />
+    </AppShell>
+  );
+}
+
+function AccountDataContent(props: AccountDataPageProps): JSX.Element {
+  const theme = useTheme();
+  const session = useSessionActions();
   const page = useAccountData({
     remote: () => props.remote,
     onErased: () => props.onErased(),
   });
 
   return (
-    <AppShell>
-      <Page
-        lede="Download a copy of what Lineupkeep holds, or delete your account and everything tied to it."
-        title="Your data"
-      >
-        <Stack gap="xl">
-          <Stack as="section" gap="md" labelledBy="export-title">
-            <SectionTitle id="export-title">Export</SectionTitle>
-            <Text>
-              The file includes your account, connections, teams, lineup runs, transaction
-              proposals, feedback, and sign-in records. Provider sessions, passwords, and agent
-              tokens are left out, because a copy should not let anyone sign in as you.
-            </Text>
-            <DownloadLink href={accountExportPath}>Export my data</DownloadLink>
-            <Show when={page.exportStatus()?.latest}>
-              {(latest) => <ExportDetails latest={latest()} />}
-            </Show>
-            <Show when={page.exportStatus()}>
-              {(status) => (
-                <Text size="caption" tone="faint">
-                  An export counts for {freshnessWindow(status().freshForMinutes)} after you take
-                  it.
-                </Text>
-              )}
-            </Show>
-          </Stack>
-          <Stack as="section" gap="md" labelledBy="erase-title">
-            <SectionTitle id="erase-title">Erase your account</SectionTitle>
-            <Text>
-              This deletes everything listed above, plus every sign-in session and the grants agents
-              hold. It happens as soon as you confirm, and it cannot be undone.
-            </Text>
-            <Show
-              fallback={
-                <Text size="caption" tone="faint">
-                  Checking your export…
-                </Text>
-              }
-              when={!page.statusLoading()}
-            >
-              <Show
-                fallback={
-                  <ActionFeedback
-                    feedback={{
-                      type: "attention",
-                      message: page.statusFailure()?.message ?? "We could not check your export.",
-                      recovery: {
-                        label: "Check again",
-                        pendingLabel: "Checking…",
-                        onAction: page.refreshExportStatus,
-                      },
-                    }}
-                  />
+    <Page
+      lede="Set how Lineupkeep looks, export or erase your data, and sign out of this device."
+      title="Account"
+    >
+      <Stack gap="xl">
+        <Stack as="section" gap="md" labelledBy="appearance-title">
+          <SectionTitle id="appearance-title">Appearance</SectionTitle>
+          <Stack gap="sm" measure="control">
+            <SelectField
+              description="System follows this device's light or dark setting."
+              label="Theme"
+              options={themeOptions}
+              value={theme.preference()}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                if (isThemePreference(value)) {
+                  theme.setPreference(value);
                 }
-                when={page.statusFailure() === undefined}
-              >
-                <Show
-                  fallback={<EraseWithoutExport latest={page.exportStatus()?.latest} />}
-                  when={page.exportStatus()?.usable === true}
-                >
-                  <Text>
-                    Your export is ready. Keep that file: after the erasure it is the only copy.
-                  </Text>
-                  <Form gap="md" onSubmit={page.erase}>
-                    <TextField
-                      autocomplete="off"
-                      error={page.confirmationError()}
-                      label="Type erase my account to confirm"
-                      spellcheck={false}
-                      value={page.confirmation()}
-                      onInput={(event) => page.setConfirmation(event.currentTarget.value)}
-                    />
-                    <Inline gap="sm">
-                      <Button
-                        pending={page.erasing()}
-                        pendingLabel="Erasing your account…"
-                        tone="danger"
-                        type="submit"
-                        variant="primary"
-                      >
-                        Erase my account
-                      </Button>
-                    </Inline>
-                  </Form>
-                </Show>
-              </Show>
-            </Show>
-            <ActionFeedback feedback={page.feedback()} />
+              }}
+            />
           </Stack>
         </Stack>
-      </Page>
-    </AppShell>
+        <Stack as="section" gap="md" labelledBy="export-title">
+          <SectionTitle id="export-title">Your data</SectionTitle>
+          <Text>
+            The file includes your account, connections, teams, lineup runs, transaction proposals,
+            feedback, and sign-in records. Provider sessions, passwords, and agent tokens are left
+            out, because a copy should not let anyone sign in as you.
+          </Text>
+          <DownloadLink href={accountExportPath}>Export my data</DownloadLink>
+          <Show when={page.exportStatus()?.latest}>
+            {(latest) => <ExportDetails latest={latest()} />}
+          </Show>
+          <Show when={page.exportStatus()}>
+            {(status) => (
+              <Text size="caption" tone="faint">
+                An export counts for {freshnessWindow(status().freshForMinutes)} after you take it.
+              </Text>
+            )}
+          </Show>
+        </Stack>
+        <Stack as="section" gap="md" labelledBy="sign-out-title">
+          <SectionTitle id="sign-out-title">Sign out</SectionTitle>
+          <Text>
+            Signing out ends this browser session. Your account, connections, and data stay.
+          </Text>
+          <Inline gap="sm">
+            <Button
+              pending={session.isSigningOut()}
+              pendingLabel="Signing out…"
+              variant="quiet"
+              onClick={() => void session.signOut()}
+            >
+              Sign out this device
+            </Button>
+          </Inline>
+        </Stack>
+        <Stack as="section" gap="md" labelledBy="erase-title">
+          <SectionTitle id="erase-title">Erase your account</SectionTitle>
+          <Text>
+            This deletes everything listed above, plus every sign-in session and the grants agents
+            hold. It happens as soon as you confirm, and it cannot be undone.
+          </Text>
+          <Show
+            fallback={
+              <Text size="caption" tone="faint">
+                Checking your export…
+              </Text>
+            }
+            when={!page.statusLoading()}
+          >
+            <Show
+              fallback={
+                <ActionFeedback
+                  feedback={{
+                    type: "attention",
+                    message: page.statusFailure()?.message ?? "We could not check your export.",
+                    recovery: {
+                      label: "Check again",
+                      pendingLabel: "Checking…",
+                      onAction: page.refreshExportStatus,
+                    },
+                  }}
+                />
+              }
+              when={page.statusFailure() === undefined}
+            >
+              <Show
+                fallback={<EraseWithoutExport latest={page.exportStatus()?.latest} />}
+                when={page.exportStatus()?.usable === true}
+              >
+                <Text>
+                  Your export is ready. Keep that file: after the erasure it is the only copy.
+                </Text>
+                <Form gap="md" onSubmit={page.erase}>
+                  <TextField
+                    autocomplete="off"
+                    error={page.confirmationError()}
+                    label="Type erase my account to confirm"
+                    spellcheck={false}
+                    value={page.confirmation()}
+                    onInput={(event) => page.setConfirmation(event.currentTarget.value)}
+                  />
+                  <Inline gap="sm">
+                    <Button
+                      pending={page.erasing()}
+                      pendingLabel="Erasing your account…"
+                      tone="danger"
+                      type="submit"
+                      variant="primary"
+                    >
+                      Erase my account
+                    </Button>
+                  </Inline>
+                </Form>
+              </Show>
+            </Show>
+          </Show>
+          <ActionFeedback feedback={page.feedback()} />
+        </Stack>
+      </Stack>
+    </Page>
   );
 }
 
@@ -187,6 +231,16 @@ function areasLabel(areas: LatestExport["areas"]): string {
   const hidden = labels.length - shown.length;
   return hidden === 0 ? shown.join(", ") : `${shown.join(", ")}, and ${hidden} more`;
 }
+
+function isThemePreference(value: string): value is ThemePreference {
+  return value === "system" || value === "light" || value === "dark";
+}
+
+const themeOptions: ReadonlyArray<{ readonly value: ThemePreference; readonly label: string }> = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
 
 type AccountDataPageProps = {
   readonly remote: AccountDataRemote;

@@ -83,7 +83,12 @@ test("signs in again after an ended session and returns to the page", async ({ p
   await signIn(page, account);
 
   await expect(page).toHaveURL("/teams");
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", {
+      name: "Account",
+      exact: true,
+    }),
+  ).toBeVisible();
 });
 
 for (const viewport of [

@@ -18,6 +18,7 @@ import { useTeamControls } from "./useTeamControls";
 const pauseLabel = "Pause lineup checks for the rest of the fantasy day";
 const resumeLabel = "Resume lineup checks";
 const waitForSwitch = "Wait for the lineup checks change to finish before pausing.";
+const turnOnFirst = "Turn on lineup checks to pause the rest of the fantasy day.";
 
 export function TeamControls(props: TeamControlsProps): JSX.Element {
   const controls = useTeamControls({ team: () => props.team, remote: () => props.remote });
@@ -46,22 +47,26 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
         >
           Lineup checks
         </Switch>
-        <Show when={enabled()}>
-          <IconButton
-            busy={pausePending()}
-            disabled={controls.pendingAction() !== undefined && !pausePending()}
-            label={resumeAction() ? resumeLabel : pauseLabel}
-            title={
-              controls.pendingAction() !== undefined && !pausePending() ? waitForSwitch : undefined
-            }
-            onClick={() => controls.control(resumeAction() ? "resume" : "pause-today")}
-          >
-            <Show fallback={<PauseIcon size="md" />} when={resumeAction()}>
-              <PlayIcon size="md" />
-            </Show>
-          </IconButton>
+        <IconButton
+          busy={pausePending()}
+          disabled={!enabled() || (controls.pendingAction() !== undefined && !pausePending())}
+          label={resumeAction() ? resumeLabel : pauseLabel}
+          title={
+            !enabled()
+              ? turnOnFirst
+              : controls.pendingAction() !== undefined && !pausePending()
+                ? waitForSwitch
+                : undefined
+          }
+          onClick={() => controls.control(resumeAction() ? "resume" : "pause-today")}
+        >
+          <Show fallback={<PauseIcon size="md" />} when={resumeAction()}>
+            <PlayIcon size="md" />
+          </Show>
+        </IconButton>
+        <Show when={props.showProvider !== false}>
+          <TeamProviderLink team={props.team.team} />
         </Show>
-        <TeamProviderLink team={props.team.team} />
       </Inline>
       <Show when={switchPending()}>
         <Text role="status" size="caption" tone="muted">
@@ -95,6 +100,7 @@ type TeamControlsProps = {
   readonly align?: "start" | "end";
   readonly compact?: boolean;
   readonly showPauseNote?: boolean;
+  readonly showProvider?: boolean;
   readonly team: TeamSummaryView;
   readonly remote: TeamRemote;
 };

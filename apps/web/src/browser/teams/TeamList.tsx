@@ -5,6 +5,7 @@ import type { Accessor } from "solid-js";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
@@ -16,6 +17,7 @@ import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { checkTallyLabel, lastCheckLine, pauseResumeLabel, teamContextLabel } from "./teamLabels";
+import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
 
 export function TeamList(props: TeamListProps): JSX.Element {
@@ -88,9 +90,12 @@ function TeamRow(props: TeamRowProps): JSX.Element {
   return (
     <RuleListItem layout="columns">
       <Stack gap="xs">
-        <TextLink params={{ teamId: props.team.team.id }} size="item" to="/teams/$teamId">
-          {props.team.team.name}
-        </TextLink>
+        <Inline gap="sm">
+          <TextLink params={{ teamId: props.team.team.id }} size="item" to="/teams/$teamId">
+            {props.team.team.name}
+          </TextLink>
+          <TeamProviderLink team={props.team.team} />
+        </Inline>
         <Text size="caption" tone="muted">
           {teamContextLabel(props.team.team)}
         </Text>
@@ -128,6 +133,7 @@ function TeamRow(props: TeamRowProps): JSX.Element {
         align="end"
         compact
         showPauseNote={false}
+        showProvider={false}
         team={props.team}
         remote={props.remote}
       />

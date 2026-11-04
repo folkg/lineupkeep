@@ -207,6 +207,23 @@ it("returns the switch to the server state when the server refuses the change", 
     .toBeVisible();
 });
 
+it("keeps the pause control in place and disabled while lineup checks are off", async () => {
+  using _app = setupTeamsPage([baseTeam]);
+
+  const pause = page.getByRole("button", {
+    name: "Pause lineup checks for the rest of the fantasy day",
+  });
+  const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
+  await expect.element(pause).toBeVisible();
+  await expect.element(pause).toHaveAttribute("aria-disabled", "true");
+  await expect
+    .element(pause)
+    .toHaveAttribute("title", "Turn on lineup checks to pause the rest of the fantasy day.");
+  expect(pause.element().getBoundingClientRect().left).toBeGreaterThanOrEqual(
+    toggle.element().getBoundingClientRect().right,
+  );
+});
+
 it("labels a pause as the rest of the fantasy day and resumes through the control action", async () => {
   const changes: Array<{ readonly team: string; readonly action: string }> = [];
   using _app = setupTeamsPage([pausedTeam], {
@@ -351,8 +368,18 @@ it("shows the fantasy league name and a provider jump out for the team", async (
 
   await expect.element(page.getByText("Irish Lax · Football · NFL 2026")).toBeVisible();
   const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
+  const name = page.getByRole("link", { name: "Alpha", exact: true });
+  const pause = page.getByRole("button", {
+    name: "Pause lineup checks for the rest of the fantasy day",
+  });
   await expect.element(jumpOut).toHaveAttribute("href", "https://provider.example/f1/1000/1");
   await expect.element(jumpOut).toHaveAttribute("target", "_blank");
+  const nameBox = name.element().getBoundingClientRect();
+  const jumpBox = jumpOut.element().getBoundingClientRect();
+  expect(jumpBox.left).toBeGreaterThanOrEqual(nameBox.right);
+  expect(
+    jumpOut.element().compareDocumentPosition(pause.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 });
 
 it("says what the last check did and tallies the checks that changed the lineup", async () => {
