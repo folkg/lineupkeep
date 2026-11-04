@@ -13,7 +13,7 @@ export default defineConfig({
   testIgnore: verifying && process.env["VERIFICATION_SCRATCH"] === "true" ? [] : ["scratch/**"],
   outputDir: artifactDirectory === undefined ? "test-results" : `${artifactDirectory}/test-results`,
   fullyParallel: !verifying,
-  workers: verifying || process.env["CI"] !== undefined ? 1 : 2,
+  workers: 1,
   retries: 0,
   failOnFlakyTests: true,
   ...(verifying ? { globalSetup: "./verify/doctor.ts" } : {}),
