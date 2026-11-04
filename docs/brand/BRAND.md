@@ -16,11 +16,11 @@ Professional quality comes from typography, alignment, information design, usefu
 
 ## Wordmark
 
-Continuous lowercase **lineupkeep**, Schibsted Grotesk Variable at weight 500. One baseline, one colour; no added letter spacing or separation around up. Tracking -0.035em. Do not distort, tilt, outline, turn letters into arrows, or colour separate syllables.
+Continuous lowercase **lineupkeep**, Schibsted Grotesk Variable at weight 600 on the 11px label scale with 0.16em tracking. One baseline, one colour; no added gap or separation around up. Do not distort, tilt, outline, turn letters into arrows, or colour separate syllables.
 
-The default mark is typographic, not a badge. No trophy, shield, whistle, robot head, sports-ball mashup, initials block before the wordmark, or generic AI sparkle.
+The wordmark sits beside the square brand mark: a 20px gold square with ink **lk** strokes, square corners. Gold is the mark's only job. No trophy, shield, whistle, robot head, sports-ball mashup, or generic AI sparkle.
 
-At small sizes use the plain wordmark; the tiny lk favicon is a browser utility, not a second logo. The app's accessible home-link name remains “Lineupkeep home.”
+At small sizes use the wordmark and mark together; the gold lk favicon is the mark's browser utility, not a second logo. The app's accessible home-link name remains “Lineupkeep home.”
 
 Use **Lineupkeep** in sentences, headings, release notes, email sender names, legal documents, and speech. Never LineUPkeep, LineUpKeep, LineupKeep, Line Upkeep, or Lineup Keep as the product name.
 
@@ -40,15 +40,15 @@ Do not use hype, exclamation-heavy success messages, “AI-powered” decoration
 
 ## Visual expression
 
-**Royal violet and gold is the owner-approved palette.** Vivid violet actions, golden yellow accents, and deep violet ink give Lineupkeep fantasy-sports energy without trophies, betting imagery, or theatrical effects. This is a custom pairing, not the original site's Material preset. Do not substitute green or reopen palette selection during routine implementation.
+**Royal violet and gold is the owner-approved palette.** Vivid violet actions and deep violet ink give Lineupkeep fantasy-sports energy without trophies, betting imagery, or theatrical effects. Gold fills the square brand mark and is used nowhere else on a page. This is a custom pairing, not the original site's Material preset. Do not substitute green or reopen palette selection during routine implementation.
 
-[DESIGN.md](../../DESIGN.md) owns the exact semantic palette, typography, components, spacing, states, and accessibility rules. Violet carries everyday interaction; gold highlights important actions and labelled attention. Colour alone never communicates success or risk. Default light supports daytime checks; dark supports evening use.
+[DESIGN.md](../../DESIGN.md) owns the exact semantic palette, typography, components, spacing, states, and accessibility rules. Violet carries everyday interaction; the gold mark carries identity. Colour alone never communicates success or risk. Default light supports daytime checks; dark supports evening use.
 
 The [specimen](preview.html) demonstrates the visual foundation. Any team/control examples are illustrative and do not claim implemented functionality.
 
 ## Assets and licensing
 
-- App wordmark: [BrandLink.tsx](../../apps/web/src/browser/brand-ui/BrandLink.tsx).
+- App wordmark and mark: [BrandLink.tsx](../../apps/web/src/browser/brand-ui/BrandLink.tsx), [BrandMark.tsx](../../apps/web/src/browser/brand-ui/BrandMark.tsx).
 - Favicon: [lineupkeep-mark.svg](../../apps/web/public/brand/lineupkeep-mark.svg).
 - Self-hosted font: `@fontsource-variable/schibsted-grotesk@5.3.0`, sourced through Bun at preparation. SIL Open Font License is distributed in the dependency; no Google Fonts/browser network dependency.
 - Preview font is embedded from that same package; [font license](FONT-LICENSE.txt) accompanies the specimen.

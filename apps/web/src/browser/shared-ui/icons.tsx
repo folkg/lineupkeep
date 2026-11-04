@@ -1,13 +1,16 @@
 import type { JSX } from "@solidjs/web";
 import ArrowUpRight from "~icons/lucide/arrow-up-right";
+import ChevronRight from "~icons/lucide/chevron-right";
 import LoaderCircle from "~icons/lucide/loader-circle";
 import Moon from "~icons/lucide/moon";
 import Sun from "~icons/lucide/sun";
 import X from "~icons/lucide/x";
 
 import googleG from "./brand/google-g.svg";
+import { cx } from "./cx";
 
 export const ArrowUpRightIcon = icon(ArrowUpRight);
+export const ChevronRightIcon = icon(ChevronRight);
 export const LoaderCircleIcon = icon(LoaderCircle);
 export const MoonIcon = icon(Moon);
 export const PauseIcon = icon(PauseGlyph);
@@ -57,7 +60,7 @@ function icon(
 ): (props: IconProps) => JSX.Element {
   return (props: IconProps) => (
     <Svg
-      class={props.spin === true ? "animate-spin motion-reduce:animate-none" : undefined}
+      class={cx(props.class, props.spin === true && "animate-spin motion-reduce:animate-none")}
       height={iconSize[props.size]}
       width={iconSize[props.size]}
     />
@@ -67,6 +70,7 @@ function icon(
 const iconSize = { sm: 15, md: 17 };
 
 type IconProps = {
+  readonly class?: string;
   readonly size: keyof typeof iconSize;
 
   readonly spin?: boolean;

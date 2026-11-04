@@ -4,8 +4,8 @@ import type { Accessor } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { FeedbackContextView } from "#contracts/feedback/feedbackContract.ts";
@@ -37,9 +37,7 @@ export function FeedbackPage(props: FeedbackPageProps): JSX.Element {
       >
         <Stack gap="xl">
           <Stack as="section" gap="md" labelledBy="feedback-form-title">
-            <Heading id="feedback-form-title" level={2} size="section">
-              Send a report
-            </Heading>
+            <SectionTitle id="feedback-form-title">Send a report</SectionTitle>
             <Show when={about()}>{(summary) => <Text size="body">{summary()}</Text>}</Show>
             <FeedbackForm
               draft={page.draft()}

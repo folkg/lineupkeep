@@ -10,9 +10,9 @@ import {
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
@@ -24,7 +24,6 @@ import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { teamContextLabel } from "./teamLabels";
 import { TeamNote } from "./TeamNote";
-import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamListQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 import { useTeamNote } from "./useTeamNote";
@@ -41,10 +40,16 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
 
   return (
     <AppShell>
-      <Page title={team()?.team.name ?? "Team"}>
+      <Page
+        back={
+          <TextLink tone="quiet" to="/teams">
+            Back to teams
+          </TextLink>
+        }
+        title={team()?.team.name ?? "Team"}
+      >
         <UnsavedChangesScope>
           <Stack gap="lg">
-            <TextLink to="/teams">Back to teams</TextLink>
             <Show
               fallback={<LoadingState label="Loading team">Loading this team…</LoadingState>}
               when={!page.isLoading()}
@@ -83,6 +88,7 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
         <TeamControls team={props.team} remote={props.remote} />
         <Inline gap="sm">
           <TextLink
+            tone="quiet"
             search={{
               surface: "team",
               team: props.team.team.id,
@@ -92,14 +98,11 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
           >
             Report a problem with this team
           </TextLink>
-          <TeamProviderLink team={props.team.team} />
         </Inline>
       </Stack>
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
-        <Heading id="team-activity-title" level={2} size="section">
-          Recent activity
-        </Heading>
+        <SectionTitle id="team-activity-title">Recent activity</SectionTitle>
         <Text size="caption" tone="muted">
           Newest first. Checks that changed nothing are grouped.
         </Text>

@@ -11,6 +11,7 @@ import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { pauseResumeLabel } from "./teamLabels";
+import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
 import { useTeamControls } from "./useTeamControls";
 
@@ -34,10 +35,11 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
         : paused();
 
   return (
-    <Stack gap="sm" align="start">
-      <Inline gap="sm">
+    <Stack gap="sm">
+      <Inline gap="sm" justify={props.align === "end" ? "end" : undefined}>
         <Switch
           busy={controls.pendingAction() !== undefined}
+          compact={props.compact}
           checked={enabled()}
           name={`Lineup checks for ${props.team.team.name}`}
           onToggle={() => controls.control(enabled() ? "disable" : "enable")}
@@ -59,6 +61,7 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
             </Show>
           </IconButton>
         </Show>
+        <TeamProviderLink team={props.team.team} />
       </Inline>
       <Show when={switchPending()}>
         <Text role="status" size="caption" tone="muted">
@@ -70,7 +73,13 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
           {controls.pendingAction() === "resume" ? "Resuming…" : "Pausing…"}
         </Text>
       </Show>
-      <Show when={!pausePending() && pauseResumeLabel(controls.automation())}>
+      <Show
+        when={
+          props.showPauseNote !== false &&
+          !pausePending() &&
+          pauseResumeLabel(controls.automation())
+        }
+      >
         {(note) => (
           <Text size="caption" tone="muted">
             {note()}
@@ -83,6 +92,9 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
 }
 
 type TeamControlsProps = {
+  readonly align?: "start" | "end";
+  readonly compact?: boolean;
+  readonly showPauseNote?: boolean;
   readonly team: TeamSummaryView;
   readonly remote: TeamRemote;
 };

@@ -3,10 +3,8 @@ import { omit } from "solid-js";
 
 import { cx } from "./cx";
 import { Field, fieldControlClass } from "./Field";
-import { useSurface } from "./Surface";
 
 export function TextArea(props: TextAreaProps): JSX.Element {
-  const surface = useSurface();
   const rest = omit(props, "ariaLabel", "description", "error", "label");
 
   return (
@@ -22,7 +20,6 @@ export function TextArea(props: TextAreaProps): JSX.Element {
             "min-h-[9rem] resize-y py-2.5",
             fieldControlClass({
               invalid: props.error !== undefined,
-              surface,
             }),
           )}
         />

@@ -2,7 +2,11 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 
 import { Disclosure } from "#browser/shared-ui/Disclosure.tsx";
-import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import {
+  formatRangeEnd,
+  formatRangeStart,
+  formatReaderTime,
+} from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -53,9 +57,18 @@ function QuietGroupSummary(props: { readonly runs: ReadonlyArray<LineupRunView> 
   const span = (): QuietGroupSpan => quietGroupSpan(props.runs);
   return (
     <>
-      {span().count} checks changed nothing between{" "}
-      <Time datetime={span().from}>{formatDateTime(span().from)}</Time> and{" "}
-      <Time datetime={span().to}>{formatDateTime(span().to)}</Time>
+      {span().count} checks changed nothing{" "}
+      <Show
+        fallback={
+          <>
+            at <Time datetime={span().from}>{formatRangeStart(span().from, span().to)}</Time>
+          </>
+        }
+        when={span().from !== span().to}
+      >
+        from <Time datetime={span().from}>{formatRangeStart(span().from, span().to)}</Time> to{" "}
+        <Time datetime={span().to}>{formatRangeEnd(span().from, span().to)}</Time>
+      </Show>
     </>
   );
 }
@@ -81,14 +94,14 @@ function RunLine(props: { readonly run: LineupRunView }): JSX.Element {
   return (
     <>
       <Inline gap="sm" justify="between">
-        <Text size="caption">
+        <Text numeric size="body">
           {runStatusLabel(props.run.status)} · {targetLabel(props.run.target)}
         </Text>
         <Text size="caption" tone="faint">
           <Time datetime={props.run.updatedAt}>{formatReaderTime(props.run.updatedAt)}</Time>
         </Text>
       </Inline>
-      <Text size="caption" tone="muted">
+      <Text size="body" tone="muted">
         {runExplanation(props.run)}
       </Text>
     </>

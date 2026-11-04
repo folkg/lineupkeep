@@ -2,6 +2,8 @@ import type { JSX } from "@solidjs/web";
 import { createLink } from "@tanstack/solid-router";
 import { omit } from "solid-js";
 
+import { BrandMark } from "./BrandMark";
+
 export const BrandLink = createLink(BrandAnchor);
 
 function BrandAnchor(props: JSX.AnchorHTMLAttributes<HTMLAnchorElement>): JSX.Element {
@@ -9,9 +11,10 @@ function BrandAnchor(props: JSX.AnchorHTMLAttributes<HTMLAnchorElement>): JSX.El
   return (
     <a
       {...rest}
-      class="inline-flex min-h-tap-target items-center rounded-control font-display text-wordmark font-medium text-ink lowercase no-underline focus-visible:outline-none focus-visible:shadow-focus"
+      class="inline-flex min-h-tap-target items-center gap-2.5 font-display text-wordmark font-semibold text-ink lowercase no-underline focus-visible:outline-none focus-visible:shadow-focus"
     >
-      {props.children}
+      <BrandMark />
+      <span>{props.children}</span>
     </a>
   );
 }

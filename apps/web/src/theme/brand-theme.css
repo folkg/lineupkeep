@@ -3,76 +3,63 @@
 :root {
   color-scheme: light;
 
-  --theme-canvas: #f6f5ff;
+  --theme-canvas: #fbfbfa;
   --theme-paper: #ffffff;
-  --theme-ink: #20143b;
-  --theme-ink-soft: #625675;
-  --theme-ink-faint: #726480;
-  --theme-rule: #dfd9ec;
-  --theme-rule-strong: #9483a8;
-  --theme-action: #6236e5;
-  --theme-action-hover: #4c24bf;
-  --theme-action-soft: #ece6ff;
-  --theme-accent: #ffe253;
-  --theme-accent-hover: #f5d137;
-  --theme-on-accent: #23113f;
+  --theme-ink: #101014;
+  --theme-ink-soft: #5d5d68;
+  --theme-ink-faint: #6a6a72;
+  --theme-rule: #e2e2dc;
+  --theme-rule-strong: #101014;
+  --theme-action: #5b21b6;
+  --theme-action-hover: #4c1d95;
+  --theme-action-soft: #f3eeff;
+  --theme-on-action: #fbfbfa;
+  --theme-accent: #e0b64a;
+  --theme-on-accent: #101014;
   --theme-danger: #a33432;
   --theme-danger-hover: #802421;
   --theme-danger-soft: #faece9;
-  --theme-danger-on-panel: #ffc0b9;
-  --theme-panel: #291450;
-  --theme-on-panel: #ffffff;
-  --theme-on-panel-soft: #dccff0;
-  --theme-panel-rule: #947eb3;
-  --theme-lift: rgb(32 20 59 / 0.08);
+  --theme-scrim: rgb(16 16 20 / 0.55);
 
   --theme-font-display: "Schibsted Grotesk Variable", sans-serif;
   --theme-font-sans:
     "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
 
-  --theme-text-wordmark: 1.5rem;
+  --theme-text-wordmark: 0.6875rem;
   --theme-text-wordmark-line-height: 1.2;
-  --theme-text-wordmark-letter-spacing: -0.035em;
+  --theme-text-wordmark-letter-spacing: 0.16em;
 
-  --theme-text-display: clamp(3rem, 5.5vw, 5.25rem);
-  --theme-text-display-line-height: 1.06;
-  --theme-text-display-letter-spacing: -0.035em;
+  --theme-text-display: 2.5rem;
+  --theme-text-display-line-height: 1.05;
+  --theme-text-display-letter-spacing: -0.03em;
 
-  --theme-text-statement: clamp(2rem, 4vw, 3.75rem);
-  --theme-text-headline: clamp(2.5rem, 4vw, 3.75rem);
-  --theme-text-headline-line-height: 1.1;
-  --theme-text-headline-letter-spacing: -0.03em;
-  --theme-text-title: clamp(2rem, 3.2vw, 2.75rem);
-  --theme-text-subtitle: 1.75rem;
-  --theme-text-section-title: 1.25rem;
-  --theme-text-item: 1.125rem;
-  --theme-text-item-letter-spacing: -0.015em;
-  --theme-text-lede: clamp(1rem, 0.95rem + 0.3vw, 1.125rem);
-  --theme-text-base: 1rem;
-  --theme-text-glyph: 1.125rem;
-  --theme-text-supporting: 0.9375rem;
-  --theme-text-control: 0.875rem;
-  --theme-text-label: 0.8125rem;
-  --theme-text-caption: 0.8125rem;
-  --theme-text-feedback: 0.875rem;
-  --theme-text-metadata: 0.75rem;
-  --theme-tracking-tight: -0.025em;
-  --theme-tracking-rail: 0.02em;
+  --theme-text-title: 1.75rem;
+  --theme-text-title-line-height: 1.15;
+  --theme-text-section-title: 1.375rem;
+  --theme-text-section-title-line-height: 1.2;
+  --theme-text-body: 0.9375rem;
+  --theme-text-body-line-height: 1.55;
+  --theme-text-meta: 0.75rem;
+  --theme-text-meta-line-height: 1.5;
+  --theme-text-label: 0.6875rem;
+  --theme-text-label-line-height: 1.2;
+  --theme-tracking-tight: -0.02em;
+  --theme-tracking-label: 0.16em;
 
   --theme-size-tap-target: 2.75rem;
-  --theme-size-button: 2.875rem;
-  --theme-size-field: 3rem;
-  --theme-size-cue: 1.6875rem;
-  --theme-size-glyph: 2rem;
-  --theme-size-header: 4.5rem;
-  --theme-size-header-wide: 5rem;
+  --theme-size-button: 2.75rem;
+  --theme-size-field: 2.75rem;
+  --theme-size-cue: 1.75rem;
+  --theme-size-glyph: 1rem;
+  --theme-size-header: 3rem;
+  --theme-size-header-wide: 3.5rem;
   --theme-space-surface: 1.5rem;
 
-  --theme-radius-badge: 4px;
-  --theme-radius-sheet: 12px;
-  --theme-radius-control: 6px;
-  --theme-radius-surface: 12px;
+  --theme-radius-badge: 0px;
+  --theme-radius-sheet: 0px;
+  --theme-radius-control: 0px;
+  --theme-radius-surface: 0px;
 
   --theme-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --theme-duration-quick: 140ms;
@@ -82,26 +69,21 @@
 .dark {
   color-scheme: dark;
 
-  --theme-canvas: #151020;
-  --theme-paper: #21192f;
-  --theme-ink: #f8f3ff;
-  --theme-ink-soft: #c6b9d9;
-  --theme-ink-faint: #b3a1ca;
-  --theme-rule: #48375e;
-  --theme-rule-strong: #a48bbc;
-  --theme-action: #baa3ff;
-  --theme-action-hover: #cfbdff;
-  --theme-action-soft: #39275d;
-  --theme-accent: #ffe253;
-  --theme-accent-hover: #f5d137;
-  --theme-on-accent: #271240;
+  --theme-canvas: #17122a;
+  --theme-paper: #1e1836;
+  --theme-ink: #efeafc;
+  --theme-ink-soft: #b3a4d8;
+  --theme-ink-faint: #9b8cc4;
+  --theme-rule: #34285c;
+  --theme-rule-strong: #b9a6e8;
+  --theme-action: #c4b5fd;
+  --theme-action-hover: #d8c6ff;
+  --theme-action-soft: #2a2150;
+  --theme-on-action: #17122a;
+  --theme-accent: #e0b64a;
+  --theme-on-accent: #101014;
   --theme-danger: #ffb9b0;
   --theme-danger-hover: #ffd1c9;
   --theme-danger-soft: #492b27;
-  --theme-danger-on-panel: #ffb9b0;
-  --theme-panel: #412479;
-  --theme-on-panel: #ffffff;
-  --theme-on-panel-soft: #e1d1ff;
-  --theme-panel-rule: #a48bbc;
-  --theme-lift: rgb(0 0 0 / 0.25);
+  --theme-scrim: rgb(0 0 0 / 0.65);
 }

@@ -17,14 +17,13 @@ export function Heading(props: HeadingProps): JSX.Element {
 }
 
 const sizeClass = {
-  display: "max-w-[14ch] text-balance font-display text-display font-semibold",
-
-  statement: "max-w-[14ch] text-balance font-display text-statement font-semibold",
-  headline: "font-display text-headline font-semibold",
-  title: "font-display text-title font-semibold",
-  subtitle: "font-display text-subtitle font-semibold",
-  section: "font-display text-section-title font-semibold",
-  item: "break-words text-item font-bold",
+  display: "max-w-[19ch] text-balance font-display text-display font-semibold",
+  statement: "max-w-[22ch] text-balance font-display text-statement font-semibold",
+  headline: "max-w-[28ch] text-balance font-display text-headline font-semibold",
+  title: "text-pretty font-display text-title font-semibold",
+  subtitle: "text-pretty font-display text-subtitle font-semibold",
+  section: "text-pretty font-display text-section-title font-semibold",
+  item: "break-words text-item font-semibold",
 };
 
 type HeadingProps = {

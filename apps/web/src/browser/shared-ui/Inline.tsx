@@ -10,6 +10,7 @@ export function Inline(props: InlineProps): JSX.Element {
     <div
       class={cx(
         "flex flex-wrap",
+        props.nowrap === true && "flex-nowrap",
         gapClass[props.gap],
         props.align === "start"
           ? "items-start"
@@ -17,6 +18,10 @@ export function Inline(props: InlineProps): JSX.Element {
             ? "items-baseline"
             : "items-center",
         props.justify === "between" && "justify-between",
+        props.justify === "end" && "justify-end max-[559px]:justify-start",
+        props.growFirst === true && "[&>*:first-child]:min-w-0 [&>*:first-child]:flex-1",
+        props.fullWidthOnSmall === true &&
+          "max-[559px]:col-span-2 max-[559px]:w-full max-[559px]:justify-start",
         props.collapse === true && "max-sm:grid max-sm:[&>*]:w-full",
       )}
     >
@@ -28,7 +33,10 @@ export function Inline(props: InlineProps): JSX.Element {
 type InlineProps = {
   readonly gap: Space;
   readonly align?: "start" | "baseline";
-  readonly justify?: "between";
+  readonly justify?: "between" | "end";
+  readonly fullWidthOnSmall?: boolean;
+  readonly nowrap?: boolean;
+  readonly growFirst?: boolean;
   readonly collapse?: boolean;
   readonly children: Element;
 };

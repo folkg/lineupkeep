@@ -9,13 +9,13 @@ export function Notice(props: NoticeProps): JSX.Element {
     <div
       id={props.id}
       class={cx(
-        "grid max-w-[68ch] gap-1.5 rounded-surface border p-3",
-        props.tone === "danger" ? "border-danger bg-danger-soft" : "border-rule-strong bg-paper",
+        "grid max-w-[42.5rem] gap-1.5 border-l ps-4",
+        props.tone === "danger" ? "border-danger" : "border-rule-strong",
       )}
     >
       <p
         class={cx(
-          "text-control font-semibold",
+          "text-label font-semibold uppercase tracking-label",
           props.tone === "danger" ? "text-danger" : "text-ink",
         )}
       >

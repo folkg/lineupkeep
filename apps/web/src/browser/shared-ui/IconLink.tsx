@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import type { Element } from "solid-js";
 
-import { iconButtonClass } from "./Button";
+import { iconButtonClass, iconButtonFrameClass } from "./Button";
 
 export function IconLink(props: IconLinkProps): JSX.Element {
   return (
@@ -13,7 +13,8 @@ export function IconLink(props: IconLinkProps): JSX.Element {
       target="_blank"
       title={props.title ?? props.label}
     >
-      {props.children}
+      <span aria-hidden="true" class={iconButtonFrameClass} />
+      <span class="relative">{props.children}</span>
     </a>
   );
 }

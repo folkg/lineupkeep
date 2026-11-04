@@ -16,7 +16,7 @@ function NavAnchor(props: NavAnchorProps): JSX.Element {
 }
 
 const navLinkClass =
-  "inline-flex min-h-tap-target items-center rounded-control px-3.5 text-control font-semibold text-ink-soft transition-[color,background-color] duration-quick ease-out-cubic hover:bg-paper hover:text-ink focus-visible:outline-none focus-visible:shadow-focus data-[status=active]:bg-ink data-[status=active]:text-paper data-[status=active]:hover:bg-ink data-[status=active]:hover:text-paper max-sm:px-2.5";
+  "relative inline-flex min-h-tap-target items-center text-control leading-none font-semibold uppercase tracking-label text-ink-soft transition-[color] duration-quick ease-out-cubic after:absolute after:inset-x-[-0.5rem] after:bottom-0 after:h-px after:bg-transparent after:content-[''] hover:text-ink focus-visible:outline-none focus-visible:shadow-focus data-[status=active]:text-ink data-[status=active]:after:bg-rule-strong data-[status=active]:hover:text-ink";
 
 type NavAnchorProps = Omit<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "class"> & {
   readonly class?: string;

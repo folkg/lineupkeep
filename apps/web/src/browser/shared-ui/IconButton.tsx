@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import type { Element } from "solid-js";
 
-import { iconButtonClass } from "./Button";
+import { iconButtonClass, iconButtonFrameClass } from "./Button";
 
 export function IconButton(props: IconButtonProps): JSX.Element {
   const blocked = (): boolean => props.busy === true || props.disabled === true;
@@ -26,7 +26,8 @@ export function IconButton(props: IconButtonProps): JSX.Element {
         type="button"
         onClick={handleClick}
       >
-        {props.children}
+        <span aria-hidden="true" class={iconButtonFrameClass} />
+        <span class="relative">{props.children}</span>
       </button>
     </span>
   );

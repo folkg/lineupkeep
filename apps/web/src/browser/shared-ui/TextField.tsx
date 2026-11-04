@@ -3,10 +3,8 @@ import { omit } from "solid-js";
 
 import { cx } from "./cx";
 import { Field, fieldControlClass } from "./Field";
-import { useSurface } from "./Surface";
 
 export function TextField(props: TextFieldProps): JSX.Element {
-  const surface = useSurface();
   const rest = omit(props, "ariaLabel", "description", "error", "label", "weight");
 
   return (
@@ -23,7 +21,6 @@ export function TextField(props: TextFieldProps): JSX.Element {
             props.weight === "strong" ? "font-bold" : "",
             fieldControlClass({
               invalid: props.error !== undefined,
-              surface,
             }),
           )}
         />

@@ -2,133 +2,122 @@
 name: Lineupkeep
 description: "Your lineup. Looked after."
 colors:
-  canvas: "#f6f5ff"
+  canvas: "#fbfbfa"
   paper: "#ffffff"
-  ink: "#20143b"
-  ink-soft: "#625675"
-  ink-faint: "#726480"
-  rule: "#dfd9ec"
-  rule-strong: "#9483a8"
-  action: "#6236e5"
-  action-hover: "#4c24bf"
-  action-soft: "#ece6ff"
-  accent: "#ffe253"
-  accent-hover: "#f5d137"
-  on-accent: "#23113f"
+  ink: "#101014"
+  ink-soft: "#5d5d68"
+  ink-faint: "#6a6a72"
+  rule: "#e2e2dc"
+  rule-strong: "#101014"
+  action: "#5b21b6"
+  action-hover: "#4c1d95"
+  action-soft: "#f3eeff"
+  on-action: "#fbfbfa"
+  accent: "#e0b64a"
+  on-accent: "#101014"
   danger: "#a33432"
   danger-hover: "#802421"
   danger-soft: "#faece9"
-  danger-on-panel: "#ffc0b9"
-  panel: "#291450"
-  on-panel: "#ffffff"
-  on-panel-soft: "#dccff0"
-  panel-rule: "#947eb3"
-  dark-canvas: "#151020"
-  dark-paper: "#21192f"
-  dark-ink: "#f8f3ff"
-  dark-ink-soft: "#c6b9d9"
-  dark-ink-faint: "#b3a1ca"
-  dark-rule: "#48375e"
-  dark-rule-strong: "#a48bbc"
-  dark-action: "#baa3ff"
-  dark-action-hover: "#cfbdff"
-  dark-action-soft: "#39275d"
-  dark-accent: "#ffe253"
-  dark-accent-hover: "#f5d137"
-  dark-on-accent: "#271240"
+  scrim: "rgb(16 16 20 / 0.55)"
+  dark-canvas: "#17122a"
+  dark-paper: "#1e1836"
+  dark-ink: "#efeafc"
+  dark-ink-soft: "#b3a4d8"
+  dark-ink-faint: "#9b8cc4"
+  dark-rule: "#34285c"
+  dark-rule-strong: "#b9a6e8"
+  dark-action: "#c4b5fd"
+  dark-action-hover: "#d8c6ff"
+  dark-action-soft: "#2a2150"
+  dark-on-action: "#17122a"
+  dark-accent: "#e0b64a"
+  dark-on-accent: "#101014"
   dark-danger: "#ffb9b0"
   dark-danger-hover: "#ffd1c9"
   dark-danger-soft: "#492b27"
-  dark-danger-on-panel: "#ffb9b0"
-  dark-panel: "#412479"
-  dark-on-panel: "#ffffff"
-  dark-on-panel-soft: "#e1d1ff"
-  dark-panel-rule: "#a48bbc"
+  dark-scrim: "rgb(0 0 0 / 0.65)"
 typography:
   wordmark:
     fontFamily: "Schibsted Grotesk Variable, sans-serif"
-    fontSize: "1.5rem"
-    fontWeight: 500
+    fontSize: "0.6875rem"
+    fontWeight: 600
     lineHeight: 1.2
-    letterSpacing: "-0.035em"
+    letterSpacing: "0.16em"
   display:
     fontFamily: "Schibsted Grotesk Variable, sans-serif"
-    fontSize: "clamp(3rem, 5.5vw, 5.25rem)"
+    fontSize: "2.5rem"
     fontWeight: 600
-    lineHeight: 1.06
-    letterSpacing: "-0.035em"
-  headline:
-    fontFamily: "Schibsted Grotesk Variable, sans-serif"
-    fontSize: "clamp(2.5rem, 4vw, 3.75rem)"
-    fontWeight: 600
-    lineHeight: 1.1
+    lineHeight: 1.05
     letterSpacing: "-0.03em"
-  title:
+  page-title:
     fontFamily: "Schibsted Grotesk Variable, sans-serif"
-    fontSize: "clamp(2rem, 3.2vw, 2.75rem)"
+    fontSize: "1.75rem"
     fontWeight: 600
     lineHeight: 1.15
-    letterSpacing: "-0.025em"
-  body:
+    letterSpacing: "-0.02em"
+  section-title:
     fontFamily: "Schibsted Grotesk Variable, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 400
-    lineHeight: 1.55
-  control:
-    fontFamily: "Schibsted Grotesk Variable, sans-serif"
-    fontSize: "0.875rem"
+    fontSize: "1.375rem"
     fontWeight: 600
     lineHeight: 1.2
-  caption:
+    letterSpacing: "-0.02em"
+  body:
     fontFamily: "Schibsted Grotesk Variable, sans-serif"
-    fontSize: "0.8125rem"
+    fontSize: "0.9375rem"
+    fontWeight: 400
+    lineHeight: 1.55
+  meta:
+    fontFamily: "Schibsted Grotesk Variable, sans-serif"
+    fontSize: "0.75rem"
     fontWeight: 400
     lineHeight: 1.5
+  label:
+    fontFamily: "Schibsted Grotesk Variable, sans-serif"
+    fontSize: "0.6875rem"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "0.16em"
 rounded:
-  badge: "4px"
-  control: "6px"
-  surface: "12px"
+  badge: "0px"
+  control: "0px"
+  surface: "0px"
 spacing:
   xs: "4px"
   sm: "8px"
-  md: "16px"
-  lg: "24px"
-  xl: "32px"
-  section: "48px"
-  section-wide: "64px"
+  md: "12px"
+  lg: "16px"
+  xl: "24px"
+  section: "32px"
+  section-wide: "48px"
   control-min: "44px"
-  content-max: "76rem"
+  content-max: "680px"
+  table-max: "960px"
 components:
   button-primary:
     backgroundColor: "{colors.action}"
-    textColor: "{colors.paper}"
-    typography: "{typography.control}"
+    textColor: "{colors.on-action}"
+    typography: "{typography.label}"
     rounded: "{rounded.control}"
-    height: "46px"
-    padding: "0 18px"
+    height: "44px"
+    padding: "0 20px"
   button-primary-hover:
     backgroundColor: "{colors.action-hover}"
-  button-accent:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
-    typography: "{typography.control}"
-    rounded: "{rounded.control}"
-    height: "46px"
-    padding: "0 18px"
-  button-accent-hover:
-    backgroundColor: "{colors.accent-hover}"
   button-secondary:
     textColor: "{colors.ink}"
+    borderColor: "{colors.rule-strong}"
+    typography: "{typography.label}"
     rounded: "{rounded.control}"
-    height: "46px"
+    height: "44px"
+    padding: "0 20px"
   text-field:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
+    borderColor: "{colors.rule-strong}"
     rounded: "{rounded.control}"
-    height: "48px"
+    height: "44px"
   badge:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
+    textColor: "{colors.action}"
+    typography: "{typography.label}"
     rounded: "{rounded.badge}"
 ---
 
@@ -136,125 +125,261 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Considered Instrument"**
+**Creative North Star: "The Technical Sheet"**
 
-An assured fantasy-team instrument with sporting energy: royal violet actions, golden yellow accents, and deep violet ink. A continuous lowercase wordmark, one self-hosted family, and ruled information keep the identity professional and solid.
+Lineupkeep reads as one precise sheet: a single grotesk, square controls, a short measure, and
+hairlines that do the work a card used to do. Royal violet is spent in one place per view. Gold
+exists only in the mark. The product is calm enough to check in the morning and precise enough to
+trust with a lineup.
 
-This is an Operate product: familiar navigation, native controls, direct labels, and information before spectacle. Light supports daytime checks and dark supports evening use. The operational teams, connections, and lineup-run surfaces are implemented on this foundation.
+This is an Operate product: information before spectacle, familiar controls, direct labels, and
+honest state. Light is a warm paper; dark is a tinted violet sheet. Both are complete palettes.
 
 **Key Characteristics:**
 
-- Continuous typographic identity
-- Clear operational state
-- Confident sporting colour
-- Light and dark as complete palettes
+- One grotesk, six text sizes, no serif
+- Square everywhere; hairlines instead of boxes
+- One 680px measure and one solid action per view
+- Numbers aligned with tabular figures, never prose tracking
+- Royal violet for interaction; gold only in the mark
+- Light and dark designed together
 
-Runtime values live in [brand-theme.css](apps/web/src/theme/brand-theme.css); [design-system.css](apps/web/src/theme/design-system.css) maps them to semantic utilities. Frontmatter owns normative primitives. The [schema-v2 sidecar](.impeccable/design.json) adds metadata, dark-theme mappings, motion, focus, and portable component specimens. Keep all three aligned.
+Runtime values live in [brand-theme.css](apps/web/src/theme/brand-theme.css);
+[design-system.css](apps/web/src/theme/design-system.css) maps them to Tailwind utilities. The
+frontmatter and the [schema-v2 sidecar](.impeccable/design.json) carry the same primitives. Keep
+all three aligned.
 
-## Colors
+## Colour, exactly
 
-### Primary
+Violet owns interaction. Ink and rule carry everything else. Gold is the brand mark's fill and is
+never used for text, actions, status, or decoration.
 
-Royal violet **action** owns primary actions, links, focus, and selection; **action-soft** supports quieter interactive states. Deep violet **panel** is a confident companion surface with explicitly scoped foregrounds.
+### Paper light
 
-### Secondary
+| Token          | Value                  | Role                                                      |
+| -------------- | ---------------------- | --------------------------------------------------------- |
+| `canvas`       | `#fbfbfa`              | Page field                                                |
+| `paper`        | `#ffffff`              | Inputs and the mark's surroundings, not cards             |
+| `ink`          | `#101014`              | Primary text, headings, mark strokes                      |
+| `ink-soft`     | `#5d5d68`              | Secondary text, quiet links, quiet controls               |
+| `ink-faint`    | `#6a6a72`              | Metadata, labels, placeholders                            |
+| `rule`         | `#e2e2dc`              | Hairlines between rows and under section titles           |
+| `rule-strong`  | `#101014`              | Masthead rule, control and field borders, active nav rule |
+| `action`       | `#5b21b6`              | The one solid action, action links, live controls, focus  |
+| `action-hover` | `#4c1d95`              | Action hover                                              |
+| `action-soft`  | `#f3eeff`              | Selection and quiet interactive ground                    |
+| `on-action`    | `#fbfbfa`              | Text on a solid action, toggle knob when on               |
+| `accent`       | `#e0b64a`              | Brand mark fill only                                      |
+| `on-accent`    | `#101014`              | Mark strokes only                                         |
+| `danger`       | `#a33432`              | Errors, destructive actions, attention text               |
+| `danger-hover` | `#802421`              | Danger hover                                              |
+| `danger-soft`  | `#faece9`              | Danger hover ground                                       |
+| `scrim`        | `rgb(16 16 20 / 0.55)` | Modal scrim                                               |
 
-Golden yellow **accent**, paired with **on-accent** deep ink, brings sporting energy to highlighted calls to action and labelled attention. Gold is part of the approved identity, not a universal success or warning colour. Danger colours remain reserved for error/destructive meaning.
+### Tinted dark
 
-### Neutral
+| Token          | Value               | Role                                                      |
+| -------------- | ------------------- | --------------------------------------------------------- |
+| `canvas`       | `#17122a`           | Page field                                                |
+| `paper`        | `#1e1836`           | Inputs, one step above the field                          |
+| `ink`          | `#efeafc`           | Primary text, headings                                    |
+| `ink-soft`     | `#b3a4d8`           | Secondary text, quiet links, quiet controls               |
+| `ink-faint`    | `#9b8cc4`           | Metadata, labels, placeholders                            |
+| `rule`         | `#34285c`           | Hairlines between rows and under section titles           |
+| `rule-strong`  | `#b9a6e8`           | Masthead rule, control and field borders, active nav rule |
+| `action`       | `#c4b5fd`           | The one solid action, action links, live controls, focus  |
+| `action-hover` | `#d8c6ff`           | Action hover                                              |
+| `action-soft`  | `#2a2150`           | Selection and quiet interactive ground                    |
+| `on-action`    | `#17122a`           | Text on a solid action, toggle knob when on               |
+| `accent`       | `#e0b64a`           | Brand mark fill only                                      |
+| `on-accent`    | `#101014`           | Mark strokes only                                         |
+| `danger`       | `#ffb9b0`           | Errors, destructive actions, attention text               |
+| `danger-hover` | `#ffd1c9`           | Danger hover                                              |
+| `danger-soft`  | `#492b27`           | Danger hover ground                                       |
+| `scrim`        | `rgb(0 0 0 / 0.65)` | Modal scrim                                               |
 
-**Canvas** is pale violet; **paper** is clean white. Dark surfaces use violet-black rather than green or neutral charcoal. **Ink**, **ink-soft**, and **ink-faint** establish readable hierarchy. **Rule** separates rows; **rule-strong** defines important boundaries. Dark tokens use the corresponding dark-prefixed frontmatter names and map to the same runtime roles.
+**Measured pairs.** Text pairs clear WCAG AA: ink 18.3:1 (light) and 15.4:1 (dark); ink-soft
+6.3:1 and 8.0:1; ink-faint 5.2:1 and 6.0:1; action 8.7:1 and 9.8:1; on-action on action 8.7:1
+and 9.8:1; action on action-soft 7.9:1 in both; danger 6.6:1 and 11.1:1; danger on danger-soft
+5.9:1 and 7.7:1; on-accent on accent 9.9:1 in both. Hairlines are non-text. The mark's strokes
+are a graphic and clear 9.9:1. Gold never carries text on the page.
 
-**The Violet and Gold Rule.** Violet owns everyday interaction; gold brings focused energy to highlighted actions and labelled attention. Do not use either colour alone as a success, warning, or risk signal.
+**The One Violet Rule.** Per view, one solid violet element: the primary action. Links and live
+controls carry violet as text, underline, or border. Everything else is ink, soft ink, and rule.
+Danger is a semantic exception, used only for errors and destructive actions.
 
-Body/supporting/placeholder text must meet 4.5:1. Large text, focus, and essential control boundaries need 3:1. Every status also has a label or icon.
+**The Gold Reserve Rule.** Gold belongs to the mark and nowhere else. It is not a status, a
+highlight, a badge, or a second action.
 
 ## Typography
 
-**Display and body font:** Schibsted Grotesk Variable, self-hosted through Fontsource; system sans fallbacks. One family avoids theatrical sports display type.
+**One family:** Schibsted Grotesk Variable, self-hosted through Fontsource. No serif, no display
+face, no second grotesk. Google's branded button keeps Google's prescribed G and type.
 
-- **Wordmark:** uniform medium lowercase, 24px in the header, one baseline and one colour. Clear space at least half its cap height; link target at least 44px.
-- **Display:** semibold, fluid up to the recorded maximum; sentence case, balanced, not a dashboard headline treatment.
-- **Headline/title:** semibold, readable line height, negative tracking restrained.
-- **Body:** regular, 16px base, 1.55 leading; continuous prose near 65–75ch.
-- **Controls:** semibold. Google-branded controls retain Google's prescribed treatment.
-- **Caption:** sentence case. Metadata is for supplementary information, never the only presentation of essential state.
-- **Numerals:** tabular only for comparable values, times, and tables.
+The pages use six text sizes, and no others:
 
-**The Continuous Word Rule.** Use Lineupkeep in prose and lineupkeep in the wordmark. The shared up is discoverable; no gap, uppercase UP, colour alternation, or extra logo badge. A commissioned slight weight change can be evaluated later; this foundation is uniform. Tracking never falls below -0.04em.
+- **11px label** — uppercase, weight 600, `0.16em` tracking. Masthead, nav, control labels, field
+  labels, status words, section kickers.
+- **12px meta** — weight 400, line height 1.5. League context, timestamps, helper copy, feedback.
+- **15px body** — weight 400, line height 1.55. Prose, rows, links, field values.
+- **22px section title** — weight 600, line height 1.2. Section headings and auth form headings.
+- **28px page title** — weight 600, line height 1.15. Page and auth titles.
+- **40px display** — weight 600, line height 1.05. The landing statement only.
+
+Tracking belongs to labels. Body, meta, and titles use normal tracking; titles may use `-0.02em`
+to `-0.03em`. Never add letter spacing to body text.
+
+**Numerals.** Use `font-variant-numeric: tabular-nums` on anything compared to anything else:
+`time`, counts in a row, attempts, ratios, and record tallies. Apply it to the numeric element or
+line, never to prose: in Schibsted Grotesk tabular figures widen punctuation and produce gaps
+before commas and full stops.
+
+**The Wordmark Rule.** The wordmark stays continuous lowercase `lineupkeep` at the 11px label
+weight and tracking, beside the square mark. Use Lineupkeep in prose. Do not uppercase, split,
+outline, or colour the syllables.
+
+**The Mark.** A 20px gold square with ink `lk` strokes, square corners, placed at the masthead's
+left edge. The same artwork is the favicon. Gold appears nowhere else.
 
 ## Layout
 
-Generous separation between tasks, tight grouping inside them. A four-pixel base rhythm with the recorded spacing steps supports familiar product layouts. Desktop can put controls beside a list; mobile stacks them in task order. Maximum application content width is 76rem; operational page content caps at 48rem so controls size to their content rather than to the viewport. On small screens the primary navigation occupies its own header row; signed-out visitors see no application navigation before sign-in.
+**One measure.** The application column is 680px. Lists and tables may extend to 960px when their
+columns genuinely need it; no content runs the viewport width. The masthead, section rules, row
+rules, and controls share the column's left and right edges.
 
-Lists/tables—not repeated marketing cards—own teams and run history when those features are implemented. Shared alignment is the visual signature: wordmark, headings, labels, state text, and row rules sit on a disciplined baseline. No field grids, ornamental numbers, podiums, or trading-terminal clutter.
+**The masthead** is two rows inside the measure: brand mark and lowercase wordmark left, theme
+toggle right; then primary navigation with the sign-out control at the right. One 1px
+`rule-strong` rule closes the masthead. Navigation labels are 11px caps; the active item carries a
+1px rule that spans the item, not a short bar under the word.
 
-## Elevation & Depth
+**Rows** are two columns from 560px: text at the left, one control cluster at the right. Below
+560px a row stacks: full-width text first, then the controls on their own line, aligned left. A
+long team or league name wraps; it never truncates. Controls never overlap a name.
 
-Flat by default. Tonal surfaces and 1px rules establish hierarchy. Use a border or a soft offset shadow, not both by default. Avoid halos and hard-offset block shadows. The current foundation needs no authored entrance animation; local state feedback is brief.
+**Team detail order** is fixed: back link, title, one metadata line (sport and league), one
+control row with toggle, pause, and provider jump-out on the same line, a quiet report link, then
+the activity section behind its rule, then the owner note. Nothing floats to the right of the
+metadata line.
 
-**The Honest Surface Rule.** A surface exists to group a task or establish hierarchy, not to make sparse content look substantial.
+**Activity ranges** omit a repeated date: `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
+single instant, say `at Nov 1, 11:44 AM`; when it crosses the reader's midnight, show both full
+dates.
 
-## Shapes
+**Alignment.** Text shares one left edge. Controls share one right edge above 560px and one left
+edge below it. Toggle, pause, and provider controls sit on the text's first-line baseline.
 
-Gently softened corners: badge, control, and surface radii come from the frontmatter. Pills are for genuinely small controls, not every container. No tilted sheets, tape, ornamental clipping, or simulated physical objects.
+## Elevation and shape
+
+There are no rounded corners. Controls, toggles, inputs, badges, dialogs, and surfaces are square.
+Radii are `0px` in the tokens, and a component must not add one.
+
+There are no shadows, gradients, or layered panels. Hierarchy comes from ink weight, the 680px
+measure, and 1px rules. A surface earns a border only when it is a control: an input, a button, the
+hosted browser viewport, or a dialog. Prose, lists, notices, and empty states use rules, not boxes.
+
+**The Rule, Not a Box Rule.** A section title owns one hairline. List rows own one hairline between
+them. Status and empty states use a leading rule or plain text, never a dashed or bordered card.
 
 ## Components
 
-### Home wordmark
+### Actions
 
-[BrandLink](apps/web/src/browser/brand-ui/BrandLink.tsx) is a continuous lowercase home link, without a prefix monogram. Accessible name: Lineupkeep home. The small lk [favicon](apps/web/public/brand/lineupkeep-mark.svg) is a browser utility, not a second primary logo.
+- **Primary:** solid `action`, `on-action` text, 44px high, 11px caps, square. One per view.
+- **Secondary:** 1px `rule-strong` border, ink text, 44px, square.
+- **Quiet:** 11px caps ink-soft text, no border; used for sign-out and other low-stakes controls.
+- **Link:** 15px action violet with a 1px underline, used for navigation and recovery. Quiet links
+  use ink-soft, not violet.
+- **Icon:** a 28px square frame with a 1px `rule-strong` border inside a 44px hit area. The frame
+  sits flush with the column edge; the hit area may extend into the gutter. Pause, provider, and
+  theme toggle use this control.
+- **Google:** Google's G and prescribed light/dark fill, square to match the sheet, with its own
+  14px type as the one branded exception.
 
-### Actions and navigation
-
-Existing Button, ButtonLink, IconButton, NavLink, and TabLink retain native behavior and familiar selected/disabled/pending states. Minimum target 44px. Named Lucide icons only; icon-only controls need an accessible name. Focus is a visible 3px action ring with 3px separation.
-
-Local feedback uses the sidecar's quick timing; honour reduced motion. Do not animate sections or delay content. Hover is not the only indication of actionability.
+Pressed, pending, disabled, and focus states remain native and accessible. Focus is a 2px action
+ring with 2px separation; it is visible on every ground and does not rely on colour alone.
 
 ### Fields
 
-TextField, TextArea, and SearchField keep persistent labels, visible boundaries, associated hints/errors, and a themed caret. Pending states keep accessible feedback. Error copy names the issue and recovery; placeholder text is not a label.
+Labels are 11px caps. Inputs are 44px, 15px body, square, with a 1px `rule-strong` border and
+`paper` ground. Descriptions and errors are 12px; errors are danger and sit beside the field.
+Placeholders are not labels. The caret and selection use action tokens.
 
-### Containers and metadata
+### Toggle
 
-Status metadata is labelled text, not a rank sticker. Reserve gold emphasis for highlighted calls to action; supporting state stays in ink tones without inventing another status palette. IntroPanel/Panel are occasional dark companion surfaces, not a site-wide card recipe. Do not derive the fantasy domain by renaming starter components.
+A 40×22 square track with a 16px square knob. On is `action` with an `on-action` knob; off is
+`rule` with a `paper` knob. The track carries a 44px hit area. In a list of teams the label is
+hidden and the row's name identifies the toggle; on a single team the `LINEUP CHECKS` label is
+visible. The pause control sits beside the toggle with its sentence in the title.
+
+### Lists and status
+
+Team and connection rows use 15px text with 12px meta, a 22px name where the row is a primary
+destination, and a bottom hairline. Status is a labelled word in caps, never a colour alone. Team
+rows show what the last check did, when, the recent tally, and a paused sentence in the text
+column. A list never repeats a control label on every row.
+
+Notices are a 1px leading rule with caps title and 12px detail. Empty and loading states are a
+top rule with a 15px title and soft text. The live status region stays in the accessibility tree
+when empty (visually hidden) and becomes visible when a message arrives.
+
+### Browser and dialogs
+
+The hosted browser viewport keeps a 1px border and square corners; it has no simulated traffic
+lights, no shadow, and no panel treatment. A dialog uses a `paper` ground, a 1px border, the scrim
+token, and the same square corners.
 
 ### Operational states
 
-Connection health, team automation, actionable period, and run outcome are explicit in team and run rows. Automation off, paused, reconnect required, unavailable, queued, checking, verified unchanged, verified updated, and needs reconciliation are distinct. Never flatten them into green/red or Done.
+Connection health, team automation, actionable period, and run outcome stay explicit. Automation
+off, paused, reconnect required, unavailable, queued, checking, verified unchanged, verified
+updated, and needs reconciliation are distinct. Never flatten them into green/red or Done.
 
-A pause is not a disable, expired connection is not lost enrollment, unavailable is not deleted, and sent is not verified. Paused rows name the rest of the fantasy day and show the resume time in the reader's locale. Reconnect-required rows retain enrollment and expose one explicit reconnect path.
+A pause is not a disable, expired connection is not lost enrollment, unavailable is not deleted,
+and sent is not verified. Paused rows name the rest of the fantasy day and show the resume time in
+the reader's locale. Reconnect-required rows retain enrollment and expose one explicit reconnect
+path.
 
-### Teams and runs
+A run detail shows the target period, trigger, attempts, verified outcome, changes, and pending
+reason without exposing credentials, cookies, provider GUIDs, raw payloads, or raw errors.
 
-Teams are a ruled list, not a grid of marketing cards. Each row carries the team name, one line of league context (sport, league, season), what the last check did and how long ago, and a tally of recent checks that changed the lineup. Status words appear only when something needs attention: a connection that needs a new sign-in, a sign-in in progress, or a team the provider no longer lists.
+### Connections
 
-Lineup checks are one switch, optimistic and labelled for the team; pause and resume sit beside it as a quieter control. The switch keeps its confirmed state, shows a pending label while the write is in flight, and returns to the server's state with a message when the write is refused. The team detail keeps the same controls and the recent runs, folding consecutive checks that changed nothing into one expandable line while changed, blocked, failed, uncertain, and in-progress runs always stand alone. A run detail shows the target period, trigger, attempts, verified outcome, changes, and pending reason without exposing credentials, cookies, provider GUIDs, raw payloads, or raw errors.
+The connection surface links through the hosted browser only; the web UI has no password field.
+Each connection row names the provider, the teams it covers, when it was connected, and what its
+current status can do. A connection that needs a new sign-in reopens the same hosted browser
+session in place.
 
-### Connections and incidents
+### Content and states
 
-The connection surface links through the hosted browser only; the web UI has no password field. Each connection row names the provider, the number of teams it covers, when it was connected, and what its current status can do. A connection that needs a new sign-in reopens the same hosted browser session in place. The person never types a password here. One connection expiration opens one durable incident, and the paired action-required email uses a stable logical idempotency identity so retries cannot multiply reminders.
-
-### Browser surfaces
-
-Theme text selection, caret, scrollbar, focus, and underline offset from semantic roles. Dark is a full palette, not inversion. Respect reduced motion, keyboard order, landmarks, heading hierarchy, error associations, empty states, and long real-world names.
+Use sentence case in prose and caps only for labels. Provider names appear only where a specific
+connection, team, or run is named; the product stays provider neutral. Numbers are tabular when
+compared; times are written in the reader's locale. Colour alone never communicates success, risk,
+or connection health.
 
 ## Do's and Don'ts
 
 ### Do
 
 - Do use semantic tokens and both complete themes.
-- Do keep the wordmark continuous and uniform.
-- Do distinguish verified, pending, and uncertain outcomes.
-- Do label sample data and retained starter scaffolding honestly.
-- Do preserve keyboard access, visible focus, and reduced motion.
+- Do keep controls, inputs, badges, and dialogs square.
+- Do keep the 680px measure and let tables exceed it only with a reason.
+- Do use one hairline under a section title and between list rows.
+- Do spend violet once per view on the primary action.
+- Do apply tabular numerals to comparable numbers only.
+- Do keep the wordmark lowercase and the mark gold.
+- Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.
+- Do let long names wrap and rows stack below 560px.
 
 ### Don't
 
-- Don't use LineUPkeep, LineUpKeep, arrows, trophies, shields, or AI decoration.
-- Don't use gradient lettering, lime stickers, tilted paper, or simulated notebooks.
-- Don't infer the fantasy domain by renaming starter-demo components.
-- Don't use colour alone to communicate connection, automation, or risk.
-- Don't claim live features, ownership, accuracy, or publication readiness without evidence.
+- Don't add border radii, shadows, gradients, or a second accent.
+- Don't use gold outside the mark.
+- Don't use a serif or a second typeface.
+- Don't box prose, lists, notices, or empty states.
+- Don't add letter spacing to body text or apply tabular figures to prose.
+- Don't repeat a control label on every row of a list.
+- Don't float controls to the right of a metadata line.
+- Don't use colour alone for connection, automation, or risk.
+- Don't expose credentials, cookies, provider GUIDs, raw payloads, or raw errors.
 
-[Brand notes](docs/brand/BRAND.md) owns naming/voice/placement. The [specimen](docs/brand/preview.html) illustrates this foundation; it is not a product prototype. This design does not authorize launch, waive the dependency blocker, or establish trademark/domain ownership.
+[Brand notes](docs/brand/BRAND.md) owns naming, voice, and placement. The [specimen](docs/brand/preview.html) illustrates the foundation; it is not a product prototype. This design does not authorize launch, waive the dependency blocker, or establish trademark/domain ownership.

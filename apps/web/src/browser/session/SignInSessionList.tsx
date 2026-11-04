@@ -9,9 +9,9 @@ import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { ConfirmDialog } from "#browser/shared-ui/ConfirmDialog.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
@@ -23,9 +23,7 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
 
   return (
     <Stack as="section" gap="md" labelledBy="sign-in-sessions-title">
-      <Heading id="sign-in-sessions-title" level={2} size="section">
-        Sign-in sessions
-      </Heading>
+      <SectionTitle id="sign-in-sessions-title">Sign-in sessions</SectionTitle>
       <Text size="caption" tone="muted">
         Where this account is signed in. Signing out ends this device only; the other sessions stay
         listed here until you end them.

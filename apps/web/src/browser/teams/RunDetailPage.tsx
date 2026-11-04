@@ -6,10 +6,10 @@ import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
 import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
@@ -41,15 +41,26 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
 
   return (
     <AppShell>
-      <Page title="Lineup run">
-        <Stack gap="lg">
-          <Show fallback={<TextLink to="/teams">Back to teams</TextLink>} when={page.team()}>
+      <Page
+        back={
+          <Show
+            fallback={
+              <TextLink tone="quiet" to="/teams">
+                Back to teams
+              </TextLink>
+            }
+            when={page.team()}
+          >
             {(team) => (
-              <TextLink params={{ teamId: team().team.id }} to="/teams/$teamId">
+              <TextLink params={{ teamId: team().team.id }} tone="quiet" to="/teams/$teamId">
                 Back to {team().team.name}
               </TextLink>
             )}
           </Show>
+        }
+        title="Lineup run"
+      >
+        <Stack gap="lg">
           <Show
             fallback={<LoadingState label="Loading run">Loading this run…</LoadingState>}
             when={!page.isLoading()}
@@ -90,9 +101,7 @@ function RunDetail(props: {
   return (
     <Stack gap="lg">
       <Stack gap="sm">
-        <Heading level={2} size="section">
-          {props.teamName}
-        </Heading>
+        <SectionTitle>{props.teamName}</SectionTitle>
         <Inline gap="sm">
           <Text size="caption">
             {runStatusLabel(props.run.status)} · {targetLabel(props.run.target)}
@@ -114,16 +123,14 @@ function RunDetail(props: {
         </Show>
       </DefinitionList>
 
-      <TextLink search={{ surface: "run", team: props.teamId }} to="/feedback">
+      <TextLink search={{ surface: "run", team: props.teamId }} tone="quiet" to="/feedback">
         Report a problem with this run
       </TextLink>
 
       <Show when={props.run.outcome}>
         {(outcome) => (
           <Stack gap="sm">
-            <Heading level={2} size="section">
-              What the run found
-            </Heading>
+            <SectionTitle>What the run found</SectionTitle>
             <Show when={outcome().provenance}>
               {(provenance) => (
                 <Text size="caption" tone="muted">
@@ -161,9 +168,7 @@ function RunDetail(props: {
             <Show when={outcome().leftInPlace}>
               {(leftInPlace) => (
                 <Stack gap="sm">
-                  <Heading level={3} size="item">
-                    Left in place
-                  </Heading>
+                  <SectionTitle level={3}>Left in place</SectionTitle>
                   <RuleList>
                     <For each={leftInPlace()}>
                       {(player) => (
@@ -176,7 +181,7 @@ function RunDetail(props: {
                               {player.slot}
                             </Text>
                           </Inline>
-                          <Text size="caption" tone="muted">
+                          <Text size="body" tone="muted">
                             {player.reason}
                           </Text>
                         </RuleListItem>

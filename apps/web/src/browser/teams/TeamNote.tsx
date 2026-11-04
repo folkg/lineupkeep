@@ -3,8 +3,8 @@ import type { JSX } from "@solidjs/web";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextArea } from "#browser/shared-ui/TextArea.tsx";
@@ -14,9 +14,7 @@ import type { TeamNoteController } from "./useTeamNote";
 export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Element {
   return (
     <Stack as="section" gap="sm" labelledBy="team-note-title">
-      <Heading id="team-note-title" level={2} size="section">
-        Owner note
-      </Heading>
+      <SectionTitle id="team-note-title">Owner note</SectionTitle>
       <Text size="body" tone="muted">
         Only this account sees this note, and it is not sent to the provider.
       </Text>

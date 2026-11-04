@@ -25,17 +25,13 @@
   --color-action: var(--theme-action);
   --color-action-hover: var(--theme-action-hover);
   --color-action-soft: var(--theme-action-soft);
+  --color-on-action: var(--theme-on-action);
   --color-accent: var(--theme-accent);
-  --color-accent-hover: var(--theme-accent-hover);
   --color-on-accent: var(--theme-on-accent);
   --color-danger: var(--theme-danger);
   --color-danger-hover: var(--theme-danger-hover);
   --color-danger-soft: var(--theme-danger-soft);
-  --color-danger-on-panel: var(--theme-danger-on-panel);
-  --color-panel: var(--theme-panel);
-  --color-on-panel: var(--theme-on-panel);
-  --color-on-panel-soft: var(--theme-on-panel-soft);
-  --color-panel-rule: var(--theme-panel-rule);
+  --color-scrim: var(--theme-scrim);
 
   --color-google-fill: var(--brand-google-fill);
   --color-google-stroke: var(--brand-google-stroke);
@@ -52,46 +48,51 @@
   --text-display: var(--theme-text-display);
   --text-display--line-height: var(--theme-text-display-line-height);
   --text-display--letter-spacing: var(--theme-text-display-letter-spacing);
-  --text-statement: var(--theme-text-statement);
-  --text-statement--line-height: var(--theme-text-display-line-height);
-  --text-statement--letter-spacing: var(--theme-text-display-letter-spacing);
-  --text-headline: var(--theme-text-headline);
-  --text-headline--line-height: var(--theme-text-headline-line-height);
-  --text-headline--letter-spacing: var(--theme-text-headline-letter-spacing);
+
+  --text-statement: var(--theme-text-title);
+  --text-statement--line-height: var(--theme-text-title-line-height);
+  --text-statement--letter-spacing: var(--theme-tracking-tight);
+  --text-headline: var(--theme-text-title);
+  --text-headline--line-height: var(--theme-text-title-line-height);
+  --text-headline--letter-spacing: var(--theme-tracking-tight);
   --text-title: var(--theme-text-title);
-  --text-title--line-height: 1.15;
+  --text-title--line-height: var(--theme-text-title-line-height);
   --text-title--letter-spacing: var(--theme-tracking-tight);
-  --text-subtitle: var(--theme-text-subtitle);
-  --text-subtitle--line-height: 1.2;
+  --text-subtitle: var(--theme-text-section-title);
+  --text-subtitle--line-height: var(--theme-text-section-title-line-height);
   --text-subtitle--letter-spacing: var(--theme-tracking-tight);
   --text-section-title: var(--theme-text-section-title);
-  --text-section-title--line-height: 1.3;
-  --text-item: var(--theme-text-item);
-  --text-item--line-height: 1.3;
-  --text-item--letter-spacing: var(--theme-text-item-letter-spacing);
-  --text-lede: var(--theme-text-lede);
-  --text-lede--line-height: 1.68;
-  --text-base: var(--theme-text-base);
-  --text-base--line-height: 1.6;
-  --text-glyph: var(--theme-text-glyph);
+  --text-section-title--line-height: var(--theme-text-section-title-line-height);
+  --text-section-title--letter-spacing: var(--theme-tracking-tight);
+  --text-item: var(--theme-text-body);
+  --text-item--line-height: 1.4;
+  --text-lede: var(--theme-text-body);
+  --text-lede--line-height: var(--theme-text-body-line-height);
+  --text-body: var(--theme-text-body);
+  --text-body--line-height: var(--theme-text-body-line-height);
+  --text-base: var(--theme-text-body);
+  --text-base--line-height: var(--theme-text-body-line-height);
+  --text-supporting: var(--theme-text-body);
+  --text-supporting--line-height: var(--theme-text-body-line-height);
+  --text-glyph: var(--theme-size-glyph);
   --text-glyph--line-height: 1;
-  --text-supporting: var(--theme-text-supporting);
-  --text-supporting--line-height: 1.65;
-  --text-control: var(--theme-text-control);
-  --text-control--line-height: 1;
+  --text-control: var(--theme-text-label);
+  --text-control--line-height: var(--theme-text-label-line-height);
+  --text-control--letter-spacing: var(--theme-tracking-label);
   --text-label: var(--theme-text-label);
-  --text-label--line-height: 1;
-  --text-caption: var(--theme-text-caption);
-  --text-caption--line-height: 1.4;
-  --text-feedback: var(--theme-text-feedback);
-  --text-feedback--line-height: 1.4;
-  --text-metadata: var(--theme-text-metadata);
+  --text-label--line-height: var(--theme-text-label-line-height);
+  --text-label--letter-spacing: var(--theme-tracking-label);
+  --text-caption: var(--theme-text-meta);
+  --text-caption--line-height: var(--theme-text-meta-line-height);
+  --text-feedback: var(--theme-text-meta);
+  --text-feedback--line-height: var(--theme-text-meta-line-height);
+  --text-metadata: var(--theme-text-meta);
+  --text-metadata--line-height: var(--theme-text-meta-line-height);
   --text-google: 0.875rem;
   --text-google--line-height: 1.25rem;
-  --text-metadata--line-height: 1.4;
 
   --tracking-tight: var(--theme-tracking-tight);
-  --tracking-rail: var(--theme-tracking-rail);
+  --tracking-label: var(--theme-tracking-label);
 
   --spacing-tap-target: var(--theme-size-tap-target);
   --spacing-button: var(--theme-size-button);
@@ -103,13 +104,12 @@
   --spacing-header-wide: var(--theme-size-header-wide);
   --spacing-surface: var(--theme-space-surface);
 
-  --radius-badge: var(--theme-radius-badge);
-  --radius-sheet: var(--theme-radius-sheet);
-  --radius-control: var(--theme-radius-control);
-  --radius-surface: var(--theme-radius-surface);
+  --radius-badge: 0px;
+  --radius-sheet: 0px;
+  --radius-control: 0px;
+  --radius-surface: 0px;
 
-  --shadow-lift: 0 18px 46px var(--theme-lift);
-  --shadow-focus: 0 0 0 3px var(--theme-canvas), 0 0 0 6px var(--theme-action);
+  --shadow-focus: 0 0 0 2px var(--theme-canvas), 0 0 0 4px var(--theme-action);
 
   --ease-out-cubic: var(--theme-ease-out);
 
@@ -132,7 +132,7 @@
   @keyframes dialog-in {
     from {
       opacity: 0;
-      scale: 0.95;
+      scale: 0.98;
     }
 
     to {

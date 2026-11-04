@@ -38,7 +38,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
       <Match when={form.step() === "email"}>
         <Stack gap="xl">
           <Stack gap="md">
-            <Heading level={2} size="title">
+            <Heading level={2} size="section">
               Sign in or start fresh.
             </Heading>
             <Text tone="muted">The first sign-in creates your account.</Text>
@@ -92,7 +92,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
       <Match when={form.step() === "code"}>
         <Stack gap="xl">
           <Stack gap="md">
-            <Heading level={2} size="title">
+            <Heading level={2} size="section">
               Check your email.
             </Heading>
             <Text tone="muted">

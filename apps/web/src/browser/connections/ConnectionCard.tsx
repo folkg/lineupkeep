@@ -1,6 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
+import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
@@ -20,12 +21,12 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
           <Heading level={3} size="item">
             {providerDisplayName(props.connection.provider)} connection
           </Heading>
-          <Text size="caption" tone="faint" weight="semibold">
+          <Badge tone={props.connection.status === "ready" ? "neutral" : "accent"}>
             {statusLabel(props.connection.status)}
-          </Text>
+          </Badge>
         </Inline>
         <ConnectionIdentity connection={props.connection} />
-        <Text size="caption" tone="muted">
+        <Text size="body" tone="muted">
           {capabilityLabel(props.connection.status)}
         </Text>
         <Show when={props.connection.linkingExpiresAt}>
@@ -37,7 +38,7 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
           )}
         </Show>
       </Stack>
-      <Inline gap="sm">
+      <Inline gap="sm" justify="end" fullWidthOnSmall>
         <Show when={props.connection.status === "reconnect-required"}>
           <Button
             pending={props.reconnecting}
@@ -71,7 +72,7 @@ function ConnectionIdentity(props: { readonly connection: ConnectionView }): JSX
   const label = (): string => (props.connection.approvedAt === undefined ? "Started" : "Connected");
 
   return (
-    <Text size="caption">
+    <Text numeric size="caption">
       {teamCountLabel(props.connection.teamCount)} · {label()}{" "}
       <Time datetime={timestamp()}>{formatReaderTime(timestamp())}</Time>
     </Text>

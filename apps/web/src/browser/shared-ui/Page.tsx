@@ -7,14 +7,15 @@ import { Text } from "./Text";
 
 export function Page(props: PageProps): JSX.Element {
   return (
-    <section class="w-full max-w-[48rem] pt-[clamp(34px,4vw,52px)] pb-[max(40px,env(safe-area-inset-bottom))] max-sm:pt-9">
-      <header class="mb-[clamp(28px,4vw,44px)] grid max-w-[760px] gap-3">
+    <section class="w-full pt-[clamp(32px,4vw,48px)] pb-[max(48px,env(safe-area-inset-bottom))] max-sm:pt-8">
+      <Show when={props.back}>{(back) => <div class="mb-6">{back()}</div>}</Show>
+      <header class="mb-8 grid max-w-[42.5rem] gap-2">
         <Heading level={1} size="headline">
           {props.title}
         </Heading>
         <Show when={props.lede}>
           {(lede) => (
-            <Text size="lede" tone="muted">
+            <Text size="body" tone="muted">
               {lede()}
             </Text>
           )}
@@ -26,6 +27,7 @@ export function Page(props: PageProps): JSX.Element {
 }
 
 type PageProps = {
+  readonly back?: Element;
   readonly title: string;
   readonly lede?: string;
   readonly children: Element;

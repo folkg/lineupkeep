@@ -14,12 +14,12 @@ import { Dock, DockSpacer } from "#browser/shared-ui/Dock.tsx";
 import { FocusRegion } from "#browser/shared-ui/FocusRegion.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
 import { Quote } from "#browser/shared-ui/Quote.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Split } from "#browser/shared-ui/Split.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -287,12 +287,9 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
     <FocusRegion id={resultSummaryId} labelledBy="submitted-title">
       <Box rule="bottom" space="lg">
         <Stack gap="sm">
-          <Inline gap="sm" align="baseline">
-            <Heading id="submitted-title" level={2} size="section">
-              Submitted
-            </Heading>
-            <Badge tone="accent">Audit record</Badge>
-          </Inline>
+          <SectionTitle id="submitted-title" action={<Badge tone="accent">Audit record</Badge>}>
+            Submitted
+          </SectionTitle>
           <Text size="body" weight="semibold" live="polite">
             {outcomeSummary(props.counts, props.review)}
           </Text>
@@ -353,11 +350,11 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
   return (
     <Stack as="section" gap="sm" labelledBy={headingId()}>
       <Stack gap="xs">
-        <Heading id={headingId()} level={2} size="section">
-          <TextLink params={{ teamId: props.team.team.id }} to="/teams/$teamId">
+        <SectionTitle id={headingId()}>
+          <TextLink params={{ teamId: props.team.team.id }} size="item" to="/teams/$teamId">
             {props.team.team.name}
           </TextLink>
-        </Heading>
+        </SectionTitle>
         <Text size="caption" tone="muted">
           {leagueDisplayName(props.team.team.league)} · {sportDisplayName(props.team.team.sport)}{" "}
           {String(props.team.team.season)}
@@ -733,9 +730,7 @@ function ProviderOffers(props: ProviderOffersProps): JSX.Element {
   return (
     <Stack as="section" gap="sm" labelledBy="provider-offers-title">
       <Stack gap="xs">
-        <Heading id="provider-offers-title" level={2} size="section">
-          Offers pending at the provider
-        </Heading>
+        <SectionTitle id="provider-offers-title">Offers pending at the provider</SectionTitle>
         <Text size="caption" tone="muted">
           These offers are on the provider now. An offer Lineupkeep did not create still appears
           here, so you can withdraw it before it is accepted.
@@ -863,9 +858,7 @@ function offerMatchesItem(
 function QuietTeams(props: QuietTeamsProps): JSX.Element {
   return (
     <Stack as="section" gap="sm" labelledBy="quiet-teams-title">
-      <Heading id="quiet-teams-title" level={2} size="section">
-        Teams with nothing proposed
-      </Heading>
+      <SectionTitle id="quiet-teams-title">Teams with nothing proposed</SectionTitle>
       <Text size="body" tone="muted">
         {props.teams.map((team) => team.team.name).join(", ")}
       </Text>
@@ -879,9 +872,7 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
       <Box rule="top" space="lg">
         <Form gap="sm" onSubmit={props.onSubmit}>
           <Stack as="section" gap="sm" labelledBy="submission-title">
-            <Heading id="submission-title" level={2} size="section">
-              Submit
-            </Heading>
+            <SectionTitle id="submission-title">Submit</SectionTitle>
             <Inline gap="lg" justify="between" collapse>
               <Stack gap="xs">
                 <Text size="body" weight="semibold" live="polite">

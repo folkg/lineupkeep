@@ -46,7 +46,7 @@ export function Button(props: ButtonProps): JSX.Element {
 }
 
 export function buttonClass(options: ButtonOptions = {}): string {
-  if (options.variant === "accent" || options.variant === "google") {
+  if (options.variant === "google") {
     return buttonStyles[`${options.variant}:neutral`];
   }
 
@@ -54,35 +54,33 @@ export function buttonClass(options: ButtonOptions = {}): string {
 }
 
 const buttonBase =
-  "inline-flex items-center justify-center gap-2 rounded-control border text-control no-underline transition-[color,background-color,border-color,transform] duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50";
+  "inline-flex items-center justify-center gap-2 border no-underline transition-[color,background-color,border-color,transform] duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50";
 
 const buttonBorderless = "border-transparent";
 
-const filledShape = "min-h-button px-4.5 font-semibold";
+const filledShape =
+  "min-h-button px-5 text-control font-semibold uppercase tracking-label leading-none";
 
-const quietShape = "min-h-tap-target px-2.5 font-semibold";
+const quietShape =
+  "min-h-tap-target px-2 text-control font-semibold uppercase tracking-label leading-none";
 
-const linkShape = "min-h-tap-target p-0 font-semibold underline decoration-1 underline-offset-4";
+const linkShape =
+  "min-h-tap-target p-0 text-body font-semibold normal-case tracking-normal leading-tight underline decoration-1 underline-offset-4";
 
-const quietNeutral = "text-ink-soft hover:bg-action-soft hover:text-ink";
+const quietNeutral = "text-ink-soft hover:text-action";
 
 export const iconButtonClass = cx(
   buttonBase,
-  buttonBorderless,
-  "size-tap-target font-semibold",
-  quietNeutral,
+  "group relative -me-2 size-tap-target shrink-0 border-transparent bg-transparent text-ink",
+  "hover:text-action",
 );
 
-const buttonStyles: Record<ButtonStyleKey, string> = {
-  "accent:neutral": cx(
-    buttonBase,
-    buttonBorderless,
-    filledShape,
-    "bg-accent text-on-accent hover:bg-accent-hover",
-  ),
+export const iconButtonFrameClass =
+  "pointer-events-none absolute inset-2 border border-rule-strong transition-colors duration-quick ease-out-cubic group-hover:border-action group-focus-visible:border-action";
 
+const buttonStyles: Record<ButtonStyleKey, string> = {
   "google:neutral": cx(
-    "inline-flex min-h-button items-center justify-center gap-2.5 rounded-control border border-google-stroke bg-google-fill px-3 font-google text-google font-medium text-google-ink no-underline transition-transform duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus aria-disabled:pointer-events-none aria-disabled:opacity-50",
+    "relative inline-flex min-h-button items-center justify-center gap-2.5 border border-google-stroke bg-google-fill px-3 font-google text-google font-medium text-google-ink no-underline transition-transform duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus aria-disabled:pointer-events-none aria-disabled:opacity-50",
   ),
   "link:danger": cx(
     buttonBase,
@@ -94,19 +92,19 @@ const buttonStyles: Record<ButtonStyleKey, string> = {
     buttonBase,
     buttonBorderless,
     linkShape,
-    "bg-transparent text-action-hover hover:bg-transparent hover:text-action",
+    "bg-transparent text-action hover:bg-transparent hover:text-action-hover",
   ),
   "primary:danger": cx(
     buttonBase,
     buttonBorderless,
     filledShape,
-    "bg-danger text-paper hover:bg-danger-hover",
+    "bg-danger text-on-action hover:bg-danger-hover",
   ),
   "primary:neutral": cx(
     buttonBase,
     buttonBorderless,
     filledShape,
-    "bg-action text-paper hover:bg-action-hover",
+    "bg-action text-on-action hover:bg-action-hover",
   ),
   "quiet:danger": cx(
     buttonBase,
@@ -118,25 +116,22 @@ const buttonStyles: Record<ButtonStyleKey, string> = {
   "secondary:danger": cx(
     buttonBase,
     filledShape,
-    "border-danger text-danger hover:bg-danger hover:text-paper",
+    "border-danger bg-transparent text-danger hover:border-danger-hover hover:text-danger-hover",
   ),
   "secondary:neutral": cx(
     buttonBase,
     filledShape,
-    "border-ink text-ink hover:bg-ink hover:text-paper",
+    "border-rule-strong bg-transparent text-ink hover:border-action hover:text-action",
   ),
 };
 
-type ButtonVariant = "primary" | "secondary" | "quiet" | "accent" | "google" | "link";
+type ButtonVariant = "primary" | "secondary" | "quiet" | "google" | "link";
 
-type ButtonVariantWithTone = Exclude<ButtonVariant, "accent" | "google">;
+type ButtonVariantWithTone = Exclude<ButtonVariant, "google">;
 
 type ButtonTone = "neutral" | "danger";
 
-type ButtonStyleKey =
-  | `${ButtonVariantWithTone}:${ButtonTone}`
-  | "accent:neutral"
-  | "google:neutral";
+type ButtonStyleKey = `${ButtonVariantWithTone}:${ButtonTone}` | "google:neutral";
 
 export type ButtonOptions =
   | {
@@ -146,7 +141,7 @@ export type ButtonOptions =
   | {
       readonly tone?: "neutral";
 
-      readonly variant: "accent" | "google";
+      readonly variant: "google";
     };
 
 type ButtonProps = ButtonOptions &

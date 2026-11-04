@@ -31,7 +31,8 @@
     background: var(--theme-canvas);
     color: var(--theme-ink);
     font-family: var(--theme-font-sans);
-    line-height: var(--text-base--line-height);
+    font-size: var(--theme-text-body);
+    line-height: var(--theme-text-body-line-height);
     scrollbar-color: var(--theme-rule-strong) var(--theme-canvas);
   }
 
@@ -59,8 +60,8 @@
   }
 
   ::selection {
-    color: var(--theme-paper);
-    background: var(--theme-action);
+    color: var(--theme-ink);
+    background: var(--theme-action-soft);
   }
 
   @media (prefers-reduced-motion: reduce) {

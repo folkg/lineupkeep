@@ -1,659 +1,215 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-25T02:22:58.129Z",
+  "generatedAt": "2026-11-04T12:00:00.000Z",
   "title": "Design System: Lineupkeep",
   "extensions": {
     "colorMeta": {
       "canvas": {
         "role": "neutral",
         "displayName": "Canvas",
-        "canonical": "#f6f5ff",
-        "tonalRamp": [
-          "oklch(0.15 0.0133 290.76)",
-          "oklch(0.26 0.0133 290.76)",
-          "oklch(0.38 0.0133 290.76)",
-          "oklch(0.49 0.0133 290.76)",
-          "oklch(0.61 0.0133 290.76)",
-          "oklch(0.72 0.0133 290.76)",
-          "oklch(0.84 0.0133 290.76)",
-          "oklch(0.95 0.0133 290.76)"
-        ]
+        "canonical": "#fbfbfa"
       },
       "paper": {
         "role": "neutral",
         "displayName": "Paper",
-        "canonical": "#ffffff",
-        "tonalRamp": [
-          "oklch(0.15 0.0000 89.88)",
-          "oklch(0.26 0.0000 89.88)",
-          "oklch(0.38 0.0000 89.88)",
-          "oklch(0.49 0.0000 89.88)",
-          "oklch(0.61 0.0000 89.88)",
-          "oklch(0.72 0.0000 89.88)",
-          "oklch(0.84 0.0000 89.88)",
-          "oklch(0.95 0.0000 89.88)"
-        ]
+        "canonical": "#ffffff"
       },
       "ink": {
         "role": "neutral",
         "displayName": "Ink",
-        "canonical": "#20143b",
-        "tonalRamp": [
-          "oklch(0.15 0.0722 294.23)",
-          "oklch(0.26 0.0722 294.23)",
-          "oklch(0.38 0.0722 294.23)",
-          "oklch(0.49 0.0722 294.23)",
-          "oklch(0.61 0.0722 294.23)",
-          "oklch(0.72 0.0722 294.23)",
-          "oklch(0.84 0.0722 294.23)",
-          "oklch(0.95 0.0722 294.23)"
-        ]
+        "canonical": "#101014"
       },
       "ink-soft": {
         "role": "neutral",
         "displayName": "Ink Soft",
-        "canonical": "#625675",
-        "tonalRamp": [
-          "oklch(0.15 0.0511 302.21)",
-          "oklch(0.26 0.0511 302.21)",
-          "oklch(0.38 0.0511 302.21)",
-          "oklch(0.49 0.0511 302.21)",
-          "oklch(0.61 0.0511 302.21)",
-          "oklch(0.72 0.0511 302.21)",
-          "oklch(0.84 0.0511 302.21)",
-          "oklch(0.95 0.0511 302.21)"
-        ]
+        "canonical": "#5d5d68"
       },
       "ink-faint": {
         "role": "neutral",
         "displayName": "Ink Faint",
-        "canonical": "#726480",
-        "tonalRamp": [
-          "oklch(0.15 0.0463 307.49)",
-          "oklch(0.26 0.0463 307.49)",
-          "oklch(0.38 0.0463 307.49)",
-          "oklch(0.49 0.0463 307.49)",
-          "oklch(0.61 0.0463 307.49)",
-          "oklch(0.72 0.0463 307.49)",
-          "oklch(0.84 0.0463 307.49)",
-          "oklch(0.95 0.0463 307.49)"
-        ]
+        "canonical": "#6a6a72"
       },
       "rule": {
         "role": "neutral",
         "displayName": "Rule",
-        "canonical": "#dfd9ec",
-        "tonalRamp": [
-          "oklch(0.15 0.0265 300.24)",
-          "oklch(0.26 0.0265 300.24)",
-          "oklch(0.38 0.0265 300.24)",
-          "oklch(0.49 0.0265 300.24)",
-          "oklch(0.61 0.0265 300.24)",
-          "oklch(0.72 0.0265 300.24)",
-          "oklch(0.84 0.0265 300.24)",
-          "oklch(0.95 0.0265 300.24)"
-        ]
+        "canonical": "#e2e2dc"
       },
       "rule-strong": {
         "role": "neutral",
         "displayName": "Rule Strong",
-        "canonical": "#9483a8",
-        "tonalRamp": [
-          "oklch(0.15 0.0577 305.69)",
-          "oklch(0.26 0.0577 305.69)",
-          "oklch(0.38 0.0577 305.69)",
-          "oklch(0.49 0.0577 305.69)",
-          "oklch(0.61 0.0577 305.69)",
-          "oklch(0.72 0.0577 305.69)",
-          "oklch(0.84 0.0577 305.69)",
-          "oklch(0.95 0.0577 305.69)"
-        ]
+        "canonical": "#101014"
       },
       "action": {
         "role": "primary",
         "displayName": "Royal Violet",
-        "canonical": "#6236e5",
-        "tonalRamp": [
-          "oklch(0.15 0.2425 285.26)",
-          "oklch(0.26 0.2425 285.26)",
-          "oklch(0.38 0.2425 285.26)",
-          "oklch(0.49 0.2425 285.26)",
-          "oklch(0.61 0.2425 285.26)",
-          "oklch(0.72 0.2425 285.26)",
-          "oklch(0.84 0.2425 285.26)",
-          "oklch(0.95 0.2425 285.26)"
-        ]
+        "canonical": "#5b21b6"
       },
       "action-hover": {
         "role": "primary",
         "displayName": "Action Hover",
-        "canonical": "#4c24bf",
-        "tonalRamp": [
-          "oklch(0.15 0.2185 284.15)",
-          "oklch(0.26 0.2185 284.15)",
-          "oklch(0.38 0.2185 284.15)",
-          "oklch(0.49 0.2185 284.15)",
-          "oklch(0.61 0.2185 284.15)",
-          "oklch(0.72 0.2185 284.15)",
-          "oklch(0.84 0.2185 284.15)",
-          "oklch(0.95 0.2185 284.15)"
-        ]
+        "canonical": "#4c1d95"
       },
       "action-soft": {
         "role": "primary",
         "displayName": "Action Soft",
-        "canonical": "#ece6ff",
-        "tonalRamp": [
-          "oklch(0.15 0.0341 296.72)",
-          "oklch(0.26 0.0341 296.72)",
-          "oklch(0.38 0.0341 296.72)",
-          "oklch(0.49 0.0341 296.72)",
-          "oklch(0.61 0.0341 296.72)",
-          "oklch(0.72 0.0341 296.72)",
-          "oklch(0.84 0.0341 296.72)",
-          "oklch(0.95 0.0341 296.72)"
-        ]
+        "canonical": "#f3eeff"
+      },
+      "on-action": {
+        "role": "primary",
+        "displayName": "On Action",
+        "canonical": "#fbfbfa"
       },
       "accent": {
         "role": "secondary",
-        "displayName": "Golden Yellow",
-        "canonical": "#ffe253",
-        "tonalRamp": [
-          "oklch(0.15 0.1597 97.59)",
-          "oklch(0.26 0.1597 97.59)",
-          "oklch(0.38 0.1597 97.59)",
-          "oklch(0.49 0.1597 97.59)",
-          "oklch(0.61 0.1597 97.59)",
-          "oklch(0.72 0.1597 97.59)",
-          "oklch(0.84 0.1597 97.59)",
-          "oklch(0.95 0.1597 97.59)"
-        ]
-      },
-      "accent-hover": {
-        "role": "secondary",
-        "displayName": "Accent Hover",
-        "canonical": "#f5d137",
-        "tonalRamp": [
-          "oklch(0.15 0.1637 95.01)",
-          "oklch(0.26 0.1637 95.01)",
-          "oklch(0.38 0.1637 95.01)",
-          "oklch(0.49 0.1637 95.01)",
-          "oklch(0.61 0.1637 95.01)",
-          "oklch(0.72 0.1637 95.01)",
-          "oklch(0.84 0.1637 95.01)",
-          "oklch(0.95 0.1637 95.01)"
-        ]
+        "displayName": "Brand Gold",
+        "canonical": "#e0b64a"
       },
       "on-accent": {
         "role": "secondary",
-        "displayName": "On Accent",
-        "canonical": "#23113f",
-        "tonalRamp": [
-          "oklch(0.15 0.0837 297.49)",
-          "oklch(0.26 0.0837 297.49)",
-          "oklch(0.38 0.0837 297.49)",
-          "oklch(0.49 0.0837 297.49)",
-          "oklch(0.61 0.0837 297.49)",
-          "oklch(0.72 0.0837 297.49)",
-          "oklch(0.84 0.0837 297.49)",
-          "oklch(0.95 0.0837 297.49)"
-        ]
+        "displayName": "On Brand Gold",
+        "canonical": "#101014"
       },
       "danger": {
         "role": "tertiary",
         "displayName": "Danger",
-        "canonical": "#a33432",
-        "tonalRamp": [
-          "oklch(0.15 0.1469 25.28)",
-          "oklch(0.26 0.1469 25.28)",
-          "oklch(0.38 0.1469 25.28)",
-          "oklch(0.49 0.1469 25.28)",
-          "oklch(0.61 0.1469 25.28)",
-          "oklch(0.72 0.1469 25.28)",
-          "oklch(0.84 0.1469 25.28)",
-          "oklch(0.95 0.1469 25.28)"
-        ]
+        "canonical": "#a33432"
       },
       "danger-hover": {
         "role": "tertiary",
         "displayName": "Danger Hover",
-        "canonical": "#802421",
-        "tonalRamp": [
-          "oklch(0.15 0.1269 26.39)",
-          "oklch(0.26 0.1269 26.39)",
-          "oklch(0.38 0.1269 26.39)",
-          "oklch(0.49 0.1269 26.39)",
-          "oklch(0.61 0.1269 26.39)",
-          "oklch(0.72 0.1269 26.39)",
-          "oklch(0.84 0.1269 26.39)",
-          "oklch(0.95 0.1269 26.39)"
-        ]
+        "canonical": "#802421"
       },
       "danger-soft": {
         "role": "tertiary",
         "displayName": "Danger Soft",
-        "canonical": "#faece9",
-        "tonalRamp": [
-          "oklch(0.15 0.0158 32.01)",
-          "oklch(0.26 0.0158 32.01)",
-          "oklch(0.38 0.0158 32.01)",
-          "oklch(0.49 0.0158 32.01)",
-          "oklch(0.61 0.0158 32.01)",
-          "oklch(0.72 0.0158 32.01)",
-          "oklch(0.84 0.0158 32.01)",
-          "oklch(0.95 0.0158 32.01)"
-        ]
+        "canonical": "#faece9"
       },
-      "danger-on-panel": {
-        "role": "tertiary",
-        "displayName": "Danger On Panel",
-        "canonical": "#ffc0b9",
-        "tonalRamp": [
-          "oklch(0.15 0.0736 25.91)",
-          "oklch(0.26 0.0736 25.91)",
-          "oklch(0.38 0.0736 25.91)",
-          "oklch(0.49 0.0736 25.91)",
-          "oklch(0.61 0.0736 25.91)",
-          "oklch(0.72 0.0736 25.91)",
-          "oklch(0.84 0.0736 25.91)",
-          "oklch(0.95 0.0736 25.91)"
-        ]
-      },
-      "panel": {
-        "role": "primary",
-        "displayName": "Panel",
-        "canonical": "#291450",
-        "tonalRamp": [
-          "oklch(0.15 0.1035 294.09)",
-          "oklch(0.26 0.1035 294.09)",
-          "oklch(0.38 0.1035 294.09)",
-          "oklch(0.49 0.1035 294.09)",
-          "oklch(0.61 0.1035 294.09)",
-          "oklch(0.72 0.1035 294.09)",
-          "oklch(0.84 0.1035 294.09)",
-          "oklch(0.95 0.1035 294.09)"
-        ]
-      },
-      "on-panel": {
-        "role": "primary",
-        "displayName": "On Panel",
-        "canonical": "#ffffff",
-        "tonalRamp": [
-          "oklch(0.15 0.0000 0.00)",
-          "oklch(0.26 0.0000 0.00)",
-          "oklch(0.38 0.0000 0.00)",
-          "oklch(0.49 0.0000 0.00)",
-          "oklch(0.61 0.0000 0.00)",
-          "oklch(0.72 0.0000 0.00)",
-          "oklch(0.84 0.0000 0.00)",
-          "oklch(0.95 0.0000 0.00)"
-        ]
-      },
-      "on-panel-soft": {
-        "role": "primary",
-        "displayName": "On Panel Soft",
-        "canonical": "#dccff0",
-        "tonalRamp": [
-          "oklch(0.15 0.0470 303.31)",
-          "oklch(0.26 0.0470 303.31)",
-          "oklch(0.38 0.0470 303.31)",
-          "oklch(0.49 0.0470 303.31)",
-          "oklch(0.61 0.0470 303.31)",
-          "oklch(0.72 0.0470 303.31)",
-          "oklch(0.84 0.0470 303.31)",
-          "oklch(0.95 0.0470 303.31)"
-        ]
-      },
-      "panel-rule": {
+      "scrim": {
         "role": "neutral",
-        "displayName": "Panel Rule",
-        "canonical": "#947eb3",
-        "tonalRamp": [
-          "oklch(0.15 0.0816 303.16)",
-          "oklch(0.26 0.0816 303.16)",
-          "oklch(0.38 0.0816 303.16)",
-          "oklch(0.49 0.0816 303.16)",
-          "oklch(0.61 0.0816 303.16)",
-          "oklch(0.72 0.0816 303.16)",
-          "oklch(0.84 0.0816 303.16)",
-          "oklch(0.95 0.0816 303.16)"
-        ]
+        "displayName": "Scrim",
+        "canonical": "rgb(16 16 20 / 0.55)"
       },
       "dark-canvas": {
         "role": "neutral",
         "displayName": "Dark Canvas",
-        "canonical": "#151020",
-        "tonalRamp": [
-          "oklch(0.15 0.0325 297.57)",
-          "oklch(0.26 0.0325 297.57)",
-          "oklch(0.38 0.0325 297.57)",
-          "oklch(0.49 0.0325 297.57)",
-          "oklch(0.61 0.0325 297.57)",
-          "oklch(0.72 0.0325 297.57)",
-          "oklch(0.84 0.0325 297.57)",
-          "oklch(0.95 0.0325 297.57)"
-        ]
+        "canonical": "#17122a"
       },
       "dark-paper": {
         "role": "neutral",
         "displayName": "Dark Paper",
-        "canonical": "#21192f",
-        "tonalRamp": [
-          "oklch(0.15 0.0426 299.87)",
-          "oklch(0.26 0.0426 299.87)",
-          "oklch(0.38 0.0426 299.87)",
-          "oklch(0.49 0.0426 299.87)",
-          "oklch(0.61 0.0426 299.87)",
-          "oklch(0.72 0.0426 299.87)",
-          "oklch(0.84 0.0426 299.87)",
-          "oklch(0.95 0.0426 299.87)"
-        ]
+        "canonical": "#1e1836"
       },
       "dark-ink": {
         "role": "neutral",
         "displayName": "Dark Ink",
-        "canonical": "#f8f3ff",
-        "tonalRamp": [
-          "oklch(0.15 0.0167 304.81)",
-          "oklch(0.26 0.0167 304.81)",
-          "oklch(0.38 0.0167 304.81)",
-          "oklch(0.49 0.0167 304.81)",
-          "oklch(0.61 0.0167 304.81)",
-          "oklch(0.72 0.0167 304.81)",
-          "oklch(0.84 0.0167 304.81)",
-          "oklch(0.95 0.0167 304.81)"
-        ]
+        "canonical": "#efeafc"
       },
       "dark-ink-soft": {
         "role": "neutral",
         "displayName": "Dark Ink Soft",
-        "canonical": "#c6b9d9",
-        "tonalRamp": [
-          "oklch(0.15 0.0466 303.79)",
-          "oklch(0.26 0.0466 303.79)",
-          "oklch(0.38 0.0466 303.79)",
-          "oklch(0.49 0.0466 303.79)",
-          "oklch(0.61 0.0466 303.79)",
-          "oklch(0.72 0.0466 303.79)",
-          "oklch(0.84 0.0466 303.79)",
-          "oklch(0.95 0.0466 303.79)"
-        ]
+        "canonical": "#b3a4d8"
       },
       "dark-ink-faint": {
         "role": "neutral",
         "displayName": "Dark Ink Faint",
-        "canonical": "#b3a1ca",
-        "tonalRamp": [
-          "oklch(0.15 0.0614 304.88)",
-          "oklch(0.26 0.0614 304.88)",
-          "oklch(0.38 0.0614 304.88)",
-          "oklch(0.49 0.0614 304.88)",
-          "oklch(0.61 0.0614 304.88)",
-          "oklch(0.72 0.0614 304.88)",
-          "oklch(0.84 0.0614 304.88)",
-          "oklch(0.95 0.0614 304.88)"
-        ]
+        "canonical": "#9b8cc4"
       },
       "dark-rule": {
         "role": "neutral",
         "displayName": "Dark Rule",
-        "canonical": "#48375e",
-        "tonalRamp": [
-          "oklch(0.15 0.0681 303.33)",
-          "oklch(0.26 0.0681 303.33)",
-          "oklch(0.38 0.0681 303.33)",
-          "oklch(0.49 0.0681 303.33)",
-          "oklch(0.61 0.0681 303.33)",
-          "oklch(0.72 0.0681 303.33)",
-          "oklch(0.84 0.0681 303.33)",
-          "oklch(0.95 0.0681 303.33)"
-        ]
+        "canonical": "#34285c"
       },
       "dark-rule-strong": {
         "role": "neutral",
         "displayName": "Dark Rule Strong",
-        "canonical": "#a48bbc",
-        "tonalRamp": [
-          "oklch(0.15 0.0760 307.66)",
-          "oklch(0.26 0.0760 307.66)",
-          "oklch(0.38 0.0760 307.66)",
-          "oklch(0.49 0.0760 307.66)",
-          "oklch(0.61 0.0760 307.66)",
-          "oklch(0.72 0.0760 307.66)",
-          "oklch(0.84 0.0760 307.66)",
-          "oklch(0.95 0.0760 307.66)"
-        ]
+        "canonical": "#b9a6e8"
       },
       "dark-action": {
         "role": "primary",
         "displayName": "Royal Violet · Dark",
-        "canonical": "#baa3ff",
-        "tonalRamp": [
-          "oklch(0.15 0.1307 294.63)",
-          "oklch(0.26 0.1307 294.63)",
-          "oklch(0.38 0.1307 294.63)",
-          "oklch(0.49 0.1307 294.63)",
-          "oklch(0.61 0.1307 294.63)",
-          "oklch(0.72 0.1307 294.63)",
-          "oklch(0.84 0.1307 294.63)",
-          "oklch(0.95 0.1307 294.63)"
-        ]
+        "canonical": "#c4b5fd"
       },
       "dark-action-hover": {
         "role": "primary",
         "displayName": "Dark Action Hover",
-        "canonical": "#cfbdff",
-        "tonalRamp": [
-          "oklch(0.15 0.0928 296.86)",
-          "oklch(0.26 0.0928 296.86)",
-          "oklch(0.38 0.0928 296.86)",
-          "oklch(0.49 0.0928 296.86)",
-          "oklch(0.61 0.0928 296.86)",
-          "oklch(0.72 0.0928 296.86)",
-          "oklch(0.84 0.0928 296.86)",
-          "oklch(0.95 0.0928 296.86)"
-        ]
+        "canonical": "#d8c6ff"
       },
       "dark-action-soft": {
         "role": "primary",
         "displayName": "Dark Action Soft",
-        "canonical": "#39275d",
-        "tonalRamp": [
-          "oklch(0.15 0.0930 296.19)",
-          "oklch(0.26 0.0930 296.19)",
-          "oklch(0.38 0.0930 296.19)",
-          "oklch(0.49 0.0930 296.19)",
-          "oklch(0.61 0.0930 296.19)",
-          "oklch(0.72 0.0930 296.19)",
-          "oklch(0.84 0.0930 296.19)",
-          "oklch(0.95 0.0930 296.19)"
-        ]
+        "canonical": "#2a2150"
+      },
+      "dark-on-action": {
+        "role": "primary",
+        "displayName": "Dark On Action",
+        "canonical": "#17122a"
       },
       "dark-accent": {
         "role": "secondary",
-        "displayName": "Golden Yellow · Dark",
-        "canonical": "#ffe253",
-        "tonalRamp": [
-          "oklch(0.15 0.1597 97.59)",
-          "oklch(0.26 0.1597 97.59)",
-          "oklch(0.38 0.1597 97.59)",
-          "oklch(0.49 0.1597 97.59)",
-          "oklch(0.61 0.1597 97.59)",
-          "oklch(0.72 0.1597 97.59)",
-          "oklch(0.84 0.1597 97.59)",
-          "oklch(0.95 0.1597 97.59)"
-        ]
-      },
-      "dark-accent-hover": {
-        "role": "secondary",
-        "displayName": "Dark Accent Hover",
-        "canonical": "#f5d137",
-        "tonalRamp": [
-          "oklch(0.15 0.1637 95.01)",
-          "oklch(0.26 0.1637 95.01)",
-          "oklch(0.38 0.1637 95.01)",
-          "oklch(0.49 0.1637 95.01)",
-          "oklch(0.61 0.1637 95.01)",
-          "oklch(0.72 0.1637 95.01)",
-          "oklch(0.84 0.1637 95.01)",
-          "oklch(0.95 0.1637 95.01)"
-        ]
+        "displayName": "Brand Gold · Dark",
+        "canonical": "#e0b64a"
       },
       "dark-on-accent": {
         "role": "secondary",
-        "displayName": "Dark On Accent",
-        "canonical": "#271240",
-        "tonalRamp": [
-          "oklch(0.15 0.0842 301.31)",
-          "oklch(0.26 0.0842 301.31)",
-          "oklch(0.38 0.0842 301.31)",
-          "oklch(0.49 0.0842 301.31)",
-          "oklch(0.61 0.0842 301.31)",
-          "oklch(0.72 0.0842 301.31)",
-          "oklch(0.84 0.0842 301.31)",
-          "oklch(0.95 0.0842 301.31)"
-        ]
+        "displayName": "On Brand Gold · Dark",
+        "canonical": "#101014"
       },
       "dark-danger": {
         "role": "tertiary",
         "displayName": "Dark Danger",
-        "canonical": "#ffb9b0",
-        "tonalRamp": [
-          "oklch(0.15 0.0828 27.18)",
-          "oklch(0.26 0.0828 27.18)",
-          "oklch(0.38 0.0828 27.18)",
-          "oklch(0.49 0.0828 27.18)",
-          "oklch(0.61 0.0828 27.18)",
-          "oklch(0.72 0.0828 27.18)",
-          "oklch(0.84 0.0828 27.18)",
-          "oklch(0.95 0.0828 27.18)"
-        ]
+        "canonical": "#ffb9b0"
       },
       "dark-danger-hover": {
         "role": "tertiary",
         "displayName": "Dark Danger Hover",
-        "canonical": "#ffd1c9",
-        "tonalRamp": [
-          "oklch(0.15 0.0533 29.63)",
-          "oklch(0.26 0.0533 29.63)",
-          "oklch(0.38 0.0533 29.63)",
-          "oklch(0.49 0.0533 29.63)",
-          "oklch(0.61 0.0533 29.63)",
-          "oklch(0.72 0.0533 29.63)",
-          "oklch(0.84 0.0533 29.63)",
-          "oklch(0.95 0.0533 29.63)"
-        ]
+        "canonical": "#ffd1c9"
       },
       "dark-danger-soft": {
         "role": "tertiary",
         "displayName": "Dark Danger Soft",
-        "canonical": "#492b27",
-        "tonalRamp": [
-          "oklch(0.15 0.0456 28.05)",
-          "oklch(0.26 0.0456 28.05)",
-          "oklch(0.38 0.0456 28.05)",
-          "oklch(0.49 0.0456 28.05)",
-          "oklch(0.61 0.0456 28.05)",
-          "oklch(0.72 0.0456 28.05)",
-          "oklch(0.84 0.0456 28.05)",
-          "oklch(0.95 0.0456 28.05)"
-        ]
+        "canonical": "#492b27"
       },
-      "dark-danger-on-panel": {
-        "role": "tertiary",
-        "displayName": "Dark Danger On Panel",
-        "canonical": "#ffb9b0",
-        "tonalRamp": [
-          "oklch(0.15 0.0828 27.18)",
-          "oklch(0.26 0.0828 27.18)",
-          "oklch(0.38 0.0828 27.18)",
-          "oklch(0.49 0.0828 27.18)",
-          "oklch(0.61 0.0828 27.18)",
-          "oklch(0.72 0.0828 27.18)",
-          "oklch(0.84 0.0828 27.18)",
-          "oklch(0.95 0.0828 27.18)"
-        ]
-      },
-      "dark-panel": {
-        "role": "primary",
-        "displayName": "Dark Panel",
-        "canonical": "#412479",
-        "tonalRamp": [
-          "oklch(0.15 0.1366 293.81)",
-          "oklch(0.26 0.1366 293.81)",
-          "oklch(0.38 0.1366 293.81)",
-          "oklch(0.49 0.1366 293.81)",
-          "oklch(0.61 0.1366 293.81)",
-          "oklch(0.72 0.1366 293.81)",
-          "oklch(0.84 0.1366 293.81)",
-          "oklch(0.95 0.1366 293.81)"
-        ]
-      },
-      "dark-on-panel": {
-        "role": "primary",
-        "displayName": "Dark On Panel",
-        "canonical": "#ffffff",
-        "tonalRamp": [
-          "oklch(0.15 0.0000 0.00)",
-          "oklch(0.26 0.0000 0.00)",
-          "oklch(0.38 0.0000 0.00)",
-          "oklch(0.49 0.0000 0.00)",
-          "oklch(0.61 0.0000 0.00)",
-          "oklch(0.72 0.0000 0.00)",
-          "oklch(0.84 0.0000 0.00)",
-          "oklch(0.95 0.0000 0.00)"
-        ]
-      },
-      "dark-on-panel-soft": {
-        "role": "primary",
-        "displayName": "Dark On Panel Soft",
-        "canonical": "#e1d1ff",
-        "tonalRamp": [
-          "oklch(0.15 0.0646 300.97)",
-          "oklch(0.26 0.0646 300.97)",
-          "oklch(0.38 0.0646 300.97)",
-          "oklch(0.49 0.0646 300.97)",
-          "oklch(0.61 0.0646 300.97)",
-          "oklch(0.72 0.0646 300.97)",
-          "oklch(0.84 0.0646 300.97)",
-          "oklch(0.95 0.0646 300.97)"
-        ]
-      },
-      "dark-panel-rule": {
+      "dark-scrim": {
         "role": "neutral",
-        "displayName": "Dark Panel Rule",
-        "canonical": "#a48bbc",
-        "tonalRamp": [
-          "oklch(0.15 0.0760 307.66)",
-          "oklch(0.26 0.0760 307.66)",
-          "oklch(0.38 0.0760 307.66)",
-          "oklch(0.49 0.0760 307.66)",
-          "oklch(0.61 0.0760 307.66)",
-          "oklch(0.72 0.0760 307.66)",
-          "oklch(0.84 0.0760 307.66)",
-          "oklch(0.95 0.0760 307.66)"
-        ]
+        "displayName": "Dark Scrim",
+        "canonical": "rgb(0 0 0 / 0.65)"
       }
     },
     "typographyMeta": {
       "wordmark": {
         "displayName": "Continuous Wordmark",
-        "purpose": "Home identity, not a display-font badge."
+        "purpose": "Home identity beside the square mark; lowercase at label weight."
       },
       "display": {
         "displayName": "Display",
-        "purpose": "Short introduction only."
+        "purpose": "The landing statement only."
+      },
+      "page-title": {
+        "displayName": "Page Title",
+        "purpose": "One per page."
+      },
+      "section-title": {
+        "displayName": "Section Title",
+        "purpose": "Section headings and auth form headings."
       },
       "body": {
         "displayName": "Body",
         "purpose": "Readable product content and prose."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Timestamps, league context, helper copy."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Caps labels, controls, nav, and status words."
       }
     },
     "shadows": [
       {
         "name": "focus",
-        "value": "0 0 0 3px var(--theme-canvas), 0 0 0 6px var(--theme-action)",
-        "purpose": "Visible focus with separation; not decorative elevation."
+        "value": "0 0 0 2px var(--theme-canvas), 0 0 0 4px var(--theme-action)",
+        "purpose": "Visible focus with separation; the only allowed shadow."
       }
     ],
     "motion": [
@@ -675,6 +231,11 @@
     ],
     "breakpoints": [
       {
+        "name": "row-stack",
+        "value": "560px",
+        "purpose": "List rows stack below this width; controls move below the text and align left."
+      },
+      {
         "name": "md",
         "value": "768px"
       }
@@ -692,24 +253,20 @@
         "action": "dark-action",
         "action-hover": "dark-action-hover",
         "action-soft": "dark-action-soft",
+        "on-action": "dark-on-action",
         "accent": "dark-accent",
-        "accent-hover": "dark-accent-hover",
         "on-accent": "dark-on-accent",
         "danger": "dark-danger",
         "danger-hover": "dark-danger-hover",
         "danger-soft": "dark-danger-soft",
-        "danger-on-panel": "dark-danger-on-panel",
-        "panel": "dark-panel",
-        "on-panel": "dark-on-panel",
-        "on-panel-soft": "dark-on-panel-soft",
-        "panel-rule": "dark-panel-rule"
+        "scrim": "dark-scrim"
       }
     },
     "provenance": {
       "tool": "Impeccable",
       "directionSeed": "5547f54d66619d8a2a94b7456b419072",
       "assignedCandidate": 5,
-      "selection": "Owner selected royal violet and gold after comparing three palettes in light/dark. This selection supersedes the evergreen direction; generated suggestions are not visual authority."
+      "selection": "Owner selected the technical sheet from rendered studies, then corrected punctuation spacing, row stacking, team-detail order, activity ranges, and the masthead mark. Royal violet and gold remain the approved identity; gold is reserved for the mark."
     }
   },
   "components": [
@@ -717,96 +274,122 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Canonical primary action; no product workflow implied.",
+      "description": "The one solid action in a view.",
       "html": "<button class=\"ds-primary\">Primary action</button>",
-      "css": ".ds-primary{min-height:46px;padding:0 18px;border:0;border-radius:6px;background:var(--theme-action,#6236e5);color:var(--theme-paper,#ffffff);font:600 14px \"Schibsted Grotesk Variable\",sans-serif;cursor:pointer;transition:background 140ms cubic-bezier(.16,1,.3,1)}.ds-primary:hover{background:var(--theme-action-hover,#4c24bf)}.ds-primary:focus-visible{outline:3px solid var(--theme-action,#6236e5);outline-offset:2px}.ds-primary:disabled{opacity:.5;cursor:default}"
-    },
-    {
-      "name": "Accent Button",
-      "kind": "button",
-      "refersTo": "button-accent",
-      "description": "Gold-highlighted action with explicit deep-ink text.",
-      "html": "<button class=\"ds-accent\">Highlighted action</button>",
-      "css": ".ds-accent{min-height:46px;padding:0 18px;border:0;border-radius:6px;background:var(--theme-accent,#ffe253);color:var(--theme-on-accent,#23113f);font:600 14px \"Schibsted Grotesk Variable\",sans-serif;cursor:pointer;transition:background 140ms cubic-bezier(.16,1,.3,1)}.ds-accent:hover{background:var(--theme-accent-hover,#f5d137)}.ds-accent:focus-visible{outline:3px solid var(--theme-action,#6236e5);outline-offset:2px}.ds-accent:disabled{opacity:.5;cursor:default}"
+      "css": ".ds-primary{min-height:44px;padding:0 20px;border:0;background:var(--theme-action,#5b21b6);color:var(--theme-on-action,#fbfbfa);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}.ds-primary:hover{background:var(--theme-action-hover,#4c1d95)}.ds-primary:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}.ds-primary:disabled{opacity:.5;cursor:default}"
     },
     {
       "name": "Secondary Button",
       "kind": "button",
       "refersTo": "button-secondary",
-      "description": "Secondary action with explicit boundary.",
+      "description": "A bordered action beside the one solid action.",
       "html": "<button class=\"ds-secondary\">Secondary action</button>",
-      "css": ".ds-secondary{min-height:46px;padding:0 18px;border:1px solid var(--theme-ink,#20143b);border-radius:6px;background:transparent;color:var(--theme-ink,#20143b);font:600 14px \"Schibsted Grotesk Variable\",sans-serif;cursor:pointer}.ds-secondary:hover{background:var(--theme-ink,#20143b);color:var(--theme-paper,#ffffff)}.ds-secondary:focus-visible{outline:3px solid var(--theme-action,#6236e5);outline-offset:2px}"
+      "css": ".ds-secondary{min-height:44px;padding:0 20px;border:1px solid var(--theme-rule-strong,#101014);background:transparent;color:var(--theme-ink,#101014);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}.ds-secondary:hover{border-color:var(--theme-action,#5b21b6);color:var(--theme-action,#5b21b6)}.ds-secondary:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
+    },
+    {
+      "name": "Quiet Icon Button",
+      "kind": "button",
+      "description": "A 28px square frame with a 44px hit area, flush with the column edge.",
+      "html": "<button class=\"ds-icon\" aria-label=\"Pause\">II</button>",
+      "css": ".ds-icon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin-inline-end:-8px;border:0;background:transparent;color:var(--theme-ink,#101014);cursor:pointer}.ds-icon::before{content:'';position:absolute;inset:8px;border:1px solid var(--theme-rule-strong,#101014)}.ds-icon:hover{color:var(--theme-action,#5b21b6)}.ds-icon:hover::before{border-color:var(--theme-action,#5b21b6)}.ds-icon:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Text Field",
       "kind": "input",
       "refersTo": "text-field",
-      "description": "Visible persistent label and input boundary.",
-      "html": "<label class=\"ds-field\">Email address<input type=\"email\" placeholder=\"you@example.com\"/></label>",
-      "css": ".ds-field{display:grid;gap:8px;color:var(--theme-ink,#20143b);font:600 13px \"Schibsted Grotesk Variable\",sans-serif}.ds-field input{min-height:48px;padding:0 12px;border:1px solid var(--theme-rule-strong,#9483a8);border-radius:6px;background:var(--theme-paper,#ffffff);color:var(--theme-ink,#20143b);font:400 16px \"Schibsted Grotesk Variable\",sans-serif;caret-color:var(--theme-action,#6236e5)}.ds-field input::placeholder{color:var(--theme-ink-faint,#726480)}.ds-field input:focus-visible{outline:3px solid var(--theme-action,#6236e5);outline-offset:2px}"
+      "description": "A square, 44px field with a caps label.",
+      "html": "<label class=\"ds-field\">Email address<input type=\"email\"/></label>",
+      "css": ".ds-field{display:grid;gap:8px;color:var(--theme-ink,#101014);font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-field input{min-height:44px;padding:0 12px;border:1px solid var(--theme-rule-strong,#101014);background:var(--theme-paper,#ffffff);color:var(--theme-ink,#101014);font:400 15px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:normal;text-transform:none;caret-color:var(--theme-action,#5b21b6)}.ds-field input:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Navigation",
       "kind": "nav",
-      "description": "Familiar named navigation with an explicit selected state.",
-      "html": "<nav class=\"ds-nav\" aria-label=\"Example navigation\"><a href=\"#example\" aria-current=\"page\">Overview</a><a href=\"#example\">Activity</a></nav>",
-      "css": ".ds-nav{display:flex;gap:4px;font:600 14px \"Schibsted Grotesk Variable\",sans-serif}.ds-nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;color:var(--theme-ink-soft,#625675);border-radius:6px;text-decoration:none}.ds-nav a[aria-current]{background:var(--theme-ink,#20143b);color:var(--theme-paper,#ffffff)}.ds-nav a:not([aria-current]):hover{background:var(--theme-action-soft,#ece6ff)}.ds-nav a:focus-visible{outline:3px solid var(--theme-action,#6236e5);outline-offset:2px}"
+      "description": "Caps navigation; the active item carries a full-width rule.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Primary navigation\"><a href=\"#example\" aria-current=\"page\">Teams</a><a href=\"#example\">Connections</a></nav>",
+      "css": ".ds-nav{display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase}.ds-nav a{position:relative;display:inline-flex;align-items:center;min-height:44px;color:var(--theme-ink-soft,#5d5d68);text-decoration:none}.ds-nav a::after{content:'';position:absolute;left:-8px;right:-8px;bottom:0;height:1px;background:transparent}.ds-nav a[aria-current]{color:var(--theme-ink,#101014)}.ds-nav a[aria-current]::after{background:var(--theme-rule-strong,#101014)}.ds-nav a:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
     },
     {
       "name": "Metadata Badge",
       "kind": "chip",
       "refersTo": "badge",
-      "description": "Labelled gold metadata, never a colour-only status.",
-      "html": "<span class=\"ds-badge\">Example label</span>",
-      "css": ".ds-badge{display:inline-flex;padding:4px 8px;border-radius:4px;background:var(--theme-accent,#ffe253);color:var(--theme-on-accent,#23113f);font:500 13px \"Schibsted Grotesk Variable\",sans-serif}"
+      "description": "A caps word, never a solid block or a colour-only status.",
+      "html": "<span class=\"ds-badge\">Waiver claim</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;font:600 11px \"Schibsted Grotesk Variable\",sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--theme-action,#5b21b6)}"
     },
     {
-      "name": "Companion Panel",
-      "kind": "card",
-      "description": "Deep violet companion surface, not a repeated dashboard card.",
-      "html": "<section class=\"ds-panel\"><h2>A clear place to begin.</h2><p>Illustrative surface treatment, not a live service.</p></section>",
-      "css": ".ds-panel{padding:24px;border-radius:12px;background:var(--theme-panel,#291450);color:var(--theme-on-panel,#ffffff);font-family:\"Schibsted Grotesk Variable\",sans-serif}.ds-panel h2{margin:0 0 16px;font-size:24px;line-height:1.2;font-weight:600;letter-spacing:-.025em}.ds-panel p{margin:0;color:var(--theme-on-panel-soft,#dccff0);font-size:16px;line-height:1.55}"
+      "name": "Square Toggle",
+      "kind": "toggle",
+      "description": "A 40x22 track with a 16px knob and a 44px hit area.",
+      "html": "<button class=\"ds-toggle\" role=\"switch\" aria-checked=\"true\" aria-label=\"Lineup checks\"><span></span></button>",
+      "css": ".ds-toggle{display:inline-flex;min-height:44px;align-items:center;padding:0;border:0;background:transparent;cursor:pointer}.ds-toggle span{display:inline-flex;width:40px;height:22px;padding:3px;background:var(--theme-action,#5b21b6)}.ds-toggle span::before{content:'';width:16px;height:16px;transform:translateX(18px);background:var(--theme-on-action,#fbfbfa)}.ds-toggle:focus-visible{outline:0;box-shadow:0 0 0 2px var(--theme-canvas,#fbfbfa),0 0 0 4px var(--theme-action,#5b21b6)}"
+    },
+    {
+      "name": "Section Title",
+      "kind": "heading",
+      "description": "A 22px heading with one hairline under it.",
+      "html": "<div class=\"ds-section\"><h2>Recent activity</h2></div>",
+      "css": ".ds-section{padding-bottom:8px;border-bottom:1px solid var(--theme-rule,#e2e2dc);font-family:\"Schibsted Grotesk Variable\",sans-serif}.ds-section h2{margin:0;font-size:22px;line-height:1.2;font-weight:600;letter-spacing:-.02em;color:var(--theme-ink,#101014)}"
+    },
+    {
+      "name": "Brand Mark",
+      "kind": "mark",
+      "description": "A square gold mark with ink lk strokes; gold appears nowhere else.",
+      "html": "<svg class=\"ds-mark\" viewBox=\"0 0 64 64\" aria-hidden=\"true\"><rect width=\"64\" height=\"64\" fill=\"#e0b64a\"/><path d=\"M21 17v30M33 17v30M46 29 34 39l14 8\" fill=\"none\" stroke=\"#101014\" stroke-width=\"5\" stroke-linecap=\"square\" stroke-linejoin=\"miter\"/></svg>",
+      "css": ".ds-mark{width:20px;height:20px;flex:none}"
     }
   ],
   "narrative": {
-    "northStar": "The Considered Instrument",
-    "overview": "An assured fantasy-team instrument with sporting energy: royal violet actions, golden yellow accents, and deep violet ink. A continuous lowercase wordmark, one self-hosted family, and ruled information keep the identity professional and solid.\n\nThis is an Operate product: familiar navigation, native controls, direct labels, and information before spectacle. Light supports daytime checks and dark supports evening use. The brand foundation is implemented; the fantasy product is not.",
+    "northStar": "The Technical Sheet",
+    "overview": "Lineupkeep reads as one precise sheet: a single grotesk, square controls, a short measure, and hairlines that do the work a card used to do. Royal violet is spent in one place per view. Gold exists only in the mark. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is a warm paper; dark is a tinted violet sheet. Both are complete palettes.",
     "keyCharacteristics": [
-      "Continuous typographic identity",
-      "Clear operational state",
-      "Confident sporting colour",
-      "Light and dark as complete palettes"
+      "One grotesk, six text sizes, no serif",
+      "Square everywhere; hairlines instead of boxes",
+      "One 680px measure and one solid action per view",
+      "Numbers aligned with tabular figures, never prose tracking",
+      "Royal violet for interaction; gold only in the mark",
+      "Light and dark designed together"
     ],
     "rules": [
       {
-        "name": "The Violet and Gold Rule",
-        "body": "Violet owns everyday interaction; gold brings focused energy to highlighted actions and labelled attention. Do not use either colour alone as a success, warning, or risk signal.",
+        "name": "The One Violet Rule",
+        "body": "Per view, one solid violet element: the primary action. Links and live controls carry violet as text, underline, or border. Everything else is ink, soft ink, and rule. Danger is a semantic exception.",
         "section": "colors"
       },
       {
-        "name": "The Continuous Word Rule",
-        "body": "Use Lineupkeep in prose and lineupkeep in the wordmark. The shared up is discoverable; no gap, uppercase UP, colour alternation, or extra logo badge.",
-        "section": "typography"
+        "name": "The Gold Reserve Rule",
+        "body": "Gold belongs to the mark and nowhere else. It is not a status, a highlight, a badge, or a second action.",
+        "section": "colors"
       },
       {
-        "name": "The Honest Surface Rule",
-        "body": "A surface exists to group a task or establish hierarchy, not to make sparse content look substantial.",
+        "name": "The Rule, Not a Box Rule",
+        "body": "A section title owns one hairline. List rows own one hairline between them. Status and empty states use a leading rule or plain text, never a dashed or bordered card.",
         "section": "elevation"
+      },
+      {
+        "name": "The Wordmark Rule",
+        "body": "The wordmark stays continuous lowercase lineupkeep at the 11px label weight and tracking, beside the square mark. Gold appears nowhere else.",
+        "section": "typography"
       }
     ],
     "dos": [
       "Do use semantic tokens and both complete themes.",
-      "Do keep the wordmark continuous and uniform.",
-      "Do distinguish verified, pending, and uncertain outcomes.",
-      "Do label sample data and retained starter scaffolding honestly.",
-      "Do preserve keyboard access, visible focus, and reduced motion."
+      "Do keep controls, inputs, badges, and dialogs square.",
+      "Do keep the 680px measure and let tables exceed it only with a reason.",
+      "Do use one hairline under a section title and between list rows.",
+      "Do spend violet once per view on the primary action.",
+      "Do apply tabular numerals to comparable numbers only.",
+      "Do keep the wordmark lowercase and the mark gold.",
+      "Do preserve keyboard access, visible focus, selection, zoom, and reduced motion."
     ],
     "donts": [
-      "Don't use LineUPkeep, LineUpKeep, arrows, trophies, shields, or AI decoration.",
-      "Don't use gradient lettering, lime stickers, tilted paper, or simulated notebooks.",
-      "Don't infer the fantasy domain by renaming the Notes demo.",
-      "Don't use colour alone to communicate connection, automation, or risk.",
-      "Don't claim live features, ownership, accuracy, or publication readiness without evidence."
+      "Don't add border radii, shadows, gradients, or a second accent.",
+      "Don't use gold outside the mark.",
+      "Don't use a serif or a second typeface.",
+      "Don't box prose, lists, notices, or empty states.",
+      "Don't add letter spacing to body text or apply tabular figures to prose.",
+      "Don't repeat a control label on every row of a list.",
+      "Don't float controls to the right of a metadata line.",
+      "Don't use colour alone for connection, automation, or risk."
     ]
   }
 }

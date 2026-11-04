@@ -3,10 +3,8 @@ import { Show, action, createOptimistic } from "solid-js";
 
 import { Button } from "./Button";
 import { FormMessage } from "./FormMessage";
-import { useSurface } from "./Surface";
 
 export function ActionFeedback(props: ActionFeedbackProps): JSX.Element {
-  const surface = useSurface();
   const [pending, setPending] = createOptimistic(false);
   const recover = action(function* (recovery: RecoveryAction) {
     setPending(true);
@@ -31,7 +29,7 @@ export function ActionFeedback(props: ActionFeedbackProps): JSX.Element {
             pending={pending()}
             disabled={props.recoveryDisabled}
             pendingLabel={action().pendingLabel}
-            variant={surface === "panel" ? "accent" : "link"}
+            variant="link"
             onClick={() => void recover(action())}
           >
             {action().label}

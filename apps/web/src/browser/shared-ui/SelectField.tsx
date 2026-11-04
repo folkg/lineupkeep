@@ -3,10 +3,8 @@ import { For, Show, omit } from "solid-js";
 
 import { cx } from "./cx";
 import { Field, fieldControlClass } from "./Field";
-import { useSurface } from "./Surface";
 
 export function SelectField(props: SelectFieldProps): JSX.Element {
-  const surface = useSurface();
   const rest = omit(props, "ariaLabel", "description", "error", "label", "options", "placeholder");
 
   return (
@@ -22,7 +20,6 @@ export function SelectField(props: SelectFieldProps): JSX.Element {
             "min-h-field pr-8",
             fieldControlClass({
               invalid: props.error !== undefined,
-              surface,
             }),
           )}
         >

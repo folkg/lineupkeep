@@ -5,7 +5,7 @@ import { Show, createEffect, createOptimistic, createSignal, merge } from "solid
 import { Button, buttonClass } from "./Button";
 
 const dialogContentClass =
-  "animate-dialog-in fixed left-1/2 top-1/2 z-50 max-h-[calc(100svh-2rem)] w-[min(calc(100vw-2rem),26rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-surface border border-rule bg-paper p-6 shadow-lift focus:outline-none";
+  "animate-dialog-in fixed left-1/2 top-1/2 z-50 max-h-[calc(100svh-2rem)] w-[min(calc(100vw-2rem),26rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-rule-strong bg-paper p-6 focus:outline-none";
 
 export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
   const [open, setOpen] = createSignal(false);
@@ -83,7 +83,7 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
         <AlertDialog.Trigger as={renderTrigger} />
       </Show>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay class="animate-overlay-in fixed inset-0 z-40 bg-ink/50" />
+        <AlertDialog.Overlay class="animate-overlay-in fixed inset-0 z-40 bg-scrim" />
         <AlertDialog.Content
           ref={(element) => {
             dialogElement = element;
@@ -99,10 +99,10 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
             trigger?.focus({ preventScroll: true });
           }}
         >
-          <AlertDialog.Title class="font-display text-subtitle font-bold text-ink">
+          <AlertDialog.Title class="font-display text-subtitle font-semibold text-ink">
             {props.title}
           </AlertDialog.Title>
-          <AlertDialog.Description class="mt-2 text-supporting text-ink-soft">
+          <AlertDialog.Description class="mt-2 text-body text-ink-soft">
             {props.description}
           </AlertDialog.Description>
           <div class="mt-6 flex justify-end gap-2">

@@ -3,11 +3,8 @@ import { dynamic } from "@solidjs/web";
 import type { Element } from "solid-js";
 
 import { cx } from "./cx";
-import { useSurface } from "./Surface";
-import type { Surface } from "./Surface";
 
 export function Text(props: TextProps): JSX.Element {
-  const surface = useSurface();
   const Tag = dynamic(() => props.as ?? "p");
   return (
     <Tag
@@ -16,8 +13,9 @@ export function Text(props: TextProps): JSX.Element {
       aria-live={props.live}
       class={cx(
         sizeClass[props.size ?? "body"],
-        toneClass[surface][props.tone ?? "default"],
+        toneClass[props.tone ?? "default"],
         props.weight === "semibold" && "font-semibold",
+        props.numeric === true && "tabular-nums",
         props.wrap === "words" && "break-words",
         props.wrap === "preserve" && "break-words whitespace-pre-wrap",
       )}
@@ -28,25 +26,17 @@ export function Text(props: TextProps): JSX.Element {
 }
 
 const sizeClass = {
-  lede: "max-w-[48ch] text-lede",
-  body: "max-w-[68ch] text-supporting",
-  item: "max-w-[68ch] text-item",
-  caption: "max-w-[56ch] text-caption",
+  lede: "max-w-[42.5rem] text-pretty text-lede",
+  body: "max-w-[42.5rem] text-pretty text-body",
+  item: "max-w-[42.5rem] text-pretty text-item",
+  caption: "max-w-[42.5rem] text-caption",
 };
 
-const toneClass: Record<Surface, Record<TextTone, string>> = {
-  page: {
-    default: "",
-    muted: "text-ink-soft",
-    faint: "text-ink-faint",
-    danger: "text-danger",
-  },
-  panel: {
-    default: "",
-    muted: "text-on-panel-soft",
-    faint: "text-on-panel-soft",
-    danger: "text-danger-on-panel",
-  },
+const toneClass: Record<TextTone, string> = {
+  default: "",
+  muted: "text-ink-soft",
+  faint: "text-ink-faint",
+  danger: "text-danger",
 };
 
 type TextTone = "default" | "muted" | "faint" | "danger";
@@ -61,5 +51,6 @@ type TextProps = {
   readonly wrap?: "words" | "preserve";
   readonly as?: "p" | "span";
   readonly weight?: "normal" | "semibold";
+  readonly numeric?: boolean;
   readonly children: Element;
 };

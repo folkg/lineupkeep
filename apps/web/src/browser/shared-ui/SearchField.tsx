@@ -10,7 +10,7 @@ import { LoaderCircleIcon, XIcon } from "./icons";
 
 const loadingIndicatorDelay = 150;
 const searchActionClass =
-  "grid h-tap-target w-tap-target place-items-center rounded-control border-0 bg-transparent text-ink-soft transition-colors duration-quick ease-out-cubic hover:bg-action-soft hover:text-ink focus-visible:outline-none focus-visible:shadow-focus";
+  "grid h-tap-target w-tap-target place-items-center border-0 bg-transparent text-ink-soft transition-colors duration-quick ease-out-cubic hover:bg-action-soft hover:text-ink focus-visible:outline-none focus-visible:shadow-focus";
 
 export function SearchField(props: SearchFieldProps): JSX.Element {
   const [showLoading, setShowLoading] = createSignal(false);

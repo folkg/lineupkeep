@@ -9,7 +9,7 @@ export function Box(props: BoxProps): JSX.Element {
     <div
       class={cx(
         props.rule === "top" ? "border-t" : "border-b",
-        props.ruleTone === "ink" ? "border-ink" : "border-rule-strong",
+        props.ruleTone === "ink" ? "border-rule-strong" : "border-rule",
         props.rule === "top" ? paddingTop[props.space] : paddingBottom[props.space],
       )}
     >

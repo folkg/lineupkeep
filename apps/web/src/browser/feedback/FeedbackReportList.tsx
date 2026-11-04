@@ -5,9 +5,9 @@ import type { Accessor } from "solid-js";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import type { FeedbackReportView } from "#contracts/feedback/feedbackContract.ts";
@@ -23,14 +23,16 @@ import {
 export function FeedbackReportList(props: FeedbackReportListProps): JSX.Element {
   return (
     <Stack as="section" gap="md" labelledBy="feedback-reports-title">
-      <Inline gap="md">
-        <Heading id="feedback-reports-title" level={2} size="section">
-          Your reports
-        </Heading>
-        <Button variant="link" onClick={() => void props.onRefresh()}>
-          Refresh
-        </Button>
-      </Inline>
+      <SectionTitle
+        id="feedback-reports-title"
+        action={
+          <Button variant="link" onClick={() => void props.onRefresh()}>
+            Refresh
+          </Button>
+        }
+      >
+        Your reports
+      </SectionTitle>
       <Show
         fallback={<LoadingState label="Loading reports">Loading your reports…</LoadingState>}
         when={!props.isLoading()}
@@ -92,7 +94,7 @@ function ReportRow(props: { readonly report: FeedbackReportView }): JSX.Element 
         {feedbackStatusDetail(props.report)}
       </Text>
       <Inline gap="sm">
-        <Text as="span" size="caption" tone="faint">
+        <Text as="span" numeric size="caption" tone="faint">
           Reported {formatFeedbackDate(props.report.createdAt)}
         </Text>
         <Show when={about()}>

@@ -3,15 +3,15 @@ import { Show } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
-import { Box } from "#browser/shared-ui/Box.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
 import { DownloadLink } from "#browser/shared-ui/DownloadLink.tsx";
 import { Form } from "#browser/shared-ui/Form.tsx";
 import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
+import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { Page } from "#browser/shared-ui/Page.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextField } from "#browser/shared-ui/TextField.tsx";
@@ -37,9 +37,7 @@ export function AccountDataPage(props: AccountDataPageProps): JSX.Element {
       >
         <Stack gap="xl">
           <Stack as="section" gap="md" labelledBy="export-title">
-            <Heading id="export-title" level={2} size="section">
-              Export
-            </Heading>
+            <SectionTitle id="export-title">Export</SectionTitle>
             <Text>
               The file includes your account, connections, teams, lineup runs, transaction
               proposals, feedback, and sign-in records. Provider sessions, passwords, and agent
@@ -58,55 +56,53 @@ export function AccountDataPage(props: AccountDataPageProps): JSX.Element {
               )}
             </Show>
           </Stack>
-          <Box rule="top" space="xl">
-            <Stack as="section" gap="md" labelledBy="erase-title">
-              <Heading id="erase-title" level={2} size="section">
-                Erase your account
-              </Heading>
-              <Text>
-                This deletes everything listed above, plus every sign-in session and the grants
-                agents hold. It happens as soon as you confirm, and it cannot be undone.
-              </Text>
+          <Stack as="section" gap="md" labelledBy="erase-title">
+            <SectionTitle id="erase-title">Erase your account</SectionTitle>
+            <Text>
+              This deletes everything listed above, plus every sign-in session and the grants agents
+              hold. It happens as soon as you confirm, and it cannot be undone.
+            </Text>
+            <Show
+              fallback={
+                <Text size="caption" tone="faint">
+                  Checking your export…
+                </Text>
+              }
+              when={!page.statusLoading()}
+            >
               <Show
                 fallback={
-                  <Text size="caption" tone="faint">
-                    Checking your export…
-                  </Text>
+                  <ActionFeedback
+                    feedback={{
+                      type: "attention",
+                      message: page.statusFailure()?.message ?? "We could not check your export.",
+                      recovery: {
+                        label: "Check again",
+                        pendingLabel: "Checking…",
+                        onAction: page.refreshExportStatus,
+                      },
+                    }}
+                  />
                 }
-                when={!page.statusLoading()}
+                when={page.statusFailure() === undefined}
               >
                 <Show
-                  fallback={
-                    <ActionFeedback
-                      feedback={{
-                        type: "attention",
-                        message: page.statusFailure()?.message ?? "We could not check your export.",
-                        recovery: {
-                          label: "Check again",
-                          pendingLabel: "Checking…",
-                          onAction: page.refreshExportStatus,
-                        },
-                      }}
-                    />
-                  }
-                  when={page.statusFailure() === undefined}
+                  fallback={<EraseWithoutExport latest={page.exportStatus()?.latest} />}
+                  when={page.exportStatus()?.usable === true}
                 >
-                  <Show
-                    fallback={<EraseWithoutExport latest={page.exportStatus()?.latest} />}
-                    when={page.exportStatus()?.usable === true}
-                  >
-                    <Text>
-                      Your export is ready. Keep that file: after the erasure it is the only copy.
-                    </Text>
-                    <Form gap="md" onSubmit={page.erase}>
-                      <TextField
-                        autocomplete="off"
-                        error={page.confirmationError()}
-                        label="Type erase my account to confirm"
-                        spellcheck={false}
-                        value={page.confirmation()}
-                        onInput={(event) => page.setConfirmation(event.currentTarget.value)}
-                      />
+                  <Text>
+                    Your export is ready. Keep that file: after the erasure it is the only copy.
+                  </Text>
+                  <Form gap="md" onSubmit={page.erase}>
+                    <TextField
+                      autocomplete="off"
+                      error={page.confirmationError()}
+                      label="Type erase my account to confirm"
+                      spellcheck={false}
+                      value={page.confirmation()}
+                      onInput={(event) => page.setConfirmation(event.currentTarget.value)}
+                    />
+                    <Inline gap="sm">
                       <Button
                         pending={page.erasing()}
                         pendingLabel="Erasing your account…"
@@ -116,13 +112,13 @@ export function AccountDataPage(props: AccountDataPageProps): JSX.Element {
                       >
                         Erase my account
                       </Button>
-                    </Form>
-                  </Show>
+                    </Inline>
+                  </Form>
                 </Show>
               </Show>
-              <ActionFeedback feedback={page.feedback()} />
-            </Stack>
-          </Box>
+            </Show>
+            <ActionFeedback feedback={page.feedback()} />
+          </Stack>
         </Stack>
       </Page>
     </AppShell>

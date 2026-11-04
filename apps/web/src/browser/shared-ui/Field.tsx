@@ -3,11 +3,8 @@ import { Show, createUniqueId, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { cx } from "./cx";
-import { useSurface } from "./Surface";
-import type { Surface } from "./Surface";
 
 export function Field(props: FieldProps): JSX.Element {
-  const surface = useSurface();
   const id = createUniqueId();
   const descriptionId = `${id}-description`;
   const errorId = `${id}-error`;
@@ -42,8 +39,8 @@ export function Field(props: FieldProps): JSX.Element {
       }
       when={props.label !== undefined}
     >
-      <div class={fieldLabelClass(surface)}>
-        <label class="font-bold" for={id}>
+      <div class="grid gap-2 text-label text-ink">
+        <label class="font-semibold uppercase tracking-label" for={id}>
           {props.label}
         </label>
         {control}
@@ -53,17 +50,8 @@ export function Field(props: FieldProps): JSX.Element {
   );
 }
 
-function fieldLabelClass(surface: Surface): string {
-  return cx("grid gap-2 text-label", surface === "panel" ? "text-on-panel" : "text-ink");
-}
-
 export function fieldControlClass(options: FieldControlOptions = {}): string {
-  const border =
-    options.invalid === true
-      ? "border-danger"
-      : options.surface === "panel"
-        ? "border-panel-rule"
-        : "border-rule-strong";
+  const border = options.invalid === true ? "border-danger" : "border-rule-strong";
 
   const interaction =
     options.invalid === true
@@ -71,7 +59,7 @@ export function fieldControlClass(options: FieldControlOptions = {}): string {
       : "hover:border-action focus:border-action";
 
   return cx(
-    "w-full select-text rounded-control border bg-paper px-3 text-base text-ink transition-[border-color,box-shadow] duration-quick ease-out-cubic placeholder:text-ink-faint focus:outline-none focus-visible:shadow-focus",
+    "w-full select-text border bg-paper px-3 text-body text-ink transition-[border-color,box-shadow] duration-quick ease-out-cubic placeholder:text-ink-faint focus:outline-none focus-visible:shadow-focus",
     border,
     interaction,
   );
@@ -96,7 +84,6 @@ function FieldMessages(props: FieldMessageProps): JSX.Element {
 
 type FieldControlOptions = {
   readonly invalid?: boolean;
-  readonly surface?: Surface;
 };
 
 type FieldProps = {

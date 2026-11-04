@@ -5,20 +5,22 @@ import { Text } from "./Text";
 
 export function DefinitionList(props: { readonly children: Element }): JSX.Element {
   return (
-    <dl class="grid gap-3 border-t border-rule-strong pt-4 sm:grid-cols-2">{props.children}</dl>
+    <dl class="grid gap-x-8 gap-y-3 border-t border-rule pt-4 sm:grid-cols-2">{props.children}</dl>
   );
 }
 
 export function Definition(props: { readonly term: string; readonly value: string }): JSX.Element {
   return (
-    <div class="grid gap-0.5">
+    <div class="grid gap-1">
       <dt>
-        <Text size="caption" tone="muted">
+        <Text size="caption" tone="faint">
           {props.term}
         </Text>
       </dt>
       <dd>
-        <Text size="caption">{props.value}</Text>
+        <Text numeric size="body">
+          {props.value}
+        </Text>
       </dd>
     </div>
   );

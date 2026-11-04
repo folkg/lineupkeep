@@ -5,10 +5,9 @@ import type { Accessor } from "solid-js";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
-import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
@@ -16,26 +15,27 @@ import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
-import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
-import { TeamProviderLink } from "./TeamProviderLink";
+import { checkTallyLabel, lastCheckLine, pauseResumeLabel, teamContextLabel } from "./teamLabels";
 import type { TeamRemote } from "./teamRemote";
 
 export function TeamList(props: TeamListProps): JSX.Element {
   return (
     <Stack as="section" gap="md" labelledBy="teams-list-title">
-      <Inline gap="md">
-        <Heading id="teams-list-title" level={2} size="section">
-          Your teams
-        </Heading>
-        <Button
-          pending={props.refreshing()}
-          pendingLabel="Refreshing teams…"
-          variant="link"
-          onClick={props.onRefreshTeams}
-        >
-          Refresh teams
-        </Button>
-      </Inline>
+      <SectionTitle
+        id="teams-list-title"
+        action={
+          <Button
+            pending={props.refreshing()}
+            pendingLabel="Refreshing teams…"
+            variant="link"
+            onClick={props.onRefreshTeams}
+          >
+            Refresh teams
+          </Button>
+        }
+      >
+        Your teams
+      </SectionTitle>
       <Show
         when={!props.isLoading() && props.loadFailure() === null && allTeamsIdle(props.teams())}
       >
@@ -96,31 +96,41 @@ function TeamRow(props: TeamRowProps): JSX.Element {
         </Text>
         <Show
           fallback={
-            <Text size="caption" tone="muted">
+            <Text numeric size="caption" tone="muted">
               No lineup checks have run yet.
             </Text>
           }
           when={props.team.lastRun}
         >
           {(run) => (
-            <Text size="caption" tone="muted">
+            <Text numeric size="caption" tone="muted">
               {lastCheckLine(run())}
+            </Text>
+          )}
+        </Show>
+        <Show when={pauseResumeLabel(props.team.team.automation)}>
+          {(note) => (
+            <Text size="caption" tone="muted">
+              {note()}
             </Text>
           )}
         </Show>
         <Show when={checkTallyLabel(props.team.recentRuns)}>
           {(tally) => (
-            <Text size="caption" tone="faint">
+            <Text numeric size="caption" tone="faint">
               {tally()}
             </Text>
           )}
         </Show>
         <TeamAttention team={props.team} />
       </Stack>
-      <Inline gap="sm" align="start">
-        <TeamControls team={props.team} remote={props.remote} />
-        <TeamProviderLink team={props.team.team} />
-      </Inline>
+      <TeamControls
+        align="end"
+        compact
+        showPauseNote={false}
+        team={props.team}
+        remote={props.remote}
+      />
     </RuleListItem>
   );
 }

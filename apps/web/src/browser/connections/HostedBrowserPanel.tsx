@@ -5,8 +5,8 @@ import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { BrowserFrame } from "#browser/shared-ui/BrowserFrame.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
+import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
@@ -21,11 +21,11 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
 
   return (
     <Stack as="section" gap="sm" labelledBy="provider-signin-title">
-      <Heading id="provider-signin-title" level={2} size="section">
+      <SectionTitle id="provider-signin-title">
         {props.controller.session() === undefined && props.connected
           ? `${provider} connection`
           : `${provider} sign-in`}
-      </Heading>
+      </SectionTitle>
       <Show when={props.controller.session()}>
         {(session) => (
           <Stack gap="sm">

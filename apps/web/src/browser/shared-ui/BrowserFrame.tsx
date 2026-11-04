@@ -123,11 +123,8 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
   };
 
   return (
-    <div class="overflow-hidden rounded-surface border border-rule-strong bg-paper shadow-lift focus-within:shadow-focus">
-      <div class="flex items-center gap-2 border-b border-rule px-3.5 py-2.5">
-        <span class="size-2.5 shrink-0 rounded-full bg-danger" aria-hidden="true" />
-        <span class="size-2.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
-        <span class="size-2.5 shrink-0 rounded-full bg-ink/20" aria-hidden="true" />
+    <div class="overflow-hidden border border-rule-strong bg-paper focus-within:shadow-focus">
+      <div class="flex items-center gap-3 border-b border-rule px-3 py-2">
         <Text size="caption" tone="muted">
           Private to this session. Closes when you finish or cancel.
         </Text>
@@ -150,7 +147,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
         )}
       </Show>
       <div
-        class="relative w-full overflow-hidden bg-ink/5"
+        class="relative w-full overflow-hidden bg-canvas"
         style={{ "aspect-ratio": `${props.viewport.width} / ${props.viewport.height}` }}
       >
         <Show when={props.frameUrl}>

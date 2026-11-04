@@ -16,7 +16,12 @@ import "#web/styles.css";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
-import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import {
+  formatDateTime,
+  formatRangeEnd,
+  formatRangeStart,
+  formatReaderTime,
+} from "#browser/shared-ui/formatTime.ts";
 import type {
   LineupRunView,
   TeamNoteSaveResult,
@@ -243,6 +248,24 @@ it("folds consecutive checks that changed nothing and keeps the rest on their ow
   await expect.element(page.getByRole("link", { name: "View run detail" }).first()).toBeVisible();
 });
 
+it("collapses a silent stretch with one timestamp to a single time", async () => {
+  const timestamp = hoursAgo(2);
+  const quietRuns = [
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c4", updatedAt: timestamp },
+    { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c5", updatedAt: timestamp },
+  ];
+  using _app = setupTeamDetailPage({
+    ...team,
+    lastRun: changedRun,
+    recentRuns: [changedRun, ...quietRuns, failedRun],
+  });
+
+  const groupLabel = foldedLabel(quietRuns);
+  expect(groupLabel).toContain(" at ");
+  await expect.element(page.getByText(groupLabel)).toBeVisible();
+  await expect.element(page.getByText(/changed nothing from .+ to .+/u)).not.toBeInTheDocument();
+});
+
 it("folds three silent stretches between the runs that mattered", async () => {
   const first = [
     { ...noOpRun, run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165d1", updatedAt: hoursAgo(11) },
@@ -434,9 +457,11 @@ it("confirms before navigation discards an unsaved note", async () => {
 
 function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
   const span = quietGroupSpan(runs);
-  return `${String(span.count)} checks changed nothing between ${formatDateTime(
-    span.from,
-  )} and ${formatDateTime(span.to)}`;
+  const start = formatRangeStart(span.from, span.to);
+  const end = formatRangeEnd(span.from, span.to);
+  return span.from === span.to
+    ? `${String(span.count)} checks changed nothing at ${start}`
+    : `${String(span.count)} checks changed nothing from ${start} to ${end}`;
 }
 
 function setupTeamDetailPage(

@@ -3,7 +3,7 @@ import type { Element } from "solid-js";
 
 export function Time(props: TimeProps): JSX.Element {
   return (
-    <time class="text-metadata font-semibold text-ink-faint" datetime={props.datetime}>
+    <time class="tabular-nums" datetime={props.datetime}>
       {props.children}
     </time>
   );
