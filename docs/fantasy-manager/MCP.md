@@ -287,11 +287,16 @@ descriptions. Weekly rank and stat sorts are refused with the remedy because the
 payload publishes only season values for them; offering the sort would return an order the rows
 cannot explain.
 
-`get_transactions` maps `scope: team` onto the provider's team filter. The provider has no date
-filter: `since`/`until` filter the bounded window the provider returns, `window` reports how many
-events were fetched, the oldest and newest timestamps, and whether the window was exhausted, and a
-range older than the window is reported as `transaction_window_truncated` with degraded coverage
-instead of a silently incomplete success.
+`get_transactions` maps `scope: team` onto the provider's team filter. `since` and `until` are ISO
+8601 instants such as `2026-09-20T00:00:00Z`. The provider has no date filter, but its history is
+newest-first and offset-addressable, so a date-bounded read pages back until the bound is reached or
+a bounded event cap stops it; without a date bound it fetches the most recent page. `window` reports
+how many events were fetched across those pages, the oldest and newest timestamps, and whether the
+cap was reached. A requested `since` older than the oldest event the provider publishes is reported
+as `transaction_history_starts_after_range` with degraded coverage, and a capped read as
+`transaction_window_truncated`; neither is a silently incomplete success. The bounded read is capped
+at 500 events (ten pages of 50), which covers a full owner-season history observed so far without
+one unbounded provider response.
 
 Every transaction player row is a movement with two named ends. `from` is the team the player left
 and `to` is the team it joined, each a private counterparty reference plus the provider's inline

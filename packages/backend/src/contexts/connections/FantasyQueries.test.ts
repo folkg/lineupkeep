@@ -852,6 +852,122 @@ it.effect("resolves a dropped player's identity from transaction history", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("hydrates a free agent's availability without the actual_stats group", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      availability: "free_agent",
+    });
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+    const freeAgent = Array.getUnsafe(search.players, 0);
+    assert.strictEqual(freeAgent.name, "Free Agent");
+    assert.strictEqual(freeAgent.availability, "free_agent");
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players: [freeAgent.player],
+      groups: ["identity", "availability"],
+    });
+
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    const player = Array.getUnsafe(hydrated.players, 0);
+    assert.isDefined(player.identity);
+    assert.deepStrictEqual(player.availability, {
+      rosterStatus: "free_agent",
+      injury: { reported: false },
+    });
+    assert.deepStrictEqual(hydrated.failures, []);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("names the input position of a player reference that does not open", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const roster = yield* queries.getRosters(owner, { team: teamId });
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok") {
+      return;
+    }
+    const rosterRef = Array.getUnsafe(roster.players, 0).player;
+    const foreignRef = yield* Effect.provide(
+      Effect.flatMap(QueryTokens, (tokens) =>
+        tokens.sealPlayerRef({
+          userId: owner,
+          leagueKey: "999.l.9999",
+          playerKey: "461.p.10003",
+        }),
+      ),
+      QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars"),
+    );
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players: [rosterRef, foreignRef],
+      groups: ["identity"],
+    });
+
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      hydrated.players.map((row) => row.player),
+      [rosterRef],
+    );
+    assert.strictEqual(hydrated.failures.length, 1);
+    const [failure] = hydrated.failures;
+    assert.strictEqual(failure?.code, "invalid_player_reference");
+    assert.strictEqual(failure?.resource, foreignRef);
+    assert.include(failure?.message, "input position 2");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports a requested availability the provider does not publish", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const ref = yield* Effect.provide(
+      Effect.flatMap(QueryTokens, (tokens) =>
+        tokens.sealPlayerRef({
+          userId: owner,
+          leagueKey: "461.l.1000",
+          playerKey: "461.p.99999",
+        }),
+      ),
+      QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars"),
+    );
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players: [ref],
+      groups: ["identity", "availability"],
+    });
+
+    assert.strictEqual(hydrated.status, "unsupported");
+    if (hydrated.status === "unsupported") {
+      assert.isTrue(
+        hydrated.failures.some((failure) => failure.code === "player_availability_unavailable"),
+      );
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("searches bounded free agents and preserves zero versus missing stats", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -2831,7 +2947,7 @@ it.effect("filters transactions by scope and date inside the bounded provider wi
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("reports a truncated transaction window instead of silently narrowing a date range", () =>
+it.effect("reports a transaction range that starts before the provider's history", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -2866,12 +2982,115 @@ it.effect("reports a truncated transaction window instead of silently narrowing 
     if (ranged.status !== "ok") {
       return;
     }
-    assert.isTrue(ranged.window.truncated);
+    assert.isFalse(ranged.window.truncated);
+    assert.strictEqual(ranged.window.fetched, 50);
     assert.isTrue(
       ranged.coverage.some(
         (entry) => entry.resource === "transactions" && entry.status === "degraded",
       ),
     );
+    assert.isTrue(
+      ranged.failures.some((failure) => failure.code === "transaction_history_starts_after_range"),
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("pages back to a transaction range older than the newest provider page", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const base = DateTime.makeUnsafe("2026-09-25T12:00:00.000Z");
+    const occurredAt = (hours: number): string =>
+      DateTime.formatIso(base.pipe(DateTime.subtract({ hours })));
+    yield* fake.setTransactions(
+      globalThis.Array.from({ length: 120 }, (_, index) =>
+        transaction({
+          occurredAt: occurredAt(index),
+          type: "add",
+          teams: [alphaTeam],
+          players: [
+            transactionPlayer(
+              "461.p.10003",
+              movement("add", undefined, alphaTeam),
+              "Synthetic Addition",
+            ),
+          ],
+        }),
+      ),
+    );
+
+    const input = {
+      team: teamId,
+      since: DateTime.makeUnsafe(occurredAt(106)),
+      until: DateTime.makeUnsafe(occurredAt(94)),
+    };
+    const occurred: string[] = [];
+    let cursor: string | undefined;
+    let window: { fetched: number; truncated: boolean } | undefined;
+    do {
+      const page = yield* queries.getTransactions(owner, {
+        ...input,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      assert.strictEqual(page.status, "ok");
+      if (page.status !== "ok") {
+        return;
+      }
+      window = page.window;
+      assert.deepStrictEqual(page.failures, []);
+      for (const transaction of page.transactions) {
+        occurred.push(transaction.occurredAt);
+      }
+      cursor = page.page.next;
+    } while (cursor !== undefined);
+
+    assert.strictEqual(window.fetched, 120);
+    assert.isFalse(window.truncated);
+    assert.strictEqual(occurred.length, 13);
+    assert.strictEqual(occurred[0], occurredAt(94));
+    assert.strictEqual(occurred[12], occurredAt(106));
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports truncation when the transaction read reaches its page cap", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setTransactions(
+      globalThis.Array.from({ length: 501 }, (_, index) =>
+        transaction({
+          occurredAt: DateTime.formatIso(
+            DateTime.makeUnsafe("2026-09-25T12:00:00.000Z").pipe(
+              DateTime.subtract({ hours: index }),
+            ),
+          ),
+          type: "add",
+          teams: [alphaTeam],
+          players: [
+            transactionPlayer(
+              "461.p.10003",
+              movement("add", undefined, alphaTeam),
+              "Synthetic Addition",
+            ),
+          ],
+        }),
+      ),
+    );
+
+    const ranged = yield* queries.getTransactions(owner, {
+      team: teamId,
+      since: DateTime.makeUnsafe("2026-08-01T00:00:00.000Z"),
+    });
+    assert.strictEqual(ranged.status, "ok");
+    if (ranged.status !== "ok") {
+      return;
+    }
+    assert.isTrue(ranged.window.truncated);
+    assert.strictEqual(ranged.window.fetched, 500);
     assert.isTrue(
       ranged.failures.some((failure) => failure.code === "transaction_window_truncated"),
     );

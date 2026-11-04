@@ -875,7 +875,7 @@ export const GetPlayersInput = Schema.Struct({
     Schema.Array(PlayerGroup).pipe(
       Schema.annotate({
         description:
-          "Groups to hydrate. `actual_stats` states the basis the provider declares: a completed week, season totals, or a daily-summed window with its covered dates. `projections` is available only where the provider publishes them; otherwise the group returns an unsupported status naming that limitation.",
+          "Groups to hydrate. `actual_stats` states the basis the provider declares: a completed week, season totals, or a daily-summed window with its covered dates. `projections` is available only where the provider publishes them; otherwise the group returns an unsupported status naming that limitation. `availability` reads the provider's selected-player status for references that are not on the current roster, such as a free agent, waiver player, or dropped player; that is one provider read for those references and it does not require `actual_stats`. A player the provider publishes no status for carries no `availability` and is named in `failures`.",
       }),
     ),
   ),
@@ -1084,22 +1084,23 @@ export const GetTransactionsInput = Schema.Struct({
     Schema.Literals(["league", "team"]).pipe(
       Schema.annotate({
         description:
-          "`league` returns the league's recent transactions; `team` restricts the provider read to the linked team's own moves. Both use the provider's bounded transaction window.",
+          "`league` returns the league's recent transactions; `team` restricts the provider read to the linked team's own moves. Both read newest first, and a date bound pages back through the provider's history.",
       }),
     ),
   ),
   since: Schema.optional(
-    Schema.DateTimeUtc.pipe(
+    Schema.DateTimeUtcFromString.pipe(
       Schema.annotate({
         description:
-          "Only transactions at or after this instant. The provider has no date filter, so the range is applied to the bounded window the provider returns; `window` states whether the window was exhausted.",
+          "Only transactions at or after this instant. Supply an ISO 8601 instant such as `2026-09-20T00:00:00Z`; an offset form such as `2026-09-20T00:00:00-04:00` is also accepted. The provider has no date filter, so the read pages back from its newest transaction until this bound is reached or a bounded event count is fetched; `window` states which happened.",
       }),
     ),
   ),
   until: Schema.optional(
-    Schema.DateTimeUtc.pipe(
+    Schema.DateTimeUtcFromString.pipe(
       Schema.annotate({
-        description: "Only transactions at or before this instant.",
+        description:
+          "Only transactions at or before this instant. Supply an ISO 8601 instant such as `2026-09-20T00:00:00Z`; an offset form is also accepted. Without `since`, the read pages back until this bound is reached or a bounded event count is fetched.",
       }),
     ),
   ),
@@ -1109,8 +1110,18 @@ export const GetTransactionsInput = Schema.Struct({
 export type GetTransactionsInput = typeof GetTransactionsInput.Type;
 
 export const TransactionWindow = Schema.Struct({
-  fetched: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  truncated: Schema.Boolean,
+  fetched: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+    Schema.annotate({
+      description:
+        "Number of provider events read. A date-bounded read may fetch several newest-first pages to reach the bound; an unbounded read fetches the most recent page only.",
+    }),
+  ),
+  truncated: Schema.Boolean.pipe(
+    Schema.annotate({
+      description:
+        "True only when the bounded read stopped at its event cap before reaching the requested `since`; false when the bound was reached or the provider's history ended. When `since` is older than the provider's oldest event, `failures` reports `transaction_history_starts_after_range`.",
+    }),
+  ),
   earliest: Schema.optional(Schema.String),
   latest: Schema.optional(Schema.String),
 });

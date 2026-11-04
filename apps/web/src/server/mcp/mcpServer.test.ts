@@ -517,6 +517,134 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
   expect(await json(invalid)).toMatchObject({ error: { code: -32602 } });
 });
 
+it("accepts ISO 8601 instants for transaction and feedback filters", async () => {
+  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const transactionFilters: Array<Parameters<FantasyQueriesShape["getTransactions"]>[1]> = [];
+  const feedbackFilters: Array<Parameters<FeedbackShape["list"]>[1]> = [];
+  const queries: FantasyQueriesShape = {
+    ...unavailableQueries,
+    getTransactions: (_userId, input) => {
+      transactionFilters.push(input);
+      return Effect.succeed({
+        status: "ok",
+        team: {
+          id: teamId,
+          name: "Synthetic Team",
+          provider: decodeProviderKey("yahoo"),
+          league: "nfl",
+          sport: "football",
+          season: 2026,
+        },
+        transactions: [],
+        window: { fetched: 0, truncated: false },
+        coverage: [],
+        failures: [],
+        page: { returned: 0, complete: true, remaining: 0 },
+        budget: { targetBytes: 12_288, hardLimitBytes: 16_384 },
+      });
+    },
+  };
+  const feedback: FeedbackShape = {
+    ...unavailableFeedback,
+    list: (_userId, filter) => {
+      feedbackFilters.push(filter);
+      return Effect.succeed([]);
+    },
+  };
+  const services = Layer.mergeAll(
+    authentication,
+    permissiveQuota,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(queries),
+    Layer.succeed(TransactionReviews)(unavailableReviews),
+    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(unavailableTeams),
+    Layer.succeed(Feedback)(feedback),
+  );
+  const run = (invocation: Request): Promise<Response> =>
+    handleMcpRequest(invocation, (_request, _operation, program) =>
+      Effect.runPromise(Effect.provide(program, services)),
+    );
+
+  for (const since of [
+    "2026-09-20T00:00:00Z",
+    "2026-09-20T00:00:00.000Z",
+    "2026-09-20T00:00:00+00:00",
+    "2026-09-20T00:00:00.0000000Z",
+  ]) {
+    const transactions = await run(
+      request(
+        "tools/call",
+        { name: "get_transactions", arguments: { team: teamId, since } },
+        "fantasy",
+      ),
+    );
+    const feedbackRead = await run(
+      request("tools/call", { name: "list_feedback", arguments: { since } }, "fantasy"),
+    );
+
+    expect(transactions.status).toBe(200);
+    expect(feedbackRead.status).toBe(200);
+  }
+
+  expect(transactionFilters).toHaveLength(4);
+  expect(feedbackFilters).toHaveLength(4);
+  for (const input of transactionFilters) {
+    const since = input.since;
+    if (since === undefined) {
+      throw new Error("Expected the transaction filter to carry a decoded since instant");
+    }
+    expect(DateTime.formatIso(since)).toBe("2026-09-20T00:00:00.000Z");
+  }
+  for (const filter of feedbackFilters) {
+    const since = filter.since;
+    if (since === undefined) {
+      throw new Error("Expected the feedback filter to carry a decoded since instant");
+    }
+    expect(DateTime.formatIso(since)).toBe("2026-09-20T00:00:00.000Z");
+  }
+  expect(transactionFilters[0]?.until).toBeUndefined();
+});
+
+it("refuses a malformed or tagged instant with a readable field message", async () => {
+  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
+  const run = (arguments_: Record<string, unknown>, name: string): Promise<Response> =>
+    handleMcpRequest(
+      request("tools/call", { name, arguments: arguments_ }, "fantasy"),
+      (_request, _operation, program) =>
+        Effect.runPromise(
+          Effect.provide(
+            program,
+            Layer.mergeAll(
+              authentication,
+              permissiveQuota,
+              Layer.succeed(Connections)(unavailableConnections),
+              Layer.succeed(FantasyQueries)(unavailableQueries),
+              Layer.succeed(TransactionReviews)(unavailableReviews),
+              Layer.succeed(TransactionProposals)(unavailableProposals),
+              Layer.succeed(LineupRuns)(unavailableLineups),
+              Layer.succeed(Teams)(unavailableTeams),
+              Layer.succeed(Feedback)(unavailableFeedback),
+            ),
+          ),
+        ),
+    );
+
+  for (const name of ["get_transactions", "list_feedback"]) {
+    const malformed = await run({ team: teamId, since: "2026-13-40T00:00:00Z" }, name);
+    const tagged = await run({ team: teamId, since: { epochMilliseconds: 1789862400000 } }, name);
+    const malformedBody = await json(malformed);
+    const taggedBody = await json(tagged);
+
+    expect(malformedBody).toMatchObject({ result: { isError: true } });
+    expect(JSON.stringify(malformedBody)).toContain("Expected a valid UTC DateTime string");
+    expect(JSON.stringify(malformedBody)).toContain("since");
+    expect(tagged.status).toBe(400);
+    expect(taggedBody).toMatchObject({ error: { code: -32_602, data: { field: '["since"]' } } });
+  }
+});
+
 it("reaches search_players with an empty query and returns the remedy instead of invalid-params", async () => {
   const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
   const queries: FantasyQueriesShape = {

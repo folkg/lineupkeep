@@ -977,12 +977,14 @@ export const yahooProvider = Effect.gen(function* () {
       readonly providerLeagueKey: string;
       readonly providerTeamKey: string | undefined;
       readonly limit: number;
+      readonly offset?: number;
     },
   ) {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_transactions");
     const cookie = yield* sessionCookie(input, "read_transactions");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_transactions");
     const limit = yield* ValidTransactionLimit(input.limit);
+    const offset = yield* ValidTransactionOffset(input.offset ?? 0);
     const teamFilter = yield* ValidLeagueTeamKey(
       input.providerTeamKey,
       leagueKey,
@@ -991,7 +993,10 @@ export const yahooProvider = Effect.gen(function* () {
     const payload = yield* readJson(internet, {
       operation: "read_transactions",
       origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/transactions;count=${String(limit)}` + teamFilter,
+      path:
+        `/fantasy/v2/league/${leagueKey}/transactions;count=${String(limit)}` +
+        (offset === 0 ? "" : `;start=${String(offset)}`) +
+        teamFilter,
       query: { format: "json" },
       cookie,
       normalize: true,
@@ -3775,6 +3780,12 @@ function ValidSearchLimit(value: number): Effect.Effect<number, ProviderResponse
 
 function ValidTransactionLimit(value: number): Effect.Effect<number, ProviderResponseInvalid> {
   return ValidLimit(value, "read_transactions");
+}
+
+function ValidTransactionOffset(value: number): Effect.Effect<number, ProviderResponseInvalid> {
+  return Number.isSafeInteger(value) && value >= 0
+    ? Effect.succeed(value)
+    : ProviderResponseInvalid.make({ operation: "read_transactions" });
 }
 
 function ValidSearchQuery(

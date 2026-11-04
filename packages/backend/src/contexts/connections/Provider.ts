@@ -325,6 +325,7 @@ export type ProviderShape = {
       readonly providerLeagueKey: string;
       readonly providerTeamKey: string | undefined;
       readonly limit: number;
+      readonly offset?: number;
     },
   ) => Effect.Effect<ReadonlyArray<ProviderTransaction>, ProviderReadFailure>;
 

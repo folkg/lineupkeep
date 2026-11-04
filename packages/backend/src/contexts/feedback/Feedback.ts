@@ -99,7 +99,14 @@ export type FeedbackReport = typeof FeedbackReport.Type;
 export const FeedbackFilter = Schema.Struct({
   statuses: Schema.optional(Schema.Array(FeedbackStatus).pipe(Schema.check(Schema.isMinLength(1)))),
   kinds: Schema.optional(Schema.Array(FeedbackKind).pipe(Schema.check(Schema.isMinLength(1)))),
-  since: Schema.optional(Schema.DateTimeUtc),
+  since: Schema.optional(
+    Schema.DateTimeUtcFromString.pipe(
+      Schema.annotate({
+        description:
+          "Only reports created at or after this ISO 8601 instant, for example `2026-09-20T00:00:00Z`. An offset form such as `2026-09-20T00:00:00-04:00` is also accepted.",
+      }),
+    ),
+  ),
   limit: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(50)),
   ),

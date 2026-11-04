@@ -867,13 +867,14 @@ const providerFake = Effect.gen(function* () {
     }),
     readTransactions: Effect.fn("FakeProvider.readTransactions")(function* (input) {
       const current = yield* prepare(input, "read_transactions");
+      const offset = input.offset ?? 0;
       return current.transactions
         .filter(
           (transaction) =>
             input.providerTeamKey === undefined ||
             transaction.teams.some((team) => team.providerTeamKey === input.providerTeamKey),
         )
-        .slice(0, input.limit);
+        .slice(offset, offset + input.limit);
     }),
     readCompletedTrades: Effect.fn("FakeProvider.readCompletedTrades")(function* (input) {
       const current = yield* prepare(input, "read_completed_trades");

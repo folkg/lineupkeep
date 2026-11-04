@@ -3,6 +3,29 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — round-10 MCP fixes (ISO instants, free-agent availability, transaction history)
+
+- `get_transactions` `since`/`until` and `list_feedback` `since` accept ISO 8601 instants such as
+  `2026-09-20T00:00:00Z`, `...000Z`, `...+00:00`, and `...0000000Z`. They previously required an
+  internal `DateTime.Utc` value that a JSON client cannot produce, so every ISO string was refused
+  as `Expected DateTime.Utc`; a malformed string is now refused with `Expected a valid UTC DateTime
+  string` naming the field.
+- `get_transactions` pages the provider's newest-first history when `since` or `until` is given,
+  instead of stopping at the newest 50 events. A bounded read fetches up to 500 events (ten pages of
+  50); `window.fetched` counts every page, `window.truncated` is true only when that cap stopped the
+  read before the requested range began, and a `since` older than the oldest published event is
+  reported as `transaction_history_starts_after_range` with degraded coverage. An unbounded read
+  still fetches one recent page. On the owner's football league a September bound now reads 138
+  events back to 2 September instead of 50 events back to 23 October.
+- `get_players` hydrates the `availability` group for references that are not on the current roster,
+  such as a free agent or waiver player, with one selected-player provider read for those references.
+  It no longer requires `actual_stats` to produce a free agent's `availability`, and the group is
+  documented as that read. A player the provider publishes no status for is named in `failures`.
+- A player reference that cannot be opened is reported in `failures` with its 1-based input position
+  in the message, so a client can match a refused reference to its request. References from a roster
+  read resolve in `get_players` for the same team and league; a reference sealed for another owner or
+  league is refused there rather than omitted.
+
 ## Unreleased — four resource scopes, retired names accepted
 
 - The advertised set is now `fantasy:read transactions:review lineups:write teams:manage offline_access`.

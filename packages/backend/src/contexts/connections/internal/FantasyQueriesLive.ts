@@ -30,6 +30,7 @@ import type {
   ProviderStatPeriod,
   ProviderStatValue,
   ProviderTeamScore,
+  ProviderTransaction,
   ProviderTransactionTeam,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderLimitationSubject } from "#contexts/connections/Provider.ts";
@@ -111,6 +112,8 @@ import { ScheduleObservationRepository } from "./ScheduleObservationRepository.t
 
 const defaultLeagueGroups: ReadonlyArray<LeagueGroup> = ["overview", "scoring", "roster_rules"];
 const defaultPlayerGroups: ReadonlyArray<PlayerGroup> = ["identity", "availability", "eligibility"];
+const transactionReadPageSize = 50;
+const transactionReadMaximumPages = 10;
 const summaryGroups: ReadonlyArray<SummaryGroup> = [
   "league",
   "standings",
@@ -1200,13 +1203,13 @@ export const FantasyQueriesLive = Layer.effect(
           readonly providerPlayerKey: string;
         } => row.providerPlayerKey !== undefined,
       );
-      const failures: QueryFailure[] = resolved.flatMap((row) =>
+      const failures: QueryFailure[] = resolved.flatMap((row, index) =>
         row.providerPlayerKey === undefined
           ? [
               {
                 code: "invalid_player_reference",
                 resource: row.ref,
-                message: "The player reference is invalid for this team and owner.",
+                message: `The player reference at input position ${String(index + 1)} is invalid for this team and owner.`,
               },
             ]
           : [],
@@ -1267,17 +1270,28 @@ export const FantasyQueriesLive = Layer.effect(
           failures.push(rosterOutcome.failure);
         }
       }
+      const rosterByKey = new Map(
+        (roster?.players ?? []).map((player) => [player.providerPlayerKey, player]),
+      );
       const requestedPeriod = normalizeStatPeriod(input.period);
+      const includesActualStats = groups.includes("actual_stats");
+      const detailKeys = includesActualStats
+        ? valid.map((row) => row.providerPlayerKey)
+        : groups.includes("availability")
+          ? valid
+              .filter((row) => !rosterByKey.has(row.providerPlayerKey))
+              .map((row) => row.providerPlayerKey)
+          : [];
       let details: ReadonlyArray<ProviderPlayerDetail> = [];
       let detailsUnsupported: string | undefined;
-      if (groups.includes("actual_stats")) {
+      if (includesActualStats || detailKeys.length > 0) {
         const detailsOutcome = yield* readOutcome(
           context,
           "players",
           context.provider.readPlayerDetails({
             ...providerIdentity(context),
             providerLeagueKey: leagueKey,
-            providerPlayerKeys: valid.map((row) => row.providerPlayerKey),
+            providerPlayerKeys: detailKeys,
             sport: context.owned.team.sport,
             period: requestedPeriod,
             currentPeriod: league?.periodWindow?.current,
@@ -1287,7 +1301,9 @@ export const FantasyQueriesLive = Layer.effect(
         );
         if (detailsOutcome._tag === "ok") {
           details = detailsOutcome.value;
-          const basis = details.find((player) => player.actual !== undefined)?.actual?.basis;
+          const basis = includesActualStats
+            ? details.find((player) => player.actual !== undefined)?.actual?.basis
+            : undefined;
           coverageEntries.push(
             coverage(
               "players",
@@ -1299,6 +1315,7 @@ export const FantasyQueriesLive = Layer.effect(
           );
         } else {
           if (
+            includesActualStats &&
             detailsOutcome._tag === "failed" &&
             detailsOutcome.failure.code === "period_unsupported"
           ) {
@@ -1306,10 +1323,12 @@ export const FantasyQueriesLive = Layer.effect(
               detail: `${periodKindRefusal(requestedPeriod)} ${detailsOutcome.failure.message}`,
             });
           }
-          detailsUnsupported =
-            detailsOutcome._tag === "unsupported"
-              ? detailsOutcome.detail
-              : detailsOutcome.failure.message;
+          if (includesActualStats) {
+            detailsUnsupported =
+              detailsOutcome._tag === "unsupported"
+                ? detailsOutcome.detail
+                : detailsOutcome.failure.message;
+          }
           coverageEntries.push(
             detailsOutcome._tag === "unsupported"
               ? unsupportedCoverage("players", "player_details", fetchedAt)
@@ -1328,9 +1347,6 @@ export const FantasyQueriesLive = Layer.effect(
           }
         }
       }
-      const rosterByKey = new Map(
-        (roster?.players ?? []).map((player) => [player.providerPlayerKey, player]),
-      );
       const detailsByKey = new Map(details.map((player) => [player.providerPlayerKey, player]));
       const transactionIdentities = yield* transactionIdentityIndex(
         context,
@@ -1452,6 +1468,14 @@ export const FantasyQueriesLive = Layer.effect(
                 : detail === undefined
                   ? undefined
                   : { rosterStatus: detail.rosterStatus, injury: { reported: false as const } };
+            if (groups.includes("availability") && availability === undefined) {
+              failures.push({
+                code: "player_availability_unavailable",
+                resource: row.ref,
+                message:
+                  "The provider returned no roster or selected-player status for this player.",
+              });
+            }
             const actualStats = !groups.includes("actual_stats")
               ? undefined
               : detailsUnsupported !== undefined
@@ -1726,45 +1750,118 @@ export const FantasyQueriesLive = Layer.effect(
       const team = queryTeam(context.owned);
       const fetchedAt = yield* DateTime.now;
       const scope = input.scope ?? "league";
-      const outcome = yield* readOutcome(
-        context,
-        "transactions",
-        context.provider.readTransactions({
-          ...providerIdentity(context),
-          providerLeagueKey: context.owned.team.providerLeagueKey,
-          providerTeamKey: scope === "team" ? context.owned.team.providerTeamKey : undefined,
-          limit: 50,
-        }),
-      );
-      if (outcome._tag !== "ok") {
-        return transactionsWithoutData(team, fetchedAt, outcome);
+      const bounded = since !== undefined || until !== undefined;
+      const fetchedTransactions: ProviderTransaction[] = [];
+      let pageOffset = 0;
+      let pageCount = 0;
+      let windowTruncated = false;
+      let pageFailure: FailureOutcome | undefined;
+      for (;;) {
+        const outcome = yield* readOutcome(
+          context,
+          "transactions",
+          context.provider.readTransactions({
+            ...providerIdentity(context),
+            providerLeagueKey: context.owned.team.providerLeagueKey,
+            providerTeamKey: scope === "team" ? context.owned.team.providerTeamKey : undefined,
+            limit: transactionReadPageSize,
+            offset: pageOffset,
+          }),
+        );
+        if (outcome._tag !== "ok") {
+          if (fetchedTransactions.length === 0) {
+            return transactionsWithoutData(team, fetchedAt, outcome);
+          }
+          pageFailure = outcome;
+          windowTruncated = true;
+          break;
+        }
+        const page = outcome.value;
+        for (const transaction of page) {
+          fetchedTransactions.push(transaction);
+        }
+        pageCount += 1;
+        const oldest = fetchedTransactions.at(-1)?.occurredAt;
+        const reachedBound =
+          oldest !== undefined &&
+          (since !== undefined ? oldest <= since : until !== undefined ? oldest <= until : false);
+        const fullPage = page.length === transactionReadPageSize;
+        if (!bounded) {
+          windowTruncated = fullPage;
+          break;
+        }
+        if (!fullPage || reachedBound) {
+          break;
+        }
+        if (pageCount >= transactionReadMaximumPages) {
+          windowTruncated = true;
+          break;
+        }
+        pageOffset += page.length;
       }
-      const fetched = outcome.value;
-      const filtered = fetched.filter(
+      const filtered = fetchedTransactions.filter(
         (transaction) =>
           (since === undefined || transaction.occurredAt >= since) &&
           (until === undefined || transaction.occurredAt <= until),
       );
       const window: TransactionWindow = {
-        fetched: fetched.length,
-        truncated: fetched.length >= 50,
-        ...(fetched[0] === undefined ? {} : { latest: fetched[0].occurredAt }),
-        ...(fetched.at(-1) === undefined ? {} : { earliest: fetched.at(-1)?.occurredAt }),
+        fetched: fetchedTransactions.length,
+        truncated: windowTruncated,
+        ...(fetchedTransactions[0] === undefined
+          ? {}
+          : { latest: fetchedTransactions[0].occurredAt }),
+        ...(fetchedTransactions.at(-1) === undefined
+          ? {}
+          : { earliest: fetchedTransactions.at(-1)?.occurredAt }),
       };
-      const exhausted =
-        since !== undefined &&
-        window.truncated &&
-        window.earliest !== undefined &&
-        since < window.earliest;
+      const beforeHistory =
+        since !== undefined && window.earliest !== undefined && since < window.earliest;
       const coverageEntries = [
-        exhausted
+        windowTruncated
           ? degradedCoverage(
               "transactions",
               "transactions",
               fetchedAt,
-              "The requested range starts before the most recent transaction window the provider returns; older moves are not included.",
+              "The bounded transaction read reached its history limit before the requested range began; older moves are not included.",
             )
-          : coverage("transactions", "transactions", fetchedAt),
+          : beforeHistory
+            ? degradedCoverage(
+                "transactions",
+                "transactions",
+                fetchedAt,
+                `The provider publishes no transaction older than ${String(window.earliest)}, so the requested range is not complete.`,
+              )
+            : coverage("transactions", "transactions", fetchedAt),
+        ...(pageFailure === undefined
+          ? []
+          : [
+              pageFailure._tag === "failed"
+                ? degradedCoverage(
+                    "transactions",
+                    "transactions",
+                    fetchedAt,
+                    pageFailure.failure.message,
+                  )
+                : unsupportedCoverage("transactions", "transactions", fetchedAt),
+            ]),
+      ];
+      const windowFailure: QueryFailure | undefined = windowTruncated
+        ? {
+            code: "transaction_window_truncated",
+            resource: "transactions",
+            message:
+              "The provider has more transaction history than this bounded read fetches, so this date range may omit older moves.",
+          }
+        : beforeHistory
+          ? {
+              code: "transaction_history_starts_after_range",
+              resource: "transactions",
+              message: `The provider publishes no transaction older than ${String(window.earliest)}, so this range starts before the available history.`,
+            }
+          : undefined;
+      const failures: QueryFailure[] = [
+        ...(pageFailure?._tag === "failed" ? [pageFailure.failure] : []),
+        ...(windowFailure === undefined ? [] : [windowFailure]),
       ];
       const leagueKey = context.owned.team.providerLeagueKey;
       const teamKeys = [
@@ -1880,16 +1977,7 @@ export const FantasyQueriesLive = Layer.effect(
         team,
         window,
         coverage: coverageEntries,
-        failures: exhausted
-          ? [
-              {
-                code: "transaction_window_truncated",
-                resource: "transactions",
-                message:
-                  "The provider returns only its most recent transaction window, so this date range may omit older moves.",
-              },
-            ]
-          : [],
+        failures,
         budget: queryBudget,
       };
       return yield* fitPage({

@@ -3535,6 +3535,26 @@ it.effect("scopes a transaction read to one team in the same league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("reads older transaction history from a provider offset", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    yield* provider.readTransactions({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerTeamKey: undefined,
+      limit: 25,
+      offset: 50,
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/transactions;count=25;start=50?format=json",
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("reads completed trades with the type filter and their transaction keys", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflTradeTransactions));
   return Effect.gen(function* () {
