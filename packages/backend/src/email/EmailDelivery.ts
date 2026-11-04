@@ -72,8 +72,14 @@ export class EmailDelivery extends Context.Service<EmailDelivery, EmailDeliveryS
               text: message.text,
             }),
             client.execute,
-            Effect.flatMap(HttpClientResponse.schemaBodyJson(ResendEmailResponse)),
-            Effect.mapError(classifyResendFailure),
+            Effect.catchTag("HttpClientError", (error) =>
+              Effect.flatMap(resendFailure(error), Effect.fail),
+            ),
+            Effect.flatMap((response) =>
+              HttpClientResponse.schemaBodyJson(ResendEmailResponse)(response).pipe(
+                Effect.mapError(() => EmailDeliveryFailed.make({ reason: "unavailable" })),
+              ),
+            ),
           );
           yield* Effect.annotateCurrentSpan("email.provider_message_id", response.id);
         });
@@ -128,14 +134,54 @@ export class EmailDeliveryFailed extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("EmailDeliveryFailed", {
   reason: Schema.Literals(["rejected", "unavailable"]),
+  detail: Schema.optional(Schema.String),
+  recipientPolicy: Schema.optional(Schema.Boolean),
 }) {}
 
-function classifyResendFailure(
+const ResendErrorBody = Schema.Struct({
+  message: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
+});
+
+function resendFailure(
   error: HttpClientError.HttpClientError | Schema.SchemaError,
-): EmailDeliveryFailed {
-  const status = error._tag === "HttpClientError" ? error.response?.status : undefined;
+): Effect.Effect<EmailDeliveryFailed> {
+  if (error._tag !== "HttpClientError") {
+    return Effect.succeed(EmailDeliveryFailed.make({ reason: "unavailable" }));
+  }
+  const status = error.response?.status;
   const rejected = status !== undefined && status >= 400 && status < 500 && status !== 429;
-  return EmailDeliveryFailed.make({ reason: rejected ? "rejected" : "unavailable" });
+  const response = error.response;
+  if (response === undefined) {
+    return Effect.succeed(
+      EmailDeliveryFailed.make({ reason: rejected ? "rejected" : "unavailable" }),
+    );
+  }
+  return HttpClientResponse.schemaBodyJson(ResendErrorBody)(response).pipe(
+    Effect.map((body) => providerDetail(body.message ?? body.name)),
+    Effect.orElseSucceed(() => undefined),
+    Effect.map((message) =>
+      EmailDeliveryFailed.make({
+        reason: rejected ? "rejected" : "unavailable",
+        ...(message === undefined ? {} : { detail: message }),
+        ...(message !== undefined && providerRefusesRecipient(message)
+          ? { recipientPolicy: true }
+          : {}),
+      }),
+    ),
+  );
+}
+
+function providerDetail(message: string | undefined): string | undefined {
+  if (message === undefined) {
+    return undefined;
+  }
+  const withoutAddresses = message.replaceAll(/[^\s@]+@[^\s@]+/gu, "[address]");
+  return withoutAddresses.length > 200 ? `${withoutAddresses.slice(0, 197)}...` : withoutAddresses;
+}
+
+function providerRefusesRecipient(message: string): boolean {
+  return /only send testing emails to your own email address/iu.test(message);
 }
 
 const resendConfig = Config.all({

@@ -258,6 +258,11 @@ function sendFailureFeedback(reason: SignInFailureReason | undefined): ActionFee
         type: "attention",
         message: "We can't send a code to that address. Check it and try again.",
       };
+    case "email_not_deliverable":
+      return {
+        type: "attention",
+        message: "Sign-in email cannot reach that address yet. Try a different address.",
+      };
     case "email_unavailable":
       return {
         type: "attention",
@@ -282,6 +287,7 @@ function codeRejectionMessage(reason: SignInFailureReason): string {
     case "rate_limited":
       return `Too many attempts. Try again in ${describeWait(reason.retryAfterSeconds)}.`;
     case "email_rejected":
+    case "email_not_deliverable":
     case "email_unavailable":
     case "rejected":
       return "We couldn't sign you in with that code. Send a new code.";

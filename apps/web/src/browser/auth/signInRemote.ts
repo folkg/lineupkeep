@@ -105,5 +105,6 @@ const knownReasons: Readonly<Record<string, SignInFailureReason>> = {
   TOO_MANY_ATTEMPTS: { type: "code_attempts_exhausted" },
   INVALID_EMAIL: { type: "email_rejected" },
   EMAIL_REJECTED: { type: "email_rejected" },
+  EMAIL_RECIPIENT_NOT_ALLOWED: { type: "email_not_deliverable" },
   EMAIL_UNAVAILABLE: { type: "email_unavailable" },
 };

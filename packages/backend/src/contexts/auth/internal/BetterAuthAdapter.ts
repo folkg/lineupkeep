@@ -159,10 +159,12 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           Effect.tap(() => Effect.annotateCurrentSpan("auth.sign_in_code.outcome", "sent")),
           Effect.as(response),
           Effect.catchTag("EmailDeliveryFailed", (failure) =>
-            Effect.annotateCurrentSpan(
-              "auth.sign_in_code.outcome",
-              `delivery_${failure.reason}`,
-            ).pipe(Effect.as(deliveryFailedResponse(failure))),
+            Effect.annotateCurrentSpan({
+              "auth.sign_in_code.outcome": `delivery_${failure.reason}`,
+              ...(failure.detail === undefined
+                ? {}
+                : { "auth.sign_in_code.detail": failure.detail }),
+            }).pipe(Effect.as(deliveryFailedResponse(failure))),
           ),
         );
 
@@ -571,15 +573,26 @@ function tooManyCodesResponse(retryAfter: Duration.Duration): Response {
 }
 
 function deliveryFailedResponse(failure: EmailDeliveryFailed): Response {
-  return failure.reason === "rejected"
+  return failure.recipientPolicy === true
     ? Response.json(
-        { code: "EMAIL_REJECTED", message: "The sign-in code could not be sent to this address." },
+        {
+          code: "EMAIL_RECIPIENT_NOT_ALLOWED",
+          message: "The mail sender is not allowed to reach this address.",
+        },
         { status: 422 },
       )
-    : Response.json(
-        { code: "EMAIL_UNAVAILABLE", message: "The sign-in code could not be sent." },
-        { status: 503 },
-      );
+    : failure.reason === "rejected"
+      ? Response.json(
+          {
+            code: "EMAIL_REJECTED",
+            message: "The sign-in code could not be sent to this address.",
+          },
+          { status: 422 },
+        )
+      : Response.json(
+          { code: "EMAIL_UNAVAILABLE", message: "The sign-in code could not be sent." },
+          { status: 503 },
+        );
 }
 
 function toAuthenticationSession(session: BetterAuthSessionValue): AuthenticationSession {

@@ -117,6 +117,19 @@ it("explains how long to wait after too many codes", async () => {
     .toHaveTextContent("Too many codes were requested. Try again in 25 minutes.");
 });
 
+it("says the sender cannot reach the address instead of blaming the address", async () => {
+  using _app = setupAuthPage({
+    sendCode: () => Promise.reject(new SignInFailure({ type: "email_not_deliverable" })),
+  });
+  await page.getByLabelText("Email").fill("reader@example.test");
+
+  await page.getByRole("button", { name: "Email me a code" }).click();
+
+  await expect
+    .element(page.getByRole("status"))
+    .toHaveTextContent("Sign-in email cannot reach that address yet. Try a different address.");
+});
+
 it("accepts a pasted code with spacing and signs in with its digits", async () => {
   const attempts: Array<{ readonly email: string; readonly code: string }> = [];
   using _app = setupAuthPage({

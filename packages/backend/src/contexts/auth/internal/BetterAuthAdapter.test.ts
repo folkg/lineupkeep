@@ -307,6 +307,22 @@ it.effect(
 );
 
 it.effect(
+  "names a sender that may not reach the address instead of blaming the address",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+
+      const response = yield* adapter.handle(sendCodeRequest("reader@example.test"));
+
+      assert.deepStrictEqual(yield* errorOf(response), {
+        status: 422,
+        code: "EMAIL_RECIPIENT_NOT_ALLOWED",
+      });
+    }).pipe(Effect.provide(adapterLayer(baseConfig, senderRefusedEmail))),
+  databaseTestTimeout,
+);
+
+it.effect(
   "offers no password sign-up or sign-in",
   () =>
     Effect.gen(function* () {
@@ -1329,6 +1345,21 @@ const googleConfig = {
   GOOGLE_CLIENT_ID: "google-client-id",
   GOOGLE_CLIENT_SECRET: "google-client-secret",
 };
+
+const senderRefusedEmail = Layer.merge(
+  EmailDeliveryTest,
+  Layer.succeed(EmailDelivery)({
+    send: () =>
+      Effect.fail(
+        EmailDeliveryFailed.make({
+          reason: "rejected",
+          detail: "You can only send testing emails to your own email address.",
+          recipientPolicy: true,
+        }),
+      ),
+    sendMany: () => Effect.succeed([]),
+  }),
+);
 
 const unavailableEmail = Layer.merge(
   EmailDeliveryTest,

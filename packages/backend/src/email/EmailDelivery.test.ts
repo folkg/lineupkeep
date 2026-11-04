@@ -66,6 +66,55 @@ it.effect("reports provider rejection without retrying", () =>
   }),
 );
 
+it.effect("keeps the sender's own words when it refuses a recipient it may not reach", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
+      Effect.sync(() => server[Symbol.dispose]()),
+    );
+    server.use(
+      http.post(endpoint, () =>
+        HttpResponse.json(
+          {
+            statusCode: 403,
+            name: "validation_error",
+            message:
+              "You can only send testing emails to your own email address (owner@example.test). To send emails to other recipients, please verify a domain.",
+          },
+          { status: 403 },
+        ),
+      ),
+    );
+
+    const exit = yield* Effect.exit(send(signInMessage).pipe(Effect.provide(resendLayer)));
+
+    assert.strictEqual(failureReason(exit), "rejected");
+    const failure = failureOf(exit);
+    assert.isTrue(failure.recipientPolicy);
+    assert.include(failure.detail ?? "", "only send testing emails to your own email address");
+    assert.notInclude(failure.detail ?? "", "owner@example.test");
+  }),
+);
+
+it.effect("keeps a rejection that is not about the recipient unmarked", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
+      Effect.sync(() => server[Symbol.dispose]()),
+    );
+    server.use(
+      http.post(endpoint, () =>
+        HttpResponse.json({ message: "The recipient address is malformed." }, { status: 422 }),
+      ),
+    );
+
+    const exit = yield* Effect.exit(send(signInMessage).pipe(Effect.provide(resendLayer)));
+
+    const failure = failureOf(exit);
+    assert.strictEqual(failureReason(exit), "rejected");
+    assert.isUndefined(failure.recipientPolicy);
+    assert.strictEqual(failure.detail, "The recipient address is malformed.");
+  }),
+);
+
 it.effect("retries transient failures with one stable key and succeeds", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(Effect.sync(setupEmailTransport), (server) =>
@@ -281,6 +330,14 @@ function failureReason(exit: Exit.Exit<unknown, unknown>): string | undefined {
   return failure?._tag === "Fail" && Schema.is(EmailDeliveryFailed)(failure.error)
     ? failure.error.reason
     : undefined;
+}
+
+function failureOf(exit: Exit.Exit<unknown, unknown>): EmailDeliveryFailed {
+  const failure = Exit.isFailure(exit) ? exit.cause.reasons[0] : undefined;
+  if (failure?._tag !== "Fail" || !Schema.is(EmailDeliveryFailed)(failure.error)) {
+    throw new Error("expected the email delivery to fail");
+  }
+  return failure.error;
 }
 
 const retryClock = Effect.gen(function* () {
