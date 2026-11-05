@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "4fa38d76-f9bd-43cc-9a62-a38fcc1530eb",
+  "prevIds": ["a8ac81cf-ea32-4609-9ef5-0b8eb713cee8"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "slot_move"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.slot_move",
+        "n|col|public.transaction_proposal_items.slot_move",
+        "e|col|public.transaction_proposal_items.slot_move"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "slot_move",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

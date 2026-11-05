@@ -29,6 +29,7 @@ import { leagueDisplayName, sportDisplayName } from "#contracts/connections/team
 import type {
   TransactionReviewExecutionView,
   TransactionReviewItemView,
+  TransactionReviewOrderView,
   TransactionReviewPendingOfferView,
   TransactionReviewPlayerView,
   TransactionReviewStepView,
@@ -345,6 +346,84 @@ function ExpiredNotice(props: ExpiredNoticeProps): JSX.Element {
   );
 }
 
+function ServerOrder(props: ServerOrderProps): JSX.Element {
+  return (
+    <Show
+      when={props.order.status === "conflict" ? props.order : undefined}
+      fallback={
+        <Show
+          when={props.order.status === "unresolved" ? props.order : undefined}
+          fallback={
+            <Show when={props.order.status === "ordered" ? props.order : undefined}>
+              {(order) => <OrderedNotice order={order()} items={props.items} />}
+            </Show>
+          }
+        >
+          {(order) => (
+            <Notice tone="neutral" title="The order could not be decided">
+              <Text size="caption" tone="muted">
+                {order().detail}
+              </Text>
+            </Notice>
+          )}
+        </Show>
+      }
+    >
+      {(order) => (
+        <Notice tone="danger" title="No order keeps the lineup legal">
+          <Stack gap="2xs">
+            <For each={order().conflicts}>
+              {(conflict) => (
+                <Text size="caption" tone="danger">
+                  {conflict.detail}
+                </Text>
+              )}
+            </For>
+          </Stack>
+        </Notice>
+      )}
+    </Show>
+  );
+}
+
+function OrderedNotice(props: OrderedNoticeProps): JSX.Element {
+  return (
+    <Notice tone="neutral" title="Server order">
+      <Stack gap="2xs">
+        <For each={props.order.steps}>
+          {(step, index) => {
+            const item = props.items.find((entry) => entry.id === step.item);
+            return (
+              <Text size="caption" tone="muted">
+                {`${String(index() + 1)}. ${item === undefined ? "This move" : moveSummary(item)}`}
+              </Text>
+            );
+          }}
+        </For>
+        <Text size="caption" tone="faint">
+          {orderEffectiveLine(props.order)}
+        </Text>
+      </Stack>
+    </Notice>
+  );
+}
+
+function orderEffectiveLine(
+  order: Extract<TransactionReviewOrderView, { status: "ordered" }>,
+): string {
+  switch (order.timing) {
+    case "same_day":
+    case "next_day":
+      return order.effectiveDate === undefined
+        ? "The league did not publish the roster-change date."
+        : `The league applies these moves on ${order.effectiveDate}.`;
+    case "weekly_lock":
+      return "The league applies these moves in its scoring week.";
+    case "not_published":
+      return "The league did not publish when it applies roster changes.";
+  }
+}
+
 function TeamProposal(props: TeamProposalProps): JSX.Element {
   const headingId = (): string => `team-${props.team.team.id}`;
   return (
@@ -372,6 +451,9 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
               {failure()} <TextLink to="/connections">Review the connection</TextLink>
             </Text>
           )}
+        </Show>
+        <Show when={props.team.order}>
+          {(order) => <ServerOrder order={order()} items={props.team.items} />}
         </Show>
       </Stack>
       <RuleList>
@@ -496,12 +578,24 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           </Show>
         </Split>
 
+        <Show when={!blocked() && result() === undefined && props.item.slotMove}>
+          {(move) => (
+            <Notice tone="neutral" title="Slot move">
+              <Text size="caption" tone="muted">
+                Move {move().playerName ?? "this player"} to {move().toSlot}. The server places this
+                move in the order where the roster stays legal.
+              </Text>
+            </Notice>
+          )}
+        </Show>
+
         <Show when={!blocked() && result() === undefined && props.item.reserveMove}>
           {(move) => (
             <Notice tone="neutral" title="Roster move first">
               <Text size="caption" tone="muted">
-                Move {move().playerName ?? "this player"} from {move().fromSlot} to {move().toSlot}{" "}
-                before the transaction. That move is reported as its own step.
+                Move {move().playerName ?? "this player"} from{" "}
+                {move().fromSlot ?? "its reported slot"} to {move().toSlot} before the transaction.
+                That move is reported as its own step.
               </Text>
             </Notice>
           )}
@@ -925,6 +1019,11 @@ function budgetLine(budget: NonNullable<TransactionReviewTeamView["budget"]>): s
 }
 
 function moveSummary(item: TransactionReviewItemView): string {
+  if (item.kind === "slot_move") {
+    return item.slotMove === undefined
+      ? "Slot move"
+      : `Move ${item.slotMove.playerName ?? "this player"} to ${item.slotMove.toSlot}`;
+  }
   const adds = playerNames(item.adds);
   const drops = playerNames(item.drops);
   if (item.kind === "trade" && adds !== undefined && drops !== undefined) {
@@ -973,10 +1072,15 @@ function kindLabel(kind: TransactionReviewItemView["kind"]): string {
       return "Drop";
     case "trade":
       return "Trade offer";
+    case "slot_move":
+      return "Slot move";
   }
 }
 
 function consequenceLine(item: TransactionReviewItemView): string {
+  if (item.kind === "slot_move") {
+    return "Same roster. Reversible while the player is editable.";
+  }
   if (item.kind === "trade") {
     switch (item.trade?.state) {
       case "accepted":
@@ -1182,6 +1286,16 @@ type TeamProposalProps = {
   readonly withdrawing: string | undefined;
   readonly onToggle: (item: string, included: boolean) => void;
   readonly onWithdraw: (team: string, item: string) => void;
+};
+
+type ServerOrderProps = {
+  readonly order: TransactionReviewOrderView;
+  readonly items: ReadonlyArray<TransactionReviewItemView>;
+};
+
+type OrderedNoticeProps = {
+  readonly order: Extract<TransactionReviewOrderView, { status: "ordered" }>;
+  readonly items: ReadonlyArray<TransactionReviewItemView>;
 };
 
 type ProposalItemProps = {

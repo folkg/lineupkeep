@@ -28,6 +28,7 @@ import {
   ProposalItemRecord,
   ProposalSetRecord,
   ProposalStepRecord,
+  StoredSlotMove,
   StoredProposalPlayer,
   StoredProposalStaleReason,
 } from "./TransactionProposalRecord.ts";
@@ -69,10 +70,11 @@ export const transactionProposalItems = pgTable(
     teamId: uuid("team_id").notNull(),
     connectionId: text("connection_id").notNull(),
     kind: text("kind", {
-      enum: ["free_agent_add", "waiver_claim", "drop", "trade"],
+      enum: ["free_agent_add", "waiver_claim", "drop", "trade", "slot_move"],
     }).notNull(),
     addPlayers: jsonb("add_players").notNull(),
     dropPlayers: jsonb("drop_players").notNull(),
+    slotMove: jsonb("slot_move"),
     counterpartyTeamKey: text("counterparty_team_key"),
     counterpartyName: text("counterparty_name"),
     bid: integer("bid"),
@@ -221,6 +223,7 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   kind: ProposalItemKind,
   addPlayers: Schema.Unknown,
   dropPlayers: Schema.Unknown,
+  slotMove: Schema.Unknown,
   counterpartyTeamKey: Schema.NullOr(Schema.NonEmptyString),
   counterpartyName: Schema.NullOr(Schema.NonEmptyString),
   bid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
@@ -257,6 +260,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
           const reasons = yield* SchemaParser.decodeUnknownEffect(
             Schema.Array(StoredProposalStaleReason),
           )(row.staleReasons);
+          const slotMove = yield* SchemaParser.decodeUnknownEffect(Schema.NullOr(StoredSlotMove))(
+            row.slotMove,
+          );
           if (row.staleness === "unchecked" && (row.checkedAt !== null || reasons.length > 0)) {
             return yield* Effect.die(
               new Error("An unchecked proposal item cannot carry a check time or a stale reason"),
@@ -280,6 +286,21 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
               new Error("Only a trade proposal item can carry a counterparty"),
             );
           }
+          if (row.kind === "slot_move" && slotMove === null) {
+            return yield* Effect.die(
+              new Error("A slot move proposal item requires its destination slot"),
+            );
+          }
+          if (row.kind !== "slot_move" && slotMove !== null) {
+            return yield* Effect.die(
+              new Error("Only a slot move proposal item can carry a slot move"),
+            );
+          }
+          if (row.kind === "slot_move" && (adds.length > 0 || drops.length > 0)) {
+            return yield* Effect.die(
+              new Error("A slot move proposal item cannot add or drop a player"),
+            );
+          }
           if ((row.tradeProviderKey === null) !== (row.tradeState === null)) {
             return yield* Effect.die(
               new Error("A trade provider key and trade state must appear together"),
@@ -300,6 +321,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             kind: row.kind,
             adds,
             drops,
+            ...(slotMove === null ? {} : { slotMove }),
             ...(row.counterpartyTeamKey === null
               ? {}
               : { counterpartyKey: row.counterpartyTeamKey }),
@@ -352,6 +374,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             kind: record.kind,
             addPlayers: adds,
             dropPlayers: drops,
+            slotMove: record.slotMove ?? null,
             counterpartyTeamKey: record.counterpartyKey ?? null,
             counterpartyName: record.counterpartyName ?? null,
             bid: record.bid ?? null,

@@ -7,6 +7,7 @@ import { DateTime, Schema } from "effect";
 
 import type {
   TransactionReviewItemView,
+  TransactionReviewOrderView,
   TransactionReviewPlayerView,
   TransactionReviewStaleReasonView,
   TransactionReviewPendingOfferView,
@@ -73,10 +74,42 @@ function toTeamView(team: ProposalSetReview["teams"][number]): TransactionReview
               : { objectionDays: team.tradeRules.objectionDays }),
           },
         }),
+    ...(team.order === undefined ? {} : { order: toOrderView(team.order) }),
     ...(team.failure === undefined ? {} : { failure: unreadableTeamDetail }),
     items: team.items.map(toItemView),
     pendingOffers: team.pendingOffers.map(toPendingOfferView),
   };
+}
+
+function toOrderView(
+  order: NonNullable<ProposalSetReview["teams"][number]["order"]>,
+): TransactionReviewOrderView {
+  switch (order.status) {
+    case "ordered":
+      return {
+        status: "ordered",
+        timing: order.timing,
+        ...(order.effectiveDate === undefined ? {} : { effectiveDate: order.effectiveDate }),
+        steps: order.steps.map((step) => ({ item: step.item })),
+      };
+    case "conflict":
+      return {
+        status: "conflict",
+        timing: order.timing,
+        ...(order.effectiveDate === undefined ? {} : { effectiveDate: order.effectiveDate }),
+        conflicts: order.conflicts.map((conflict) => ({
+          items: [...conflict.items],
+          detail: conflict.detail,
+        })),
+      };
+    case "unresolved":
+      return {
+        status: "unresolved",
+        timing: order.timing,
+        ...(order.effectiveDate === undefined ? {} : { effectiveDate: order.effectiveDate }),
+        detail: order.detail,
+      };
+  }
 }
 
 function toItemView(
@@ -122,8 +155,21 @@ function toItemView(
             ...(item.reserveMove.player.name === undefined
               ? {}
               : { playerName: item.reserveMove.player.name }),
-            fromSlot: item.reserveMove.fromSlot,
+            ...(item.reserveMove.fromSlot === undefined
+              ? {}
+              : { fromSlot: item.reserveMove.fromSlot }),
             toSlot: item.reserveMove.toSlot,
+          },
+        }),
+    ...(item.slotMove === undefined
+      ? {}
+      : {
+          slotMove: {
+            ...(item.slotMove.player.name === undefined
+              ? {}
+              : { playerName: item.slotMove.player.name }),
+            ...(item.slotMove.fromSlot === undefined ? {} : { fromSlot: item.slotMove.fromSlot }),
+            toSlot: item.slotMove.toSlot,
           },
         }),
     ...(item.counterparty === undefined

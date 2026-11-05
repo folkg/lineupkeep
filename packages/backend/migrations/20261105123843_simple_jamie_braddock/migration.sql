@@ -1,0 +1,1 @@
+ALTER TABLE "transaction_proposal_items" ADD COLUMN "slot_move" jsonb;

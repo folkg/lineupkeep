@@ -63,6 +63,13 @@ export const StoredProposalTrade = Schema.Struct({
 }).pipe(Schema.toType);
 export type StoredProposalTrade = typeof StoredProposalTrade.Type;
 
+export const StoredSlotMove = Schema.Struct({
+  playerKey: Schema.NonEmptyString,
+  playerName: Schema.optional(Schema.NonEmptyString),
+  toSlot: Schema.NonEmptyString,
+}).pipe(Schema.toType);
+export type StoredSlotMove = typeof StoredSlotMove.Type;
+
 export const ProposalItemRecord = Schema.Struct({
   id: ProposalItemId,
   setId: ProposalSetId,
@@ -73,6 +80,7 @@ export const ProposalItemRecord = Schema.Struct({
   kind: ProposalItemKind,
   adds: Schema.Array(StoredProposalPlayer),
   drops: Schema.Array(StoredProposalPlayer),
+  slotMove: Schema.optional(StoredSlotMove),
   counterpartyKey: Schema.optional(Schema.NonEmptyString),
   counterpartyName: Schema.optional(Schema.NonEmptyString),
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),

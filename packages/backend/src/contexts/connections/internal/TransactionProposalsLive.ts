@@ -2,6 +2,12 @@ import { Array, DateTime, Effect, Layer, Result, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import { planProposalOrder, slotAcceptsPositions } from "#contexts/connections/ProposalOrder.ts";
+import type {
+  ProposalOrderItem,
+  ProposalOrderPlan,
+  ProposalOrderPlayer,
+} from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProviderLeagueSettings,
   ProviderLeagueTeam,
@@ -83,7 +89,7 @@ import type {
 } from "./TransactionProposalRepository.ts";
 
 const contentInvalidDetail =
-  "A proposal set needs one to twenty items. Each item names an owned team, a kind, the players to add or drop, an optional FAAB bid of 0 or more, and a reason of at most 500 characters. A drop item adds nobody, a free-agent add carries no bid, a waiver claim requires a bid, and a trade names a counterparty with at least one player going out and one coming back. A trade carries no bid and no draft picks.";
+  "A proposal set needs one to twenty items. Each item names an owned team, a kind, the players to add or drop, an optional FAAB bid of 0 or more, and a reason of at most 500 characters. A drop item adds nobody, a free-agent add carries no bid, a waiver claim requires a bid, a trade names a counterparty with at least one player going out and one coming back, and a slot move names one rostered player and one destination slot without adding or dropping anyone. A trade carries no bid and no draft picks.";
 
 const submitInvalidDetail =
   "A submission names one proposal set and one to twenty of its move ids. Reload the review and submit again.";
@@ -119,6 +125,7 @@ type OpenedDraft = {
   readonly draft: ProposalItemDraft;
   readonly adds: ReadonlyArray<string>;
   readonly drops: ReadonlyArray<string>;
+  readonly slotMoveKey: string | undefined;
   readonly counterpartyKey: string | undefined;
 };
 
@@ -151,6 +158,7 @@ type TeamCheck = {
   readonly facts?: TeamFacts;
   readonly context?: TeamContext;
   readonly changes: ReadonlyArray<ProposalItemChange>;
+  readonly order?: ProposalOrderPlan;
   readonly tradeFeed?: TradeFeed;
 };
 
@@ -222,7 +230,13 @@ export const TransactionProposalsLive = Layer.effect(
       const leagueGroups = [...byLeague.entries()].map(([leagueKey, entries]) => ({
         leagueKey,
         entries,
-        refs: entries.flatMap((entry) => [...entry.draft.adds, ...entry.draft.drops]),
+        refs: entries.flatMap((entry) => [
+          ...entry.draft.adds,
+          ...entry.draft.drops,
+          ...(entry.draft.slotMove === undefined || entry.draft.slotMove === null
+            ? []
+            : [entry.draft.slotMove.player]),
+        ]),
       }));
       const openedGroups = yield* tokens.openPlayerRefGroups({
         userId,
@@ -233,7 +247,10 @@ export const TransactionProposalsLive = Layer.effect(
         const opened = Array.getUnsafe(openedGroups, groupIndex);
         let offset = 0;
         for (const entry of group.entries) {
-          const count = entry.draft.adds.length + entry.draft.drops.length;
+          const count =
+            entry.draft.adds.length +
+            entry.draft.drops.length +
+            (entry.draft.slotMove === undefined || entry.draft.slotMove === null ? 0 : 1);
           openedByIndex.set(entry.index, opened.slice(offset, offset + count));
           offset += count;
         }
@@ -278,7 +295,8 @@ export const TransactionProposalsLive = Layer.effect(
       for (const { index, team, draft } of prepared) {
         const opened = openedByIndex.get(index) ?? [];
         const addKeys = opened.slice(0, draft.adds.length);
-        const dropKeys = opened.slice(draft.adds.length);
+        const dropKeys = opened.slice(draft.adds.length, draft.adds.length + draft.drops.length);
+        const moveRef = opened[draft.adds.length + draft.drops.length];
         const adds = addKeys.filter(isPlayerKey);
         const drops = dropKeys.filter(isPlayerKey);
         if (adds.length !== addKeys.length || drops.length !== dropKeys.length) {
@@ -287,6 +305,15 @@ export const TransactionProposalsLive = Layer.effect(
             outcome: "refused",
             refusal: "reference_invalid",
             detail: `Item ${String(index + 1)} carries a player reference this account did not receive from a read of that team's league. Read the roster or the player pool again and propose with those references.`,
+          });
+          continue;
+        }
+        if (draft.kind === "slot_move" && !isPlayerKey(moveRef)) {
+          refusals.push({
+            index,
+            outcome: "refused",
+            refusal: "reference_invalid",
+            detail: `Item ${String(index + 1)} carries a player reference this account did not receive from a read of that team's league. Read the roster again and name the player to move from that read.`,
           });
           continue;
         }
@@ -317,6 +344,7 @@ export const TransactionProposalsLive = Layer.effect(
           draft,
           adds,
           drops,
+          slotMoveKey: isPlayerKey(moveRef) ? moveRef : undefined,
           counterpartyKey: draft.kind === "trade" ? counterpartyByIndex.get(index) : undefined,
         });
       }
@@ -347,12 +375,19 @@ export const TransactionProposalsLive = Layer.effect(
           });
           continue;
         }
+        const slotMove =
+          candidate.slotMoveKey === undefined ||
+          draft.slotMove === undefined ||
+          draft.slotMove === null
+            ? undefined
+            : { player: candidate.slotMoveKey, toSlot: draft.slotMove.toSlot };
         const key = proposalItemKey({
           team: draft.team,
           kind: draft.kind,
           counterpartyKey,
           adds,
           drops,
+          slotMove,
           bid: draft.bid ?? undefined,
           reason: draft.reason,
         });
@@ -362,6 +397,7 @@ export const TransactionProposalsLive = Layer.effect(
           counterpartyKey,
           adds,
           drops,
+          slotMove,
           draft.bid ?? undefined,
         );
         const firstIndex = firstIndexByKey.get(moveKey);
@@ -388,6 +424,10 @@ export const TransactionProposalsLive = Layer.effect(
               staged?.outcome === "staged" ? staged.drops : drops.map((drop) => ({ key: drop })),
             counterpartyKey,
             counterpartyName: staged?.outcome === "staged" ? staged.counterpartyName : undefined,
+            slotMove:
+              slotMove === undefined
+                ? undefined
+                : { playerKey: slotMove.player, toSlot: slotMove.toSlot },
             bid: draft.bid ?? undefined,
             reason: draft.reason,
           },
@@ -1769,13 +1809,25 @@ export const TransactionProposalsLive = Layer.effect(
           ),
         };
         const budget = budgetOf(facts, items);
+        const declaredMoveKeys = new Set(
+          items.flatMap((item) =>
+            item.kind === "slot_move" && item.slotMove !== undefined
+              ? [item.slotMove.playerKey]
+              : [],
+          ),
+        );
+        const changes = items.map((item) =>
+          evaluateItem(item, facts, budget, at, feed, declaredMoveKeys),
+        );
+        const order = orderFor(facts, items, changes);
         return {
           team: teamId,
           ...(budget === undefined ? {} : { budget }),
           facts,
           context,
           ...(feed === undefined ? {} : { tradeFeed: feed }),
-          changes: items.map((item) => evaluateItem(item, facts, budget, at, feed)),
+          changes: orderChanges(changes, order, at),
+          ...(order === undefined ? {} : { order }),
         };
       });
     }
@@ -1799,6 +1851,161 @@ export const TransactionProposalsLive = Layer.effect(
     }
   }),
 );
+
+function orderFor(
+  facts: TeamFacts,
+  items: ReadonlyArray<ProposalItemRecord>,
+  changes: ReadonlyArray<ProposalItemChange>,
+): ProposalOrderPlan | undefined {
+  const current: Array<ProposalOrderItem> = [];
+  for (const [index, change] of changes.entries()) {
+    const item = items[index];
+    if (item === undefined || item.kind === "trade" || change.staleness.status !== "current") {
+      continue;
+    }
+    current.push(orderItemOf(facts, item, change));
+  }
+  if (current.length === 0) {
+    return undefined;
+  }
+  const players: ReadonlyArray<ProposalOrderPlayer> = facts.roster.players.map((player) => ({
+    key: player.providerPlayerKey,
+    name: player.name,
+    positions: player.eligiblePositions,
+    slot: player.slot.status === "verified" ? player.slot.slot : undefined,
+    editable: player.isEditable === true,
+  }));
+  return planProposalOrder({
+    slots: facts.league.rosterPositions.map((slot) => ({
+      position: slot.position,
+      kind: slot.kind,
+      count: slot.count,
+      eligibility: slot.eligibility,
+    })),
+    players,
+    timing: {
+      rule: facts.league.rosterChange?.rule,
+      currentDate: facts.league.currentDate,
+    },
+    items: current,
+  });
+}
+
+function orderItemOf(
+  facts: TeamFacts,
+  item: ProposalItemRecord,
+  change: ProposalItemChange,
+): ProposalOrderItem {
+  const declared = item.kind === "slot_move" ? item.slotMove : undefined;
+  const declaredName =
+    declared === undefined
+      ? undefined
+      : (facts.roster.players.find((player) => player.providerPlayerKey === declared.playerKey)
+          ?.name ??
+        declared.playerName ??
+        declared.playerKey);
+  const move =
+    declared === undefined
+      ? change.reserveMove === undefined
+        ? undefined
+        : {
+            player: {
+              key: change.reserveMove.playerKey,
+              name: change.reserveMove.playerName ?? change.reserveMove.playerKey,
+            },
+            toSlot: change.reserveMove.toSlot,
+            origin: "repair" as const,
+          }
+      : {
+          player: {
+            key: declared.playerKey,
+            name: declaredName ?? declared.playerKey,
+          },
+          toSlot: declared.toSlot,
+          origin: "declared" as const,
+        };
+  const adds = change.adds.map((add) => ({
+    key: add.key,
+    name: add.name ?? add.key,
+    positions: facts.players.get(add.key)?.eligiblePositions ?? [],
+  }));
+  const drops = change.drops.map((drop) => ({
+    key: drop.key,
+    name: drop.name ?? drop.key,
+  }));
+  return {
+    id: item.id,
+    label: orderItemLabel(adds, drops, move),
+    adds,
+    drops,
+    move,
+  };
+}
+
+function orderItemLabel(
+  adds: ReadonlyArray<{ readonly name: string }>,
+  drops: ReadonlyArray<{ readonly name: string }>,
+  move: ProposalOrderItem["move"],
+): string {
+  if (move !== undefined) {
+    return `Move ${move.player.name} to ${move.toSlot}`;
+  }
+  const names = (players: ReadonlyArray<{ readonly name: string }>): string =>
+    players.map((player) => player.name).join(", ");
+  if (adds.length > 0 && drops.length > 0) {
+    return `Add ${names(adds)} and drop ${names(drops)}`;
+  }
+  if (adds.length > 0) {
+    return `Add ${names(adds)}`;
+  }
+  return drops.length > 0 ? `Drop ${names(drops)}` : "This move";
+}
+
+function orderChanges(
+  changes: ReadonlyArray<ProposalItemChange>,
+  order: ProposalOrderPlan | undefined,
+  at: DateTime.Utc,
+): ReadonlyArray<ProposalItemChange> {
+  if (order === undefined || order.status === "ordered") {
+    return changes;
+  }
+  const details = new Map<string, Array<string>>();
+  if (order.status === "conflict") {
+    for (const conflict of order.conflicts) {
+      for (const id of conflict.items) {
+        const current = details.get(id) ?? [];
+        current.push(conflict.detail);
+        details.set(id, current);
+      }
+    }
+  } else {
+    for (const change of changes) {
+      if (change.staleness.status === "current") {
+        details.set(change.id, [order.detail]);
+      }
+    }
+  }
+  return changes.map((change) => {
+    const reasons = details.get(change.id);
+    if (reasons === undefined || change.staleness.status !== "current") {
+      return change;
+    }
+    return {
+      ...change,
+      staleness:
+        order.status === "unresolved"
+          ? staleCheck(
+              reasons.map((detail) => ({ code: "order_unresolved" as const, detail })),
+              at,
+            )
+          : checked(
+              [],
+              reasons.map((detail) => ({ code: "order_conflict" as const, detail })),
+              at,
+            ),
+    };
+  });
+}
 
 function buildReview(
   tokens: QueryTokens["Service"],
@@ -1866,6 +2073,7 @@ function buildReview(
                 },
               }),
           ...(check?.failure === undefined ? {} : { failure: check.failure }),
+          ...(check?.order === undefined ? {} : { order: check.order }),
           items: teamItems,
           pendingOffers: offersByTeam?.get(teamId) ?? [],
         }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause }))),
@@ -1884,9 +2092,13 @@ function evaluateItem(
   budget: ProposalBudget | undefined,
   at: DateTime.Utc,
   feed: TradeFeed | undefined,
+  declaredMoveKeys: ReadonlySet<string>,
 ): ProposalItemChange {
   if (item.kind === "trade") {
     return evaluateTradeItem(item, facts, at, feed);
+  }
+  if (item.kind === "slot_move") {
+    return evaluateSlotMoveItem(item, facts, at);
   }
   const reasons: Array<StoredProposalStaleReason> = [];
   const adds = item.adds.map((add) => ({ ...add }));
@@ -1967,7 +2179,7 @@ function evaluateItem(
   );
   const occupied = facts.roster.players.length - inReserve.length;
   const droppedKeys = new Set(drops.map((drop) => drop.key));
-  const legality = illegalSlots(facts, droppedKeys, "repair");
+  const legality = illegalSlots(facts, droppedKeys, "repair", declaredMoveKeys);
   const repair = legality.reasons.length === 0 ? legality.repair : undefined;
   const occupiedAfterRepair = occupied + occupancyDelta(repair, facts.league);
   const dropped = drops.filter((drop) => rostered.has(drop.key)).length;
@@ -1980,7 +2192,8 @@ function evaluateItem(
         detail: `This team holds ${String(occupiedAfterRepair)} roster players and the league allows ${String(capacity)}. Adding ${String(adds.length)} while dropping ${String(dropped)} still exceeds it, and this item can send only one roster move.`,
       });
     } else {
-      reserveMove = needed === 1 ? planReserveMove(item, facts, reservePositions) : undefined;
+      reserveMove =
+        needed === 1 ? planReserveMove(item, facts, reservePositions, declaredMoveKeys) : undefined;
       if (reserveMove === undefined) {
         reasons.push({
           code: "roster_full",
@@ -2022,6 +2235,71 @@ function evaluateItem(
     ...(reserveMove === undefined ? {} : { reserveMove }),
     staleness: checked(reasons, legality.reasons, at),
   };
+}
+
+function evaluateSlotMoveItem(
+  item: ProposalItemRecord,
+  facts: TeamFacts,
+  at: DateTime.Utc,
+): ProposalItemChange {
+  const move = item.slotMove;
+  if (move === undefined) {
+    return {
+      id: item.id,
+      adds: [],
+      drops: [],
+      staleness: staleCheck(
+        [
+          {
+            code: "state_unavailable",
+            detail: "This slot move names no player and destination slot, so it cannot be planned.",
+          },
+        ],
+        at,
+      ),
+    };
+  }
+  const player = facts.roster.players.find((entry) => entry.providerPlayerKey === move.playerKey);
+  if (player === undefined) {
+    return {
+      id: item.id,
+      adds: [],
+      drops: [],
+      staleness: staleCheck(
+        [
+          {
+            code: "move_not_rostered",
+            playerKey: move.playerKey,
+            detail: `${move.playerName ?? "The moved player"} is no longer on this team's roster, so the move cannot be made.`,
+          },
+        ],
+        at,
+      ),
+    };
+  }
+  const illegal: Array<StoredProposalStaleReason> = [];
+  if (player.slot.status !== "verified") {
+    illegal.push({
+      code: "slot_illegal",
+      playerKey: player.providerPlayerKey,
+      detail: `The provider reports no verified slot for ${player.name}, so the move cannot be planned.`,
+    });
+  }
+  const slot = facts.league.rosterPositions.find((position) => position.position === move.toSlot);
+  if (slot === undefined) {
+    illegal.push({
+      code: "move_slot_unknown",
+      playerKey: player.providerPlayerKey,
+      detail: `The league does not declare a ${move.toSlot} slot, so ${player.name} cannot move there.`,
+    });
+  } else if (!slotAcceptsPositions(slot.eligibility, player.eligiblePositions)) {
+    illegal.push({
+      code: "slot_illegal",
+      playerKey: player.providerPlayerKey,
+      detail: `${player.name} is not eligible for the ${slot.position} slot: it does not accept their positions (${player.eligiblePositions.join(", ")}).`,
+    });
+  }
+  return { id: item.id, adds: [], drops: [], staleness: checked([], illegal, at) };
 }
 
 function evaluateTradeItem(
@@ -2381,7 +2659,29 @@ function proposalShape(
   draft: ProposalItemDraft,
 ): { readonly refusal: "kind_invalid" | "bid_invalid"; readonly detail: string } | undefined {
   const bid = draft.bid ?? undefined;
+  const move = draft.slotMove ?? undefined;
   switch (draft.kind) {
+    case "slot_move":
+      if (draft.adds.length > 0 || draft.drops.length > 0) {
+        return {
+          refusal: "kind_invalid",
+          detail:
+            "A slot move names one rostered player and one destination slot the league declares. It cannot also add or drop a player; use a separate item for that.",
+        };
+      }
+      if (move === undefined) {
+        return {
+          refusal: "kind_invalid",
+          detail:
+            "A slot move names the player to move, with `slotMove.player`, and the destination slot, with `slotMove.toSlot`.",
+        };
+      }
+      return bid === undefined
+        ? undefined
+        : {
+            refusal: "bid_invalid",
+            detail: "A slot move carries no FAAB bid. Use a waiver claim to spend a bid.",
+          };
     case "drop":
       if (draft.adds.length > 0) {
         return {
@@ -2394,6 +2694,12 @@ function proposalShape(
         return {
           refusal: "kind_invalid",
           detail: "A drop item names at least one player to drop.",
+        };
+      }
+      if (move !== undefined) {
+        return {
+          refusal: "kind_invalid",
+          detail: "Only a slot move item names a destination slot.",
         };
       }
       return bid === undefined
@@ -2409,6 +2715,12 @@ function proposalShape(
           detail: "A free-agent add names at least one player to add.",
         };
       }
+      if (move !== undefined) {
+        return {
+          refusal: "kind_invalid",
+          detail: "Only a slot move item names a destination slot.",
+        };
+      }
       return bid === undefined
         ? undefined
         : {
@@ -2422,6 +2734,12 @@ function proposalShape(
           detail: "A waiver claim names at least one player to add.",
         };
       }
+      if (move !== undefined) {
+        return {
+          refusal: "kind_invalid",
+          detail: "Only a slot move item names a destination slot.",
+        };
+      }
       return bid === undefined
         ? { refusal: "bid_invalid", detail: "A waiver claim requires a FAAB bid." }
         : undefined;
@@ -2431,6 +2749,12 @@ function proposalShape(
           refusal: "kind_invalid",
           detail:
             "A trade names at least one player going out and at least one player coming back. Draft picks are not part of a trade item.",
+        };
+      }
+      if (move !== undefined) {
+        return {
+          refusal: "kind_invalid",
+          detail: "Only a slot move item names a destination slot.",
         };
       }
       return bid === undefined
@@ -2448,6 +2772,7 @@ function proposalItemKey(input: {
   readonly counterpartyKey: string | undefined;
   readonly adds: ReadonlyArray<string>;
   readonly drops: ReadonlyArray<string>;
+  readonly slotMove: { readonly player: string; readonly toSlot: string } | undefined;
   readonly bid: number | undefined;
   readonly reason: string;
 }): string {
@@ -2457,6 +2782,8 @@ function proposalItemKey(input: {
     input.counterpartyKey ?? null,
     [...input.adds].sort(),
     [...input.drops].sort(),
+    input.slotMove?.player ?? null,
+    input.slotMove?.toSlot ?? null,
     input.bid ?? null,
     input.reason,
   ]);
@@ -2468,6 +2795,7 @@ function proposalMoveKey(
   counterpartyKey: string | undefined,
   adds: ReadonlyArray<string>,
   drops: ReadonlyArray<string>,
+  slotMove: { readonly player: string; readonly toSlot: string } | undefined,
   bid: number | undefined,
 ): string {
   return JSON.stringify([
@@ -2476,6 +2804,8 @@ function proposalMoveKey(
     counterpartyKey ?? null,
     [...adds].sort(),
     [...drops].sort(),
+    slotMove?.player ?? null,
+    slotMove?.toSlot ?? null,
     bid ?? null,
   ]);
 }
@@ -2487,6 +2817,10 @@ function recordItemKey(item: ProposalItemRecord): string {
     counterpartyKey: item.counterpartyKey,
     adds: item.adds.map((add) => add.key),
     drops: item.drops.map((drop) => drop.key),
+    slotMove:
+      item.slotMove === undefined
+        ? undefined
+        : { player: item.slotMove.playerKey, toSlot: item.slotMove.toSlot },
     bid: item.bid,
     reason: item.reason,
   });
@@ -2565,7 +2899,7 @@ function toItem(
   team: ProposalTeamRecord,
   record: ProposalItemRecord,
   facts: TeamFacts | undefined,
-  reserveMove: StoredReserveMove | undefined,
+  repair: StoredReserveMove | undefined,
   steps: ReadonlyArray<ProposalStepRecord> | undefined,
 ): Effect.Effect<ProposalItem, ProposalPersistenceFailed> {
   return Effect.gen(function* () {
@@ -2585,14 +2919,26 @@ function toItem(
     );
     const reasonRefs = yield* tokens.sealPlayerRefs({ userId, leagueKey, playerKeys: reasonKeys });
     const executionSteps = steps ?? [];
-    const stepKeys = [
-      ...executionSteps.map((step) => step.playerKey),
-      ...(reserveMove === undefined ? [] : [reserveMove.playerKey]),
-    ];
-    const stepRefs = yield* tokens.sealPlayerRefs({ userId, leagueKey, playerKeys: stepKeys });
     const rostered = new Map(
       (facts?.roster.players ?? []).map((player) => [player.providerPlayerKey, player] as const),
     );
+    const declared = record.kind === "slot_move" ? record.slotMove : undefined;
+    const rosterPlayer = declared === undefined ? undefined : rostered.get(declared.playerKey);
+    const slotMove: MoveViewSource | undefined =
+      declared === undefined
+        ? undefined
+        : {
+            playerKey: declared.playerKey,
+            playerName: rosterPlayer?.name ?? declared.playerName,
+            fromSlot: rosterPlayer?.slot.status === "verified" ? rosterPlayer.slot.slot : undefined,
+            toSlot: declared.toSlot,
+          };
+    const stepKeys = [
+      ...executionSteps.map((step) => step.playerKey),
+      ...(slotMove === undefined ? [] : [slotMove.playerKey]),
+      ...(repair === undefined ? [] : [repair.playerKey]),
+    ];
+    const stepRefs = yield* tokens.sealPlayerRefs({ userId, leagueKey, playerKeys: stepKeys });
     const counterpartyRoster =
       record.counterpartyKey === undefined
         ? undefined
@@ -2631,10 +2977,12 @@ function toItem(
               decidedAt: step.decidedAt,
             })),
           };
+    const slot =
+      slotMove === undefined ? undefined : moveView(slotMove, stepRefs, executionSteps.length);
     const reserve =
-      reserveMove === undefined
+      repair === undefined
         ? undefined
-        : reserveMoveView(reserveMove, stepRefs, executionSteps.length);
+        : moveView(repair, stepRefs, executionSteps.length + (slotMove === undefined ? 0 : 1));
     return yield* Schema.decodeEffect(ProposalItemSchema)({
       id: record.id,
       team: record.team,
@@ -2694,6 +3042,7 @@ function toItem(
         }),
       },
       ...(execution === undefined ? {} : { execution }),
+      ...(slot === undefined ? {} : { slotMove: slot }),
       ...(reserve === undefined ? {} : { reserveMove: reserve }),
       ...(counterpartyRef === undefined
         ? {}
@@ -2733,21 +3082,28 @@ function toItem(
   });
 }
 
-function reserveMoveView(
-  move: StoredReserveMove,
+function moveView(
+  move: MoveViewSource,
   refs: ReadonlyArray<PlayerRef>,
   index: number,
-): ProposalItem["reserveMove"] {
+): ProposalItem["slotMove"] {
   const ref = Array.getUnsafe(refs, index);
   return {
     player: {
       ref,
       ...(move.playerName === undefined ? {} : { name: move.playerName }),
     },
-    fromSlot: move.fromSlot,
+    ...(move.fromSlot === undefined ? {} : { fromSlot: move.fromSlot }),
     toSlot: move.toSlot,
   };
 }
+
+type MoveViewSource = {
+  readonly playerKey: string;
+  readonly playerName?: string;
+  readonly fromSlot?: string;
+  readonly toSlot: string;
+};
 
 function displayValue(
   primary: string | undefined,
@@ -2767,6 +3123,9 @@ function checkOutcomeDetail(staleness: StoredProposalStaleness | undefined): str
 }
 
 function executableRefusal(item: ProposalItemRecord): string | undefined {
+  if (item.kind === "slot_move") {
+    return "This is a same-roster slot move, not a transaction, and this version only plans it. Nothing was sent.";
+  }
   if (item.adds.length + item.drops.length === 0) {
     return "This move names no player to add or drop, so there is nothing to send.";
   }
@@ -2804,6 +3163,9 @@ function stoppedDetailFor(item: ProposalItemRecord, outcome: ProposalOutcome): s
 }
 
 function moveLabel(item: ProposalItemRecord): string {
+  if (item.kind === "slot_move" && item.slotMove !== undefined) {
+    return `Moving ${item.slotMove.playerName ?? "a player"} to ${item.slotMove.toSlot}`;
+  }
   const adds = item.adds.flatMap((add) => (add.name === undefined ? [] : [add.name]));
   const drops = item.drops.flatMap((drop) => (drop.name === undefined ? [] : [drop.name]));
   if (item.kind === "trade" && adds.length > 0 && drops.length > 0) {
@@ -2912,6 +3274,7 @@ function planReserveMove(
   item: ProposalItemRecord,
   facts: TeamFacts,
   reserves: ProviderLeagueSettings["rosterPositions"],
+  declaredMoveKeys: ReadonlySet<string>,
 ): StoredReserveMove | undefined {
   const reserveNames = new Set(reserves.map((position) => position.position));
   const occupants = new Map<string, number>();
@@ -2935,13 +3298,12 @@ function planReserveMove(
         player.slot.status === "verified" &&
         !reserveNames.has(player.slot.slot) &&
         !addKeys.has(player.providerPlayerKey) &&
-        !dropKeys.has(player.providerPlayerKey),
+        !dropKeys.has(player.providerPlayerKey) &&
+        !declaredMoveKeys.has(player.providerPlayerKey),
     )
     .flatMap((player) => {
-      const target = open.find(
-        (entry) =>
-          entry.eligibility.length === 0 ||
-          entry.eligibility.some((position) => player.eligiblePositions.includes(position)),
+      const target = open.find((entry) =>
+        slotAcceptsPositions(entry.eligibility, player.eligiblePositions),
       );
       return target === undefined
         ? []
@@ -2975,6 +3337,7 @@ function illegalSlots(
   facts: TeamFacts,
   droppedKeys: ReadonlySet<string>,
   mode: "repair" | "refuse",
+  declaredMoveKeys: ReadonlySet<string> = new Set(),
 ): {
   readonly reasons: ReadonlyArray<StoredProposalStaleReason>;
   readonly repair: StoredReserveMove | undefined;
@@ -2986,16 +3349,18 @@ function illegalSlots(
   const reasons: Array<StoredProposalStaleReason> = [];
   let repair: StoredReserveMove | undefined;
   for (const player of facts.roster.players) {
-    if (player.slot.status !== "verified" || droppedKeys.has(player.providerPlayerKey)) {
+    if (
+      player.slot.status !== "verified" ||
+      droppedKeys.has(player.providerPlayerKey) ||
+      declaredMoveKeys.has(player.providerPlayerKey)
+    ) {
       continue;
     }
     const slot = slotsByName.get(player.slot.slot);
     if (slot === undefined) {
       continue;
     }
-    const acceptsPositions =
-      slot.eligibility.length === 0 ||
-      slot.eligibility.some((position) => player.eligiblePositions.includes(position));
+    const acceptsPositions = slotAcceptsPositions(slot.eligibility, player.eligiblePositions);
     if (acceptsPositions) {
       continue;
     }
@@ -3033,9 +3398,7 @@ function openSlotFor(
       if (slot.position === current) {
         return false;
       }
-      const acceptsPositions =
-        slot.eligibility.length === 0 ||
-        slot.eligibility.some((position) => player.eligiblePositions.includes(position));
+      const acceptsPositions = slotAcceptsPositions(slot.eligibility, player.eligiblePositions);
       return acceptsPositions && (occupancy.get(slot.position) ?? 0) < slot.count;
     })
     .sort((left, right) => kindOrder[left.kind] - kindOrder[right.kind])[0];

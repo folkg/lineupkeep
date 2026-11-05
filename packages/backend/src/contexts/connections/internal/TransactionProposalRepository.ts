@@ -25,6 +25,7 @@ import type {
   ProposalSetRecord,
   ProposalStepRecord,
   ProposalTeamRecord,
+  StoredSlotMove,
   StoredProposalPlayer,
   StoredProposalStaleness,
   StoredProposalTrade,
@@ -45,6 +46,7 @@ export type ProposalItemCommand = {
   readonly kind: ProposalItemKind;
   readonly adds: ReadonlyArray<StoredProposalPlayer>;
   readonly drops: ReadonlyArray<StoredProposalPlayer>;
+  readonly slotMove: StoredSlotMove | undefined;
   readonly counterpartyKey: string | undefined;
   readonly counterpartyName: string | undefined;
   readonly bid: number | undefined;
@@ -159,6 +161,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                   kind: item.kind,
                   addPlayers: item.adds,
                   dropPlayers: item.drops,
+                  slotMove: item.slotMove ?? null,
                   counterpartyTeamKey: item.counterpartyKey ?? null,
                   counterpartyName: item.counterpartyName ?? null,
                   bid: item.bid ?? null,

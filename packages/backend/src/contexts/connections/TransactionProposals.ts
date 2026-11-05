@@ -32,6 +32,7 @@ export const ProposalItemKind = Schema.Literals([
   "waiver_claim",
   "drop",
   "trade",
+  "slot_move",
 ]);
 export type ProposalItemKind = typeof ProposalItemKind.Type;
 
@@ -71,8 +72,12 @@ export type ProposalStalenessStatus = typeof ProposalStalenessStatus.Type;
 export const ProposalStaleCode = Schema.Literals([
   "player_unavailable",
   "drop_not_rostered",
+  "move_not_rostered",
+  "move_slot_unknown",
   "roster_full",
   "slot_illegal",
+  "order_conflict",
+  "order_unresolved",
   "period_closed",
   "bid_exceeds_budget",
   "bid_not_available",
@@ -125,10 +130,17 @@ type ProposalItemExecution = typeof ProposalItemExecution.Type;
 
 const ProposalReserveMove = Schema.Struct({
   player: ProposalStepPlayer,
-  fromSlot: Schema.NonEmptyString,
+  fromSlot: Schema.optional(Schema.NonEmptyString),
   toSlot: Schema.NonEmptyString,
 });
 type ProposalReserveMove = typeof ProposalReserveMove.Type;
+
+const ProposalSlotMove = Schema.Struct({
+  player: ProposalStepPlayer,
+  fromSlot: Schema.optional(Schema.NonEmptyString),
+  toSlot: Schema.NonEmptyString,
+});
+type ProposalSlotMove = typeof ProposalSlotMove.Type;
 
 const ProposalStaleReason = Schema.Struct({
   code: ProposalStaleCode,
@@ -172,6 +184,7 @@ export const ProposalItem = Schema.Struct({
   staleness: ProposalStaleness,
   execution: Schema.optional(ProposalItemExecution),
   reserveMove: Schema.optional(ProposalReserveMove),
+  slotMove: Schema.optional(ProposalSlotMove),
   counterparty: Schema.optional(ProposalCounterparty),
   trade: Schema.optional(ProposalTrade),
   createdAt: Schema.DateTimeUtc,
@@ -234,6 +247,41 @@ export const PendingTradeOffer = Schema.Struct({
 });
 export type PendingTradeOffer = typeof PendingTradeOffer.Type;
 
+const ProposalOrderTiming = Schema.Literals([
+  "same_day",
+  "next_day",
+  "weekly_lock",
+  "not_published",
+]);
+
+const ProposalOrderStep = Schema.Struct({ item: ProposalItemId });
+
+const ProposalOrderConflict = Schema.Struct({
+  items: Schema.Array(ProposalItemId),
+  detail: Schema.NonEmptyString,
+});
+
+const ProposalOrderDecision = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("ordered"),
+    timing: ProposalOrderTiming,
+    effectiveDate: Schema.optional(Schema.NonEmptyString),
+    steps: Schema.Array(ProposalOrderStep),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("conflict"),
+    timing: ProposalOrderTiming,
+    effectiveDate: Schema.optional(Schema.NonEmptyString),
+    conflicts: Schema.Array(ProposalOrderConflict),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unresolved"),
+    timing: ProposalOrderTiming,
+    effectiveDate: Schema.optional(Schema.NonEmptyString),
+    detail: Schema.NonEmptyString,
+  }),
+]);
+
 const ProposalTradeRules = Schema.Struct({
   endDate: Schema.optional(Schema.NonEmptyString),
   ratification: Schema.optional(Schema.Literals(["vote", "commissioner", "none", "unknown"])),
@@ -245,6 +293,7 @@ export const ProposalTeam = Schema.Struct({
   team: QueryTeam,
   budget: Schema.optional(ProposalBudget),
   tradeRules: Schema.optional(ProposalTradeRules),
+  order: Schema.optional(ProposalOrderDecision),
   failure: Schema.optional(Schema.NonEmptyString),
   items: Schema.Array(ProposalItem),
   pendingOffers: Schema.Array(PendingTradeOffer),
@@ -295,11 +344,17 @@ const ProposalBid = Schema.Int.check(
   Schema.isLessThanOrEqualTo(1_000_000),
 );
 
+const ProposalSlotMoveDraft = Schema.Struct({
+  player: PlayerRef,
+  toSlot: Schema.NonEmptyString,
+});
+
 export const ProposalItemDraft = Schema.Struct({
   team: TeamId,
   kind: ProposalItemKind,
   adds: Schema.Array(PlayerRef).pipe(Schema.check(Schema.isMaxLength(10))),
   drops: Schema.Array(PlayerRef).pipe(Schema.check(Schema.isMaxLength(10))),
+  slotMove: Schema.optional(Schema.NullOr(ProposalSlotMoveDraft)),
   counterparty: Schema.optional(Schema.NullOr(CounterpartyRef)),
   bid: Schema.optional(Schema.NullOr(ProposalBid)),
   reason: ProposalReason,

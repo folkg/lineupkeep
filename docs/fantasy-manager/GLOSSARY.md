@@ -341,12 +341,20 @@ One agent or person's proposed player transactions across any of their own teams
 _Avoid_: Proposal when the whole set is meant, batch, review queue
 
 **Proposal item**:
-One team's proposed transaction inside a proposal set: the players to add, the players to drop, an optional FAAB bid, a required reason, the provider player references, and its state and check. A proposal set holds one item per distinct move.
+One team's proposed operation inside a proposal set: the players to add, the players to drop, the player and destination slot of a slot move, an optional FAAB bid, a required reason, the provider player references, and its state and check. A proposal set holds one item per distinct move.
 _Avoid_: Proposal when one item is meant, transaction when it is not yet executed
 
 **Proposal item kind**:
-Which shape a proposal item takes: a free-agent add (players added, no bid), a waiver claim (players added with a FAAB bid), a drop (players dropped only), or a trade (players going out and coming back with one counterparty team, no bid, no draft picks). A waiver claim is the only kind that spends a budget, so it is never presented as a free-agent add. A trade is an offer to another manager, not a change either manager has made.
+Which shape a proposal item takes: a free-agent add (players added, no bid), a waiver claim (players added with a FAAB bid), a drop (players dropped only), a slot move (one rostered player moved to one named slot the league declares, including a reserve list; no add, drop, bid, or counterparty), or a trade (players going out and coming back with one counterparty team, no bid, no draft picks). A waiver claim is the only kind that spends a budget, so it is never presented as a free-agent add. A trade is an offer to another manager, not a change either manager has made. A slot move names only its destination; the server decides when it can run. It is not a lineup write and never changes the team's membership.
 _Avoid_: Claim when the bid is not part of it, move, action
+
+**Slot move**:
+One rostered player's move to a named slot on the same team, either declared as its own proposal item or added by the server as a repair before an add. The destination must be a slot the league declares and that accepts the player's positions; the client names the destination and never the order. A server-added repair is specifically a move into a reserve list to open a non-reserve roster spot. A slot move is not a lineup assignment for a period and not an add, drop, or trade.
+_Avoid_: Reserve move when any slot is meant, position change, lineup change
+
+**Proposal order**:
+The sequence the server chooses for one team's current proposal items so every step leaves the roster legal under the league's own slots. It is computed against the league's published roster-change date and is reported to the client, never accepted from it. A player the provider reports as locked cannot be moved on that date. When no order keeps the roster legal at every step, the refusal names the conflicting operations and says they cannot both be legal on the same date. An order the server could not decide within its stated search bound is unresolved, not refused.
+_Avoid_: Client order, priority, queue, greedy plan
 
 **Proposal item state**:
 Where a proposal item sits in its lifecycle: proposed (its initial state), executed (the provider accepted the whole move), pending (a waiver claim the provider has not processed, or a trade offer awaiting the other manager), failed (an attempt was made and did not succeed), skipped (a person left it out, it was stale or illegal at submit, an earlier move stopped its team, or a team's connection changed), unknown (a request that may or may not have applied), or, for a trade, accepted (the counterparty accepted it), withdrawn (we withdrew it before acceptance), or expired (the provider no longer lists it and did not complete it). Staleness and illegality are not states: a stale or illegal item keeps its state and carries the reason it cannot be submitted.
@@ -357,11 +365,11 @@ Whether a proposal item still matches a state the provider would accept, recorde
 _Avoid_: Expired when the provider state changed, failed, invalid, stale when the roster is illegal
 
 **Illegal roster position**:
-A rostered player whose current slot does not accept any of his positions. The league declares each slot's eligibility; a reserve slot is one such slot, not a special case. It blocks every transaction for that team, not only a move that names him. When an open slot accepts him, the proposal carries a roster move before the transaction; otherwise it refuses and names the player, the slot, and the choice only the person can make. It is not a failed move and not staleness.
+A rostered player whose current slot does not accept any of his positions. The league declares each slot's eligibility; a reserve slot is one such slot, not a special case. It blocks every transaction for that team, not only a move that names him. When an open slot accepts him, the proposal's order carries a slot move before the transaction; a person may also declare that move as its own item. Otherwise it refuses and names the player, the slot, and the choice only the person can make. It is not a failed move and not staleness.
 _Avoid_: Stale player, invalid player when the slot is meant, unhealthy player when eligibility is meant
 
 **Proposal check reason**:
-The named cause a proposal item is stale or illegal: the added player is no longer available in the pool, a dropped player is no longer on the roster, the roster would exceed its declared capacity, a rostered player's slot does not accept him, the league's period has closed, the bid exceeds the team's remaining FAAB budget, the league does not use a FAAB budget, or the team's current state could not be read. Each carries a readable detail and, where it names a player, that player's reference.
+The named cause a proposal item is stale or illegal: the added player is no longer available in the pool, a dropped player is no longer on the roster, a moved player is no longer on the roster, a destination slot is not one the league declares, the roster would exceed its declared capacity, a rostered player's slot does not accept him, no order keeps the roster legal, the order could not be decided within its search bound, the league's period has closed, the bid exceeds the team's remaining FAAB budget, the league does not use a FAAB budget, or the team's current state could not be read. Each carries a readable detail and, where it names a player, that player's reference.
 _Avoid_: Error, failure, conflict, stale reason when an illegal slot is meant
 
 **Proposal set expiry**:
@@ -377,7 +385,7 @@ The result recorded for a proposal item or one of its steps: executed, pending o
 _Avoid_: Success, done when a claim is pending, error when no attempt was made
 
 **Execution step**:
-One recorded action inside a proposal item: an optional reserve move that frees a roster spot, then the add or drop movement sent in the provider transaction. Each step carries its own outcome and the provider's wording when it failed, so a swap cannot half-apply without being reported.
+One recorded action inside a proposal item: a reserve move added by the server to free a roster spot, then the add or drop movement sent in the provider transaction. Each step carries its own outcome and the provider's wording when it failed, so a swap cannot half-apply without being reported.
 _Avoid_: Sub-transaction, retry, hidden precondition
 
 **Proposal review**:

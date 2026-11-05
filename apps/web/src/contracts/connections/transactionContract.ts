@@ -40,7 +40,13 @@ export type TransactionReviewExecutionView = {
 
 type TransactionReviewReserveMoveView = {
   readonly playerName?: string;
-  readonly fromSlot: string;
+  readonly fromSlot?: string;
+  readonly toSlot: string;
+};
+
+type TransactionReviewSlotMoveView = {
+  readonly playerName?: string;
+  readonly fromSlot?: string;
   readonly toSlot: string;
 };
 
@@ -106,6 +112,7 @@ export type TransactionReviewItemView = {
   };
   readonly execution?: TransactionReviewExecutionView;
   readonly reserveMove?: TransactionReviewReserveMoveView;
+  readonly slotMove?: TransactionReviewSlotMoveView;
   readonly counterparty?: TransactionReviewCounterpartyView;
   readonly trade?: TransactionReviewTradeView;
 };
@@ -115,6 +122,29 @@ export type TransactionReviewTradeRulesView = {
   readonly ratification?: "vote" | "commissioner" | "none" | "unknown";
   readonly objectionDays?: number;
 };
+
+export type TransactionReviewOrderView =
+  | {
+      readonly status: "ordered";
+      readonly timing: "same_day" | "next_day" | "weekly_lock" | "not_published";
+      readonly effectiveDate?: string;
+      readonly steps: ReadonlyArray<{ readonly item: string }>;
+    }
+  | {
+      readonly status: "conflict";
+      readonly timing: "same_day" | "next_day" | "weekly_lock" | "not_published";
+      readonly effectiveDate?: string;
+      readonly conflicts: ReadonlyArray<{
+        readonly items: ReadonlyArray<string>;
+        readonly detail: string;
+      }>;
+    }
+  | {
+      readonly status: "unresolved";
+      readonly timing: "same_day" | "next_day" | "weekly_lock" | "not_published";
+      readonly effectiveDate?: string;
+      readonly detail: string;
+    };
 
 export type TransactionReviewTeamView = {
   readonly team: {
@@ -128,6 +158,7 @@ export type TransactionReviewTeamView = {
     | { readonly status: "published"; readonly remaining: number }
     | { readonly status: "not_published"; readonly detail: string };
   readonly tradeRules?: TransactionReviewTradeRulesView;
+  readonly order?: TransactionReviewOrderView;
   readonly failure?: string;
   readonly items: ReadonlyArray<TransactionReviewItemView>;
   readonly pendingOffers: ReadonlyArray<TransactionReviewPendingOfferView>;

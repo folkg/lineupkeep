@@ -428,6 +428,19 @@ function freeAgentItem(): TransactionReviewItemView {
   };
 }
 
+function slotMoveItem(): TransactionReviewItemView {
+  return {
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b8",
+    kind: "slot_move",
+    adds: [],
+    drops: [],
+    slotMove: { playerName: "Casey Moss", fromSlot: "IR", toSlot: "BN" },
+    reason: "Move the reserve center to the bench.",
+    state: "proposed",
+    staleness: { status: "current", checkedAt: now, reasons: [] },
+  };
+}
+
 function dropItem(): TransactionReviewItemView {
   return {
     id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b4",
@@ -453,6 +466,95 @@ function player(
     ...(availability === undefined ? {} : { availability }),
   };
 }
+
+it("shows the order the server chose before the moves", async () => {
+  const base = reviewFixture();
+  const alpha = base.teams[0];
+  if (alpha === undefined) {
+    throw new Error("the review fixture has an alpha team");
+  }
+  using _app = setupReviewPage({
+    ...base,
+    teams: [
+      {
+        ...alpha,
+        order: {
+          status: "ordered",
+          timing: "same_day",
+          effectiveDate: "2026-11-04",
+          steps: [{ item: waiverItem().id }, { item: freeAgentItem().id }],
+        },
+      },
+      ...base.teams.slice(1),
+    ],
+  });
+
+  await expect.element(page.getByText("Server order", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("1. Add Sam Rivers and drop Alex Vance", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(page.getByText("2. Add Mika Olsen and drop Tomas Berg", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(page.getByText("The league applies these moves on 2026-11-04.", { exact: true }))
+    .toBeVisible();
+});
+
+it("shows a refusal that names both operations when no order keeps the lineup legal", async () => {
+  const base = reviewFixture();
+  const alpha = base.teams[0];
+  if (alpha === undefined) {
+    throw new Error("the review fixture has an alpha team");
+  }
+  const move = waiverItem();
+  const drop = dropItem();
+  const detail =
+    "Moving Roster Three to BN needs a free BN slot, and it is full. Dropping Roster One frees the C slot, not BN. The two operations cannot both be legal on 2026-11-04.";
+  using _app = setupReviewPage({
+    ...base,
+    teams: [
+      {
+        ...alpha,
+        order: {
+          status: "conflict",
+          timing: "same_day",
+          effectiveDate: "2026-11-04",
+          conflicts: [{ items: [move.id, drop.id], detail }],
+        },
+      },
+      ...base.teams.slice(1),
+    ],
+  });
+
+  await expect
+    .element(page.getByText("No order keeps the lineup legal", { exact: true }))
+    .toBeVisible();
+  await expect.element(page.getByText(detail, { exact: true })).toBeVisible();
+});
+
+it("shows a declared slot move as its own move", async () => {
+  const base = reviewFixture();
+  using _app = setupReviewPage({
+    ...base,
+    teams: [
+      teamFixture(alphaId, "Alpha", "nfl", "football", [slotMoveItem()]),
+      ...base.teams.slice(1),
+    ],
+  });
+
+  await expect
+    .element(
+      page.getByText(
+        "Move Casey Moss to BN. The server places this move in the order where the roster stays legal.",
+        { exact: true },
+      ),
+    )
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("checkbox", { name: /Include: Move Casey Moss to BN/u }))
+    .toBeVisible();
+});
 
 it("shows a roster move before the transaction", async () => {
   const base = reviewFixture();
