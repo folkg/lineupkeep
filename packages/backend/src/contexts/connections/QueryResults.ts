@@ -571,11 +571,38 @@ export const RosterDetail = Schema.Literals(["compact", "full"]);
 export type RosterDetail = typeof RosterDetail.Type;
 
 export const GetRostersInput = Schema.Struct({
-  team: TeamId,
-  period: Schema.optional(QueryPeriod),
+  team: TeamId.pipe(
+    Schema.annotate({
+      description:
+        "The linked team whose league scopes this read. With `scope: \"team\"` it is the team whose roster is read; with `scope: \"league\"` it supplies the league and the ownership boundary, and every team in that league is read.",
+    }),
+  ),
+  scope: Schema.optional(
+    Schema.Literals(["team", "league"]).pipe(
+      Schema.annotate({
+        description:
+          '`team` reads one linked team and pages its players. `league` reads every roster in the linked team\'s league, including teams the account does not own, and pages whole teams: a page boundary never splits a roster. The default is `team`.',
+      }),
+    ),
+  ),
+  period: Schema.optional(
+    QueryPeriod.pipe(
+      Schema.annotate({
+        description:
+          "The exact league week for a `team` read. The provider publishes its league-wide roster output only for its current coverage, so a `league` read refuses this argument instead of reading the teams one at a time; the result's `period` or coverage states the current week or date.",
+      }),
+    ),
+  ),
   detail: Schema.optional(RosterDetail),
   cursor: Schema.optional(Cursor),
-  limit: Schema.optional(PageLimit),
+  limit: Schema.optional(
+    PageLimit.pipe(
+      Schema.annotate({
+        description:
+          "The most rows this page may carry: players for `scope: \"team\"`, whole teams for `scope: \"league\"`. The result's `page.size` repeats the bound, `page.total` states the row count in the league roster read, and `page.returned` is the actual count after the result budget.",
+      }),
+    ),
+  ),
 });
 export type GetRostersInput = typeof GetRostersInput.Type;
 
@@ -645,9 +672,49 @@ export const RosterData = Schema.Struct({
   budget: QueryBudget,
 });
 export type RosterData = typeof RosterData.Type;
-export const RosterResult = Schema.Union([RosterData, NarrowingResult]);
-export type RosterResult = typeof RosterResult.Type;
 
+export const LeagueRosterTeam = Schema.Struct({
+  team: CounterpartyRef.pipe(
+    Schema.annotate({
+      description:
+        "The provider team's private reference, sealed for this owner and league. It opens in this league's counterparty reads and nowhere else, and is the same reference shape offers and transactions carry.",
+    }),
+  ),
+  name: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description: "The provider team name for display. Identity is the private reference, never the name.",
+    }),
+  ),
+  owned: Schema.Boolean.pipe(
+    Schema.annotate({
+      description:
+        "Whether this account linked the team. An unowned team is a rival in the same league; its players are still readable here.",
+    }),
+  ),
+  players: Schema.Array(RosterPlayer).pipe(
+    Schema.annotate({
+      description:
+        "The team's whole roster for this read. A league page never splits a roster across pages.",
+    }),
+  ),
+});
+export type LeagueRosterTeam = typeof LeagueRosterTeam.Type;
+
+export const LeagueRosterData = Schema.Struct({
+  status: QueryStatus,
+  scope: Schema.Literal("league"),
+  team: QueryTeam,
+  period: Schema.optional(QueryPeriod),
+  coverage: Schema.Array(QueryCoverage),
+  teams: Schema.Array(LeagueRosterTeam),
+  failures: Schema.Array(QueryFailure),
+  page: QueryPage,
+  budget: QueryBudget,
+});
+export type LeagueRosterData = typeof LeagueRosterData.Type;
+
+export const RosterResult = Schema.Union([RosterData, LeagueRosterData, NarrowingResult]);
+export type RosterResult = typeof RosterResult.Type;
 export const PlayerGroup = Schema.Literals([
   "identity",
   "availability",

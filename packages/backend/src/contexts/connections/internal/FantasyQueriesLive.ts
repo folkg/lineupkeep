@@ -11,6 +11,7 @@ import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts
 import type {
   ProviderAcquisitionUsage,
   ProviderDraftPick,
+  ProviderLeagueRoster,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderPeriodWindow,
@@ -48,6 +49,7 @@ import type {
   GetTransactionsInput,
   LeagueData,
   LeagueGroup,
+  LeagueRosterData,
   ListTeamsInput,
   MatchupsData,
   PlayersData,
@@ -78,6 +80,7 @@ import {
   ListTeamsData,
   MatchupsData as MatchupsSchema,
   PlayersData as PlayersSchema,
+  LeagueRosterData as LeagueRosterSchema,
   RosterData as RosterSchema,
   SearchPlayersData as SearchPlayersSchema,
   TransactionsData as TransactionsSchema,
@@ -91,6 +94,7 @@ import {
   type QueryPeriod,
   type QueryStatus,
   type CounterpartyRef,
+  type PlayerRef,
   type QueryTeam,
   type StatPeriod,
   QueryPersistenceFailed,
@@ -857,11 +861,119 @@ export const FantasyQueriesLive = Layer.effect(
       });
     });
 
+    const getLeagueRosters = (
+      userId: UserId,
+      context: TeamContext,
+      input: GetRostersInput,
+    ): Effect.Effect<RosterResult, QueryError> =>
+      Effect.gen(function* () {
+        const team = queryTeam(context.owned);
+        const detail: RosterDetail = input.detail ?? "compact";
+        const fetchedAt = yield* DateTime.now;
+        if (input.period !== undefined) {
+          return yield* QuerySelectionInvalid.make({
+            detail:
+              'A `scope: "league"` roster read returns the provider\'s current coverage for every team. The provider publishes no league-wide roster for a selected week, and this server will not read the teams one at a time, so omit `period` or use `scope: "team"` for one linked team\'s exact week.',
+          });
+        }
+        const leagueKey = context.owned.team.providerLeagueKey;
+        const outcome = yield* readOutcome(
+          context,
+          "roster",
+          context.provider.readLeagueRosters({
+            ...providerIdentity(context),
+            providerLeagueKey: leagueKey,
+          }),
+        );
+        if (outcome._tag !== "ok") {
+          return leagueRostersWithoutData(team, fetchedAt, outcome);
+        }
+        const ownedKeys = yield* repository.readLeagueOwnedTeamKeys({
+          userId,
+          provider: context.owned.connection.provider,
+          providerLeagueKey: leagueKey,
+        });
+        const rosters = outcome.value;
+        const teamRefs = yield* tokens.sealCounterpartyRefs({
+          userId,
+          leagueKey,
+          teamKeys: rosters.map((roster) => roster.providerTeamKey),
+        });
+        const playerRefs = yield* tokens.sealPlayerRefs({
+          userId,
+          leagueKey,
+          playerKeys: rosters.flatMap((roster) =>
+            roster.players.map((player) => player.providerPlayerKey),
+          ),
+        });
+        const owned = new Set(ownedKeys);
+        let playerIndex = 0;
+        const teams = rosters.map((roster, index) => ({
+          team: EffectArray.getUnsafe(teamRefs, index),
+          name: roster.name,
+          owned: owned.has(roster.providerTeamKey),
+          players: roster.players.map((player) => {
+            const ref = EffectArray.getUnsafe(playerRefs, playerIndex);
+            playerIndex += 1;
+            return rosterRow(player, ref, detail);
+          }),
+        }));
+        const batchCoverage = rosters[0]?.coverage;
+        if (batchCoverage === undefined) {
+          throw new Error("A league roster read returns at least one team roster.");
+        }
+        const rosterCoverage =
+          batchCoverage.type === "week"
+            ? coverage("roster", "league_rosters", fetchedAt, { week: batchCoverage.week })
+            : coverage(
+                "roster",
+                "league_rosters",
+                fetchedAt,
+                undefined,
+                `Date-scoped league rosters for ${batchCoverage.date}`,
+              );
+        const fingerprintValue = yield* queryFingerprint(
+          `rosters|scope=league|team=${input.team}|detail=${detail}|order=team_key`,
+        );
+        const now = yield* DateTime.now;
+        const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
+        const pageSize = input.limit ?? 50;
+        const base: Omit<LeagueRosterData, "teams" | "page"> = {
+          status: "ok",
+          scope: "league",
+          team,
+          ...(batchCoverage.type === "week" ? { period: { week: batchCoverage.week } } : {}),
+          coverage: [rosterCoverage],
+          failures: [],
+          budget: playerListBudget,
+        };
+        return yield* fitPage({
+          schema: LeagueRosterSchema,
+          rows: teams,
+          offset,
+          limit: pageSize,
+          pageSize,
+          total: teams.length,
+          budget: playerListBudget,
+          resource: "roster.teams",
+          groups: [detail],
+          remedy:
+            "Request fewer teams with `limit`, or use `detail: compact`. A league page keeps every team's roster whole.",
+          build: (pageRows, page) => ({ ...base, teams: [...pageRows], page }),
+          makeNext: (nextOffset) =>
+            tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
+          recordLabel: (row) => row.team,
+        });
+      });
+
     const getRosters = Effect.fn("FantasyQueries.getRosters")(function* (
       userId: UserId,
       input: GetRostersInput,
     ) {
       const context = yield* loadContext(userId, input.team);
+      if ((input.scope ?? "team") === "league") {
+        return yield* getLeagueRosters(userId, context, input);
+      }
       const team = queryTeam(context.owned);
       const detail: RosterDetail = input.detail ?? "compact";
       const fetchedAt = yield* DateTime.now;
@@ -3357,6 +3469,27 @@ function leagueWithoutData(
     failures: leagueFailure(outcome),
     page: emptyPage(),
     budget: queryBudget,
+  };
+}
+
+function leagueRostersWithoutData(
+  team: QueryTeam,
+  fetchedAt: DateTime.Utc,
+  outcome: FailureOutcome,
+): LeagueRosterData {
+  return {
+    status: outcome._tag === "unsupported" ? "unsupported" : "failed",
+    scope: "league",
+    team,
+    teams: [],
+    coverage: [
+      outcome._tag === "unsupported"
+        ? unsupportedCoverage("roster", "league_rosters", fetchedAt, outcome.detail)
+        : degradedCoverage("roster", "league_rosters", fetchedAt, outcome.failure.message),
+    ],
+    failures: outcome._tag === "failed" ? [outcome.failure] : [],
+    page: emptyPage(),
+    budget: playerListBudget,
   };
 }
 

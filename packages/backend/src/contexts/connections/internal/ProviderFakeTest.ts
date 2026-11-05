@@ -17,6 +17,7 @@ import type {
   ProviderDraftPick,
   ProviderGamesPlayed,
   ProviderLeagueSettings,
+  ProviderLeagueRoster,
   ProviderLeagueTeam,
   ProviderLineupAssignment,
   ProviderScoreOutcome,
@@ -94,6 +95,7 @@ type FakeProviderState = {
   readonly pendingTrades: ReadonlyArray<ProviderPendingTrade>;
   readonly draftResults: ReadonlyArray<ProviderDraftPick>;
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
+  readonly leagueRosters: ReadonlyArray<ProviderLeagueRoster> | undefined;
   readonly unsupported: ReadonlySet<ProviderOperation>;
   readonly reviewLinkFailure: ProviderReviewLinkInvalid | undefined;
   readonly reviewLinkUrl: string | undefined;
@@ -164,6 +166,9 @@ export type FakeProviderWorldShape = {
   readonly setPendingTrades: (trades: ReadonlyArray<ProviderPendingTrade>) => Effect.Effect<void>;
   readonly setDraftResults: (picks: ReadonlyArray<ProviderDraftPick>) => Effect.Effect<void>;
   readonly setLeagueTeams: (teams: ReadonlyArray<ProviderLeagueTeam>) => Effect.Effect<void>;
+  readonly setLeagueRosters: (
+    rosters: ReadonlyArray<ProviderLeagueRoster> | undefined,
+  ) => Effect.Effect<void>;
   readonly unsupportedOperations: (
     operations: ReadonlyArray<ProviderOperation>,
   ) => Effect.Effect<void>;
@@ -244,6 +249,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         pendingTrades: [],
         draftResults: [],
         leagueTeams: [],
+        leagueRosters: undefined,
         unsupported: new Set(),
         reviewLinkFailure: undefined,
         reviewLinkUrl: undefined,
@@ -336,6 +342,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setPendingTrades: (pendingTrades) => modify((current) => ({ ...current, pendingTrades })),
         setDraftResults: (draftResults) => modify((current) => ({ ...current, draftResults })),
         setLeagueTeams: (leagueTeams) => modify((current) => ({ ...current, leagueTeams })),
+        setLeagueRosters: (leagueRosters) => modify((current) => ({ ...current, leagueRosters })),
         unsupportedOperations: (operations) =>
           modify((current) => ({ ...current, unsupported: new Set(operations) })),
         failReviewLinks: (reviewLinkFailure) =>
@@ -904,6 +911,19 @@ const providerFake = Effect.gen(function* () {
         (team) => team.providerLeagueKey === input.providerLeagueKey,
       );
     }),
+    readLeagueRosters: Effect.fn("FakeProvider.readLeagueRosters")(function* (input) {
+      const current = yield* prepare(input, "read_league_rosters");
+      const rosters = (current.leagueRosters ?? []).filter(
+        (roster) => roster.providerLeagueKey === input.providerLeagueKey,
+      );
+      if (rosters.length === 0) {
+        return yield* ProviderOperationUnsupported.make({
+          operation: "read_league_rosters",
+          reason: "No league rosters are configured for the fake provider.",
+        });
+      }
+      return rosters;
+    }),
     buildReviewLink: Effect.fn("FakeProvider.buildReviewLink")(function* (
       input: ProviderReviewLinkInput,
     ) {
@@ -963,6 +983,7 @@ const readOperations: ReadonlySet<ProviderOperation> = new Set<ProviderOperation
   "read_league",
   "read_standings",
   "read_roster",
+  "read_league_rosters",
   "read_roster_schedule",
   "read_player_details",
   "read_player_history",

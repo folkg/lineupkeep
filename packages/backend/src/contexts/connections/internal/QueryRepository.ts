@@ -255,6 +255,27 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         return owned;
       });
 
+      const readLeagueOwnedTeamKeys = Effect.fn("QueryRepository.readLeagueOwnedTeamKeys")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly provider: ProviderKey;
+          readonly providerLeagueKey: string;
+        }) {
+          const rows = yield* database
+            .select({ providerTeamKey: providerTeams.providerTeamKey })
+            .from(providerTeams)
+            .where(
+              and(
+                eq(providerTeams.userId, input.userId),
+                eq(providerTeams.provider, input.provider),
+                eq(providerTeams.providerLeagueKey, input.providerLeagueKey),
+              ),
+            )
+            .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
+          return rows.map((row) => row.providerTeamKey);
+        },
+      );
+
       const recordSessionRejectedMany = Effect.fn("QueryRepository.recordSessionRejectedMany")(
         function* (userId: UserId, teams: ReadonlyArray<OwnedTeam>) {
           if (teams.length === 0) {
@@ -289,6 +310,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
       return {
         loadOwnedTeam,
         loadOwnedTeams,
+        readLeagueOwnedTeamKeys,
         recordSessionRejected,
         recordSessionRejectedMany,
       };

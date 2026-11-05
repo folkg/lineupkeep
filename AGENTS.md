@@ -17,8 +17,8 @@ The approved identity is Lineupkeep, lowercase lineupkeep in the wordmark, with 
 Use the pinned Node runtime by default and Bun package manager.
 While iterating, run one file with `bunx vitest run --project node <path>` (or `--project chromium <path>` for a Chromium-launching test, or `--project browser <path>`).
 Run `bun checks` before completing each jj change; do not start a new jj change with failing checks.
-After completing your entire task, run the E2E test suite with `bun run test:e2e`.
-Before deploying, run each deployment E2E target (`test:e2e:cloudflare`, `test:e2e:container`). Run suites serially
+After completing your entire task, run `bun run test:e2e:container`. That is the only E2E target we run: it
+exercises the production artifact, so a separate node or Cloudflare target adds cost without evidence.
 
 ## Safety
 

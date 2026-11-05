@@ -131,6 +131,22 @@ export const QueryPage = Schema.Struct({
   complete: Schema.Boolean,
   remaining: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   next: Schema.optional(Schema.String),
+  size: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThan(0)).pipe(
+      Schema.annotate({
+        description:
+          "The bound this page was requested with, in rows of the paged resource. `returned` is the actual count after the result budget and can be smaller because the page keeps whole records intact.",
+      }),
+    ),
+  ),
+  total: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+      Schema.annotate({
+        description:
+          "The total number of rows in the paged resource, before paging. Present where the read knows it, such as the number of teams in a league roster read.",
+      }),
+    ),
+  ),
 });
 export type QueryPage = typeof QueryPage.Type;
 

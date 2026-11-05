@@ -127,6 +127,7 @@ export const secondProvider: ProviderShape = {
       },
     })),
   readRosterSchedule: ({ period }) => Effect.succeed(schedule(period)),
+  readLeagueRosters: () => unsupported("read_league_rosters"),
   searchPlayers: () => Effect.succeed(searchResults),
   scoreRoster: ({ roster }) => Effect.succeed(scores(roster)),
   readPlayerDetails: () => unsupported("read_player_details"),

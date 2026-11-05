@@ -45,6 +45,8 @@ export type FitPageInput<Row, Result> = {
   readonly makeNext: (offset: number) => Effect.Effect<string, QueryError>;
   readonly recordLabel: (row: Row) => string | undefined;
   readonly budget?: QueryBudget;
+  readonly pageSize?: number;
+  readonly total?: number;
 };
 
 export function fitPage<Row, Result>(
@@ -75,6 +77,8 @@ export function fitPage<Row, Result>(
         complete: remaining === 0,
         remaining,
         ...(next === undefined ? {} : { next }),
+        ...(input.pageSize === undefined ? {} : { size: input.pageSize }),
+        ...(input.total === undefined ? {} : { total: input.total }),
       };
     };
 
