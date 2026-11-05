@@ -32,7 +32,7 @@ export function LandingPage(): JSX.Element {
   const session = useSessionActions();
 
   return (
-    <AppShell>
+    <AppShell footer={false}>
       <Spread
         variant="showcase"
         start={

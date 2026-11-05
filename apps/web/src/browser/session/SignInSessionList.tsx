@@ -9,6 +9,8 @@ import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { ConfirmDialog } from "#browser/shared-ui/ConfirmDialog.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { IconButton } from "#browser/shared-ui/IconButton.tsx";
+import { LoaderCircleIcon, XIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
@@ -24,10 +26,6 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
   return (
     <Stack as="section" gap="md" labelledBy="sign-in-sessions-title">
       <SectionTitle id="sign-in-sessions-title">Sign-in sessions</SectionTitle>
-      <Text size="caption" tone="muted">
-        Where this account is signed in. Signing out ends this device only; the other sessions stay
-        listed here until you end them.
-      </Text>
       <Show
         fallback={<LoadingState label="Loading sessions">Loading your sessions…</LoadingState>}
         when={!props.isLoading()}
@@ -112,16 +110,16 @@ function SessionRow(props: SessionRowProps): JSX.Element {
           </Show>
         </Inline>
         <Show when={!props.session.current}>
-          <Button
-            aria-label={`End the ${props.session.device} session`}
-            pending={props.ending}
-            pendingLabel="Ending…"
-            tone="danger"
-            variant="quiet"
+          <IconButton
+            busy={props.ending}
+            busyLabel="Ending…"
+            label={`End the ${props.session.device} session`}
             onClick={props.onEnd}
           >
-            End
-          </Button>
+            <Show fallback={<XIcon size="md" />} when={props.ending}>
+              <LoaderCircleIcon size="md" spin />
+            </Show>
+          </IconButton>
         </Show>
       </Inline>
       <Text size="caption" tone="faint">

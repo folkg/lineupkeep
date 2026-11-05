@@ -5,8 +5,7 @@ export function signInDestinations(
   returnTo: string;
   errorReturnTo: string;
 } {
-  const returnTo =
-    redirect !== undefined && isApplicationPath(redirect) ? redirect : "/connections";
+  const returnTo = redirect !== undefined && isApplicationPath(redirect) ? redirect : "/account";
   return {
     returnTo,
 

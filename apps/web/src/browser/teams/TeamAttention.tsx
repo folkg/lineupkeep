@@ -19,7 +19,7 @@ export function TeamAttention(props: TeamAttentionProps): JSX.Element {
             <Text as="span" size="caption">
               {provider()} needs a new sign-in before lineup checks can run.
             </Text>
-            <TextLink to="/connections">Reconnect {provider()}</TextLink>
+            <TextLink to="/account">Reconnect {provider()}</TextLink>
           </Inline>
         </Show>
         <Show when={props.team.connectionStatus === "disconnected"}>
@@ -27,7 +27,7 @@ export function TeamAttention(props: TeamAttentionProps): JSX.Element {
             <Text as="span" size="caption">
               {provider()} is disconnected, so lineup checks cannot run.
             </Text>
-            <TextLink to="/connections">Reconnect {provider()}</TextLink>
+            <TextLink to="/account">Reconnect {provider()}</TextLink>
           </Inline>
         </Show>
         <Show when={props.team.connectionStatus === "linking"}>

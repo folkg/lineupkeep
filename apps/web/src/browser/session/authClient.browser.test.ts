@@ -18,7 +18,7 @@ it.each(["email", "google"] as const)(
     const response =
       method === "email"
         ? await authClient.signIn.emailOtp({ email: "reader@example.test", otp: "123456" })
-        : await authClient.signIn.social({ provider: "google", callbackURL: "/connections" });
+        : await authClient.signIn.social({ provider: "google", callbackURL: "/account" });
 
     expect(response.error).toBeNull();
     expect(response.data).toMatchObject({ posted: { oauth_query: rawQuery.slice(1) } });

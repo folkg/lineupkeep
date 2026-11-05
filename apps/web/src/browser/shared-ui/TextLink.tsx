@@ -12,12 +12,16 @@ function TextAnchor(props: TextAnchorProps): JSX.Element {
     <a
       {...rest}
       class={cx(
-        "justify-self-start focus-visible:outline-none focus-visible:shadow-focus",
+        "justify-self-start underline decoration-1 underline-offset-4 focus-visible:outline-none focus-visible:shadow-focus",
         props.size === "item"
           ? "break-words font-display text-section-title font-semibold text-ink hover:text-action"
-          : props.tone === "quiet"
-            ? "text-body font-semibold text-ink-soft underline decoration-1 underline-offset-4 hover:text-ink"
-            : "text-body font-semibold text-action underline decoration-1 underline-offset-4 hover:text-action-hover",
+          : cx(
+              props.size === "caption" ? "text-caption" : "text-body",
+              "font-semibold",
+              props.tone === "quiet"
+                ? "text-ink-soft hover:text-ink"
+                : "text-action hover:text-action-hover",
+            ),
       )}
     >
       {props.children}
@@ -26,6 +30,6 @@ function TextAnchor(props: TextAnchorProps): JSX.Element {
 }
 
 type TextAnchorProps = Omit<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "class"> & {
-  readonly size?: "control" | "item";
+  readonly size?: "control" | "item" | "caption";
   readonly tone?: "action" | "quiet";
 };

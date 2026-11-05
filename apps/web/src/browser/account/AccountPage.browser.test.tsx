@@ -15,11 +15,14 @@ import { requireAccountErasureSuccess } from "#browser/account/accountFailure.ts
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
+import { signInSessionsQueries } from "#browser/session/signInSessionsQueries.ts";
+import type { SignInSessionsRemote } from "#browser/session/signInSessionsRemote.ts";
 import { accountExportPath } from "#contracts/account/accountContract.ts";
 import type { AccountExportStatusView } from "#contracts/account/accountContract.ts";
+import type { SignInSessionView } from "#contracts/auth/authContract.ts";
 
-import { AccountDataPage } from "./AccountDataPage";
 import { AccountErasedPage } from "./AccountErasedPage";
+import { AccountPage } from "./AccountPage";
 import type { AccountDataRemote } from "./accountRemote";
 
 const summary = {
@@ -58,6 +61,42 @@ const staleExportStatus: AccountExportStatusView = {
     areas: [{ label: "Fantasy teams", records: 2 }],
   },
 };
+
+const connectionsSection = (
+  <section aria-labelledby="connections-title">
+    <h2 id="connections-title">Connections</h2>
+  </section>
+);
+
+const thisDevice: SignInSessionView = {
+  id: "session-laptop",
+  device: "Chrome on macOS",
+  startedAt: "2026-10-23T09:00:00.000Z",
+  lastUsedAt: "2026-10-25T11:55:00.000Z",
+  current: true,
+};
+
+it("puts appearance, connections, sessions, data, sign out, and erasure in order", async () => {
+  using _app = setupAccountPage();
+
+  await expect.element(page.getByRole("heading", { name: "Account" })).toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "Connections" })).toBeVisible();
+  await expect.element(page.getByText("Chrome on macOS")).toBeVisible();
+
+  const headings = [...document.querySelectorAll("h2")].map((heading) => heading.textContent);
+  expect(headings).toEqual([
+    "Appearance",
+    "Connections",
+    "Sign-in sessions",
+    "Your data",
+    "Sign out",
+    "Erase your account",
+  ]);
+
+  const copy = document.body.textContent.replace(/\s+/g, " ");
+  expect(copy).not.toContain("Yahoo is connected. Lineup checks use this connection.");
+  expect(copy).not.toContain("Your connections");
+});
 
 it("offers an export and explains what erasure cannot undo", async () => {
   using _app = setupAccountPage();
@@ -274,7 +313,12 @@ function setupAccountPage(
     load: () => Promise.resolve({ status: "anonymous" }),
     signOut: () => Promise.resolve(),
   };
-  const router = createAccountRouter(queryClient, sessionRemote, remote, onErased);
+  const sessionsRemote: SignInSessionsRemote = {
+    list: () => Promise.resolve({ sessions: [thisDevice] }),
+    end: () => Promise.reject(new Error("Unexpected session ending")),
+    endOthers: () => Promise.reject(new Error("Unexpected session ending")),
+  };
+  const router = createAccountRouter(queryClient, sessionRemote, remote, sessionsRemote, onErased);
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <RouterProvider router={router} />, host);
   let disposed = false;
@@ -301,8 +345,10 @@ function createAccountRouter(
   queryClient: ReturnType<typeof createQueryClient>,
   sessionRemote: SessionRemote,
   remote: AccountDataRemote,
+  sessionsRemote: SignInSessionsRemote,
   onErased: () => Promise<void>,
 ): ReturnType<typeof createRouter> {
+  const sessionsQuery = signInSessionsQueries.list(sessionsRemote);
   const rootRoute = createRootRouteWithContext<RouterContext>()({
     component: () => (
       <QueryClientProvider client={queryClient}>
@@ -313,7 +359,16 @@ function createAccountRouter(
   const accountRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/account",
-    component: () => <AccountDataPage remote={remote} onErased={() => onErased()} />,
+    component: () => (
+      <AccountPage
+        connections={connectionsSection}
+        onErased={() => onErased()}
+        onRefreshSessions={() => Promise.resolve()}
+        remote={remote}
+        sessionsQuery={() => sessionsQuery}
+        sessionsRemote={sessionsRemote}
+      />
+    ),
   });
   const erasedRoute = createRoute({
     getParentRoute: () => rootRoute,

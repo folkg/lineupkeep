@@ -11,14 +11,13 @@ import {
 import { expect, it } from "vitest";
 import { page } from "vitest/browser";
 
+import { AccountPage } from "#browser/account/AccountPage.tsx";
+import type { AccountDataRemote } from "#browser/account/accountRemote.ts";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
-import { connectionQueries } from "#browser/connections/connectionQueries.ts";
-import type { ConnectionRemote } from "#browser/connections/connectionRemote.ts";
-import { ConnectionsPage } from "#browser/connections/ConnectionsPage.tsx";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
+import type { AccountExportStatusView } from "#contracts/account/accountContract.ts";
 import type { SignInSessionListData } from "#contracts/auth/authContract.ts";
-import type { ConnectionView } from "#contracts/connections/connectionContract.ts";
 
 import { signInSessionsQueries } from "./signInSessionsQueries";
 import type { SignInSessionsRemote } from "./signInSessionsRemote";
@@ -46,6 +45,12 @@ const tablet: SignInSessionListData["sessions"][number] = {
   lastUsedAt: "2026-10-24T20:00:00.000Z",
   current: false,
 };
+
+const connectionsSection = (
+  <section aria-labelledby="connections-title">
+    <h2 id="connections-title">Connections</h2>
+  </section>
+);
 
 it("lists each session with its device, start, and last use, and marks this device", async () => {
   await page.viewport(1440, 900);
@@ -111,7 +116,8 @@ it("shows the row as ending until the server confirms it", async () => {
 
   await page.getByRole("button", { name: "End the Safari on iOS session" }).click();
 
-  await expect.element(page.getByText("Ending…")).toBeVisible();
+  const ending = page.getByRole("button", { name: "Ending…" });
+  await expect.element(ending).toHaveAttribute("aria-busy", "true");
   confirm({ sessions: [thisDevice] });
   await expect
     .element(page.getByText("That session ended. The device must sign in again."))
@@ -173,14 +179,16 @@ function setupSessionsPage(
       overrides.endOthers ?? (() => Promise.reject(new Error("Unexpected session ending"))),
   };
   const sessionsQuery = signInSessionsQueries.list(sessionsRemote);
-  const connections: ReadonlyArray<ConnectionView> = [];
-  const connectionsRemote: ConnectionRemote = {
-    list: () => Promise.resolve(connections),
-    disconnect: () => Promise.reject(new Error("Unexpected disconnect")),
-    startHosted: () => Promise.reject(new Error("Unexpected hosted sign-in start")),
-    cancelHosted: () => Promise.reject(new Error("Unexpected hosted sign-in cancellation")),
+  const exportStatus: AccountExportStatusView = {
+    usable: false,
+    freshForMinutes: 60,
+    latest: undefined,
   };
-  const connectionsQuery = connectionQueries.list(connectionsRemote);
+  const accountRemote: AccountDataRemote = {
+    status: () => Promise.resolve(exportStatus),
+    erase: () => Promise.reject(new Error("Unexpected erasure")),
+    signOut: () => Promise.resolve(),
+  };
   const sessionRemote: SessionRemote = {
     load: () => Promise.resolve({ status: "anonymous" }),
     signOut: () => Promise.resolve(),
@@ -192,15 +200,15 @@ function setupSessionsPage(
       </QueryClientProvider>
     ),
   });
-  const connectionsRoute = createRoute({
+  const accountRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/connections",
+    path: "/account",
     component: () => (
-      <ConnectionsPage
-        connectionsQuery={() => connectionsQuery}
-        remote={connectionsRemote}
-        onRefresh={() => Promise.resolve()}
+      <AccountPage
+        connections={connectionsSection}
+        onErased={() => Promise.resolve()}
         onRefreshSessions={() => Promise.resolve()}
+        remote={accountRemote}
         sessionsQuery={() => sessionsQuery}
         sessionsRemote={sessionsRemote}
       />
@@ -208,8 +216,8 @@ function setupSessionsPage(
   });
   const router = createRouter({
     context: { queryClient, sessionRemote },
-    history: createMemoryHistory({ initialEntries: ["/connections"] }),
-    routeTree: rootRoute.addChildren([connectionsRoute]),
+    history: createMemoryHistory({ initialEntries: ["/account"] }),
+    routeTree: rootRoute.addChildren([accountRoute]),
   });
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <RouterProvider router={router} />, host);

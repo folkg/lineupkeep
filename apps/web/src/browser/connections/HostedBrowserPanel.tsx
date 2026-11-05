@@ -6,7 +6,6 @@ import { BrowserFrame } from "#browser/shared-ui/BrowserFrame.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
-import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { Time } from "#browser/shared-ui/Time.tsx";
@@ -20,12 +19,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
   const provider = defaultProviderName();
 
   return (
-    <Stack as="section" gap="sm" labelledBy="provider-signin-title">
-      <SectionTitle id="provider-signin-title">
-        {props.controller.session() === undefined && props.connected
-          ? `${provider} connection`
-          : `${provider} sign-in`}
-      </SectionTitle>
+    <Stack gap="sm">
       <Show when={props.controller.session()}>
         {(session) => (
           <Stack gap="sm">
@@ -82,12 +76,15 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
           </Stack>
         )}
       </Show>
-      <Show when={props.controller.session() === undefined && props.connected}>
-        <Text size="body" tone="muted">
-          {provider} is connected. Lineup checks use this connection.
-        </Text>
+      <Show
+        when={
+          props.controller.session() === undefined &&
+          props.connected &&
+          props.renderConnectAction !== false
+        }
+      >
         <Inline gap="sm">
-          <Button variant="link" onClick={() => void props.controller.start()}>
+          <Button variant="secondary" onClick={() => void props.controller.start()}>
             Connect another account
           </Button>
         </Inline>
@@ -114,4 +111,5 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
 type HostedBrowserPanelProps = {
   readonly connected: boolean;
   readonly controller: HostedLinkingController;
+  readonly renderConnectAction?: boolean;
 };

@@ -14,14 +14,12 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
-import { signInSessionsQueries } from "#browser/session/signInSessionsQueries.ts";
-import type { SignInSessionsRemote } from "#browser/session/signInSessionsRemote.ts";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type { ConnectionView } from "#contracts/connections/connectionContract.ts";
 
 import { connectionQueries } from "./connectionQueries";
 import type { ConnectionRemote } from "./connectionRemote";
-import { ConnectionsPage } from "./ConnectionsPage";
+import { ConnectionsSection } from "./ConnectionsSection";
 
 const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1_000).toISOString();
 const fourMinutesFromNow = new Date(Date.now() + 4 * 60 * 1_000).toISOString();
@@ -60,8 +58,9 @@ const linking: ConnectionView = {
 };
 
 it("shows what each connection covers and when it was connected", async () => {
-  using _app = setupConnectionsPage([connected, reconnectable, linking]);
+  using _section = setupConnectionsSection([connected, reconnectable, linking]);
 
+  await expect.element(page.getByRole("heading", { name: "Connections" })).toBeVisible();
   await expect.element(page.getByText(/3 teams/)).toBeVisible();
   await expect.element(page.getByText(/1 team/)).toBeVisible();
 
@@ -70,7 +69,7 @@ it("shows what each connection covers and when it was connected", async () => {
 });
 
 it("renders timestamps in the reader's locale with the raw value in datetime", async () => {
-  using _app = setupConnectionsPage([connected, linking]);
+  using _section = setupConnectionsSection([connected, linking]);
 
   await expect.element(page.getByText(/This sign-in request expires/)).toBeVisible();
   const expiry = document.querySelector<HTMLTimeElement>(`time[datetime="${fourMinutesFromNow}"]`);
@@ -78,36 +77,20 @@ it("renders timestamps in the reader's locale with the raw value in datetime", a
   expect(expiry?.textContent).toBe(formatReaderTime(fourMinutesFromNow));
 });
 
-it("describes a connected account without naming the provider in the introduction", async () => {
-  using _app = setupConnectionsPage([connected]);
+it("explains the encrypted session without naming the provider", async () => {
+  using _section = setupConnectionsSection([connected]);
 
   await expect
-    .element(
-      page.getByText(
-        "Lineupgrade keeps the encrypted sign-in session, not your password, and lists the teams this account can manage.",
-      ),
-    )
+    .element(page.getByText("Lineupgrade keeps the encrypted sign-in session, not your password."))
     .toBeVisible();
 });
 
-it("describes the connection step without naming the provider in the introduction", async () => {
-  using _app = setupConnectionsPage([]);
-
-  await expect
-    .element(
-      page.getByText(
-        "Connect your fantasy account in a private browser. Lineupgrade keeps the encrypted session, not your password, and finds the teams this account can manage.",
-      ),
-    )
-    .toBeVisible();
-});
-
-it("keeps setup out of the way when a connection is already present", async () => {
-  using _app = setupConnectionsPage([connected]);
+it("keeps the removed connection explanation off the connections section", async () => {
+  using _section = setupConnectionsSection([connected]);
 
   await expect
     .element(page.getByText("Yahoo is connected. Lineup checks use this connection."))
-    .toBeVisible();
+    .not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Connect another account" })).toBeVisible();
   await expect
     .element(
@@ -120,7 +103,7 @@ it("keeps setup out of the way when a connection is already present", async () =
 });
 
 it("offers the connect action when no connection exists", async () => {
-  using _app = setupConnectionsPage([]);
+  using _section = setupConnectionsSection([]);
 
   await expect
     .element(
@@ -135,7 +118,7 @@ it("offers the connect action when no connection exists", async () => {
 it("starts a hosted sign-in for a connection that needs to reconnect", async () => {
   await page.viewport(1440, 900);
   const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _app = setupConnectionsPage([connected, reconnectable], {
+  using _section = setupConnectionsSection([connected, reconnectable], {
     startHosted: (input) => {
       hostedInputs.push(input);
       return new Promise(() => undefined);
@@ -153,7 +136,7 @@ it("starts a hosted sign-in for a connection that needs to reconnect", async () 
 it("starts a phone viewport profile from a phone-sized client", async () => {
   await page.viewport(390, 844);
   const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _app = setupConnectionsPage([], {
+  using _section = setupConnectionsSection([], {
     startHosted: (input) => {
       hostedInputs.push(input);
       return new Promise(() => undefined);
@@ -168,7 +151,7 @@ it("starts a phone viewport profile from a phone-sized client", async () => {
 it("starts a desktop viewport profile from a wide client", async () => {
   await page.viewport(1440, 900);
   const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
-  using _app = setupConnectionsPage([], {
+  using _section = setupConnectionsSection([], {
     startHosted: (input) => {
       hostedInputs.push(input);
       return new Promise(() => undefined);
@@ -180,7 +163,7 @@ it("starts a desktop viewport profile from a wide client", async () => {
   await expect.poll(() => hostedInputs).toEqual([{ provider: "yahoo", viewport: "desktop" }]);
 });
 
-function setupConnectionsPage(
+function setupConnectionsSection(
   connections: ReadonlyArray<ConnectionView>,
   overrides: Partial<Pick<ConnectionRemote, "startHosted">> = {},
 ): { [Symbol.dispose](): void } {
@@ -197,12 +180,6 @@ function setupConnectionsPage(
     cancelHosted: () => Promise.reject(new Error("Unexpected hosted sign-in cancellation")),
   };
   const connectionsQuery = connectionQueries.list(remote);
-  const sessionsRemote: SignInSessionsRemote = {
-    list: () => Promise.resolve({ sessions: [] }),
-    end: () => Promise.reject(new Error("Unexpected session ending")),
-    endOthers: () => Promise.reject(new Error("Unexpected session ending")),
-  };
-  const sessionsQuery = signInSessionsQueries.list(sessionsRemote);
   const sessionRemote: SessionRemote = {
     load: () => Promise.resolve({ status: "anonymous" }),
     signOut: () => Promise.resolve(),
@@ -214,17 +191,14 @@ function setupConnectionsPage(
       </QueryClientProvider>
     ),
   });
-  const connectionsRoute = createRoute({
+  const accountRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/connections",
+    path: "/account",
     component: () => (
-      <ConnectionsPage
+      <ConnectionsSection
         connectionsQuery={() => connectionsQuery}
-        remote={remote}
         onRefresh={() => Promise.resolve()}
-        onRefreshSessions={() => Promise.resolve()}
-        sessionsQuery={() => sessionsQuery}
-        sessionsRemote={sessionsRemote}
+        remote={remote}
       />
     ),
   });
@@ -233,15 +207,10 @@ function setupConnectionsPage(
     path: "/teams",
     component: () => <p>Teams</p>,
   });
-  const authRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/auth",
-    component: () => <p>Auth</p>,
-  });
   const router = createRouter({
     context: { queryClient, sessionRemote },
-    history: createMemoryHistory({ initialEntries: ["/connections"] }),
-    routeTree: rootRoute.addChildren([connectionsRoute, teamsRoute, authRoute]),
+    history: createMemoryHistory({ initialEntries: ["/account"] }),
+    routeTree: rootRoute.addChildren([accountRoute, teamsRoute]),
   });
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <RouterProvider router={router} />, host);

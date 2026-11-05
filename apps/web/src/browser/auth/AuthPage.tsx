@@ -13,7 +13,7 @@ import type { SignInRemote } from "./signInRemote";
 
 export function AuthPage(props: AuthPageProps): JSX.Element {
   return (
-    <AppShell>
+    <AppShell footer={false}>
       <Spread
         variant="form"
         start={

@@ -5,63 +5,56 @@ import type { Accessor } from "solid-js";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { RuleList } from "#browser/shared-ui/RuleList.tsx";
-import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
-import { Stack } from "#browser/shared-ui/Stack.tsx";
 import type { ConnectionView } from "#contracts/connections/connectionContract.ts";
 
 import { ConnectionCard } from "./ConnectionCard";
 
 export function ConnectionList(props: ConnectionListProps): JSX.Element {
   return (
-    <Stack as="section" gap="md" labelledBy="connections-list-title">
-      <SectionTitle id="connections-list-title">Your connections</SectionTitle>
+    <Show
+      fallback={<LoadingState label="Loading connections">Loading your connections…</LoadingState>}
+      when={!props.isLoading()}
+    >
       <Show
         fallback={
-          <LoadingState label="Loading connections">Loading your connections…</LoadingState>
+          <ActionFeedback
+            feedback={{
+              type: "attention",
+              message: "We could not load your connections.",
+              recovery: {
+                label: "Refresh",
+                pendingLabel: "Refreshing…",
+                onAction: props.onRefresh,
+              },
+            }}
+          />
         }
-        when={!props.isLoading()}
+        when={props.loadFailure() === null}
       >
         <Show
           fallback={
-            <ActionFeedback
-              feedback={{
-                type: "attention",
-                message: "We could not load your connections.",
-                recovery: {
-                  label: "Refresh",
-                  pendingLabel: "Refreshing…",
-                  onAction: props.onRefresh,
-                },
-              }}
-            />
+            <EmptyState title="No connections yet.">
+              Connect an account above to see the teams this account can manage.
+            </EmptyState>
           }
-          when={props.loadFailure() === null}
+          when={props.connections().length > 0}
         >
-          <Show
-            fallback={
-              <EmptyState title="No connections yet.">
-                Connect an account above to see the teams this account can manage.
-              </EmptyState>
-            }
-            when={props.connections().length > 0}
-          >
-            <RuleList>
-              <For each={props.connections()}>
-                {(connection) => (
-                  <ConnectionCard
-                    connection={connection}
-                    disconnecting={props.disconnectingId() === connection.id}
-                    reconnecting={props.reconnectingId() === connection.id}
-                    onDisconnect={() => props.onDisconnect(connection)}
-                    onReconnect={() => props.onReconnect(connection)}
-                  />
-                )}
-              </For>
-            </RuleList>
-          </Show>
+          <RuleList>
+            <For each={props.connections()}>
+              {(connection) => (
+                <ConnectionCard
+                  connection={connection}
+                  disconnecting={props.disconnectingId() === connection.id}
+                  reconnecting={props.reconnectingId() === connection.id}
+                  onDisconnect={() => props.onDisconnect(connection)}
+                  onReconnect={() => props.onReconnect(connection)}
+                />
+              )}
+            </For>
+          </RuleList>
         </Show>
       </Show>
-    </Stack>
+    </Show>
   );
 }
 

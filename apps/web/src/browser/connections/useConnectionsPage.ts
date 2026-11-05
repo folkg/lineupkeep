@@ -14,7 +14,7 @@ import { connectionMutations, storeRefreshedConnections } from "./connectionMuta
 import type { ConnectionListQueryOptions } from "./connectionQueries";
 import type { ConnectionRemote } from "./connectionRemote";
 
-export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPageController {
+export function useConnectionsPage(props: ConnectionsOptions): ConnectionsController {
   const connections = useQuery(() => props.connectionsQuery());
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
@@ -54,7 +54,7 @@ export function useConnectionsPage(props: ConnectionsPageOptions): ConnectionsPa
   };
 }
 
-export type ConnectionsPageController = {
+export type ConnectionsController = {
   readonly connections: Accessor<ReadonlyArray<ConnectionView>>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
@@ -64,7 +64,7 @@ export type ConnectionsPageController = {
   readonly disconnectLinking: (connection: ConnectionView) => void;
 };
 
-type ConnectionsPageOptions = {
+type ConnectionsOptions = {
   readonly connectionsQuery: Accessor<ConnectionListQueryOptions>;
   readonly remote: Accessor<ConnectionRemote>;
   readonly onRefresh: () => Promise<void>;

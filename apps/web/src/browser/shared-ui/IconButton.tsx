@@ -5,6 +5,8 @@ import { iconButtonClass, iconButtonFrameClass } from "./Button";
 
 export function IconButton(props: IconButtonProps): JSX.Element {
   const blocked = (): boolean => props.busy === true || props.disabled === true;
+  const label = (): string =>
+    props.busy === true && props.busyLabel !== undefined ? props.busyLabel : props.label;
 
   const handleClick: JSX.EventHandler<HTMLButtonElement, MouseEvent> = (event) => {
     if (blocked()) {
@@ -16,13 +18,13 @@ export function IconButton(props: IconButtonProps): JSX.Element {
   };
 
   return (
-    <span class="inline-flex" title={props.title ?? props.label}>
+    <span class="inline-flex" title={props.title ?? label()}>
       <button
-        aria-label={props.label}
+        aria-label={label()}
         aria-busy={props.busy === true ? "true" : undefined}
         aria-disabled={blocked() ? "true" : undefined}
         class={iconButtonClass}
-        title={props.title ?? props.label}
+        title={props.title ?? label()}
         type="button"
         onClick={handleClick}
       >
@@ -35,6 +37,7 @@ export function IconButton(props: IconButtonProps): JSX.Element {
 
 type IconButtonProps = {
   readonly label: string;
+  readonly busyLabel?: string;
   readonly onClick: () => void;
   readonly children: Element;
   readonly title?: string;

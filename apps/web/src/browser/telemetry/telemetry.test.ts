@@ -13,17 +13,17 @@ it("classifies a client error without reading arbitrary exception text", () => {
 
   const report = buildClientErrorReport(
     error,
-    { ownerPath: ["<App>", "<ConnectionsPage>"], boundaryPath: ["<App>", "<Errored>"] },
-    { pathname: "/connections" },
+    { ownerPath: ["<App>", "<AccountPage>"], boundaryPath: ["<App>", "<Errored>"] },
+    { pathname: "/account" },
     "0af7651916cd43dd8448eb211c80319c",
   );
 
   expect(report).toEqual({
     kind: "client_error",
     message: "ui.boundary_caught",
-    thrownIn: "<App> › <ConnectionsPage>",
+    thrownIn: "<App> › <AccountPage>",
     caughtBy: "<App> › <Errored>",
-    pathname: "/connections",
+    pathname: "/account",
     clientTraceId: "0af7651916cd43dd8448eb211c80319c",
   });
   expect(JSON.stringify(report)).not.toContain("private-");

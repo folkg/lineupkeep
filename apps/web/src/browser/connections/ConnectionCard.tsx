@@ -5,6 +5,8 @@ import { Badge } from "#browser/shared-ui/Badge.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
+import { IconButton } from "#browser/shared-ui/IconButton.tsx";
+import { LoaderCircleIcon, XIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -53,14 +55,16 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
             props.connection.status === "ready" || props.connection.status === "reconnect-required"
           }
         >
-          <Button
-            pending={props.disconnecting}
-            pendingLabel="Disconnecting…"
-            variant="secondary"
+          <IconButton
+            busy={props.disconnecting}
+            busyLabel="Disconnecting…"
+            label={`Disconnect the ${providerDisplayName(props.connection.provider)} connection`}
             onClick={props.onDisconnect}
           >
-            Disconnect
-          </Button>
+            <Show fallback={<XIcon size="md" />} when={props.disconnecting}>
+              <LoaderCircleIcon size="md" spin />
+            </Show>
+          </IconButton>
         </Show>
       </Inline>
     </RuleListItem>

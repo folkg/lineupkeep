@@ -37,7 +37,7 @@ test("renders the sign-in call to action in the server HTML when signed out", as
   await expect(serverRendered.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });
 
-test("returns home on sign-out and back to the account's connections on sign-in", async ({
+test("returns home on sign-out and back to the account page on sign-in", async ({
   page,
   services,
 }) => {
@@ -53,18 +53,18 @@ test("returns home on sign-out and back to the account's connections on sign-in"
   await page.getByRole("button", { name: "Sign out this device", exact: true }).click();
   await expect(page).toHaveURL("/");
   await expect(page.getByRole("link", { name: "Sign in to get started" })).toBeVisible();
-  await page.goto("/connections");
-  await expect(page).toHaveURL("/auth?redirect=%2Fconnections");
+  await page.goto("/account");
+  await expect(page).toHaveURL("/auth?redirect=%2Faccount");
   await signIn(page, account);
 
-  await expect(page).toHaveURL("/connections");
+  await expect(page).toHaveURL("/account");
   await expect(
     page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", {
       name: "Account",
       exact: true,
     }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Your connections" }).getByRole("listitem"),
-  ).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "Connections" }).getByRole("listitem")).toHaveCount(
+    1,
+  );
 });

@@ -131,8 +131,8 @@ export async function signUp(page: Page, persona = pagePersona(page)): Promise<A
     const account = { email: `e2e-${randomUUID()}@example.com` };
     await page.goto("/auth");
     await signIn(page, account);
-    await expect(page).toHaveURL("/connections");
-    await expect(page.getByRole("heading", { name: "Connections", exact: true })).toBeVisible();
+    await expect(page).toHaveURL("/account");
+    await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
     return account;
   });
 }

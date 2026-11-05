@@ -1135,15 +1135,15 @@ function setupReviewPage(
     path: "/teams",
     component: () => <p>Teams</p>,
   });
-  const connectionsRoute = createRoute({
+  const accountRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/connections",
-    component: () => <p>Connections</p>,
+    path: "/account",
+    component: () => <p>Account</p>,
   });
   const router = createRouter({
     context: { queryClient, sessionRemote },
     history: createMemoryHistory({ initialEntries: [`/transactions/${review.set.id}`] }),
-    routeTree: rootRoute.addChildren([reviewRoute, teamRoute, teamsRoute, connectionsRoute]),
+    routeTree: rootRoute.addChildren([reviewRoute, teamRoute, teamsRoute, accountRoute]),
   });
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <RouterProvider router={router} />, host);

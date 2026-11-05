@@ -15,7 +15,7 @@ test("renders the empty teams surface and links back to provider linking", async
   await expect(page.getByText("No teams yet.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Connect an account" })).toHaveAttribute(
     "href",
-    "/connections",
+    "/account",
   );
   await expect(page.getByRole("link", { name: "Teams", exact: true })).toBeVisible();
   await captureCheckpoint(page, info, "teams-empty");
@@ -135,7 +135,7 @@ test("renders the teams surface before client scripts and hydrates its navigatio
 
   await expect(page.getByRole("link", { name: "Teams", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Connect an account" }).click();
-  await expect(page).toHaveURL("/connections");
+  await expect(page).toHaveURL("/account");
   expect(hydrationWarnings).toEqual([]);
 });
 

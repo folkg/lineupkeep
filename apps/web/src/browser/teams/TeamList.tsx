@@ -68,7 +68,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
           <Show
             fallback={
               <EmptyState title="No teams yet.">
-                <TextLink to="/connections">Connect an account</TextLink> to import the teams this
+                <TextLink to="/account">Connect an account</TextLink> to import the teams this
                 account can manage. If you join another league, refresh to import it.
               </EmptyState>
             }

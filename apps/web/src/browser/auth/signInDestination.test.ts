@@ -6,24 +6,22 @@ it("preserves repeated signed OAuth parameters in the Google failure return", ()
   const query =
     "?client_id=https%3A%2F%2Fclient.test%2Fmeta&ba_param=client_id&ba_param=scope&scope=connections%3Aread+connections%3Awrite&sig=a%2Bb%2Fc%3D";
 
-  const destinations = signInDestinations(query, "/connections");
+  const destinations = signInDestinations(query, "/account");
 
-  expect(destinations).toEqual({ returnTo: "/connections", errorReturnTo: `/auth${query}` });
+  expect(destinations).toEqual({ returnTo: "/account", errorReturnTo: `/auth${query}` });
   expect(
     new URL(destinations.errorReturnTo, "https://app.test").searchParams.getAll("ba_param"),
   ).toEqual(["client_id", "scope"]);
 });
 
 it("returns to an application page without a custom OAuth continuation", () => {
-  expect(signInDestinations("", "/connections?state=trashed").returnTo).toBe(
-    "/connections?state=trashed",
-  );
-  expect(signInDestinations("", undefined).returnTo).toBe("/connections");
+  expect(signInDestinations("", "/account?state=trashed").returnTo).toBe("/account?state=trashed");
+  expect(signInDestinations("", undefined).returnTo).toBe("/account");
 });
 
 it.each(["https://evil.test/", "//evil.test/", "/\\\\evil.test/", "javascript:alert(1)"])(
   "rejects an external return destination %s",
   (destination) => {
-    expect(signInDestinations("", destination).returnTo).toBe("/connections");
+    expect(signInDestinations("", destination).returnTo).toBe("/account");
   },
 );

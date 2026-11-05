@@ -22,7 +22,7 @@ export function ConsentPage(props: {
 }): JSX.Element {
   const consent = useConsent(props);
   return (
-    <AppShell>
+    <AppShell footer={false}>
       <Page title={consent.title()} lede={consent.lede()}>
         <Show
           when={consent.request()}

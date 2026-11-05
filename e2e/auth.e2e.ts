@@ -31,7 +31,7 @@ test("keeps sign-in controls inactive until their handlers are hydrated", async 
 
   await expect(page.getByLabel("Email")).toBeEnabled();
   await signIn(page, { email: `e2e-hydration-${randomUUID()}@example.com` });
-  await expect(page).toHaveURL("/connections");
+  await expect(page).toHaveURL("/account");
 });
 
 test("offers no Google sign-in when it is not configured", async ({ page }) => {
@@ -56,7 +56,7 @@ test("explains a wrong code and signs in with the right one", async ({ page }) =
   ).toBeVisible();
   await page.getByLabel("Code").fill(code);
   await page.getByRole("main").getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL("/connections");
+  await expect(page).toHaveURL("/account");
 });
 
 test("returns to the email step to use a different address", async ({ page }) => {
@@ -67,7 +67,7 @@ test("returns to the email step to use a different address", async ({ page }) =>
 
   await expect(page.getByLabel("Email")).toBeFocused();
   await signIn(page, { email: `e2e-corrected-${randomUUID()}@example.com` });
-  await expect(page).toHaveURL("/connections");
+  await expect(page).toHaveURL("/account");
 });
 
 test("signs in again after an ended session and returns to the page", async ({ page }) => {

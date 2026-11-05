@@ -477,7 +477,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
         <Show when={props.team.failure}>
           {(failure) => (
             <Text size="caption" tone="muted">
-              {failure()} <TextLink to="/connections">Review the connection</TextLink>
+              {failure()} <TextLink to="/account">Review the connection</TextLink>
             </Text>
           )}
         </Show>

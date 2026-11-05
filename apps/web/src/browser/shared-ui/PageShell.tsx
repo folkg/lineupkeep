@@ -1,4 +1,5 @@
 import type { JSX } from "@solidjs/web";
+import { Show } from "solid-js";
 import type { Element } from "solid-js";
 
 export function PageShell(props: PageShellProps): JSX.Element {
@@ -9,6 +10,9 @@ export function PageShell(props: PageShellProps): JSX.Element {
         <div class="min-w-0 empty:hidden">{props.navigation}</div>
       </header>
       <main class="flex min-h-0 flex-1 flex-col">{props.children}</main>
+      <Show when={props.footer}>
+        <footer class="border-t border-rule py-3">{props.footer}</footer>
+      </Show>
     </div>
   );
 }
@@ -17,5 +21,6 @@ type PageShellProps = {
   readonly brand: Element;
 
   readonly navigation: Element;
+  readonly footer?: Element;
   readonly children: Element;
 };

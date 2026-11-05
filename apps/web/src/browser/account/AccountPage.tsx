@@ -1,10 +1,15 @@
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
+import type { Accessor, Element } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
 import type { ThemePreference } from "#browser/app-shell/theme.ts";
 import { useSessionActions } from "#browser/app-shell/useSessionActions.ts";
 import { useTheme } from "#browser/app-shell/useTheme.ts";
+import { SignInSessionList } from "#browser/session/SignInSessionList.tsx";
+import type { SignInSessionListQueryOptions } from "#browser/session/signInSessionsQueries.ts";
+import type { SignInSessionsRemote } from "#browser/session/signInSessionsRemote.ts";
+import { useSignInSessions } from "#browser/session/useSignInSessions.ts";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
 import { Button } from "#browser/shared-ui/Button.tsx";
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
@@ -27,25 +32,30 @@ import { useAccountData } from "./useAccountData";
 
 type LatestExport = NonNullable<AccountExportStatusView["latest"]>;
 
-export function AccountDataPage(props: AccountDataPageProps): JSX.Element {
+export function AccountPage(props: AccountPageProps): JSX.Element {
   return (
     <AppShell>
-      <AccountDataContent onErased={props.onErased} remote={props.remote} />
+      <AccountContent {...props} />
     </AppShell>
   );
 }
 
-function AccountDataContent(props: AccountDataPageProps): JSX.Element {
+function AccountContent(props: AccountPageProps): JSX.Element {
   const theme = useTheme();
   const session = useSessionActions();
-  const page = useAccountData({
+  const account = useAccountData({
     remote: () => props.remote,
     onErased: () => props.onErased(),
+  });
+  const sessions = useSignInSessions({
+    query: () => props.sessionsQuery(),
+    remote: () => props.sessionsRemote,
+    onRefresh: () => props.onRefreshSessions(),
   });
 
   return (
     <Page
-      lede="Set how Lineupgrade looks, export or erase your data, and sign out of this device."
+      lede="Choose how Lineupgrade looks, manage connections and sign-in sessions, and export your data, sign out, or erase your account."
       title="Account"
     >
       <Stack gap="xl">
@@ -66,6 +76,18 @@ function AccountDataContent(props: AccountDataPageProps): JSX.Element {
             />
           </Stack>
         </Stack>
+        {props.connections}
+        <SignInSessionList
+          endingId={sessions.endingId}
+          endingOthers={sessions.endingOthers}
+          feedback={sessions.feedback}
+          isLoading={sessions.isLoading}
+          loadFailure={sessions.loadFailure}
+          sessions={sessions.sessions}
+          onEnd={sessions.endSession}
+          onEndOthers={sessions.endOtherSessions}
+          onRefresh={sessions.refresh}
+        />
         <Stack as="section" gap="md" labelledBy="export-title">
           <SectionTitle id="export-title">Your data</SectionTitle>
           <Text>
@@ -74,10 +96,10 @@ function AccountDataContent(props: AccountDataPageProps): JSX.Element {
             out, because a copy should not let anyone sign in as you.
           </Text>
           <DownloadLink href={accountExportPath}>Export my data</DownloadLink>
-          <Show when={page.exportStatus()?.latest}>
+          <Show when={account.exportStatus()?.latest}>
             {(latest) => <ExportDetails latest={latest()} />}
           </Show>
-          <Show when={page.exportStatus()}>
+          <Show when={account.exportStatus()}>
             {(status) => (
               <Text size="caption" tone="faint">
                 An export counts for {freshnessWindow(status().freshForMinutes)} after you take it.
@@ -94,7 +116,7 @@ function AccountDataContent(props: AccountDataPageProps): JSX.Element {
             <Button
               pending={session.isSigningOut()}
               pendingLabel="Signing out…"
-              variant="quiet"
+              variant="secondary"
               onClick={() => void session.signOut()}
             >
               Sign out this device
@@ -113,43 +135,43 @@ function AccountDataContent(props: AccountDataPageProps): JSX.Element {
                 Checking your export…
               </Text>
             }
-            when={!page.statusLoading()}
+            when={!account.statusLoading()}
           >
             <Show
               fallback={
                 <ActionFeedback
                   feedback={{
                     type: "attention",
-                    message: page.statusFailure()?.message ?? "We could not check your export.",
+                    message: account.statusFailure()?.message ?? "We could not check your export.",
                     recovery: {
                       label: "Check again",
                       pendingLabel: "Checking…",
-                      onAction: page.refreshExportStatus,
+                      onAction: account.refreshExportStatus,
                     },
                   }}
                 />
               }
-              when={page.statusFailure() === undefined}
+              when={account.statusFailure() === undefined}
             >
               <Show
-                fallback={<EraseWithoutExport latest={page.exportStatus()?.latest} />}
-                when={page.exportStatus()?.usable === true}
+                fallback={<EraseWithoutExport latest={account.exportStatus()?.latest} />}
+                when={account.exportStatus()?.usable === true}
               >
                 <Text>
                   Your export is ready. Keep that file: after the erasure it is the only copy.
                 </Text>
-                <Form gap="md" onSubmit={page.erase}>
+                <Form gap="md" onSubmit={account.erase}>
                   <TextField
                     autocomplete="off"
-                    error={page.confirmationError()}
+                    error={account.confirmationError()}
                     label="Type erase my account to confirm"
                     spellcheck={false}
-                    value={page.confirmation()}
-                    onInput={(event) => page.setConfirmation(event.currentTarget.value)}
+                    value={account.confirmation()}
+                    onInput={(event) => account.setConfirmation(event.currentTarget.value)}
                   />
                   <Inline gap="sm">
                     <Button
-                      pending={page.erasing()}
+                      pending={account.erasing()}
                       pendingLabel="Erasing your account…"
                       tone="danger"
                       type="submit"
@@ -162,7 +184,7 @@ function AccountDataContent(props: AccountDataPageProps): JSX.Element {
               </Show>
             </Show>
           </Show>
-          <ActionFeedback feedback={page.feedback()} />
+          <ActionFeedback feedback={account.feedback()} />
         </Stack>
       </Stack>
     </Page>
@@ -242,7 +264,11 @@ const themeOptions: ReadonlyArray<{ readonly value: ThemePreference; readonly la
   { value: "dark", label: "Dark" },
 ];
 
-type AccountDataPageProps = {
+type AccountPageProps = {
   readonly remote: AccountDataRemote;
   readonly onErased: () => Promise<void>;
+  readonly connections: Element;
+  readonly sessionsQuery: Accessor<SignInSessionListQueryOptions>;
+  readonly sessionsRemote: SignInSessionsRemote;
+  readonly onRefreshSessions: () => Promise<void>;
 };

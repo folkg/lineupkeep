@@ -42,9 +42,7 @@ it("starts Google sign-in toward the page that asked for it", async () => {
   await google.click();
 
   await expect.element(google).toHaveTextContent("Opening Google…");
-  expect(started).toEqual([
-    { returnTo: "/connections", errorReturnTo: "/auth?redirect=%2Fconnections" },
-  ]);
+  expect(started).toEqual([{ returnTo: "/account", errorReturnTo: "/auth?redirect=%2Faccount" }]);
 });
 
 it("explains why Google sent the person back", async () => {
@@ -150,7 +148,7 @@ it("accepts a pasted code with spacing and signs in with its digits", async () =
   await page.getByLabelText("Code").fill("123 456");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect.element(page.getByText("Connections", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Account", { exact: true })).toBeVisible();
   expect(attempts).toEqual([{ email: "reader@example.test", code: "123456" }]);
 });
 
@@ -198,7 +196,7 @@ it("checks the session before offering another try after an unconfirmed sign-in"
 
   await page.getByRole("button", { name: "Check again" }).click();
 
-  await expect.element(page.getByText("Connections", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Account", { exact: true })).toBeVisible();
 });
 
 it("waits before offering another code", async () => {
@@ -260,23 +258,23 @@ function setupAuthPage(options: AuthPageFixtureOptions): {
         <AuthPage
           remote={remote}
           methodsQuery={() => methodsQuery}
-          returnTo="/connections"
-          googleErrorReturnTo="/auth?redirect=%2Fconnections"
+          returnTo="/account"
+          googleErrorReturnTo="/auth?redirect=%2Faccount"
           googleError={options.googleError}
-          onAuthenticated={() => navigate({ to: "/connections" })}
+          onAuthenticated={() => navigate({ to: "/account" })}
         />
       );
     },
   });
-  const connectionsRoute = createRoute({
+  const accountRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/connections",
-    component: () => <p>Connections</p>,
+    path: "/account",
+    component: () => <p>Account</p>,
   });
   const router = createRouter({
     context: { queryClient, sessionRemote },
     history: createMemoryHistory({ initialEntries: ["/auth"] }),
-    routeTree: rootRoute.addChildren([authRoute, connectionsRoute]),
+    routeTree: rootRoute.addChildren([authRoute, accountRoute]),
   });
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = render(() => <RouterProvider router={router} />, host);
