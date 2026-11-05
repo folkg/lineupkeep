@@ -13,10 +13,9 @@ test("shares product identity across document metadata and home navigation", asy
   await expect(
     page.getByRole("heading", { name: "Lineupgrade sets your fantasy lineup.", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "What Lineupgrade does" })).toBeVisible();
-  await expect(
-    page.getByText("Provider linking, lineup automation, and the optimizer"),
-  ).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The lineup writes itself" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your agent can run your teams" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "You stay in control" })).toBeVisible();
 });
 
 test("shows no application navigation before sign-in", async ({ page }) => {

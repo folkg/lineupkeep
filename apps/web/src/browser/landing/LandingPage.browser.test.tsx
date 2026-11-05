@@ -15,23 +15,47 @@ import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import { sessionQueries } from "#browser/session/sessionQueries.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
+import type { SessionView } from "#contracts/auth/authContract.ts";
 
 import { LandingPage } from "./LandingPage";
 
-it("describes the product without naming a provider", async () => {
+it("describes what the product does without naming a provider", async () => {
   using _app = setupLandingPage();
 
   await expect
     .element(page.getByRole("heading", { name: "Lineupgrade sets your fantasy lineup." }))
     .toBeVisible();
-  await expect.element(page.getByText("Your league's lineup rules")).toBeVisible();
+  await expect
+    .element(page.getByText("It keeps your lineup current, and your agent can help with the rest."))
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("heading", { name: "The lineup writes itself" }))
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("heading", { name: "Your agent can run your teams" }))
+    .toBeVisible();
+  await expect.element(page.getByRole("heading", { name: "You stay in control" })).toBeVisible();
+  expect(document.body.textContent).toContain(
+    "You can let a connected agent read your teams, set lineups, and propose players to add or drop, trades, and waiver claims.",
+  );
   expect(document.body.textContent).not.toContain("Yahoo");
 });
 
-function setupLandingPage(): { [Symbol.dispose](): void } {
+it("sends a signed-in visitor to their teams", async () => {
+  using _app = setupLandingPage({ status: "authenticated", userId: "user-1" });
+
+  await expect
+    .element(page.getByRole("link", { name: "Open your teams", exact: true }))
+    .toHaveAttribute("href", "/teams");
+  expect(page.getByRole("link", { name: "Sign in to get started" }).elements()).toHaveLength(0);
+});
+
+function setupLandingPage(session: SessionView = { status: "anonymous" }): {
+  [Symbol.dispose](): void;
+} {
   const queryClient = createQueryClient();
   const sessionRemote: SessionRemote = {
-    load: () => Promise.resolve({ status: "anonymous" }),
+    load: () => Promise.resolve(session),
     signOut: () => Promise.resolve(),
   };
   const rootRoute = createRootRouteWithContext<RouterContext>()({
