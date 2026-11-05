@@ -2007,6 +2007,16 @@ export const yahooNflDraftResults = {
         draft_results: {
           "0": {
             draft_result: {
+              "0": {
+                players: {
+                  "0": {
+                    player: [
+                      [{ player_key: "466.p.20003" }, { name: { full: "Synthetic Pick One" } }],
+                    ],
+                  },
+                  count: 1,
+                },
+              },
               pick: "1",
               round: "1",
               team_key: "466.l.4000.t.1",
@@ -2015,6 +2025,16 @@ export const yahooNflDraftResults = {
           },
           "1": {
             draft_result: {
+              "0": {
+                players: {
+                  "0": {
+                    player: [
+                      [{ player_key: "466.p.20006" }, { name: { full: "Synthetic Pick Two" } }],
+                    ],
+                  },
+                  count: 1,
+                },
+              },
               pick: "2",
               round: "1",
               team_key: "466.l.4000.t.2",

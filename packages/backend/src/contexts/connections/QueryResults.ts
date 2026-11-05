@@ -22,6 +22,7 @@ import {
   StatPeriodPreset,
   StatRef,
   TeamListRow,
+  TeamOwnerNote,
 } from "./QueryValues.ts";
 
 export const ListTeamsInput = Schema.Struct({
@@ -508,6 +509,12 @@ const DraftPick = Schema.Struct({
   pick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   team: CounterpartyRef,
   teamName: Schema.optional(Schema.NonEmptyString),
+  name: Schema.optional(Schema.NonEmptyString).pipe(
+    Schema.annotate({
+      description:
+        "The provider's inline player name for this pick, present where its draft read publishes one. It sits beside the private player reference; the name is absent when the provider gives none.",
+    }),
+  ),
   player: PlayerRef,
 });
 export type DraftPick = typeof DraftPick.Type;
@@ -627,6 +634,12 @@ export const RosterData = Schema.Struct({
   coverage: Schema.Array(QueryCoverage),
   playerSchedule: PlayerSchedule,
   players: Schema.Array(RosterPlayer),
+  ownerNote: Schema.optional(TeamOwnerNote).pipe(
+    Schema.annotate({
+      description:
+        "The owner's note for this team, present only when `detail` is `full`. It is owner context, not a provider or league fact, and the compact roster omits it.",
+    }),
+  ),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,
   budget: QueryBudget,
@@ -859,9 +872,18 @@ export const SearchPlayersResult = Schema.Union([SearchPlayersData, NarrowingRes
 export type SearchPlayersResult = typeof SearchPlayersResult.Type;
 
 export const GetPlayersInput = Schema.Struct({
-  team: TeamId,
+  team: TeamId.pipe(
+    Schema.annotate({
+      description:
+        "The linked team whose league seals every player reference and whose roster supplies identity. This is context, not the subject of the read: a player on another team in the same league resolves normally. It is required because a player reference carries the owner and the league, and a query needs a league to open them.",
+    }),
+  ),
   players: Schema.Array(PlayerRef).pipe(
     Schema.check(Schema.isMinLength(1), Schema.isMaxLength(25)),
+    Schema.annotate({
+      description:
+        "Between 1 and 25 private player references from the league named by `team`. The whole requested list is returned in one response; an explicit list is bounded by this 25-reference cap instead of paging at a pool or roster page size.",
+    }),
   ),
   period: Schema.optional(
     StatPeriod.pipe(
@@ -1627,20 +1649,6 @@ const SummaryRosterPlayer = Schema.Struct({
   }),
 });
 export type SummaryRosterPlayer = typeof SummaryRosterPlayer.Type;
-
-const TeamOwnerNote = Schema.Union([
-  Schema.Struct({
-    status: Schema.Literal("provided"),
-    text: Schema.NonEmptyString,
-    updatedAt: Schema.optional(Schema.DateTimeUtc),
-  }),
-  Schema.Struct({ status: Schema.Literal("not_set") }),
-]).pipe(
-  Schema.annotate({
-    description:
-      "The note the team's owner wrote in Lineupkeep. This is owner context, not a provider fact: the provider and the league do not publish it, so it is not a rule, a scoring setting, or a fact the league said. It can explain keepers, dynasty cost, salary, or why a player is held. The owner can change or clear it, and it is never a place for passwords, tokens, or provider session material.",
-  }),
-);
 
 export const TeamSummaryData = Schema.Struct({
   status: QueryStatus,

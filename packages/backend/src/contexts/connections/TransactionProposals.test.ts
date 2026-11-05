@@ -2,7 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
-import { Array, Effect, Layer, Redacted } from "effect";
+import { Array, DateTime, Effect, Layer, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 
 import { Connections } from "./Connections.ts";
@@ -793,12 +793,24 @@ it.effect("reads pending trade offers as a read-only, owner-scoped view", () =>
       team("nhl.l.1.t.2", "Blue Line", "nhl"),
     ]);
     yield* fake.setPendingTrades([pendingTrade]);
+    const database = yield* ConnectionsDatabase;
+    const writtenAt = DateTime.makeUnsafe("2026-10-30T18:00:00.000Z");
+    const note = "Dynasty league. Keep both goalies; cost rises by 5 each season.";
+    yield* database
+      .update(providerTeams)
+      .set({ ownerNote: note, ownerNoteUpdatedAt: DateTime.toDateUtc(writtenAt) })
+      .where(eq(providerTeams.id, teamId(seeded, "nhl.l.1.t.1")));
 
     const read = yield* proposals.readPendingOffers(owner, {
       team: teamId(seeded, "nhl.l.1.t.1"),
     });
     assert.strictEqual(read.status, "available");
     assert.isTrue(read.readOnly);
+    assert.deepStrictEqual(read.ownerNote, {
+      status: "provided",
+      text: note,
+      updatedAt: writtenAt,
+    });
     assert.strictEqual(read.offers.length, 1);
     const offer = Array.getUnsafe(read.offers, 0);
     assert.isTrue(offer.canRespond);

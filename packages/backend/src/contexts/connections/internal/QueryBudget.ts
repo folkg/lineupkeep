@@ -12,6 +12,7 @@ const queryResultTargetBytes = 12 * 1024;
 const queryResultHardLimitBytes = 16 * 1024;
 const summaryResultTargetBytes = 20 * 1024;
 const summaryResultHardLimitBytes = 28 * 1024;
+const playerListResultLimitBytes = 256 * 1024;
 
 const envelopeAllowanceBytes = 1_024;
 const cursorPlaceholder = "x".repeat(256);
@@ -25,6 +26,11 @@ export const queryBudget: QueryBudget = {
 export const summaryBudget: QueryBudget = {
   targetBytes: summaryResultTargetBytes,
   hardLimitBytes: summaryResultHardLimitBytes,
+};
+
+export const playerListBudget: QueryBudget = {
+  targetBytes: playerListResultLimitBytes,
+  hardLimitBytes: playerListResultLimitBytes,
 };
 
 export type FitPageInput<Row, Result> = {

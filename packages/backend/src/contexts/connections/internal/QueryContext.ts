@@ -2,9 +2,10 @@ import { Effect } from "effect";
 import type { Redacted } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
-import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
+import type { FantasyTeam, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { Provider, ProviderSessionMaterial } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
+import type { TeamOwnerNote } from "#contexts/connections/QueryValues.ts";
 import { type QueryError, QueryPersistenceFailed } from "#contexts/connections/QueryValues.ts";
 
 import type { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
@@ -61,4 +62,14 @@ export function providerIdentity(context: TeamContext): ProviderSessionMaterial 
     provider: context.owned.connection.provider,
     session: context.session,
   };
+}
+
+export function ownerNoteOf(team: FantasyTeam): TeamOwnerNote {
+  return team.ownerNote === null
+    ? { status: "not_set" }
+    : {
+        status: "provided",
+        text: team.ownerNote,
+        ...(team.ownerNoteUpdatedAt === null ? {} : { updatedAt: team.ownerNoteUpdatedAt }),
+      };
 }

@@ -1094,7 +1094,7 @@ export const yahooProvider = Effect.gen(function* () {
     const payload = yield* readJson(internet, {
       operation: "read_draft_results",
       origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/draftresults`,
+      path: `/fantasy/v2/league/${leagueKey}/draftresults;out=players`,
       query: { format: "json" },
       cookie,
       normalize: true,
@@ -1108,12 +1108,16 @@ export const yahooProvider = Effect.gen(function* () {
     ) {
       return yield* responseMismatch({ operation: "read_draft_results" });
     }
-    const picks = decoded.league.draft_results.map(({ draft_result }) => ({
-      round: draft_result.round,
-      pick: draft_result.pick,
-      providerTeamKey: draft_result.team_key,
-      providerPlayerKey: draft_result.player_key,
-    }));
+    const picks = decoded.league.draft_results.map(({ draft_result }) => {
+      const name = optionalNonEmpty(draft_result.entries?.[0]?.players?.[0]?.name?.full ?? "");
+      return {
+        round: draft_result.round,
+        pick: draft_result.pick,
+        providerTeamKey: draft_result.team_key,
+        providerPlayerKey: draft_result.player_key,
+        ...(name === undefined ? {} : { name }),
+      };
+    });
     yield* Effect.annotateCurrentSpan("provider.draft_pick_count", picks.length);
     return picks;
   });
@@ -4400,12 +4404,23 @@ const TransactionPayload = Schema.Struct({
   players: Schema.optional(Schema.Array(TransactionPlayerPayload)),
 });
 
+const DraftResultPlayerPayload = Schema.Struct({
+  name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
+});
+
 const DraftResultPayload = Schema.Struct({
   draft_result: Schema.Struct({
     round: IntFromStringOrNumber,
     pick: IntFromStringOrNumber,
     team_key: TeamKey,
     player_key: PlayerKey,
+    entries: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          players: Schema.optional(Schema.Array(DraftResultPlayerPayload)),
+        }),
+      ),
+    ),
   }),
 });
 

@@ -16,6 +16,7 @@ import {
   QueryPage,
   QueryStatus,
   QueryTeam,
+  TeamOwnerNote,
 } from "./QueryValues.ts";
 import type { QueryError } from "./QueryValues.ts";
 
@@ -90,6 +91,7 @@ export const ReviewLinksData = Schema.Struct({
   }),
   links: Schema.Array(ReviewLink),
   instruction: Schema.String,
+  ownerNote: TeamOwnerNote,
   coverage: Schema.Array(QueryCoverage),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,

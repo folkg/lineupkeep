@@ -48,7 +48,7 @@ import type {
 import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
 import { ProviderRegistry } from "./ProviderRegistry.ts";
 import { RosterResult, TeamSummaryData, TeamSummaryResult } from "./QueryResults.ts";
-import { StatRef } from "./QueryValues.ts";
+import { CounterpartyRef, StatRef } from "./QueryValues.ts";
 import { QueryTeamNotFound } from "./QueryValues.ts";
 import { TransactionReviews } from "./TransactionReview.ts";
 
@@ -1020,6 +1020,70 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("returns every explicitly requested player reference in one response", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const categories = globalThis.Array.from({ length: 36 }, (_, index) => ({
+      statId: 100 + index,
+      name: `Synthetic Category ${String(index)}`,
+      displayName: `SC${String(index)}`,
+      abbreviation: `S${String(index)}`,
+      group: "synthetic",
+      enabled: true,
+      displayOnly: false,
+      positionTypes: ["O"],
+    }));
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      league: { ...leagueFixture, statCategories: categories },
+      roster: rosterFixture({ count: 25 }),
+      playerDetails: globalThis.Array.from({ length: 25 }, (_, index) => ({
+        providerPlayerKey: `461.p.${String(10001 + index)}`,
+        name: `Synthetic ${String(index)}`,
+        primaryPosition: "QB",
+        displayPosition: "QB",
+        proTeam: undefined,
+        availabilityDetail: undefined,
+        eligiblePositions: ["QB"],
+        rosterStatus: "rostered" as const,
+        actual: {
+          basis: { type: "week" as const, week: 3 },
+          stats: categories.map((category) => ({ statId: category.statId, value: index })),
+          notAggregated: [],
+        },
+        projected: undefined,
+      })),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const players = yield* Effect.provide(
+      Effect.flatMap(QueryTokens, (tokens) =>
+        tokens.sealPlayerRefs({
+          userId: owner,
+          leagueKey: "461.l.1000",
+          playerKeys: globalThis.Array.from(
+            { length: 25 },
+            (_, index) => `461.p.${String(10001 + index)}`,
+          ),
+        }),
+      ),
+      QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars"),
+    );
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players,
+      groups: ["identity", "availability", "eligibility", "actual_stats", "scoring_context"],
+    });
+
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(hydrated.players.length, 25);
+    assert.deepStrictEqual(hydrated.page, { returned: 25, complete: true, remaining: 0 });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("counts a pool player's games from its professional team key without a roster row", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -1962,6 +2026,7 @@ it.effect("returns draft history with round, pick, team, and player for the leag
         pick: 1,
         providerTeamKey: "461.l.1000.t.1",
         providerPlayerKey: "461.p.10001",
+        name: "Synthetic 0",
       },
       {
         round: 1,
@@ -1989,6 +2054,8 @@ it.effect("returns draft history with round, pick, team, and player for the leag
     assert.strictEqual(first.round, 1);
     assert.strictEqual(first.pick, 1);
     assert.strictEqual(first.teamName, "Alpha");
+    assert.strictEqual(first.name, "Synthetic 0");
+    assert.isUndefined(Array.getUnsafe(draft.picks, 1).name);
     assert.isTrue(
       league.coverage.some(
         (entry) => entry.resource === "draft_history" && entry.status === "available",
@@ -2861,6 +2928,66 @@ it.effect("returns the owner note as owner context in a team summary", () =>
     assert.deepStrictEqual(summary.ownerNote, {
       status: "provided",
       text: "Dynasty league. Keep both goalies; cost rises by 5 each season.",
+      updatedAt: writtenAt,
+    });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("carries the owner note on the full roster read and the trade review surface", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const reviews = yield* TransactionReviews;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [
+      team("461.l.1000.t.1", "Alpha"),
+      team("461.l.1000.t.2", "Beta"),
+    ]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const writtenAt = DateTime.makeUnsafe("2026-10-30T18:00:00.000Z");
+    const note = "Dynasty league. Keep both goalies; cost rises by 5 each season.";
+    yield* database
+      .update(providerTeams)
+      .set({ ownerNote: note, ownerNoteUpdatedAt: DateTime.toDateUtc(writtenAt) })
+      .where(eq(providerTeams.id, teamId));
+
+    const compact = yield* queries.getRosters(owner, { team: teamId });
+    assert.strictEqual(compact.status, "ok");
+    if (compact.status !== "ok") {
+      return;
+    }
+    assert.isFalse("ownerNote" in compact);
+
+    const full = yield* queries.getRosters(owner, { team: teamId, detail: "full" });
+    assert.strictEqual(full.status, "ok");
+    if (full.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(full.ownerNote, {
+      status: "provided",
+      text: note,
+      updatedAt: writtenAt,
+    });
+
+    const player = Array.getUnsafe(full.players, 0).player;
+    const review = yield* reviews.generate(owner, {
+      team: teamId,
+      intents: [
+        {
+          kind: "trade",
+          send: [player],
+          receive: [player],
+          counterparty: yield* Schema.decodeEffect(CounterpartyRef)("r1.counterparty"),
+        },
+      ],
+    });
+    assert.notStrictEqual(review.status, "narrowing_required");
+    if (review.status === "narrowing_required") {
+      return;
+    }
+    assert.deepStrictEqual(review.ownerNote, {
+      status: "provided",
+      text: note,
       updatedAt: writtenAt,
     });
   }).pipe(Effect.provide(QueriesTestLayer)),

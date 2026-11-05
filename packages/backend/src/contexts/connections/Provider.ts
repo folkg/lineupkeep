@@ -812,6 +812,7 @@ export type ProviderDraftPick = {
   readonly pick: number;
   readonly providerTeamKey: string;
   readonly providerPlayerKey: string;
+  readonly name?: string;
 };
 
 export type ProviderAcquisitionUsage = {

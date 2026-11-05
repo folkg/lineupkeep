@@ -3,6 +3,24 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — round-11 MCP fixes (explicit player lists, owner note, draft names)
+
+- `get_players` returns every reference in an explicit list in one response instead of paging at the
+  pool page size. The schema states the 25-reference cap and that `team` is league context rather
+  than the subject of the read, so a player on another team in the same league resolves normally.
+  A live five-reference call with identity, availability, eligibility, actual stats, and scoring
+  context returned 1 of 5 players on football and 2 of 5 on hockey under the shared 16 KiB ceiling;
+  on those leagues the same call now returns 5 players complete at 10,059 and 7,482 structured
+  bytes, and a 9-player roster returns 9 complete at 15,776 and 11,633.
+- `get_rosters` with `detail: full` carries the team's `ownerNote`; the compact default still omits
+  it. `generate_transaction_review_links` and `get_pending_trade_offers` also carry the linked
+  team's `ownerNote`, so a trade decision sees the owner's stated intent without a separate
+  `get_team_summary` call. The note remains owner context, never a provider or league fact.
+- `get_league`'s `draft_history` group carries the provider's inline player name where its
+  `draftresults;out=players` read publishes one, beside the private player reference. A pick the
+  provider returns without a name keeps only the reference. On the owner's football league the first
+  page of draft picks now carries names beside their references instead of references alone.
+
 ## Unreleased — refresh grant survival and refusal telemetry
 
 - A refresh token replayed inside the rotation reuse window is replayed for five minutes instead of

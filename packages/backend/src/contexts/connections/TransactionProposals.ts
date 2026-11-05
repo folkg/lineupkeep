@@ -9,6 +9,7 @@ import {
   PlayerRef,
   QueryCoverage,
   QueryTeam,
+  TeamOwnerNote,
   TradeOfferRef,
 } from "./QueryValues.ts";
 
@@ -372,6 +373,7 @@ export const PendingTradeOffersResult = Schema.Struct({
   team: QueryTeam,
   readOnly: Schema.Literal(true),
   offers: Schema.Array(PendingTradeOffer),
+  ownerNote: TeamOwnerNote,
   coverage: Schema.Array(QueryCoverage),
   detail: Schema.NonEmptyString,
 });

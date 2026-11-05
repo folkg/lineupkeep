@@ -4030,7 +4030,7 @@ it.effect("reads a league's draft results with round, pick, team, and player", (
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/draftresults?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/draftresults;out=players?format=json",
     );
     assert.deepStrictEqual(picks, [
       {
@@ -4038,12 +4038,14 @@ it.effect("reads a league's draft results with round, pick, team, and player", (
         pick: 1,
         providerTeamKey: "466.l.4000.t.1",
         providerPlayerKey: "466.p.20003",
+        name: "Synthetic Pick One",
       },
       {
         round: 1,
         pick: 2,
         providerTeamKey: "466.l.4000.t.2",
         providerPlayerKey: "466.p.20006",
+        name: "Synthetic Pick Two",
       },
       {
         round: 2,

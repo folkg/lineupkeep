@@ -96,14 +96,15 @@ import {
   QueryPersistenceFailed,
   QuerySelectionInvalid,
   type StatRef,
+  type TeamOwnerNote,
 } from "#contexts/connections/QueryValues.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
 import { uniqueProviderTeamKeys } from "./ProfessionalTeamIdentity.ts";
 import { ProviderOpponentFactStale, readProviderOpponent } from "./ProviderOpponentFacts.ts";
-import { fitPage, queryBudget, summaryBudget } from "./QueryBudget.ts";
-import { loadTeamContext, providerIdentity } from "./QueryContext.ts";
+import { fitPage, playerListBudget, queryBudget, summaryBudget } from "./QueryBudget.ts";
+import { loadTeamContext, ownerNoteOf, providerIdentity } from "./QueryContext.ts";
 import type { TeamContext } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 import type { OwnedTeam } from "./QueryRepository.ts";
@@ -907,6 +908,7 @@ export const FantasyQueriesLive = Layer.effect(
           fetchedAt,
           rosterOutcome,
           leagueOutcome,
+          detail === "full" ? ownerNoteOf(context.owned.team) : undefined,
         );
       }
       const roster = rosterOutcome.value;
@@ -943,6 +945,7 @@ export const FantasyQueriesLive = Layer.effect(
           status: "unsupported",
           detail: limitation(context.provider, "player_schedule"),
         },
+        ...(detail === "full" ? { ownerNote: ownerNoteOf(context.owned.team) } : {}),
         failures: leagueFailure(leagueOutcome),
         budget: queryBudget,
       };
@@ -1564,7 +1567,7 @@ export const FantasyQueriesLive = Layer.effect(
         schema: PlayersSchema,
         rows: playerRows,
         offset,
-        limit: input.limit ?? 25,
+        limit: input.limit ?? input.players.length,
         resource: "players",
         groups,
         remedy: "Select fewer player groups or fewer player references.",
@@ -1572,6 +1575,7 @@ export const FantasyQueriesLive = Layer.effect(
         makeNext: (nextOffset) =>
           tokens.sealCursor({ userId, fingerprint: fingerprintValue, offset: nextOffset, now }),
         recordLabel: (row) => row.player,
+        budget: playerListBudget,
       });
     });
 
@@ -2760,16 +2764,7 @@ export const FantasyQueriesLive = Layer.effect(
               },
             }
           : {}),
-        ownerNote:
-          context.owned.team.ownerNote === null
-            ? { status: "not_set" as const }
-            : {
-                status: "provided" as const,
-                text: context.owned.team.ownerNote,
-                ...(context.owned.team.ownerNoteUpdatedAt === null
-                  ? {}
-                  : { updatedAt: context.owned.team.ownerNoteUpdatedAt }),
-              },
+        ownerNote: ownerNoteOf(context.owned.team),
         coverage: coverageEntries,
         failures,
         budget: summaryBudget,
@@ -3172,6 +3167,7 @@ function draftPickRows(
         pick: pick.pick,
         team,
         ...(teamName === undefined ? {} : { teamName }),
+        ...(pick.name === undefined ? {} : { name: pick.name }),
         player: EffectArray.getUnsafe(playerRefs, index),
       };
     });
@@ -3193,7 +3189,7 @@ function draftHistoryData(
     status: "available",
     ...(draftStatus === undefined ? {} : { draftStatus }),
     detailNote:
-      "These are the picks the provider publishes for this league's draft. This is draft history, not current or future pick ownership: the provider publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it.",
+      "These are the picks the provider publishes for this league's draft. Each pick carries the provider's inline player name where it publishes one, beside the private player reference. This is draft history, not current or future pick ownership: the provider publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it.",
     picks: [...picks],
   };
 }
@@ -3371,6 +3367,7 @@ function rosterWithoutData(
   fetchedAt: DateTime.Utc,
   outcome: ReadOutcome<ProviderRoster>,
   league: ReadOutcome<ProviderLeagueSettings>,
+  ownerNote: TeamOwnerNote | undefined,
 ): RosterData {
   return {
     status: outcome._tag === "unsupported" ? "unsupported" : "failed",
@@ -3381,6 +3378,7 @@ function rosterWithoutData(
       detail: limitation(provider, "player_schedule"),
     },
     players: [],
+    ...(ownerNote === undefined ? {} : { ownerNote }),
     coverage: [
       leagueCoverage(league, fetchedAt),
       outcome._tag === "ok"

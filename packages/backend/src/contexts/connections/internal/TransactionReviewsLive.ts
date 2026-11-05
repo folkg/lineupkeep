@@ -29,7 +29,7 @@ import { ReviewLinksData as ReviewLinksSchema } from "#contexts/connections/Tran
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { fitPage, queryBudget } from "./QueryBudget.ts";
-import { loadTeamContext, providerIdentity } from "./QueryContext.ts";
+import { loadTeamContext, ownerNoteOf, providerIdentity } from "./QueryContext.ts";
 import type { TeamContext } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 import type { OwnedTeam } from "./QueryRepository.ts";
@@ -145,6 +145,7 @@ export const TransactionReviewsLive = Layer.effect(
     ) {
       const context = yield* loadTeamContext(repository, encryption, registry, userId, input.team);
       const team = queryTeam(context.owned);
+      const ownerNote = ownerNoteOf(context.owned.team);
       const linkTemplate = {
         provider: context.owned.team.provider,
         version: context.provider.reviewLinkTemplate.version,
@@ -152,7 +153,7 @@ export const TransactionReviewsLive = Layer.effect(
       const fetchedAt = yield* DateTime.now;
       const leagueOutcome = yield* readLeague(context);
       if (leagueOutcome._tag !== "ok") {
-        return reviewWithoutData(team, linkTemplate, fetchedAt, leagueOutcome);
+        return reviewWithoutData(team, linkTemplate, ownerNote, fetchedAt, leagueOutcome);
       }
       const league = leagueOutcome.value;
       const rosterOutcome = yield* readOutcome(
@@ -234,6 +235,7 @@ export const TransactionReviewsLive = Layer.effect(
         team,
         linkTemplate,
         instruction: humanReviewInstruction,
+        ownerNote,
         coverage: coverageEntries,
         failures,
         budget: queryBudget,
@@ -544,6 +546,7 @@ function queryTeam(owned: OwnedTeam): QueryTeam {
 function reviewWithoutData(
   team: QueryTeam,
   linkTemplate: ReviewLinksData["linkTemplate"],
+  ownerNote: ReviewLinksData["ownerNote"],
   fetchedAt: DateTime.Utc,
   outcome: ReadOutcome<ProviderLeagueSettings>,
 ): ReviewLinksData {
@@ -553,6 +556,7 @@ function reviewWithoutData(
     linkTemplate,
     links: [],
     instruction: humanReviewInstruction,
+    ownerNote,
     coverage: [
       outcome._tag === "ok"
         ? coverage("league", "league_settings", fetchedAt)

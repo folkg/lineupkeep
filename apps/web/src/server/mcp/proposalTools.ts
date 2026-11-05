@@ -77,7 +77,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_pending_trade_offers", {
     description:
-      "Read the pending trade offers the provider publishes for one team this account owns, with the proposing and receiving teams, both ends of every player, any traded draft picks, and an opaque reference a signed-in person can use on the review page to withdraw an offer this account made. This tool is read-only: Lineupkeep cannot accept, reject, vote, or counter an offer, and the result says so. The provider publishes only the managing account's own offers, so this never reports another manager's trade traffic. A provider that publishes no offers resource reports that boundary instead of an empty success.",
+      "Read the pending trade offers the provider publishes for one team this account owns, with the proposing and receiving teams, both ends of every player, any traded draft picks, and an opaque reference a signed-in person can use on the review page to withdraw an offer this account made. The result also carries `ownerNote`, the linked team's note from Lineupkeep: it is owner context, not a provider or league fact, and can explain keepers, dynasty cost, salary, or why a player is held before an offer is evaluated. This tool is read-only: Lineupkeep cannot accept, reject, vote, or counter an offer, and the result says so. The provider publishes only the managing account's own offers, so this never reports another manager's trade traffic. A provider that publishes no offers resource reports that boundary instead of an empty success.",
     parameters: PendingTradeOffersInput,
     success: Schema.toCodecJson(PendingTradeOffersResult),
     failure: ToolFailure,

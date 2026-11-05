@@ -20,9 +20,9 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 | `list_teams`                        | Compact owned team discovery with season/sport/connection filters; stable paging                                                                                           |
 | `get_calendar`                      | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                        |
 | `get_league`                        | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages |
-| `get_rosters`                       | Exact selected team/period rosters, compact by default; professional-team abbreviation on every entry                                                                      |
+| `get_rosters`                       | Exact selected team/period rosters, compact by default; professional-team abbreviation on every entry; full detail carries the owner note                                  |
 | `search_players`                    | Bounded league/sport-context player search with ownership/started signals, validated sorts, and optional professional games remaining                                      |
-| `get_players`                       | Bounded selected-player hydration including generic stats/projections/availability groups                                                                                  |
+| `get_players`                       | Explicit-list hydration of up to 25 selected-player references, returned whole; generic stats/projections/availability groups                                              |
 | `get_matchups`                      | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                 |
 | `get_transactions`                  | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution   |
 | `get_team_summary`                  | One bounded per-team snapshot: league, standing and record, standings, current matchup, and compact roster                                                                 |
@@ -71,7 +71,7 @@ Submission is bounded and rate-limited: title ≤ 120 characters, body ≤ 4000,
 
 Initial service policy: aim for about 12 KiB and enforce a 16 KiB model-facing application-result ceiling. These are our proposed application budgets, not claimed Muse/MCP limits. The measurement counts both representations a client receives: `structuredContent` and the JSON text copy that a text-only client reads. Keeping the text copy follows the specification's backwards-compatibility recommendation, so a structured page fills about half the ceiling instead of dropping the copy and halving what a text-only client can use.
 
-`get_team_summary` is the one deliberate exception because it composes up to six sections into one snapshot: it aims for 20 KiB and enforces a 28 KiB hard ceiling, with the same double-counting of structured and text copies. The ordinary six-group call fits a 13-team league inside that ceiling. A request that still cannot fit one player row refuses with the largest sections and the groups to drop, so the exception does not turn a genuinely oversized snapshot into a silent truncation or an unbounded result. Every other tool keeps the 12 KiB target and 16 KiB hard ceiling.
+`get_team_summary` is the one deliberate exception because it composes up to six sections into one snapshot: it aims for 20 KiB and enforces a 28 KiB hard ceiling, with the same double-counting of structured and text copies. The ordinary six-group call fits a 13-team league inside that ceiling. A request that still cannot fit one player row refuses with the largest sections and the groups to drop, so the exception does not turn a genuinely oversized snapshot into a silent truncation or an unbounded result. `get_players` is the second deliberate exception: an explicit list of at most 25 player references is returned whole in one response, so it is bounded by a 256 KiB hard ceiling instead of paging at the pool size. A caller that deliberately passes `limit` can still request a smaller page. Every other tool keeps the 12 KiB target and 16 KiB hard ceiling.
 
 - Bound both row counts and encoded UTF-8 bytes, including metadata and continuation information.
 - Return complete records. Do not truncate strings midway, silently drop requested fields, or mark omitted values zero.
@@ -228,7 +228,10 @@ per-professional-team remaining-game count and no probable-starter field; Lineup
 professional team's games from the league's own schedule instead. `get_rosters` reports `proTeam`,
 injury, and the bye week where published; its `playerSchedule` declaration states the per-player
 schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group publishes the
-games themselves and each player's games remaining. `search_players` reports provider
+games themselves and each player's games remaining. With `detail: full`, `get_rosters` also carries
+the team's `ownerNote`, while the compact default omits it; the note is the owner's stated intent
+for that team, not a provider or league fact, and it belongs with the roster facts a trade or lineup
+decision reads. `search_players` reports provider
 ownership/started percentages without inventing either, and publishes the player's professional team
 as `proTeam`, the same abbreviation a roster entry carries. Pass `includeGames: true` to add
 `gamesRemaining` to each pool row, joined from the row's professional-team key against the same
@@ -338,16 +341,20 @@ teams: `transactions;type=pending_trade;team_key={own}` returns a `pending_trade
 and whether the session can respond. The plain league feed never carries them and another team's
 request is refused, so there is no league-wide trade wire and no offer data is inferred.
 `get_pending_trade_offers` reads that feed for one owned team, marks the result `readOnly: true`,
-and states that this product cannot accept, reject, or vote on a trade. It returns an opaque reference
+and states that this product cannot accept, reject, or vote on a trade. It also carries `ownerNote`,
+the linked team's note from Lineupkeep, so an offer can be read against the owner's stated intent;
+the note is owner context, not a provider fact. It returns an opaque reference
 a signed-in person can use on the review page to withdraw an offer this account made. It never exposes
 a provider team key, player key, or pending-trade key; parties and players arrive as private references. A provider that
 publishes no such feed reports `status: "unsupported"` with the reason instead of an empty success.
 
 `get_league`'s `draft_history` group returns the provider's `draftresults` read: every published
-pick in provider order with its round, pick number, the team that made it, and a private player
-reference, beside the league's published draft status. It is history, not current or future pick
-ownership; the provider publishes no pick-ownership read, so the group does not pretend to know who
-owns an upcoming pick. A traded pick appears on the trade transaction that moved it, not in this
+pick in provider order with its round, pick number, the team that made it, the provider's inline
+player name where it publishes one, and a private player reference, beside the league's published
+draft status. The name comes from the same `draftresults;out=players` read, so no second player
+hydration is needed; a pick the provider returns without a name keeps only the reference. It is
+history, not current or future pick ownership; the provider publishes no pick-ownership read, so
+the group does not pretend to know who owns an upcoming pick. A traded pick appears on the trade transaction that moved it, not in this
 pick history. Team names come from one batched league-teams read and are omitted when that
 read fails while the picks remain. The group pages picks inside the result budget, and the section's
 detail note repeats that this is completed draft history rather than pick ownership.
@@ -634,7 +641,7 @@ A period reference must be resolved against the provider calendar, sport, season
 
 Do not advertise multi-week aggregation, advanced-stat availability, diamond data, all legacy sorts, or NHL projection completeness without proof. Rates, percentages, ratios, and time-on-ice averages are not summed like counts. Missing games/stats are not automatically zero.
 
-Separate roster membership reads from bounded player hydration. Live verification found no projected-statistics series in the provider's read surface: completed weeks report actual values, while the current and future weeks report zero rather than projections. Projections therefore stay typed unsupported unless a future verified read proves otherwise. See [live read endpoints](RESEARCH.md#live-yahoo-read-endpoints-2026-10-25).
+Separate roster membership reads from bounded player hydration. `get_players` takes an explicit list of at most 25 references and returns the whole list in one response; its `team` is league context, not the subject, so a reference to a player on another team in the same league resolves normally and a reference sealed for another owner or league is refused in `failures`. Live verification found no projected-statistics series in the provider's read surface: completed weeks report actual values, while the current and future weeks report zero rather than projections. Projections therefore stay typed unsupported unless a future verified read proves otherwise. See [live read endpoints](RESEARCH.md#live-yahoo-read-endpoints-2026-10-25).
 
 Actual statistics state their basis: `week` with the covered period when the provider declares a weekly player series for the sport, `date_range` with the covered dates when the provider served a window by aggregation, otherwise `season`. A client must not compare a season total against a weekly or window value, and the read reports the basis it used rather than relabelling one as the other. Player identity resolves from the roster, then selected-player hydration, then transaction history, so a player who is no longer rostered anywhere is still named by the drop side of an add/drop; a transaction player row carries its inline identity beside the reference, and its primary position is omitted where the provider does not publish one.
 
@@ -736,7 +743,9 @@ Generate links from typed domain intents and verified relationships. Users may c
 Return a clear human-review instruction and no guarantee of add/drop/trade eligibility. Review links never carry a submission, confirmation automation, waiver/bid submission, or multi-add/drop behavior the adapter has not validated. They are for a person to inspect in the provider's own interface.
 
 Every result carries `linkTemplate: { provider, version }`, so a client can detect a stale link
-template after an upgrade without guessing from URL shape. The Yahoo template
+template after an upgrade without guessing from URL shape. It also carries `ownerNote`, the linked
+team's note from Lineupkeep: owner context, not a provider fact, so a person reviewing a proposal
+can see keepers, dynasty cost, salary, or why a player is held. The Yahoo template
 (`yahoo-review-links-v2`) emits an `addplayer` review page for `add` and `add/drop`, and a
 team-scoped `dropplayer` page for `drop`; each was verified against the provider as the intended
 review page for the named player. The provider publishes no parameterized trade proposal page, so a

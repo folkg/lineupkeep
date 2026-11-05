@@ -865,6 +865,7 @@ it("requires transaction review scope and returns human-review-only links", asyn
       },
     ],
     instruction: "Review each proposal in the provider interface.",
+    ownerNote: { status: "not_set" },
     coverage: [],
     failures: [],
     page: { returned: 1, complete: true, remaining: 0 },
@@ -1602,6 +1603,15 @@ it("publishes the accepted player-statistics periods and the compact standings f
   }
   expect(tool("get_players").description).toContain("periodSupport");
   expect(tool("get_players").description).toContain("aggregated");
+  expect(tool("get_players").description).toContain("25-reference");
+  expect(tool("get_players").description).toContain("another team");
+  expect(players).toContain("25-reference");
+  expect(players).toContain("league named by");
+  expect(tool("get_rosters").description).toContain("ownerNote");
+  expect(tool("get_rosters").description).toContain("detail: full");
+  expect(tool("get_league").description).toContain("inline player name");
+  expect(tool("get_pending_trade_offers").description).toContain("ownerNote");
+  expect(tool("generate_transaction_review_links").description).toContain("ownerNote");
 
   const league = tool("get_league");
   expect(JSON.stringify(league.inputSchema)).toContain("standingsDetail");

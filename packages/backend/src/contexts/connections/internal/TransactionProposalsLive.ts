@@ -59,7 +59,7 @@ import {
 } from "#contexts/connections/TransactionProposals.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
-import { loadTeamContext, providerIdentity } from "./QueryContext.ts";
+import { loadTeamContext, ownerNoteOf, providerIdentity } from "./QueryContext.ts";
 import type { TeamContext } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 import { QueryTokens } from "./QueryTokens.ts";
@@ -1052,6 +1052,7 @@ export const TransactionProposalsLive = Layer.effect(
           team,
           readOnly: true,
           offers: [],
+          ownerNote: ownerNoteOf(context.owned.team),
           coverage: [
             {
               resource: "pending_trade_offers",
@@ -1076,6 +1077,7 @@ export const TransactionProposalsLive = Layer.effect(
         team,
         readOnly: true,
         offers,
+        ownerNote: ownerNoteOf(context.owned.team),
         coverage: [
           {
             resource: "pending_trade_offers",

@@ -189,6 +189,21 @@ export const NarrowingResult = Schema.Struct({
 });
 export type NarrowingResult = typeof NarrowingResult.Type;
 
+export const TeamOwnerNote = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("provided"),
+    text: Schema.NonEmptyString,
+    updatedAt: Schema.optional(Schema.DateTimeUtc),
+  }),
+  Schema.Struct({ status: Schema.Literal("not_set") }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "The note the team's owner wrote in Lineupkeep. This is owner context, not a provider fact: the provider and the league do not publish it, so it is not a rule, a scoring setting, or a fact the league said. It can explain keepers, dynasty cost, salary, or why a player is held. The owner can change or clear it, and it is never a place for passwords, tokens, or provider session material.",
+  }),
+);
+export type TeamOwnerNote = typeof TeamOwnerNote.Type;
+
 export const Cursor = Schema.String.pipe(
   Schema.check(Schema.isMaxLength(2_048)),
   Schema.annotate({
