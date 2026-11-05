@@ -76,7 +76,7 @@ If your Yahoo account signs in with Google, Yahoo will not accept a Gmail addres
 
 ## Connecting an MCP client
 
-Connect a stateless **MCP 2026-07-28** client to `https://<host>/mcp`; earlier session-based revisions are unsupported. Follow the `401` challenge and resource metadata, then use authorization code with S256 PKCE, the endpoint `resource`, and explicit scope consent.
+Connect a stateless **MCP 2026-07-28** client to `https://<host>/mcp`; earlier session-based revisions are unsupported. Follow the `401` challenge and resource metadata, then use authorization code with S256 PKCE, the endpoint `resource`, and explicit scope consent. A token exchange that omits `resource` is issued for this MCP resource, so a client that never sends the indicator still receives a token this server accepts; an explicit unknown resource is still refused.
 
 ### Request this scope set on the first authorization
 
@@ -152,7 +152,7 @@ An access token lasts **five minutes**. A refresh token lasts **30 days from iss
 
 Request `offline_access` on the first authorization; it is part of the set above. Without it the grant has no refresh token, so the client must send the person through authorization again when the access token expires.
 
-Every successful refresh rotates the refresh token. Persist the returned `refresh_token` before using the new access token. For 30 seconds after rotation the old token returns the same response, which lets a retried request recover; after that the provider treats reuse as replay and revokes the whole refresh-token grant for that client and person, including the newest token. The grant is then unrecoverable and only a fresh authorization restores it. A client that cannot persist the rotated token will lose the connection at its first renewal after the retry window.
+Every successful refresh rotates the refresh token. Persist the returned `refresh_token` before using the new access token. For five minutes after rotation the old token returns the same response, which lets a stalled or retried request recover; after that the provider treats reuse as replay. A replay after the window is refused with `invalid_grant` and also revokes the whole refresh-token grant for that client and person, including the newest token, so the grant is unrecoverable and only a fresh authorization restores it. A client that cannot persist the rotated token will lose the connection at its first renewal after the retry window. The refusal carries the OAuth error code in the server's wide event, beside the grant type, client id, and whether a refresh token was presented; the token values and the person's address are not recorded.
 
 Refresh without a secret as a public client:
 

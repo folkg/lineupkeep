@@ -3,6 +3,20 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — refresh grant survival and refusal telemetry
+
+- A refresh token replayed inside the rotation reuse window is replayed for five minutes instead of
+  thirty seconds. A retried `POST /api/auth/oauth2/token` whose first response was lost therefore
+  recovers the same grant across a slow network or a client restart; a replay after five minutes is
+  still refused with `invalid_grant` and still revokes the client-and-person grant family.
+- The token endpoint's refusal wide event now carries the OAuth `error` code, `grant_type`, `client_id`,
+  and whether a refresh token was presented, so a spend refusal is distinguishable from a failed
+  authorization-code exchange without logging any token, code, secret, or email.
+- An authorization-code or refresh exchange that omits `resource` is issued for the MCP resource.
+  Previously it minted an opaque access token with no audience, which `POST /mcp` could only reject
+  with `401 auth.state: invalid` even though the exchange returned 200. An explicit resource is never
+  replaced, and an unknown resource is still refused.
+
 ## Unreleased — round-10 MCP fixes (ISO instants, free-agent availability, transaction history)
 
 - `get_transactions` `since`/`until` and `list_feedback` `since` accept ISO 8601 instants such as

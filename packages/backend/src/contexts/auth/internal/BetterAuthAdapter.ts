@@ -79,6 +79,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         return target !== name && advertisedScopeNames.includes(target) ? target : name;
       };
       const oauthResource = new URL("/mcp", baseUrl).href;
+      const tokenPath = new URL("/api/auth/oauth2/token", baseUrl).pathname;
       const registrationPath = new URL("/api/auth/oauth2/register", baseUrl).pathname;
 
       const rateLimitEnabled = environment !== "development";
@@ -198,7 +199,9 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           return registrationRefusal;
         }
 
-        const response = yield* runAuthHandler(request);
+        const exchange = yield* defaultTokenExchangeResource(request, tokenPath, oauthResource);
+        const response = yield* runAuthHandler(exchange);
+        yield* annotateRefusedTokenExchange(exchange, response, tokenPath);
 
         const code = requestedCodes.get(request);
         if (code === undefined) {
@@ -432,6 +435,103 @@ function clientMetadataRequest(
 
 class ClientMetadataRedirectRefused extends Data.TaggedError("ClientMetadataRedirectRefused") {}
 
+function defaultTokenExchangeResource(
+  request: Request,
+  tokenPath: string,
+  resource: string,
+): Effect.Effect<Request> {
+  return Effect.gen(function* () {
+    if (!isFormPost(request, tokenPath)) {
+      return request;
+    }
+    const form = yield* readForm(request);
+    if (Option.isNone(form)) {
+      return request;
+    }
+    const params = new URLSearchParams(form.value);
+    const grantType = params.get("grant_type");
+    if (grantType !== "authorization_code" && grantType !== "refresh_token") {
+      return request;
+    }
+    if ((params.get("resource") ?? "") !== "") {
+      return request;
+    }
+
+    params.set("resource", resource);
+    const headers = new Headers(request.headers);
+    headers.delete("content-length");
+    return new Request(request.url, { method: "POST", headers, body: params });
+  });
+}
+
+function annotateRefusedTokenExchange(
+  request: Request,
+  response: Response,
+  tokenPath: string,
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    if (!isFormPost(request, tokenPath) || response.status < 400 || response.status >= 500) {
+      return;
+    }
+    const form = yield* readForm(request);
+    if (Option.isNone(form)) {
+      return;
+    }
+    const params = new URLSearchParams(form.value);
+    const grantType = params.get("grant_type");
+    const error = yield* oauthErrorCode(response);
+    yield* Effect.annotateCurrentSpan({
+      "oauth.grant_type":
+        grantType === "authorization_code" || grantType === "refresh_token" ? grantType : "unknown",
+      "oauth.client_id": tokenExchangeClientId(request.headers, params) ?? "unknown",
+      "oauth.refresh_token_presented": (params.get("refresh_token") ?? "") !== "",
+      ...(error === undefined ? {} : { "oauth.error": error }),
+    });
+  });
+}
+
+function isFormPost(request: Request, path: string): boolean {
+  const contentType = request.headers.get("content-type") ?? "";
+  return (
+    request.method === "POST" &&
+    new URL(request.url).pathname === path &&
+    contentType.split(";")[0]?.trim().toLowerCase() === "application/x-www-form-urlencoded"
+  );
+}
+
+function readForm(request: Request): Effect.Effect<Option.Option<string>> {
+  return Effect.tryPromise(() => request.clone().text()).pipe(Effect.option);
+}
+
+function oauthErrorCode(response: Response): Effect.Effect<string | undefined> {
+  return Effect.tryPromise(() => response.clone().json()).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(OAuthErrorBody)),
+    Effect.map((body) => body.error),
+    Effect.option,
+    Effect.map(Option.getOrUndefined),
+  );
+}
+
+function tokenExchangeClientId(headers: Headers, params: URLSearchParams): string | undefined {
+  const presented = params.get("client_id");
+  if (presented !== null && presented !== "") {
+    return presented;
+  }
+  const authorization = headers.get("authorization");
+  const encoded =
+    authorization === null ? undefined : /^Basic ([^\s]+)$/iu.exec(authorization)?.[1];
+  if (encoded === undefined) {
+    return undefined;
+  }
+  try {
+    const credential = atob(encoded);
+    const separator = credential.indexOf(":");
+    return separator <= 0 ? undefined : credential.slice(0, separator);
+  } catch {
+    return undefined;
+  }
+}
+
 function createAuth(options: AuthFactoryOptions): ApplicationAuth {
   return betterAuth<ApplicationAuthOptions>({
     appName: productName,
@@ -616,7 +716,7 @@ const sessionRefreshWindow = Duration.minutes(5);
 
 const refreshTokenLifetime = Duration.days(30);
 
-const refreshTokenReuseWindow = Duration.seconds(30);
+const refreshTokenReuseWindow = Duration.minutes(5);
 
 const signInCodesPerAddress = { window: Duration.hours(1), max: 5 };
 
@@ -767,6 +867,8 @@ const AccessTokenClaims = Schema.Struct({
   client_id: Schema.optional(Schema.String),
   cnf: Schema.optional(Schema.Unknown),
 });
+
+const OAuthErrorBody = Schema.Struct({ error: Schema.String });
 
 type ApplicationAuthOptions = import("better-auth").BetterAuthOptions & {
   plugins: [

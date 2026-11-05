@@ -749,7 +749,7 @@ test("authorizes a dynamically registered client through consent", async ({ page
   );
 });
 
-test("rotates refresh credentials and rejects the spent token after the retry window", async ({
+test("rotates refresh credentials and replays a retry past the old thirty-second window", async ({
   page,
   baseURL,
 }) => {
@@ -767,6 +767,7 @@ test("rotates refresh credentials and rejects the spent token after the retry wi
   const response = await exchangeRefreshToken(authorization, initial.refresh_token);
   expect(response.status).toBe(200);
   const rotated = Schema.decodeUnknownSync(RefreshCredentials)(await response.json());
+  const rotatedAt = Date.now();
   const tools = await mcpClient(mcpEndpoint(origin), rotated.access_token).request("tools/call", {
     name: "list_connections",
     arguments: {},
@@ -781,17 +782,17 @@ test("rotates refresh credentials and rejects the spent token after the retry wi
     Schema.decodeUnknownSync(RefreshCredentials)(await replayResponse.json()).refresh_token,
   ).toBe(rotated.refresh_token);
   await expect
-    .poll(
-      async () => {
-        const spent = await exchangeRefreshToken(authorization, initial.refresh_token);
-        const body = Schema.decodeUnknownSync(
-          Schema.Struct({ error: Schema.optional(Schema.String) }),
-        )(await spent.json());
-        return { status: spent.status, error: body.error };
-      },
-      { timeout: 40_000, intervals: [1000, 2000, 5000] },
-    )
-    .toEqual({ status: 400, error: "invalid_grant" });
+    .poll(() => Date.now() - rotatedAt, { timeout: 40_000, intervals: [1000] })
+    .toBeGreaterThanOrEqual(31_000);
+  const late = await exchangeRefreshToken(authorization, initial.refresh_token);
+  expect(late.status).toBe(200);
+  expect(Schema.decodeUnknownSync(RefreshCredentials)(await late.json()).refresh_token).toBe(
+    rotated.refresh_token,
+  );
+  expect(
+    (await mcpClient(mcpEndpoint(origin), rotated.access_token).callTool("list_connections", {}))
+      .isError,
+  ).toBe(false);
 });
 
 test("issues a refresh token only for a grant that asks for offline_access", async ({
@@ -808,7 +809,7 @@ test("issues a refresh token only for a grant that asks for offline_access", asy
   expect(withOffline.refresh_token).toBeDefined();
 });
 
-test("renews an expired public client grant after idle and refuses a rotated token", async ({
+test("renews an expired public client grant after idle and replays a rotated token", async ({
   page,
   baseURL,
 }) => {
@@ -862,14 +863,26 @@ test("renews an expired public client grant after idle and refuses a rotated tok
       .isError,
   ).toBe(false);
 
-  await delay(Math.max(0, refreshTokenReuseWindowMillis + 1000 - (Date.now() - rotatedAt)));
-  const spent = await exchangeRefreshToken(authorization, issued.refresh_token);
-  expect(spent.status).toBe(400);
-  expect(await errorCode(spent)).toBe("invalid_grant");
+  await expect
+    .poll(() => Date.now() - rotatedAt, { timeout: 40_000, intervals: [1000] })
+    .toBeGreaterThanOrEqual(31_000);
+  const replayed = await exchangeRefreshToken(authorization, issued.refresh_token);
+  expect(replayed.status).toBe(200);
+  expect(Schema.decodeUnknownSync(RefreshCredentials)(await replayed.json()).refresh_token).toBe(
+    rotated.refresh_token,
+  );
 
   const family = await exchangeRefreshToken(authorization, chained.refresh_token);
-  expect(family.status).toBe(400);
-  expect(await errorCode(family)).toBe("invalid_grant");
+  expect(family.status).toBe(200);
+  const familyCredentials = Schema.decodeUnknownSync(RefreshCredentials)(await family.json());
+  expect(
+    (
+      await mcpClient(mcpEndpoint(origin), familyCredentials.access_token).callTool(
+        "list_connections",
+        {},
+      )
+    ).isError,
+  ).toBe(false);
 });
 
 function teamAutomation(
@@ -1057,8 +1070,6 @@ const IssuedCredentials = Schema.Struct({
   expires_in: Schema.Finite,
 });
 
-const refreshTokenReuseWindowMillis = 30_000;
-
 async function advertisedKeyIds(origin: string): Promise<ReadonlyArray<string>> {
   const response = await fetch(new URL("/api/auth/jwks", origin));
   const document = Schema.decodeUnknownSync(
@@ -1071,12 +1082,6 @@ function jwtHeader(token: string): { readonly kid: string } {
   return Schema.decodeUnknownSync(Schema.Struct({ kid: Schema.String }))(
     JSON.parse(Buffer.from(token.split(".")[0] ?? "", "base64url").toString()),
   );
-}
-
-async function errorCode(response: Response): Promise<string | undefined> {
-  return Schema.decodeUnknownSync(Schema.Struct({ error: Schema.optional(Schema.String) }))(
-    await response.json(),
-  ).error;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

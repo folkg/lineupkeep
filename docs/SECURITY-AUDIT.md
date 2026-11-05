@@ -604,7 +604,7 @@ submitted, and the honest recovery is to look at the provider, not to retry blin
 | Sign-in code                                        | `verification.value`, stored hashed by `emailOTP`                               | Ten minutes to expiry; attempts capped at three                                               | Deleted on use by the plugin; the hourly sweep removes expired rows                            |
 | Sign-in code quota                                  | `sign_in_code_quota.key` — SHA-256 of the lowercased address                    | One-hour window; the row is reused or replaced, and stale rows are deleted on the next insert | The quota repository's own delete-then-insert path                                             |
 | MCP refresh token                                   | `oauth_refresh_token.token` — hashed by the provider plugin                     | Thirty days from issue or last rotation, then revoked                                         | Rotation, revocation, or expiry; no sweep of consumed rows                                     |
-| MCP refresh-token rotation replay window            | `oauth_refresh_token.rotation_replay_response`                                  | Up to thirty seconds                                                                          | Replaced on the next rotation; encrypted with `BETTER_AUTH_SECRET`                             |
+| MCP refresh-token rotation replay window            | `oauth_refresh_token.rotation_replay_response`                                  | Up to five minutes                                                                            | Replaced on the next rotation; encrypted with `BETTER_AUTH_SECRET`                             |
 | MCP consent record                                  | `oauth_consent`                                                                 | 180 days after the last consent interaction                                                   | The hourly sweep removes consents past the window                                              |
 | OAuth signing keys                                  | `jwks.private_key`                                                              | No expiry, no sweep                                                                           | Nothing; rotating them invalidates every live token                                            |
 | Dynamic client registration                         | `oauth_client` (name, URIs, contacts, metadata)                                 | Unapproved registrations 7 days; at most 100 may be live                                      | The hourly sweep removes unapproved registrations; at the cap, registration is refused         |
@@ -682,12 +682,26 @@ Each item below was checked; silence would have been a gap, so each carries its 
   (`apps/web/src/server/mcp/mcpScopes.test.ts`). The onboarding grant reaches only read tools plus feedback
   submission and read-back, asserted by the same file.
 - **Token lifetime, rotation, and the reuse window.** Access tokens last five minutes, refresh tokens thirty
-  days from issue or last rotation, and every refresh rotates; a rotated token replayed inside thirty
-  seconds replays the same response instead of revoking, and outside that window revokes the family
-  (`BetterAuthAdapter.ts:432-434`; `@better-auth/oauth-provider` `invalidateRefreshFamily`). Refresh tokens
-  are stored hashed; the replay response is encrypted with `BETTER_AUTH_SECRET`. DPoP-bound tokens are
-  rejected (`resolveAccessToken` refuses a `cnf` claim) because this resource does not do DPoP — a token
-  that claims a binding we cannot verify must not be accepted as a bearer token.
+  days from issue or last rotation, and every refresh rotates; a rotated token replayed inside five
+  minutes replays the same response instead of revoking, and outside that window revokes the family
+  (`BetterAuthAdapter.ts` `refreshTokenReuseWindow`; `@better-auth/oauth-provider`
+  `invalidateRefreshFamily`). Five minutes bounds the replay to one access-token lifetime while covering
+  a retried refresh whose response was lost; it does not change what a spent token can do, because the
+  provider refuses it after the window. Refresh tokens are stored hashed; the replay response is
+  encrypted with `BETTER_AUTH_SECRET`. DPoP-bound tokens are rejected (`resolveAccessToken` refuses a
+  `cnf` claim) because this resource does not do DPoP — a token that claims a binding we cannot verify
+  must not be accepted as a bearer token.
+- **A refused token exchange is legible without its secrets.** The `auth.handle` wide event carries the
+  provider's own OAuth `error` code, the grant type, the client id, and whether a refresh token was
+  presented whenever the token endpoint refuses a form-encoded exchange. It never carries the grant,
+  access token, refresh token, authorization code, client secret, or address; the wide-event writer also
+  drops token-bearing keys. This distinguishes a spent refresh token (`invalid_grant`) from a failed
+  authorization-code exchange without guessing from the HTTP status.
+- **A grant always targets a resource this server can verify.** A token exchange that omits the RFC 8707
+  `resource` indicator is defaulted to this application's MCP resource before the provider mints it
+  (`defaultTokenExchangeResource`), so a client that never sends the indicator cannot receive an opaque,
+  audience-less access token that `/mcp` must reject. An explicit resource is never replaced and an
+  unknown one is still refused by the provider.
 - **PKCE and public clients.** `@better-auth/oauth-provider` requires PKCE for `token_endpoint_auth_method:
   none` and by default for every client (`isPKCERequired`), and the provider is configured with only the
   `authorization_code` and `refresh_token` grant types (`BetterAuthAdapter.ts:435`).

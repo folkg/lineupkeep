@@ -17,10 +17,11 @@ import {
 } from "effect";
 import { vi } from "vitest";
 
+import type { AuthServiceShape } from "#contexts/auth/Auth.ts";
 import { AuthorizationScopes, offlineAccess } from "#contexts/auth/AuthorizationScopes.ts";
 import { retiredScopeAliases } from "#contexts/auth/AuthorizationScopes.ts";
 import { SignInSessions } from "#contexts/auth/SignInSessions.ts";
-import { decodeUserId } from "#contexts/auth/User.ts";
+import { decodeUserId, type UserId } from "#contexts/auth/User.ts";
 import { EmailDelivery, EmailDeliveryFailed } from "#email/EmailDelivery.ts";
 import { EmailDeliveryTest, EmailOutbox } from "#email/internal/EmailDeliveryTest.ts";
 import { advertisedScopes, resourceScopes } from "#runtime/ApplicationScopes.ts";
@@ -1258,6 +1259,168 @@ it.effect(
 );
 
 it.effect(
+  "replays a rotated grant for a retry later than thirty seconds",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const startedAt = DateTime.makeUnsafe("2026-11-05T08:10:00Z");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(DateTime.toDateUtc(startedAt));
+      const grant = yield* issueGrant(adapter, "retry@example.test", mcpResource);
+
+      const rotated = yield* jsonOf(
+        yield* adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
+        IssuedCredentials,
+      );
+      vi.setSystemTime(
+        DateTime.toDateUtc(DateTime.makeUnsafe(startedAt.epochMilliseconds + 31_000)),
+      );
+
+      const replay = yield* adapter.handle(
+        refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource),
+      );
+
+      assert.strictEqual(replay.status, 200);
+      const replayed = yield* jsonOf(replay, IssuedCredentials);
+      assert.strictEqual(replayed.refresh_token, rotated.refresh_token);
+      assert.propertyVal(
+        yield* adapter.resolveAccessToken(replayed.access_token, ["connections:read"]),
+        "status",
+        "authenticated",
+      );
+    }).pipe(
+      Effect.ensuring(Effect.sync(() => vi.useRealTimers())),
+      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
+    ),
+  databaseTestTimeout,
+);
+
+it.effect(
+  "refuses a replay after the reuse window and revokes the whole grant family",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const startedAt = DateTime.makeUnsafe("2026-11-05T08:10:00Z");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(DateTime.toDateUtc(startedAt));
+      const grant = yield* issueGrant(adapter, "spent@example.test", mcpResource);
+      const rotated = yield* jsonOf(
+        yield* adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
+        IssuedCredentials,
+      );
+      vi.setSystemTime(
+        DateTime.toDateUtc(DateTime.makeUnsafe(startedAt.epochMilliseconds + 301_000)),
+      );
+
+      const spent = yield* adapter.handle(
+        refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource),
+      );
+      const family = yield* adapter.handle(
+        refreshGrantRequest(rotated.refresh_token, grant.clientId, mcpResource),
+      );
+
+      assert.strictEqual(spent.status, 400);
+      assert.deepStrictEqual(yield* jsonOf(spent, ErrorDescription), {
+        error: "invalid_grant",
+        error_description: "invalid refresh token",
+      });
+      assert.strictEqual(family.status, 400);
+      assert.deepStrictEqual(yield* jsonOf(family, ErrorDescription), {
+        error: "invalid_grant",
+        error_description: "session not found",
+      });
+    }).pipe(
+      Effect.ensuring(Effect.sync(() => vi.useRealTimers())),
+      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
+    ),
+  databaseTestTimeout,
+);
+
+it.effect(
+  "records the OAuth refusal on a spent token exchange without token or account material",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const startedAt = DateTime.makeUnsafe("2026-11-05T08:10:00Z");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(DateTime.toDateUtc(startedAt));
+      const grant = yield* issueGrant(adapter, "refusal-log@example.test", mcpResource);
+      const rotated = yield* jsonOf(
+        yield* adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource)),
+        IssuedCredentials,
+      );
+      vi.setSystemTime(
+        DateTime.toDateUtc(DateTime.makeUnsafe(startedAt.epochMilliseconds + 301_000)),
+      );
+      const spans: Array<Tracer.Span> = [];
+
+      const refused = yield* adapter
+        .handle(refreshGrantRequest(grant.refreshToken, grant.clientId, mcpResource))
+        .pipe(
+          Effect.withTracer(
+            Tracer.make({
+              span: (options) => {
+                const span = new Tracer.NativeSpan(options);
+                spans.push(span);
+                return span;
+              },
+            }),
+          ),
+        );
+
+      assert.strictEqual(refused.status, 400);
+      const span = spans.find((candidate) => candidate.name === "AuthService.handle");
+      assert.isDefined(span);
+      assert.strictEqual(span.attributes.get("oauth.error"), "invalid_grant");
+      assert.strictEqual(span.attributes.get("oauth.grant_type"), "refresh_token");
+      assert.strictEqual(span.attributes.get("oauth.client_id"), grant.clientId);
+      assert.strictEqual(span.attributes.get("oauth.refresh_token_presented"), true);
+      const exported = spans
+        .flatMap((candidate) => [candidate.name, ...[...candidate.attributes].flat().map(String)])
+        .join("\n");
+      assert.notInclude(exported, grant.refreshToken);
+      assert.notInclude(exported, rotated.refresh_token);
+      assert.notInclude(exported, rotated.access_token);
+      assert.notInclude(exported, "refusal-log@example.test");
+    }).pipe(
+      Effect.ensuring(Effect.sync(() => vi.useRealTimers())),
+      Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata)),
+    ),
+  databaseTestTimeout,
+);
+
+it.effect(
+  "mints an access token the resource server accepts when the client omits the resource indicator",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+      const grant = yield* issueGrant(adapter, "no-resource@example.test", undefined);
+
+      assert.deepStrictEqual(
+        yield* adapter.resolveAccessToken(grant.accessToken, ["connections:read"]),
+        {
+          status: "authenticated",
+          userId: grant.userId,
+          clientId: grant.clientId,
+        },
+      );
+      const renewed = yield* jsonOf(
+        yield* adapter.handle(refreshGrantRequest(grant.refreshToken, grant.clientId, undefined)),
+        IssuedCredentials,
+      );
+      assert.deepStrictEqual(
+        yield* adapter.resolveAccessToken(renewed.access_token, ["connections:read"]),
+        {
+          status: "authenticated",
+          userId: grant.userId,
+          clientId: grant.clientId,
+        },
+      );
+    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+  databaseTestTimeout,
+);
+
+it.effect(
   "keeps CIMD's 5 KiB limit stricter than the general HTTP response cap",
   () =>
     Effect.gen(function* () {
@@ -1514,6 +1677,117 @@ function refreshTokenRequest(token: string): Request {
   });
 }
 
+function issueGrant(
+  adapter: Pick<AuthServiceShape, "consent" | "getSession" | "handle">,
+  email: string,
+  resource: string | undefined,
+): Effect.Effect<
+  IssuedGrant,
+  | import("#contexts/auth/Auth.ts").AuthenticationUnavailable
+  | import("#contexts/auth/Auth.ts").AuthenticationInvalidResponse,
+  EmailOutbox
+> {
+  return Effect.gen(function* () {
+    yield* adapter.handle(sendCodeRequest(email));
+    const signedIn = yield* adapter.handle(signInRequest(email, yield* latestCode(email)));
+    const headers = new Headers({ cookie: cookieHeader(signedIn) });
+    const session = yield* adapter.getSession(headers);
+    if (session === undefined) {
+      throw new Error("Sign-in did not produce a session");
+    }
+    const registration = yield* adapter.handle(grantRegistrationRequest(email));
+    const registered = yield* jsonOf(registration, Schema.Struct({ client_id: Schema.String }));
+
+    const authorization = new URLSearchParams({
+      response_type: "code",
+      client_id: registered.client_id,
+      redirect_uri: "http://127.0.0.1:19999/callback",
+      scope: "connections:read offline_access",
+      code_challenge: yield* pkceChallenge(pkceVerifier),
+      code_challenge_method: "S256",
+      state: "grant",
+    });
+    if (resource !== undefined) {
+      authorization.set("resource", resource);
+    }
+    const redirect = yield* adapter.handle(
+      new Request(`http://localhost:5173/api/auth/oauth2/authorize?${authorization}`, { headers }),
+    );
+    const location = new URL(redirect.headers.get("location") ?? "", baseConfig.BETTER_AUTH_URL);
+    const consent = yield* adapter.consent(headers, location.search.slice(1), true);
+
+    const exchange = new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: registered.client_id,
+      redirect_uri: "http://127.0.0.1:19999/callback",
+      code_verifier: pkceVerifier,
+      code: new URL(consent).searchParams.get("code") ?? "",
+    });
+    if (resource !== undefined) {
+      exchange.set("resource", resource);
+    }
+    const credentials = yield* jsonOf(
+      yield* adapter.handle(
+        new Request("http://localhost:5173/api/auth/oauth2/token", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: exchange,
+        }),
+      ),
+      IssuedCredentials,
+    );
+
+    return {
+      accessToken: credentials.access_token,
+      clientId: registered.client_id,
+      refreshToken: credentials.refresh_token,
+      userId: decodeUserId(session.user.id),
+    } as const;
+  });
+}
+
+function grantRegistrationRequest(clientName: string): Request {
+  return new Request("http://localhost:5173/api/auth/oauth2/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      client_name: clientName,
+      redirect_uris: ["http://127.0.0.1:19999/callback"],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      application_type: "native",
+    }),
+  });
+}
+
+function refreshGrantRequest(
+  refreshToken: string,
+  clientId: string,
+  resource: string | undefined,
+): Request {
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    client_id: clientId,
+    refresh_token: refreshToken,
+  });
+  if (resource !== undefined) {
+    body.set("resource", resource);
+  }
+  return new Request("http://localhost:5173/api/auth/oauth2/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+  });
+}
+
+const mcpResource = "http://localhost:5173/mcp";
+
+const IssuedCredentials = Schema.Struct({
+  access_token: Schema.String,
+  refresh_token: Schema.String,
+});
+
 const JwtPayload = Schema.Struct({ iat: Schema.Finite, exp: Schema.Finite });
 const JwtHeader = Schema.Struct({ kid: Schema.String });
 
@@ -1577,3 +1851,10 @@ function cookieHeader(response: Response): string {
     .map((cookie) => cookie.split(";")[0])
     .join("; ");
 }
+
+type IssuedGrant = {
+  readonly accessToken: string;
+  readonly clientId: string;
+  readonly refreshToken: string;
+  readonly userId: UserId;
+};
