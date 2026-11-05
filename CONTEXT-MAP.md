@@ -1,4 +1,4 @@
-# Lineupkeep context map
+# Lineupgrade context map
 
 ## Product and execution plan
 
@@ -15,7 +15,7 @@
 
 - `apps/web/src/routes/`: TanStack Start routes and metadata.
 - `apps/web/src/browser/`: Solid browser UI. Auth is retained from the starter; connections is the first product surface and links through the hosted browser.
-- `apps/web/src/browser/brand-ui/`, `apps/web/src/theme/`: Lineupkeep foundation and generic primitives.
+- `apps/web/src/browser/brand-ui/`, `apps/web/src/theme/`: Lineupgrade foundation and generic primitives.
 - `apps/web/src/server/`: server functions, session/auth adapters, hosted linking, stateless starter MCP.
 - `packages/backend/src/contexts/auth/`: application authentication.
 - `packages/backend/src/contexts/privacy/`: owner-scoped account erasure and export over the audited inventory.
@@ -24,7 +24,7 @@
 - `packages/backend/src/runtime/`: runtime composition and PublicInternet.
 - `packages/backend/src/utilities/machine.ts`: starter machine convention, not a durable side-effect engine.
 - `packages/brand/src/product.ts`: shared product identity.
-- `infra/`: Alchemy scaffolding, not approved/applied Lineupkeep production infrastructure.
+- `infra/`: Alchemy scaffolding, not approved/applied Lineupgrade production infrastructure.
 - `e2e/`: disposable verification harness, not deployed test endpoints.
 - `.agents/skills/`: local testing, domain, interaction, observability, and verification instructions.
 

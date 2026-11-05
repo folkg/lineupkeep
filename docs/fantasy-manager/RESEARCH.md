@@ -1889,7 +1889,7 @@ same provider publishes picks on its completed and pending trade reads, and its 
 picks. A re-check on 2026-11-05 read the archived official transactions-collection guide directly
 (`.../fantasysports/guide/transactions-collection.html`, 2013 snapshot) and found the same
 players-only propose body, and no other documented or community client here sends a pick in a
-proposal. Until an authorised probe sends a pick-inclusive proposal, Lineupkeep cannot name a pick
+proposal. Until an authorised probe sends a pick-inclusive proposal, Lineupgrade cannot name a pick
 in an offer; it records that as the provider's published request-shape limit, never as "the provider
 cannot trade picks".
 

@@ -84,7 +84,7 @@ it("describes a connected account without naming the provider in the introductio
   await expect
     .element(
       page.getByText(
-        "Lineupkeep keeps the encrypted sign-in session, not your password, and lists the teams this account can manage.",
+        "Lineupgrade keeps the encrypted sign-in session, not your password, and lists the teams this account can manage.",
       ),
     )
     .toBeVisible();
@@ -96,7 +96,7 @@ it("describes the connection step without naming the provider in the introductio
   await expect
     .element(
       page.getByText(
-        "Connect your fantasy account in a private browser. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage.",
+        "Connect your fantasy account in a private browser. Lineupgrade keeps the encrypted session, not your password, and finds the teams this account can manage.",
       ),
     )
     .toBeVisible();

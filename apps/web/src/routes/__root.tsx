@@ -18,10 +18,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       {
         name: "description",
         content:
-          "Lineupkeep sets fantasy lineups for football and hockey teams and shows what changed after each check.",
+          "Lineupgrade sets fantasy lineups for football and hockey teams and shows what changed after each check.",
       },
     ],
-    links: [{ rel: "icon", type: "image/svg+xml", href: "/brand/lineupkeep-mark.svg" }],
+    links: [{ rel: "icon", type: "image/svg+xml", href: "/brand/lineupgrade-mark.svg" }],
     scripts: [{ children: themeBootstrapScript }],
   }),
 

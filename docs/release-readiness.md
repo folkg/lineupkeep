@@ -4,7 +4,7 @@ Status checked **2026-10-22** against official upstream issues, releases and pub
 
 ## Local-development decision
 
-The Lineupkeep owner has chosen to continue local implementation on the pinned baseline while awaiting a coherent upstream security fix. This supersedes treating that fix as an entry condition for all local feature work; it does **not** waive the publication blocker below or establish security acceptance. A temporary response-validation backport is checked in below, so the vulnerable transport itself no longer blocks publication; adopting a published fix with the same acceptance still does.
+The Lineupgrade owner has chosen to continue local implementation on the pinned baseline while awaiting a coherent upstream security fix. This supersedes treating that fix as an entry condition for all local feature work; it does **not** waive the publication blocker below or establish security acceptance. A temporary response-validation backport is checked in below, so the vulnerable transport itself no longer blocks publication; adopting a published fix with the same acceptance still does.
 
 Keep the application loopback-only, with no public tunnel or public deployment of the vulnerable transport. Automated provider tests use synthetic data and behavioral fakes; real provider access remains separately authorized. Track adoption of the coherent fix before publication, including installed-source inspection and real-transport security/SSR/single-flight acceptance. No new upstream-status check or dependency audit is claimed by this decision; a separate audit was run on 2026-10-29 and is recorded in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md).
 

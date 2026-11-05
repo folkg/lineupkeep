@@ -1,4 +1,4 @@
-# Begin here: Lineupkeep
+# Begin here: Lineupgrade
 
 ## What this project is
 
@@ -19,7 +19,7 @@ These are local reference paths, not build-time dependencies.
 
 ## What is ready
 
-- Independent jj repository: one flattened starter baseline, then a Lineupkeep identity/preparation change.
+- Independent jj repository: one flattened starter baseline, then a Lineupgrade identity/preparation change.
 - All 17 planning documents copied, with current setup/name annotations where appropriate.
 - Product/brand guidance, the owner-selected royal violet and gold palette, semantic light/dark tokens, self-hosted typography, wordmark, favicon, and an Impeccable design sidecar.
 - Retained starter platform with a device-paired connections vertical and a first-party local CLI that links a Yahoo session through a temporary browser profile into an encrypted, owner-scoped connection. The Notes demo is removed.
@@ -28,7 +28,7 @@ These are local reference paths, not build-time dependencies.
 
 ## Permission boundary
 
-The owner wants one autonomous assignment covering all Phase 1 and permits use of their GCP CLI to set up fresh Lineupkeep infrastructure. [The Phase 1 handoff](docs/PHASE-1-HANDOFF.md) records the execution prompt, authority, credential provisioning, and remaining billing/security/live-provider gates. Internal slices are delivery units, not repeated owner-approval gates. Preparing this handoff did not begin feature execution or provision resources. Domain purchases, unrelated-resource changes, and unscoped provider writes remain prohibited.
+The owner wants one autonomous assignment covering all Phase 1 and permits use of their GCP CLI to set up fresh Lineupgrade infrastructure. [The Phase 1 handoff](docs/PHASE-1-HANDOFF.md) records the execution prompt, authority, credential provisioning, and remaining billing/security/live-provider gates. Internal slices are delivery units, not repeated owner-approval gates. Preparing this handoff did not begin feature execution or provision resources. Domain purchases, unrelated-resource changes, and unscoped provider writes remain prohibited.
 
 ## Read in this order
 

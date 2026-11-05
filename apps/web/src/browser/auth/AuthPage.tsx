@@ -21,7 +21,7 @@ export function AuthPage(props: AuthPageProps): JSX.Element {
             cue="For football and hockey fantasy leagues."
             title={
               <Heading level={1} size="statement">
-                Sign in to Lineupkeep.
+                Sign in to Lineupgrade.
               </Heading>
             }
           >

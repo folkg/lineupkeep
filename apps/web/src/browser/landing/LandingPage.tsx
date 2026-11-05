@@ -15,11 +15,11 @@ const capabilities = [
   {
     title: "Scoring periods",
     detail:
-      "Your league decides whether a scoring period is a week or a day. Lineupkeep sets the lineup for whichever period is current.",
+      "Your league decides whether a scoring period is a week or a day. Lineupgrade sets the lineup for whichever period is current.",
   },
   {
     title: "Your league's lineup rules",
-    detail: "Lineupkeep works inside your league's rules. It cannot add, drop, or trade a player.",
+    detail: "Lineupgrade works inside your league's rules. It cannot add, drop, or trade a player.",
   },
   {
     title: "Agents use the same teams",
@@ -39,7 +39,7 @@ export function LandingPage(): JSX.Element {
           <Stack gap="xl">
             <Stack gap="lg">
               <Heading level={1} size="display">
-                Lineupkeep sets your fantasy lineup.
+                Lineupgrade sets your fantasy lineup.
               </Heading>
               <Text size="body" tone="muted">
                 Once your account is connected, it checks each enabled team every hour and starts
@@ -60,7 +60,7 @@ export function LandingPage(): JSX.Element {
         }
         end={
           <Stack as="section" gap="md" labelledBy="landing-capabilities-title">
-            <SectionTitle id="landing-capabilities-title">What Lineupkeep does</SectionTitle>
+            <SectionTitle id="landing-capabilities-title">What Lineupgrade does</SectionTitle>
             <RuleList>
               <For each={capabilities}>
                 {(capability) => (

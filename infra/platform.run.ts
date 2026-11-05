@@ -27,7 +27,7 @@ const projectApis: ReadonlyArray<{ readonly id: string; readonly service: string
 const providers = gcpProviders;
 
 export default Alchemy.Stack(
-  "LineupkeepPlatform",
+  "LineupgradePlatform",
   {
     providers,
     state: deploymentState,
@@ -38,7 +38,7 @@ export default Alchemy.Stack(
       GCP.ServiceUsage.ProjectService(id, { service }),
     );
     const budget = yield* GCP.BillingBudgets.BillingBudget("MonthlyBudget", {
-      displayName: "Lineupkeep monthly budget",
+      displayName: "Lineupgrade monthly budget",
       amount: { specifiedAmount: { currencyCode: "CAD", units: "5" } },
       budgetFilter: {
         projects: ["projects/lineupkeep-prod"],

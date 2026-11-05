@@ -1,6 +1,6 @@
-# Lineupkeep planning
+# Lineupgrade planning
 
-Planning workspace for Lineupkeep, the independent provider-neutral rewrite. The owner selected the name and authorized the independent starter copy plus branding/design-system preparation in `/Users/graemefolk/Documents/Software/lineupkeep`. That setup is complete; fantasy feature implementation, infrastructure plans/apply, publication, and live provider probes/writes remain separate approval gates. Start with [the project handoff](../../START-HERE.md).
+Planning workspace for Lineupgrade, the independent provider-neutral rewrite. The owner selected the name and authorized the independent starter copy plus branding/design-system preparation in `/Users/graemefolk/Documents/Software/lineupkeep`. That setup is complete; fantasy feature implementation, infrastructure plans/apply, publication, and live provider probes/writes remain separate approval gates. Start with [the project handoff](../../START-HERE.md).
 
 ## Documents
 
@@ -19,7 +19,7 @@ Planning workspace for Lineupkeep, the independent provider-neutral rewrite. The
 - [Schedule sources](SCHEDULE-SOURCES.md): the candidates probed, their terms, the freshness policy per observation kind, and the schedule-observation design.
 - [Reference knowledge](AUTOCOACH-KNOWLEDGE.md): everything the AutoCoach implementation encodes about setting a lineup, recorded before that checkout stops being consulted.
 - [Lineup correctness analysis](LINEUP-CORRECTNESS-ANALYSIS.md): the participation regression, the gap against the reference, and the ordered correction design.
-- [Naming research](NAMING-RESEARCH.md): preliminary domain/commercial/US-Canadian screening; Lineupkeep is selected, not legally cleared or purchased.
+- [Naming research](NAMING-RESEARCH.md): preliminary domain/commercial/US-Canadian screening; Lineupgrade is selected, not legally cleared or purchased.
 - Architecture decisions: [provider-neutral product](adr/0001-provider-neutral-product.md), [workflow machines and pure selection](adr/0002-workflow-machines-and-pure-selection.md), [independent product](adr/0003-independent-product.md), [Cloud Run first](adr/0004-cloud-run-first.md), [free-tier Postgres](adr/0005-free-tier-postgres.md), [availability tiers in the lineup objective](adr/0006-availability-tiers.md), [provider registry and planner capability](adr/0007-provider-registry-and-planner-capability.md), [refusal kinds and the planner cutover](adr/0008-refusal-kinds-and-planner-cutover.md), [provider score ownership](adr/0009-provider-score-ownership.md), [address-based egress](adr/0010-address-based-egress.md), and [schedule observations and schedule sources](adr/0011-schedule-observations-and-schedule-sources.md).
 
 ## Source of truth

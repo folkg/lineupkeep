@@ -57,7 +57,7 @@ export function describeConnectionFailure(error: unknown): ConnectionFailure {
       case "hosted_browser.unsupported":
         return {
           kind: "rejected",
-          message: "The private browser is not available here. Try again from the Lineupkeep app.",
+          message: "The private browser is not available here. Try again from the Lineupgrade app.",
         };
       case "hosted_linking.session_active":
         return {

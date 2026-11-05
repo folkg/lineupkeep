@@ -65,7 +65,7 @@ it("identifies the product during protocol discovery", async () => {
   expect(response.status).toBe(200);
   const body = Schema.decodeUnknownSync(DiscoveryDocument)(await response.json());
   expect(body.result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({
-    name: "Lineupkeep",
+    name: "Lineupgrade",
     version: "1.0.0",
   });
   expect(body.result.capabilities).toEqual({ tools: {} });

@@ -1,8 +1,8 @@
-# Lineupkeep brand
+# Lineupgrade brand
 
 ## Name and purpose
 
-**Lineupkeep** combines **lineup** and **upkeep**, sharing **up** rather than appending two complete words. It names the ongoing work of looking after a fantasy lineup. The provider-neutral name must remain independent of Yahoo, a league, a sport, or a paid-data entitlement.
+**Lineupgrade** combines **lineup** and **upkeep**, sharing **up** rather than appending two complete words. It names the ongoing work of looking after a fantasy lineup. The provider-neutral name must remain independent of Yahoo, a league, a sport, or a paid-data entitlement.
 
 **Your lineup. Looked after.**
 
@@ -16,13 +16,13 @@ Professional quality comes from typography, alignment, information design, usefu
 
 ## Wordmark
 
-Continuous lowercase **lineupkeep**, Schibsted Grotesk Variable at weight 600 on the 11px label scale with 0.16em tracking. One baseline, one colour; no added gap or separation around up. Do not distort, tilt, outline, turn letters into arrows, or colour separate syllables.
+Continuous lowercase **lineupgrade**, Schibsted Grotesk Variable at weight 600 on the 11px label scale with 0.16em tracking. One baseline, one colour; no added gap or separation around up. Do not distort, tilt, outline, turn letters into arrows, or colour separate syllables.
 
 The wordmark sits beside the square brand mark: a 20px gold square with ink **lk** strokes, square corners. Gold is the mark's only job. No trophy, shield, whistle, robot head, sports-ball mashup, or generic AI sparkle.
 
-At small sizes use the wordmark and mark together; the gold lk favicon is the mark's browser utility, not a second logo. The app's accessible home-link name remains “Lineupkeep home.”
+At small sizes use the wordmark and mark together; the gold lk favicon is the mark's browser utility, not a second logo. The app's accessible home-link name remains “Lineupgrade home.”
 
-Use **Lineupkeep** in sentences, headings, release notes, email sender names, legal documents, and speech. Never LineUPkeep, LineUpKeep, LineupKeep, Line Upkeep, or Lineup Keep as the product name.
+Use **Lineupgrade** in sentences, headings, release notes, email sender names, legal documents, and speech. Never LineUPkeep, LineUpKeep, LineupKeep, Line Upkeep, or Lineup Keep as the product name.
 
 ## Voice
 
@@ -40,7 +40,7 @@ Do not use hype, exclamation-heavy success messages, “AI-powered” decoration
 
 ## Visual expression
 
-**Royal violet and gold is the owner-approved palette.** Vivid violet actions and deep violet ink give Lineupkeep fantasy-sports energy without trophies, betting imagery, or theatrical effects. Gold fills the square brand mark and is used nowhere else on a page. This is a custom pairing, not the original site's Material preset. Do not substitute green or reopen palette selection during routine implementation.
+**Royal violet and gold is the owner-approved palette.** Vivid violet actions and deep violet ink give Lineupgrade fantasy-sports energy without trophies, betting imagery, or theatrical effects. Gold fills the square brand mark and is used nowhere else on a page. This is a custom pairing, not the original site's Material preset. Do not substitute green or reopen palette selection during routine implementation.
 
 [DESIGN.md](../../DESIGN.md) owns the exact semantic palette, typography, components, spacing, states, and accessibility rules. Violet carries everyday interaction; the gold mark carries identity. Colour alone never communicates success or risk. Light and dark are complete palettes; the Account theme setting defaults to System and follows the device.
 
@@ -49,8 +49,8 @@ The [specimen](preview.html) demonstrates the visual foundation. Any team/contro
 ## Assets and licensing
 
 - App wordmark and mark: [BrandLink.tsx](../../apps/web/src/browser/brand-ui/BrandLink.tsx), [BrandMark.tsx](../../apps/web/src/browser/brand-ui/BrandMark.tsx).
-- Favicon: [lineupkeep-mark.svg](../../apps/web/public/brand/lineupkeep-mark.svg).
+- Favicon: [lineupgrade-mark.svg](../../apps/web/public/brand/lineupgrade-mark.svg).
 - Self-hosted font: `@fontsource-variable/schibsted-grotesk@5.3.0`, sourced through Bun at preparation. SIL Open Font License is distributed in the dependency; no Google Fonts/browser network dependency.
 - Preview font is embedded from that same package; [font license](FONT-LICENSE.txt) accompanies the specimen.
 
-No professional trademark clearance is claimed. The owner selected Lineupkeep after the preliminary [naming screen](../fantasy-manager/NAMING-RESEARCH.md). No domain has been purchased, reserved, or added to a cart, and no production hostname has been selected.
+No professional trademark clearance is claimed. The owner selected Lineupgrade after the preliminary [naming screen](../fantasy-manager/NAMING-RESEARCH.md). No domain has been purchased, reserved, or added to a cart, and no production hostname has been selected.

@@ -7,7 +7,7 @@ describe("waking shell document", () => {
     const document = wakingShellDocument("https://app.example.com/teams?view=mine");
 
     expect(document).toContain('<html lang="en">');
-    expect(document).toContain("Lineupkeep is waking.");
+    expect(document).toContain("Lineupgrade is waking.");
     expect(document).toContain('id="waking-message" role="status" aria-live="polite"');
     expect(document).toContain('href="/teams?view=mine"');
     expect(document).toContain('<meta name="robots" content="noindex, nofollow">');

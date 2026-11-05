@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-11-04T12:00:00.000Z",
-  "title": "Design System: Lineupkeep",
+  "title": "Design System: Lineupgrade",
   "extensions": {
     "colorMeta": {
       "canvas": {
@@ -340,7 +340,7 @@
   ],
   "narrative": {
     "northStar": "The Technical Sheet",
-    "overview": "Lineupkeep reads as one precise sheet: a single grotesk, square controls, a short measure, and hairlines that do the work a card used to do. Royal violet is spent in one place per view. Gold exists only in the mark. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is a warm paper; dark is a tinted violet sheet. Both are complete palettes.",
+    "overview": "Lineupgrade reads as one precise sheet: a single grotesk, square controls, a short measure, and hairlines that do the work a card used to do. Royal violet is spent in one place per view. Gold exists only in the mark. The product is calm enough to check in the morning and precise enough to trust with a lineup.\n\nThis is an Operate product: information before spectacle, familiar controls, direct labels, and honest state. Light is a warm paper; dark is a tinted violet sheet. Both are complete palettes.",
     "keyCharacteristics": [
       "One grotesk, six text sizes, no serif",
       "Square everywhere; hairlines instead of boxes",
@@ -367,7 +367,7 @@
       },
       {
         "name": "The Wordmark Rule",
-        "body": "The wordmark stays continuous lowercase lineupkeep at the 11px label weight and tracking, beside the square mark. Gold appears nowhere else.",
+        "body": "The wordmark stays continuous lowercase lineupgrade at the 11px label weight and tracking, beside the square mark. Gold appears nowhere else.",
         "section": "typography"
       }
     ],

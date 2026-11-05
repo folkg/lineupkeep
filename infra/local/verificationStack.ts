@@ -23,7 +23,7 @@ export const verificationProviders = Layer.mergeAll(
   postgresProvider,
 );
 
-export const verificationStackName = "LineupkeepVerification";
+export const verificationStackName = "LineupgradeVerification";
 
 export function verificationStack(
   run: LocalRun,

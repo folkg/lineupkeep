@@ -229,11 +229,11 @@ function countBucket(buckets: ReadonlyMap<number, ReadonlyArray<string>>): numbe
 function reconnectEmail(incidentId: string, to: string): EmailMessage {
   return {
     to,
-    subject: "Action required: reconnect your fantasy provider for Lineupkeep",
+    subject: "Action required: reconnect your fantasy provider for Lineupgrade",
     text: [
-      "Lineupkeep cannot run your lineups because your provider connection needs to be reconnected.",
+      "Lineupgrade cannot run your lineups because your provider connection needs to be reconnected.",
       "",
-      "Open Lineupkeep and go to Connections to reconnect your provider. Your team automation settings are unchanged.",
+      "Open Lineupgrade and go to Connections to reconnect your provider. Your team automation settings are unchanged.",
       "",
       "You will not receive another reminder for this connection until it is reconnected.",
     ].join("\n"),

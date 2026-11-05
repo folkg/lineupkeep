@@ -26,7 +26,7 @@ Work in vertical red-green slices inside each stage, not all schemas followed by
 
 Tasks:
 
-- Product name/destination: complete. The owner selected Lineupkeep at `/Users/graemefolk/Documents/Software/lineupkeep`; independent baseline and branding preparation are recorded in [setup provenance](../SETUP.md). No domain purchase or trademark clearance is implied.
+- Product name/destination: complete. The owner selected Lineupgrade at `/Users/graemefolk/Documents/Software/lineupkeep`; independent baseline and branding preparation are recorded in [setup provenance](../SETUP.md). No domain purchase or trademark clearance is implied.
 - Keep the validated independent starter baseline for local implementation. Its release tracker forbids publication of the installed vulnerable Solid Start RPC closure. Track adoption of a coherent upstream fix and required security regression proof before Stage 6; do not stop every local slice while waiting or introduce an unauthorized backport/downgrade.
 - Preserve the starter's pinned Effect, machine, auth, runtime, MCP, architecture/test, SSR, and frontend/server constraints. Presence of files is not proof of baseline readiness.
 - Convert the known Yahoo evidence into small maintained contract cases. Do not depend on disappeared `/tmp` reports, copy old implementation code, or include real cookies/account data.

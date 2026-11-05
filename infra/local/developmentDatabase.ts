@@ -16,14 +16,14 @@ import { DatabaseDeployment } from "#infra/services/DatabaseDeployment.ts";
 
 export const DevelopmentPostgres = Resource<
   Resource<
-    "Lineupkeep.DevelopmentPostgres",
+    "Lineupgrade.DevelopmentPostgres",
     DevelopmentDatabaseIdentity,
     { url: Redacted.Redacted<string> }
   >
->("Lineupkeep.DevelopmentPostgres");
+>("Lineupgrade.DevelopmentPostgres");
 
 export const developmentDatabase = Alchemy.Stack(
-  "LineupkeepDevelopmentDatabase",
+  "LineupgradeDevelopmentDatabase",
   { providers: developmentPostgresProvider(), state: Alchemy.localState() },
   Effect.gen(function* () {
     if (!(yield* AlchemyContext).dev) {
@@ -37,7 +37,7 @@ export const developmentDatabase = Alchemy.Stack(
 export const developmentDatabaseLayer = Layer.effect(DatabaseDeployment)(
   Effect.gen(function* () {
     const database = yield* DevelopmentPostgres.ref("Postgres", {
-      stack: "LineupkeepDevelopmentDatabase",
+      stack: "LineupgradeDevelopmentDatabase",
       stage: "development",
     });
     return { runtimeUrl: database.url, directUrl: database.url };
@@ -80,7 +80,7 @@ export async function resetDevelopmentDatabase(
 export function developmentPostgresProvider(): Layer.Layer<
   Alchemy.Provider<
     Resource<
-      "Lineupkeep.DevelopmentPostgres",
+      "Lineupgrade.DevelopmentPostgres",
       DevelopmentDatabaseIdentity,
       {
         url: Redacted.Redacted<string>;

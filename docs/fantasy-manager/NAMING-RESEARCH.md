@@ -1,6 +1,6 @@
 # Naming research
 
-Screened 2026-10-25 UTC. The owner subsequently selected **Lineupkeep** and authorized the independent project/brand setup. No domain has been purchased, reserved, or added to a cart. The research below records the earlier screening, not professional clearance or current registration availability.
+Screened 2026-10-25 UTC. The owner subsequently selected **Lineupgrade** and authorized the independent project/brand setup. No domain has been purchased, reserved, or added to a cart. The research below records the earlier screening, not professional clearance or current registration availability.
 
 ## Recommendation
 
@@ -13,7 +13,7 @@ The initial creative shortlist does not survive commercial screening particularl
 - **Lineup Works:** a tentative survivor, not a strong recommendation. No exact mark appeared in the completed grouped US/Canadian searches, but the `.com` is registered, the wording is fairly generic, and similar LINEUP software marks need professional assessment.
 - **Bench to Board:** not a direct sports-app collision in the searches completed, but its `.com` hosts the Bench to Boardroom podcast. Long, indirect, and not compelling enough to outweigh that disadvantage.
 
-A few alternative constructions were screened after these collisions emerged. **Lineupkeep** is the most actionable domain-backed candidate from this pass: `lineupkeep.com` was offered for ordinary registration by Namecheap, and no matching marks appeared in the completed US/Canadian searches. It conveys “lineup + upkeep.” It is less characterful than Benchcraft and is not legally cleared. **Rosterwake** also had a registrar-listed `.com`, but the existing RoosterWake software name makes spelling, search, and similarity assessment less attractive. **Rosterhelm** is a possible Roster Pilot-style creative direction if a `.app` is acceptable, but its `.com` is registered and existing ownership/use needs further investigation.
+A few alternative constructions were screened after these collisions emerged. **Lineupgrade** is the most actionable domain-backed candidate from this pass: `lineupkeep.com` was offered for ordinary registration by Namecheap, and no matching marks appeared in the completed US/Canadian searches. It conveys “lineup + upkeep.” It is less characterful than Benchcraft and is not legally cleared. **Rosterwake** also had a registrar-listed `.com`, but the existing RoosterWake software name makes spelling, search, and similarity assessment less attractive. **Rosterhelm** is a possible Roster Pilot-style creative direction if a `.app` is acceptable, but its `.com` is registered and existing ownership/use needs further investigation.
 
 It is reasonable to reject the whole batch and develop more distinctive names in Benchcraft's creative direction. Do not choose a weaker brand simply because an exact-match domain appears unregistered.
 
@@ -23,7 +23,7 @@ This is a preliminary commercial/domain/trademark knockout screen, **not a legal
 
 - Public commercial searches, selected primary product pages and app-store listings, live registry RDAP, and selected registrar search results were inspected.
 - The official USPTO browser search and Canadian Trademarks Database were queried directly, including joined/spaced forms for the principal candidates. CIPO displayed a database update of 2026-10-21. The All display was checked.
-- US exact/grouped screening covered Benchcraft/Bench Craft, First String/Firststring, Rosterpilot/Roster Pilot, Rosterwise/Roster Wise, Lineupworks/Lineup Works, Rosterroom/Roster Room, Readyroster/Ready Roster, Bench to Board/Benchtoboard, Lineupkeep/Lineup Keep, Rosterwake/Roster Wake, and Benchward. A second regex search covered related Lineupkeep, Rosterwake/Roosterwake, Rosterhelm, and Benchward constructions.
+- US exact/grouped screening covered Benchcraft/Bench Craft, First String/Firststring, Rosterpilot/Roster Pilot, Rosterwise/Roster Wise, Lineupworks/Lineup Works, Rosterroom/Roster Room, Readyroster/Ready Roster, Bench to Board/Benchtoboard, Lineupgrade/Lineup Keep, Rosterwake/Roster Wake, and Benchward. A second regex search covered related Lineupgrade, Rosterwake/Roosterwake, Rosterhelm, and Benchward constructions.
 - In Play and Matchday were commercially rejected without attempting exhaustive US-register review. CIPO grouped searches included those names.
 - This is not exhaustive phonetic, translated, design/logo, state/provincial, company-name, social-handle, unregistered-rights, international, or marketplace clearance. A missing exact match does not establish availability.
 - Different trademark classes do not automatically make two names safe. Equally, furniture registrations do not automatically prohibit fantasy-sports software under the same word. Related goods/services, market impression, geography, and existing use matter.
@@ -104,16 +104,16 @@ Commercial/software observations:
 - [InPlay Labs](https://www.inplaylabs.com/): sports software company describing UFL live fantasy and other sports apps.
 - [Matchday](https://matchday.com/) and [App Store listing](https://apps.apple.com/us/app/matchday-soccer-card-game/id6757609398): existing sports-game branding. Website search results and the store listing establish the collision; the homepage's text fetch itself was empty.
 - [Bench to Board](https://benchtoboard.com/): active Bench to Boardroom career-transition podcast site.
-- [LINEUP serial 88753307](https://furm.com/trademarks/lineup-88753307): secondary trademark record reports an active class-42 SaaS mark for Lineup Systems. It is a reason to examine similar marks, not proof that Lineup Works or Lineupkeep is prohibited.
+- [LINEUP serial 88753307](https://furm.com/trademarks/lineup-88753307): secondary trademark record reports an active class-42 SaaS mark for Lineup Systems. It is a reason to examine similar marks, not proof that Lineup Works or Lineupgrade is prohibited.
 
 ## Alternative constructions screened
 
-| Candidate  | `.com`                                         | `.app`    | Judgment                                                                                                                                                                              |
-| ---------- | ---------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lineupkeep | No RDAP record; Namecheap offered registration | No record | Most actionable candidate from this pass. Clear upkeep meaning; less distinctive in tone than Benchcraft. Similar Lineup/Lineup Keeper wording still needs review.                    |
-| Rosterwake | No RDAP record; Namecheap offered registration | No record | Fits unattended roster readiness, but RoosterWake is an existing software product and an easy spelling confusion. Weaker recommendation.                                              |
-| Rosterhelm | Registered                                     | No record | Appealing delegated-management metaphor. No exact commercial product identified in completed searches, but `.com` ownership/use is unresolved. Further diligence before shortlisting. |
-| Benchward  | Registered                                     | No record | Lower-priority. Public searches surfaced an older UK company name that was not independently resolved through a current primary company record. Not cleared.                          |
+| Candidate   | `.com`                                         | `.app`    | Judgment                                                                                                                                                                              |
+| ----------- | ---------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lineupgrade | No RDAP record; Namecheap offered registration | No record | Most actionable candidate from this pass. Clear upkeep meaning; less distinctive in tone than Benchcraft. Similar Lineup/Lineup Keeper wording still needs review.                    |
+| Rosterwake  | No RDAP record; Namecheap offered registration | No record | Fits unattended roster readiness, but RoosterWake is an existing software product and an easy spelling confusion. Weaker recommendation.                                              |
+| Rosterhelm  | Registered                                     | No record | Appealing delegated-management metaphor. No exact commercial product identified in completed searches, but `.com` ownership/use is unresolved. Further diligence before shortlisting. |
+| Benchward   | Registered                                     | No record | Lower-priority. Public searches surfaced an older UK company name that was not independently resolved through a current primary company record. Not cleared.                          |
 
 **Registrar observations:** Namecheap's public search offered both [lineupkeep.com](https://www.namecheap.com/domains/registration/results/?domain=lineupkeep.com) and [rosterwake.com](https://www.namecheap.com/domains/registration/results/?domain=rosterwake.com) with enabled Add to cart buttons and an advertised **USD 11.28/year**, retail USD 14.98/year, plus a conditional USD 6.48 new-customer promotion. These are observed registration offers, not renewal quotes, final checkout totals, reservations, or guarantees that the domains remain available. No cart button was clicked.
 
@@ -126,7 +126,7 @@ Other quick rejections: Benchkeep and BenchSignal surfaced existing software use
 
 ### Completed US/Canadian search evidence for alternatives
 
-In the USPTO's **General / Field tag** mode, a grouped `CM:(...)` search across the exact names and spaced forms listed above returned **48 results**, all rendered on one page. The records were reviewed as a complete group. No Lineupkeep, Rosterwake, Rosterhelm, Benchward, or Lineup Works exact mark appeared in the relevant completed searches; Rosterhelm was included in the broader regex query rather than the initial exact group.
+In the USPTO's **General / Field tag** mode, a grouped `CM:(...)` search across the exact names and spaced forms listed above returned **48 results**, all rendered on one page. The records were reviewed as a complete group. No Lineupgrade, Rosterwake, Rosterhelm, Benchward, or Lineup Works exact mark appeared in the relevant completed searches; Rosterhelm was included in the broader regex query rather than the initial exact group.
 
 The broader USPTO query was:
 

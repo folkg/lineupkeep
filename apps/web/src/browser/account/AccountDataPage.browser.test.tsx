@@ -205,7 +205,7 @@ it("erases, ends the browser session, and lands on the page that says what happe
   await expect
     .element(
       page.getByText(
-        "Lineupkeep no longer holds your account, connections, teams, runs, proposals, feedback, sign-in sessions, or agent grants. You are signed out.",
+        "Lineupgrade no longer holds your account, connections, teams, runs, proposals, feedback, sign-in sessions, or agent grants. You are signed out.",
       ),
     )
     .toBeVisible();

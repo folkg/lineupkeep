@@ -166,7 +166,7 @@ it("explains a wrong code beside the field and keeps it", async () => {
   await expect
     .element(
       page.getByText(
-        "That code isn't right. Check the latest email from Lineupkeep and try again.",
+        "That code isn't right. Check the latest email from Lineupgrade and try again.",
       ),
     )
     .toBeVisible();

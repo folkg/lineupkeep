@@ -154,7 +154,7 @@ export function runExplanation(run: LineupRunView): string {
     case "verifying":
       return "The run is in progress. Its result is not confirmed yet.";
     case "uncertain":
-      return "Lineupkeep could not confirm the result. A later run will check it again.";
+      return "Lineupgrade could not confirm the result. A later run will check it again.";
     case "superseded":
       return "A later run replaced this one.";
     case "completed":

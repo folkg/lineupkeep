@@ -26,7 +26,7 @@ The cloud budget and billing account are not yet specified. Budget alerts are no
 
 No Yahoo cookies, crumb, passwords, or reusable sessions are retained in this handoff. Do not search for or copy AutoCoach credential stores. Do not ask the owner to paste secrets into chat or Inbox.
 
-A metadata-only preflight during handoff preparation found an active gcloud account and active project `auto-gm-372620`. This is evidence of CLI configuration only, not token validity, IAM, billing access, or permission to use that project. Do not deploy Lineupkeep there by default. No token, credential file, or local/cloud secret store was inspected.
+A metadata-only preflight during handoff preparation found an active gcloud account and active project `auto-gm-372620`. This is evidence of CLI configuration only, not token validity, IAM, billing access, or permission to use that project. Do not deploy Lineupgrade there by default. No token, credential file, or local/cloud secret store was inspected.
 
 Alchemy needs actual credentials in the executing process, but the owner need not manually copy them into the conversation. The inspected pinned GCP provider supports `GOOGLE_ACCESS_TOKEN` with `GOOGLE_PROJECT_ID` (alias `GOOGLE_CLOUD_PROJECT`), or a supported service-account key via `GOOGLE_APPLICATION_CREDENTIALS`; a gcloud login alone is not automatic Alchemy authentication. Obtain a short-lived token from the authorized CLI into a protected child-process environment without printing it, shell tracing, command-line secret arguments, captured logs, or persistent plaintext files. Refresh safely between operations and account for expiry during long deployments. Reinspect the installed provider if dependencies change. Do not create a long-lived service-account key merely for convenience. Align gcloud, registry authentication, and Alchemy to the same explicitly selected project/identity; avoid changing the owner's global CLI defaults.
 
@@ -52,7 +52,7 @@ Bootstrap outside Alchemy, because Alchemy has no billing-link provider and stat
 - GCP project `lineupkeep-prod` (number `602042678335`) linked to billing account `0139E5-D27389-43F1F2`; region `us-east1`. The CLI's active project remains the unrelated `auto-gm-372620`, so pass `--project=lineupkeep-prod` explicitly and never change global gcloud config.
 - Protected Alchemy state: the owner's shared Neon project `alchemy-state` (`spring-cell-62836171`) with database and role `lineupkeep_state`, direct endpoint, `sslmode=verify-full`.
 - Provisioning inputs live in `~/.config/lineupkeep/infra.env` (mode 600, outside the repository): `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, `AUTH_CLIENT_IP_HEADERS`. A key rotation adds `CONNECTION_ENCRYPTION_KEY_VERSION` and `CONNECTION_ENCRYPTION_RETAINED_KEYS` per [the deployment runbook](deployment.md#connection-credential-encryption-rotation). Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token`; never echo it.
-- Everything else is Alchemy-managed: the application Neon project (`LineupkeepDatabase`, stage `production`), the project APIs and the CAD 5/month budget (`LineupkeepPlatform`, stage `production`), and the Cloud Run web service (`LineupkeepWeb`, stage `cloud-run`).
+- Everything else is Alchemy-managed: the application Neon project (`LineupgradeDatabase`, stage `production`), the project APIs and the CAD 5/month budget (`LineupgradePlatform`, stage `production`), and the Cloud Run web service (`LineupgradeWeb`, stage `cloud-run`).
 - Email currently uses Resend's test sender `onboarding@resend.dev`, which delivers only to the owner's account address. A verified sending domain is a launch gate for open registration; the owner has not purchased a domain.
 - Owner decisions recorded here: budget ceiling 5 CAD/month with alerts at 50/90/100%; temporary backported security patches until a fixed upstream parent exists; live read queries and native `set_lineup` writes on the owner's teams are authorized, transactions and premium actions are not.
 
@@ -146,7 +146,7 @@ The handoff is your execution mandate and permission ledger, not a request to
 produce another plan. Implement in focused TDD/jj slices without seeking owner
 approval for each slice or routine technical decision.
 
-Use the owner's GCP CLI as authorized to prepare/setup fresh Lineupkeep
+Use the owner's GCP CLI as authorized to prepare/setup fresh Lineupgrade
 infrastructure. Confirm billing account and budget before billable provisioning;
 never treat the active legacy project as the approved destination. Obtain missing
 Neon/email/state access securely, generate application secrets yourself, and

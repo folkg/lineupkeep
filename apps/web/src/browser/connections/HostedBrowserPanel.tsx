@@ -69,7 +69,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
             <Show when={props.controller.frameUrl() !== undefined}>
               <Text size="caption" tone="muted">
                 Tap the page and type. Keystrokes go to {provider}'s page through the private
-                browser. Lineupkeep does not store or log them.
+                browser. Lineupgrade does not store or log them.
               </Text>
             </Show>
             <Text size="caption" tone="muted">

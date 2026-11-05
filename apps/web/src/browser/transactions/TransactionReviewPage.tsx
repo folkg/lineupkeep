@@ -610,7 +610,7 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
                       ? "The other team's manager decides. We cannot accept or reject on their behalf."
                       : `${counterparty().managerName} decides. We cannot accept or reject on their behalf.`}{" "}
                 {trade()?.state === "accepted"
-                  ? "Lineupkeep could not have accepted it for them."
+                  ? "Lineupgrade could not have accepted it for them."
                   : trade()?.state === "withdrawn" || trade()?.state === "expired"
                     ? "It did not change either roster."
                     : "This is an offer, not a change to either roster."}
@@ -665,8 +665,8 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
               </Text>
               <Text size="caption" tone="faint">
                 {trade()?.state === "pending" || trade() === undefined
-                  ? "You are making an offer. The other manager decides; Lineupkeep cannot accept, reject, vote, or counter for them."
-                  : "This offer is settled. Lineupkeep never accepts, rejects, votes, or counters for another manager."}
+                  ? "You are making an offer. The other manager decides; Lineupgrade cannot accept, reject, vote, or counter for them."
+                  : "This offer is settled. Lineupgrade never accepts, rejects, votes, or counters for another manager."}
               </Text>
             </Stack>
           )}
@@ -857,7 +857,7 @@ function ExecutionResult(props: {
         >
           <Text size="caption" tone="muted">
             {props.isTrade
-              ? "This is a real offer. The other manager alone can accept or reject it; Lineupkeep cannot answer for them."
+              ? "This is a real offer. The other manager alone can accept or reject it; Lineupgrade cannot answer for them."
               : "The provider will process this claim later. It is not done, and it is not a failure."}
           </Text>
         </Notice>
@@ -905,7 +905,7 @@ function ProviderOffers(props: ProviderOffersProps): JSX.Element {
       <Stack gap="xs">
         <SectionTitle id="provider-offers-title">Offers pending at the provider</SectionTitle>
         <Text size="caption" tone="muted">
-          These offers are on the provider now. An offer Lineupkeep did not create still appears
+          These offers are on the provider now. An offer Lineupgrade did not create still appears
           here, so you can withdraw it before it is accepted.
         </Text>
       </Stack>
@@ -988,7 +988,7 @@ function ProviderOffers(props: ProviderOffersProps): JSX.Element {
                 >
                   <Text size="caption" tone="muted">
                     This offer is waiting for your answer on the provider. Accepting or rejecting it
-                    belongs to you there; Lineupkeep cannot answer it for you.
+                    belongs to you there; Lineupgrade cannot answer it for you.
                   </Text>
                 </Show>
               </Stack>

@@ -1,4 +1,4 @@
-# Lineupkeep
+# Lineupgrade
 
 **Your lineup. Looked after.**
 
@@ -14,7 +14,7 @@ An independent, provider-neutral fantasy-management product, prepared from a fre
 
 **Current state:** independent repository on the approved brand/design system, with retained starter authentication, hosted browser linking, owner-scoped encrypted Yahoo connections, team discovery, bounded provider queries, durable lineup runs, hourly current-period automation, reconnect notifications, and owner-scoped feedback from the app and MCP clients. The Notes demo is removed. Provider scoring, the pure solver, and the Phase 2 cutover are implemented locally; Phase 2 deployment and live acceptance remain. The `cloud-run` stage is deployed in `lineupkeep-prod`; [the deployed environment](docs/deployment.md#deployed-environment-2026-10-25) and [the redacted live acceptance record](docs/phase-1-acceptance-2026-10-25.md) own the inventory, evidence and remaining gates. The current dependency baseline still has a documented critical publication blocker and an applied temporary backport; deployment is not blanket security acceptance.
 
-The lowercase wordmark is **lineupkeep**; ordinary prose uses **Lineupkeep**. The approved palette is **royal violet and gold**, with complete light/dark themes. No domain has been purchased; the deployed Cloud Run origin is the configured public origin.
+The lowercase wordmark is **lineupkeep**; ordinary prose uses **Lineupgrade**. The approved palette is **royal violet and gold**, with complete light/dark themes. No domain has been purchased; the deployed Cloud Run origin is the configured public origin.
 
 ## Reference, not inheritance
 
@@ -22,7 +22,7 @@ AutoCoach can supply historical research and reverse-engineered provider knowled
 
 ## Repository
 
-Jujutsu owns version control. There is one flattened starter baseline, followed by focused Lineupkeep preparation/branding changes and an empty working copy for the next assigned task. No remote is configured. Use `jj status`, `jj log`, and `jj diff`; do not use Git commands.
+Jujutsu owns version control. There is one flattened starter baseline, followed by focused Lineupgrade preparation/branding changes and an empty working copy for the next assigned task. No remote is configured. Use `jj status`, `jj log`, and `jj diff`; do not use Git commands.
 
 ## Start locally
 
@@ -68,7 +68,7 @@ The owner has chosen to proceed with local implementation on the current pinned 
 
 ## Link a Yahoo account
 
-Open **Connections** and choose **Connect Yahoo**. A private browser opens inside the page; sign in there once. Lineupkeep never stores your password, and keystrokes are relayed only to that temporary browser. When Yahoo accepts the sign-in, the connection becomes ready, teams are discovered automatically, and the app opens **Teams**. No install, code copy, or second approval is required. The temporary browser profile is destroyed when the session ends.
+Open **Connections** and choose **Connect Yahoo**. A private browser opens inside the page; sign in there once. Lineupgrade never stores your password, and keystrokes are relayed only to that temporary browser. When Yahoo accepts the sign-in, the connection becomes ready, teams are discovered automatically, and the app opens **Teams**. No install, code copy, or second approval is required. The temporary browser profile is destroyed when the session ends.
 
 Hosted sign-in runs on the Node target when a Playwright Chromium is installed. The Cloudflare target and a Node image without that browser report `hosted_browser.unsupported`; the dedicated production browser service is [planned but not provisioned](docs/fantasy-manager/HOSTED-BROWSER-INFRA-PLAN.md). The hosted browser is the only linking path.
 
@@ -139,7 +139,7 @@ Dynamic Client Registration is enabled for public clients at `POST /api/auth/oau
 ```sh
 curl -sS -X POST https://<host>/api/auth/oauth2/register \
   -H 'content-type: application/json' \
-  --data '{"client_name":"Lineupkeep curl","redirect_uris":["http://127.0.0.1:19999/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none","application_type":"native"}'
+  --data '{"client_name":"Lineupgrade curl","redirect_uris":["http://127.0.0.1:19999/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none","application_type":"native"}'
 ```
 
 Clients that cannot self-register may instead use an HTTPS client metadata document as their `client_id`. Metadata fetches never follow redirects: serve the document at the exact HTTPS URL, because a redirect is refused by policy and reported separately from a network failure. Private destinations are rejected and native loopback callbacks are allowed.

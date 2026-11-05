@@ -1,6 +1,6 @@
 # @lineupkeep/lineup-solver
 
-Provider-neutral, pure lineup optimization for Lineupkeep. Given the league's roster slots, the retained roster, signed scores for one period, an ordered ladder of availability tiers, and the provider's locks, the solver returns either a legal lineup plan or a named refusal.
+Provider-neutral, pure lineup optimization for Lineupgrade. Given the league's roster slots, the retained roster, signed scores for one period, an ordered ladder of availability tiers, and the provider's locks, the solver returns either a legal lineup plan or a named refusal.
 
 This package contains no IO, provider code, database, worker, HTTP, clock, randomness, or Effect services. The caller owns the provider period, the scores it publishes, and the eventual provider write contract.
 

@@ -9,7 +9,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Effect, Redacted } from "effect";
 
-export const Postgres = Resource<PostgresResource>("Lineupkeep.LocalPostgres");
+export const Postgres = Resource<PostgresResource>("Lineupgrade.LocalPostgres");
 
 export const postgresProvider = Provider.succeed(Postgres, {
   read: ({ olds }) => inspect(olds),
@@ -68,7 +68,7 @@ function inspect(properties: { name: string; lockDirectory: string }): Effect.Ef
 }
 
 type PostgresResource = Resource<
-  "Lineupkeep.LocalPostgres",
+  "Lineupgrade.LocalPostgres",
   { name: string; lockDirectory: string },
   { name: string; url: Redacted.Redacted<string> }
 >;

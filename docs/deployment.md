@@ -42,7 +42,7 @@ are the same URL; the provisioned environment file now owns that value.
 | Queue                             | `projects/lineupkeep-prod/locations/us-east1/queues/lineupkeepweb-lineupworkerqueue-cloud-run-vhxrepebzd4sojv4` — running, 5 dispatches/s, 4 concurrent, 5 attempts with 10–300 s backoff                                                                                                                 |
 | Scheduler                         | `lineupkeepweb-lineuptick-cloud-run-ctseuiblv2wtwlwu` — `55 * * * *` UTC since the 2026-10-31 deploy. OIDC to `POST /api/internal/lineup-worker` with `{action:"tick",limit:50}`, 300 s attempt deadline, 2 retries, which is why the worker timeout is 300 s rather than 900 s                           |
 | Registry                          | `us-east1-docker.pkg.dev/lineupkeep-prod/lineupkeepweb-registry-cloud-run-u4rplfecdzi27v3w` — `web:*` and `browser:*` images; the browser image is about 853 MB expanded and replaces the Chromium headless deployment on every content change                                                            |
-| Application database              | Alchemy-managed `LineupkeepDatabase` / `production` Neon Free project, independent of protected state                                                                                                                                                                                                     |
+| Application database              | Alchemy-managed `LineupgradeDatabase` / `production` Neon Free project, independent of protected state                                                                                                                                                                                                    |
 | Secret Manager                    | `lineupkeepweb-secret-better-auth-secret-cloud-run-zz7b4zbcg2rfo5fb`, `…-connection-encryption-key-cloud-run-ec7zelts3e7mtrtt`, `…-resend-api-key-cloud-run-6daiaqee2uvf6llx`, `…-database-url-cloud-run-2zpqgtvdba7gierc`, `…-hosted-browser-descriptor-key-cloud-run-ifx5uoc5omsxeu74`                  |
 | Secret versions                   | The web and browser revisions pin immutable versions; on 2026-10-31 each secret has exactly one active version (better auth 15, connection key 15, Resend 15, database URL 46, descriptor key 13), kept by `Retain-<name>-Version` in [cloudRun.ts](../infra/hosts/cloudRun.ts).                          |
 
@@ -327,7 +327,7 @@ visitor's own render is 15–22 ms. A warm request returned in 0.37 s TTFB and 0
 before and after, so the cold samples carry the container and probe wait, not a rendering regression.
 
 **The waking shell.** A document navigation whose render has not started within two seconds is answered
-with a complete static document instead: the wordmark, "Lineupkeep is waking", a `role="status"` line
+with a complete static document instead: the wordmark, "Lineupgrade is waking", a `role="status"` line
 that says nothing has been read yet, and a **Try again** link to the same path. It carries
 `x-lineupkeep-waking: 1`, `Cache-Control: no-store` and `noindex, nofollow`, so neither a browser nor a
 crawler can keep or replay it as a page. It reloads itself once; a second stall within ten seconds
@@ -502,7 +502,7 @@ to run on the older build's dispatch path. See
 
 ### Deployed smoke results (2026-10-25)
 
-- `GET /` returned `200 text/html` (12,497 bytes, 0.28 s) with the Lineupkeep title.
+- `GET /` returned `200 text/html` (12,497 bytes, 0.28 s) with the Lineupgrade title.
 - `POST /mcp` without a token returned `401` and
   `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/mcp"`.
 - The protected-resource metadata returned the deployed `/mcp` resource, the
@@ -572,7 +572,7 @@ Hosted MCP-client acceptance and a verified sending domain remain open. See [the
 
 Local state depends on **Alchemy dev execution mode**, not a stage named `local`. Non-dev plan/deploy/destroy requires remote state. Development and verification explicitly use local state.
 
-Remote web stages reference the **same** durable `LineupkeepDatabase` / `production` resource in [neon.ts](../infra/database/neon.ts); they are not isolated previews. Add stage/database isolation deliberately. Changing hosts requires reviewing replacement and deletion effects, not simply switching an environment flag.
+Remote web stages reference the **same** durable `LineupgradeDatabase` / `production` resource in [neon.ts](../infra/database/neon.ts); they are not isolated previews. Add stage/database isolation deliberately. Changing hosts requires reviewing replacement and deletion effects, not simply switching an environment flag.
 
 [database.run.ts](../infra/database.run.ts) owns the durable database independently of web teardown. Retention protects the physical database but removes its state record when destroyed: it does not replace backups or adoption procedures. Routine CI must not destroy this stack.
 
@@ -1112,7 +1112,7 @@ which spans are exported:
 #### Alerts
 
 `infra/hosts/cloudRun.ts` declares a log-based Cloud Monitoring alert policy,
-`Lineupkeep failed or uncertain lineup runs`, with this filter:
+`Lineupgrade failed or uncertain lineup runs`, with this filter:
 
 ```
 resource.type="cloud_run_revision"

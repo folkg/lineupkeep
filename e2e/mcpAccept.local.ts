@@ -233,15 +233,15 @@ function sameSet(left: ReadonlyArray<string>, right: ReadonlyArray<string>): boo
   return leftSet.size === rightSet.size && [...leftSet].every((value) => rightSet.has(value));
 }
 
-const clientName = "Lineupkeep MCP acceptance";
+const clientName = "Lineupgrade MCP acceptance";
 
-const legacyClientName = "Lineupkeep legacy scope acceptance";
+const legacyClientName = "Lineupgrade legacy scope acceptance";
 
 const scopePhrases: Readonly<Record<string, RegExp>> = {
   "fantasy:read": /Read your own fantasy data/u,
   "transactions:review": /Propose player transactions/u,
-  "lineups:write": /Ask Lineupkeep to set an owned team's lineup/u,
-  "teams:manage": /Change what Lineupkeep records about your own teams/u,
+  "lineups:write": /Ask Lineupgrade to set an owned team's lineup/u,
+  "teams:manage": /Change what Lineupgrade records about your own teams/u,
   offline_access: /Stay connected with renewable access/u,
 };
 

@@ -81,7 +81,7 @@ The helper initiates, the signed-in application user approves, and the helper re
 ### Flow: who holds what
 
 1. **Helper starts.** `POST /api/auth/device/code` with the helper's public `client_id` and the helper scope. The helper keeps `device_code` in its own memory or private state and shows the user only the public `user_code` and verification URL.
-2. **User approves.** The user opens the verification URL in a browser, signs in to Lineupkeep if needed through the existing email code, reviews the helper name and requested scope, then approves or denies. The first authenticated user to claim the `user_code` becomes the attempt owner; the application records the pairing attempt for that owner.
+2. **User approves.** The user opens the verification URL in a browser, signs in to Lineupgrade if needed through the existing email code, reviews the helper name and requested scope, then approves or denies. The first authenticated user to claim the `user_code` becomes the attempt owner; the application records the pairing attempt for that owner.
 3. **Helper completes.** The helper polls `POST /api/auth/oauth2/token` with the device grant at the advertised interval. On approval it receives a Bearer access token scoped to the helper scope and expiring within 300 seconds. It stores the token in private local state (mode 0600 file or OS keychain), never logs it or passes it as a shell argument, and uses it only for the provider-credential upload.
 4. **Application.** A different signed-in person cannot approve the claimed request. The device code is consumed atomically at redemption. The helper token is revoked after the upload, or expires on its own.
 

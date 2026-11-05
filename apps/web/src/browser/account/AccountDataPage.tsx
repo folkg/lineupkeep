@@ -45,7 +45,7 @@ function AccountDataContent(props: AccountDataPageProps): JSX.Element {
 
   return (
     <Page
-      lede="Set how Lineupkeep looks, export or erase your data, and sign out of this device."
+      lede="Set how Lineupgrade looks, export or erase your data, and sign out of this device."
       title="Account"
     >
       <Stack gap="xl">

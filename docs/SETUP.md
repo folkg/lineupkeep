@@ -8,7 +8,7 @@
 - Copy set: **377 tracked files**, each SHA-256 verified against the source snapshot before initialization.
 - New repository: independent colocated jj/Git backing store, with jj as the only user-facing VCS.
 - Flattened baseline: change `tosvuqvo`, commit prefix `72195e75`, description `chore: seed independent application from starter snapshot`.
-- Next change: Lineupkeep identity, design system, full planning workspace, and independent-rewrite handoff. No fantasy feature implementation.
+- Next change: Lineupgrade identity, design system, full planning workspace, and independent-rewrite handoff. No fantasy feature implementation.
 - No remote, deployment, production database, domain purchase, or trademark filing.
 
 The source's VCS history/metadata, dependencies, ignored files, dotenv secrets, cloud state, caches, output, test artifacts, and local agent state were not copied. The starter and AutoCoach were not edited. Safe tracked environment examples and synthetic E2E configuration remain part of the baseline.
@@ -17,7 +17,7 @@ The source's VCS history/metadata, dependencies, ignored files, dotenv secrets, 
 
 Use Node `>=24.11.1 <25` and the repository's pinned Bun `1.4.3`. On the preparation machine the global Bun differs, so verification is invoked through `bunx --package bun@1.4.3 bun ...`.
 
-Independent dependencies were installed with Bun. After namespace/font changes, an incremental install put Undici 8 at the root despite the manifest/lockfile pinning Undici 7.30.1; this made the native-fetch isolate fixture reject its dispatcher. A frozen forced reinstall restored the pinned resolution and the exact reproducer passed, without application/transport changes. All workspace scopes, stack/resource labels, telemetry identities, local development names, auth/application identity, and MCP name now use Lineupkeep; deployment hostnames remain documentation placeholders. The package lock was regenerated through Bun.
+Independent dependencies were installed with Bun. After namespace/font changes, an incremental install put Undici 8 at the root despite the manifest/lockfile pinning Undici 7.30.1; this made the native-fetch isolate fixture reject its dispatcher. A frozen forced reinstall restored the pinned resolution and the exact reproducer passed, without application/transport changes. All workspace scopes, stack/resource labels, telemetry identities, local development names, auth/application identity, and MCP name now use Lineupgrade; deployment hostnames remain documentation placeholders. The package lock was regenerated through Bun.
 
 The starter display-font dependency was removed. Schibsted Grotesk Variable was installed at the latest exact version then available, `5.3.0`, via Bun from the workspace root. It is self-hosted; font loading does not contact Google Fonts.
 
@@ -31,7 +31,7 @@ Root README, PRODUCT, DESIGN, AGENTS, CONTEXT-MAP, GLOSSARY, and START-HERE esta
 
 - The unmodified independent baseline's frozen Bun install and full checks passed: **70 test files / 839 tests**, including required architecture/type/lint/format/build gates.
 - The public product-name regression was observed red against the old identity and green after the rename.
-- Lineupkeep's full checks passed: **71 test files / 840 tests**, with architecture, lint, unused-code, type, and build gates.
+- Lineupgrade's full checks passed: **71 test files / 840 tests**, with architecture, lint, unused-code, type, and build gates.
 - All **41 committed E2Es** passed on disposable local PostgreSQL/Node, including application auth, Notes, MCP authorization/isolation, session behavior, telemetry, and 375×667/390×844 sign-in layouts. Cleanup completed.
 - The first mixed committed/scratch invocation selected the scratch harness's empty service-program module, so service-dependent regressions returned 404; rerunning the committed suite with its intended composition passed. Two small-screen sign-in failures revealed excessive brand-panel height; reduced mobile spacing/copy fixed both existing viewport assertions without weakening tests.
 - Final full checks passed again after the small-screen adjustment: **71 test files / 840 tests**.

@@ -354,7 +354,7 @@ const ProposalItemDraftPicks = Schema.optional(
   Schema.NullOr(Schema.Array(Schema.Unknown)),
 ).annotate({
   description:
-    "Refused when non-empty. A trade item carries players only. A league may allow draft pick trades, and the league read publishes that rule, but a provider publishes picks only on its website and names no element for one in the transaction request Lineupkeep sends, so a pick here is refused with that reason and never silently ignored.",
+    "Refused when non-empty. A trade item carries players only. A league may allow draft pick trades, and the league read publishes that rule, but a provider publishes picks only on its website and names no element for one in the transaction request Lineupgrade sends, so a pick here is refused with that reason and never silently ignored.",
 });
 
 export const ProposalItemDraft = Schema.Struct({

@@ -53,7 +53,7 @@ Inputs: a bounded batch of owned private team ids, each with exactly one action:
 
 Availability is separate from enrollment. An unavailable team keeps the requested automation setting, reports `availability: "unavailable"`, and remains skipped by scheduled checks. Ownership is enforced in the team service, so another owner's id is `not_found`, not a forbidden-with-details response. Responses report each input in order with its outcome, enrollment, availability, and full automation state, so an agent does not need to re-read before the next action.
 
-This tool changes only durable Lineupkeep automation state; it never contacts the provider. `set_lineup` remains the sole provider mutation and continues to bypass enrollment for a manual run while honoring ownership, connection readiness, availability, locks, and uncertain-write protection.
+This tool changes only durable Lineupgrade automation state; it never contacts the provider. `set_lineup` remains the sole provider mutation and continues to bypass enrollment for a manual run while honoring ownership, connection readiness, availability, locks, and uncertain-write protection.
 
 ## Feedback behavior
 
@@ -224,7 +224,7 @@ leagues, plus `remainingGames` for the scoring week where the provider publishes
 section states the unit or declares the capability unsupported with the reason: Yahoo publishes
 that remaining-game count only as a fantasy-team total of player-games (National Hockey League),
 and a football player plays at most one game per scoring week. The provider publishes no
-per-professional-team remaining-game count and no probable-starter field; Lineupkeep counts the
+per-professional-team remaining-game count and no probable-starter field; Lineupgrade counts the
 professional team's games from the league's own schedule instead. `get_rosters` reports `proTeam`,
 injury, and the bye week where published; its `playerSchedule` declaration states the per-player
 schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group publishes the
@@ -359,7 +359,7 @@ and whether the session can respond. The plain league feed never carries them an
 request is refused, so there is no league-wide trade wire and no offer data is inferred.
 `get_pending_trade_offers` reads that feed for one owned team, marks the result `readOnly: true`,
 and states that this product cannot accept, reject, or vote on a trade. It also carries `ownerNote`,
-the linked team's note from Lineupkeep, so an offer can be read against the owner's stated intent;
+the linked team's note from Lineupgrade, so an offer can be read against the owner's stated intent;
 the note is owner context, not a provider fact. It returns an opaque reference
 a signed-in person can use on the review page to withdraw an offer this account made. It never exposes
 a provider team key, player key, or pending-trade key; parties and players arrive as private references. A provider that
@@ -783,7 +783,7 @@ Return a clear human-review instruction and no guarantee of add/drop/trade eligi
 
 Every result carries `linkTemplate: { provider, version }`, so a client can detect a stale link
 template after an upgrade without guessing from URL shape. It also carries `ownerNote`, the linked
-team's note from Lineupkeep: owner context, not a provider fact, so a person reviewing a proposal
+team's note from Lineupgrade: owner context, not a provider fact, so a person reviewing a proposal
 can see keepers, dynasty cost, salary, or why a player is held. The Yahoo template
 (`yahoo-review-links-v2`) emits an `addplayer` review page for `add` and `add/drop`, and a
 team-scoped `dropplayer` page for `drop`; each was verified against the provider as the intended
@@ -839,7 +839,7 @@ Four resource scopes cover the surface, and each exists because a tool needs exa
   human-review links. It writes nothing to the provider and submits nothing.
 - `lineups:write` is the roster mutation: `set_lineup` and only `set_lineup`. A lineup change and
   a transaction submission are not the same risk, so they are not the same scope.
-- `teams:manage` changes team-level state the owner keeps in Lineupkeep: automation enrollment,
+- `teams:manage` changes team-level state the owner keeps in Lineupgrade: automation enrollment,
   pause, and resume, and the owner note on the team page. It never contacts the provider.
 
 `submit_feedback` and `list_feedback` require `fantasy:read` rather than a manage grant.

@@ -40,8 +40,8 @@ export function ConnectionsPage(props: ConnectionsPageProps): JSX.Element {
       <Page
         lede={
           hasConnection()
-            ? "Lineupkeep keeps the encrypted sign-in session, not your password, and lists the teams this account can manage."
-            : "Connect your fantasy account in a private browser. Lineupkeep keeps the encrypted session, not your password, and finds the teams this account can manage."
+            ? "Lineupgrade keeps the encrypted sign-in session, not your password, and lists the teams this account can manage."
+            : "Connect your fantasy account in a private browser. Lineupgrade keeps the encrypted session, not your password, and finds the teams this account can manage."
         }
         title="Connections"
       >

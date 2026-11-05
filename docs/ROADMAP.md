@@ -1,6 +1,6 @@
 # Roadmap
 
-Long-term work for Lineupkeep. Phases 1 and 2 are deployed; this file tracks what remains, grouped so one
+Long-term work for Lineupgrade. Phases 1 and 2 are deployed; this file tracks what remains, grouped so one
 group can be handed to one agent as a unit.
 
 **An item is checked only when it is verified, not when it is written.** Every item names how it will be
@@ -426,6 +426,30 @@ A future route worth trying: capture the provider's mobile app traffic, which li
 API with picks. An Android emulator can trust a proxy certificate without a rooted phone; app pinning
 may still refuse, in which case instrumentation is needed. Recorded here rather than scheduled.
 
+### What the capture session is for
+
+The owner used mitmproxy against the provider's app some years ago and expects it to still work on
+Android. One capture session is worth more than one question, so the list below is the whole inventory
+of things we cannot read today and would act on. Every entry is a question to answer from observed
+traffic, never a promise; an entry that turns out not to exist is deleted rather than guessed at.
+
+| Question                                                                   | What it would change                                                           | Where it probably lives                           |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------- |
+| How does a pick enter a trade request?                                     | Draft pick trades become proposable, which is the seed of this section         | The trade submission call behind the website form |
+| What are the real bid amounts on resolved waiver claims, and who else bid? | Waiver advice can say what a claim needs rather than only what is allowed      | The claim history or transaction detail call      |
+| Why is a player unavailable, in words?                                     | The app explains a status instead of only showing it, which is what people ask | A player notes or injury feed                     |
+| What is a player's role this week: line, pair, depth?                      | Streaming and start/sit advice stops treating every player as interchangeable  | Depth chart or projection detail                  |
+| Who is on the trade block, and what is being shopped?                      | Trade proposals can start from real interest instead of a cold offer           | A trade block or team activity call               |
+| What does a keeper cost, and in what round?                                | Keeper decisions become possible in keeper leagues                             | Keeper or draft detail calls                      |
+| What is the draft order for next season?                                   | Pick trade value becomes computable, which is the point of trading picks       | Draft settings or draft results with order        |
+| When does each player lock, per game?                                      | A late scratch or a bench swap before a specific game start becomes correct    | Schedule detail or lineup lock metadata           |
+| How are live points attributed per player during a matchup?                | Activity can explain a swing in a matchup, not just a lineup change            | Matchup or live scoring detail                    |
+
+Reads to try on our existing channel first, before assuming a capture is needed: the transaction detail
+shape behind a completed trade, the waiver claim history for a league, and any player endpoint that
+carries a note or a role. These are cheap to test with cookies we already hold, and each success
+removes an entry from the table.
+
 ---
 
 ## G. Provider boundary and simplification
@@ -554,7 +578,7 @@ current publication blocker.
 **Verify**: a running sample with feature parity, plus numbers on both concerns and a recommendation.
 `M`, blocked on the final release.
 
-### I2 — Migrate Lineupkeep
+### I2 — Migrate Lineupgrade
 
 - [ ] Migrate in slices, keeping the product working throughout.
 - [ ] Preserve the provider boundary, the MCP surface and every acceptance test.

@@ -1,4 +1,4 @@
-# Lineupkeep
+# Lineupgrade
 
 <!-- impeccable:product-schema 1 -->
 
@@ -46,7 +46,7 @@ Semantic controls, keyboard access, visible focus, AA contrast, touch-sized targ
 
 ## Brand Commitments
 
-Lineupkeep in prose; lowercase lineupkeep in the wordmark. One continuous word, one baseline, one colour; the shared “up” is a quiet discovery. Never LineUPkeep or LineUpKeep.
+Lineupgrade in prose; lowercase lineupgrade in the wordmark. One continuous word, one baseline, one colour; the shared “up” is a quiet discovery. Never LineUPgrade or LineUpGrade.
 
 Professional, solid, and energetically sporting—not cheap, mascot-led, gamified, or AI-themed. The owner selected royal violet and gold: vivid violet actions, golden yellow accents, and deep violet ink, with complete light/dark palettes. Do not substitute green or return to extreme restraint. Precise typography and useful information keep the colour confident rather than noisy. No trophies, shields, robot heads, gradient lettering, neon, or sports-betting hype. “Your lineup. Looked after.” is the positioning line, not an accuracy guarantee.
 

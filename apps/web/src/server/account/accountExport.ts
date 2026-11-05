@@ -25,7 +25,7 @@ export const exportAccountData = Effect.gen(function* () {
     status: 200,
     headers: {
       "cache-control": "no-store",
-      "content-disposition": `attachment; filename="lineupkeep-export-${day}.json"`,
+      "content-disposition": `attachment; filename="lineupgrade-export-${day}.json"`,
       "content-type": "application/json; charset=utf-8",
     },
   });

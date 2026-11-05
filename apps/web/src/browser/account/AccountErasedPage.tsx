@@ -10,7 +10,7 @@ export function AccountErasedPage(): JSX.Element {
   return (
     <AppShell>
       <Page
-        lede="Lineupkeep no longer holds your account, connections, teams, runs, proposals, feedback, sign-in sessions, or agent grants. You are signed out."
+        lede="Lineupgrade no longer holds your account, connections, teams, runs, proposals, feedback, sign-in sessions, or agent grants. You are signed out."
         title="Your account is erased"
       >
         <Stack gap="md">

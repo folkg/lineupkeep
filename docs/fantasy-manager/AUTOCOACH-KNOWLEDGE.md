@@ -9,7 +9,7 @@ day the reference checkout is no longer consulted.
 - **What it is.** Accumulated operational knowledge: rules found by running this against real Yahoo
   leagues for years. Several rules exist only because something went wrong once.
 - **What it is not.** It is not architecture, naming, infrastructure, credentials, data model, or
-  policy worth copying. Those are decided separately in Lineupkeep.
+  policy worth copying. Those are decided separately in Lineupgrade.
 - **How it is written.** Each item states (a) the fact and where it comes from, (b) the behaviour it
   drives, (c) why it exists where the code reveals it. Where the behaviour is wrong in my judgement,
   it is still recorded here and the judgement is in [§12](#12-behaviours-i-judge-wrong).
@@ -59,28 +59,28 @@ Everything else in the reference is machinery to apply that ordering legally:
 
 ## 2. Language
 
-Reference terms, mapped to the vocabulary Lineupkeep already uses:
+Reference terms, mapped to the vocabulary Lineupgrade already uses:
 
-| Reference term                                 | Meaning                                                                              | Lineupkeep term                                                   |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| starting player                                | selected position is not `BN` and not an inactive list                               | player in a starting position                                     |
-| reserve player                                 | selected position is `BN` **or** an inactive list (a single predicate covering both) | player on the bench or on a reserve list                          |
-| inactive list (`IR`, `IR+`, `IL`, `IL+`, `NA`) | restricted roster areas                                                              | reserve list                                                      |
-| `is_playing`                                   | the player's real-world team has a game in the period                                | has a game (an availability fact)                                 |
-| start score                                    | the one number compared inside a roster                                              | **not** a Lineupkeep concept: availability is a tier, not a score |
-| ownership score                                | the number compared between a roster and the free-agent pool                         | transaction valuation, out of scope                               |
-| coverage period                                | the provider period a roster read was scoped to                                      | target period                                                     |
-| edit key                                       | provider identifier of the current editable period                                   | roster-cadence evidence when the deadline is ambiguous            |
+| Reference term                                 | Meaning                                                                              | Lineupgrade term                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| starting player                                | selected position is not `BN` and not an inactive list                               | player in a starting position                                      |
+| reserve player                                 | selected position is `BN` **or** an inactive list (a single predicate covering both) | player on the bench or on a reserve list                           |
+| inactive list (`IR`, `IR+`, `IL`, `IL+`, `NA`) | restricted roster areas                                                              | reserve list                                                       |
+| `is_playing`                                   | the player's real-world team has a game in the period                                | has a game (an availability fact)                                  |
+| start score                                    | the one number compared inside a roster                                              | **not** a Lineupgrade concept: availability is a tier, not a score |
+| ownership score                                | the number compared between a roster and the free-agent pool                         | transaction valuation, out of scope                                |
+| coverage period                                | the provider period a roster read was scoped to                                      | target period                                                      |
+| edit key                                       | provider identifier of the current editable period                                   | roster-cadence evidence when the deadline is ambiguous             |
 
 The reference's conflation of bench and reserve lists into one "reserve player" predicate is
 deliberate: both are non-contributing areas, and every search that promotes someone aims at a starting
-slot. Lineupkeep keeps them as distinct slot kinds because reserve lists have eligibility rules; the
+slot. Lineupgrade keeps them as distinct slot kinds because reserve lists have eligibility rules; the
 distinction is a refinement, not a disagreement.
 
 ## 3. Sports
 
 `Leagues = "nba" | "nhl" | "nfl" | "mlb"` (`common/types/Leagues.ts`; `yahooAPI.service.ts`
-`games;game_keys=nhl,nfl,nba,mlb`). Lineupkeep supports football and hockey; the other two are recorded
+`games;game_keys=nhl,nfl,nba,mlb`). Lineupgrade supports football and hockey; the other two are recorded
 because their rules are where several general lessons came from.
 
 - **S1. Football (`nfl`).** Weekly roster coverage; every player either plays or is on bye in the
@@ -458,7 +458,7 @@ The lineup optimiser and the transaction generator are the same object; listing 
   their positions, pending drops are excluded from position counts and locked, and pending trades lock
   every named player.
 
-For Lineupkeep, all of this is out of scope today: there is no add, drop, or trade surface, and the
+For Lineupgrade, all of this is out of scope today: there is no add, drop, or trade surface, and the
 retained roster is the whole player set. What must not be lost is **T9**: once transactions exist, a
 player in a pending transaction is not a free variable, and the solver's lock is the natural place to
 say so.
@@ -518,7 +518,7 @@ Recorded so they are not copied by accident. Severity is my reading; each is sep
 - **J1. Participation is a value multiplier (`1e-7`) instead of a separate dimension.** It works, but
   it makes the score meaningless as a number, makes "why did this player start?" unanswerable without
   arithmetic, and forces every later rule (injury, starting status, churn protection) into the same
-  dimensionless product. Lineupkeep's availability ladder
+  dimensionless product. Lineupgrade's availability ladder
   ([ADR 0006](../adr/0006-availability-tiers.md)) is the better expression of the same ordering. Keep
   the _order_, drop the multiplication.
 - **J2. Injury is counted multiplicatively, twice for long-term IR.** `×1e-3` for injured and `×1e-1`
@@ -531,7 +531,7 @@ Recorded so they are not copied by accident. Severity is my reading; each is sep
   silently substitutes a different measurement is worse than an explicit absence.
 - **J4. The `-22200` sentinel for a missing percent started.** It is a number, so it flows through every
   factor and every comparison as if it were evidence; `-22200 × 1e-7` is still a number. A missing
-  value must be `unusable`, which is what Lineupkeep already does.
+  value must be `unusable`, which is what Lineupgrade already does.
 - **J5. `rank` arithmetic mixes units.** `100 / ranks.projectedWeek`, `100 / ranks.next7Days`, and the
   ownership score's `min(numPlayersInLeague / rank, weight / 5) × 5` treat an ordinal position in a
   list as a quantity. A rank of 1 and a rank of 2 differ by 50 points; a rank of 400 and 401 differ by

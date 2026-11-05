@@ -1,5 +1,5 @@
 ---
-name: Lineupkeep
+name: Lineupgrade
 description: "Your lineup. Looked after."
 colors:
   canvas: "#fbfbfa"
@@ -121,13 +121,13 @@ components:
     rounded: "{rounded.badge}"
 ---
 
-# Design System: Lineupkeep
+# Design System: Lineupgrade
 
 ## Overview
 
 **Creative North Star: "The Technical Sheet"**
 
-Lineupkeep reads as one precise sheet: a single grotesk, square controls, a short measure, and
+Lineupgrade reads as one precise sheet: a single grotesk, square controls, a short measure, and
 hairlines that do the work a card used to do. Royal violet is spent in one place per view. Gold
 exists only in the mark. The product is calm enough to check in the morning and precise enough to
 trust with a lineup.
@@ -234,8 +234,8 @@ to `-0.03em`. Never add letter spacing to body text.
 line, never to prose: in Schibsted Grotesk tabular figures widen punctuation and produce gaps
 before commas and full stops.
 
-**The Wordmark Rule.** The wordmark stays continuous lowercase `lineupkeep` at the 11px label
-weight and tracking, beside the square mark. Use Lineupkeep in prose. Do not uppercase, split,
+**The Wordmark Rule.** The wordmark stays continuous lowercase `lineupgrade` at the 11px label
+weight and tracking, beside the square mark. Use Lineupgrade in prose. Do not uppercase, split,
 outline, or colour the syllables.
 
 **The Mark.** A 20px gold square with ink `lk` strokes, square corners, placed at the masthead's

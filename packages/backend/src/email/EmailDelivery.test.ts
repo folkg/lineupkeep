@@ -38,9 +38,9 @@ it.effect(
         /^[0-9a-f-]{36}$/u,
       );
       assert.deepStrictEqual(Array.getUnsafe(requests, 0).body, {
-        from: "Lineupkeep <sign-in@example.test>",
+        from: "Lineupgrade <sign-in@example.test>",
         to: ["reader@example.test"],
-        subject: "Your Lineupkeep sign-in code",
+        subject: "Your Lineupgrade sign-in code",
         text: "Your code is 123456.",
       });
     }),
@@ -360,13 +360,13 @@ const retryClock = Effect.gen(function* () {
 const endpoint = "https://resend.test/emails";
 const signInMessage = {
   to: "reader@example.test",
-  subject: "Your Lineupkeep sign-in code",
+  subject: "Your Lineupgrade sign-in code",
   text: "Your code is 123456.",
   purpose: "auth.sign_in_code",
 };
 const resendConfig = {
   RESEND_API_KEY: "re_test_key",
-  EMAIL_FROM: "Lineupkeep <sign-in@example.test>",
+  EMAIL_FROM: "Lineupgrade <sign-in@example.test>",
   RESEND_API_BASE_URL: "https://resend.test",
 };
 const transport = Layer.merge(FetchHttpClient.layer, NodeCrypto.layer);

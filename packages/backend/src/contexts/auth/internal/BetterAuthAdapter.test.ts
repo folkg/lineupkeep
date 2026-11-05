@@ -182,7 +182,7 @@ it.effect(
       const [message] = yield* outbox.messages;
       const code = codeIn(message?.text ?? "");
       assert.strictEqual(message?.to, "reader@example.test");
-      assert.strictEqual(message?.subject, `${code} is your Lineupkeep sign-in code`);
+      assert.strictEqual(message?.subject, `${code} is your Lineupgrade sign-in code`);
       assert.include(message?.text ?? "", "expires in 10 minutes");
       assert.notInclude(yield* Effect.promise(() => response.text()), code);
     }).pipe(Effect.provide(adapterLayer(baseConfig))),
@@ -927,7 +927,7 @@ it.effect(
           method: "POST",
           headers: { "content-type": "application/json" },
           body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-            client_name: "Lineupkeep Support",
+            client_name: "Lineupgrade Support",
             redirect_uris: ["http://127.0.0.1:19999/callback"],
             grant_types: ["authorization_code"],
             response_types: ["code"],
@@ -960,7 +960,7 @@ it.effect(
       assert.strictEqual(consent.status, "valid");
       assert.deepStrictEqual(consent.status === "valid" ? consent.client : undefined, {
         id: registered.client_id,
-        name: "Lineupkeep Support",
+        name: "Lineupgrade Support",
         host: "an unverified client",
       });
     }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
@@ -1019,7 +1019,7 @@ it.effect(
         status: "valid",
         client: {
           id: "https://connections-client.test/client.json",
-          name: "Lineupkeep test client",
+          name: "Lineupgrade test client",
           host: "connections-client.test",
         },
         scopes: [
@@ -1161,7 +1161,7 @@ it.effect(
             Promise.resolve(
               Response.json({
                 client_id: request.url,
-                client_name: "Lineupkeep test client",
+                client_name: "Lineupgrade test client",
                 redirect_uris: ["http://127.0.0.1:19999/callback"],
                 grant_types: ["authorization_code", "refresh_token"],
                 response_types: ["code"],
@@ -1479,7 +1479,7 @@ const testMetadata = PublicInternet.fromTransport((request) =>
   Promise.resolve(
     Response.json({
       client_id: request.url,
-      client_name: "Lineupkeep test client",
+      client_name: "Lineupgrade test client",
       redirect_uris: ["http://127.0.0.1:19999/callback"],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],

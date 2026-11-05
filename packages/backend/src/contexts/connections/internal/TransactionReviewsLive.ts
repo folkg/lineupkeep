@@ -41,7 +41,7 @@ type ReadOutcome<A> =
   | { readonly _tag: "failed"; readonly failure: QueryFailure };
 
 const humanReviewInstruction =
-  "Open each review link in your browser and review the proposal in the provider's own interface. Lineupkeep cannot submit transactions, and a prefilled review page does not guarantee that the provider will accept the proposal.";
+  "Open each review link in your browser and review the proposal in the provider's own interface. Lineupgrade cannot submit transactions, and a prefilled review page does not guarantee that the provider will accept the proposal.";
 
 export const TransactionReviewsLive = Layer.effect(
   TransactionReviews,

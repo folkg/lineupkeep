@@ -99,7 +99,7 @@ const loginPage = `<!doctype html>
 
 const successPage = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Signed in</title></head>
-<body><main><h1>Signed in</h1><p>You can return to Lineupkeep.</p></main></body></html>`;
+<body><main><h1>Signed in</h1><p>You can return to Lineupgrade.</p></main></body></html>`;
 
 const blockedPage = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Sign-in blocked</title></head>

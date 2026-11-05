@@ -1,1 +1,1 @@
-export const productName = "Lineupkeep";
+export const productName = "Lineupgrade";

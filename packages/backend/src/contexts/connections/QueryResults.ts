@@ -330,7 +330,7 @@ const TransactionRules = Schema.Struct({
     ]).pipe(
       Schema.annotate({
         description:
-          "Whether this league allows draft picks to be traded. A league that allows it publishes picks only on its website, so Lineupkeep reports the rule but cannot propose a pick on our channel.",
+          "Whether this league allows draft picks to be traded. A league that allows it publishes picks only on its website, so Lineupgrade reports the rule but cannot propose a pick on our channel.",
       }),
     ),
   }),

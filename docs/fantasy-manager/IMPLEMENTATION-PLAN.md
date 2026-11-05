@@ -1,6 +1,6 @@
 # Provider-neutral fantasy manager: implementation plan
 
-Status: product grilling and independent Lineupkeep repository/brand preparation are complete. The owner wants autonomous completion of all Phase 1 in bounded internal slices, with GCP CLI setup authority and conditional deployment under [the execution mandate](../PHASE-1-HANDOFF.md). A coherent upstream security fix remains a publication gate, not a blanket local-development stop. Billing/budget, secure access, framework-pin, and scoped live-provider gates remain explicit. All eight rounds of answers are preserved in [DECISIONS.md](DECISIONS.md).
+Status: product grilling and independent Lineupgrade repository/brand preparation are complete. The owner wants autonomous completion of all Phase 1 in bounded internal slices, with GCP CLI setup authority and conditional deployment under [the execution mandate](../PHASE-1-HANDOFF.md). A coherent upstream security fix remains a publication gate, not a blanket local-development stop. Billing/budget, secure access, framework-pin, and scoped live-provider gates remain explicit. All eight rounds of answers are preserved in [DECISIONS.md](DECISIONS.md).
 
 ## Read this first
 
@@ -109,7 +109,7 @@ See DELIVERY-PLAN.md for each stage's tasks and acceptance evidence.
 1. **Starter publication blocker:** the inspected local `docs/release-readiness.md` explicitly reports a critical Solid Start RPC vulnerability and forbids publication of the installed closure. This is a local tracker observation, not an independent fresh advisory audit. The owner permits local implementation on the validated pinned baseline while awaiting a coherent fix; adopt and accept it before publication. Keep the vulnerable transport loopback-only, without public tunnels; no unauthorized workaround.
 2. **Provider contracts:** confirm Yahoo fantasy-day rollover, bench/pool/reserve rules, meaningful NFL/NHL scoring evidence, and live explicit-assignment write/readback before the relevant stages. An all-zero cut is a recorded finding, not proof of usable fallback quality.
 3. **Client/browser/cloud:** verify hosted Muse OAuth/paging/pending-run behavior, hosted browser streaming, cloud egress/session compatibility, IAM, cold starts, and actual free-allowance availability. No new live Yahoo probes were performed in consolidation.
-4. **Identity — complete:** the owner selected Lineupkeep, its independent directory, and the royal violet and gold visual direction. No domain purchase, trademark clearance, or production origin is implied.
+4. **Identity — complete:** the owner selected Lineupgrade, its independent directory, and the royal violet and gold visual direction. No domain purchase, trademark clearance, or production origin is implied.
 5. **Authority:** the [autonomous handoff](../PHASE-1-HANDOFF.md) records the owner's subsequent whole-Phase-1 assignment and GCP CLI setup permission. Review technical seams as implementation work, not a repeated owner-approval ritual. Resolve the remaining billing/security/access/live-provider gates before the affected external action; earlier research authorization does not carry forward.
 
 The product-question frontier is settled. Reopen questions only for genuine unresolved tradeoffs or facts that invalidate these choices—not to make the owner choose routine implementation details.

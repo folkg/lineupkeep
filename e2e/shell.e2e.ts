@@ -3,17 +3,17 @@ import { expect, signUp, test } from "./support";
 test("shares product identity across document metadata and home navigation", async ({ page }) => {
   await page.goto("/auth");
 
-  await expect(page).toHaveTitle("Lineupkeep: your fantasy lineup, checked every hour");
-  const home = page.getByRole("link", { name: "Lineupkeep home", exact: true });
-  await expect(home.getByText("Lineupkeep", { exact: true })).toBeVisible();
+  await expect(page).toHaveTitle("Lineupgrade: your fantasy lineup, checked every hour");
+  const home = page.getByRole("link", { name: "Lineupgrade home", exact: true });
+  await expect(home.getByText("Lineupgrade", { exact: true })).toBeVisible();
   await home.click();
 
   await expect(page).toHaveURL("/");
-  await expect(page).toHaveTitle("Lineupkeep: your fantasy lineup, checked every hour");
+  await expect(page).toHaveTitle("Lineupgrade: your fantasy lineup, checked every hour");
   await expect(
-    page.getByRole("heading", { name: "Lineupkeep sets your fantasy lineup.", exact: true }),
+    page.getByRole("heading", { name: "Lineupgrade sets your fantasy lineup.", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "What Lineupkeep does" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What Lineupgrade does" })).toBeVisible();
   await expect(
     page.getByText("Provider linking, lineup automation, and the optimizer"),
   ).toHaveCount(0);
@@ -53,7 +53,7 @@ test("keeps the signed-in navigation on its own row on a phone", async ({ page }
   await page.goto("/");
 
   const navigation = page.getByRole("navigation", { name: "Primary navigation" });
-  const brand = page.getByRole("link", { name: "Lineupkeep home", exact: true });
+  const brand = page.getByRole("link", { name: "Lineupgrade home", exact: true });
   await expect(navigation.getByRole("link", { name: "Teams", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Feedback", exact: true })).toBeVisible();

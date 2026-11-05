@@ -1255,7 +1255,7 @@ export const TransactionProposalsLive = Layer.effect(
           },
         ],
         detail:
-          "Read-only. These are this team's pending trade offers as the provider publishes them to this account. Lineupkeep cannot accept, reject, or vote on an offer; a signed-in person can withdraw an offer this account made from the review page.",
+          "Read-only. These are this team's pending trade offers as the provider publishes them to this account. Lineupgrade cannot accept, reject, or vote on an offer; a signed-in person can withdraw an offer this account made from the review page.",
       }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
     });
 

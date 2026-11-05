@@ -36,7 +36,7 @@ The plan reached `Computing plan` and then stopped before producing a resource d
 [INFO] Resolving stack services
 [INFO] Loading stack state
 [INFO] Computing plan
-[ERROR] InvalidReferenceError: Reference to 'Postgres' in stack 'LineupkeepDatabase' and stage 'production' not found. Have you deployed 'production' of 'LineupkeepDatabase'?
+[ERROR] InvalidReferenceError: Reference to 'Postgres' in stack 'LineupgradeDatabase' and stage 'production' not found. Have you deployed 'production' of 'LineupgradeDatabase'?
 [ERROR] Service not found: GCP::Environment
 ```
 

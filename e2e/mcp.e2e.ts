@@ -94,7 +94,7 @@ test("answers the documented token-free discovery request with the same document
     "ttlMs",
   ]);
   expect(document.result).toMatchObject({
-    _meta: { "io.modelcontextprotocol/serverInfo": { name: "Lineupkeep" } },
+    _meta: { "io.modelcontextprotocol/serverInfo": { name: "Lineupgrade" } },
     supportedVersions: ["2026-07-28"],
     capabilities: { tools: {} },
   });
@@ -817,7 +817,7 @@ test("renews an expired public client grant after idle and replays a rotated tok
 
   const origin = requiredOrigin(baseURL);
   await signUp(page);
-  const clientId = await registerPublicClient(origin, "Lineupkeep expiry probe");
+  const clientId = await registerPublicClient(origin, "Lineupgrade expiry probe");
   const authorization = await beginAuthorization(
     page,
     mcpEndpoint(origin),
@@ -952,7 +952,7 @@ const onboardingScopes = "fantasy:read offline_access";
 const documentedScopes =
   "fantasy:read transactions:review lineups:write teams:manage offline_access";
 const retiredReadScope = "connections:read";
-const retiredClientName = "Lineupkeep retired scope probe";
+const retiredClientName = "Lineupgrade retired scope probe";
 
 async function authorize(
   page: Page,
@@ -985,7 +985,7 @@ async function authorize(
     page.getByText("Connecting to connections-client.test", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Calls itself “Lineupkeep test client”. Names are not verified.", {
+    page.getByText("Calls itself “Lineupgrade test client”. Names are not verified.", {
       exact: true,
     }),
   ).toBeVisible();

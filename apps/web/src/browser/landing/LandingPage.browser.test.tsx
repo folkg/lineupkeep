@@ -22,7 +22,7 @@ it("describes the product without naming a provider", async () => {
   using _app = setupLandingPage();
 
   await expect
-    .element(page.getByRole("heading", { name: "Lineupkeep sets your fantasy lineup." }))
+    .element(page.getByRole("heading", { name: "Lineupgrade sets your fantasy lineup." }))
     .toBeVisible();
   await expect.element(page.getByText("Your league's lineup rules")).toBeVisible();
   expect(document.body.textContent).not.toContain("Yahoo");

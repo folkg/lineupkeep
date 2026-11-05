@@ -76,7 +76,7 @@ it.effect("returns the owner's export as a JSON attachment", () =>
     assert.strictEqual(response.headers.get("content-type"), "application/json; charset=utf-8");
     assert.match(
       response.headers.get("content-disposition") ?? "",
-      /^attachment; filename="lineupkeep-export-\d{4}-\d{2}-\d{2}\.json"$/,
+      /^attachment; filename="lineupgrade-export-\d{4}-\d{2}-\d{2}\.json"$/,
     );
     const body = yield* Effect.promise(() => response.text());
     assert.deepStrictEqual(

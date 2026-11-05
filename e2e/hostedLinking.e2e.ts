@@ -39,7 +39,7 @@ test("signs in through the hosted browser or reports why it is unavailable", asy
   if (!hostedBrowserAvailable) {
     await expect(
       page.getByText(
-        "The private browser is not available here. Try again from the Lineupkeep app.",
+        "The private browser is not available here. Try again from the Lineupgrade app.",
         {
           exact: true,
         },

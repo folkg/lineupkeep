@@ -27,7 +27,7 @@ The primary surface lists compact teams with sport, league, provider, enrollment
 
 ### Provider connections
 
-A compact connection surface supports link, status, reconnect, and disconnect. The primary link opens a private hosted browser inside the page: the human signs in on the provider's own page, the connection becomes ready automatically, and teams appear without a code copy or second approval. Lineupkeep never stores the provider password or logs keystrokes; the hosted browser profile is temporary and removed when the session ends.
+A compact connection surface supports link, status, reconnect, and disconnect. The primary link opens a private hosted browser inside the page: the human signs in on the provider's own page, the connection becomes ready automatically, and teams appear without a code copy or second approval. Lineupgrade never stores the provider password or logs keystrokes; the hosted browser profile is temporary and removed when the session ends.
 
 An expired connection supplies one clear reconnect action, identifies affected teams safely, retains enrollment, and opens one deduplicated action-required email incident. An inaccessible team retains configuration rather than disappearing silently.
 

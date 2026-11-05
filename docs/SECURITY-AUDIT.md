@@ -66,7 +66,7 @@ reviewer to schedule.
 | F13 | The consent screen presents an unverified client name as the destination                   | Low      | **Fixed** |
 | F14 | `fantasy:read` grants a write and the consent text did not say so                          | Low      | **Fixed** |
 | F15 | The egress proxy records an unbounded number of distinct refusals per session              | Low      | **Fixed** |
-| F16 | The hosted browser can reach Lineupkeep's own public origin                                | Low      | Accepted  |
+| F16 | The hosted browser can reach Lineupgrade's own public origin                               | Low      | Accepted  |
 
 Count: 0 critical, 1 high, 5 medium, 10 low. Eight fixed, one accepted as designed, seven deferred.
 
@@ -480,7 +480,7 @@ serve a document there. For a dynamically registered client with an opaque `clie
 `undefined`, so `client_name` — an attacker-supplied string with no verification — became the `host`. The
 consent page renders that value in its first line, "Connecting to {host}", and only then says "Calls itself
 “{name}”. Names are not verified." So the phishing-relevant line showed unverified text while the
-disclaimer sat underneath it, and a stranger could register `client_name: "Lineupkeep Support"` and be
+disclaimer sat underneath it, and a stranger could register `client_name: "Lineupgrade Support"` and be
 introduced as the destination.
 
 **What an attacker gains.** A better phishing pretext on a page whose whole purpose is to make the client's
@@ -493,8 +493,8 @@ and it is now never mistaken for a host.
 
 **Test.** `BetterAuthAdapter.test.ts`:
 "does not present an unverified client name as the address it is connecting to" registers a client named
-`Lineupkeep Support`, drives the real authorize redirect, reads the consent lookup, and asserts the host is
-`an unverified client` and the name is still `Lineupkeep Support`. It fails against the previous line.
+`Lineupgrade Support`, drives the real authorize redirect, reads the consent lookup, and asserts the host is
+`an unverified client` and the name is still `Lineupgrade Support`. It fails against the previous line.
 
 ### F14 — `fantasy:read` grants a write and the consent text did not say so
 
@@ -545,14 +545,14 @@ person lose nothing operationally; the log stops being writable by the page.
 non-public destinations, asserts every one still gets 403, and asserts exactly
 `maximumReportedRefusals` were recorded and reported. It fails against the previous code.
 
-### F16 — The hosted browser can reach Lineupkeep's own public origin
+### F16 — The hosted browser can reach Lineupgrade's own public origin
 
 **Severity: Low. Accepted: it is a property of the address policy, and it grants nothing.**
 
 Evidence. Egress is decided by resolved address, not hostname
 ([ADR 0010](fantasy-manager/adr/0010-address-based-egress.md)); our own origin is a public Cloud Run URL,
 so the browser can load it. The browser profile is freshly created per session with no cookies and no
-storage from any prior session, and it has no Lineupkeep session, so it reaches our origin as an anonymous
+storage from any prior session, and it has no Lineupgrade session, so it reaches our origin as an anonymous
 visitor. The surfaces it could touch are public: `/`, `/auth`, `/.well-known/*`, `/mcp` (which requires a
 bearer token), and `/api/auth/*` (which is origin-checked by `better-auth`'s `originCheckMiddleware`). The
 app also has no state-changing `GET`.
@@ -578,7 +578,7 @@ means a repeated request is either refused or a no-op against current provider s
 | Reconnect (`completeReconnect`)       | A signed-in person through the hosted browser     | owner + connection + expected credential generation               | Yes — the generation check rejects a stale race (`ConnectionsLive.ts:218`)                              | Needs the one-use ticket hash and the owner's session cookie; wrong owner is `not_found`.                                                                                                                                                          |
 | Transaction proposal `submit`         | **A signed-in person only.** There is no MCP tool | owner + proposal set + team + connection                          | Yes — `claimSubmission` is a single conditional update; a second submit is `proposal.already_submitted` | The set expires after 24 hours and refuses; each item is re-checked against current provider state before its write; a non-`executed` outcome stops the rest of that team.                                                                         |
 | `withdrawTrade`                       | **A signed-in person only**                       | owner + team + stored proposal item or sealed offer reference     | Effectively — the provider is re-read first and the offer must still be pending                         | A replay finds it no longer pending and changes nothing (`proposal.trade_not_pending`). References are sealed AES-GCM values bound to owner and league, so one cannot be aimed at another account's league.                                        |
-| `set_team_automation`                 | `teams:manage`                                    | owner + team                                                      | n/a — Lineupkeep state only                                                                             | Idempotent: repeating an action returns `unchanged`. Contacts no provider.                                                                                                                                                                         |
+| `set_team_automation`                 | `teams:manage`                                    | owner + team                                                      | n/a — Lineupgrade state only                                                                            | Idempotent: repeating an action returns `unchanged`. Contacts no provider.                                                                                                                                                                         |
 | `propose_transactions` / `revalidate` | `transactions:review`                             | owner + proposal set + every referenced team                      | n/a — reads only                                                                                        | Writes no upstream state; the identical set returns the existing set instead of a duplicate (`transaction_proposal_sets_user_id_fingerprint_idx`).                                                                                                 |
 | Review links (`TransactionReviews`)   | `transactions:review`                             | owner + team + league + validated player and counterparty refs    | n/a — a URL handed to a person                                                                          | The provider executes nothing from the link; forbidden path segments (`submit`, `confirm`, `transaction`, `execute`) are rejected when the link is built.                                                                                          |
 | Provider connection linking           | A signed-in person through the hosted browser     | owner + one-use ticket hash + ten-minute window + one active lock | Yes — the ticket is consumed and the session id is refused on reuse                                     | Another owner's session id is `not_found`; a replayed ticket is `ticket_rejected`.                                                                                                                                                                 |

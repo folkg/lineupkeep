@@ -142,7 +142,7 @@ function developmentStack(
   activation: DevelopmentActivation,
 ): ReturnType<typeof Alchemy.Stack<DevelopmentOutputs, DevelopmentRequirements>> {
   return Alchemy.Stack(
-    "LineupkeepDevelopment",
+    "LineupgradeDevelopment",
     { providers, state: Alchemy.localState() },
     Effect.gen(function* () {
       if (!(yield* AlchemyContext).dev) {
