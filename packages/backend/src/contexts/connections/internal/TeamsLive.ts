@@ -1,6 +1,7 @@
 import { DateTime, Effect, Layer } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import { Connections } from "#contexts/connections/Connections.ts";
 import { currentFantasyDayStart } from "#contexts/connections/FantasyDay.ts";
 import type { TeamAutomation } from "#contexts/connections/FantasyTeam.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
@@ -35,10 +36,12 @@ export const TeamsLive = Layer.effect(
     const teams = yield* TeamRepository;
     const runs = yield* LineupRunRepository;
     const registry = yield* ProviderRegistry;
+    const connections = yield* Connections;
 
     const summaries = (
       userId: UserId,
       records: ReadonlyArray<TeamRecord>,
+      connectionCount: number,
     ): Effect.Effect<ReadonlyArray<TeamSummary>, TeamError> =>
       Effect.gen(function* () {
         if (records.length === 0) {
@@ -68,6 +71,7 @@ export const TeamsLive = Layer.effect(
           return {
             team: record.team,
             connectionStatus: record.connection.status,
+            connectionCount,
             recentRuns,
             ...(teamActivity === undefined ? {} : { lastRun: toLineupRun(teamActivity.latest) }),
           };
@@ -76,18 +80,46 @@ export const TeamsLive = Layer.effect(
 
     const list: TeamsShape["list"] = (userId) =>
       Effect.gen(function* () {
-        const records = yield* teams.list(userId);
-        return yield* summaries(userId, records);
+        const named = yield* ensureLeagueNames(userId, yield* teams.list(userId));
+        return yield* summaries(userId, named, yield* connectionCountOf(userId));
       });
 
     const get: TeamsShape["get"] = (userId, team) =>
       Effect.gen(function* () {
         const records = yield* teams.load(userId, [team]);
-        const summary = (yield* summaries(userId, records))[0];
+        const summary = (yield* summaries(userId, records, yield* connectionCountOf(userId)))[0];
         if (summary === undefined) {
           return yield* TeamNotFound.make({ team });
         }
         return summary;
+      });
+
+    const connectionCountOf = (userId: UserId): Effect.Effect<number, TeamError> =>
+      connections.list(userId).pipe(
+        Effect.map((owned) => owned.length),
+        Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
+      );
+
+    const ensureLeagueNames = (
+      userId: UserId,
+      records: ReadonlyArray<TeamRecord>,
+    ): Effect.Effect<ReadonlyArray<TeamRecord>, TeamError> =>
+      Effect.gen(function* () {
+        const unnamed = records.filter(
+          (record) => record.team.leagueName === undefined && record.connection.status === "ready",
+        );
+        if (unnamed.length === 0) {
+          return records;
+        }
+        const connectionIds = [...new Set(unnamed.map((record) => record.team.connectionId))];
+        yield* Effect.annotateCurrentSpan("teams.league_names_discovered", connectionIds.length);
+        yield* connections
+          .discoverTeams(
+            userId,
+            connectionIds.map((id) => ({ id })),
+          )
+          .pipe(Effect.catch(() => Effect.void));
+        return yield* teams.list(userId);
       });
 
     const control = Effect.fn("Teams.control")(function* (

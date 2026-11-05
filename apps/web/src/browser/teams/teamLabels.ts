@@ -1,4 +1,10 @@
-import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import {
+  formatClockTime,
+  formatDateTime,
+  formatReaderTime,
+  formatWeekday,
+} from "#browser/shared-ui/formatTime.ts";
+import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 import type {
   LineupRunView,
   TeamAutomationView,
@@ -6,9 +12,14 @@ import type {
 } from "#contracts/connections/teamContract.ts";
 import { leagueDisplayName, sportDisplayName } from "#contracts/connections/teamVocabulary.ts";
 
-export function teamContextLabel(team: TeamView): string {
-  const context = `${sportDisplayName(team.sport)} · ${leagueDisplayName(team.league)} ${String(team.season)}`;
-  return team.leagueName === undefined ? context : `${team.leagueName} · ${context}`;
+export function teamContextLabel(team: TeamView, connectionCount: number): string {
+  const sportAndSeason =
+    team.leagueName === undefined
+      ? `${sportDisplayName(team.sport)} · ${leagueDisplayName(team.league)} ${String(team.season)}`
+      : `${team.leagueName} · ${sportDisplayName(team.sport)} · ${String(team.season)}`;
+  return connectionCount > 1
+    ? `${sportAndSeason} · ${providerDisplayName(team.provider)}`
+    : sportAndSeason;
 }
 
 export function lastCheckLine(run: LineupRunView, now?: Date): string {
@@ -139,7 +150,7 @@ export function provenanceExplanation(
 
 export function runExplanation(run: LineupRunView): string {
   if (run.outcome !== undefined) {
-    return run.outcome.summary;
+    return skippedExplanation(run.outcome) ?? run.outcome.summary;
   }
   if (run.pending !== undefined) {
     return run.pending.detail;
@@ -180,6 +191,36 @@ export function targetLabel(target: LineupRunView["target"]): string {
 
 export function triggerLabel(run: LineupRunView): string {
   return run.trigger === "scheduled" ? "Scheduled check" : "Manual run";
+}
+
+export function runIsInProgress(status: LineupRunView["status"]): boolean {
+  switch (status) {
+    case "queued":
+    case "reading":
+    case "planning":
+    case "validating":
+    case "applying":
+    case "verifying":
+    case "retry-wait":
+      return true;
+    case "completed":
+    case "skipped":
+    case "blocked":
+    case "failed":
+    case "uncertain":
+    case "superseded":
+      return false;
+  }
+}
+
+function skippedExplanation(outcome: NonNullable<LineupRunView["outcome"]>): string | undefined {
+  if (outcome.kind !== "skipped" || outcome.nextTickAt === undefined) {
+    return undefined;
+  }
+  if (outcome.nextGameAt === undefined) {
+    return `Nothing to check. The next check is at ${formatClockTime(outcome.nextTickAt)}.`;
+  }
+  return `Nothing to check. Next game is ${formatWeekday(outcome.nextGameAt)} at ${formatClockTime(outcome.nextGameAt)}.`;
 }
 
 function playerCount(count: number): string {

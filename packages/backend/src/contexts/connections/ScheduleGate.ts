@@ -35,6 +35,7 @@ export type ScheduleGateDecision =
   | {
       readonly kind: "skip";
       readonly summary: string;
+      readonly nextTickAt: DateTime.Utc;
       readonly nextGameAt?: DateTime.Utc;
     };
 

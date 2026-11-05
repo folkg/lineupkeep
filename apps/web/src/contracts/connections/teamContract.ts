@@ -72,6 +72,8 @@ export type LineupRunView = {
     readonly reconciled: boolean;
     readonly summary: string;
     readonly observedAt: string;
+    readonly nextGameAt?: string;
+    readonly nextTickAt?: string;
     readonly changes: ReadonlyArray<{
       readonly name: string;
       readonly from: string;
@@ -108,6 +110,7 @@ export type LineupRunView = {
 export type TeamSummaryView = {
   readonly team: TeamView;
   readonly connectionStatus: ConnectionStatus;
+  readonly connectionCount: number;
   readonly lastRun?: LineupRunView;
   readonly recentRuns: ReadonlyArray<LineupRunView>;
 };

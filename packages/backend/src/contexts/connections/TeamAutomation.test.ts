@@ -712,6 +712,7 @@ const TeamsRepositoryTest = TeamRepository.layer.pipe(Layer.provide(DatabaseLaye
 const TeamsTest = TeamsLive.pipe(
   Layer.provide(TeamsRepositoryTest),
   Layer.provide(LineupRepositoryTest),
+  Layer.provide(ConnectionsTest),
 );
 const TeamsTestLayer = Layer.mergeAll(
   TeamsTest,

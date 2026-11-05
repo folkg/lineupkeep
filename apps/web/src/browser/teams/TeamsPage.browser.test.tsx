@@ -99,6 +99,7 @@ const baseTeam: TeamSummaryView = {
     updatedAt: "2026-10-25T08:00:00.000Z",
   },
   connectionStatus: "ready",
+  connectionCount: 1,
   lastRun: noOpRun,
   recentRuns: [noOpRun],
 };
@@ -366,7 +367,7 @@ it("shows the fantasy league name and a provider jump out for the team", async (
     },
   ]);
 
-  await expect.element(page.getByText("Irish Lax · Football · NFL 2026")).toBeVisible();
+  await expect.element(page.getByText("Irish Lax · Football · 2026")).toBeVisible();
   const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
   const name = page.getByRole("link", { name: "Alpha", exact: true });
   const pause = page.getByRole("button", {
@@ -379,6 +380,51 @@ it("shows the fantasy league name and a provider jump out for the team", async (
   expect(jumpBox.left).toBeGreaterThanOrEqual(nameBox.right);
   expect(
     jumpOut.element().compareDocumentPosition(pause.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+it("names the connection only when the account has more than one", async () => {
+  using _app = setupTeamsPage([{ ...enabledTeam, connectionCount: 2 }]);
+
+  await expect.element(page.getByText("Football · NFL 2026 · Yahoo")).toBeVisible();
+});
+
+it("keeps a team row in the order of name, league, last check, tally, and attention", async () => {
+  const tally = "1 of the last 3 checks changed the lineup";
+  using _app = setupTeamsPage([
+    {
+      ...enabledTeam,
+      team: { ...enabledTeam.team, leagueName: "Elite League 25" },
+      lastRun: changedRun,
+      recentRuns: [changedRun, noOpRun, noOpRun],
+    },
+  ]);
+
+  const row = page.getByRole("listitem").filter({ hasText: "Alpha" });
+  const name = row.getByRole("link", { name: "Alpha", exact: true });
+  const league = row.getByText("Elite League 25 · Football · 2026");
+  const lastCheck = row.getByText(
+    `Last check changed 2 players · ${formatReaderTime(twoHoursAgo)}`,
+  );
+  const tallyLine = row.getByText(tally);
+
+  await expect.element(name).toBeVisible();
+  await expect.element(league).toBeVisible();
+  await expect.element(lastCheck).toBeVisible();
+  await expect.element(tallyLine).toBeVisible();
+
+  for (const later of [league, lastCheck, tallyLine]) {
+    expect(
+      name.element().compareDocumentPosition(later.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  }
+  expect(
+    league.element().compareDocumentPosition(lastCheck.element()) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    lastCheck.element().compareDocumentPosition(tallyLine.element()) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
 
@@ -411,6 +457,14 @@ it("shows a loading state while the team list is pending", async () => {
   await expect.element(page.getByText("Loading your teams…")).toBeVisible();
   pending.resolve([]);
   await expect.element(page.getByText("No teams yet.")).toBeVisible();
+});
+
+it("keeps refresh an icon button with a tooltip and no text label", async () => {
+  using _app = setupTeamsPage([baseTeam]);
+
+  const refresh = page.getByRole("button", { name: "Refresh teams" });
+  await expect.element(refresh).toHaveAttribute("title", "Refresh teams");
+  expect(refresh.element().textContent).toBe("");
 });
 
 it("imports provider teams when the owner refreshes discovery", async () => {

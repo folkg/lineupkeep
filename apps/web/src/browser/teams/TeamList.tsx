@@ -3,8 +3,9 @@ import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
-import { Button } from "#browser/shared-ui/Button.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
+import { IconButton } from "#browser/shared-ui/IconButton.tsx";
+import { LoaderCircleIcon, RefreshIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
@@ -26,14 +27,16 @@ export function TeamList(props: TeamListProps): JSX.Element {
       <SectionTitle
         id="teams-list-title"
         action={
-          <Button
-            pending={props.refreshing()}
-            pendingLabel="Refreshing teams…"
-            variant="link"
+          <IconButton
+            busy={props.refreshing()}
+            busyLabel="Refreshing teams…"
+            label="Refresh teams"
             onClick={props.onRefreshTeams}
           >
-            Refresh teams
-          </Button>
+            <Show fallback={<RefreshIcon size="md" />} when={props.refreshing()}>
+              <LoaderCircleIcon size="md" spin />
+            </Show>
+          </IconButton>
         }
       >
         Your teams
@@ -88,7 +91,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
 
 function TeamRow(props: TeamRowProps): JSX.Element {
   return (
-    <RuleListItem layout="columns">
+    <RuleListItem dense layout="columns">
       <Stack gap="xs">
         <Inline gap="sm">
           <TextLink params={{ teamId: props.team.team.id }} size="item" to="/teams/$teamId">
@@ -97,7 +100,7 @@ function TeamRow(props: TeamRowProps): JSX.Element {
           <TeamProviderLink team={props.team.team} />
         </Inline>
         <Text size="caption" tone="muted">
-          {teamContextLabel(props.team.team)}
+          {teamContextLabel(props.team.team, props.team.connectionCount)}
         </Text>
         <Show
           fallback={
@@ -113,17 +116,17 @@ function TeamRow(props: TeamRowProps): JSX.Element {
             </Text>
           )}
         </Show>
-        <Show when={pauseResumeLabel(props.team.team.automation)}>
-          {(note) => (
-            <Text size="caption" tone="muted">
-              {note()}
-            </Text>
-          )}
-        </Show>
         <Show when={checkTallyLabel(props.team.recentRuns)}>
           {(tally) => (
             <Text numeric size="caption" tone="faint">
               {tally()}
+            </Text>
+          )}
+        </Show>
+        <Show when={pauseResumeLabel(props.team.team.automation)}>
+          {(note) => (
+            <Text size="caption" tone="muted">
+              {note()}
             </Text>
           )}
         </Show>

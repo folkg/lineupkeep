@@ -158,6 +158,8 @@ export const LineupRunOutcome = Schema.Struct({
   reconciled: Schema.Boolean,
   summary: Schema.String.pipe(Schema.check(Schema.isMaxLength(500))),
   observedAt: Schema.DateTimeUtc,
+  nextGameAt: Schema.optional(Schema.DateTimeUtc),
+  nextTickAt: Schema.optional(Schema.DateTimeUtc),
   changes: Schema.Array(LineupRunChange),
   differences: Schema.optional(Schema.Array(LineupRunDifference)),
   leftInPlace: Schema.optional(Schema.Array(LineupLeftInPlacePlayer)),

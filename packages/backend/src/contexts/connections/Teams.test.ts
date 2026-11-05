@@ -22,10 +22,14 @@ import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { providerCredentials, providerTeams } from "./internal/ConnectionTables.ts";
+import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { TeamAutomationState } from "./internal/TeamAutomationWorkflow.ts";
+import { TeamRepository } from "./internal/TeamRepository.ts";
+import { TeamsLive } from "./internal/TeamsLive.ts";
 import type { ProviderTeam } from "./Provider.ts";
 import { ProviderRegistry } from "./ProviderRegistry.ts";
+import { Teams } from "./Teams.ts";
 
 it.effect("discovers multiple teams in one league and persists them disabled", () =>
   Effect.gen(function* () {
@@ -94,6 +98,76 @@ it.effect("keeps the fantasy league name and provider url discovered for each te
       "https://provider.example/hockey/1/2",
     );
   }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("names a stored team's league on the teams list read", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    yield* fake.setTeams([team("nhl.l.1.t.1", "First Skate")]);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    assert.strictEqual(
+      findTeam(yield* connections.listTeams(owner), "nhl.l.1.t.1").leagueName,
+      undefined,
+    );
+
+    yield* fake.setTeams([
+      {
+        ...team("nhl.l.1.t.1", "First Skate"),
+        leagueName: "Elite League 25",
+        providerUrl: "https://provider.example/hockey/1/1",
+      },
+    ]);
+
+    const summary = Array.getUnsafe(yield* teams.list(owner), 0);
+
+    assert.strictEqual(summary.team.leagueName, "Elite League 25");
+    assert.strictEqual(summary.team.providerUrl, "https://provider.example/hockey/1/1");
+    assert.strictEqual(summary.connectionCount, 1);
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
+it.effect("does not rediscover a team whose league is already named", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    yield* fake.setTeams([
+      {
+        ...team("nhl.l.1.t.1", "First Skate"),
+        leagueName: "Elite League 25",
+        providerUrl: "https://provider.example/hockey/1/1",
+      },
+    ]);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    const before = yield* fake.providerReads;
+
+    const summary = Array.getUnsafe(yield* teams.list(owner), 0);
+
+    assert.strictEqual(summary.team.leagueName, "Elite League 25");
+    assert.strictEqual((yield* fake.providerReads) - before, 0);
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
+it.effect("lists a team whose league name cannot be read", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const teams = yield* Teams;
+    const fake = yield* FakeProviderWorld;
+    const ready = yield* connect(connections);
+    yield* fake.setTeams([team("nhl.l.1.t.1", "First Skate")]);
+    yield* connections.discoverTeams(owner, [{ id: ready.id }]);
+    yield* fake.failRequests("unavailable");
+
+    const summary = Array.getUnsafe(yield* teams.list(owner), 0);
+
+    assert.strictEqual(summary.team.name, "First Skate");
+    assert.strictEqual(summary.team.leagueName, undefined);
+    assert.strictEqual(summary.connectionStatus, "ready");
+  }).pipe(Effect.provide(TeamsTestLayer)),
 );
 
 it.effect("refreshes availability, restores teams, and preserves configuration", () =>
@@ -295,3 +369,15 @@ const EncryptionTestLayer = ConnectionCredentialEncryption.forKey(
 ).pipe(Layer.provide(NodeCrypto.layer));
 
 const ConnectionsTestLayer = ConnectionsLayerFor(NodeCrypto.layer);
+const TeamRepositoryTest = TeamRepository.layer.pipe(
+  Layer.provide(ConnectionsDatabaseTest),
+  Layer.provide(ProviderFakeTest),
+);
+const LineupRepositoryTest = LineupRunRepository.layer.pipe(Layer.provide(ConnectionsDatabaseTest));
+const TeamsTestLayer = TeamsLive.pipe(
+  Layer.provide(TeamRepositoryTest),
+  Layer.provide(LineupRepositoryTest),
+  Layer.provideMerge(ConnectionsTestLayer),
+  Layer.provide(NodeCrypto.layer),
+  Layer.orDie,
+);

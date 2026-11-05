@@ -8,6 +8,7 @@ import {
   UnsavedNavigationGuard,
 } from "#browser/navigation/UnsavedChanges.tsx";
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
+import { ButtonLink } from "#browser/shared-ui/ButtonLink.tsx";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
@@ -81,31 +82,15 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       <Stack gap="md">
         <Stack gap="xs">
           <Text size="caption" tone="muted">
-            {teamContextLabel(props.team.team)}
+            {teamContextLabel(props.team.team, props.team.connectionCount)}
           </Text>
           <TeamAttention team={props.team} />
         </Stack>
         <TeamControls team={props.team} remote={props.remote} />
-        <Inline gap="sm">
-          <TextLink
-            tone="quiet"
-            search={{
-              surface: "team",
-              team: props.team.team.id,
-              teamName: props.team.team.name,
-            }}
-            to="/feedback"
-          >
-            Report a problem with this team
-          </TextLink>
-        </Inline>
       </Stack>
 
       <Stack as="section" gap="sm" labelledBy="team-activity-title">
         <SectionTitle id="team-activity-title">Recent activity</SectionTitle>
-        <Text size="caption" tone="muted">
-          Newest first. Checks that changed nothing are grouped.
-        </Text>
         <Show
           fallback={<NoChecksToday team={props.team} />}
           when={props.team.recentRuns.length > 0}
@@ -115,6 +100,20 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
       </Stack>
 
       <TeamNote note={note} />
+
+      <Inline gap="sm">
+        <ButtonLink
+          variant="secondary"
+          search={{
+            surface: "team",
+            team: props.team.team.id,
+            teamName: props.team.team.name,
+          }}
+          to="/feedback"
+        >
+          Report a problem with this team
+        </ButtonLink>
+      </Inline>
     </Stack>
   );
 }

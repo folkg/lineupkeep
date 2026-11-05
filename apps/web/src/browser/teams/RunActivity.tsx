@@ -101,7 +101,7 @@ function RunLine(props: { readonly run: LineupRunView }): JSX.Element {
           <Time datetime={props.run.updatedAt}>{formatReaderTime(props.run.updatedAt)}</Time>
         </Text>
       </Inline>
-      <Text size="body" tone="muted">
+      <Text size="body" numeric tone="muted">
         {runExplanation(props.run)}
       </Text>
     </>

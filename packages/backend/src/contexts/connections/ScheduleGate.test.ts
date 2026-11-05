@@ -90,7 +90,12 @@ it.effect("skips a quiet tick, runs a busy one, and fails open on unknown data",
     });
     assert.strictEqual(quiet.kind, "skip");
     if (quiet.kind === "skip") {
-      assert.include(quiet.summary, "Tuesday 2026-11-03");
+      assert.strictEqual(quiet.summary, "No games before the next scheduled check.");
+      assert.strictEqual(quiet.nextTickAt, nextTickAt);
+      assert.strictEqual(
+        quiet.nextGameAt === undefined ? undefined : DateTime.formatIso(quiet.nextGameAt),
+        "2026-11-03T23:00:00.000Z",
+      );
     }
 
     const busy = decideScheduleGate({
@@ -177,6 +182,31 @@ it.effect("skips a quiet tick, runs a busy one, and fails open on unknown data",
     assert.deepStrictEqual(failed, { kind: "run", reason: "game_source_unavailable" });
   }).pipe(Effect.provide(GateTest)),
 );
+
+it("skips a quiet tick with a plain reason when no game is scheduled", () => {
+  const now = DateTime.makeUnsafe("2026-11-02T12:00:00.000Z");
+  const nextTickAt = nextLineupTick(now);
+
+  const decision = decideScheduleGate({
+    now,
+    dayStartedAt: DateTime.makeUnsafe("2026-11-02T08:00:00.000Z"),
+    dayEndsAt: DateTime.makeUnsafe("2026-11-03T08:00:00.000Z"),
+    today: "2026-11-02",
+    nextTickAt,
+    nextTickDate: "2026-11-02",
+    games: [],
+    providerGameKeys: new Set(),
+    teamKeys: new Set(["465.t.1"]),
+    todayRun: { kind: "verified" },
+  });
+
+  assert.strictEqual(decision.kind, "skip");
+  if (decision.kind === "skip") {
+    assert.strictEqual(decision.summary, "No rostered player has a game scheduled.");
+    assert.strictEqual(decision.nextTickAt, nextTickAt);
+    assert.strictEqual(decision.nextGameAt, undefined);
+  }
+});
 
 it.effect("fails open when the provider schedule or a roster team is unknown", () =>
   Effect.gen(function* () {
@@ -277,7 +307,11 @@ it.effect("places a team from a stored game whose club the map knows", () =>
     );
     assert.strictEqual(decision.kind, "skip");
     if (decision.kind === "skip") {
-      assert.include(decision.summary, "The next game is Monday 2026-11-02");
+      assert.strictEqual(decision.summary, "No games before the next scheduled check.");
+      assert.strictEqual(
+        decision.nextGameAt === undefined ? undefined : DateTime.formatIso(decision.nextGameAt),
+        "2026-11-02T23:00:00.000Z",
+      );
     }
   }).pipe(Effect.provide(GateTest)),
 );
@@ -387,7 +421,11 @@ it.effect("skips a quiet tick after a verified run today and names the next game
     const decision = yield* evaluateQuietTick();
     assert.strictEqual(decision.kind, "skip");
     if (decision.kind === "skip") {
-      assert.include(decision.summary, "The next game is Tuesday 2026-11-03");
+      assert.strictEqual(decision.summary, "No games before the next scheduled check.");
+      assert.strictEqual(
+        decision.nextGameAt === undefined ? undefined : DateTime.formatIso(decision.nextGameAt),
+        "2026-11-03T23:00:00.000Z",
+      );
     }
   }).pipe(Effect.provide(GateTest)),
 );

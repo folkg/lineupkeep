@@ -193,6 +193,7 @@ const TeamsLayer = TeamsLive.pipe(
   Layer.provide(LineupRepositoryLayer),
   Layer.provide(ProviderLayer),
   Layer.provide(CredentialEncryptionLayer),
+  Layer.provide(ConnectionsLayer),
 );
 const RetentionSweepLayer = RetentionSweepLive.pipe(
   Layer.provide(ConnectionsDatabase.layer),

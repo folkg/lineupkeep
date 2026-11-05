@@ -2,6 +2,7 @@ import type { JSX } from "@solidjs/web";
 import ArrowUpRight from "~icons/lucide/arrow-up-right";
 import ChevronRight from "~icons/lucide/chevron-right";
 import LoaderCircle from "~icons/lucide/loader-circle";
+import RefreshCw from "~icons/lucide/refresh-cw";
 import X from "~icons/lucide/x";
 
 import googleG from "./brand/google-g.svg";
@@ -12,6 +13,7 @@ export const ChevronRightIcon = icon(ChevronRight);
 export const LoaderCircleIcon = icon(LoaderCircle);
 export const PauseIcon = icon(PauseGlyph);
 export const PlayIcon = icon(PlayGlyph);
+export const RefreshIcon = icon(RefreshCw);
 export const XIcon = icon(X);
 
 function PauseGlyph(props: JSX.SvgSVGAttributes<SVGSVGElement>): JSX.Element {

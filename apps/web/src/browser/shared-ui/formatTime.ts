@@ -15,6 +15,8 @@ const rangeTimeFormat = new Intl.DateTimeFormat(undefined, {
 
 const relativeTimeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
+const weekdayFormat = new Intl.DateTimeFormat(undefined, { weekday: "long" });
+
 const minuteMillis = 60_000;
 const hourMillis = 60 * minuteMillis;
 const dayMillis = 24 * hourMillis;
@@ -57,6 +59,16 @@ export function formatReaderTime(value: string | Date, now: Date = new Date()): 
     return relativeTimeFormat.format(Math.round(difference / dayMillis), "day");
   }
   return dateTimeFormat.format(date);
+}
+
+export function formatWeekday(value: string | Date): string {
+  return weekdayFormat.format(toDate(value));
+}
+
+export function formatClockTime(value: string | Date): string {
+  return rangeTimeFormat
+    .format(toDate(value))
+    .replace(/\b(AM|PM)\b/gu, (period) => period.toLowerCase());
 }
 
 function sameReaderDay(left: Date, right: Date): boolean {

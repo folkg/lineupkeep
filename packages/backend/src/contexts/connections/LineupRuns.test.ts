@@ -1561,7 +1561,16 @@ it.effect("records a skipped outcome and its reason for a scheduled run", () =>
     );
     assert.strictEqual(
       run.state._tag === "Skipped" ? run.state.outcome.summary : undefined,
-      "Nothing to check before Friday.",
+      "No games before the next scheduled check.",
+    );
+    const outcome = run.state._tag === "Skipped" ? run.state.outcome : undefined;
+    assert.strictEqual(
+      outcome?.nextTickAt === undefined ? undefined : DateTime.formatIso(outcome.nextTickAt),
+      "2026-11-02T13:00:00.000Z",
+    );
+    assert.strictEqual(
+      outcome?.nextGameAt === undefined ? undefined : DateTime.formatIso(outcome.nextGameAt),
+      "2026-11-05T23:30:00.000Z",
     );
   }).pipe(Effect.provide(SkippingLayer)),
 );
@@ -1829,7 +1838,9 @@ const SkippingGateTest = Layer.succeed(ScheduleGate)({
   evaluate: () =>
     Effect.succeed({
       kind: "skip" as const,
-      summary: "Nothing to check before Friday.",
+      summary: "No games before the next scheduled check.",
+      nextTickAt: DateTime.makeUnsafe("2026-11-02T13:00:00.000Z"),
+      nextGameAt: DateTime.makeUnsafe("2026-11-05T23:30:00.000Z"),
     }),
 });
 const SkippingWorkerTest = LineupWorkerLive.pipe(

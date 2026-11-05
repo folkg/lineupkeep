@@ -3,6 +3,7 @@ import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { AppShell } from "#browser/app-shell/AppShell.tsx";
+import { ButtonLink } from "#browser/shared-ui/ButtonLink.tsx";
 import { LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { Definition, DefinitionList } from "#browser/shared-ui/DefinitionList.tsx";
 import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
@@ -20,6 +21,7 @@ import { describeRunFailure } from "./teamFailure";
 import {
   provenanceExplanation,
   runExplanation,
+  runIsInProgress,
   runStatusLabel,
   targetLabel,
   triggerLabel,
@@ -80,12 +82,24 @@ export function RunDetailPage(props: RunDetailPageProps): JSX.Element {
                   run={run()}
                   providerName={providerName()}
                   teamName={page.team()?.team.name ?? "Unknown team"}
-                  teamId={run().team}
                 />
               )}
             </Show>
           </Show>
           <TextLink to="/teams">All teams</TextLink>
+          <Show when={page.run()}>
+            {(run) => (
+              <Inline gap="sm">
+                <ButtonLink
+                  variant="secondary"
+                  search={{ surface: "run", team: run().team }}
+                  to="/feedback"
+                >
+                  Report a problem with this run
+                </ButtonLink>
+              </Inline>
+            )}
+          </Show>
         </Stack>
       </Page>
     </AppShell>
@@ -96,7 +110,6 @@ function RunDetail(props: {
   readonly run: LineupRunView;
   readonly providerName: string | undefined;
   readonly teamName: string;
-  readonly teamId: string;
 }): JSX.Element {
   return (
     <Stack gap="lg">
@@ -115,17 +128,18 @@ function RunDetail(props: {
 
       <DefinitionList>
         <Definition term="Started" value={formatDateTime(props.run.createdAt)} />
-        <Definition term="Last updated" value={formatDateTime(props.run.updatedAt)} />
+        <Show
+          fallback={<Definition term="Finished" value={formatDateTime(props.run.updatedAt)} />}
+          when={runIsInProgress(props.run.status)}
+        >
+          <Definition term="Updated" value={formatDateTime(props.run.updatedAt)} />
+        </Show>
         <Definition term="Attempts" value={String(props.run.attempts)} />
         <Definition term="Team" value={props.teamName} />
         <Show when={props.run.pending?.retryAt}>
           {(retryAt) => <Definition term="Retry at" value={formatReaderTime(retryAt())} />}
         </Show>
       </DefinitionList>
-
-      <TextLink search={{ surface: "run", team: props.teamId }} tone="quiet" to="/feedback">
-        Report a problem with this run
-      </TextLink>
 
       <Show when={props.run.outcome}>
         {(outcome) => (

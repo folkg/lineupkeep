@@ -14,6 +14,7 @@ import { page } from "vitest/browser";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
+import { formatClockTime, formatWeekday } from "#browser/shared-ui/formatTime.ts";
 import type { LineupRunView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { RunDetailPage } from "./RunDetailPage";
@@ -83,6 +84,7 @@ const team: TeamSummaryView = {
     updatedAt: observedAt,
   },
   connectionStatus: "ready",
+  connectionCount: 1,
   lastRun: run,
   recentRuns: [run],
 };
@@ -108,6 +110,68 @@ it("says which score decided the plan", async () => {
   await expect
     .element(page.getByText("Scored from yahoo/projected rank for week 3."))
     .toBeVisible();
+});
+
+it("shows a finished run as started and finished, without a last update", async () => {
+  using _app = setupRunDetailPage(run);
+
+  await expect.element(page.getByText("Started", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Finished", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Updated", { exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByText("Last updated", { exact: true })).not.toBeInTheDocument();
+});
+
+it("shows a working run as started and updated, without a finish time", async () => {
+  using _app = setupRunDetailPage({ ...run, status: "reading", outcome: undefined });
+
+  await expect.element(page.getByText("Started", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Updated", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Finished", { exact: true })).not.toBeInTheDocument();
+});
+
+it("puts the report action last, after everything the run found", async () => {
+  using _app = setupRunDetailPage(run);
+
+  const found = page.getByRole("heading", { name: "What the run found" });
+  const allTeams = page.getByRole("link", { name: "All teams" });
+  const report = page.getByRole("link", { name: "Report a problem with this run" });
+  await expect.element(report).toBeVisible();
+  expect(
+    found.element().compareDocumentPosition(report.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    allTeams.element().compareDocumentPosition(report.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+it("says when the next game is in the reader's local time", async () => {
+  const nextTickAt = "2026-11-04T22:55:00.000Z";
+  const nextGameAt = "2026-11-05T00:30:00.000Z";
+  using _app = setupRunDetailPage({
+    ...run,
+    status: "skipped",
+    outcome: {
+      kind: "skipped",
+      verified: false,
+      reconciled: false,
+      summary: "No games before the next scheduled check.",
+      observedAt,
+      nextTickAt,
+      nextGameAt,
+      changes: [],
+      lockedPlayers: 0,
+      editablePlayers: 0,
+    },
+  });
+
+  await expect
+    .element(
+      page.getByText(
+        `Nothing to check. Next game is ${formatWeekday(nextGameAt)} at ${formatClockTime(nextGameAt)}.`,
+      ),
+    )
+    .toBeVisible();
+  await expect.element(page.getByText(/UTC/u)).not.toBeInTheDocument();
 });
 
 it("names the refusal when the custom policy could not score the league", async () => {

@@ -647,6 +647,7 @@ const TeamRepositoryTest = TeamRepository.layer.pipe(Layer.provide(DatabaseLayer
 const TeamsTest = TeamsLive.pipe(
   Layer.provide(TeamRepositoryTest),
   Layer.provide(LineupRepositoryTest),
+  Layer.provide(ConnectionsTest),
 );
 const RetentionTest = RetentionSweepLive.pipe(
   Layer.provide(DatabaseLayer),

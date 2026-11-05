@@ -15,6 +15,7 @@ import { LineupRun } from "./LineupRun.ts";
 export const TeamSummary = Schema.Struct({
   team: FantasyTeam,
   connectionStatus: ConnectionStatus,
+  connectionCount: Schema.Int.check(Schema.isGreaterThan(0)),
   lastRun: Schema.optional(LineupRun),
   recentRuns: Schema.Array(LineupRun),
 });

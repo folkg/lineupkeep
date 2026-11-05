@@ -17,10 +17,12 @@ import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import {
+  formatClockTime,
   formatDateTime,
   formatRangeEnd,
   formatRangeStart,
   formatReaderTime,
+  formatWeekday,
 } from "#browser/shared-ui/formatTime.ts";
 import type {
   LineupRunView,
@@ -98,6 +100,28 @@ const failedRun: LineupRunView = {
   },
 };
 
+const nextTickAt = "2026-11-04T22:55:00.000Z";
+const nextGameAt = "2026-11-05T00:30:00.000Z";
+
+const skippedRun: LineupRunView = {
+  ...noOpRun,
+  run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b5",
+  status: "skipped",
+  updatedAt: hoursAgo(1),
+  outcome: {
+    kind: "skipped",
+    verified: false,
+    reconciled: false,
+    summary: "No games before the next scheduled check.",
+    observedAt: hoursAgo(1),
+    nextTickAt,
+    nextGameAt,
+    changes: [],
+    lockedPlayers: 0,
+    editablePlayers: 0,
+  },
+};
+
 const team: TeamSummaryView = {
   team: {
     id: teamId,
@@ -122,6 +146,7 @@ const team: TeamSummaryView = {
     updatedAt: threeDaysAgo,
   },
   connectionStatus: "ready",
+  connectionCount: 1,
   lastRun: noOpRun,
   recentRuns: [noOpRun],
 };
@@ -147,6 +172,9 @@ it("names the league context and keeps quiet states off the page", async () => {
   await expect
     .element(page.getByText("Lineup settings and recent activity for this team."))
     .not.toBeInTheDocument();
+  await expect
+    .element(page.getByText("Newest first. Checks that changed nothing are grouped."))
+    .not.toBeInTheDocument();
 });
 
 it("shows the fantasy league name and a provider jump out for the team", async () => {
@@ -159,7 +187,7 @@ it("shows the fantasy league name and a provider jump out for the team", async (
     },
   });
 
-  await expect.element(page.getByText("Irish Lax · Football · NFL 2026")).toBeVisible();
+  await expect.element(page.getByText("Irish Lax · Football · 2026")).toBeVisible();
   const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
   await expect.element(jumpOut).toHaveAttribute("href", "https://provider.example/f1/1000/1");
 });
@@ -176,6 +204,63 @@ it("puts recent activity above the owner note and leaves the roster off the page
   expect(
     activity.element().compareDocumentPosition(note.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
+
+  const report = page.getByRole("link", { name: "Report a problem with this team" });
+  expect(
+    note.element().compareDocumentPosition(report.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+it("says when the next game is in the reader's local time", async () => {
+  using _app = setupTeamDetailPage({ ...team, lastRun: skippedRun, recentRuns: [skippedRun] });
+
+  const sentence = `Nothing to check. Next game is ${formatWeekday(nextGameAt)} at ${formatClockTime(nextGameAt)}.`;
+  await expect.element(page.getByText(sentence)).toBeVisible();
+  await expect.element(page.getByText(/UTC/u)).not.toBeInTheDocument();
+});
+
+it("names the next check in the reader's local time when no game is scheduled", async () => {
+  const noGame: LineupRunView = {
+    ...skippedRun,
+    outcome: {
+      kind: "skipped",
+      verified: false,
+      reconciled: false,
+      summary: "No rostered player has a game scheduled.",
+      observedAt: hoursAgo(1),
+      nextTickAt,
+      changes: [],
+      lockedPlayers: 0,
+      editablePlayers: 0,
+    },
+  };
+  using _app = setupTeamDetailPage({ ...team, lastRun: noGame, recentRuns: [noGame] });
+
+  await expect
+    .element(
+      page.getByText(`Nothing to check. The next check is at ${formatClockTime(nextTickAt)}.`),
+    )
+    .toBeVisible();
+  await expect.element(page.getByText(/UTC/u)).not.toBeInTheDocument();
+});
+
+it("falls back to the stored sentence when an older run has no instants", async () => {
+  const older: LineupRunView = {
+    ...skippedRun,
+    outcome: {
+      kind: "skipped",
+      verified: false,
+      reconciled: false,
+      summary: "No games before the next scheduled check.",
+      observedAt: hoursAgo(1),
+      changes: [],
+      lockedPlayers: 0,
+      editablePlayers: 0,
+    },
+  };
+  using _app = setupTeamDetailPage({ ...team, lastRun: older, recentRuns: [older] });
+
+  await expect.element(page.getByText("No games before the next scheduled check.")).toBeVisible();
 });
 
 it("names the pause in reader-local time", async () => {

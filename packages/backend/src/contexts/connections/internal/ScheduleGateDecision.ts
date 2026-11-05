@@ -104,8 +104,9 @@ export function decideScheduleGate(input: {
     kind: "skip",
     summary:
       nextGame === undefined || nextGame.startTime === null
-        ? `No rostered player has a game in the next seven days. The next scheduled check is ${formatTick(input.nextTickAt)}.`
-        : `Nothing to check before ${formatTick(input.nextTickAt)}. The next game is ${formatGameStart(nextGame)}.`,
+        ? "No rostered player has a game scheduled."
+        : "No games before the next scheduled check.",
+    nextTickAt: input.nextTickAt,
     ...(nextGame === undefined || nextGame.startTime === null
       ? {}
       : { nextGameAt: nextGame.startTime.instant }),
@@ -115,35 +116,3 @@ export function decideScheduleGate(input: {
 function run(reason: ScheduleGateRunReason): ScheduleGateDecision {
   return { kind: "run", reason };
 }
-
-function formatDate(at: DateTime.Utc): string {
-  return DateTime.formatIsoDate(at);
-}
-
-function formatTick(at: DateTime.Utc): string {
-  const parts = DateTime.toPartsUtc(at);
-  return `${formatDate(at)} ${pad(parts.hour)}:${pad(parts.minute)} UTC`;
-}
-
-function formatGameStart(game: ProfessionalGame): string {
-  if (game.startTime === null) {
-    return "an unstated time";
-  }
-  const parts = DateTime.toPartsUtc(game.startTime.instant);
-  const weekday = weekdayNames[parts.weekDay] ?? "day";
-  return `${weekday} ${formatDate(game.startTime.instant)} at ${pad(parts.hour)}:${pad(parts.minute)} UTC`;
-}
-
-function pad(value: number): string {
-  return String(value).padStart(2, "0");
-}
-
-const weekdayNames = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;

@@ -34,6 +34,7 @@ import type {
 } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import { ScheduleGate } from "#contexts/connections/ScheduleGate.ts";
+import type { ScheduleGateDecision } from "#contexts/connections/ScheduleGate.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { planAssignments } from "./LineupPlanning.ts";
@@ -141,7 +142,7 @@ export const LineupWorkerLive = Layer.effect(
               }),
         });
         if (decision.kind === "skip") {
-          return yield* skip(run, decision.summary);
+          return yield* skip(run, decision);
         }
       }
       const league = yield* readLeague(run, provider, context, session);
@@ -956,7 +957,10 @@ export const LineupWorkerLive = Layer.effect(
       yield* queries.recordSessionRejected(userId, owned);
     });
 
-    const skip = Effect.fnUntraced(function* (run: ClaimedLineupRun, summary: string) {
+    const skip = Effect.fnUntraced(function* (
+      run: ClaimedLineupRun,
+      decision: Extract<ScheduleGateDecision, { readonly kind: "skip" }>,
+    ) {
       const at = yield* DateTime.now;
       yield* repository.recordSkipped({
         runId: run.record.id,
@@ -965,8 +969,10 @@ export const LineupWorkerLive = Layer.effect(
           kind: "skipped",
           verified: false,
           reconciled: false,
-          summary,
+          summary: decision.summary,
           observedAt: at,
+          nextTickAt: decision.nextTickAt,
+          ...(decision.nextGameAt === undefined ? {} : { nextGameAt: decision.nextGameAt }),
           changes: [],
           lockedPlayers: 0,
           editablePlayers: 0,

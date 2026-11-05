@@ -1,6 +1,7 @@
 import type { ConnectionError } from "@lineupkeep/backend/connections/Connection";
 import type { LineupRun } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupError } from "@lineupkeep/backend/connections/LineupRun";
+import type { LineupRunOutcome } from "@lineupkeep/backend/connections/LineupRun";
 import { teamNoteLimit } from "@lineupkeep/backend/connections/TeamNote";
 import type { TeamSummary } from "@lineupkeep/backend/connections/Teams";
 import type {
@@ -23,6 +24,7 @@ export function toTeamSummaryView(summary: TeamSummary): TeamSummaryView {
   return {
     team: toTeamView(summary.team),
     connectionStatus: summary.connectionStatus,
+    connectionCount: summary.connectionCount,
     ...(summary.lastRun === undefined ? {} : { lastRun: toLineupRunView(summary.lastRun) }),
     recentRuns: summary.recentRuns.map(toLineupRunView),
   };
@@ -41,14 +43,7 @@ export function toLineupRunView(run: LineupRun): LineupRunView {
     attempts: run.attempts,
     createdAt: DateTime.formatIso(run.createdAt),
     updatedAt: DateTime.formatIso(run.updatedAt),
-    ...(run.outcome === undefined
-      ? {}
-      : {
-          outcome: {
-            ...run.outcome,
-            observedAt: DateTime.formatIso(run.outcome.observedAt),
-          },
-        }),
+    ...(run.outcome === undefined ? {} : { outcome: toLineupOutcomeView(run.outcome) }),
     ...(run.pending === undefined
       ? {}
       : {
@@ -60,6 +55,16 @@ export function toLineupRunView(run: LineupRun): LineupRunView {
               : { retryAt: DateTime.formatIso(run.pending.retryAt) }),
           },
         }),
+  };
+}
+
+function toLineupOutcomeView(outcome: LineupRunOutcome): NonNullable<LineupRunView["outcome"]> {
+  const { nextGameAt, nextTickAt, ...rest } = outcome;
+  return {
+    ...rest,
+    observedAt: DateTime.formatIso(outcome.observedAt),
+    ...(nextGameAt === undefined ? {} : { nextGameAt: DateTime.formatIso(nextGameAt) }),
+    ...(nextTickAt === undefined ? {} : { nextTickAt: DateTime.formatIso(nextTickAt) }),
   };
 }
 
