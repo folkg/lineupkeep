@@ -304,6 +304,9 @@ class OwnedProcesses {
       }
     };
     await waitForExit();
+    for (let settle = 0; settle < spawnSettleSamples && this.alive().length === 0; settle += 1) {
+      await delay(samplingMs);
+    }
     if (this.alive().length === 0) {
       return;
     }
@@ -325,7 +328,10 @@ class OwnedProcesses {
       survivors = this.alive();
     }
     send(survivors, "SIGKILL");
-    await delay(200);
+    const deadline = Date.now() + killSettleMs;
+    while (this.alive().length > 0 && Date.now() < deadline) {
+      await delay(samplingMs);
+    }
     const remaining = this.alive();
     if (remaining.length > 0) {
       throw new Error(
@@ -641,6 +647,8 @@ function now(): string {
 }
 
 const samplingMs = 100;
+const spawnSettleSamples = 3;
+const killSettleMs = 2_000;
 
 const cleanupStepMs = 60_000;
 
