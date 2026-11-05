@@ -17,7 +17,9 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The suite takes about ten minutes on a clean runner; the allowance covers a
+    # slow apt and browser install, which is where the job was previously cancelled.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
 
@@ -30,6 +32,12 @@ jobs:
           bun-version-file: package.json
 
       - run: bun install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
 
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
