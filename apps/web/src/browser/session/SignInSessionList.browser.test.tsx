@@ -98,7 +98,7 @@ it("ends one session and confirms it without touching the others", async () => {
     .element(page.getByText("That session ended. The device must sign in again."))
     .toBeVisible();
   expect(ended).toEqual(["session-phone"]);
-  expect(page.getByText("Safari on iOS").elements()).toHaveLength(0);
+  await expect.poll(() => page.getByText("Safari on iOS").elements().length).toBe(0);
   await expect.element(page.getByText("Firefox on Windows")).toBeVisible();
 });
 
@@ -116,12 +116,16 @@ it("shows the row as ending until the server confirms it", async () => {
 
   await page.getByRole("button", { name: "End the Safari on iOS session" }).click();
 
-  const ending = page.getByRole("button", { name: "Ending…" });
+  const ending = page.getByRole("button", { name: "End the Safari on iOS session" });
   await expect.element(ending).toHaveAttribute("aria-busy", "true");
+  await expect.element(ending).toHaveAttribute("disabled");
+  await expect.element(ending).toBeDisabled();
+  expect(page.getByText("Safari on iOS").elements()).toHaveLength(1);
   confirm({ sessions: [thisDevice] });
   await expect
     .element(page.getByText("That session ended. The device must sign in again."))
     .toBeVisible();
+  await expect.poll(() => page.getByText("Safari on iOS").elements().length).toBe(0);
 });
 
 it("ends every other session after the reader confirms", async () => {

@@ -64,6 +64,9 @@
   --theme-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --theme-duration-quick: 140ms;
   --theme-duration-reveal: 200ms;
+  --theme-duration-work: 1100ms;
+  --theme-duration-tick: 160ms;
+  --theme-duration-confirm: 1200ms;
 }
 
 .dark {

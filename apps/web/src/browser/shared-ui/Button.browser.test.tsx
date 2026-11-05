@@ -2,45 +2,46 @@ import { render } from "@solidjs/web";
 import type { ComponentProps } from "solid-js";
 import { Loading, createMemo, createSignal } from "solid-js";
 import { expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 
+import type { ActionState } from "./actionState";
 import { Button } from "./Button";
 
-it("keeps keyboard focus during pending feedback without repeating the action", async () => {
-  const [pending, setPending] = createSignal(false);
+it("keeps its words, disables itself, and ignores a second press while working", async () => {
+  const [state, setState] = createSignal<ActionState>("idle");
   let submissions = 0;
   using _app = renderButton({
     children: "Save",
-    get pending() {
-      return pending();
+    get state() {
+      return state();
     },
-    pendingLabel: "Saving…",
     onClick: () => {
       submissions += 1;
-      setPending(true);
     },
   });
 
-  await expect
-    .element(page.getByRole("button", { name: "Save", exact: true }))
-    .toHaveAttribute("type", "button");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const button = page.getByRole("button", { name: "Save", exact: true });
+  const idle = button.element().getBoundingClientRect();
+  await button.click();
+  setState("working");
 
-  await expect
-    .element(page.getByRole("button", { name: "Saving…" }), { timeout: 1000 })
-    .toHaveFocus();
+  await expect.element(button).toHaveAttribute("aria-busy", "true");
+  await expect.element(button).toHaveAttribute("disabled");
+  await expect.element(button).toBeDisabled();
+  expect(button.element().textContent).toBe("Save");
 
-  await userEvent.keyboard("{Enter}");
+  const working = button.element().getBoundingClientRect();
+  expect(working.width).toBe(idle.width);
+  expect(working.height).toBe(idle.height);
 
+  const control = button.element();
+  if (control instanceof HTMLButtonElement) {
+    control.click();
+  }
   expect(submissions).toBe(1);
-  await expect
-    .element(page.getByRole("button", { name: "Saving…" }))
-    .toHaveAttribute("aria-busy", "true");
 
-  setPending(false);
-
-  await expect.element(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
-  await expect.element(page.getByRole("button", { name: "Save", exact: true })).toHaveFocus();
+  setState("idle");
+  await expect.element(button).toBeEnabled();
 });
 
 it("activates the visible enabled control while a newer availability check is pending", async () => {

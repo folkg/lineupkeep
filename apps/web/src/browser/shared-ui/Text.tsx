@@ -18,6 +18,7 @@ export function Text(props: TextProps): JSX.Element {
         props.numeric === true && "tabular-nums",
         props.wrap === "words" && "break-words",
         props.wrap === "preserve" && "break-words whitespace-pre-wrap",
+        props.srOnly === true && "sr-only",
       )}
     >
       {props.children}
@@ -49,6 +50,7 @@ type TextProps = {
   readonly tone?: TextTone;
 
   readonly wrap?: "words" | "preserve";
+  readonly srOnly?: boolean;
   readonly as?: "p" | "span";
   readonly weight?: "normal" | "semibold";
   readonly numeric?: boolean;

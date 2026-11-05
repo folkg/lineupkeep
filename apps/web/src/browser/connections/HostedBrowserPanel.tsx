@@ -95,8 +95,7 @@ export function HostedBrowserPanel(props: HostedBrowserPanelProps): JSX.Element 
         </Text>
         <Inline gap="sm">
           <Button
-            pending={props.controller.starting()}
-            pendingLabel="Starting…"
+            state={props.controller.starting() ? "working" : "idle"}
             onClick={() => void props.controller.start()}
           >
             {props.controller.failure() === undefined ? `Connect ${provider}` : "Try again"}

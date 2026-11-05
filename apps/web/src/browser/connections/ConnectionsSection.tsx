@@ -51,6 +51,7 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
       />
       <ConnectionList
         connections={page.connections}
+        departingId={page.departingId}
         disconnectingId={page.disconnectingId}
         isLoading={page.isLoading}
         loadFailure={page.loadFailure}

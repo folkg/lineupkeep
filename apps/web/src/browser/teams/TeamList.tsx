@@ -3,9 +3,10 @@ import { For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
 
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
+import type { ActionState } from "#browser/shared-ui/actionState.ts";
 import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
-import { LoaderCircleIcon, RefreshIcon } from "#browser/shared-ui/icons.tsx";
+import { RefreshIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
@@ -28,19 +29,20 @@ export function TeamList(props: TeamListProps): JSX.Element {
         id="teams-list-title"
         action={
           <IconButton
-            busy={props.refreshing()}
-            busyLabel="Refreshing teams…"
+            confirmed
             label="Refresh teams"
+            state={props.refreshState()}
             onClick={props.onRefreshTeams}
           >
-            <Show fallback={<RefreshIcon size="md" />} when={props.refreshing()}>
-              <LoaderCircleIcon size="md" spin />
-            </Show>
+            <RefreshIcon size="md" />
           </IconButton>
         }
       >
         Your teams
       </SectionTitle>
+      <Text as="span" role="status" srOnly>
+        {props.refreshState() === "done" ? "Teams refreshed." : ""}
+      </Text>
       <Show
         when={!props.isLoading() && props.loadFailure() === null && allTeamsIdle(props.teams())}
       >
@@ -60,7 +62,6 @@ export function TeamList(props: TeamListProps): JSX.Element {
                 message: "We could not load your teams.",
                 recovery: {
                   label: "Refresh",
-                  pendingLabel: "Refreshing…",
                   onAction: props.onRefresh,
                 },
               }}
@@ -148,7 +149,7 @@ type TeamListProps = {
   readonly teams: Accessor<ReadonlyArray<TeamSummaryView>>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
-  readonly refreshing: Accessor<boolean>;
+  readonly refreshState: Accessor<ActionState>;
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshTeams: () => void;
   readonly remote: TeamRemote;

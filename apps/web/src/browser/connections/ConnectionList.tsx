@@ -23,7 +23,6 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
               message: "We could not load your connections.",
               recovery: {
                 label: "Refresh",
-                pendingLabel: "Refreshing…",
                 onAction: props.onRefresh,
               },
             }}
@@ -45,6 +44,7 @@ export function ConnectionList(props: ConnectionListProps): JSX.Element {
                 <ConnectionCard
                   connection={connection}
                   disconnecting={props.disconnectingId() === connection.id}
+                  leaving={props.departingId() === connection.id}
                   reconnecting={props.reconnectingId() === connection.id}
                   onDisconnect={() => props.onDisconnect(connection)}
                   onReconnect={() => props.onReconnect(connection)}
@@ -62,6 +62,7 @@ type ConnectionListProps = {
   readonly connections: Accessor<ReadonlyArray<ConnectionView>>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
+  readonly departingId: Accessor<string | undefined>;
   readonly disconnectingId: Accessor<string | undefined>;
   readonly reconnectingId: Accessor<string | undefined>;
   readonly onDisconnect: (connection: ConnectionView) => void;

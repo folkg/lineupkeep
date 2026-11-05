@@ -36,7 +36,7 @@ it("clears controlled search state when Escape is pressed", async () => {
   await expect.element(input).toHaveValue("next");
 });
 
-it("shows pending recovery while keeping keyboard focus and search input available", async () => {
+it("shows pending recovery while keeping the search input available", async () => {
   const read = Promise.withResolvers<void>();
   using _app = renderSearchField({
     message: "Refresh failed.",
@@ -44,17 +44,17 @@ it("shows pending recovery while keeping keyboard focus and search input availab
     onRetry: () => read.promise,
   });
 
-  await page.getByRole("button", { name: "Retry search" }).click();
+  const retry = page.getByRole("button", { name: "Retry search" });
+  await retry.click();
 
-  await expect
-    .element(page.getByRole("button", { name: "Retrying search…" }), { timeout: 1000 })
-    .toHaveAttribute("aria-busy", "true");
-  await expect.element(page.getByRole("button", { name: "Retrying search…" })).toHaveFocus();
+  await expect.element(retry, { timeout: 1000 }).toHaveAttribute("aria-busy", "true");
+  await expect.element(retry).toBeDisabled();
+  await expect.element(retry).toHaveTextContent("Retry search");
   await expect.element(page.getByRole("searchbox", { name: "Search connections" })).toBeEnabled();
 
   read.resolve();
 
-  await expect.element(page.getByRole("button", { name: "Retry search" })).toHaveFocus();
+  await expect.element(retry).toBeEnabled();
 });
 
 it("delays loading feedback while keeping the field enabled", async () => {

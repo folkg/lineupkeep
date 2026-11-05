@@ -463,9 +463,12 @@ it("saves an owner note explicitly and confirms it", async () => {
   await expect.element(page.getByText("31 of 2000 characters")).toBeVisible();
   await expect.element(page.getByText(/Up to 2000 characters/u)).not.toBeInTheDocument();
   await expect.element(page.getByText(/does not store passwords/u)).not.toBeInTheDocument();
-  await page.getByRole("button", { name: "Save note" }).click();
+  const save = page.getByRole("button", { name: "Save note" });
+  await save.click();
 
-  await expect.element(page.getByText("Note saved.")).toBeVisible();
+  await expect.element(save).toHaveAttribute("data-state", "done");
+  expect(save.element().querySelector('[data-action-mark="tick"]')).not.toBeNull();
+  expect(page.getByText("Note saved.").elements()).toHaveLength(1);
   expect(captured).toEqual([{ team: teamId, note: "Keep both goalies through 2027." }]);
 });
 
@@ -502,9 +505,11 @@ it("saves a note that contains a token-shaped value", async () => {
 
   const note = page.getByLabelText("Note for this team");
   await note.fill(`Reconnect with ${token}`);
-  await page.getByRole("button", { name: "Save note" }).click();
+  const save = page.getByRole("button", { name: "Save note" });
+  await save.click();
 
-  await expect.element(page.getByText("Note saved.")).toBeVisible();
+  await expect.element(save).toHaveAttribute("data-state", "done");
+  expect(page.getByText("Note saved.").elements()).toHaveLength(1);
   await expect.element(page.getByText(/does not store passwords/u)).not.toBeInTheDocument();
   expect(captured).toEqual([`Reconnect with ${token}`]);
 });

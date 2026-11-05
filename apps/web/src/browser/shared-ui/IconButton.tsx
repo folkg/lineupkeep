@@ -1,15 +1,17 @@
 import type { JSX } from "@solidjs/web";
+import { Show } from "solid-js";
 import type { Element } from "solid-js";
 
+import { ConfirmedMark, WorkMark } from "./ActionMarks";
+import type { ActionState } from "./actionState";
 import { iconButtonClass, iconButtonFrameClass } from "./Button";
 
 export function IconButton(props: IconButtonProps): JSX.Element {
-  const blocked = (): boolean => props.busy === true || props.disabled === true;
-  const label = (): string =>
-    props.busy === true && props.busyLabel !== undefined ? props.busyLabel : props.label;
-
+  const state = (): ActionState => props.state ?? "idle";
+  const working = (): boolean => state() === "working";
+  const disabled = (): boolean => !working() && props.disabled === true;
   const handleClick: JSX.EventHandler<HTMLButtonElement, MouseEvent> = (event) => {
-    if (blocked()) {
+    if (working() || disabled()) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -18,18 +20,28 @@ export function IconButton(props: IconButtonProps): JSX.Element {
   };
 
   return (
-    <span class="inline-flex" title={props.title ?? label()}>
+    <span class="inline-flex" title={props.title ?? props.label}>
       <button
-        aria-label={label()}
-        aria-busy={props.busy === true ? "true" : undefined}
-        aria-disabled={blocked() ? "true" : undefined}
+        aria-busy={working() ? "true" : undefined}
+        aria-disabled={disabled() ? "true" : undefined}
+        aria-label={props.label}
         class={iconButtonClass}
-        title={props.title ?? label()}
+        data-state={state()}
+        disabled={working()}
+        title={props.title ?? props.label}
         type="button"
         onClick={handleClick}
       >
         <span aria-hidden="true" class={iconButtonFrameClass} />
         <span class="relative">{props.children}</span>
+        <Show when={working()}>
+          <span class="pointer-events-none absolute inset-x-2 bottom-[calc(0.5rem+1px)] h-px overflow-hidden">
+            <WorkMark class="start-0 top-0 w-[34%]" />
+          </span>
+        </Show>
+        <Show when={state() === "done" && props.confirmed === true}>
+          <ConfirmedMark class="inset-0 grid place-items-center" />
+        </Show>
       </button>
     </span>
   );
@@ -37,10 +49,10 @@ export function IconButton(props: IconButtonProps): JSX.Element {
 
 type IconButtonProps = {
   readonly label: string;
-  readonly busyLabel?: string;
   readonly onClick: () => void;
   readonly children: Element;
   readonly title?: string;
-  readonly busy?: boolean;
+  readonly state?: ActionState;
+  readonly confirmed?: boolean;
   readonly disabled?: boolean;
 };

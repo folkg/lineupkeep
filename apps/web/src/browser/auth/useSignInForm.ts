@@ -202,7 +202,6 @@ export function useSignInForm(props: SignInFormOptions): {
             message: "We couldn't confirm sign-in.",
             recovery: {
               label: "Check again",
-              pendingLabel: "Checking…",
               onAction: () => signIn.send({ type: "checkSession" }),
             },
           };

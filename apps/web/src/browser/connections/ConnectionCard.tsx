@@ -6,7 +6,7 @@ import { Button } from "#browser/shared-ui/Button.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { Heading } from "#browser/shared-ui/Heading.tsx";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
-import { LoaderCircleIcon, XIcon } from "#browser/shared-ui/icons.tsx";
+import { XIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
@@ -17,7 +17,7 @@ import { providerDisplayName } from "#contracts/connections/providerLabels.ts";
 
 export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
   return (
-    <RuleListItem layout="columns">
+    <RuleListItem layout="columns" leaving={props.leaving}>
       <Stack gap="sm">
         <Inline gap="sm">
           <Heading level={3} size="item">
@@ -42,11 +42,7 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
       </Stack>
       <Inline gap="sm" justify="end" fullWidthOnSmall>
         <Show when={props.connection.status === "reconnect-required"}>
-          <Button
-            pending={props.reconnecting}
-            pendingLabel="Opening sign-in…"
-            onClick={props.onReconnect}
-          >
+          <Button state={props.reconnecting ? "working" : "idle"} onClick={props.onReconnect}>
             Reconnect
           </Button>
         </Show>
@@ -56,14 +52,11 @@ export function ConnectionCard(props: ConnectionCardProps): JSX.Element {
           }
         >
           <IconButton
-            busy={props.disconnecting}
-            busyLabel="Disconnecting…"
             label={`Disconnect the ${providerDisplayName(props.connection.provider)} connection`}
+            state={props.disconnecting ? "working" : "idle"}
             onClick={props.onDisconnect}
           >
-            <Show fallback={<XIcon size="md" />} when={props.disconnecting}>
-              <LoaderCircleIcon size="md" spin />
-            </Show>
+            <XIcon size="md" />
           </IconButton>
         </Show>
       </Inline>
@@ -116,6 +109,7 @@ function statusLabel(status: ConnectionView["status"]): string {
 type ConnectionCardProps = {
   readonly connection: ConnectionView;
   readonly disconnecting: boolean;
+  readonly leaving: boolean;
   readonly reconnecting: boolean;
   readonly onDisconnect: () => void;
   readonly onReconnect: () => void;

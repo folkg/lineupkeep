@@ -51,8 +51,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
                     <Button
                       variant="google"
                       disabled={form.isBusy()}
-                      pending={form.isStartingGoogle()}
-                      pendingLabel="Opening Google…"
+                      state={form.isStartingGoogle() ? "working" : "idle"}
                       onClick={form.continueWithGoogle}
                     >
                       <GoogleGIcon />
@@ -79,7 +78,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
                   value={form.email()}
                   onInput={(event) => form.changeEmail(event.currentTarget.value)}
                 />
-                <Button pending={form.isSendingCode()} pendingLabel="Sending code…" type="submit">
+                <Button state={form.isSendingCode() ? "working" : "idle"} type="submit">
                   Email me a code
                   <ArrowUpRightIcon size="md" />
                 </Button>
@@ -116,7 +115,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
                   event.currentTarget.value = form.changeCode(event.currentTarget.value);
                 }}
               />
-              <Button pending={form.isVerifying()} pendingLabel="Signing in…" type="submit">
+              <Button state={form.isVerifying() ? "working" : "idle"} type="submit">
                 Sign in
                 <ArrowUpRightIcon size="md" />
               </Button>
@@ -126,8 +125,7 @@ export function SignInForm(props: SignInFormProps): JSX.Element {
               <Button
                 variant="link"
                 disabled={form.isBusy() || !form.canResend()}
-                pending={form.isResendingCode()}
-                pendingLabel="Sending a new code…"
+                state={form.isResendingCode() ? "working" : "idle"}
                 onClick={() => focusCodeOnceSent(form.resendCode())}
               >
                 {form.resendLabel()}

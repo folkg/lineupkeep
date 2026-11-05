@@ -45,7 +45,6 @@ export function FeedbackReportList(props: FeedbackReportListProps): JSX.Element 
                 message: "We could not load your reports.",
                 recovery: {
                   label: "Refresh",
-                  pendingLabel: "Refreshing…",
                   onAction: props.onRefresh,
                 },
               }}

@@ -57,8 +57,7 @@ export function ConsentPage(props: {
                 >
                   <Button
                     type="submit"
-                    pending={consent.isApproving()}
-                    pendingLabel="Allowing access…"
+                    state={consent.isApproving() ? "working" : "idle"}
                     disabled={consent.isPending()}
                   >
                     Allow access
@@ -73,8 +72,7 @@ export function ConsentPage(props: {
                   <Button
                     type="submit"
                     variant="secondary"
-                    pending={consent.isDenying()}
-                    pendingLabel="Denying access…"
+                    state={consent.isDenying() ? "working" : "idle"}
                     disabled={consent.isPending()}
                   >
                     Deny access

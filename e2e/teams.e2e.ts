@@ -81,8 +81,10 @@ test("saves an owner note on the team page and reads it back over MCP", async ({
     await page
       .getByLabel("Note for this team")
       .fill("Dynasty league. Keep both goalies; cost rises by five each season.");
-    await page.getByRole("button", { name: "Save note" }).click();
-    await expect(page.getByText("Note saved.")).toBeVisible();
+    const save = page.getByRole("button", { name: "Save note" });
+    await save.click();
+    await expect(save).toHaveAttribute("data-state", "done");
+    await expect(page.locator('[data-action-mark="tick"]')).toBeVisible();
   });
 
   await test.step("Persistence: the saved note survives a reload", async () => {

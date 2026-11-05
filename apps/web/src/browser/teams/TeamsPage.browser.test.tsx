@@ -163,7 +163,13 @@ it("turns lineup checks on through the switch and confirms the change", async ()
 
 it("flips the switch before the server answers and returns to the server state when refused", async () => {
   const answer = Promise.withResolvers<TeamChangeView>();
-  using _app = setupTeamsPage([baseTeam], { control: () => answer.promise });
+  const changes: Array<{ readonly team: string; readonly action: string }> = [];
+  using _app = setupTeamsPage([baseTeam], {
+    control: (input) => {
+      changes.push(input);
+      return answer.promise;
+    },
+  });
 
   const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
   await expect.element(toggle).toHaveAttribute("aria-checked", "false");
@@ -171,9 +177,15 @@ it("flips the switch before the server answers and returns to the server state w
 
   await expect.element(toggle).toHaveAttribute("aria-checked", "true");
   await expect.element(toggle).toHaveAttribute("aria-busy", "true");
-  await expect
-    .element(page.getByRole("listitem").getByRole("status"))
-    .toHaveTextContent("Turning on…");
+  await expect.element(toggle).toHaveAttribute("disabled");
+  await expect.element(toggle).toBeDisabled();
+  expect(page.getByText("Turning on…").elements()).toHaveLength(0);
+
+  const control = toggle.element();
+  if (control instanceof HTMLButtonElement) {
+    control.click();
+  }
+  expect(changes).toHaveLength(1);
 
   answer.reject(new Error("Network"));
 
@@ -223,6 +235,20 @@ it("keeps the pause control in place and disabled while lineup checks are off", 
   expect(pause.element().getBoundingClientRect().left).toBeGreaterThanOrEqual(
     toggle.element().getBoundingClientRect().right,
   );
+});
+
+it("keeps every control inside a phone viewport without sideways scroll", async () => {
+  await page.viewport(390, 844);
+  using _app = setupTeamsPage([enabledTeam]);
+
+  const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
+  await expect.element(toggle).toBeVisible();
+  const bounds = toggle.element().getBoundingClientRect();
+  const root = document.documentElement;
+
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(root.clientWidth);
+  expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
 });
 
 it("labels a pause as the rest of the fantasy day and resumes through the control action", async () => {
@@ -300,7 +326,7 @@ it("pauses an enabled team for the rest of the fantasy day", async () => {
   expect(changes).toEqual([{ team: teamId, action: "pause-today" }]);
 });
 
-it("explains why the pause control is unavailable while the switch is saving", async () => {
+it("disables the pause control while the switch is saving", async () => {
   const answer = Promise.withResolvers<TeamChangeView>();
   using _app = setupTeamsPage([baseTeam], { control: () => answer.promise });
 
@@ -312,7 +338,7 @@ it("explains why the pause control is unavailable while the switch is saving", a
   await expect.element(pause).toHaveAttribute("aria-disabled", "true");
   await expect
     .element(pause)
-    .toHaveAttribute("title", "Wait for the lineup checks change to finish before pausing.");
+    .toHaveAttribute("title", "Pause lineup checks for the rest of the fantasy day");
 
   answer.resolve({ changed: [], teams: [baseTeam] });
 });
@@ -480,7 +506,10 @@ it("imports provider teams when the owner refreshes discovery", async () => {
   await page.getByRole("button", { name: "Refresh teams" }).click();
 
   await expect.element(page.getByRole("link", { name: "Beta", exact: true })).toBeVisible();
-  await expect.element(page.getByText("Teams refreshed.")).toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: "Refresh teams" }))
+    .toHaveAttribute("data-state", "done");
+  expect(page.getByText("Teams refreshed.").elements()).toHaveLength(1);
 });
 
 it("keeps the list and reports a failed refresh", async () => {

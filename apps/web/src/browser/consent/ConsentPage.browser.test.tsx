@@ -33,11 +33,13 @@ it("distinguishes the verified client host from its unverified declared name", a
 it("acknowledges consent immediately and returns only after confirmation", async () => {
   const decision = Promise.withResolvers<string>();
   using _app = setupConsent({ decide: () => decision.promise });
-  const allow = page.getByRole("button", { name: /Allow access|Allowing access/ });
+  const allow = page.getByRole("button", { name: "Allow access" });
 
   await allow.click();
 
-  await expect.element(allow).toHaveTextContent("Allowing access…");
+  await expect.element(allow).toHaveTextContent("Allow access");
+  await expect.element(allow).toHaveAttribute("aria-busy", "true");
+  await expect.element(allow).toBeDisabled();
   await expect.element(page.getByRole("button", { name: "Deny access" })).toBeDisabled();
   await expect.element(page.getByText("Returned to the client")).not.toBeInTheDocument();
   decision.resolve("/returned");

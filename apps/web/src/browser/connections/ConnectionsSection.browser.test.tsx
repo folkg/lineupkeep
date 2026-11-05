@@ -15,7 +15,10 @@ import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
-import type { ConnectionView } from "#contracts/connections/connectionContract.ts";
+import type {
+  ConnectionChangeView,
+  ConnectionView,
+} from "#contracts/connections/connectionContract.ts";
 
 import { connectionQueries } from "./connectionQueries";
 import type { ConnectionRemote } from "./connectionRemote";
@@ -115,6 +118,33 @@ it("offers the connect action when no connection exists", async () => {
   await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).toBeVisible();
 });
 
+it("shows the hairline, disables the control, and leaves the row after the server confirms", async () => {
+  const answer = Promise.withResolvers<ConnectionChangeView>();
+  using _section = setupConnectionsSection([connected], {
+    disconnect: () => answer.promise,
+  });
+  const button = page.getByRole("button", { name: "Disconnect the Yahoo connection" });
+  await expect.element(button).toBeVisible();
+  const idle = button.element().getBoundingClientRect();
+
+  await button.click();
+
+  await expect.element(button).toHaveAttribute("aria-busy", "true");
+  await expect.element(button).toHaveAttribute("disabled");
+  await expect.element(button).toBeDisabled();
+  expect(page.getByText("Disconnecting…").elements()).toHaveLength(0);
+  const working = button.element().getBoundingClientRect();
+  expect(working.width).toBe(idle.width);
+  expect(working.height).toBe(idle.height);
+
+  answer.resolve({ connection: { ...connected, status: "disconnected" }, connections: [] });
+
+  await expect.poll(() => page.getByText("Yahoo connection").elements().length).toBe(0);
+  await expect
+    .element(page.getByText("Disconnected. You can connect again at any time."))
+    .toBeVisible();
+});
+
 it("starts a hosted sign-in for a connection that needs to reconnect", async () => {
   await page.viewport(1440, 900);
   const hostedInputs: Array<Parameters<ConnectionRemote["startHosted"]>[0]> = [];
@@ -130,7 +160,10 @@ it("starts a hosted sign-in for a connection that needs to reconnect", async () 
   await expect
     .poll(() => hostedInputs)
     .toEqual([{ provider: "yahoo", connectionId: reconnectable.id, viewport: "desktop" }]);
-  await expect.element(page.getByRole("button", { name: "Opening sign-in…" })).toBeVisible();
+  const reconnect = page.getByRole("button", { name: "Reconnect" });
+  await expect.element(reconnect).toHaveAttribute("aria-busy", "true");
+  await expect.element(reconnect).toBeDisabled();
+  await expect.element(page.getByText("Opening sign-in…")).not.toBeInTheDocument();
 });
 
 it("starts a phone viewport profile from a phone-sized client", async () => {
@@ -165,16 +198,18 @@ it("starts a desktop viewport profile from a wide client", async () => {
 
 function setupConnectionsSection(
   connections: ReadonlyArray<ConnectionView>,
-  overrides: Partial<Pick<ConnectionRemote, "startHosted">> = {},
+  overrides: Partial<Pick<ConnectionRemote, "startHosted" | "disconnect">> = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: ConnectionRemote = {
     list: () => Promise.resolve(connections),
-    disconnect: () =>
-      Promise.resolve({
-        connection: connections[0] ?? connected,
-        connections,
-      }),
+    disconnect:
+      overrides.disconnect ??
+      (() =>
+        Promise.resolve({
+          connection: connections[0] ?? connected,
+          connections,
+        })),
     startHosted:
       overrides.startHosted ?? (() => Promise.reject(new Error("Unexpected hosted sign-in start"))),
     cancelHosted: () => Promise.reject(new Error("Unexpected hosted sign-in cancellation")),

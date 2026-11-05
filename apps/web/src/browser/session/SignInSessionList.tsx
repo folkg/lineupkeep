@@ -10,7 +10,7 @@ import { EmptyState, LoadingState } from "#browser/shared-ui/CollectionState.tsx
 import { ConfirmDialog } from "#browser/shared-ui/ConfirmDialog.tsx";
 import { formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
-import { LoaderCircleIcon, XIcon } from "#browser/shared-ui/icons.tsx";
+import { XIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
@@ -38,7 +38,6 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
                 message: "We could not load your sessions.",
                 recovery: {
                   label: "Refresh",
-                  pendingLabel: "Refreshing…",
                   onAction: props.onRefresh,
                 },
               }}
@@ -59,6 +58,7 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
                 {(session) => (
                   <SessionRow
                     ending={props.endingId() === session.id}
+                    leaving={props.departingId() === session.id}
                     session={session}
                     onEnd={() => props.onEnd(session)}
                   />
@@ -76,8 +76,7 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
                 trigger={(trigger) => (
                   <Button
                     {...trigger}
-                    pending={props.endingOthers()}
-                    pendingLabel="Ending other sessions…"
+                    state={props.endingOthers() ? "working" : "idle"}
                     tone="danger"
                     variant="secondary"
                   >
@@ -99,7 +98,7 @@ export function SignInSessionList(props: SignInSessionListProps): JSX.Element {
 
 function SessionRow(props: SessionRowProps): JSX.Element {
   return (
-    <RuleListItem>
+    <RuleListItem leaving={props.leaving}>
       <Inline gap="sm" justify="between">
         <Inline gap="sm">
           <Text as="span" weight="semibold">
@@ -111,14 +110,11 @@ function SessionRow(props: SessionRowProps): JSX.Element {
         </Inline>
         <Show when={!props.session.current}>
           <IconButton
-            busy={props.ending}
-            busyLabel="Ending…"
             label={`End the ${props.session.device} session`}
+            state={props.ending ? "working" : "idle"}
             onClick={props.onEnd}
           >
-            <Show fallback={<XIcon size="md" />} when={props.ending}>
-              <LoaderCircleIcon size="md" spin />
-            </Show>
+            <XIcon size="md" />
           </IconButton>
         </Show>
       </Inline>
@@ -139,6 +135,7 @@ type SignInSessionListProps = {
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
+  readonly departingId: Accessor<string | undefined>;
   readonly endingId: Accessor<string | undefined>;
   readonly endingOthers: Accessor<boolean>;
   readonly onEnd: (session: SignInSessionView) => void;
@@ -149,5 +146,6 @@ type SignInSessionListProps = {
 type SessionRowProps = {
   readonly session: SignInSessionView;
   readonly ending: boolean;
+  readonly leaving: boolean;
   readonly onEnd: () => void;
 };

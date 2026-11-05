@@ -55,7 +55,6 @@ export function SearchField(props: SearchFieldProps): JSX.Element {
         message: status.message,
         recovery: {
           label: status.recovery?.label ?? "Retry search",
-          pendingLabel: status.recovery?.pendingLabel ?? "Retrying search…",
           onAction: status.onRetry,
         },
       };
@@ -135,7 +134,7 @@ export type SearchFieldStatus =
   | {
       readonly message: string;
       readonly onRetry: () => void | Promise<void>;
-      readonly recovery?: { readonly label: string; readonly pendingLabel: string };
+      readonly recovery?: { readonly label: string };
       readonly type: "error";
     };
 

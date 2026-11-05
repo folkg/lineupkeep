@@ -4,6 +4,8 @@ import type { Accessor } from "solid-js";
 
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
+import { departureDurationMs } from "#browser/shared-ui/actionState.ts";
+import { scheduleDelay } from "#browser/timing/delay.ts";
 import type {
   ConnectionChangeView,
   ConnectionView,
@@ -18,7 +20,7 @@ export function useConnectionsPage(props: ConnectionsOptions): ConnectionsContro
   const connections = useQuery(() => props.connectionsQuery());
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
-  const [disconnectingId, setDisconnectingId] = createSignal<string>();
+  const [departingId, setDepartingId] = createSignal<string>();
 
   const reportFailure = (error: unknown): void => {
     const failure = describeConnectionFailure(error);
@@ -32,23 +34,27 @@ export function useConnectionsPage(props: ConnectionsOptions): ConnectionsContro
   const disconnect = useMutation(() => ({
     ...connectionMutations.disconnect(props.remote()),
     onSuccess: (change: ConnectionChangeView, variables, onMutateResult, context) => {
-      storeRefreshedConnections(change, variables, onMutateResult, context);
+      setDepartingId(variables.id);
+      scheduleDelay(() => {
+        storeRefreshedConnections(change, variables, onMutateResult, context);
+        setDepartingId(undefined);
+      }, departureDurationMs);
       setFeedback({ type: "success", message: "Disconnected. You can connect again at any time." });
     },
     onError: reportFailure,
-    onSettled: () => setDisconnectingId(undefined),
   }));
 
   return {
-    connections: () => connections.data,
+    connections: () =>
+      connections.data.filter((connection) => connection.status !== "disconnected"),
     isLoading: () => connections.isPending,
     loadFailure: () => connections.error,
     feedback,
-    disconnectingId,
+    departingId,
+    disconnectingId: () => (disconnect.isPending ? disconnect.variables?.id : undefined),
     refresh: () => props.onRefresh(),
     disconnectLinking: (connection: ConnectionView) => {
-      setDisconnectingId(connection.id);
-      setFeedback({ type: "pending", message: "Disconnecting…" });
+      setFeedback(undefined);
       void disconnect.mutate({ id: connection.id });
     },
   };
@@ -59,13 +65,14 @@ export type ConnectionsController = {
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
+  readonly departingId: Accessor<string | undefined>;
   readonly disconnectingId: Accessor<string | undefined>;
   readonly refresh: () => Promise<void>;
   readonly disconnectLinking: (connection: ConnectionView) => void;
 };
 
 type ConnectionsOptions = {
-  readonly connectionsQuery: Accessor<ConnectionListQueryOptions>;
-  readonly remote: Accessor<ConnectionRemote>;
+  readonly connectionsQuery: () => ConnectionListQueryOptions;
+  readonly remote: () => ConnectionRemote;
   readonly onRefresh: () => Promise<void>;
 };

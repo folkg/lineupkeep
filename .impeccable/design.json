@@ -227,6 +227,21 @@
         "name": "ease-out",
         "value": "cubic-bezier(0.16, 1, 0.3, 1)",
         "purpose": "Local transitions; remove authored motion for reduced-motion preference."
+      },
+      {
+        "name": "work",
+        "value": "1100ms",
+        "purpose": "One indeterminate hairline travelling inside a working control."
+      },
+      {
+        "name": "tick",
+        "value": "160ms",
+        "purpose": "Draws a confirmation tick without moving the label."
+      },
+      {
+        "name": "confirm",
+        "value": "1200ms",
+        "purpose": "Holds a confirmation tick before the control rests again."
       }
     ],
     "breakpoints": [

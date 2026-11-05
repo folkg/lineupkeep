@@ -78,6 +78,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
         </Stack>
         {props.connections}
         <SignInSessionList
+          departingId={sessions.departingId}
           endingId={sessions.endingId}
           endingOthers={sessions.endingOthers}
           feedback={sessions.feedback}
@@ -114,8 +115,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
           </Text>
           <Inline gap="sm">
             <Button
-              pending={session.isSigningOut()}
-              pendingLabel="Signing out…"
+              state={session.isSigningOut() ? "working" : "idle"}
               variant="secondary"
               onClick={() => void session.signOut()}
             >
@@ -145,7 +145,6 @@ function AccountContent(props: AccountPageProps): JSX.Element {
                     message: account.statusFailure()?.message ?? "We could not check your export.",
                     recovery: {
                       label: "Check again",
-                      pendingLabel: "Checking…",
                       onAction: account.refreshExportStatus,
                     },
                   }}
@@ -171,8 +170,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
                   />
                   <Inline gap="sm">
                     <Button
-                      pending={account.erasing()}
-                      pendingLabel="Erasing your account…"
+                      state={account.erasing() ? "working" : "idle"}
                       tone="danger"
                       type="submit"
                       variant="primary"

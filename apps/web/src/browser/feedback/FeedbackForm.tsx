@@ -44,7 +44,7 @@ export function FeedbackForm(props: FeedbackFormProps): JSX.Element {
         plain text and read back only by this account.
       </Text>
       <Inline gap="sm">
-        <Button pending={props.submitting} pendingLabel="Sending…" type="submit">
+        <Button state={props.submitting ? "working" : "idle"} type="submit">
           Send feedback
         </Button>
       </Inline>

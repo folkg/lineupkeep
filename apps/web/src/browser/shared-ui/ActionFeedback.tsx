@@ -26,9 +26,8 @@ export function ActionFeedback(props: ActionFeedbackProps): JSX.Element {
       <Show when={recovery()}>
         {(action) => (
           <Button
-            pending={pending()}
             disabled={props.recoveryDisabled}
-            pendingLabel={action().pendingLabel}
+            state={pending() ? "working" : "idle"}
             variant="link"
             onClick={() => void recover(action())}
           >
@@ -55,6 +54,5 @@ export type ActionFeedbackState =
 
 export type RecoveryAction = {
   readonly label: string;
-  readonly pendingLabel: string;
   readonly onAction: () => void | Promise<void>;
 };

@@ -7,7 +7,6 @@ export function useSignInRecovery(): RecoveryAction {
   const location = useLocation();
   return {
     label: "Sign in again",
-    pendingLabel: "Opening sign-in…",
     onAction: () => navigate({ to: "/auth", search: { redirect: location().href } }),
   };
 }

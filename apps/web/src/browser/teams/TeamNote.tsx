@@ -27,7 +27,7 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
           value={props.note.draft()}
         />
         <Inline gap="sm" justify="between">
-          <Button pending={props.note.saving()} pendingLabel="Saving…" type="submit">
+          <Button confirmed state={props.note.saveState()} type="submit">
             Save note
           </Button>
           <Text size="caption" tone="faint">
@@ -35,6 +35,9 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
           </Text>
         </Inline>
       </Form>
+      <Text as="span" role="status" srOnly>
+        {props.note.saveState() === "done" ? "Note saved." : ""}
+      </Text>
       <ActionFeedback feedback={props.note.feedback()} />
     </Stack>
   );

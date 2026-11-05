@@ -5,6 +5,8 @@ import type { Accessor } from "solid-js";
 import { useUnsavedChanges } from "#browser/navigation/useUnsavedChanges.ts";
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
+import { actionState } from "#browser/shared-ui/actionState.ts";
+import type { ActionState } from "#browser/shared-ui/actionState.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { describeNoteFailure } from "./teamFailure";
@@ -17,6 +19,7 @@ export function useTeamNote(options: TeamNoteOptions): TeamNoteController {
   const [baseline, setBaseline] = createSignal(options.team().team.ownerNote ?? "");
   const [error, setError] = createSignal<string>();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
+  const [saved, setSaved] = createSignal(false);
   const limit = (): number => options.team().team.ownerNoteLimit;
   const count = (): number => Array.from(draft()).length;
   const dirty = (): boolean => draft() !== baseline();
@@ -26,6 +29,7 @@ export function useTeamNote(options: TeamNoteOptions): TeamNoteController {
     ...teamMutations.saveNote(options.remote()),
     onSuccess: (result) => {
       if (result.outcome === "rejected") {
+        setSaved(false);
         setError(result.message);
         setFeedback({ type: "attention", message: "The note was not saved." });
         return;
@@ -33,9 +37,10 @@ export function useTeamNote(options: TeamNoteOptions): TeamNoteController {
       setBaseline(result.note ?? "");
       setDraft(result.note ?? "");
       setError(undefined);
-      setFeedback({ type: "success", message: "Note saved." });
+      setSaved(true);
     },
     onError: (cause: Error) => {
+      setSaved(false);
       const failure = describeNoteFailure(cause);
       setFeedback({
         type: "attention",
@@ -47,6 +52,7 @@ export function useTeamNote(options: TeamNoteOptions): TeamNoteController {
 
   const edit = (value: string): void => {
     setDraft(value);
+    setSaved(false);
     setError(undefined);
     setFeedback(undefined);
   };
@@ -59,8 +65,9 @@ export function useTeamNote(options: TeamNoteOptions): TeamNoteController {
       setFeedback({ type: "attention", message: "The note was not saved." });
       return;
     }
+    setSaved(false);
     setError(undefined);
-    setFeedback({ type: "pending", message: "Saving your note…" });
+    setFeedback(undefined);
     void save.mutate({ team: options.team().team.id, note: draft() });
   };
 
@@ -70,7 +77,7 @@ export function useTeamNote(options: TeamNoteOptions): TeamNoteController {
     limit,
     error,
     feedback,
-    saving: () => save.isPending,
+    saveState: (): ActionState => actionState(save.isPending, saved()),
     edit,
     submit,
   };
@@ -82,7 +89,7 @@ export type TeamNoteController = {
   readonly limit: Accessor<number>;
   readonly error: Accessor<string | undefined>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
-  readonly saving: Accessor<boolean>;
+  readonly saveState: Accessor<ActionState>;
   readonly edit: (value: string) => void;
   readonly submit: () => void;
 };

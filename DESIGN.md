@@ -349,6 +349,25 @@ path.
 A run detail shows the target period, trigger, attempts, verified outcome, changes, and pending
 reason without exposing credentials, cookies, provider GUIDs, raw payloads, or raw errors.
 
+### Action states
+
+Every `Button`, `ButtonLink`, `IconButton`, and `Switch` carries
+`state?: "idle" | "working" | "done"`. A control that shows a value changes it the moment it is
+pressed, then waits; a refusal returns the value and names the reason through `ActionFeedback`.
+The control owns no value of its own.
+
+While working, the control is natively disabled with `aria-busy`, keeps its label, and draws one
+indeterminate hairline inside its own box: under a button's edge, inside a switch's track, inside
+an icon's frame. `done` draws a tick only when the call site passes `confirmed`, because most
+actions confirm themselves by changing something else. A page never inserts words beside a
+control to describe its progress. `ButtonLink` takes the action state as `actionState`, because
+TanStack Router owns `state` for history.
+
+`--theme-duration-work`, `--theme-duration-tick`, and `--theme-duration-confirm` in
+[brand-theme.css](apps/web/src/theme/brand-theme.css) own the timing; components do not invent
+durations, easings, or keyframes. Under `prefers-reduced-motion: reduce` the hairline holds still
+and every state change is instant.
+
 ### Account
 
 The Account page owns appearance, data export, sign out, and erasure. Appearance offers System,

@@ -4,6 +4,8 @@ import type { Accessor } from "solid-js";
 
 import { useSignInRecovery } from "#browser/session/signInRecovery.ts";
 import type { ActionFeedbackState } from "#browser/shared-ui/ActionFeedback.tsx";
+import { actionState } from "#browser/shared-ui/actionState.ts";
+import type { ActionState } from "#browser/shared-ui/actionState.ts";
 import type { TeamRefreshView, TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { describeTeamFailure } from "./teamFailure";
@@ -15,7 +17,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
   const teams = useQuery(() => props.teamsQuery());
   const signIn = useSignInRecovery();
   const [feedback, setFeedback] = createSignal<ActionFeedbackState>();
-  const [refreshing, setRefreshing] = createSignal(false);
+  const [refreshFinished, setRefreshFinished] = createSignal(false);
 
   const reportRefreshFailure = (error: unknown): void => {
     const failure = describeTeamFailure(error);
@@ -30,10 +32,9 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     ...teamMutations.refresh(props.remote()),
     onSuccess: (view: TeamRefreshView, variables, onMutateResult, context) => {
       storeRefreshedTeamList(view, variables, onMutateResult, context);
-      setFeedback({ type: "success", message: "Teams refreshed." });
+      setRefreshFinished(true);
     },
     onError: reportRefreshFailure,
-    onSettled: () => setRefreshing(false),
   }));
 
   return {
@@ -41,11 +42,11 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     isLoading: () => teams.isPending,
     loadFailure: () => teams.error,
     feedback,
-    refreshing,
+    refreshState: (): ActionState => actionState(refreshTeams.isPending, refreshFinished()),
     refresh: () => props.onRefresh(),
     refreshTeams: () => {
-      setRefreshing(true);
-      setFeedback({ type: "pending", message: "Refreshing teams…" });
+      setRefreshFinished(false);
+      setFeedback(undefined);
       void refreshTeams.mutate(undefined);
     },
   };
@@ -56,13 +57,13 @@ export type TeamsPageController = {
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
-  readonly refreshing: Accessor<boolean>;
+  readonly refreshState: Accessor<ActionState>;
   readonly refresh: () => Promise<void>;
   readonly refreshTeams: () => void;
 };
 
 type TeamsPageOptions = {
-  readonly teamsQuery: Accessor<TeamListQueryOptions>;
-  readonly remote: Accessor<TeamRemote>;
+  readonly teamsQuery: () => TeamListQueryOptions;
+  readonly remote: () => TeamRemote;
   readonly onRefresh: () => Promise<void>;
 };

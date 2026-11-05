@@ -1,6 +1,8 @@
 import type { JSX } from "@solidjs/web";
-import { omit } from "solid-js";
+import { Show, omit } from "solid-js";
 
+import { ConfirmedMark, WorkMark } from "./ActionMarks";
+import type { ActionState } from "./actionState";
 import { cx } from "./cx";
 
 export function Button(props: ButtonProps): JSX.Element {
@@ -11,13 +13,16 @@ export function Button(props: ButtonProps): JSX.Element {
     "type",
     "children",
     "disabled",
-    "pending",
-    "pendingLabel",
+    "state",
+    "confirmed",
     "onClick",
   );
 
+  const state = (): ActionState => props.state ?? "idle";
+  const working = (): boolean => state() === "working";
+
   const handleClick: JSX.EventHandler<HTMLButtonElement, MouseEvent> = (event) => {
-    if (event.currentTarget.getAttribute("aria-disabled") === "true") {
+    if (working() || event.currentTarget.getAttribute("aria-disabled") === "true") {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -34,13 +39,20 @@ export function Button(props: ButtonProps): JSX.Element {
     <button
       {...rest}
       type={props.type ?? "button"}
-      class={buttonClass(props)}
-      data-pending={props.pending === true ? "true" : undefined}
-      aria-busy={props.pending === true ? "true" : undefined}
-      aria-disabled={props.pending === true || props.disabled === true ? "true" : undefined}
+      class={cx(buttonClass(props), props.confirmed === true && confirmedShape)}
+      data-state={state()}
+      aria-busy={working() ? "true" : undefined}
+      aria-disabled={props.disabled === true ? "true" : undefined}
+      disabled={working() || props.disabled === true}
       onClick={handleClick}
     >
-      {props.pending === true ? props.pendingLabel : props.children}
+      {props.children}
+      <Show when={working()}>
+        <WorkMark class="inset-x-0 bottom-0 w-[34%]" />
+      </Show>
+      <Show when={state() === "done" && props.confirmed === true}>
+        <ConfirmedMark class="start-3 top-1/2 -translate-y-1/2" />
+      </Show>
     </button>
   );
 }
@@ -54,7 +66,9 @@ export function buttonClass(options: ButtonOptions = {}): string {
 }
 
 const buttonBase =
-  "inline-flex items-center justify-center gap-2 border no-underline transition-[color,background-color,border-color,transform] duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50";
+  "relative inline-flex items-center justify-center gap-2 overflow-hidden border no-underline transition-[color,background-color,border-color,transform] duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50";
+
+const confirmedShape = "ps-9 pe-9";
 
 const buttonBorderless = "border-transparent";
 
@@ -71,7 +85,7 @@ const quietNeutral = "text-ink-soft hover:text-action";
 
 export const iconButtonClass = cx(
   buttonBase,
-  "group relative -me-2 size-tap-target shrink-0 border-transparent bg-transparent text-ink",
+  "group -me-2 size-tap-target shrink-0 border-transparent bg-transparent text-ink",
   "hover:text-action aria-disabled:opacity-40",
 );
 
@@ -80,7 +94,7 @@ export const iconButtonFrameClass =
 
 const buttonStyles: Record<ButtonStyleKey, string> = {
   "google:neutral": cx(
-    "relative inline-flex min-h-button items-center justify-center gap-2.5 border border-google-stroke bg-google-fill px-3 font-google text-google font-medium text-google-ink no-underline transition-transform duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus aria-disabled:pointer-events-none aria-disabled:opacity-50",
+    "relative inline-flex min-h-button items-center justify-center gap-2.5 overflow-hidden border border-google-stroke bg-google-fill px-3 font-google text-google font-medium text-google-ink no-underline transition-transform duration-quick ease-out-cubic focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50",
   ),
   "link:danger": cx(
     buttonBase,
@@ -145,7 +159,7 @@ export type ButtonOptions =
     };
 
 type ButtonProps = ButtonOptions &
-  PendingButtonProps & {
+  ActionStateProps & {
     readonly children?: JSX.Element;
     readonly type?: "button" | "submit" | "reset";
   } & Omit<
@@ -153,6 +167,7 @@ type ButtonProps = ButtonOptions &
     "class" | "children" | "type" | "aria-busy" | "aria-disabled"
   >;
 
-type PendingButtonProps =
-  | { readonly pending?: never; readonly pendingLabel?: never }
-  | { readonly pending: boolean; readonly pendingLabel: string };
+type ActionStateProps = {
+  readonly state?: ActionState;
+  readonly confirmed?: boolean;
+};

@@ -1,4 +1,5 @@
 import { render } from "@solidjs/web";
+import { createSignal } from "solid-js";
 import { expect, it } from "vitest";
 import { page } from "vitest/browser";
 
@@ -44,7 +45,23 @@ it("identifies each connection by team count, connection time, and status", asyn
   await expect.element(page.getByText(/Cannot read or set lineups/)).toBeVisible();
 });
 
-function setupConnectionList(connections: ReadonlyArray<ConnectionView>): {
+it("marks the row whose disconnect is waiting", async () => {
+  const [disconnectingId, setDisconnectingId] = createSignal<string>();
+  using _list = setupConnectionList([connected], { disconnectingId });
+  const button = page.getByRole("button", { name: "Disconnect the Yahoo connection" });
+  await expect.element(button).not.toHaveAttribute("aria-busy");
+
+  setDisconnectingId(connected.id);
+
+  await expect.element(button).toHaveAttribute("aria-busy", "true");
+  await expect.element(button).toHaveAttribute("disabled");
+  await expect.element(button).toBeDisabled();
+});
+
+function setupConnectionList(
+  connections: ReadonlyArray<ConnectionView>,
+  overrides: { readonly disconnectingId?: () => string | undefined } = {},
+): {
   [Symbol.dispose](): void;
 } {
   const host = document.body.appendChild(document.createElement("div"));
@@ -52,7 +69,8 @@ function setupConnectionList(connections: ReadonlyArray<ConnectionView>): {
     () => (
       <ConnectionList
         connections={() => connections}
-        disconnectingId={() => undefined}
+        departingId={() => undefined}
+        disconnectingId={overrides.disconnectingId ?? (() => undefined)}
         isLoading={() => false}
         loadFailure={() => null}
         reconnectingId={() => undefined}

@@ -102,7 +102,6 @@ function ReviewFailure(props: ReviewFailureProps): JSX.Element {
                 message: "We could not load this proposal. Try again.",
                 recovery: {
                   label: "Try again",
-                  pendingLabel: "Checking again…",
                   onAction: props.onRetry,
                 },
               }}
@@ -763,8 +762,7 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           <Inline gap="sm" align="baseline" collapse>
             <Button
               variant="secondary"
-              pending={props.withdrawing}
-              pendingLabel="Withdrawing offer…"
+              state={props.withdrawing ? "working" : "idle"}
               onClick={props.onWithdraw}
             >
               Withdraw offer
@@ -973,8 +971,7 @@ function ProviderOffers(props: ProviderOffersProps): JSX.Element {
                     <Inline gap="sm" align="baseline" collapse>
                       <Button
                         variant="secondary"
-                        pending={props.withdrawing === entry.offer.offerRef}
-                        pendingLabel="Withdrawing offer…"
+                        state={props.withdrawing === entry.offer.offerRef ? "working" : "idle"}
                         onClick={() => props.onWithdraw(entry.team.team.id, entry.offer.offerRef)}
                       >
                         Withdraw offer
@@ -1078,8 +1075,7 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
               </Stack>
               <Button
                 type="submit"
-                pending={props.submitting}
-                pendingLabel={submittingLabel(props.included)}
+                state={props.submitting ? "working" : "idle"}
                 disabled={props.included === 0 || props.submitting}
                 aria-describedby="submission-note"
               >
@@ -1236,10 +1232,6 @@ function submitLabel(included: number): string {
     return "Submit moves";
   }
   return `Submit ${String(included)} ${included === 1 ? "move" : "moves"}`;
-}
-
-function submittingLabel(included: number): string {
-  return `Submitting ${String(included)} ${included === 1 ? "move" : "moves"}…`;
 }
 
 function outcomeLabel(outcome: TransactionReviewModelOutcome): string {

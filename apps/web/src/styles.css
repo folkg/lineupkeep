@@ -49,11 +49,6 @@
     cursor: pointer;
   }
 
-  button[data-pending="true"] {
-    cursor: progress;
-    opacity: 1 !important;
-  }
-
   button,
   a {
     -webkit-tap-highlight-color: transparent;
@@ -62,16 +57,5 @@
   ::selection {
     color: var(--theme-ink);
     background: var(--theme-action-soft);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      scroll-behavior: auto !important;
-      transition-duration: 0.01ms !important;
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-    }
   }
 }

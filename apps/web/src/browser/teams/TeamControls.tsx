@@ -2,6 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
 import { ActionFeedback } from "#browser/shared-ui/ActionFeedback.tsx";
+import type { ActionState } from "#browser/shared-ui/actionState.ts";
 import { IconButton } from "#browser/shared-ui/IconButton.tsx";
 import { PauseIcon, PlayIcon } from "#browser/shared-ui/icons.tsx";
 import { Inline } from "#browser/shared-ui/Inline.tsx";
@@ -17,7 +18,6 @@ import { useTeamControls } from "./useTeamControls";
 
 const pauseLabel = "Pause lineup checks for the rest of the fantasy day";
 const resumeLabel = "Resume lineup checks";
-const waitForSwitch = "Wait for the lineup checks change to finish before pausing.";
 const turnOnFirst = "Turn on lineup checks to pause the rest of the fantasy day.";
 
 export function TeamControls(props: TeamControlsProps): JSX.Element {
@@ -34,30 +34,27 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
       : controls.pendingAction() === "pause-today"
         ? false
         : paused();
+  const switchState = (): ActionState => (switchPending() ? "working" : "idle");
+  const pauseState = (): ActionState => (pausePending() ? "working" : "idle");
 
   return (
     <Stack gap="sm">
       <Inline gap="sm" justify={props.align === "end" ? "end" : undefined}>
         <Switch
-          busy={controls.pendingAction() !== undefined}
           compact={props.compact}
           checked={enabled()}
+          disabled={pausePending()}
           name={`Lineup checks for ${props.team.team.name}`}
+          state={switchState()}
           onToggle={() => controls.control(enabled() ? "disable" : "enable")}
         >
           Lineup checks
         </Switch>
         <IconButton
-          busy={pausePending()}
-          disabled={!enabled() || (controls.pendingAction() !== undefined && !pausePending())}
+          disabled={!enabled() || switchPending()}
           label={resumeAction() ? resumeLabel : pauseLabel}
-          title={
-            !enabled()
-              ? turnOnFirst
-              : controls.pendingAction() !== undefined && !pausePending()
-                ? waitForSwitch
-                : undefined
-          }
+          title={!enabled() ? turnOnFirst : undefined}
+          state={pauseState()}
           onClick={() => controls.control(resumeAction() ? "resume" : "pause-today")}
         >
           <Show fallback={<PauseIcon size="md" />} when={resumeAction()}>
@@ -68,23 +65,7 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
           <TeamProviderLink team={props.team.team} />
         </Show>
       </Inline>
-      <Show when={switchPending()}>
-        <Text role="status" size="caption" tone="muted">
-          {controls.pendingAction() === "disable" ? "Turning off…" : "Turning on…"}
-        </Text>
-      </Show>
-      <Show when={pausePending()}>
-        <Text role="status" size="caption" tone="muted">
-          {controls.pendingAction() === "resume" ? "Resuming…" : "Pausing…"}
-        </Text>
-      </Show>
-      <Show
-        when={
-          props.showPauseNote !== false &&
-          !pausePending() &&
-          pauseResumeLabel(controls.automation())
-        }
-      >
+      <Show when={props.showPauseNote !== false && pauseResumeLabel(controls.automation())}>
         {(note) => (
           <Text size="caption" tone="muted">
             {note()}

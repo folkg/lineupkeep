@@ -648,7 +648,7 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
     await page.getByRole("button", { name: "Submit 3 moves" }).click();
 
     await expect
-      .element(page.getByRole("button", { name: "Submitting 3 moves…" }))
+      .element(page.getByRole("button", { name: "Submit 3 moves" }))
       .toHaveAttribute("aria-busy", "true");
     await expect.element(page.getByText(/Sending to the provider now/u)).toBeVisible();
     await expect

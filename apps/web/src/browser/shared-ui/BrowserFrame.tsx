@@ -129,12 +129,7 @@ export function BrowserFrame(props: BrowserFrameProps): JSX.Element {
           Private to this session. Closes when you finish or cancel.
         </Text>
         <span class="ml-auto shrink-0">
-          <Button
-            pending={props.ready}
-            pendingLabel="Connected"
-            variant="link"
-            onClick={props.onCancel}
-          >
+          <Button variant="link" onClick={props.onCancel}>
             Cancel
           </Button>
         </span>

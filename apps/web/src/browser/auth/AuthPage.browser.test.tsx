@@ -37,11 +37,13 @@ it("starts Google sign-in toward the page that asked for it", async () => {
       return new Promise(() => undefined);
     },
   });
-  const google = page.getByRole("button", { name: /Continue with Google|Opening Google/ });
+  const google = page.getByRole("button", { name: "Continue with Google" });
 
   await google.click();
 
-  await expect.element(google).toHaveTextContent("Opening Google…");
+  await expect.element(google).toHaveTextContent("Continue with Google");
+  await expect.element(google).toHaveAttribute("aria-busy", "true");
+  await expect.element(google).toBeDisabled();
   expect(started).toEqual([{ returnTo: "/account", errorReturnTo: "/auth?redirect=%2Faccount" }]);
 });
 
@@ -72,11 +74,13 @@ it("emails a code and moves focus to the code field", async () => {
   const request = Promise.withResolvers<void>();
   using _app = setupAuthPage({ sendCode: () => request.promise });
   await page.getByLabelText("Email").fill("reader@example.test");
-  const send = page.getByRole("button", { name: /Email me a code|Sending code/ });
+  const send = page.getByRole("button", { name: "Email me a code" });
 
   await send.click();
 
-  await expect.element(send).toHaveTextContent("Sending code…");
+  await expect.element(send).toHaveTextContent("Email me a code");
+  await expect.element(send).toHaveAttribute("aria-busy", "true");
+  await expect.element(send).toBeDisabled();
   await expect.element(page.getByLabelText("Email")).toBeDisabled();
   request.resolve();
   await expect.element(page.getByRole("heading", { name: "Check your email." })).toBeVisible();

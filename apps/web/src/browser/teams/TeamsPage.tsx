@@ -28,7 +28,7 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
           <TeamList
             isLoading={page.isLoading}
             loadFailure={page.loadFailure}
-            refreshing={page.refreshing}
+            refreshState={page.refreshState}
             remote={props.remote}
             teams={page.teams}
             onRefresh={page.refresh}
