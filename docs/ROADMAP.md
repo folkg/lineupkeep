@@ -26,13 +26,43 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | MCP surface          | 20 tools, four resource scopes, per-tool enforcement; feedback rounds 2 to 8 closed            |
 | Client feedback      | Zero open items                                                                                |
 | Connections          | Hosted browser only; local helper and device flow deleted                                      |
-| Interface            | Reworked from the owner walkthrough; a bolder direction is a later exploration                 |
-| Deployment           | Cloud Run web, worker and hosted browser on GCP; no repository remote and no CI                |
+| Interface            | Technical-sheet design language live: paper light, tinted dark, 680 measure, square controls   |
+| Deployment           | Cloud Run web, worker and hosted browser on GCP; CI on a clean Linux runner, container target  |
 | Publication gate     | Blocked on upstream: a temporary backport of the TanStack advisory is in force                 |
 | Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                       |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                      |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J      |
-| Checks               | 1339 node, 89 browser, 9 chromium; end to end 52 per target                                    |
+| Checks               | 1625 node, 151 browser, 10 chromium; container end to end 58 of 59, one known skip             |
+
+---
+
+## Ship log
+
+### 4 November 2026
+
+- **Design language.** Technical sheet, chosen from rendered studies: paper light, tinted dark, one
+  grotesk, 680 measure, hairlines instead of boxes, square controls, one solid action per view.
+  Account page now owns appearance (System by default, following the device), data, sign out and
+  erasure. Deployed.
+- **MCP read fixes from client feedback.** ISO 8601 instants accepted for transaction and feedback
+  bounds with the format named in the schema; date bounded transaction reads page back to the bound
+  instead of stopping at the newest fifty; free-agent availability hydrates without a stats read; an
+  unresolvable player reference names its input position.
+- **MCP grants.** A replayed refresh token past the grace revoked the whole grant family; the grace is
+  now five minutes and a refused exchange names its OAuth error, grant type and whether a refresh token
+  was presented. A resource-less token exchange defaulted to an opaque token the MCP endpoint could
+  never verify; it now defaults to the MCP resource.
+- **League rosters.** A read across every team in a league the account plays in, paged by team.
+- **Owner frictions.** Explicit player lists return whole; the owner note rides the roster and trade
+  surfaces; draft picks carry their player's name.
+- **Container end-to-end is the only E2E target**, now that the artifact is what ships.
+
+### Open after this log
+
+- Declarative proposal sets with reserve moves and server-owned ordering (R15), and draft picks in
+  trades only if the provider can express them (R17-2).
+- Whether a stale replay may spare a grant minted after it (family revocation policy).
+- The live erasure proof still needs a signed-in account whose address can receive mail.
 
 ---
 
