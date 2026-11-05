@@ -4196,6 +4196,7 @@ function leagueTransactionRules(
       endDate: declared(league.tradeEndDate),
       ratification: declared(league.tradeRatification),
       objectionDays: declared(league.tradeObjectionDays),
+      draftPicks: declared(league.tradeDraftPicks),
     },
     gamesCaps: {
       gamesPlayed: declared(league.maxGamesPlayed),

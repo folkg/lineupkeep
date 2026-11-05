@@ -462,7 +462,8 @@ export type ProviderLeagueSettings = {
   readonly maxSeasonAcquisitions: number | undefined;
   readonly tradeEndDate: string | undefined;
   readonly tradeRatification: ProviderTradeRatification | undefined;
-  readonly tradeObjectionDays: number | undefined;
+  tradeObjectionDays: number | undefined;
+  readonly tradeDraftPicks: boolean | undefined;
   readonly draftStatus: string | undefined;
   readonly periodWindow: ProviderPeriodWindow | undefined;
   readonly rosterCoverage: ProviderCoverageKind;

@@ -683,6 +683,7 @@ function league(
     maxSeasonAcquisitions: undefined,
     tradeEndDate: undefined,
     tradeRatification: undefined,
+    tradeDraftPicks: undefined,
     tradeObjectionDays: undefined,
     draftStatus: undefined,
     periodWindow: { current: 3, start: 1, end: 17 },

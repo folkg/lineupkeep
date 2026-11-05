@@ -324,6 +324,15 @@ const TransactionRules = Schema.Struct({
     objectionDays: DeclaredNumber.pipe(
       Schema.annotate({ description: "Days a manager has to object to a trade." }),
     ),
+    draftPicks: Schema.Union([
+      Schema.Struct({ status: Schema.Literal("published"), value: Schema.Boolean }),
+      Schema.Struct({ status: Schema.Literal("not_set") }),
+    ]).pipe(
+      Schema.annotate({
+        description:
+          "Whether this league allows draft picks to be traded. A league that allows it publishes picks only on its website, so Lineupkeep reports the rule but cannot propose a pick on our channel.",
+      }),
+    ),
   }),
   gamesCaps: Schema.Struct({
     gamesPlayed: DeclaredNumber.pipe(

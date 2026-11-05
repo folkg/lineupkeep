@@ -4470,6 +4470,7 @@ function planLeague(input: {
     maxSeasonAcquisitions: undefined,
     tradeEndDate: undefined,
     tradeRatification: undefined,
+    tradeDraftPicks: undefined,
     tradeObjectionDays: undefined,
     draftStatus: "postdraft",
     rosterPositions: [

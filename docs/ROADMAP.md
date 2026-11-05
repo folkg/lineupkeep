@@ -409,6 +409,25 @@ a feature requirement.
 
 ---
 
+## F2. Draft picks in trades (backlog)
+
+A keeper league can allow draft pick trades, and the owner's leagues do. The provider publishes that
+rule (`can_trade_draft_picks`, surfaced as `trades.draftPicks`) but expresses picks only on its website
+trade form: `tpids[]`/`tpicks[]` for one side and `tpids2[]`/`tpicks2[]` for the other, with pick values
+shaped `{round}_{originalTeamId}`. Every XML shape tried against the transaction API is rejected at
+schema level, while a real player in the same body reaches semantic validation, so the request shape is
+the limit rather than the product.
+
+To propose a pick we would need the website session, which means storing more of the account's cookies
+than the API needs. The owner chose to keep the API-only connection, so a pick is refused with that
+reason and the rule is reported honestly.
+
+A future route worth trying: capture the provider's mobile app traffic, which likely speaks a private
+API with picks. An Android emulator can trust a proxy certificate without a rooted phone; app pinning
+may still refuse, in which case instrumentation is needed. Recorded here rather than scheduled.
+
+---
+
 ## G. Provider boundary and simplification
 
 ### G1 — Stop provider-shaped ideas leaking into generic code

@@ -185,6 +185,7 @@ it.effect(
           maxSeasonAcquisitions: 30,
           tradeEndDate: "2026-11-20",
           tradeRatification: "commissioner",
+          tradeDraftPicks: undefined,
           tradeObjectionDays: 2,
           maxGamesPlayed: 48,
           maxInningsPitched: undefined,
@@ -217,6 +218,7 @@ it.effect(
         endDate: { status: "published", value: "2026-11-20" },
         ratification: { status: "published", value: "commissioner" },
         objectionDays: { status: "published", value: 2 },
+        draftPicks: { status: "not_set" },
       });
       assert.deepStrictEqual(rules?.gamesCaps, {
         gamesPlayed: { status: "published", value: 48 },
@@ -5775,6 +5777,7 @@ const hockeyLeagueFixture: ProviderLeagueSettings = {
   maxSeasonAcquisitions: undefined,
   tradeEndDate: undefined,
   tradeRatification: undefined,
+  tradeDraftPicks: undefined,
   tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [
@@ -5822,6 +5825,7 @@ const rotoLeagueFixture: ProviderLeagueSettings = {
   maxSeasonAcquisitions: undefined,
   tradeEndDate: undefined,
   tradeRatification: undefined,
+  tradeDraftPicks: undefined,
   tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [
@@ -5937,6 +5941,7 @@ const leagueFixture: ProviderLeagueSettings = {
   maxSeasonAcquisitions: undefined,
   tradeEndDate: undefined,
   tradeRatification: undefined,
+  tradeDraftPicks: undefined,
   tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [

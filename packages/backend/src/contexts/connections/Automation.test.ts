@@ -422,6 +422,7 @@ const league: ProviderLeagueSettings = {
   maxSeasonAcquisitions: undefined,
   tradeEndDate: undefined,
   tradeRatification: undefined,
+  tradeDraftPicks: undefined,
   tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [
@@ -525,6 +526,7 @@ const hockeyLeague: ProviderLeagueSettings = {
   maxSeasonAcquisitions: undefined,
   tradeEndDate: undefined,
   tradeRatification: undefined,
+  tradeDraftPicks: undefined,
   tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [

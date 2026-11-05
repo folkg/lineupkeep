@@ -2667,6 +2667,7 @@ function leagueFixture(overrides: Partial<ProviderLeagueSettings>): ProviderLeag
     maxSeasonAcquisitions: undefined,
     tradeEndDate: "2027-02-01",
     tradeRatification: "unknown",
+    tradeDraftPicks: undefined,
     tradeObjectionDays: 0,
     draftStatus: "postdraft",
     rosterPositions: [

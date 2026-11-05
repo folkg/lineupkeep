@@ -1931,6 +1931,7 @@ function leagueSettings(
       tradeEndDate: optionalNonEmpty(settings.trade_end_date),
       tradeRatification: tradeRatification(optionalNonEmpty(settings.trade_ratify_type)),
       tradeObjectionDays: settings.trade_reject_time,
+      tradeDraftPicks: settings.can_trade_draft_picks,
       draftStatus: optionalNonEmpty(attributes.draft_status),
       periodWindow,
       rosterCoverage,
@@ -4193,6 +4194,7 @@ const StatModifierAttributes = Schema.Struct({
 });
 
 const LeagueSettingsAttributes = Schema.Struct({
+  can_trade_draft_picks: Schema.optional(Flag),
   max_games_played: Schema.optional(IntFromStringOrNumber),
   max_innings_pitched: Schema.optional(IntFromStringOrNumber),
   max_weekly_adds: Schema.optional(IntFromStringOrNumber),

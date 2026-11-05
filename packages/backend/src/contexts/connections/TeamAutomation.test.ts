@@ -589,6 +589,7 @@ const league: ProviderLeagueSettings = {
   maxSeasonAcquisitions: undefined,
   tradeEndDate: undefined,
   tradeRatification: undefined,
+  tradeDraftPicks: undefined,
   tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [
