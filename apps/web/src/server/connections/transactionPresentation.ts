@@ -134,6 +134,7 @@ function toItemView(
       ? {}
       : {
           execution: {
+            ...(item.execution.position === undefined ? {} : { position: item.execution.position }),
             outcome: item.execution.outcome,
             ...(item.execution.detail === undefined ? {} : { detail: item.execution.detail }),
             decidedAt: DateTime.formatIso(item.execution.decidedAt),

@@ -71,7 +71,7 @@ export type ProposalItemChange = {
 };
 
 export type ProposalStepCommand = {
-  readonly kind: "reserve_move" | "add" | "drop";
+  readonly kind: "reserve_move" | "slot_move" | "add" | "drop";
   readonly playerKey: string;
   readonly playerName?: string;
   readonly fromSlot?: string;
@@ -93,6 +93,7 @@ export type ProposalOutcomeCommand = {
   readonly outcome: ProposalOutcome;
   readonly detail: string | undefined;
   readonly at: DateTime.Utc;
+  readonly position: number | undefined;
   readonly steps: ReadonlyArray<ProposalStepCommand>;
   readonly trade?: StoredProposalTrade;
 };
@@ -443,6 +444,9 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                           outcome: outcome.outcome,
                           outcomeDetail: outcome.detail,
                           outcomeAt: outcome.at,
+                          ...(outcome.position === undefined
+                            ? {}
+                            : { executionPosition: outcome.position }),
                           ...(outcome.trade === undefined ? {} : { trade: outcome.trade }),
                           updatedAt: outcome.at,
                         });

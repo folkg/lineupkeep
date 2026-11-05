@@ -100,6 +100,7 @@ export const transactionProposalItems = pgTable(
     }),
     outcomeDetail: text("outcome_detail"),
     outcomeAt: timestamp("outcome_at", { withTimezone: true }),
+    executionPosition: integer("execution_position"),
     tradeProviderKey: text("trade_provider_key"),
     tradeState: text("trade_state", {
       enum: ["pending", "accepted", "withdrawn", "expired"],
@@ -129,7 +130,7 @@ export const transactionProposalSteps = pgTable(
     itemId: uuid("item_id").notNull(),
     userId: text("user_id").notNull(),
     position: integer("position").notNull(),
-    kind: text("kind", { enum: ["reserve_move", "add", "drop"] }).notNull(),
+    kind: text("kind", { enum: ["reserve_move", "slot_move", "add", "drop"] }).notNull(),
     playerKey: text("player_key").notNull(),
     playerName: text("player_name"),
     fromSlot: text("from_slot"),
@@ -235,6 +236,7 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   outcome: Schema.NullOr(ProposalOutcome),
   outcomeDetail: Schema.NullOr(Schema.NonEmptyString),
   outcomeAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+  executionPosition: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   tradeProviderKey: Schema.NullOr(Schema.NonEmptyString),
   tradeState: Schema.NullOr(ProposalTradeState),
   tradeRequestedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
@@ -337,6 +339,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             ...(row.outcome === null ? {} : { outcome: row.outcome }),
             ...(row.outcomeDetail === null ? {} : { outcomeDetail: row.outcomeDetail }),
             ...(row.outcomeAt === null ? {} : { outcomeAt: row.outcomeAt }),
+            ...(row.executionPosition === null ? {} : { executionPosition: row.executionPosition }),
             ...(row.tradeProviderKey === null || row.tradeState === null
               ? {}
               : {
@@ -386,6 +389,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             outcome: record.outcome ?? null,
             outcomeDetail: record.outcomeDetail ?? null,
             outcomeAt: record.outcomeAt ?? null,
+            executionPosition: record.executionPosition ?? null,
             tradeProviderKey: record.trade?.providerKey ?? null,
             tradeState: record.trade?.state ?? null,
             tradeRequestedAt: record.trade?.requestedAt ?? null,
@@ -406,7 +410,7 @@ const ProposalStepSelect = createSelectSchema(transactionProposalSteps, {
   itemId: ProposalItemId,
   userId: UserId,
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  kind: Schema.Literals(["reserve_move", "add", "drop"]),
+  kind: Schema.Literals(["reserve_move", "slot_move", "add", "drop"]),
   playerKey: Schema.NonEmptyString,
   playerName: Schema.NullOr(Schema.NonEmptyString),
   fromSlot: Schema.NullOr(Schema.NonEmptyString),

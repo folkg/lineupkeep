@@ -1883,9 +1883,15 @@ The documented proposal body, with one `<player>` per asset:
 The responding calls `PUT` the pending trade's own key with `<action>accept</action>` (or `reject`,
 `allow`, `disallow`, `vote_against`) and an optional `trade_note`.
 
-That body carries players only. It has no `picks` element and no documented way to name a draft
-pick, so a pick-inclusive proposal — every one of the ten completed trades above moved at least one
-pick — has no published request shape at all.
+That body carries players only. It has no `picks` element and no published way to name a draft
+pick. That is a gap in the request shape, not evidence that the provider forbids pick trades: the
+same provider publishes picks on its completed and pending trade reads, and its web trade hub trades
+picks. A re-check on 2026-11-05 read the archived official transactions-collection guide directly
+(`.../fantasysports/guide/transactions-collection.html`, 2013 snapshot) and found the same
+players-only propose body, and no other documented or community client here sends a pick in a
+proposal. Until an authorised probe sends a pick-inclusive proposal, Lineupkeep cannot name a pick
+in an offer; it records that as the provider's published request-shape limit, never as "the provider
+cannot trade picks".
 
 What the read-only pass does establish about the write path:
 

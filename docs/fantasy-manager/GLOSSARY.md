@@ -349,11 +349,11 @@ Which shape a proposal item takes: a free-agent add (players added, no bid), a w
 _Avoid_: Claim when the bid is not part of it, move, action
 
 **Slot move**:
-One rostered player's move to a named slot on the same team, either declared as its own proposal item or added by the server as a repair before an add. The destination must be a slot the league declares and that accepts the player's positions; the client names the destination and never the order. A server-added repair is specifically a move into a reserve list to open a non-reserve roster spot. A slot move is not a lineup assignment for a period and not an add, drop, or trade.
+One rostered player's move to a named slot on the same team, either declared as its own proposal item or added by the server as a repair before an add. The destination must be a slot the league declares and that accepts the player's positions; the client names the destination and never the order. A declared slot move may go into a reserve list or back out of one, and it executes as one recorded step when its turn in the computed order arrives. A server-added repair is specifically a move into a reserve list to open a non-reserve roster spot. A slot move is not a lineup assignment for a period and not an add, drop, or trade.
 _Avoid_: Reserve move when any slot is meant, position change, lineup change
 
 **Proposal order**:
-The sequence the server chooses for one team's current proposal items so every step leaves the roster legal under the league's own slots. It is computed against the league's published roster-change date and is reported to the client, never accepted from it. A player the provider reports as locked cannot be moved on that date. When no order keeps the roster legal at every step, the refusal names the conflicting operations and says they cannot both be legal on the same date. An order the server could not decide within its stated search bound is unresolved, not refused.
+The sequence the server chooses for one team's current proposal items so every step leaves the roster legal under the league's own slots. It is computed against the league's published roster-change date, reported to the client, and used for submission, never accepted from the client. A player the provider reports as locked cannot be moved on that date. When no order keeps the roster legal at every step, the whole set for that team is refused: every move in it is illegal, the refusal names the conflicting operations in plain words, and nothing from that set is sent. An order the server could not decide within its stated search bound is unresolved, not refused. Each included move records the position it held in that order, so the order remains visible after submission. A trade is not sequenced, because it changes no roster until the other manager accepts.
 _Avoid_: Client order, priority, queue, greedy plan
 
 **Proposal item state**:
@@ -377,7 +377,7 @@ The 24-hour window after a proposal set is created within which it may be re-val
 _Avoid_: Timeout, TTL, stale set when the window is meant
 
 **Proposal submission**:
-One person's once-only decision to execute the included items of a proposal set. It records who submitted and when, re-checks current state immediately before writing, writes one provider transaction per item, and records the outcome of every item and step. The database claims the submission atomically, so a set cannot be submitted twice; afterwards the set is an audit record.
+One person's once-only decision to execute the included items of a proposal set. It records who submitted and when, re-checks current state immediately before writing, writes one provider transaction per item, and records the position and outcome of every item and the outcome of every step. A team's items run in the proposal order the server computed, never in the order the client sent. The database claims the submission atomically, so a set cannot be submitted twice; afterwards the set is an audit record.
 _Avoid_: Approval, retry, batch, execution queue
 
 **Proposal outcome**:
@@ -385,11 +385,11 @@ The result recorded for a proposal item or one of its steps: executed, pending o
 _Avoid_: Success, done when a claim is pending, error when no attempt was made
 
 **Execution step**:
-One recorded action inside a proposal item: a reserve move added by the server to free a roster spot, then the add or drop movement sent in the provider transaction. Each step carries its own outcome and the provider's wording when it failed, so a swap cannot half-apply without being reported.
+One recorded action inside a proposal item: a reserve move added by the server to free a roster spot, a declared slot move, then the add or drop movement sent in the provider transaction. Each step carries its own outcome and the provider's wording when it failed, so a swap cannot half-apply without being reported.
 _Avoid_: Sub-transaction, retry, hidden precondition
 
 **Proposal review**:
-The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and check, and a quiet section for a team with nothing proposed. A signed-in person decides there, selects the current items, and submits them once; after submission it shows each item's and step's outcome in place.
+The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and check, the order the server chose in plain words, and a quiet section for a team with nothing proposed. A refusal names the conflicting operations in the person's terms rather than by a code. A signed-in person decides there, selects the current items, and submits them once; after submission it shows the order that was sent, each item's and step's outcome, and why a later move stopped.
 _Avoid_: Approvals, cart, confirmation screen
 
 **Pending trade offer**:
@@ -397,7 +397,7 @@ A trade the provider reports as proposed and awaiting a response on a team the a
 _Avoid_: Pending trade when no offer awaits a response, proposal when the provider's own offer is meant
 
 **Trade proposal**:
-One proposal item that offers named players from one of the account's teams to one counterparty team in the same league, for named players coming back. It carries the counterparty team and manager, both sides of the move, the required reason, and no draft pick. The league's trade window and review rule are read beside it. The product proposes and withdraws; it never accepts, rejects, votes, counters, or selects a pick.
+One proposal item that offers named players from one of the account's teams to one counterparty team in the same league, for named players coming back. It carries the counterparty team and manager, both sides of the move, the required reason, and no draft pick in this version. A provider's own trade request may have no element for a pick; a pick in the input is then refused with that provider's declared reason rather than called unsupported, and it is never silently ignored. That is a limit on the request shape we can send, not a claim that the provider's product cannot trade picks. The league's trade window and review rule are read beside it. The product proposes and withdraws; it never accepts, rejects, votes, counters, or selects a pick.
 _Avoid_: Trade request when the item is meant, swap, trade offer when the stored item is meant
 
 **Trade proposal state**:

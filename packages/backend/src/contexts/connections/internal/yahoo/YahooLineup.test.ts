@@ -23,12 +23,23 @@ import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import {
   scoreYahooRoster,
   yahooAvailability,
+  yahooCapabilities,
   yahooInjuryStatusCodes,
   yahooTargetPeriod,
 } from "./YahooLineup.ts";
 import type { YahooLineupReader, YahooPlayerFacts } from "./YahooLineup.ts";
 
 const targetWeek = 7;
+
+describe("Yahoo declared trade proposal assets", () => {
+  it("names players only and says the published request has no element for a pick", () => {
+    expect(yahooCapabilities.tradeProposal.assets).toEqual(["player"]);
+    expect(yahooCapabilities.tradeProposal.detail).toContain(
+      "publishes no element for a draft pick",
+    );
+    expect(yahooCapabilities.tradeProposal.detail).toContain("not a rule against trading picks");
+  });
+});
 
 describe("Yahoo scoring translation", () => {
   it("maps every provider status code to one availability tier", () => {

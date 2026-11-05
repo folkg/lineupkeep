@@ -697,9 +697,19 @@ returns, it reads current state once per team, the same check `revalidate_transa
 performs, so each accepted item comes back `current`, `stale`, or `illegal` with the reasons instead
 of an unchecked promise. One call covers every team the account has, and the set it creates is grouped by
 team, so teams with nothing proposed still appear as an empty section on the review. Each item names
-one team, a kind (`free_agent_add`, `waiver_claim`, `drop`, or `trade`), the players to add and drop,
-an optional FAAB bid, and a required reason. A trade names `counterparty` from the league's teams read, the players
-going out in `drops`, and the players coming back in `adds`; it carries no bid and no draft picks.
+one team, a kind (`free_agent_add`, `waiver_claim`, `drop`, `slot_move`, or `trade`), the players to
+add and drop or the player and destination slot of a slot move, an optional FAAB bid, and a required
+reason. A slot move names one rostered player and one slot the league declares, into a reserve list
+or back out of one; it adds and drops nobody and carries no bid. The client declares intent per team;
+the server owns the order of that team's moves, the effective date, and the timing. A trade names
+`counterparty` from the league's teams read, the players going out in `drops`, and the players coming
+back in `adds`; it carries players only in this version, no bid, and no draft pick. The linked provider
+declares the assets its own trade proposal request can name, and a draft pick it cannot name is
+refused with that provider's declared reason rather than a bare "unsupported"; a trade item that
+carries `picks` is refused, never silently ignored. For Yahoo, that reason is that its published
+proposal request names a trader team, a tradee team, a trade note and players, with no element for a
+draft pick, while its web trade hub does trade picks: the limit is the request shape, not the
+product.
 Staging a trade reads the league settings, both rosters, and the league's teams, and refuses the item
 when the counterparty is not another team in the same league, a player is not on the roster they
 would leave, or the trade window has closed. A free-agent add carries no bid, a waiver claim carries one of 0 or more, and a
@@ -724,7 +734,12 @@ check covers every rostered player because one illegal player blocks any transac
 When a legal slot has room for an offending player, the item carries a roster move before the
 transaction, and the review reports that move as its own step. When no legal slot is open, the item
 refuses and names the choice only the person can make, which is who to drop. An item that drops the
-offending player is allowed, because that drop resolves the slot. A trade is re-checked against both
+offending player is allowed, because that drop resolves the slot. Every team also carries its
+`order`: the sequence the server chose so each move leaves the roster legal under the league's slots
+and published roster-change timing. When no order exists, that team's whole set is refused at the
+check: every move in it is illegal, the reason names the operations that conflict in plain words,
+and nothing in that team's set can be submitted. A trade is not part of the order, because it changes
+no roster until the other manager accepts. A trade is re-checked against both
 rosters, the counterparty's continuing place in the league, and the trade window, and carries its
 current state back to the review. Staleness and illegality are recorded beside the item's state and
 are never failures; an item stays `proposed`. A team whose state cannot be read marks only its own
@@ -740,15 +755,22 @@ The item state vocabulary is `proposed`, `executed`, `pending`, `failed`, `skipp
 No MCP tool submits, accepts, or spends anything. Execution happens only when a signed-in owner
 submits the included items from the review page. Submission claims the set once in the database,
 re-runs the same revalidation immediately before writing, and skips an item that went stale with its
-reason rather than attempting it. Each item is one provider transaction carrying its add and drop
-together, sent once with no retry; an optional reserve move is its own recorded step before the add.
-A waiver claim is `pending` until the provider processes it, and `unknown` means a request may or may
-not have applied and is never retried automatically. The set records who submitted, when, and the
-outcome of every item and step; after submission it is an audit record and cannot be submitted again.
-A failed, unknown, or pending item stops the later items for that team only, because their checks no
-longer describe the roster; other teams continue. A submitted trade is sent once with no retry: an `unknown` propose is recorded as unknown and the
-person is told to check the provider's trade page before trying again, because a repeated propose has
-no proven idempotency. The review page reads the provider's pending feed and completed trades to show
+reason rather than attempting it. The included moves for each team then run in the order the server
+computed, never in the order the client sent. Each executed item records its position in that order
+and its steps, so the review shows afterwards that the drop ran before the reserve move. Each item is
+one provider transaction carrying its add and drop together, sent once with no retry; an optional
+reserve move is its own recorded step before the add, and a declared slot move is one recorded step on
+its own. A waiver claim is `pending` until the provider processes it, and `unknown` means a request
+may or may not have applied and is never retried automatically. The set records who submitted, when,
+the position and outcome of every item, and the outcome of every step; after submission it is an
+audit record and cannot be submitted again. A failed, unknown, or pending item, or one refused
+before anything was sent, stops the later steps for that team only, because their checks no longer
+describe the roster; other teams continue. A
+skipped step keeps the failed step's own wording and says it followed it. A submitted trade stays
+`pending` as an offer and is never sent as though the roster had already changed. A trade is sent
+once with no retry: an `unknown` propose is recorded as unknown and the person is told to check the
+provider's trade page before trying again, because a repeated propose has no proven idempotency. The
+review page reads the provider's pending feed and completed trades to show
 the trade as pending, accepted, withdrawn, or expired, and can withdraw an offer before acceptance
 from our own record or from the provider's pending feed. It never accepts, rejects, votes, counters,
 or selects a pick for another manager or the league.

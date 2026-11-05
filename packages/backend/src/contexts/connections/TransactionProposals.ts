@@ -110,7 +110,7 @@ const ProposalStepPlayer = Schema.Struct({
 type ProposalStepPlayer = typeof ProposalStepPlayer.Type;
 
 const ProposalExecutionStep = Schema.Struct({
-  kind: Schema.Literals(["reserve_move", "add", "drop"]),
+  kind: Schema.Literals(["reserve_move", "slot_move", "add", "drop"]),
   player: ProposalStepPlayer,
   fromSlot: Schema.optional(Schema.NonEmptyString),
   toSlot: Schema.optional(Schema.NonEmptyString),
@@ -121,6 +121,7 @@ const ProposalExecutionStep = Schema.Struct({
 export type ProposalExecutionStep = typeof ProposalExecutionStep.Type;
 
 const ProposalItemExecution = Schema.Struct({
+  position: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   outcome: ProposalOutcome,
   detail: Schema.optional(Schema.NonEmptyString),
   decidedAt: Schema.DateTimeUtc,
@@ -349,12 +350,20 @@ const ProposalSlotMoveDraft = Schema.Struct({
   toSlot: Schema.NonEmptyString,
 });
 
+const ProposalItemDraftPicks = Schema.optional(
+  Schema.NullOr(Schema.Array(Schema.Unknown)),
+).annotate({
+  description:
+    "Refused when non-empty. A trade item carries players only in this version; a provider whose trade request cannot name a draft pick refuses it with that provider's declared reason, never silently ignores it.",
+});
+
 export const ProposalItemDraft = Schema.Struct({
   team: TeamId,
   kind: ProposalItemKind,
   adds: Schema.Array(PlayerRef).pipe(Schema.check(Schema.isMaxLength(10))),
   drops: Schema.Array(PlayerRef).pipe(Schema.check(Schema.isMaxLength(10))),
   slotMove: Schema.optional(Schema.NullOr(ProposalSlotMoveDraft)),
+  picks: ProposalItemDraftPicks,
   counterparty: Schema.optional(Schema.NullOr(CounterpartyRef)),
   bid: Schema.optional(Schema.NullOr(ProposalBid)),
   reason: ProposalReason,
@@ -374,6 +383,7 @@ const ProposalItemRefusal = Schema.Literals([
   "reference_invalid",
   "kind_invalid",
   "bid_invalid",
+  "draft_pick_included",
   "player_in_both",
   "duplicate_item",
   "trade_counterparty_invalid",

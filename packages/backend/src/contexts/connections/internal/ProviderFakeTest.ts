@@ -67,6 +67,8 @@ type FakeGate = {
   readonly release: Deferred.Deferred<void>;
 };
 
+type FakeWrite = "reserve_move" | "transaction" | "propose_trade" | "withdraw_trade";
+
 type FakeProviderState = {
   readonly sessionRejected: boolean;
   readonly teams: ReadonlyArray<ProviderTeam>;
@@ -123,6 +125,7 @@ type FakeProviderState = {
   readonly reserveAction: FakeWriteAction;
   readonly reserveDetail: string | undefined;
   readonly reserveRequests: ReadonlyArray<FakeReserveMoveRequest>;
+  readonly writeSequence: ReadonlyArray<FakeWrite>;
   readonly planRefusal: FakePlanRefusal | undefined;
   readonly providerCalls: number;
   readonly providerReads: number;
@@ -204,6 +207,7 @@ export type FakeProviderWorldShape = {
   readonly setCompletedTrades: (trades: ReadonlyArray<ProviderTransaction>) => Effect.Effect<void>;
   readonly setReserveAction: (action: FakeWriteAction, detail?: string) => Effect.Effect<void>;
   readonly reserveRequests: Effect.Effect<ReadonlyArray<FakeReserveMoveRequest>>;
+  readonly writeSequence: Effect.Effect<ReadonlyArray<FakeWrite>>;
   readonly setPlanRefusal: (refusal: FakePlanRefusal | undefined) => Effect.Effect<void>;
 };
 
@@ -277,6 +281,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         reserveAction: "accept",
         reserveDetail: undefined,
         reserveRequests: [],
+        writeSequence: [],
         planRefusal: undefined,
         providerCalls: 0,
         providerReads: 0,
@@ -389,6 +394,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setReserveAction: (reserveAction, reserveDetail) =>
           modify((current) => ({ ...current, reserveAction, reserveDetail })),
         reserveRequests: Effect.map(Ref.get(state), (current) => current.reserveRequests),
+        writeSequence: Effect.map(Ref.get(state), (current) => current.writeSequence),
         setPlanRefusal: (planRefusal) => modify((current) => ({ ...current, planRefusal })),
       } satisfies FakeProviderWorldShape;
     }),
@@ -647,6 +653,7 @@ const providerFake = Effect.gen(function* () {
       );
       yield* Ref.update(world.state, (state) => ({
         ...state,
+        writeSequence: [...state.writeSequence, "transaction" as const],
         transactionRequests: [
           ...state.transactionRequests,
           {
@@ -677,6 +684,7 @@ const providerFake = Effect.gen(function* () {
         current.tradeProposalAction === "accept" ? current.tradeProposalKey : undefined;
       yield* Ref.update(world.state, (state) => ({
         ...state,
+        writeSequence: [...state.writeSequence, "propose_trade" as const],
         tradeProposalRequests: [
           ...state.tradeProposalRequests,
           {
@@ -725,6 +733,7 @@ const providerFake = Effect.gen(function* () {
       );
       yield* Ref.update(world.state, (state) => ({
         ...state,
+        writeSequence: [...state.writeSequence, "withdraw_trade" as const],
         withdrawTradeRequests: [...state.withdrawTradeRequests, input.transactionKey],
         ...(current.withdrawTradeAction === "accept"
           ? {
@@ -749,6 +758,7 @@ const providerFake = Effect.gen(function* () {
       );
       yield* Ref.update(world.state, (state) => ({
         ...state,
+        writeSequence: [...state.writeSequence, "reserve_move" as const],
         reserveRequests: [
           ...state.reserveRequests,
           {
@@ -1051,6 +1061,11 @@ const fakeCapabilities: ProviderCapabilities = {
   },
   publishesProjections: false,
   scheduleRead: { maximumDates: 21 },
+  tradeProposal: {
+    assets: ["player"],
+    detail:
+      "The fake provider's trade proposal request names players only and publishes no element for a draft pick.",
+  },
   limitations: [
     {
       subject: "player_schedule",

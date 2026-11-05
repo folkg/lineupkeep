@@ -372,6 +372,10 @@ function ServerOrder(props: ServerOrderProps): JSX.Element {
       {(order) => (
         <Notice tone="danger" title="No order keeps the lineup legal">
           <Stack gap="2xs">
+            <Text size="caption" tone="danger">
+              This team's whole set is refused. Nothing from it can be submitted until the
+              operations below no longer conflict.
+            </Text>
             <For each={order().conflicts}>
               {(conflict) => (
                 <Text size="caption" tone="danger">
@@ -386,9 +390,34 @@ function ServerOrder(props: ServerOrderProps): JSX.Element {
   );
 }
 
+function ExecutedOrder(props: ExecutedOrderProps): JSX.Element {
+  const sent = (): ReadonlyArray<TransactionReviewItemView> =>
+    props.items
+      .filter((item) => item.execution?.position !== undefined)
+      .sort((left, right) => (left.execution?.position ?? 0) - (right.execution?.position ?? 0));
+  return (
+    <Show when={sent().length > 0}>
+      <Notice tone="neutral" title="The order it was sent in">
+        <Stack gap="2xs">
+          <For each={sent()}>
+            {(item) => {
+              const outcome = item.execution?.outcome ?? "skipped";
+              return (
+                <Text size="caption" tone={isAttention(outcome) ? "danger" : "muted"}>
+                  {`${String((item.execution?.position ?? 0) + 1)}. ${moveSummary(item)} — ${sentOutcomeLabel(item, outcome)}`}
+                </Text>
+              );
+            }}
+          </For>
+        </Stack>
+      </Notice>
+    </Show>
+  );
+}
+
 function OrderedNotice(props: OrderedNoticeProps): JSX.Element {
   return (
-    <Notice tone="neutral" title="Server order">
+    <Notice tone="neutral" title="The order the server chose">
       <Stack gap="2xs">
         <For each={props.order.steps}>
           {(step, index) => {
@@ -452,8 +481,11 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
             </Text>
           )}
         </Show>
-        <Show when={props.team.order}>
+        <Show when={!props.submitted && props.team.order}>
           {(order) => <ServerOrder order={order()} items={props.team.items} />}
+        </Show>
+        <Show when={props.submitted}>
+          <ExecutedOrder items={props.team.items} />
         </Show>
       </Stack>
       <RuleList>
@@ -491,13 +523,37 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
     props.item.staleness.reasons
       .filter((reason) => reason.code === "slot_illegal")
       .map((reason) => reason.detail);
+  const orderIssues = (): ReadonlyArray<string> =>
+    props.item.staleness.reasons
+      .filter((reason) => reason.code === "order_conflict" || reason.code === "order_unresolved")
+      .map((reason) => reason.detail);
+  const orderIssueTitle = (): string =>
+    props.item.staleness.reasons.some((reason) => reason.code === "order_unresolved")
+      ? "The server could not decide an order"
+      : "No legal order for this team's moves";
   const factIssues = (): ReadonlyArray<string> =>
     props.item.staleness.reasons
-      .filter((reason) => reason.code !== "slot_illegal")
+      .filter(
+        (reason) =>
+          reason.code !== "slot_illegal" &&
+          reason.code !== "order_conflict" &&
+          reason.code !== "order_unresolved",
+      )
       .map((reason) => reason.detail);
-  const checkId = (): string => (illegal() ? `illegal-${props.item.id}` : `stale-${props.item.id}`);
+  const checkId = (): string =>
+    slotIssues().length > 0
+      ? `illegal-${props.item.id}`
+      : orderIssues().length > 0
+        ? `order-${props.item.id}`
+        : `stale-${props.item.id}`;
   const checkLabel = (): string =>
-    illegal() ? "Illegal, not included" : stale() ? "Stale, not included" : "Include";
+    blocked()
+      ? orderIssues().length > 0
+        ? "Refused, not included"
+        : illegal()
+          ? "Illegal, not included"
+          : "Stale, not included"
+      : "Include";
   return (
     <RuleListItem layout={props.submitted || blocked() ? "stack" : "leading"}>
       <Show when={!props.submitted && !props.expired}>
@@ -667,7 +723,7 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           <Text size="body">{props.item.reason}</Text>
         </Quote>
 
-        <Show when={stale() || factIssues().length > 0}>
+        <Show when={stale() && factIssues().length > 0}>
           <Notice
             id={`stale-${props.item.id}`}
             tone="danger"
@@ -676,12 +732,30 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           />
         </Show>
 
-        <Show when={illegal()}>
+        <Show when={orderIssues().length > 0}>
+          <Notice
+            id={`order-${props.item.id}`}
+            tone="danger"
+            title={orderIssueTitle()}
+            items={orderIssues()}
+          />
+        </Show>
+
+        <Show when={slotIssues().length > 0}>
           <Notice
             id={`illegal-${props.item.id}`}
             tone="danger"
             title="Illegal roster position"
             items={slotIssues()}
+          />
+        </Show>
+
+        <Show when={!stale() && factIssues().length > 0}>
+          <Notice
+            id={`stale-${props.item.id}`}
+            tone="danger"
+            title="This move cannot be made"
+            items={factIssues()}
           />
         </Show>
 
@@ -718,6 +792,11 @@ function ExecutionResult(props: {
 }): JSX.Element {
   return (
     <Stack gap="sm">
+      <Show when={props.execution.position !== undefined}>
+        <Text size="caption" tone="faint">
+          {`Sent ${String((props.execution.position ?? 0) + 1)}${ordinalSuffix((props.execution.position ?? 0) + 1)} in this team's order.`}
+        </Text>
+      </Show>
       <Show when={props.execution.steps.length > 0}>
         <RuleList>
           <For each={props.execution.steps}>
@@ -1182,9 +1261,36 @@ function isAttention(outcome: TransactionReviewModelOutcome): boolean {
   return outcome === "failed" || outcome === "unknown";
 }
 
+function sentOutcomeLabel(
+  item: TransactionReviewItemView,
+  outcome: TransactionReviewModelOutcome,
+): string {
+  return item.kind === "trade" && outcome === "pending"
+    ? "Waiting for the other manager"
+    : outcomeLabel(outcome);
+}
+
+function ordinalSuffix(value: number): string {
+  const lastTwo = value % 100;
+  if (lastTwo >= 11 && lastTwo <= 13) {
+    return "th";
+  }
+  switch (value % 10) {
+    case 1:
+      return "st";
+    case 2:
+      return "nd";
+    case 3:
+      return "rd";
+    default:
+      return "th";
+  }
+}
+
 function stepLabel(step: TransactionReviewStepView): string {
   switch (step.kind) {
     case "reserve_move":
+    case "slot_move":
       return `Move ${step.playerName ?? "player"} to ${step.toSlot ?? "reserve"}${
         step.fromSlot === undefined ? "" : ` from ${step.fromSlot}`
       }`;
@@ -1295,6 +1401,10 @@ type ServerOrderProps = {
 
 type OrderedNoticeProps = {
   readonly order: Extract<TransactionReviewOrderView, { status: "ordered" }>;
+  readonly items: ReadonlyArray<TransactionReviewItemView>;
+};
+
+type ExecutedOrderProps = {
   readonly items: ReadonlyArray<TransactionReviewItemView>;
 };
 

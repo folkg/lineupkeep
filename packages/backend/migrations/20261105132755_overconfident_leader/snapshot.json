@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "f2276171-4cc2-4627-8926-16e80dc14ec2",
+  "prevIds": ["4fa38d76-f9bd-43cc-9a62-a38fcc1530eb"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "execution_position"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.execution_position",
+        "n|col|public.transaction_proposal_items.execution_position",
+        "e|col|public.transaction_proposal_items.execution_position"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "execution_position",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

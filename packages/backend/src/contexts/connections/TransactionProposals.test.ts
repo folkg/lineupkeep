@@ -1435,6 +1435,259 @@ it.effect("refuses an order whose drop frees a different slot than the move need
     );
     assert.deepStrictEqual(yield* fake.reserveRequests, []);
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
+    assert.deepStrictEqual(yield* fake.writeSequence, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("executes a set in the computed order and records each item's position", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: fullReserveLeague,
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C", "IR"] },
+        { slot: "IR", eligible: ["C", "IR"] },
+      ]),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "slot_move",
+          adds: [],
+          drops: [],
+          slotMove: {
+            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]), 0),
+            toSlot: "BN",
+          },
+          reason: "Move the reserve center to the bench.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Free the bench slot.",
+        },
+      ],
+    });
+
+    const review = yield* proposals.revalidate(owner, { set: result.set.id });
+    const moveItem = itemByReason(review, "Move the reserve center to the bench.");
+    const dropItem = itemByReason(review, "Free the bench slot.");
+    assert.strictEqual(moveItem.staleness.status, "current");
+    assert.strictEqual(dropItem.staleness.status, "current");
+
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: [moveItem.id, dropItem.id],
+    });
+    const submittedDrop = itemByReason(submitted, "Free the bench slot.");
+    const submittedMove = itemByReason(submitted, "Move the reserve center to the bench.");
+    assert.strictEqual(submittedDrop.state, "executed");
+    assert.strictEqual(submittedDrop.execution?.position, 0);
+    assert.deepStrictEqual(
+      submittedDrop.execution?.steps.map((step) => step.kind),
+      ["drop"],
+    );
+    assert.strictEqual(submittedMove.state, "executed");
+    assert.strictEqual(submittedMove.execution?.position, 1);
+    assert.deepStrictEqual(
+      submittedMove.execution?.steps.map((step) => ({
+        kind: step.kind,
+        from: step.fromSlot,
+        to: step.toSlot,
+      })),
+      [{ kind: "slot_move", from: "IR", to: "BN" }],
+    );
+    assert.deepStrictEqual(yield* fake.writeSequence, ["transaction", "reserve_move"]);
+
+    const read = yield* proposals.read(owner, { set: result.set.id });
+    assert.deepStrictEqual(
+      itemsOf(read).map((item) => [item.reason, item.execution?.position]),
+      [
+        ["Move the reserve center to the bench.", 1],
+        ["Free the bench slot.", 0],
+      ],
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("stops a team's later steps after a failure and keeps the failure's words", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: fullReserveLeague,
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C", "IR"] },
+        { slot: "IR", eligible: ["C", "IR"] },
+      ]),
+      playerDetails,
+    });
+    yield* fake.setTransactionAction("reject", providerRefusal, 400);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "slot_move",
+          adds: [],
+          drops: [],
+          slotMove: {
+            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]), 0),
+            toSlot: "BN",
+          },
+          reason: "Move the reserve center to the bench.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Free the bench slot.",
+        },
+      ],
+    });
+
+    const review = yield* proposals.revalidate(owner, { set: result.set.id });
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: [
+        itemByReason(review, "Move the reserve center to the bench.").id,
+        itemByReason(review, "Free the bench slot.").id,
+      ],
+    });
+    const failed = itemByReason(submitted, "Free the bench slot.");
+    const stopped = itemByReason(submitted, "Move the reserve center to the bench.");
+    assert.strictEqual(failed.state, "failed");
+    assert.strictEqual(failed.execution?.position, 0);
+    assert.include(failed.execution?.detail ?? "", providerRefusal);
+    assert.strictEqual(stopped.state, "skipped");
+    assert.strictEqual(stopped.execution?.position, 1);
+    assert.include(stopped.execution?.detail ?? "", "Not attempted because");
+    assert.include(stopped.execution?.detail ?? "", "Dropping Roster Two failed");
+    assert.include(stopped.execution?.detail ?? "", providerRefusal);
+    assert.deepStrictEqual(yield* fake.writeSequence, ["transaction"]);
+    assert.deepStrictEqual(yield* fake.reserveRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a whole team's set when no order keeps its moves legal", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: openBenchLeague,
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C", "IR"] },
+        { slot: "BN", eligible: ["C", "IR"] },
+        { slot: "BN", eligible: ["C"] },
+      ]),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "slot_move",
+          adds: [],
+          drops: [],
+          slotMove: {
+            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]), 0),
+            toSlot: "IR",
+          },
+          reason: "Stash the first center.",
+        },
+        {
+          team: redLine,
+          kind: "slot_move",
+          adds: [],
+          drops: [],
+          slotMove: {
+            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]), 0),
+            toSlot: "IR",
+          },
+          reason: "Stash the second center.",
+        },
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90005"]),
+          reason: "Drop the spare wing.",
+        },
+      ],
+    });
+
+    const review = yield* proposals.revalidate(owner, { set: result.set.id });
+    const teamReview = Array.getUnsafe(review.teams, 0);
+    assert.strictEqual(teamReview.order?.status, "conflict");
+    assert.deepStrictEqual(
+      itemsOf(review).map((item) => item.staleness.status),
+      ["illegal", "illegal", "illegal"],
+    );
+    assert.deepStrictEqual(
+      itemsOf(review).map((item) => reasonCodes(item)),
+      [["order_conflict"], ["order_conflict"], ["order_conflict", "order_conflict"]],
+    );
+    const spare = itemByReason(review, "Drop the spare wing.");
+    assert.include(
+      spare.staleness.reasons.map((reason) => reason.detail).join(" "),
+      "whole set is refused",
+    );
+
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: itemsOf(review).map((item) => item.id),
+    });
+    assert.deepStrictEqual(
+      itemsOf(submitted).map((item) => item.state),
+      ["skipped", "skipped", "skipped"],
+    );
+    assert.deepStrictEqual(yield* fake.writeSequence, []);
+    assert.deepStrictEqual(yield* fake.reserveRequests, []);
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a draft pick in a trade with the provider's own reason", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seedTradeTeams(fake);
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const draft = yield* tradeDraft(tokens, redLine);
+
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [{ ...draft, picks: [{ round: 1 }] }],
+      }),
+    );
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      assert.deepStrictEqual(
+        refused.refusals.map((refusal) => refusal.refusal),
+        ["draft_pick_included"],
+      );
+      assert.strictEqual(
+        Array.getUnsafe(refused.refusals, 0).detail,
+        "The fake provider's trade proposal request names players only and publishes no element for a draft pick.",
+      );
+    }
+    assert.deepStrictEqual(yield* fake.writeSequence, []);
+    assert.deepStrictEqual(yield* fake.tradeProposalRequests, []);
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -1593,7 +1846,7 @@ it.effect("refuses a locked player's move on the league's effective date", () =>
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("does not send a declared slot move during submission", () =>
+it.effect("sends a declared slot move once and records its step and position", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -1628,9 +1881,34 @@ it.effect("does not send a declared slot move during submission", () =>
     assert.strictEqual(item.staleness.status, "current");
     const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
     const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
-    assert.strictEqual(submittedItem.state, "skipped");
-    assert.include(submittedItem.execution?.detail ?? "", "only plans it");
-    assert.deepStrictEqual(yield* fake.reserveRequests, []);
+    assert.strictEqual(submittedItem.state, "executed");
+    assert.strictEqual(submittedItem.execution?.position, 0);
+    assert.deepStrictEqual(
+      submittedItem.execution?.steps.map((step) => ({
+        kind: step.kind,
+        name: step.player.name,
+        from: step.fromSlot,
+        to: step.toSlot,
+        outcome: step.outcome,
+      })),
+      [
+        {
+          kind: "slot_move",
+          name: "Roster Two",
+          from: "BN",
+          to: "IR",
+          outcome: "executed",
+        },
+      ],
+    );
+    assert.deepStrictEqual(yield* fake.reserveRequests, [
+      {
+        providerTeamKey: "nhl.l.1.t.1",
+        coverage: { type: "date", date: "2026-10-31" },
+        providerPlayerKey: "nhl.p.90002",
+        slot: "IR",
+      },
+    ]);
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
   }).pipe(Effect.provide(TestLayer)),
 );

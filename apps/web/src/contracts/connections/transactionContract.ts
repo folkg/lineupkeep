@@ -22,7 +22,7 @@ export type TransactionReviewStaleReasonView = {
 };
 
 export type TransactionReviewStepView = {
-  readonly kind: "reserve_move" | "add" | "drop";
+  readonly kind: "reserve_move" | "slot_move" | "add" | "drop";
   readonly playerName?: string;
   readonly fromSlot?: string;
   readonly toSlot?: string;
@@ -32,6 +32,7 @@ export type TransactionReviewStepView = {
 };
 
 export type TransactionReviewExecutionView = {
+  readonly position?: number;
   readonly outcome: ProposalOutcome;
   readonly detail?: string;
   readonly decidedAt: string;

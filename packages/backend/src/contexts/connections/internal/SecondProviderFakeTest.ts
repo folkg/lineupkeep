@@ -104,6 +104,10 @@ export const secondProviderCapabilities: ProviderCapabilities = {
   },
   scheduleRead: { maximumDates: 10 },
   publishesProjections: true,
+  tradeProposal: {
+    assets: ["player"],
+    detail: "Atlas publishes no trade proposal write and no element for a draft pick.",
+  },
   limitations: [
     {
       subject: "probable_starters",

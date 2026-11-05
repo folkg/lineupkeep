@@ -489,7 +489,7 @@ it("shows the order the server chose before the moves", async () => {
     ],
   });
 
-  await expect.element(page.getByText("Server order", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("The order the server chose", { exact: true })).toBeVisible();
   await expect
     .element(page.getByText("1. Add Sam Rivers and drop Alex Vance", { exact: true }))
     .toBeVisible();
@@ -531,6 +531,66 @@ it("shows a refusal that names both operations when no order keeps the lineup le
     .element(page.getByText("No order keeps the lineup legal", { exact: true }))
     .toBeVisible();
   await expect.element(page.getByText(detail, { exact: true })).toBeVisible();
+});
+
+it("shows the order it was sent in and why a later move stopped", async () => {
+  const base = reviewFixture();
+  const rejection =
+    "The provider rejected the transaction with HTTP 400. It said: That player is not on your roster.";
+  const stopped = `${rejection} Later moves on this team were not checked against the resulting roster.`;
+  using _app = setupReviewPage({
+    ...base,
+    set: { ...base.set, submission: { submittedAt: now, completedAt: now } },
+    teams: [
+      teamFixture(alphaId, "Alpha", "nhl", "hockey", [
+        {
+          ...slotMoveItem(),
+          state: "skipped",
+          execution: {
+            position: 1,
+            outcome: "skipped",
+            detail: `Not attempted because Dropping Riley Chen failed. ${stopped}`,
+            decidedAt: now,
+            steps: [],
+          },
+        },
+        {
+          ...dropItem(),
+          state: "failed",
+          execution: {
+            position: 0,
+            outcome: "failed",
+            detail: rejection,
+            decidedAt: now,
+            steps: [
+              {
+                kind: "drop",
+                playerName: "Riley Chen",
+                outcome: "failed",
+                detail: rejection,
+                decidedAt: now,
+              },
+            ],
+          },
+        },
+      ]),
+      ...base.teams.slice(1),
+    ],
+  });
+
+  await expect.element(page.getByText("The order it was sent in", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("1. Drop Riley Chen — Failed", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(page.getByText("2. Move Casey Moss to BN — Skipped", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(page.getByText("Sent 2nd in this team's order.", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(page.getByText(/Not attempted because Dropping Riley Chen failed/u))
+    .toBeVisible();
 });
 
 it("shows a declared slot move as its own move", async () => {

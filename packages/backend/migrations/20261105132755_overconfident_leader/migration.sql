@@ -1,0 +1,1 @@
+ALTER TABLE "transaction_proposal_items" ADD COLUMN "execution_position" integer;

@@ -75,6 +75,13 @@ type ProviderLimitation = {
   readonly detail: string;
 };
 
+type ProviderTradeAsset = "player" | "draft_pick";
+
+type ProviderTradeProposal = {
+  readonly assets: ReadonlyArray<ProviderTradeAsset>;
+  readonly detail: string;
+};
+
 export type ProviderCapabilities = {
   readonly fantasyDay: ProviderFantasyDay;
   readonly sports: ReadonlyArray<FantasySport>;
@@ -87,6 +94,7 @@ export type ProviderCapabilities = {
   readonly scheduleRead: {
     readonly maximumDates: number;
   };
+  readonly tradeProposal: ProviderTradeProposal;
   readonly publishesProjections: boolean;
   readonly limitations: ReadonlyArray<ProviderLimitation>;
 };
