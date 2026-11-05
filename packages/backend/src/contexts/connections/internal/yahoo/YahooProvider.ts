@@ -374,7 +374,10 @@ export const yahooProvider = Effect.gen(function* () {
       return yield* responseMismatch({ operation: "read_league_rosters", field: "league.teams" });
     }
     const coverage = rosters[0]?.coverage;
-    if (coverage === undefined || rosters.some((roster) => !sameCoverage(roster.coverage, coverage))) {
+    if (
+      coverage === undefined ||
+      rosters.some((roster) => !sameRosterCoverage(roster.coverage, coverage))
+    ) {
       return yield* responseMismatch({
         operation: "read_league_rosters",
         field: "league.teams.roster.coverage",
@@ -2230,7 +2233,7 @@ function rosterFromPayload(
 }
 
 function leagueRosterFromPayload(
-  team: typeof LeagueRostersPayload.Type["league"]["teams"][number],
+  team: (typeof LeagueRostersPayload.Type)["league"]["teams"][number],
   requestedLeagueKey: string,
 ): Effect.Effect<ProviderLeagueRoster, ProviderResponseInvalid> {
   return Effect.gen(function* () {
@@ -2321,7 +2324,7 @@ function leagueRosterCoverage(
   });
 }
 
-function sameCoverage(left: ProviderRosterCoverage, right: ProviderRosterCoverage): boolean {
+function sameRosterCoverage(left: ProviderRosterCoverage, right: ProviderRosterCoverage): boolean {
   return left.type === "week" && right.type === "week"
     ? left.week === right.week
     : left.type === "date" && right.type === "date"

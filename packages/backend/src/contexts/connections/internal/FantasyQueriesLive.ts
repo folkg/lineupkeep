@@ -11,7 +11,6 @@ import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts
 import type {
   ProviderAcquisitionUsage,
   ProviderDraftPick,
-  ProviderLeagueRoster,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderPeriodWindow,
@@ -56,6 +55,7 @@ import type {
   PlayerGroup,
   RosterData,
   RosterPlayer as RosterPlayerView,
+  RosterResult,
   RosterDetail,
   CategoryRole,
   CategoryValue,
@@ -1050,6 +1050,7 @@ export const FantasyQueriesLive = Layer.effect(
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
       const base: Omit<RosterData, "players" | "page"> = {
         status: "ok",
+        scope: "team",
         team,
         ...(roster.coverage.type === "week" ? { period: { week: roster.coverage.week } } : {}),
         coverage: [leagueCoverage(leagueOutcome, fetchedAt), rosterCoverage],
@@ -3504,6 +3505,7 @@ function rosterWithoutData(
 ): RosterData {
   return {
     status: outcome._tag === "unsupported" ? "unsupported" : "failed",
+    scope: "team",
     team,
     ...(period === undefined ? {} : { period }),
     playerSchedule: {
@@ -4399,26 +4401,32 @@ function rosterPlayer(
       leagueKey: context.owned.team.providerLeagueKey,
       playerKey: player.providerPlayerKey,
     })
-    .pipe(
-      Effect.map((ref) => ({
-        player: ref,
-        name: player.name,
-        slot: player.slot,
-        primaryPosition: player.primaryPosition,
-        displayPosition: player.displayPosition,
-        proTeam: player.proTeamAbbreviation ?? null,
-        eligiblePositions: player.eligiblePositions,
-        editable: player.isEditable,
-        injury: injuryOf(player),
-        transactionTrend: player.transactionTrend,
-        ...(detail === "full"
-          ? {
-              byeWeek: player.byeWeek,
-              undroppable: player.undroppable,
-            }
-          : {}),
-      })),
-    );
+    .pipe(Effect.map((ref) => rosterRow(player, ref, detail)));
+}
+
+function rosterRow(
+  player: ProviderRosterPlayer,
+  ref: PlayerRef,
+  detail: RosterDetail,
+): RosterPlayerView {
+  return {
+    player: ref,
+    name: player.name,
+    slot: player.slot,
+    primaryPosition: player.primaryPosition,
+    displayPosition: player.displayPosition,
+    proTeam: player.proTeamAbbreviation ?? null,
+    eligiblePositions: player.eligiblePositions,
+    editable: player.isEditable,
+    injury: injuryOf(player),
+    transactionTrend: player.transactionTrend,
+    ...(detail === "full"
+      ? {
+          byeWeek: player.byeWeek,
+          undroppable: player.undroppable,
+        }
+      : {}),
+  };
 }
 
 function counterpartyRef(

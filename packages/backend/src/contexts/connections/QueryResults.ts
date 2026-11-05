@@ -574,14 +574,14 @@ export const GetRostersInput = Schema.Struct({
   team: TeamId.pipe(
     Schema.annotate({
       description:
-        "The linked team whose league scopes this read. With `scope: \"team\"` it is the team whose roster is read; with `scope: \"league\"` it supplies the league and the ownership boundary, and every team in that league is read.",
+        'The linked team whose league scopes this read. With `scope: "team"` it is the team whose roster is read; with `scope: "league"` it supplies the league and the ownership boundary, and every team in that league is read.',
     }),
   ),
   scope: Schema.optional(
     Schema.Literals(["team", "league"]).pipe(
       Schema.annotate({
         description:
-          '`team` reads one linked team and pages its players. `league` reads every roster in the linked team\'s league, including teams the account does not own, and pages whole teams: a page boundary never splits a roster. The default is `team`.',
+          "`team` reads one linked team and pages its players. `league` reads every roster in the linked team's league, including teams the account does not own, and pages whole teams: a page boundary never splits a roster. The default is `team`.",
       }),
     ),
   ),
@@ -599,7 +599,7 @@ export const GetRostersInput = Schema.Struct({
     PageLimit.pipe(
       Schema.annotate({
         description:
-          "The most rows this page may carry: players for `scope: \"team\"`, whole teams for `scope: \"league\"`. The result's `page.size` repeats the bound, `page.total` states the row count in the league roster read, and `page.returned` is the actual count after the result budget.",
+          'The most rows this page may carry: players for `scope: "team"`, whole teams for `scope: "league"`. The result\'s `page.size` repeats the bound, `page.total` states the row count in the league roster read, and `page.returned` is the actual count after the result budget.',
       }),
     ),
   ),
@@ -656,6 +656,7 @@ const PlayerSchedule = Schema.Struct({
 
 export const RosterData = Schema.Struct({
   status: QueryStatus,
+  scope: Schema.Literal("team"),
   team: QueryTeam,
   period: Schema.optional(QueryPeriod),
   coverage: Schema.Array(QueryCoverage),
@@ -673,7 +674,7 @@ export const RosterData = Schema.Struct({
 });
 export type RosterData = typeof RosterData.Type;
 
-export const LeagueRosterTeam = Schema.Struct({
+const LeagueRosterTeam = Schema.Struct({
   team: CounterpartyRef.pipe(
     Schema.annotate({
       description:
@@ -682,7 +683,8 @@ export const LeagueRosterTeam = Schema.Struct({
   ),
   name: Schema.NonEmptyString.pipe(
     Schema.annotate({
-      description: "The provider team name for display. Identity is the private reference, never the name.",
+      description:
+        "The provider team name for display. Identity is the private reference, never the name.",
     }),
   ),
   owned: Schema.Boolean.pipe(
@@ -698,8 +700,6 @@ export const LeagueRosterTeam = Schema.Struct({
     }),
   ),
 });
-export type LeagueRosterTeam = typeof LeagueRosterTeam.Type;
-
 export const LeagueRosterData = Schema.Struct({
   status: QueryStatus,
   scope: Schema.Literal("league"),

@@ -1609,6 +1609,14 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(players).toContain("league named by");
   expect(tool("get_rosters").description).toContain("ownerNote");
   expect(tool("get_rosters").description).toContain("detail: full");
+  expect(tool("get_rosters").description).toContain('scope: "league"');
+  const rosterInput = JSON.stringify(tool("get_rosters").inputSchema);
+  expect(rosterInput).toContain("league");
+  expect(rosterInput).toContain("whole teams");
+  const rosterOutput = JSON.stringify(tool("get_rosters").outputSchema);
+  expect(rosterOutput).toContain('"teams"');
+  expect(rosterOutput).toContain('"owned"');
+  expect(rosterOutput).toContain('"total"');
   expect(tool("get_league").description).toContain("inline player name");
   expect(tool("get_pending_trade_offers").description).toContain("ownerNote");
   expect(tool("generate_transaction_review_links").description).toContain("ownerNote");

@@ -3735,3 +3735,197 @@ export function yahooNhlDatedRoster(input: {
     },
   };
 }
+
+export const yahooNflLeagueRosters = {
+  fantasy_content: {
+    "xml:lang": "en-US",
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+        url: "https://football.fantasysports.yahoo.com/f1/4000",
+      },
+      {
+        teams: {
+          "0": {
+            team: [
+              [
+                { team_key: "466.l.4000.t.1" },
+                { team_id: "1" },
+                { name: "Synthetic Team" },
+                { is_owned_by_current_login: 1 },
+              ],
+              {
+                roster: {
+                  "0": {
+                    players: {
+                      "0": {
+                        player: [
+                          [
+                            { player_key: "466.p.20001" },
+                            { player_id: "20001" },
+                            {
+                              name: {
+                                full: "Synthetic Starter",
+                                first: "Synthetic",
+                                last: "Starter",
+                              },
+                            },
+                            { editorial_team_abbr: "SYN" },
+                            { display_position: "QB" },
+                            { position_type: "O" },
+                            { primary_position: "QB" },
+                            { eligible_positions: [{ position: "QB" }, { position: "W/R" }] },
+                            { bye_weeks: { week: "7" } },
+                            { is_undroppable: "0" },
+                          ],
+                          {
+                            selected_position: [
+                              { coverage_type: "week", week: "6" },
+                              { position: "QB" },
+                              { is_flex: 0 },
+                            ],
+                          },
+                        ],
+                      },
+                      "1": {
+                        player: [
+                          [
+                            { player_key: "466.p.20002" },
+                            { player_id: "20002" },
+                            {
+                              name: {
+                                full: "Synthetic Reserve",
+                                first: "Synthetic",
+                                last: "Reserve",
+                              },
+                            },
+                            { editorial_team_abbr: "SYN" },
+                            { display_position: "WR" },
+                            { position_type: "O" },
+                            { primary_position: "WR" },
+                            { eligible_positions: [{ position: "WR" }] },
+                            { status: "O" },
+                            { status_full: "Out" },
+                            { injury_note: "Synthetic injury note" },
+                            { is_undroppable: "1" },
+                          ],
+                          {
+                            selected_position: [
+                              { coverage_type: "week", week: "6" },
+                              { position: "BN" },
+                              { is_flex: 0 },
+                            ],
+                          },
+                        ],
+                      },
+                      count: 2,
+                    },
+                  },
+                  coverage_type: "week",
+                  week: "6",
+                },
+              },
+            ],
+          },
+          "1": {
+            team: [
+              [
+                { team_key: "466.l.4000.t.2" },
+                { team_id: "2" },
+                { name: "Synthetic Rival" },
+                { is_owned_by_current_login: 0 },
+              ],
+              {
+                roster: {
+                  "0": {
+                    players: {
+                      "0": {
+                        player: [
+                          [
+                            { player_key: "466.p.20003" },
+                            { player_id: "20003" },
+                            {
+                              name: {
+                                full: "Synthetic Rival Player",
+                                first: "Synthetic",
+                                last: "Rival",
+                              },
+                            },
+                            { editorial_team_abbr: "SYN" },
+                            { display_position: "RB" },
+                            { position_type: "O" },
+                            { primary_position: "RB" },
+                            { eligible_positions: [{ position: "RB" }] },
+                            { is_undroppable: "0" },
+                          ],
+                          {
+                            selected_position: [
+                              { coverage_type: "week", week: "6" },
+                              { position: "RB" },
+                              { is_flex: 0 },
+                            ],
+                          },
+                        ],
+                      },
+                      count: 1,
+                    },
+                  },
+                  coverage_type: "week",
+                  week: "6",
+                },
+              },
+            ],
+          },
+          count: 2,
+        },
+      },
+    ],
+  },
+};
+
+export const yahooNflLeagueRostersForAnotherLeague = {
+  fantasy_content: {
+    league: [
+      { league_key: "466.l.4000" },
+      {
+        teams: {
+          "0": {
+            team: [
+              [{ team_key: "467.l.4000.t.1" }, { name: "Synthetic Other League Team" }],
+              {
+                roster: {
+                  "0": {
+                    players: {
+                      "0": {
+                        player: [
+                          [
+                            { player_key: "466.p.20001" },
+                            { name: { full: "Synthetic Starter" } },
+                            { display_position: "QB" },
+                            { primary_position: "QB" },
+                          ],
+                          {
+                            selected_position: [
+                              { coverage_type: "week", week: "6" },
+                              { position: "QB" },
+                            ],
+                          },
+                        ],
+                      },
+                      count: 1,
+                    },
+                  },
+                  coverage_type: "week",
+                  week: "6",
+                },
+              },
+            ],
+          },
+          count: 1,
+        },
+      },
+    ],
+  },
+};

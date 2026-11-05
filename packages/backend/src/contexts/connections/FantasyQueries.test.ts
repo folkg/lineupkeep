@@ -34,6 +34,7 @@ import { ProfessionalCalendar } from "./ProfessionalCalendar.ts";
 import type {
   ProviderAcquisitionUsage,
   ProviderSchedulePeriod,
+  ProviderLeagueRoster,
   ProviderLeagueSettings,
   ProviderTransaction,
   ProviderTransactionMovement,
@@ -565,7 +566,7 @@ it.effect("keeps roster, calendar, and matchup reads with degraded league covera
     const calendar = yield* queries.getCalendar(owner, { team: teamId });
 
     assert.strictEqual(roster.status, "ok");
-    if (roster.status === "ok") {
+    if (roster.status === "ok" && roster.scope === "team") {
       assert.strictEqual(roster.players.length, 2);
       assert.strictEqual(roster.period?.week, 3);
       const league = roster.coverage.find((entry) => entry.resource === "league");
@@ -674,7 +675,7 @@ it.effect("reports a league without a scoring-week window instead of inventing p
     }
 
     assert.strictEqual(roster.status, "ok");
-    if (roster.status === "ok") {
+    if (roster.status === "ok" && roster.scope === "team") {
       assert.strictEqual(roster.players.length, 2);
       assert.strictEqual(roster.period, undefined);
     }
@@ -697,9 +698,15 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
 
     assert.strictEqual(compact.status, "ok");
     assert.strictEqual(full.status, "ok");
-    if (compact.status !== "ok" || full.status !== "ok") {
+    if (
+      compact.status !== "ok" ||
+      compact.scope !== "team" ||
+      full.status !== "ok" ||
+      full.scope !== "team"
+    ) {
       return;
     }
+    assert.strictEqual(compact.scope, "team");
     assert.strictEqual(compact.players.length, 2);
     assert.strictEqual(compact.period?.week, 3);
     assert.strictEqual(compact.playerSchedule.status, "unsupported");
@@ -722,6 +729,265 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
       queries.getRosters(owner, { team: teamId, period: { week: 18 } }),
     );
     assert.strictEqual(outsideSeason._tag, "query.selection_invalid");
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reads every team's roster in the linked league with team identity on each row", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* Effect.provide(
+      QueryTokens,
+      QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars"),
+    );
+    const seeded = yield* seed(fake, [
+      team("461.l.1000.t.1", "Alpha"),
+      team("461.l.1000.t.3", "Gamma"),
+    ]);
+    yield* fake.setLeagueRosters([
+      leagueRosterFixture("461.l.1000.t.1", "Alpha", 2, 10001),
+      leagueRosterFixture("461.l.1000.t.2", "Beta", 3, 20001),
+      leagueRosterFixture("461.l.1000.t.3", "Gamma", 1, 30001),
+    ]);
+
+    const before = yield* fake.providerReads;
+    const read = yield* queries.getRosters(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      scope: "league",
+    });
+
+    assert.strictEqual((yield* fake.providerReads) - before, 1);
+    assert.strictEqual(read.status, "ok");
+    if (read.status !== "ok" || read.scope !== "league") {
+      return;
+    }
+    assert.deepStrictEqual(read.period, { week: 3 });
+    assert.deepStrictEqual(
+      read.teams.map((row) => [row.name, row.owned, row.players.length]),
+      [
+        ["Alpha", true, 2],
+        ["Beta", false, 3],
+        ["Gamma", true, 1],
+      ],
+    );
+    assert.deepStrictEqual(read.page, {
+      returned: 3,
+      complete: true,
+      remaining: 0,
+      size: 3,
+      total: 3,
+    });
+    assert.deepStrictEqual(
+      read.coverage.map((entry) => [entry.resource, entry.source, entry.status, entry.period]),
+      [["roster", "league_rosters", "available", { week: 3 }]],
+    );
+
+    const opened = yield* tokens.openCounterpartyRefGroups({
+      userId: owner,
+      groups: read.teams.map((row) => ({ leagueKey: "461.l.1000", refs: [row.team] })),
+    });
+    assert.deepStrictEqual(
+      opened.map((group) => group[0]),
+      ["461.l.1000.t.1", "461.l.1000.t.2", "461.l.1000.t.3"],
+    );
+    assert.strictEqual(
+      Array.getUnsafe(read.teams, 1)
+        .players.map((player) => player.name)
+        .join(","),
+      "Beta Player 0,Beta Player 1,Beta Player 2",
+    );
+    assert.strictEqual(
+      Array.getUnsafe(Array.getUnsafe(read.teams, 1).players, 1).injury.reported,
+      true,
+    );
+    assert.isFalse(includesText(read, "461.l.1000.t.2"));
+    assert.isFalse(includesText(read, "461.p.20001"));
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("pages league rosters by whole teams with a cursor", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setLeagueRosters([
+      leagueRosterFixture("461.l.1000.t.1", "Alpha", 2, 10001),
+      leagueRosterFixture("461.l.1000.t.2", "Beta", 3, 20001),
+      leagueRosterFixture("461.l.1000.t.3", "Gamma", 1, 30001),
+    ]);
+
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const before = yield* fake.providerReads;
+    const first = yield* queries.getRosters(owner, { team: teamId, scope: "league", limit: 2 });
+
+    assert.strictEqual((yield* fake.providerReads) - before, 1);
+    assert.strictEqual(first.status, "ok");
+    if (first.status !== "ok" || first.scope !== "league") {
+      return;
+    }
+    assert.deepStrictEqual(
+      first.teams.map((row) => [row.name, row.players.length]),
+      [
+        ["Alpha", 2],
+        ["Beta", 3],
+      ],
+    );
+    assert.deepStrictEqual(first.page, {
+      returned: 2,
+      complete: false,
+      remaining: 1,
+      next: first.page.next,
+      size: 2,
+      total: 3,
+    });
+    assert.isString(first.page.next);
+    if (first.page.next === undefined) {
+      return;
+    }
+
+    const moreReads = yield* fake.providerReads;
+    const second = yield* queries.getRosters(owner, {
+      team: teamId,
+      scope: "league",
+      limit: 2,
+      cursor: first.page.next,
+    });
+    assert.strictEqual((yield* fake.providerReads) - moreReads, 1);
+    assert.strictEqual(second.status, "ok");
+    if (second.status !== "ok" || second.scope !== "league") {
+      return;
+    }
+    assert.deepStrictEqual(
+      second.teams.map((row) => [row.name, row.players.map((player) => player.name)]),
+      [["Gamma", ["Gamma Player 0"]]],
+    );
+    assert.deepStrictEqual(second.page, {
+      returned: 1,
+      complete: true,
+      remaining: 0,
+      size: 1,
+      total: 3,
+    });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("refuses a league roster read for a team the account does not own", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setLeagueRosters([
+      leagueRosterFixture("461.l.1000.t.1", "Alpha", 2, 10001),
+      leagueRosterFixture("461.l.1000.t.2", "Beta", 3, 20001),
+    ]);
+
+    const before = yield* fake.providerReads;
+    const refused = yield* Effect.flip(
+      queries.getRosters(decodeUserId("other"), {
+        team: Array.getUnsafe(seeded, 0).id,
+        scope: "league",
+      }),
+    );
+
+    assert.instanceOf(refused, QueryTeamNotFound);
+    assert.strictEqual((yield* fake.providerReads) - before, 0);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("resolves an unowned player reference from a league roster read in get_players", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setLeagueRosters([
+      leagueRosterFixture("461.l.1000.t.1", "Alpha", 2, 10001),
+      leagueRosterFixture("461.l.1000.t.2", "Beta", 3, 20001),
+    ]);
+    yield* fake.setPlayerDetails([
+      {
+        providerPlayerKey: "461.p.20001",
+        name: "Rival Player",
+        primaryPosition: "QB",
+        displayPosition: "QB",
+        proTeam: "SYN",
+        availabilityDetail: undefined,
+        eligiblePositions: ["QB"],
+        rosterStatus: "rostered",
+        actual: undefined,
+        projected: undefined,
+      },
+    ]);
+
+    const league = yield* queries.getRosters(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      scope: "league",
+    });
+    assert.strictEqual(league.status, "ok");
+    if (league.status !== "ok" || league.scope !== "league") {
+      return;
+    }
+    const rival = Array.getUnsafe(league.teams, 1);
+    const rivalRef = Array.getUnsafe(rival.players, 0).player;
+
+    const resolved = yield* queries.getPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      players: [rivalRef],
+    });
+    assert.strictEqual(resolved.status, "ok");
+    if (resolved.status !== "ok") {
+      return;
+    }
+    const player = Array.getUnsafe(resolved.players, 0);
+    assert.strictEqual(player.player, rivalRef);
+    assert.strictEqual(player.identity?.name, "Rival Player");
+    assert.strictEqual(player.availability?.rosterStatus, "rostered");
+    assert.deepStrictEqual(resolved.failures, []);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reports a refused league roster read instead of an empty roster", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.unsupportedOperations(["read_league_rosters"]);
+
+    const read = yield* queries.getRosters(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      scope: "league",
+    });
+
+    assert.strictEqual(read.status, "unsupported");
+    if (read.status !== "unsupported" || read.scope !== "league") {
+      return;
+    }
+    assert.deepStrictEqual(read.teams, []);
+    assert.deepStrictEqual(
+      read.coverage.map((entry) => [entry.resource, entry.source, entry.status]),
+      [["roster", "league_rosters", "unsupported"]],
+    );
+    assert.deepStrictEqual(read.failures, []);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("refuses an exact period for a league roster read", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.setLeagueRosters([leagueRosterFixture("461.l.1000.t.1", "Alpha", 2, 10001)]);
+
+    const before = yield* fake.providerReads;
+    const refused = yield* Effect.flip(
+      queries.getRosters(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+        scope: "league",
+        period: { week: 3 },
+      }),
+    );
+
+    assert.strictEqual(refused._tag, "query.selection_invalid");
+    assert.strictEqual((yield* fake.providerReads) - before, 0);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -750,7 +1016,7 @@ it.effect(
 
       const read = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
       assert.strictEqual(read.status, "ok");
-      if (read.status !== "ok") {
+      if (read.status !== "ok" || read.scope !== "team") {
         return;
       }
       assert.deepStrictEqual(read.players[0]?.slot, unverified);
@@ -899,7 +1165,7 @@ it.effect("names the input position of a player reference that does not open", (
     const teamId = Array.getUnsafe(seeded, 0).id;
     const roster = yield* queries.getRosters(owner, { team: teamId });
     assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok") {
+    if (roster.status !== "ok" || roster.scope !== "team") {
       return;
     }
     const rosterRef = Array.getUnsafe(roster.players, 0).player;
@@ -1266,7 +1532,7 @@ it.effect(
       const teamId = Array.getUnsafe(seeded, 0).id;
       const roster = yield* queries.getRosters(owner, { team: teamId });
       assert.strictEqual(roster.status, "ok");
-      if (roster.status !== "ok") {
+      if (roster.status !== "ok" || roster.scope !== "team") {
         return;
       }
 
@@ -1541,7 +1807,7 @@ it.effect("carries the transaction counts on roster rows", () =>
 
     const roster = yield* queries.getRosters(owner, { team: Array.getUnsafe(seeded, 0).id });
     assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok") {
+    if (roster.status !== "ok" || roster.scope !== "team") {
       return;
     }
     assert.deepStrictEqual(
@@ -1581,7 +1847,7 @@ it.effect("refuses a period the provider cannot honour instead of ignoring it", 
     assert.isDefined(footballId);
     const roster = yield* queries.getRosters(owner, { team: hockeyId });
     assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok") {
+    if (roster.status !== "ok" || roster.scope !== "team") {
       return;
     }
 
@@ -1665,7 +1931,7 @@ it.effect(
       const teamId = Array.getUnsafe(seeded, 0).id;
       const roster = yield* queries.getRosters(owner, { team: teamId });
       assert.strictEqual(roster.status, "ok");
-      if (roster.status !== "ok") {
+      if (roster.status !== "ok" || roster.scope !== "team") {
         return;
       }
 
@@ -1730,7 +1996,7 @@ it.effect("never pairs an unsupported stat group with a period failure", () =>
     const teamId = Array.getUnsafe(seeded, 0).id;
     const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
     assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok") {
+    if (roster.status !== "ok" || roster.scope !== "team") {
       return;
     }
     const ref = Array.getUnsafe(roster.players, 0).player;
@@ -1779,7 +2045,7 @@ it.effect("reads a date-scoped roster without inventing a week", () =>
     const roster = yield* queries.getRosters(owner, { team: teamId });
 
     assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok") {
+    if (roster.status !== "ok" || roster.scope !== "team") {
       return;
     }
     assert.strictEqual(roster.period, undefined);
@@ -2090,7 +2356,7 @@ it.effect("returns explicit unsupported coverage instead of empty success", () =
       period: { week: 3 },
     });
     assert.strictEqual(supportedRoster.status, "ok");
-    if (supportedRoster.status !== "ok") {
+    if (supportedRoster.status !== "ok" || supportedRoster.scope !== "team") {
       return;
     }
     const playerRef = Array.getUnsafe(supportedRoster.players, 0).player;
@@ -2136,7 +2402,7 @@ it.effect("pages a large multi-byte roster inside the encoded result budget", ()
     const page = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
 
     assert.strictEqual(page.status, "ok");
-    if (page.status !== "ok") {
+    if (page.status !== "ok" || page.scope !== "team") {
       return;
     }
     assert.isTrue(page.players.length < 40);
@@ -2153,7 +2419,7 @@ it.effect("pages a large multi-byte roster inside the encoded result budget", ()
       cursor: nextCursor,
     });
     assert.strictEqual(next.status, "ok");
-    if (next.status === "ok") {
+    if (next.status === "ok" && next.scope === "team") {
       assert.notStrictEqual(next.players[0]?.player, page.players[0]?.player);
     }
   }).pipe(Effect.provide(QueriesTestLayer)),
@@ -2174,7 +2440,7 @@ it.effect("fits both representations a client receives inside the hard byte limi
     const page = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
 
     assert.strictEqual(page.status, "ok");
-    if (page.status !== "ok") {
+    if (page.status !== "ok" || page.scope !== "team") {
       return;
     }
     assert.isAtMost(receivedToolResultBytes(page), page.budget.hardLimitBytes);
@@ -2217,7 +2483,7 @@ it.effect("builds review-only links for add, add/drop, and drop without provider
 
     const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
     assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok") {
+    if (roster.status !== "ok" || roster.scope !== "team") {
       return;
     }
     const dropRef = Array.getUnsafe(roster.players, 0).player;
@@ -2294,7 +2560,12 @@ it.effect("builds a trade review link only for a league member counterparty", ()
     assert.strictEqual(roster.status, "ok");
     assert.strictEqual(search.status, "ok");
     assert.strictEqual(matchups.status, "ok");
-    if (roster.status !== "ok" || search.status !== "ok" || matchups.status !== "ok") {
+    if (
+      roster.status !== "ok" ||
+      roster.scope !== "team" ||
+      search.status !== "ok" ||
+      matchups.status !== "ok"
+    ) {
       return;
     }
     const send = Array.getUnsafe(roster.players, 0).player;
@@ -2960,7 +3231,7 @@ it.effect("carries the owner note on the full roster read and the trade review s
 
     const full = yield* queries.getRosters(owner, { team: teamId, detail: "full" });
     assert.strictEqual(full.status, "ok");
-    if (full.status !== "ok") {
+    if (full.status !== "ok" || full.scope !== "team") {
       return;
     }
     assert.deepStrictEqual(full.ownerNote, {
@@ -3402,7 +3673,7 @@ it.effect("carries the professional team on every compact roster entry", () =>
 
     const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
     assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok") {
+    if (roster.status !== "ok" || roster.scope !== "team") {
       return;
     }
     assert.strictEqual(roster.players[0]?.proTeam, "SYN");
@@ -5787,6 +6058,28 @@ function rosterFixture(input: {
         drops: 2,
         window: "provider_current_day" as const,
       },
+    })),
+  };
+}
+
+function leagueRosterFixture(
+  providerTeamKey: string,
+  name: string,
+  count: number,
+  playerKeyStart: number,
+): ProviderLeagueRoster {
+  const roster = rosterFixture({
+    count,
+    providerTeamKey,
+    providerLeagueKey: "461.l.1000",
+  });
+  return {
+    ...roster,
+    name,
+    players: roster.players.map((player, index) => ({
+      ...player,
+      providerPlayerKey: `461.p.${String(playerKeyStart + index)}`,
+      name: `${name} Player ${String(index)}`,
     })),
   };
 }

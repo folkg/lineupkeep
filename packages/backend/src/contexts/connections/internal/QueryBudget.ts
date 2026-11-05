@@ -70,6 +70,7 @@ export function fitPage<Row, Result>(
         : narrowing(input, undefined, budget);
     }
 
+    const pageSize = input.pageSize === undefined ? undefined : Math.min(input.pageSize, available);
     const pageFor = (returned: number, next: string | undefined): QueryPage => {
       const remaining = available - returned;
       return {
@@ -77,7 +78,7 @@ export function fitPage<Row, Result>(
         complete: remaining === 0,
         remaining,
         ...(next === undefined ? {} : { next }),
-        ...(input.pageSize === undefined ? {} : { size: input.pageSize }),
+        ...(pageSize === undefined ? {} : { size: pageSize }),
         ...(input.total === undefined ? {} : { total: input.total }),
       };
     };

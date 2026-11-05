@@ -39,6 +39,8 @@ import {
   yahooEmptyRoster,
   yahooNflFreeAgents,
   yahooNflLeagueSettings,
+  yahooNflLeagueRosters,
+  yahooNflLeagueRostersForAnotherLeague,
   yahooNflLeagueTeams,
   yahooNflLeagueTeamsWithFaab,
   yahooNflPlayerDetailsWithMismatchedStartedCoverage,
@@ -4088,6 +4090,107 @@ it.effect("reads league team membership", () => {
         acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
       },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads every league roster in one request", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueRosters));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const rosters = yield* provider.readLeagueRosters({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+    });
+
+    assert.strictEqual(internet.calls.length, 1);
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/teams;out=roster?format=json",
+    );
+    assert.deepStrictEqual(
+      rosters.map((roster) => ({
+        name: roster.name,
+        team: roster.providerTeamKey,
+        coverage: roster.coverage,
+        players: roster.players.map((player) => player.providerPlayerKey),
+      })),
+      [
+        {
+          name: "Synthetic Team",
+          team: "466.l.4000.t.1",
+          coverage: { type: "week", week: 6 },
+          players: ["466.p.20001", "466.p.20002"],
+        },
+        {
+          name: "Synthetic Rival",
+          team: "466.l.4000.t.2",
+          coverage: { type: "week", week: 6 },
+          players: ["466.p.20003"],
+        },
+      ],
+    );
+    const starter = rosters[0]?.players[0];
+    assert.deepStrictEqual(starter?.slot, { status: "verified", slot: "QB" });
+    assert.deepStrictEqual(starter?.eligiblePositions, ["QB", "W/R"]);
+    assert.strictEqual(starter?.byeWeek, 7);
+    assert.strictEqual(starter?.undroppable, false);
+    assert.deepStrictEqual(starter?.transactionTrend, {
+      status: "not_published",
+      reason: "The provider published no add and drop counts for this player.",
+    });
+    const reserve = rosters[0]?.players[1];
+    assert.strictEqual(reserve?.injuryCode, "O");
+    assert.strictEqual(reserve?.injuryDetail, "Synthetic injury note");
+    assert.strictEqual(reserve?.undroppable, true);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("rejects a league roster that omits a team's roster node", () => {
+  const internet = recordingInternet(() =>
+    jsonResponse({
+      fantasy_content: {
+        league: [
+          { league_key: "466.l.4000" },
+          {
+            teams: {
+              "0": {
+                team: [{ team_key: "466.l.4000.t.1", name: "Synthetic Team" }, {}],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readLeagueRosters({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("rejects league rosters that name another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflLeagueRostersForAnotherLeague));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readLeagueRosters({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

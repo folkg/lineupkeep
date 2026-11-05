@@ -135,7 +135,7 @@ export const QueryPage = Schema.Struct({
     Schema.Int.check(Schema.isGreaterThan(0)).pipe(
       Schema.annotate({
         description:
-          "The bound this page was requested with, in rows of the paged resource. `returned` is the actual count after the result budget and can be smaller because the page keeps whole records intact.",
+          "The row bound for this page after the remaining rows are considered: the effective `limit`, in rows of the paged resource. `returned` is the actual count after the result budget and can be smaller because the page keeps whole records intact.",
       }),
     ),
   ),

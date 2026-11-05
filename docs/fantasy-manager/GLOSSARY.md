@@ -51,6 +51,14 @@ The players held by a fantasy team, including starters, bench players, and reser
 The assignment of a fantasy team's rostered players to its roster slots for a particular period.
 _Avoid_: Roster when referring only to assignments
 
+**League roster read**:
+One read of every fantasy team's roster in a league the account plays in, including teams the
+account does not own, at the provider's current coverage. It pages whole teams, and each team row
+carries a private team reference, its name, and whether the account owns it. A rival's roster facts
+are readable only inside that league, and every team and player reference stays sealed to the owner
+and league.
+_Avoid_: League-wide roster when a single team or a player page is meant
+
 **Left in place**:
 A roster player the plan does not move because the league's slots cannot hold them legally, such as a player still listed in a reserve slot they are no longer eligible for. They keep the slot the provider reports, and the rest of the lineup is planned around them. It is not a plan failure, and it is not a missing assignment.
 _Avoid_: Unassigned, orphan, invalid player, benched when the plan did not choose the bench
