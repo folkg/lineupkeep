@@ -644,6 +644,7 @@ export default defineConfig({
     "repository/provider-identity": "error",
     "repository/provider-sport-rule": "error",
     "repository/provider-wire-vocabulary": "error",
+    "repository/provider-transaction-vocabulary": "error",
   },
   overrides: [
     { files: ["**/*.{js,cjs,mjs}"], rules: { "no-redeclare": "error" } },

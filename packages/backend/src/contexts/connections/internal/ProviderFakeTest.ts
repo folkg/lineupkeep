@@ -1066,6 +1066,7 @@ const fakeCapabilities: ProviderCapabilities = {
     detail:
       "The fake provider's trade proposal request names players only and publishes no element for a draft pick.",
   },
+  transactionRequest: { maximumAdds: 1, maximumDrops: 1 },
   limitations: [
     {
       subject: "player_schedule",

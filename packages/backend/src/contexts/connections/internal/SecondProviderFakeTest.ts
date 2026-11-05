@@ -40,7 +40,11 @@ export const secondProviderLeague: ProviderLeagueSettings = {
   scoringType: "rotisserie",
   scoringLabel: "Roto",
   weeklyDeadline: undefined,
-  rosterChange: undefined,
+  rosterChange: {
+    rule: "next_day",
+    source: ["league_settings"],
+    detail: "Atlas applies roster changes the day after its current date.",
+  },
   waiverType: undefined,
   waiverRule: undefined,
   usesFaab: undefined,
@@ -108,6 +112,7 @@ export const secondProviderCapabilities: ProviderCapabilities = {
     assets: ["player"],
     detail: "Atlas publishes no trade proposal write and no element for a draft pick.",
   },
+  transactionRequest: { maximumAdds: 2, maximumDrops: 2 },
   limitations: [
     {
       subject: "probable_starters",

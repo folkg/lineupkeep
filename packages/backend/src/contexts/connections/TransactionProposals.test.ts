@@ -1255,6 +1255,86 @@ it.effect("refuses a slot move that carries an add or names no destination", () 
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("refuses an item that names more adds than the provider's request allows", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004", "nhl.p.90007"]),
+          drops: [],
+          reason: "Add two available forwards.",
+        },
+      ],
+    });
+    const accepted = Array.getUnsafe(result.items, 0);
+    assert.strictEqual(accepted.outcome, "accepted");
+    if (accepted.outcome !== "accepted") {
+      return;
+    }
+
+    const review = yield* proposals.revalidate(owner, { set: result.set.id });
+    assert.strictEqual(Array.getUnsafe(itemsOf(review), 0).staleness.status, "current");
+
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: [accepted.item.id],
+    });
+    const item = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(item.state, "skipped");
+    assert.include(item.execution?.detail ?? "", "at most 1 add and 1 drop");
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("attributes the provider's own words when it does not send a write", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const result = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "free_agent_add",
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+          reason: "Swap one forward for another.",
+        },
+      ],
+    });
+    const accepted = Array.getUnsafe(result.items, 0);
+    assert.strictEqual(accepted.outcome, "accepted");
+    if (accepted.outcome !== "accepted") {
+      return;
+    }
+    yield* fake.setTransactionAction(
+      "unavailable",
+      "This write would exceed the provider's request allowance.",
+    );
+    const review = yield* proposals.revalidate(owner, { set: result.set.id });
+    assert.strictEqual(Array.getUnsafe(itemsOf(review), 0).staleness.status, "current");
+
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: [accepted.item.id],
+    });
+    const item = Array.getUnsafe(itemsOf(submitted), 0);
+    assert.strictEqual(item.state, "failed");
+    assert.include(
+      item.execution?.detail ?? "",
+      "The provider did not send the request. It said: This write would exceed the provider's request allowance.",
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("orders a declared slot move after the drop that frees its slot", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;

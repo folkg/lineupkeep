@@ -9,6 +9,7 @@ import type {
   ProposalOrderPlayer,
 } from "#contexts/connections/ProposalOrder.ts";
 import type {
+  ProviderCapabilities,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
   ProviderNativeTarget,
@@ -776,7 +777,10 @@ export const TransactionProposalsLive = Layer.effect(
             );
             continue;
           }
-          const refusal = executableRefusal(current);
+          const refusal = executableRefusal(
+            current,
+            check.context.provider.capabilities.transactionRequest,
+          );
           if (refusal !== undefined) {
             outcomes.push(skippedOutcome(current, refusal, decidedAt, position));
             stopped.set(
@@ -1149,12 +1153,7 @@ export const TransactionProposalsLive = Layer.effect(
           case "not_sent":
             return {
               outcome: "failed",
-              detail: clamped(
-                sent.success.detail ??
-                  (sent.success.reason === "session_incomplete"
-                    ? "The request was not sent because the provider did not issue a write token."
-                    : "The request was not sent to the provider."),
-              ),
+              detail: notSentDetail("request", sent.success),
               steps: [],
             };
         }
@@ -2727,12 +2726,7 @@ function withdrawalDetail(write: ProviderWriteResult): string {
     case "rejected":
       return clamped(rejectionDetail("withdrawal", write));
     case "not_sent":
-      return clamped(
-        write.detail ??
-          (write.reason === "session_incomplete"
-            ? "The withdrawal was not sent because the provider did not issue a write token."
-            : "The withdrawal was not sent to the provider."),
-      );
+      return notSentDetail("withdrawal", write);
     case "unknown":
       return "The provider did not confirm the withdrawal, so it may or may not have applied. It was not retried. Check the provider's trade page.";
   }
@@ -3278,7 +3272,10 @@ function executionSequence(
   return [...ordered, ...rest];
 }
 
-function executableRefusal(item: ProposalItemRecord): string | undefined {
+function executableRefusal(
+  item: ProposalItemRecord,
+  transaction: ProviderCapabilities["transactionRequest"],
+): string | undefined {
   if (item.kind === "slot_move") {
     return item.slotMove === undefined
       ? "This slot move names no player and destination slot, so there is nothing to send."
@@ -3296,8 +3293,8 @@ function executableRefusal(item: ProposalItemRecord): string | undefined {
     }
     return undefined;
   }
-  if (item.adds.length > 1 || item.drops.length > 1) {
-    return `The provider's transaction request carries one add and one drop, and this move names ${String(item.adds.length)} to add and ${String(item.drops.length)} to drop. Split it into separate items and propose a fresh set.`;
+  if (item.adds.length > transaction.maximumAdds || item.drops.length > transaction.maximumDrops) {
+    return `The provider's transaction request carries at most ${String(transaction.maximumAdds)} ${transaction.maximumAdds === 1 ? "add" : "adds"} and ${String(transaction.maximumDrops)} ${transaction.maximumDrops === 1 ? "drop" : "drops"}, and this move names ${String(item.adds.length)} to add and ${String(item.drops.length)} to drop. Split it into separate items and propose a fresh set.`;
   }
   if (item.kind === "waiver_claim" && item.bid === undefined) {
     return "A waiver claim needs a FAAB bid before it can be sent.";
@@ -3401,12 +3398,7 @@ function writeDetail(
     case "rejected":
       return clamped(rejectionDetail(subject, write));
     case "not_sent":
-      return clamped(
-        write.detail ??
-          (write.reason === "session_incomplete"
-            ? "The request was not sent because the provider did not issue a write token."
-            : "The request was not sent to the provider."),
-      );
+      return notSentDetail("request", write);
     case "unknown":
       return `The provider did not confirm the ${subject}; it may or may not have applied. It was not retried.`;
   }
@@ -3420,6 +3412,18 @@ function rejectionDetail(
   return write.detail === undefined
     ? `The provider rejected the ${subject}${status} without giving a reason.`
     : `The provider rejected the ${subject}${status}. It said: ${write.detail}`;
+}
+
+function notSentDetail(
+  subject: "request" | "withdrawal",
+  write: Extract<ProviderWriteResult, { readonly status: "not_sent" }>,
+): string {
+  if (write.detail !== undefined) {
+    return clamped(`The provider did not send the ${subject}. It said: ${write.detail}`);
+  }
+  return write.reason === "session_incomplete"
+    ? `The ${subject} was not sent because the provider did not issue a write token.`
+    : `The ${subject} was not sent to the provider.`;
 }
 
 function sessionFailureDetail(

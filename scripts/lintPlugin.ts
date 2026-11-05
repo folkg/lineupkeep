@@ -251,6 +251,25 @@ const plugin = {
         },
       }),
     },
+    "provider-transaction-vocabulary": {
+      create: (context: CommentsRuleContext) => ({
+        Program: () => {
+          if (!isGenericSourceModule(context.filename)) {
+            return;
+          }
+          for (const [term, offset] of occurrencesOf(
+            context.sourceCode.text,
+            providerTransactionVocabulary,
+          )) {
+            sourceReport(
+              context,
+              offset,
+              `\`${term}\` states one provider's transaction request shape; read the declared limits from ProviderCapabilities.transactionRequest and render those instead.`,
+            );
+          }
+        },
+      }),
+    },
     "no-intrinsic-elements": {
       create: (context: DesignSystemRuleContext) => ({
         JSXOpeningElement: (node: DesignSystemJSXOpeningElement) => {
@@ -1046,6 +1065,10 @@ const providerWireVocabulary: ReadonlyArray<string> = [
   ";sort_type=",
   "fantasysports",
   "fantasy/v2/",
+];
+
+const providerTransactionVocabulary: ReadonlyArray<string> = [
+  "provider's transaction request carries one",
 ];
 
 const sportOrLeagueComparison =

@@ -1609,3 +1609,25 @@ it.each([
 
   expect(result.status, result.output).toBe(0);
 });
+
+it("rejects one provider's transaction request shape in generic code", async () => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/connections/QueryResults.ts":
+      'export const detail = "The provider\'s transaction request carries one add and one drop.";',
+  });
+
+  expect(result.status).toBeGreaterThan(0);
+  expect(result.output).toContain("repository(provider-transaction-vocabulary)");
+  expect(result.output.replaceAll(/\s+/g, " ")).toContain(
+    "read the declared limits from ProviderCapabilities.transactionRequest",
+  );
+});
+
+it("accepts one provider's transaction request shape in the adapter", async () => {
+  const result = await checkLint({
+    "packages/backend/src/contexts/connections/internal/yahoo/YahooLineup.ts":
+      'export const detail = "The provider\'s transaction request carries one add and one drop.";',
+  });
+
+  expect(result.status, result.output).toBe(0);
+});

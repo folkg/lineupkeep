@@ -102,6 +102,7 @@ export const yahooCapabilities: ProviderCapabilities = {
     detail:
       "Yahoo's published trade proposal request names a trader team, a tradee team, a trade note and players, and publishes no element for a draft pick. Yahoo's web trade hub and its completed and pending trade reads do carry picks, so this is the limit of the published request shape we can send, not a rule against trading picks. Lineupkeep refuses a pick it cannot name in the request.",
   },
+  transactionRequest: { maximumAdds: 1, maximumDrops: 1 },
   limitations: [
     {
       subject: "player_schedule",
