@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/solid-query";
 import type { Accessor } from "solid-js";
 
-import type { TeamReserveSlotAttentionView } from "#contracts/connections/teamContract.ts";
+import type { TeamIllegalSlotAttentionView } from "#contracts/connections/teamContract.ts";
 
 import { teamQueries } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
@@ -14,7 +14,7 @@ export function useTeamAttention(props: TeamAttentionOptions): TeamAttentionCont
 }
 
 export type TeamAttentionController = {
-  readonly attention: Accessor<ReadonlyArray<TeamReserveSlotAttentionView>>;
+  readonly attention: Accessor<ReadonlyArray<TeamIllegalSlotAttentionView>>;
 };
 
 type TeamAttentionOptions = {

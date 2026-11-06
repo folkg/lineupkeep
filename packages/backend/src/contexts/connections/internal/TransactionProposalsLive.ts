@@ -2,7 +2,11 @@ import { Array, DateTime, Effect, Layer, Result, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
-import { planProposalOrder, slotAcceptsPositions } from "#contexts/connections/ProposalOrder.ts";
+import {
+  planProposalOrder,
+  slotAcceptsPositions,
+  slotMismatchDetail,
+} from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProposalOrderItem,
   ProposalOrderPlan,
@@ -3533,7 +3537,7 @@ function illegalSlots(
     reasons.push({
       code: "slot_illegal",
       playerKey: player.providerPlayerKey,
-      detail: `${player.name} is in the ${slot.position} slot, but it does not accept his positions (${player.eligiblePositions.join(", ")}).${providerNote} Move him to a legal slot at the provider, then revalidate this set.`,
+      detail: `${slotMismatchDetail({ name: player.name, slot: slot.position, positions: player.eligiblePositions })}${providerNote} Move them to a legal slot at the provider, then revalidate this set.`,
     });
   }
   return reasons;

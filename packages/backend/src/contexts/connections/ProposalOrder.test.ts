@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 
-import { planProposalOrder } from "./ProposalOrder.ts";
+import { ineligibleSlotOccupants, planProposalOrder } from "./ProposalOrder.ts";
 import type {
   ProposalOrderInput,
   ProposalOrderItem,
@@ -237,6 +237,82 @@ it("reports the search bound instead of claiming no order exists", () => {
     assert.include(decision.detail, "20,000");
     assert.include(decision.detail, "not proof");
   }
+});
+
+it("names a reserve-slot player whose positions the slot does not accept", () => {
+  const occupants = ineligibleSlotOccupants({
+    slots: [starting("C", 2), bench("BN", 3), reserve("IR", 1)],
+    players: [{ key: "p1", name: "Marcus Reserve", slot: "IR", positions: ["C"] }],
+  });
+
+  assert.deepStrictEqual(occupants, [
+    {
+      key: "p1",
+      name: "Marcus Reserve",
+      slot: "IR",
+      positions: ["C"],
+      detail: "Marcus Reserve is in the IR slot, but it does not accept their positions (C).",
+    },
+  ]);
+});
+
+it("accepts a player whose positions include one the slot accepts", () => {
+  const occupants = ineligibleSlotOccupants({
+    slots: [starting("C", 2), bench("BN", 3), reserve("IR", 1)],
+    players: [{ key: "p1", name: "Legal Reserve", slot: "IR", positions: ["C", "IR"] }],
+  });
+
+  assert.deepStrictEqual(occupants, []);
+});
+
+it("accepts any player the league puts on its bench", () => {
+  const occupants = ineligibleSlotOccupants({
+    slots: [starting("C", 2), bench("BN", 3)],
+    players: [{ key: "p1", name: "Benched Player", slot: "BN", positions: ["LW"] }],
+  });
+
+  assert.deepStrictEqual(occupants, []);
+});
+
+it("ignores a slot the league does not declare", () => {
+  const occupants = ineligibleSlotOccupants({
+    slots: [starting("C", 2)],
+    players: [{ key: "p1", name: "Unknown Slot", slot: "TAXI", positions: ["C"] }],
+  });
+
+  assert.deepStrictEqual(occupants, []);
+});
+
+it("names a starting slot the player is not eligible for", () => {
+  const occupants = ineligibleSlotOccupants({
+    slots: [starting("C", 1), starting("LW", 1)],
+    players: [{ key: "p1", name: "Wing In The Middle", slot: "C", positions: ["LW"] }],
+  });
+
+  assert.deepStrictEqual(
+    occupants.map((occupant) => occupant.detail),
+    ["Wing In The Middle is in the C slot, but it does not accept their positions (LW)."],
+  );
+});
+
+it("uses the league's own name for a reserve list", () => {
+  const slots: ReadonlyArray<Slot> = [
+    { position: "RESERVE", kind: "reserve", count: 1, eligibility: ["PG"] },
+  ];
+  const occupants = ineligibleSlotOccupants({
+    slots,
+    players: [{ key: "p1", name: "Eve Reserve", slot: "RESERVE", positions: ["SF"] }],
+  });
+
+  assert.deepStrictEqual(
+    occupants.map((occupant) => [occupant.slot, occupant.detail]),
+    [
+      [
+        "RESERVE",
+        "Eve Reserve is in the RESERVE slot, but it does not accept their positions (SF).",
+      ],
+    ],
+  );
 });
 
 const skate = { rule: "same_day", currentDate: "2026-10-31" } as const;

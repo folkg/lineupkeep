@@ -29,8 +29,8 @@ export function toTeamRosterAttention(summary: TeamSummaryResult): TeamRosterAtt
     : {
         attention: (summary.attention ?? []).map((item) => ({
           name: item.name,
-          slot: item.reserveSlot.slot,
-          detail: item.reserveSlot.detail,
+          slot: item.illegalSlot.slot,
+          detail: item.illegalSlot.detail,
         })),
       };
 }

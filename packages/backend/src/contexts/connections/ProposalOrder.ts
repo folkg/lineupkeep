@@ -58,6 +58,36 @@ export function slotAcceptsPositions(
   return eligibility.length === 0 || eligibility.some((position) => positions.includes(position));
 }
 
+export function ineligibleSlotOccupants(input: {
+  readonly slots: ReadonlyArray<SlotEligibilityRule>;
+  readonly players: ReadonlyArray<SlotOccupancy>;
+}): ReadonlyArray<IneligibleSlotOccupant> {
+  const slots = new Map(input.slots.map((slot) => [slot.position, slot] as const));
+  return input.players.flatMap((player) => {
+    const slot = slots.get(player.slot);
+    if (slot === undefined || slotAcceptsPositions(slot.eligibility, player.positions)) {
+      return [];
+    }
+    return [
+      {
+        key: player.key,
+        name: player.name,
+        slot: player.slot,
+        positions: player.positions,
+        detail: slotMismatchDetail(player),
+      },
+    ];
+  });
+}
+
+export function slotMismatchDetail(input: {
+  readonly name: string;
+  readonly slot: string;
+  readonly positions: ReadonlyArray<string>;
+}): string {
+  return `${input.name} is in the ${input.slot} slot, but it does not accept their positions (${input.positions.join(", ")}).`;
+}
+
 type OrderedStep = {
   readonly item: string;
   readonly repair?: ProposalOrderRepair;
@@ -369,7 +399,7 @@ function compositionRefusal(state: RosterState, slots: SlotMap): CompositionRefu
     const { player, slot } = illegalPlacement;
     return {
       code: "slot_illegal",
-      detail: `${player.name} is in the ${slot} slot, but it does not accept his positions (${player.positions.join(", ")}). No open slot accepts him, and choosing which player to drop is yours. Add that drop to this set, or add a slot move that gives him a legal slot.`,
+      detail: `${slotMismatchDetail({ name: player.name, slot, positions: player.positions })} No open slot accepts them, and choosing which player to drop is yours. Add that drop to this set, or add a slot move that gives them a legal slot.`,
     };
   }
   return {
@@ -419,7 +449,11 @@ function illegalDetail(state: RosterState, slots: SlotMap): string | undefined {
       continue;
     }
     if (!slotAcceptsPositions(slot.eligibility, player.positions)) {
-      return `${player.name} is in the ${slot.position} slot, but it does not accept their positions (${player.positions.join(", ")}).`;
+      return slotMismatchDetail({
+        name: player.name,
+        slot: slot.position,
+        positions: player.positions,
+      });
     }
     occupancy.set(slot.position, (occupancy.get(slot.position) ?? 0) + 1);
     if (slot.kind !== "reserve") {
@@ -743,6 +777,22 @@ function nextCalendarDate(date: string): string | undefined {
 }
 
 type RosterMember = ProposalOrderPlayer;
+
+type SlotEligibilityRule = {
+  readonly position: string;
+  readonly eligibility: ReadonlyArray<string>;
+};
+
+export type SlotOccupancy = {
+  readonly key: string;
+  readonly name: string;
+  readonly slot: string;
+  readonly positions: ReadonlyArray<string>;
+};
+
+export type IneligibleSlotOccupant = SlotOccupancy & {
+  readonly detail: string;
+};
 
 type RosterState = ReadonlyMap<string, RosterMember>;
 

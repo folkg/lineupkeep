@@ -235,9 +235,9 @@ it("keeps the popout beside a long team name on a phone", async () => {
   expect(jumpBox.top).toBeLessThan(headingBox.bottom);
 });
 
-it("shows a reserve slot the provider's statistics contradict above the controls", async () => {
+it("shows a slot the league's eligibility rules reject above the controls", async () => {
   const detail =
-    "Marcus Reserve is in a reserve slot but has played in the last 14 days, and the provider reports no injury. The roster may be refused until they are moved or dropped.";
+    "Marcus Reserve is in the IR slot, but it does not accept their positions (C). The roster may be refused until they are moved or dropped.";
   using _app = setupTeamDetailPage(team, {
     readAttention: () =>
       Promise.resolve({

@@ -31,7 +31,6 @@ import { QueryTokens } from "./internal/QueryTokens.ts";
 import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
 import {
   secondProvider,
-  secondProviderCapabilities,
   secondProviderKey,
   secondProviderRoster,
 } from "./internal/SecondProviderFakeTest.ts";
@@ -1039,71 +1038,16 @@ it.effect(
     }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect(
-  "reports a healthy reserve player with recent statistics in the team summary attention list",
-  () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(
-        DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00.000Z")),
-      );
-      const queries = yield* FantasyQueries;
-      const fake = yield* FakeProviderWorld;
-      const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-        league: reserveLeagueFixture,
-        roster: reserveRoster([
-          { key: "465.p.90001", name: "Marcus Reserve", slot: "IR" },
-          { key: "465.p.90002", name: "Starting Skater", slot: "C" },
-        ]),
-        playerDetails: [
-          reserveDetail("465.p.90001", "Marcus Reserve", 3),
-          reserveDetail("465.p.90002", "Starting Skater", 2),
-        ],
-      });
-
-      const summary = yield* queries.getTeamSummary(owner, {
-        team: Array.getUnsafe(seeded, 0).id,
-        groups: ["roster"],
-      });
-
-      assert.strictEqual(summary.status, "ok");
-      if (summary.status !== "ok") {
-        return;
-      }
-      assert.deepStrictEqual(
-        summary.attention?.map((item) => [item.name, item.reserveSlot.code, item.reserveSlot.slot]),
-        [["Marcus Reserve", "reserve_slot_suspect", "IR"]],
-      );
-      assert.deepStrictEqual(summary.attention?.[0]?.reserveSlot.activity, {
-        kind: "date_range",
-        start: "2026-10-13",
-        end: "2026-10-26",
-        days: 14,
-      });
-      assert.strictEqual(
-        summary.attention?.[0]?.reserveSlot.detail,
-        "Marcus Reserve is in a reserve slot but has played in the last 14 days, and the provider reports no injury. The roster may be refused until they are moved or dropped.",
-      );
-      assert.deepStrictEqual(
-        summary.roster?.map((player) => player.name),
-        ["Marcus Reserve", "Starting Skater"],
-      );
-    }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("uses the most recently completed week when the provider serves no daily series", () =>
+it.effect("reports a player in a slot the league does not allow them to occupy", () =>
   Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00.000Z")),
-    );
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
-      league: {
-        ...leagueFixture,
-        rosterPositions: reservePositions,
-      },
-      roster: singleReserveRoster("IR"),
-      playerDetails: [reserveDetail("461.p.10001", "Synthetic 0", 275)],
+    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
+      league: reserveLeagueFixture,
+      roster: reserveRoster([
+        { key: "465.p.90001", name: "Marcus Reserve", slot: "IR" },
+        { key: "465.p.90002", name: "Starting Skater", slot: "C" },
+      ]),
     });
 
     const summary = yield* queries.getTeamSummary(owner, {
@@ -1115,120 +1059,66 @@ it.effect("uses the most recently completed week when the provider serves no dai
     if (summary.status !== "ok") {
       return;
     }
-    assert.deepStrictEqual(summary.attention?.[0]?.reserveSlot.activity, {
-      kind: "week",
-      week: 2,
-    });
+    assert.deepStrictEqual(
+      summary.attention?.map((item) => [
+        item.name,
+        item.illegalSlot.code,
+        item.illegalSlot.slot,
+        item.illegalSlot.positions,
+      ]),
+      [["Marcus Reserve", "slot_illegal", "IR", ["C"]]],
+    );
     assert.strictEqual(
-      summary.attention?.[0]?.reserveSlot.detail,
-      "Synthetic 0 is in a reserve slot but has played in the most recently completed week, and the provider reports no injury. The roster may be refused until they are moved or dropped.",
+      summary.attention?.[0]?.illegalSlot.detail,
+      "Marcus Reserve is in the IR slot, but it does not accept their positions (C). The roster may be refused until they are moved or dropped.",
     );
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("omits the attention list when the provider serves no window to check", () =>
+it.effect("reports the illegal slot in the player read's availability", () =>
   Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00.000Z")),
-    );
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
-      league: {
-        ...leagueFixture,
-        periodWindow: undefined,
-        rosterPositions: reservePositions,
-      },
-      roster: singleReserveRoster("IR"),
-      playerDetails: [reserveDetail("461.p.10001", "Synthetic 0", 275)],
-    });
-
-    const summary = yield* queries.getTeamSummary(owner, {
-      team: Array.getUnsafe(seeded, 0).id,
-      groups: ["roster"],
-    });
-
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
-      return;
-    }
-    assert.isUndefined(summary.attention);
-    assert.isFalse(
-      summary.coverage.some(
-        (entry) => entry.resource === "players" && entry.source === "player_details",
-      ),
-    );
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("omits the attention list when the roster group is not requested", () =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00.000Z")),
-    );
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
       league: reserveLeagueFixture,
-      roster: reserveRoster([{ key: "465.p.90001", name: "Marcus Reserve", slot: "IR" }]),
-      playerDetails: [reserveDetail("465.p.90001", "Marcus Reserve", 3)],
+      roster: reserveRoster([
+        { key: "465.p.90001", name: "Marcus Reserve", slot: "IR" },
+        { key: "465.p.90002", name: "Starting Skater", slot: "C" },
+        { key: "465.p.90003", name: "Benched Skater", slot: "BN" },
+      ]),
     });
-
-    const summary = yield* queries.getTeamSummary(owner, {
-      team: Array.getUnsafe(seeded, 0).id,
-      groups: ["league"],
-    });
-
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const roster = yield* queries.getRosters(owner, { team: teamId });
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok" || roster.scope !== "team") {
       return;
     }
-    assert.isUndefined(summary.attention);
-    assert.isFalse(
-      summary.coverage.some(
-        (entry) => entry.resource === "players" && entry.source === "player_details",
-      ),
+
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players: roster.players.map((player) => player.player),
+      groups: ["availability"],
+    });
+
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    const [reserve, starter, benched] = hydrated.players;
+    assert.strictEqual(reserve?.identity?.name, "Marcus Reserve");
+    assert.strictEqual(reserve?.availability?.illegalSlot?.slot, "IR");
+    assert.deepStrictEqual(reserve?.availability?.illegalSlot?.positions, ["C"]);
+    assert.strictEqual(
+      reserve?.availability?.illegalSlot?.detail,
+      "Marcus Reserve is in the IR slot, but it does not accept their positions (C). The roster may be refused until they are moved or dropped.",
     );
+    assert.isUndefined(starter?.availability?.illegalSlot);
+    assert.isUndefined(benched?.availability?.illegalSlot);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("checks without naming a suspect when the statistics are not recent", () =>
+it.effect("does not consult the injury report when deciding the slot is illegal", () =>
   Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-12-01T18:00:00.000Z")),
-    );
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: reserveLeagueFixture,
-      roster: reserveRoster([{ key: "465.p.90001", name: "Marcus Reserve", slot: "IR" }]),
-      playerDetails: [reserveDetail("465.p.90001", "Marcus Reserve", 3)],
-    });
-
-    const summary = yield* queries.getTeamSummary(owner, {
-      team: Array.getUnsafe(seeded, 0).id,
-      groups: ["roster"],
-    });
-
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
-      return;
-    }
-    assert.deepStrictEqual(summary.attention, []);
-    assert.isTrue(
-      summary.coverage.some(
-        (entry) => entry.resource === "players" && entry.source === "player_details",
-      ),
-      "the recent-statistics read is what proves there is nothing to report",
-    );
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("says nothing about a reserve player the provider reports as injured", () =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00.000Z")),
-    );
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
@@ -1241,7 +1131,6 @@ it.effect("says nothing about a reserve player the provider reports as injured",
           injury: { code: "IR", detail: "Injured reserve" },
         },
       ]),
-      playerDetails: [reserveDetail("465.p.90001", "Marcus Reserve", 3)],
     });
 
     const summary = yield* queries.getTeamSummary(owner, {
@@ -1253,174 +1142,37 @@ it.effect("says nothing about a reserve player the provider reports as injured",
     if (summary.status !== "ok") {
       return;
     }
-    assert.deepStrictEqual(summary.attention, []);
-    assert.isFalse(
-      summary.coverage.some(
-        (entry) => entry.resource === "players" && entry.source === "player_details",
-      ),
+    assert.deepStrictEqual(
+      summary.attention?.map((item) => [item.name, item.illegalSlot.slot]),
+      [["Marcus Reserve", "IR"]],
     );
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("never names a starting or bench player as a reserve slot suspect", () =>
+it.effect("omits the attention list when the roster group is not requested", () =>
   Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00.000Z")),
-    );
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: reserveLeagueFixture,
-      roster: reserveRoster([
-        { key: "465.p.90001", name: "Starting Skater", slot: "C" },
-        { key: "465.p.90002", name: "Benched Skater", slot: "BN" },
-      ]),
-      playerDetails: [
-        reserveDetail("465.p.90001", "Starting Skater", 3),
-        reserveDetail("465.p.90002", "Benched Skater", 2),
-      ],
-    });
-
-    const summary = yield* queries.getTeamSummary(owner, {
-      team: Array.getUnsafe(seeded, 0).id,
-      groups: ["roster"],
-    });
-
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
-      return;
-    }
-    assert.deepStrictEqual(summary.attention, []);
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("reports a reserve slot suspicion in the player read's availability", () =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00.000Z")),
-    );
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: reserveLeagueFixture,
-      roster: reserveRoster([
-        { key: "465.p.90001", name: "Marcus Reserve", slot: "IR" },
-        { key: "465.p.90002", name: "Starting Skater", slot: "C" },
-      ]),
-      playerDetails: [
-        reserveDetail("465.p.90001", "Marcus Reserve", 3),
-        reserveDetail("465.p.90002", "Starting Skater", 2),
-      ],
-    });
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    const roster = yield* queries.getRosters(owner, { team: teamId });
-    assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok" || roster.scope !== "team") {
-      return;
-    }
-
-    const hydrated = yield* queries.getPlayers(owner, {
-      team: teamId,
-      players: roster.players.map((player) => player.player),
-      groups: ["availability"],
-    });
-
-    assert.strictEqual(hydrated.status, "ok");
-    if (hydrated.status !== "ok") {
-      return;
-    }
-    const [reserve, starter] = hydrated.players;
-    assert.strictEqual(reserve?.identity?.name, "Marcus Reserve");
-    assert.strictEqual(reserve?.availability?.injury.reported, false);
-    assert.deepStrictEqual(reserve?.availability?.reserveSlot?.slot, "IR");
-    assert.strictEqual(
-      reserve?.availability?.reserveSlot?.detail,
-      "Marcus Reserve is in a reserve slot but has played in the last 14 days, and the provider reports no injury. The roster may be refused until they are moved or dropped.",
-    );
-    assert.isUndefined(starter?.availability?.reserveSlot);
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("says nothing in the player read when the statistics are not recent", () =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-12-01T18:00:00.000Z")),
-    );
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
       league: reserveLeagueFixture,
       roster: reserveRoster([{ key: "465.p.90001", name: "Marcus Reserve", slot: "IR" }]),
-      playerDetails: [reserveDetail("465.p.90001", "Marcus Reserve", 3)],
-    });
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    const roster = yield* queries.getRosters(owner, { team: teamId });
-    assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok" || roster.scope !== "team") {
-      return;
-    }
-
-    const hydrated = yield* queries.getPlayers(owner, {
-      team: teamId,
-      players: roster.players.map((player) => player.player),
-      groups: ["availability"],
     });
 
-    assert.strictEqual(hydrated.status, "ok");
-    if (hydrated.status !== "ok") {
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["league"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
       return;
     }
-    assert.isUndefined(Array.getUnsafe(hydrated.players, 0).availability?.reserveSlot);
+    assert.isUndefined(summary.attention);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("says nothing in the player read when the provider reports an injury", () =>
+it.effect("reports a slot the second provider calls RESERVE, using that league's eligibility", () =>
   Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-26T18:00:00.000Z")),
-    );
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: reserveLeagueFixture,
-      roster: reserveRoster([
-        {
-          key: "465.p.90001",
-          name: "Marcus Reserve",
-          slot: "IR",
-          injury: { code: "IR" },
-        },
-      ]),
-      playerDetails: [reserveDetail("465.p.90001", "Marcus Reserve", 3)],
-    });
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    const roster = yield* queries.getRosters(owner, { team: teamId });
-    assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok" || roster.scope !== "team") {
-      return;
-    }
-
-    const hydrated = yield* queries.getPlayers(owner, {
-      team: teamId,
-      players: roster.players.map((player) => player.player),
-      groups: ["availability"],
-    });
-
-    assert.strictEqual(hydrated.status, "ok");
-    if (hydrated.status !== "ok") {
-      return;
-    }
-    const availability = Array.getUnsafe(hydrated.players, 0).availability;
-    assert.strictEqual(availability?.injury.reported, true);
-    assert.isUndefined(availability?.reserveSlot);
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("reports the same reserve slot suspicion through a second provider's slot name", () =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(
-      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-02T18:00:00.000Z")),
-    );
     const queries = yield* FantasyQueries;
     const connections = yield* Connections;
     const linked = Array.getUnsafe(
@@ -1431,30 +1183,44 @@ it.effect("reports the same reserve slot suspicion through a second provider's s
     );
     const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
     const teamId = Array.getUnsafe(discovered, 0).id;
-    const roster = yield* queries.getRosters(owner, { team: teamId });
-    assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok" || roster.scope !== "team") {
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
       return;
     }
-    const eve = roster.players.find((player) => player.name === "Eve Reserve");
-    assert.isDefined(eve);
+    const [entry] = summary.attention ?? [];
+    assert.strictEqual(entry?.name, "Eve Reserve");
+    assert.strictEqual(entry?.illegalSlot.code, "slot_illegal");
+    assert.strictEqual(entry?.illegalSlot.slot, "RESERVE");
+    assert.deepStrictEqual(entry?.illegalSlot.positions, ["SF"]);
+    assert.notInclude(entry?.illegalSlot.detail ?? "", "IR");
+    assert.include(entry?.illegalSlot.detail ?? "", "RESERVE");
+  }).pipe(Effect.provide(queriesTestLayerWithProvider(atlasWithIllegalReserve))),
+);
 
-    const hydrated = yield* queries.getPlayers(owner, {
-      team: teamId,
-      players: [eve.player],
-      groups: ["availability"],
-    });
+it.effect("says nothing about a player whose positions the slot accepts", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const connections = yield* Connections;
+    const linked = Array.getUnsafe(
+      yield* connections.link(owner, [
+        { provider: secondProviderKey, session: Redacted.make("A1=atlas-session") },
+      ]),
+      0,
+    );
+    const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
+    const teamId = Array.getUnsafe(discovered, 0).id;
 
-    assert.strictEqual(hydrated.status, "ok");
-    if (hydrated.status !== "ok") {
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
       return;
     }
-    const availability = Array.getUnsafe(hydrated.players, 0).availability;
-    assert.strictEqual(availability?.reserveSlot?.code, "reserve_slot_suspect");
-    assert.strictEqual(availability?.reserveSlot?.slot, "RESERVE");
-    assert.notInclude(availability?.reserveSlot?.detail ?? "", "IR");
-    assert.include(availability?.reserveSlot?.detail ?? "", "in the last 14 days");
-  }).pipe(Effect.provide(queriesTestLayerWithProvider(atlasWithRecentStatistics))),
+    assert.deepStrictEqual(summary.attention, []);
+  }).pipe(Effect.provide(queriesTestLayerWithProvider(secondProvider))),
 );
 
 it.effect("rejects a blank player search query with the remedy instead of a generic failure", () =>
@@ -6280,25 +6046,6 @@ function leagueRosterFixture(
   };
 }
 
-const reservePositions: ProviderLeagueSettings["rosterPositions"] = [
-  { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
-  { position: "BN", positionType: "B", count: 5, kind: "bench", eligibility: [] },
-  { position: "IR", positionType: "I", count: 1, kind: "reserve", eligibility: ["IR"] },
-];
-
-function singleReserveRoster(slot: string): ProviderRoster {
-  const base = rosterFixture({ count: 1 });
-  return {
-    ...base,
-    players: [
-      {
-        ...Array.getUnsafe(base.players, 0),
-        slot: { status: "verified", slot },
-      },
-    ],
-  };
-}
-
 const reserveLeagueFixture: ProviderLeagueSettings = {
   ...hockeyLeagueFixture,
   rosterPositions: [
@@ -6344,69 +6091,22 @@ function reserveRoster(
   };
 }
 
-function reserveDetail(
-  providerPlayerKey: string,
-  name: string,
-  value: number,
-): ProviderPlayerDetail {
-  return {
-    providerPlayerKey,
-    name,
-    primaryPosition: "C",
-    displayPosition: "C",
-    proTeam: "SYN",
-    availabilityDetail: undefined,
-    eligiblePositions: ["C"],
-    rosterStatus: "rostered",
-    actual: {
-      basis: { type: "season" },
-      stats: [{ statId: 11, value }],
-      notAggregated: [],
-    },
-    projected: undefined,
-  };
-}
-
-const atlasWithRecentStatistics: ProviderShape = {
+const atlasWithIllegalReserve: ProviderShape = {
   ...secondProvider,
-  capabilities: {
-    ...secondProviderCapabilities,
-    statPeriods: {
-      ...secondProviderCapabilities.statPeriods,
-      basketball: {
-        kinds: { season: "native", week: "native", preset: "aggregated", range: "unsupported" },
-        presets: [{ preset: "last_14_days", days: 14 }],
-        maximumRangeDays: 0,
-        detail: "The atlas-shaped test double serves one recent preset window.",
-      },
-    },
-  },
-  readPlayerDetails: ({ providerPlayerKeys }) =>
-    Effect.succeed(
-      secondProviderRoster.players
-        .filter((player) => providerPlayerKeys.includes(player.providerPlayerKey))
-        .map((player) => ({
-          providerPlayerKey: player.providerPlayerKey,
-          name: player.name,
-          primaryPosition: player.primaryPosition,
-          displayPosition: player.displayPosition,
-          proTeam: player.proTeamAbbreviation,
-          availabilityDetail: undefined,
-          eligiblePositions: player.eligiblePositions,
-          rosterStatus: "rostered" as const,
-          actual: {
-            basis: {
-              type: "date_range" as const,
-              start: "2026-10-20",
-              end: "2026-11-02",
-              days: 14,
-            },
-            stats: [{ statId: 1, value: 12 }],
-            notAggregated: [],
-          },
-          projected: undefined,
-        })),
-    ),
+  readRoster: () =>
+    Effect.succeed({
+      ...secondProviderRoster,
+      players: secondProviderRoster.players.map((player) =>
+        player.providerPlayerKey === "atlas.p.5"
+          ? {
+              ...player,
+              primaryPosition: "SF",
+              displayPosition: "SF",
+              eligiblePositions: ["SF"],
+            }
+          : player,
+      ),
+    }),
 };
 
 const playerDetails = [

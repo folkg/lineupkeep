@@ -412,7 +412,7 @@ it.effect(
       const reason = Array.getUnsafe(item.staleness.reasons, 0);
       assert.include(reason.detail, "Roster Two");
       assert.include(reason.detail, "LW");
-      assert.include(reason.detail, "does not accept his positions");
+      assert.include(reason.detail, "does not accept their positions");
     }).pipe(Effect.provide(TestLayer)),
 );
 

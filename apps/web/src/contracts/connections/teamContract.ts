@@ -150,14 +150,14 @@ export type TeamNoteRequestResult<A> =
   | UseCaseResult<A, TeamNoteError["type"]>
   | { readonly type: "error"; readonly error: AuthenticationFailure };
 
-export type TeamReserveSlotAttentionView = {
+export type TeamIllegalSlotAttentionView = {
   readonly name: string;
   readonly slot: string;
   readonly detail: string;
 };
 
 export type TeamRosterAttentionData = {
-  readonly attention: ReadonlyArray<TeamReserveSlotAttentionView>;
+  readonly attention: ReadonlyArray<TeamIllegalSlotAttentionView>;
 };
 
 export type TeamRosterAttentionError = {

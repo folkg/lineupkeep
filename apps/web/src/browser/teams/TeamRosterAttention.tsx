@@ -4,7 +4,7 @@ import type { Accessor } from "solid-js";
 
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
-import type { TeamReserveSlotAttentionView } from "#contracts/connections/teamContract.ts";
+import type { TeamIllegalSlotAttentionView } from "#contracts/connections/teamContract.ts";
 
 export function TeamRosterAttention(props: TeamRosterAttentionProps): JSX.Element {
   return (
@@ -35,5 +35,5 @@ export function TeamRosterAttention(props: TeamRosterAttentionProps): JSX.Elemen
 }
 
 type TeamRosterAttentionProps = {
-  readonly attention: Accessor<ReadonlyArray<TeamReserveSlotAttentionView>>;
+  readonly attention: Accessor<ReadonlyArray<TeamIllegalSlotAttentionView>>;
 };

@@ -32,11 +32,29 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                       |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                      |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J      |
-| Checks               | 1662 node, 180 browser, 10 chromium; container end to end 59 passed, one known skip            |
+| Checks               | 1680 node, 191 browser, 10 chromium; container end to end 59 passed, one known skip            |
 
 ---
 
 ## Ship log
+
+### 6 November 2026
+
+- **Team rows carry a status line that always exists**: next check at the hour's :55 in the reader's zone,
+  the pause sentence with its resume time, an off sentence, or `Checking now` while the run's own status says
+  it is in flight. One line, one height, so pausing no longer moves the list below it.
+- **The mark is lowercase lu**, corrected geometry, at favicon, masthead and brand-document level; the l-k
+  drawing is gone.
+- **A refresh tick stands alone**: the glyph yields completely, the tick draws alone, then the glyph returns.
+- **The provider popout sits beside the team name** on the team page, matching the list.
+- **Round 19 MCP feedback closed.** Registration accepts the retired `connections:read` scope while advertising
+  only current ones, verified against the deployed origin (`201`, grant carries the name; `connections:write`
+  still `400`). `generate_transaction_review_links` and everything that existed only for it are deleted.
+  Proposal sets are validated through their own planned order and that order is published before submission.
+  A reserve-slot player the statistics say is playing is reported as a named suspicion on the summary, the
+  team page and the player read, judged from provider statistics rather than a hardcoded slot name.
+- **Switch colours unchanged** by the owner's ruling; the similarity between a disabled switch and an off
+  switch is recorded and accepted rather than fixed.
 
 ### 5 November 2026
 
