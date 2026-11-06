@@ -37,7 +37,7 @@ it("orders a drop before a move into the slot that drop frees", () => {
   }
 });
 
-it("names the move and the drop when the drop frees a different slot", () => {
+it("refuses only the move whose drop frees a different slot", () => {
   const decision = planProposalOrder({
     slots: [starting("C", 1), bench("BN", 1), reserve("IR", 1)],
     players: [
@@ -56,14 +56,16 @@ it("names the move and the drop when the drop frees a different slot", () => {
   if (decision.status === "conflict") {
     assert.deepStrictEqual(
       decision.conflicts.map((conflict) => conflict.items),
-      [["move-three-to-bench", "drop-one"]],
+      [["move-three-to-bench"]],
+    );
+    const reasons = decision.conflicts[0]?.reasons ?? [];
+    assert.deepStrictEqual(
+      reasons.map((reason) => [reason.item, reason.code]),
+      [["move-three-to-bench", "move_slot_full"]],
     );
     const detail = decision.conflicts[0]?.detail ?? "";
-    assert.include(detail, "Roster Three");
-    assert.include(detail, "BN");
-    assert.include(detail, "Roster One");
-    assert.include(detail, "C");
-    assert.include(detail, "cannot both be legal on 2026-10-31");
+    assert.include(detail, "Moving Roster Three to BN needs a free BN slot");
+    assert.include(detail, "Dropping Roster One frees the C slot, not BN.");
   }
 });
 
@@ -132,6 +134,158 @@ it("starts an illegal roster with the move that makes it legal", () => {
     assert.deepStrictEqual(
       decision.steps.map((step) => step.item),
       ["move-one-to-bench", "drop-two"],
+    );
+  }
+});
+
+it("refuses only the add that has no place after two reserve placements are cured", () => {
+  const decision = planProposalOrder({
+    slots: [starting("C", 1), bench("BN", 4), reserve("IR", 1), reserve("IR+", 1)],
+    players: reserveHeavyRoster(),
+    timing: skate,
+    items: [
+      drop("drop-bench-one", ref("b1", "Roster Bench One")),
+      drop("drop-reserve-two", ref("r2", "Roster Reserve Two")),
+      move("move-reserve-one-to-bench", ref("r1", "Roster Reserve One"), "BN"),
+      add("add-pool", [skater("pool", "Pool Forward", ["C"])]),
+    ],
+  });
+
+  assert.strictEqual(decision.status, "conflict");
+  if (decision.status === "conflict") {
+    assert.deepStrictEqual(
+      decision.conflicts.map((conflict) => conflict.items),
+      [["add-pool"]],
+    );
+    const reason = decision.conflicts[0]?.reasons?.[0];
+    assert.strictEqual(reason?.item, "add-pool");
+    assert.strictEqual(reason?.code, "roster_full");
+    assert.include(reason?.detail ?? "", "6");
+    assert.include(reason?.detail ?? "", "allows 5");
+    assert.notInclude(reason?.detail ?? "", "Add a drop item");
+    assert.notInclude(reason?.detail ?? "", "add a slot move");
+  }
+});
+
+it("orders the reserve cures before an add that uses the place they free", () => {
+  const decision = planProposalOrder({
+    slots: [starting("C", 1), bench("BN", 4), reserve("IR", 1), reserve("IR+", 1)],
+    players: reserveHeavyRoster(),
+    timing: skate,
+    items: [
+      add("add-pool", [skater("pool", "Pool Forward", ["C"])]),
+      drop("drop-bench-one", ref("b1", "Roster Bench One")),
+      drop("drop-reserve-two", ref("r2", "Roster Reserve Two")),
+      move("move-reserve-one-to-bench", ref("r1", "Roster Reserve One"), "BN"),
+      drop("drop-bench-two", ref("b2", "Roster Bench Two")),
+    ],
+  });
+
+  assert.strictEqual(decision.status, "ordered");
+  if (decision.status === "ordered") {
+    const order = decision.steps.map((step) => step.item);
+    assert.deepStrictEqual(order.at(-1), "add-pool");
+    assert.isBelow(order.indexOf("move-reserve-one-to-bench"), order.indexOf("add-pool"));
+    assert.isBelow(order.indexOf("drop-reserve-two"), order.indexOf("add-pool"));
+    assert.isBelow(order.indexOf("drop-bench-two"), order.indexOf("add-pool"));
+  }
+});
+
+it("does not tell an add to drop the reserve player its own item already drops", () => {
+  const decision = planProposalOrder({
+    slots: [starting("C", 1), bench("BN", 1), reserve("IR", 1)],
+    players: [
+      player("p1", "Roster Center", "C", ["C"]),
+      player("p2", "Roster Bench One", "BN", ["C"]),
+      player("p3", "Roster Reserve One", "IR", ["C"]),
+    ],
+    timing: skate,
+    items: [
+      addWithDrop(
+        "add-pool",
+        skater("pool", "Pool Forward", ["C"]),
+        ref("p3", "Roster Reserve One"),
+      ),
+    ],
+  });
+
+  assert.strictEqual(decision.status, "conflict");
+  if (decision.status === "conflict") {
+    const reason = decision.conflicts[0]?.reasons?.[0];
+    assert.strictEqual(reason?.item, "add-pool");
+    assert.strictEqual(reason?.code, "slot_illegal");
+    assert.include(reason?.detail ?? "", "Roster Reserve One");
+    assert.include(reason?.detail ?? "", "This set already names their drop");
+    assert.notInclude(reason?.detail ?? "", "Add that drop to this set");
+  }
+});
+
+it("composes three illegal reserve placements the same way as two", () => {
+  const decision = planProposalOrder({
+    slots: [
+      starting("C", 1),
+      bench("BN", 4),
+      reserve("IR", 1),
+      reserve("IR+", 1),
+      reserve("TAXI", 1),
+    ],
+    players: [
+      player("c1", "Roster Center", "C", ["C"]),
+      player("b1", "Roster Bench One", "BN", ["C"]),
+      player("b2", "Roster Bench Two", "BN", ["C"]),
+      player("b3", "Roster Bench Three", "BN", ["C"]),
+      player("b4", "Roster Bench Four", "BN", ["C"]),
+      player("r1", "Roster Reserve One", "IR", ["C"]),
+      player("r2", "Roster Reserve Two", "IR+", ["C"]),
+      player("r3", "Roster Reserve Three", "TAXI", ["C"]),
+    ],
+    timing: skate,
+    items: [
+      add("add-pool", [skater("pool", "Pool Forward", ["C"])]),
+      drop("drop-bench-one", ref("b1", "Roster Bench One")),
+      drop("drop-bench-two", ref("b2", "Roster Bench Two")),
+      drop("drop-reserve-two", ref("r2", "Roster Reserve Two")),
+      drop("drop-reserve-three", ref("r3", "Roster Reserve Three")),
+      move("move-reserve-one-to-bench", ref("r1", "Roster Reserve One"), "BN"),
+    ],
+  });
+
+  assert.strictEqual(decision.status, "ordered");
+  if (decision.status === "ordered") {
+    const order = decision.steps.map((step) => step.item);
+    assert.deepStrictEqual(order.at(-1), "add-pool");
+    for (const cure of [
+      "drop-bench-one",
+      "drop-bench-two",
+      "drop-reserve-two",
+      "drop-reserve-three",
+      "move-reserve-one-to-bench",
+    ]) {
+      assert.isBelow(order.indexOf(cure), order.indexOf("add-pool"));
+    }
+  }
+});
+
+it("credits the bench place a drop bundled into an add frees", () => {
+  const decision = planProposalOrder({
+    slots: [starting("C", 2), bench("BN", 1), reserve("IR", 1)],
+    players: [
+      player("c1", "Roster Center", "C", ["C"]),
+      player("b1", "Roster Bench One", "BN", ["C"]),
+      player("r1", "Roster Reserve One", "IR", ["C", "IR"]),
+    ],
+    timing: skate,
+    items: [
+      move("move-reserve-one-to-bench", ref("r1", "Roster Reserve One"), "BN"),
+      addWithDrop("add-pool", skater("pool", "Pool Forward", ["C"]), ref("b1", "Roster Bench One")),
+    ],
+  });
+
+  assert.strictEqual(decision.status, "ordered");
+  if (decision.status === "ordered") {
+    assert.deepStrictEqual(
+      decision.steps.map((step) => step.item),
+      ["add-pool", "move-reserve-one-to-bench"],
     );
   }
 });
@@ -334,7 +488,8 @@ it("refuses an add the roster cannot hold instead of reporting a search bound", 
     assert.strictEqual(reason?.item, "add-too-many");
     assert.strictEqual(reason?.code, "roster_full");
     assert.include(reason?.detail ?? "", "the league allows 16");
-    assert.include(reason?.detail ?? "", "Add a drop item for a player outside a reserve slot");
+    assert.include(reason?.detail ?? "", "This set already contains roster changes");
+    assert.notInclude(reason?.detail ?? "", "Add a drop item");
   }
 });
 
@@ -414,6 +569,29 @@ it("uses the league's own name for a reserve list", () => {
   );
 });
 
+function addWithDrop(id: string, added: PlayerRef, dropped: PlayerRef): ProposalOrderItem {
+  return {
+    id,
+    label: `Add ${added.name} and drop ${dropped.name}`,
+    adds: [added],
+    drops: [dropped],
+    move: undefined,
+    mayRepair: true,
+  };
+}
+
+function reserveHeavyRoster(): ReadonlyArray<ProposalOrderPlayer> {
+  return [
+    player("c1", "Roster Center", "C", ["C"]),
+    player("b1", "Roster Bench One", "BN", ["C"]),
+    player("b2", "Roster Bench Two", "BN", ["C"]),
+    player("b3", "Roster Bench Three", "BN", ["C"]),
+    player("b4", "Roster Bench Four", "BN", ["C"]),
+    player("r1", "Roster Reserve One", "IR", ["C"]),
+    player("r2", "Roster Reserve Two", "IR+", ["C"]),
+  ];
+}
+
 const skate = { rule: "same_day", currentDate: "2026-10-31" } as const;
 
 function starting(position: string, count: number): Slot {
@@ -440,6 +618,10 @@ function player(
 
 function ref(key: string, name: string): PlayerRef {
   return { key, name };
+}
+
+function skater(key: string, name: string, positions: ReadonlyArray<string>): PlayerRef {
+  return { key, name, positions };
 }
 
 function move(

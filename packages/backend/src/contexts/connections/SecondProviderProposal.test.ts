@@ -70,7 +70,7 @@ it("orders an atlas drop before the move that needs the bench place", () => {
   }
 });
 
-it("names an atlas move and drop in owner terms when the drop frees another slot", () => {
+it("refuses only the atlas move whose drop frees another slot", () => {
   const decision = planProposalOrder({
     slots: secondProviderLeague.rosterPositions,
     players: atlasOrderPlayers,
@@ -83,13 +83,16 @@ it("names an atlas move and drop in owner terms when the drop frees another slot
 
   assert.strictEqual(decision.status, "conflict");
   if (decision.status === "conflict") {
-    assert.deepStrictEqual(decision.conflicts[0]?.items, ["move-fay-to-pg", "drop-dee"]);
+    assert.deepStrictEqual(decision.conflicts[0]?.items, ["move-fay-to-pg"]);
+    assert.deepStrictEqual(
+      decision.conflicts[0]?.reasons?.map((reason) => [reason.item, reason.code]),
+      [["move-fay-to-pg", "move_slot_full"]],
+    );
     const detail = decision.conflicts[0]?.detail ?? "";
     assert.include(detail, "Fay Reserve");
     assert.include(detail, "Dee Bench");
     assert.include(detail, "PG");
     assert.include(detail, "BENCH");
-    assert.include(detail, "cannot both be legal on 2026-11-03");
     assert.notInclude(detail, "Yahoo");
     assert.notInclude(detail, "yahoo");
     assert.notInclude(detail, "atlas");

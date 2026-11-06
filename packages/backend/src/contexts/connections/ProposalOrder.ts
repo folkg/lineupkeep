@@ -24,9 +24,9 @@ const neutralTier = makeAvailabilityTier("proposal-order");
 export function planProposalOrder(input: ProposalOrderInput): ProposalOrderPlan {
   const timing = timingOf(input.timing);
   const league = leagueOf(input.slots);
-  const locked = input.items.flatMap((item) => lockedConflicts(item, input.players, timing));
+  const locked = input.items.flatMap((item) => lockedReasons(item, input.players, timing));
   if (locked.length > 0) {
-    return conflictPlan(timing, locked);
+    return conflictPlan(timing, [refusalConflict(locked)]);
   }
   const ordered = orderSteps(input, league, timing);
   if (ordered.status === "conflict") {
@@ -88,6 +88,7 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
   const steps: Array<OrderedStep> = [];
   const held = new Set<string>();
   const initial = initialState(input.players);
+  const context: RefusalContext = { items: input.items, initial };
   let state = initial;
   let hold: ProposalOrderRepair | undefined;
 
@@ -99,12 +100,36 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
           rankOf(state, right.item, dropsOfPlayer, league) || left.index - right.index,
     );
     let chosen: { readonly entry: DeclaredItem; readonly state: RosterState } | undefined;
+    const refused: Array<BlockedItem> = [];
+    const waiting: Array<BlockedItem> = [];
     for (const entry of candidates) {
       const applied = applyDeclared(state, entry.item, league);
       if (applied.status === "refused") {
+        if (
+          applied.code === "move_slot_full" &&
+          freesDestination(state, entry.item, pending, league)
+        ) {
+          waiting.push({ entry, refusal: applied });
+        } else {
+          refused.push({ entry, refusal: applied });
+        }
         continue;
       }
-      if (awaitsPlace(state, entry.item, applied.state, items, league, declaredMoveKeys)) {
+      const readiness = awaitItem(
+        state,
+        applied.state,
+        entry.item,
+        pending,
+        league,
+        declaredMoveKeys,
+        context,
+      );
+      if (readiness.status === "wait") {
+        waiting.push({ entry, refusal: readiness.refusal });
+        continue;
+      }
+      if (readiness.status === "refused") {
+        refused.push({ entry, refusal: readiness.refusal });
         continue;
       }
       chosen = { entry, state: applied.state };
@@ -130,29 +155,38 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
     }
 
     const cycle = findCycle(state, items, league);
-    if (cycle === undefined) {
+    if (cycle !== undefined) {
+      const planned = planHold(state, cycle, held, league);
+      if (planned === undefined) {
+        return { status: "conflict", conflicts: cycleConflicts(state, cycle, league, timing) };
+      }
+      state = relocate(state, planned.playerKey, planned.toSlot);
+      held.add(planned.playerKey);
+      hold = planned;
+      continue;
+    }
+
+    if (refused.length > 0) {
       return {
         status: "conflict",
-        conflicts: schedulerConflicts(state, initial, input.items, items, league, timing),
+        conflicts: [itemRefusalConflict(refused, input.items, initial)],
       };
     }
-    const planned = planHold(state, cycle, held, league);
-    if (planned === undefined) {
-      return { status: "conflict", conflicts: cycleConflicts(state, cycle, league, timing) };
-    }
-    state = relocate(state, planned.playerKey, planned.toSlot);
-    held.add(planned.playerKey);
-    hold = planned;
+    return { status: "conflict", conflicts: waitingConflicts(waiting, timing) };
   }
 
-  const failure = placementFailure(state, league);
+  const failure = placementFailure(state, league, context);
   if (failure !== undefined) {
     return {
       status: "conflict",
       conflicts: [
         conflictWithReasons(
           input.items,
-          itemReasons(initial, input.items, league, declaredMoveKeys),
+          input.items.map((item) => ({
+            item: item.id,
+            code: failure.code,
+            detail: `${item.label}: ${failure.detail}`,
+          })),
           failure.detail,
           timing,
         ),
@@ -161,50 +195,140 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
   }
   const refusal = placementRefusal(state, league);
   if (refusal !== undefined) {
-    const detail = strandedDetail(state, league, refusal);
-    const reasons = itemReasons(initial, input.items, league, declaredMoveKeys);
+    const detail = strandedDetail(state, league, refusal, context);
+    const reasons = strandedReasons(input.items, refusal, detail);
     return {
       status: "conflict",
       conflicts: [
-        conflictWithReasons(
-          input.items,
-          reasons.length > 0 ? reasons : strandedReasons(input.items, refusal, detail),
-          detail,
-          timing,
-        ),
+        reasons.length > 0
+          ? refusalConflict(reasons)
+          : conflictWithReasons(input.items, [], detail, timing),
       ],
     };
   }
   return { status: "ordered", steps };
 }
 
-function awaitsPlace(
+type Readiness =
+  | { readonly status: "ready" }
+  | { readonly status: "wait"; readonly refusal: Refusal }
+  | { readonly status: "refused"; readonly refusal: Refusal };
+
+function awaitItem(
   state: RosterState,
-  item: ProposalOrderItem,
   applied: RosterState,
-  pending: ReadonlyArray<ProposalOrderItem>,
+  item: ProposalOrderItem,
+  pending: ReadonlyArray<DeclaredItem>,
+  league: League,
+  declaredMoveKeys: ReadonlySet<string>,
+  context: RefusalContext,
+): Readiness {
+  const others = pending.flatMap((entry) => (entry.item === item ? [] : [entry.item]));
+  const before = item.adds.length > 0 ? placementFailure(state, league, context) : undefined;
+  if (
+    item.adds.length > 0 &&
+    before !== undefined &&
+    !repairsBefore(state, applied, item, league, declaredMoveKeys)
+  ) {
+    return others.some((other) => curesPlacement(state, other, league))
+      ? { status: "wait", refusal: before }
+      : { status: "refused", refusal: before };
+  }
+  const after = placementFailure(applied, league, context);
+  if (after?.code !== "roster_full") {
+    return { status: "ready" };
+  }
+  if (repairsPlace(applied, item, league, declaredMoveKeys)) {
+    return { status: "ready" };
+  }
+  if (others.some((other) => freesPlace(state, other, league))) {
+    return { status: "wait", refusal: after };
+  }
+  return { status: "refused", refusal: after };
+}
+
+function repairsBefore(
+  state: RosterState,
+  applied: RosterState,
+  item: ProposalOrderItem,
   league: League,
   declaredMoveKeys: ReadonlySet<string>,
 ): boolean {
-  if (item.adds.length === 0) {
+  if (!item.mayRepair) {
     return false;
   }
-  if (placementFailure(applied, league)?.code !== "roster_full") {
-    return false;
-  }
-  const blocked = new Set([
+  const repaired = planRepair(
+    applied,
+    league,
+    blockedKeys(item, declaredMoveKeys),
+    declaredMoveKeys,
+  );
+  return (
+    repaired !== undefined &&
+    isLegal(relocate(state, repaired.repair.playerKey, repaired.repair.toSlot), league)
+  );
+}
+
+function repairsPlace(
+  state: RosterState,
+  item: ProposalOrderItem,
+  league: League,
+  declaredMoveKeys: ReadonlySet<string>,
+): boolean {
+  return (
+    item.mayRepair &&
+    planRepair(state, league, blockedKeys(item, declaredMoveKeys), declaredMoveKeys) !== undefined
+  );
+}
+
+function blockedKeys(
+  item: ProposalOrderItem,
+  declaredMoveKeys: ReadonlySet<string>,
+): ReadonlySet<string> {
+  return new Set([
     ...declaredMoveKeys,
     ...item.adds.map((add) => add.key),
     ...item.drops.map((drop) => drop.key),
   ]);
-  if (item.mayRepair && planRepair(applied, league, blocked, declaredMoveKeys) !== undefined) {
+}
+
+function curesPlacement(state: RosterState, item: ProposalOrderItem, league: League): boolean {
+  if (item.drops.some((drop) => illegalOccupant(state, drop.key, league))) {
+    return true;
+  }
+  return item.move !== undefined && illegalOccupant(state, item.move.player.key, league);
+}
+
+function freesDestination(
+  state: RosterState,
+  item: ProposalOrderItem,
+  pending: ReadonlyArray<DeclaredItem>,
+  league: League,
+): boolean {
+  if (item.move === undefined) {
     return false;
   }
-  return pending.some((other) => other !== item && freesPlace(state, other, league));
+  const destination = league.byPosition.get(item.move.toSlot);
+  if (destination === undefined) {
+    return false;
+  }
+  const occupants = [...state.values()].filter((player) => player.slot === destination.position);
+  return pending.some(
+    (entry) =>
+      entry.item !== item &&
+      (entry.item.drops.some((drop) => occupants.some((player) => player.key === drop.key)) ||
+        (entry.item.move !== undefined &&
+          occupants.some((player) => player.key === entry.item.move?.player.key))),
+  );
 }
 
 function freesPlace(state: RosterState, item: ProposalOrderItem, league: League): boolean {
-  if (item.drops.some((drop) => !inReserve(state.get(drop.key), league))) {
+  if (
+    item.drops.some((drop) => {
+      const dropped = state.get(drop.key);
+      return dropped !== undefined && !inReserve(dropped, league);
+    })
+  ) {
     return true;
   }
   const mover = item.move === undefined ? undefined : state.get(item.move.player.key);
@@ -403,33 +527,6 @@ function applyDeclared(state: RosterState, item: ProposalOrderItem, league: Leag
   return { status: "applied", state: next };
 }
 
-function itemRefusal(
-  state: RosterState,
-  item: ProposalOrderItem,
-  league: League,
-  declaredMoveKeys: ReadonlySet<string>,
-): Refusal | undefined {
-  const applied = applyDeclared(state, item, league);
-  if (applied.status === "refused") {
-    return applied;
-  }
-  const failure = placementFailure(applied.state, league);
-  if (failure === undefined) {
-    return undefined;
-  }
-  if (item.mayRepair) {
-    const blocked = new Set([
-      ...declaredMoveKeys,
-      ...item.adds.map((add) => add.key),
-      ...item.drops.map((drop) => drop.key),
-    ]);
-    if (planRepair(applied.state, league, blocked, declaredMoveKeys) !== undefined) {
-      return undefined;
-    }
-  }
-  return failure;
-}
-
 function planRepair(
   state: RosterState,
   league: League,
@@ -519,7 +616,11 @@ function repairOf(player: RosterMember, fromSlot: string, toSlot: string): Propo
   };
 }
 
-function placementFailure(state: RosterState, league: League): CompositionRefusal | undefined {
+function placementFailure(
+  state: RosterState,
+  league: League,
+  context?: RefusalContext,
+): CompositionRefusal | undefined {
   const occupancy = new Map<string, number>();
   let nonReserve = 0;
   let illegal: RosterMember | undefined;
@@ -545,23 +646,48 @@ function placementFailure(state: RosterState, league: League): CompositionRefusa
     }
   }
   if (nonReserve > league.capacity) {
+    const already =
+      context !== undefined &&
+      context.items.some((item) => freesPlace(context.initial, item, league));
     return {
       code: "roster_full",
-      detail: `The team would hold ${String(nonReserve)} players outside its reserve slots, but the league allows ${String(league.capacity)}. Add a drop item for a player outside a reserve slot, or a slot move into a reserve slot, to this set.`,
+      detail: `The team would hold ${String(nonReserve)} players outside its reserve slots, but the league allows ${String(league.capacity)}. ${
+        already
+          ? "This set already contains roster changes, and they do not free another place."
+          : "Add a drop item for a player outside a reserve slot, or a slot move into a reserve slot, to this set."
+      }`,
     };
   }
   if (illegal?.slot !== undefined) {
+    const already =
+      context !== undefined &&
+      context.items.some(
+        (item) =>
+          item.drops.some((drop) => drop.key === illegal.key) ||
+          item.move?.player.key === illegal.key,
+      );
     return {
       code: "slot_illegal",
-      detail: `${slotMismatchDetail({ name: illegal.name, slot: illegal.slot, positions: illegal.positions })} No open slot accepts them, and choosing which player to drop is yours. Add that drop to this set, or add a slot move that gives them a legal slot.`,
+      detail: `${slotMismatchDetail({ name: illegal.name, slot: illegal.slot, positions: illegal.positions })} No open slot accepts them, and choosing which player to drop is yours. ${
+        already
+          ? "This set already names their drop or a slot move for them."
+          : "Add that drop to this set, or add a slot move that gives them a legal slot."
+      }`,
     };
   }
   for (const [position, count] of occupancy) {
     const slot = league.byPosition.get(position);
     if (slot !== undefined && count > slot.count) {
+      const already =
+        context !== undefined &&
+        context.items.some((item) => item.drops.length > 0 || item.move !== undefined);
       return {
         code: "slot_illegal",
-        detail: `The ${position} slot holds ${String(count)} players, but the league allows ${String(slot.count)}. Add a move that resolves it to this set.`,
+        detail: `The ${position} slot holds ${String(count)} players, but the league allows ${String(slot.count)}. ${
+          already
+            ? "This set already contains roster changes, and none resolves it."
+            : "Add a move that resolves it to this set."
+        }`,
       };
     }
   }
@@ -651,11 +777,11 @@ function occupancyOf(state: RosterState, slot: string): number {
   return count;
 }
 
-function lockedConflicts(
+function lockedReasons(
   item: ProposalOrderItem,
   players: ReadonlyArray<ProposalOrderPlayer>,
   timing: Timing,
-): ReadonlyArray<ProposalOrderPlanConflict> {
+): ReadonlyArray<ConflictReason> {
   if (item.move === undefined) {
     return [];
   }
@@ -665,76 +791,28 @@ function lockedConflicts(
   }
   return [
     {
-      items: [item.id],
-      detail: `${player.name} is locked, and the league applies roster changes ${timing.phrase}, so moving them to ${item.move.toSlot} cannot be legal ${timing.moment}.`,
+      item: item.id,
+      code: "move_locked",
+      detail: `${item.label}: ${player.name} is locked, and the league applies roster changes ${timing.phrase}, so moving them to ${item.move.toSlot} cannot be legal ${timing.moment}.`,
     },
   ];
 }
 
-function schedulerConflicts(
-  state: RosterState,
-  initial: RosterState,
-  items: ReadonlyArray<ProposalOrderItem>,
-  pending: ReadonlyArray<ProposalOrderItem>,
-  league: League,
+function waitingConflicts(
+  waiting: ReadonlyArray<BlockedItem>,
   timing: Timing,
 ): ReadonlyArray<ProposalOrderPlanConflict> {
-  const blocked = pending.flatMap((item) => {
-    const applied = applyDeclared(state, item, league);
-    return applied.status === "refused" &&
-      item.move !== undefined &&
-      applied.code === "move_slot_full"
-      ? [{ item, detail: applied.detail }]
-      : [];
-  });
-  const conflicts: Array<ProposalOrderPlanConflict> = [];
-  for (const entry of blocked) {
-    if (conflicts.length >= conflictLimit) {
-      break;
-    }
-    const destination = entry.item.move?.toSlot;
-    if (destination === undefined) {
-      continue;
-    }
-    const competitors = items.filter(
-      (other) => other !== entry.item && other.move?.toSlot === destination,
-    );
-    if (competitors.length > 0) {
-      conflicts.push({
-        items: [entry.item.id, ...competitors.map((other) => other.id)],
-        detail: `${entry.detail} ${pairSentence(timing)}`,
-      });
-      continue;
-    }
-    const drops = items.filter(
-      (other) =>
-        other !== entry.item &&
-        other.drops.some((drop) => {
-          const player = initial.get(drop.key);
-          return player !== undefined && player.slot !== destination;
-        }),
-    );
-    if (drops.length === 0) {
-      conflicts.push({
-        items: [entry.item.id],
-        detail: `${entry.detail} ${generalSentence(timing)}`,
-      });
-      continue;
-    }
-    for (const drop of drops) {
-      if (conflicts.length >= conflictLimit) {
-        break;
-      }
-      const note = freedSlotNote(entry.item, drop, initial);
-      conflicts.push({
-        items: [entry.item.id, drop.id],
-        detail: `${entry.detail}${note === undefined ? "" : ` ${note}`} ${pairSentence(timing)}`,
-      });
-    }
+  if (waiting.length === 0) {
+    return [];
   }
-  return conflicts.length > 0
-    ? conflicts
-    : [conflictWithReasons(pending, itemReasons(state, pending, league), "", timing)];
+  return [
+    {
+      items: waiting.map((blocked) => blocked.entry.item.id),
+      detail: `No operation can go first: ${waiting
+        .map((blocked) => `${blocked.entry.item.label}: ${blocked.refusal.detail}`)
+        .join(" ")} The set cannot be ordered ${timing.phrase}.`,
+    },
+  ];
 }
 
 function cycleConflicts(
@@ -779,18 +857,48 @@ function conflictWithReasons(
   };
 }
 
-function itemReasons(
-  initial: RosterState,
+function itemRefusalConflict(
+  refused: ReadonlyArray<BlockedItem>,
   items: ReadonlyArray<ProposalOrderItem>,
-  league: League,
-  declaredMoveKeys: ReadonlySet<string> = declaredMovers(items),
-): ReadonlyArray<ConflictReason> {
-  return items.flatMap((item) => {
-    const refused = itemRefusal(initial, item, league, declaredMoveKeys);
-    return refused === undefined
-      ? []
-      : [{ item: item.id, code: refused.code, detail: `${item.label}: ${refused.detail}` }];
+  initial: RosterState,
+): ProposalOrderPlanConflict {
+  const reasons = refused.map((item) => {
+    const note =
+      item.refusal.code === "move_slot_full"
+        ? freedDestinationNote(item.entry.item, items, initial)
+        : undefined;
+    return {
+      item: item.entry.item.id,
+      code: item.refusal.code,
+      detail: `${item.entry.item.label}: ${item.refusal.detail}${note === undefined ? "" : ` ${note}`}`,
+    };
   });
+  return refusalConflict(reasons);
+}
+
+function freedDestinationNote(
+  moveItem: ProposalOrderItem,
+  items: ReadonlyArray<ProposalOrderItem>,
+  initial: RosterState,
+): string | undefined {
+  for (const item of items) {
+    if (item === moveItem) {
+      continue;
+    }
+    const note = freedSlotNote(moveItem, item, initial);
+    if (note !== undefined) {
+      return note;
+    }
+  }
+  return undefined;
+}
+
+function refusalConflict(reasons: ReadonlyArray<ConflictReason>): ProposalOrderPlanConflict {
+  return {
+    items: reasons.map((reason) => reason.item),
+    detail: reasons.map((reason) => reason.detail).join(" "),
+    reasons,
+  };
 }
 
 function strandedReasons(
@@ -804,12 +912,17 @@ function strandedReasons(
       : new Set<string>();
   return items.flatMap((item) =>
     item.adds.some((add) => playerIds.has(add.key))
-      ? [{ item: item.id, code: "slot_illegal" as const, detail }]
+      ? [{ item: item.id, code: "slot_illegal" as const, detail: `${item.label}: ${detail}` }]
       : [],
   );
 }
 
-function strandedDetail(state: RosterState, league: League, refusal: LineupRefusal): string {
+function strandedDetail(
+  state: RosterState,
+  league: League,
+  refusal: LineupRefusal,
+  context?: RefusalContext,
+): string {
   const key =
     refusal.reason === "player-has-no-legal-slot" || refusal.reason === "no-legal-assignment"
       ? String(refusal.playerIds[0])
@@ -819,7 +932,14 @@ function strandedDetail(state: RosterState, league: League, refusal: LineupRefus
   if (player === undefined) {
     return failure?.detail ?? "The roster cannot be made legal.";
   }
-  return `${player.name} cannot be placed in any open slot in this league: no open slot accepts their positions (${player.positions.join(", ")}). Add a drop item for a player in a slot that accepts them, or a slot move that gives them a legal slot, to this set.`;
+  const already =
+    context !== undefined &&
+    context.items.some((item) => freesPlace(context.initial, item, league));
+  return `${player.name} cannot be placed in any open slot in this league: no open slot accepts their positions (${player.positions.join(", ")}). ${
+    already
+      ? "This set's drops and slot moves do not leave a slot that accepts them."
+      : "Add a drop item for a player in a slot that accepts them, or a slot move that gives them a legal slot, to this set."
+  }`;
 }
 
 function declaredMovers(items: ReadonlyArray<ProposalOrderItem>): ReadonlySet<string> {
@@ -937,6 +1057,16 @@ type Refusal = {
   readonly detail: string;
 };
 
+type BlockedItem = {
+  readonly entry: DeclaredItem;
+  readonly refusal: Refusal;
+};
+
+type RefusalContext = {
+  readonly items: ReadonlyArray<ProposalOrderItem>;
+  readonly initial: RosterState;
+};
+
 type ConflictReason = {
   readonly item: string;
   readonly code: ProposalOrderRefusalCode;
@@ -1020,7 +1150,7 @@ type ProposalOrderPlanConflict = {
   readonly reasons?: ReadonlyArray<ConflictReason>;
 };
 
-type ProposalOrderRefusalCode =
+export type ProposalOrderRefusalCode =
   | "roster_full"
   | "slot_illegal"
   | "move_not_rostered"

@@ -7,6 +7,7 @@ import type {
   ProposalOrderItem,
   ProposalOrderPlan,
   ProposalOrderPlayer,
+  ProposalOrderRefusalCode,
 } from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProviderCapabilities,
@@ -53,6 +54,7 @@ import {
   ProposalSetExpired,
   ProposalSetNotFound,
   ProposalSetReview as ProposalSetReviewSchema,
+  ProposalStaleCode,
   ProposalTeam as ProposalTeamSchema,
   ProposalTeamNotFound,
   ProposalTradeNotFound,
@@ -1988,7 +1990,10 @@ export const TransactionProposalsLive = Layer.effect(
 
 type TeamPlan = {
   readonly plan: ProposalOrderPlan | undefined;
-  readonly refused: ReadonlyMap<string, { readonly code: string; readonly detail: string }>;
+  readonly refused: ReadonlyMap<
+    string,
+    { readonly code: ProposalOrderRefusalCode; readonly detail: string }
+  >;
 };
 
 function orderFor(
@@ -2025,15 +2030,16 @@ function orderFor(
     rule: facts.league.rosterChange?.rule,
     currentDate: facts.league.currentDate,
   };
-  const refused = new Map<string, { readonly code: string; readonly detail: string }>();
+  const refused = new Map<
+    string,
+    { readonly code: ProposalOrderRefusalCode; readonly detail: string }
+  >();
   for (;;) {
     const plan = planProposalOrder({ slots, players, timing, items: remaining });
     if (plan.status !== "conflict") {
       return { plan, refused };
     }
-    const blocked = plan.conflicts
-      .flatMap((conflict) => conflict.reasons ?? [])
-      .filter((reason) => reason.code === "roster_full" || reason.code === "slot_illegal");
+    const blocked = plan.conflicts.flatMap((conflict) => conflict.reasons ?? []);
     const removed = new Set(blocked.map((reason) => reason.item));
     if (removed.size === 0) {
       return { plan, refused };
@@ -2109,6 +2115,25 @@ function orderItemLabel(
   return drops.length > 0 ? `Drop ${names(drops)}` : "This move";
 }
 
+function proposalStaleCode(code: ProposalOrderRefusalCode): ProposalStaleCode {
+  switch (code) {
+    case "roster_full":
+      return "roster_full";
+    case "move_not_rostered":
+      return "move_not_rostered";
+    case "move_slot_unknown":
+      return "move_slot_unknown";
+    case "drop_not_rostered":
+      return "drop_not_rostered";
+    case "add_already_rostered":
+      return "player_unavailable";
+    case "move_locked":
+    case "move_slot_full":
+    case "slot_illegal":
+      return "slot_illegal";
+  }
+}
+
 function orderChanges(
   changes: ReadonlyArray<ProposalItemChange>,
   items: ReadonlyArray<ProposalItemRecord>,
@@ -2151,13 +2176,12 @@ function orderChanges(
     }
     const called = teamPlan.refused.get(change.id);
     if (called !== undefined) {
+      const code = proposalStaleCode(called.code);
       return {
         ...change,
-        ...(called.code === "roster_full"
-          ? { staleness: staleCheck([{ code: "roster_full", detail: called.detail }], at) }
-          : {
-              staleness: checked([], [{ code: "slot_illegal", detail: called.detail }], at),
-            }),
+        ...(code === "roster_full"
+          ? { staleness: staleCheck([{ code, detail: called.detail }], at) }
+          : { staleness: checked([], [{ code, detail: called.detail }], at) }),
       };
     }
     const repair = repairs.get(change.id);
