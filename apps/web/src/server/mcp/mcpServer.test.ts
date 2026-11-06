@@ -412,6 +412,7 @@ it("lists only the read-only connection tool without exposing account identity",
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
+    "add_team_agent_note",
     "submit_feedback",
     "list_feedback",
   ]);
@@ -731,6 +732,7 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
         },
         roster: [],
         ownerNote: { status: "not_set" },
+        agentNotes: [],
         coverage: [],
         failures: [],
         page: { returned: 0, complete: true, remaining: 0 },
@@ -1145,6 +1147,81 @@ it("requires teams:manage and changes automation through the shared team service
   expect(enabled).toBe(true);
 });
 
+it("requires notes:write and attributes an agent note to the authenticated client", async () => {
+  const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
+  const team = decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164c1");
+  const recorded: Array<{ userId: string; author: unknown; input: unknown }> = [];
+  const teams: TeamsShape = {
+    ...unavailableTeams,
+    addAgentNote: (userId, author, input) => {
+      recorded.push({ userId, author, input });
+      return Effect.succeed({ team: input.team, author, body: input.body, writtenAt: at });
+    },
+  };
+  const withClient: AuthService["Service"] = {
+    ...authenticationService,
+    resolveAccessToken: (token, scopes) => {
+      const granted = token.startsWith("notes")
+        ? ["fantasy:read", "notes:write"]
+        : ["fantasy:read"];
+      return Effect.succeed(
+        scopes.every((scope) => granted.includes(scope))
+          ? {
+              status: "authenticated" as const,
+              userId: decodeUserId("reader"),
+              ...(token === "notes" ? { clientId: "client-note", clientName: "Note Agent" } : {}),
+            }
+          : { status: "insufficient_scope" as const },
+      );
+    },
+  };
+  const services = Layer.mergeAll(
+    Layer.succeed(AuthService)(withClient),
+    permissiveQuota,
+    Layer.succeed(Connections)(unavailableConnections),
+    Layer.succeed(FantasyQueries)(unavailableQueries),
+    Layer.succeed(TransactionProposals)(unavailableProposals),
+    Layer.succeed(LineupRuns)(unavailableLineups),
+    Layer.succeed(Teams)(teams),
+    Layer.succeed(Feedback)(unavailableFeedback),
+  );
+  const call = (token: string, body: string): Promise<Response> =>
+    handleMcpRequest(
+      request("tools/call", { name: "add_team_agent_note", arguments: { team, body } }, token),
+      (_request, _operation, program) => Effect.runPromise(Effect.provide(program, services)),
+    );
+
+  const denied = await call("read", "The goalie bubble is thin.");
+  const allowed = await call("notes", "The manager hoards goaltenders.");
+  const unattributed = await call("notes-without-client", "This has no client.");
+
+  expect(denied.status).toBe(403);
+  expect(denied.headers.get("www-authenticate")).toContain('scope="notes:write"');
+  const allowedBody = await json(allowed);
+  expect(allowedBody).toMatchObject({
+    result: {
+      isError: false,
+      structuredContent: {
+        team,
+        author: { clientId: "client-note", name: "Note Agent" },
+        body: "The manager hoards goaltenders.",
+        writtenAt: "2026-10-25T12:00:00.000Z",
+      },
+    },
+  });
+  expect(recorded).toEqual([
+    {
+      userId: "reader",
+      author: { clientId: "client-note", name: "Note Agent" },
+      input: { team, body: "The manager hoards goaltenders." },
+    },
+  ]);
+  const unattributedBody = await json(unattributed);
+  expect(unattributedBody).toMatchObject({ result: { isError: true } });
+  expect(JSON.stringify(unattributedBody)).toContain("identified client");
+  expect(recorded).toHaveLength(1);
+});
+
 it("records agent feedback for the authenticated account on a read grant", async () => {
   const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
   const submitted: Array<{ readonly userId: string; readonly submitter: unknown }> = [];
@@ -1335,7 +1412,7 @@ const permissiveQuota = Layer.succeed(ToolCallQuota)({
   consume: () => Effect.succeed({ allowed: true as const }),
 });
 
-const authentication = Layer.succeed(AuthService)({
+const authenticationService: AuthService["Service"] = {
   signInMethods: { google: false },
   oauthResource: "https://connections.example/mcp",
   onboardingScopes: [
@@ -1365,7 +1442,8 @@ const authentication = Layer.succeed(AuthService)({
         : { status: "insufficient_scope" as const },
     );
   },
-});
+};
+const authentication = Layer.succeed(AuthService)(authenticationService);
 const unavailableConnections: ConnectionsShape = {
   list: () => Effect.succeed([]),
   link: () => Effect.succeed([]),
@@ -1424,6 +1502,7 @@ const unavailableTeams: TeamsShape = {
   get: () => Effect.die(new Error("teams unavailable")),
   control: () => Effect.die(new Error("teams unavailable")),
   saveNote: () => Effect.die(new Error("teams unavailable")),
+  addAgentNote: () => Effect.die(new Error("teams unavailable")),
 };
 const unavailableFeedback: FeedbackShape = {
   submit: () => Effect.die(new Error("feedback unavailable")),
@@ -1515,6 +1594,10 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(rosterOutput).toContain('"total"');
   expect(tool("get_league").description).toContain("inline player name");
   expect(tool("get_pending_trade_offers").description).toContain("ownerNote");
+  expect(tool("add_team_agent_note").description).toContain("client memory");
+  expect(tool("add_team_agent_note").description).toContain("owner's note");
+  expect(tool("add_team_agent_note").description).toContain("append-only");
+  expect(JSON.stringify(tool("add_team_agent_note").outputSchema)).toContain("writtenAt");
 
   const league = tool("get_league");
   expect(JSON.stringify(league.inputSchema)).toContain("standingsDetail");

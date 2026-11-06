@@ -7,6 +7,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -100,13 +101,35 @@ export const providerTeams = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.connectionId, table.providerTeamKey] }),
-    uniqueIndex("provider_teams_id_idx").on(table.id),
+    unique("provider_teams_id_unique").on(table.id),
     index("provider_teams_user_id_league_name_idx").on(table.userId, table.league, table.name),
     index("provider_teams_user_id_automation_status_idx").on(table.userId, table.automationStatus),
     index("provider_teams_automation_status_availability_idx").on(
       table.automationStatus,
       table.availability,
     ),
+  ],
+);
+
+export const providerTeamAgentNotes = pgTable(
+  "provider_team_agent_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => providerTeams.id, { onDelete: "cascade" }),
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => providerConnections.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    body: text("body").notNull(),
+    authorName: text("author_name"),
+    authorClientId: text("author_client_id").notNull(),
+    writtenAt: timestamp("written_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("provider_team_agent_notes_team_written_at_idx").on(table.teamId, table.writtenAt),
+    index("provider_team_agent_notes_user_id_team_id_idx").on(table.userId, table.teamId),
   ],
 );
 
@@ -263,6 +286,17 @@ function stateFromAutomation(automation: TeamAutomation): TeamAutomationState {
       };
   }
 }
+
+export const AgentNoteRow = createSelectSchema(providerTeamAgentNotes, {
+  id: Schema.String,
+  teamId: TeamId,
+  connectionId: ConnectionId,
+  userId: UserId,
+  body: Schema.NonEmptyString,
+  authorName: Schema.NullOr(Schema.NonEmptyString),
+  authorClientId: Schema.NonEmptyString,
+  writtenAt: Schema.DateTimeUtcFromDate,
+});
 
 const Row = createSelectSchema(providerConnections, {
   id: ConnectionId,

@@ -1,6 +1,7 @@
 import { DateTime, Effect, Layer } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import { checkAgentNote } from "#contexts/connections/AgentNote.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import { currentFantasyDayStart } from "#contexts/connections/FantasyDay.ts";
 import type { TeamAutomation } from "#contexts/connections/FantasyTeam.ts";
@@ -11,6 +12,7 @@ import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import type { ProviderRegistryShape } from "#contexts/connections/ProviderRegistry.ts";
 import { checkTeamNote } from "#contexts/connections/TeamNote.ts";
 import {
+  TeamAgentNoteRejected,
   TeamNotFound,
   TeamPersistenceFailed,
   TeamNoteRejected,
@@ -160,7 +162,27 @@ export const TeamsLive = Layer.effect(
         } satisfies TeamNoteSaved;
       });
 
-    return Teams.of({ list, get, control, saveNote });
+    const addAgentNote: TeamsShape["addAgentNote"] = (userId, author, input) =>
+      Effect.gen(function* () {
+        const checked = checkAgentNote(input.body);
+        if (!checked.valid) {
+          return yield* TeamAgentNoteRejected.make({
+            team: input.team,
+            reason: checked.reason,
+            message: checked.message,
+          });
+        }
+        const saved = yield* teams.addAgentNote(userId, author, {
+          team: input.team,
+          body: checked.body,
+        });
+        yield* Effect.annotateCurrentSpan({
+          "team.agent_note_chars": Array.from(checked.body).length,
+        });
+        return saved;
+      });
+
+    return Teams.of({ list, get, control, saveNote, addAgentNote });
   }),
 );
 

@@ -2120,6 +2120,7 @@ export const FantasyQueriesLive = Layer.effect(
     ) {
       const context = yield* loadContext(userId, input.team);
       const team = queryTeam(context.owned);
+      const agentNotes = yield* repository.recentAgentNotes(userId, input.team);
       const fetchedAt = yield* DateTime.now;
       const groups = [...new Set(input.groups ?? defaultSummaryGroups)];
       if (groups.length === 0) {
@@ -2910,6 +2911,7 @@ export const FantasyQueriesLive = Layer.effect(
             }
           : {}),
         ownerNote: ownerNoteOf(context.owned.team),
+        agentNotes,
         coverage: coverageEntries,
         failures,
         budget: summaryBudget,

@@ -41,6 +41,7 @@ it.effect(
         "Agent grants",
         "Agent rate limits",
         "Agent refresh tokens",
+        "Agent team notes",
         "Connection incidents",
         "Exports you downloaded",
         "Fantasy teams",
@@ -112,6 +113,7 @@ it.effect(
         "software-statement-owner",
         otherOwner.sessionToken,
         otherOwner.providerEnvelope,
+        otherOwner.agentNoteBody,
       ]) {
         assert.isFalse(exported.includes(secret), `the export contains ${secret}`);
       }

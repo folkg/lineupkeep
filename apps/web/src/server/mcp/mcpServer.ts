@@ -1,5 +1,4 @@
-import type { AuthService } from "@lineupkeep/backend/auth/Auth";
-import type { UserId } from "@lineupkeep/backend/auth/User";
+import type { AuthenticatedAgent, AuthService } from "@lineupkeep/backend/auth/Auth";
 import type { Connections } from "@lineupkeep/backend/connections/Connections";
 import type { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
 import type { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
@@ -31,19 +30,19 @@ export const applicationTools = Toolkit.merge(
   feedbackTools,
 );
 const applicationHandlers = (
-  userId: UserId,
+  agent: AuthenticatedAgent,
 ): Layer.Layer<
   Tool.HandlersFor<Toolkit.Tools<typeof applicationTools>>,
   never,
   Connections | FantasyQueries | TransactionProposals | LineupRuns | Teams | Feedback | AuthService
 > =>
   Layer.mergeAll(
-    connectionToolHandlers(userId),
-    fantasyQueryToolHandlers(userId),
-    proposalToolHandlers(userId),
-    lineupToolHandlers(userId),
-    teamToolHandlers(userId),
-    feedbackToolHandlers(userId),
+    connectionToolHandlers(agent),
+    fantasyQueryToolHandlers(agent),
+    proposalToolHandlers(agent),
+    lineupToolHandlers(agent),
+    teamToolHandlers(agent),
+    feedbackToolHandlers(agent),
   );
 
 export function handleMcpRequest(

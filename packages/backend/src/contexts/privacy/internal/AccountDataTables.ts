@@ -152,6 +152,13 @@ export const ownedDataInventory: ReadonlyArray<OwnedDataClass> = [
     ],
   },
   {
+    table: "provider_team_agent_notes",
+    label: "Agent team notes",
+    needsAccountIdentity: false,
+    where: ownerRows("user_id"),
+    withheld: [],
+  },
+  {
     table: "provider_teams",
     label: "Fantasy teams",
     needsAccountIdentity: false,

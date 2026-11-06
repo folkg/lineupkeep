@@ -1,8 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import type { TeamAgentNote } from "#contexts/connections/AgentNote.ts";
+import { recentAgentNoteLimit } from "#contexts/connections/AgentNote.ts";
 import {
   ConnectionCredentialGeneration,
   ConnectionId,
@@ -21,9 +23,11 @@ import { anyOf } from "#database/dbUtilities.ts";
 import { ConnectionRepository } from "./ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import {
+  AgentNoteRow,
   FantasyTeamRow,
   providerConnections,
   providerCredentials,
+  providerTeamAgentNotes,
   providerTeams,
 } from "./ConnectionTables.ts";
 
@@ -255,6 +259,34 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         return owned;
       });
 
+      const recentAgentNotes = Effect.fn("QueryRepository.recentAgentNotes")(function* (
+        userId: UserId,
+        teamId: TeamId,
+      ) {
+        const rows = yield* database
+          .select()
+          .from(providerTeamAgentNotes)
+          .where(
+            and(
+              eq(providerTeamAgentNotes.userId, userId),
+              eq(providerTeamAgentNotes.teamId, teamId),
+            ),
+          )
+          .orderBy(desc(providerTeamAgentNotes.writtenAt), desc(providerTeamAgentNotes.id))
+          .limit(recentAgentNoteLimit)
+          .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
+        return yield* Effect.forEach(rows, (row) =>
+          Schema.decodeEffect(AgentNoteRow)(row).pipe(
+            Effect.map((stored): TeamAgentNote => ({
+              author: { clientId: stored.authorClientId, name: stored.authorName },
+              body: stored.body,
+              writtenAt: stored.writtenAt,
+            })),
+            Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })),
+          ),
+        );
+      });
+
       const readLeagueOwnedTeamKeys = Effect.fn("QueryRepository.readLeagueOwnedTeamKeys")(
         function* (input: {
           readonly userId: UserId;
@@ -310,6 +342,7 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
       return {
         loadOwnedTeam,
         loadOwnedTeams,
+        recentAgentNotes,
         readLeagueOwnedTeamKeys,
         recordSessionRejected,
         recordSessionRejectedMany,

@@ -1,6 +1,6 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
+import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import type { AuthorizationScope } from "@lineupkeep/backend/auth/AuthorizationScopes";
-import type { UserId } from "@lineupkeep/backend/auth/User";
 import { ToolCallQuota } from "@lineupkeep/backend/toolCalls/ToolCallQuota";
 import type {
   ToolCallDecision,
@@ -16,7 +16,7 @@ import { RequiredScope, toolCallClass } from "./toolAuthorization";
 export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<string, Tool.Any>, R>(
   request: Request,
   toolkit: Toolkit.Toolkit<Tools>,
-  handlers: (userId: UserId) => Layer.Layer<Tool.HandlersFor<Tools>, never, R>,
+  handlers: (agent: AuthenticatedAgent) => Layer.Layer<Tool.HandlersFor<Tools>, never, R>,
   application: ApplicationIdentity,
 ) {
   const auth = yield* AuthService;
@@ -56,7 +56,7 @@ export const mcpRequest = Effect.fnUntraced(function* <Tools extends Record<stri
     });
     return invalid;
   }
-  return yield* serveToolkit(request, toolkit, handlers(identity.userId), resource, application);
+  return yield* serveToolkit(request, toolkit, handlers(identity), resource, application);
 }, Effect.scoped);
 
 function readInvocation<Tools extends Record<string, Tool.Any>>(
@@ -199,7 +199,7 @@ function challengeResponse(
 
 function quotaRefusal(
   invocation: Invocation,
-  identity: { readonly userId: UserId; readonly clientId?: string },
+  identity: AuthenticatedAgent,
 ): Effect.Effect<Response | undefined, ToolCallQuotaUnavailable, ToolCallQuota> {
   return Effect.gen(function* () {
     const call = invocation.call;

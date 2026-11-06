@@ -1,4 +1,4 @@
-import type { UserId } from "@lineupkeep/backend/auth/User";
+import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
 import {
   CalendarResult,
@@ -151,21 +151,21 @@ export const fantasyQueryTools = Toolkit.make(
 );
 
 export function fantasyQueryToolHandlers(
-  userId: UserId,
+  agent: AuthenticatedAgent,
 ): Layer.Layer<Tool.HandlersFor<Toolkit.Tools<typeof fantasyQueryTools>>, never, FantasyQueries> {
   return fantasyQueryTools.toLayer(
     Effect.gen(function* () {
       const queries = yield* FantasyQueries;
       return fantasyQueryTools.of({
-        list_teams: (input) => queries.listTeams(userId, input).pipe(mapOutcome),
-        get_calendar: (input) => queries.getCalendar(userId, input).pipe(mapOutcome),
-        get_league: (input) => queries.getLeague(userId, input).pipe(mapOutcome),
-        get_rosters: (input) => queries.getRosters(userId, input).pipe(mapOutcome),
-        search_players: (input) => queries.searchPlayers(userId, input).pipe(mapOutcome),
-        get_players: (input) => queries.getPlayers(userId, input).pipe(mapOutcome),
-        get_matchups: (input) => queries.getMatchups(userId, input).pipe(mapOutcome),
-        get_team_summary: (input) => queries.getTeamSummary(userId, input).pipe(mapOutcome),
-        get_transactions: (input) => queries.getTransactions(userId, input).pipe(mapOutcome),
+        list_teams: (input) => queries.listTeams(agent.userId, input).pipe(mapOutcome),
+        get_calendar: (input) => queries.getCalendar(agent.userId, input).pipe(mapOutcome),
+        get_league: (input) => queries.getLeague(agent.userId, input).pipe(mapOutcome),
+        get_rosters: (input) => queries.getRosters(agent.userId, input).pipe(mapOutcome),
+        search_players: (input) => queries.searchPlayers(agent.userId, input).pipe(mapOutcome),
+        get_players: (input) => queries.getPlayers(agent.userId, input).pipe(mapOutcome),
+        get_matchups: (input) => queries.getMatchups(agent.userId, input).pipe(mapOutcome),
+        get_team_summary: (input) => queries.getTeamSummary(agent.userId, input).pipe(mapOutcome),
+        get_transactions: (input) => queries.getTransactions(agent.userId, input).pipe(mapOutcome),
       });
     }),
   );

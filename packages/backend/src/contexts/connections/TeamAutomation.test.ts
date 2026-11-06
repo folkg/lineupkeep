@@ -2,7 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, beforeEach, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { and, eq } from "drizzle-orm";
-import { Array, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Array, DateTime, Duration, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { Config } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -10,6 +10,7 @@ import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { DatabaseConnection } from "#database/DatabaseConnection.ts";
 import { PostgresLive } from "#database/internal/PostgresLive.ts";
 
+import { agentNoteLimit } from "./AgentNote.ts";
 import { Connections } from "./Connections.ts";
 import { decodeTeamId } from "./FantasyTeam.ts";
 import type { TeamAutomation, TeamId } from "./FantasyTeam.ts";
@@ -38,6 +39,7 @@ import { LineupRequestInput } from "./LineupRun.ts";
 import { LineupRuns } from "./LineupRuns.ts";
 import type { ProviderLeagueSettings, ProviderRoster, ProviderTeam } from "./Provider.ts";
 import { teamNoteLimit } from "./TeamNote.ts";
+import { TeamAgentNoteRejected, TeamNotFound } from "./Teams.ts";
 import type { TeamAutomationAction, TeamControlResult } from "./Teams.ts";
 import { TeamNoteRejected, TeamPersistenceFailed, Teams } from "./Teams.ts";
 
@@ -452,6 +454,80 @@ it.effect("refuses a note past its limit without storing it", () =>
   }).pipe(Effect.provide(TeamsTestLayer)),
 );
 
+it.effect(
+  "appends agent notes with the authenticated client as author and leaves the owner note alone",
+  () =>
+    Effect.gen(function* () {
+      const teams = yield* Teams;
+      const queries = yield* QueryRepository;
+      const fake = yield* FakeProviderWorld;
+      const seeded = yield* seedTeam(fake);
+      const author = { clientId: "https://agent.example/client.json", name: "Agent" };
+
+      const first = yield* teams.addAgentNote(owner, author, {
+        team: seeded,
+        body: "  Goalie bubble is thinner than the roster shows.  ",
+      });
+      yield* TestClock.adjust(Duration.seconds(1));
+      const second = yield* teams.addAgentNote(
+        owner,
+        { clientId: "https://second.example/client.json", name: null },
+        { team: seeded, body: "The manager waits on goaltenders." },
+      );
+
+      assert.strictEqual(first.body, "Goalie bubble is thinner than the roster shows.");
+      assert.deepStrictEqual(first.author, author);
+      assert.strictEqual(first.team, seeded);
+      assert.isNotNull(first.writtenAt);
+      assert.strictEqual(second.author.name, null);
+
+      const notes = yield* queries.recentAgentNotes(owner, seeded);
+      assert.deepStrictEqual(
+        notes.map((note) => note.body),
+        ["The manager waits on goaltenders.", "Goalie bubble is thinner than the roster shows."],
+      );
+      assert.deepStrictEqual(
+        notes.map((note) => note.author),
+        [second.author, author],
+      );
+      assert.isTrue(
+        DateTime.toEpochMillis(notes[0]?.writtenAt ?? first.writtenAt) >
+          DateTime.toEpochMillis(first.writtenAt),
+      );
+      assert.strictEqual((yield* teams.get(owner, seeded)).team.ownerNote, null);
+    }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
+it.effect("refuses an empty agent note and a note on a team the account does not own", () =>
+  Effect.gen(function* () {
+    const teams = yield* Teams;
+    const queries = yield* QueryRepository;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seedTeam(fake);
+    const author = { clientId: "https://agent.example/client.json", name: "Agent" };
+
+    const empty = yield* Effect.flip(
+      teams.addAgentNote(owner, author, { team: seeded, body: " " }),
+    );
+    const foreign = yield* Effect.flip(
+      teams.addAgentNote(other, author, { team: seeded, body: "Foreign memory" }),
+    );
+    const tooLong = yield* Effect.flip(
+      teams.addAgentNote(owner, author, {
+        team: seeded,
+        body: "a".repeat(agentNoteLimit + 1),
+      }),
+    );
+
+    assert.instanceOf(empty, TeamAgentNoteRejected);
+    assert.strictEqual(empty.reason, "empty");
+    assert.instanceOf(foreign, TeamNotFound);
+    assert.instanceOf(tooLong, TeamAgentNoteRejected);
+    assert.strictEqual(tooLong.reason, "too_long");
+    assert.deepStrictEqual(yield* queries.recentAgentNotes(owner, seeded), []);
+  }).pipe(Effect.provide(TeamsTestLayer)),
+);
+
 it.effect("keeps an owner note when discovery refreshes the team", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
@@ -717,6 +793,7 @@ const TeamsTest = TeamsLive.pipe(
 const TeamsTestLayer = Layer.mergeAll(
   TeamsTest,
   TeamsRepositoryTest,
+  QueryRepositoryTest,
   RunsTest,
   ConnectionsTest,
 ).pipe(

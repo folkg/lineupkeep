@@ -1,5 +1,5 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
-import type { UserId } from "@lineupkeep/backend/auth/User";
+import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import {
   PendingTradeOffersInput,
@@ -91,7 +91,7 @@ export const proposalTools = Toolkit.make(
 );
 
 export function proposalToolHandlers(
-  userId: UserId,
+  agent: AuthenticatedAgent,
 ): Layer.Layer<
   Tool.HandlersFor<Toolkit.Tools<typeof proposalTools>>,
   never,
@@ -106,10 +106,10 @@ export function proposalToolHandlers(
 
       return proposalTools.of({
         propose_transactions: (input) =>
-          proposals.propose(userId, proposer, input).pipe(
+          proposals.propose(agent.userId, proposer, input).pipe(
             Effect.flatMap((result) =>
               proposals
-                .revalidate(userId, { set: result.set.id })
+                .revalidate(agent.userId, { set: result.set.id })
                 .pipe(Effect.map((review) => revalidatedProposal(result, review))),
             ),
             Effect.map((result): ProposedTransactions => ({
@@ -122,7 +122,7 @@ export function proposalToolHandlers(
             mapFailure,
           ),
         get_transaction_proposal_set: (input) =>
-          proposals.read(userId, input).pipe(
+          proposals.read(agent.userId, input).pipe(
             Effect.map((review): ProposalReview => ({
               set: review.set,
               teams: review.teams,
@@ -131,7 +131,7 @@ export function proposalToolHandlers(
             mapFailure,
           ),
         revalidate_transaction_proposal_set: (input) =>
-          proposals.revalidate(userId, input).pipe(
+          proposals.revalidate(agent.userId, input).pipe(
             Effect.map((review): ProposalReview => ({
               set: review.set,
               teams: review.teams,
@@ -140,7 +140,7 @@ export function proposalToolHandlers(
             mapFailure,
           ),
         get_pending_trade_offers: (input) =>
-          proposals.readPendingOffers(userId, input).pipe(mapFailure),
+          proposals.readPendingOffers(agent.userId, input).pipe(mapFailure),
       });
     }),
   );

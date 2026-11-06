@@ -48,6 +48,7 @@ import * as authSchema from "./AuthTables.ts";
 import { user as authUser } from "./AuthTables.ts";
 import { OAuthClientRepository } from "./OAuthClientRepository.ts";
 import * as oauthSchema from "./OAuthTables.ts";
+import { oauthClient } from "./OAuthTables.ts";
 import { SignInCodeQuotaRepository } from "./SignInCodeQuotaRepository.ts";
 
 export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
@@ -265,10 +266,23 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
           return { status: "insufficient_scope" };
         }
         const clientId = claims.value.client_id;
+        const clientName =
+          clientId === undefined
+            ? undefined
+            : ((yield* Effect.tryPromise({
+                try: () =>
+                  database
+                    .select({ name: oauthClient.name })
+                    .from(oauthClient)
+                    .where(eq(oauthClient.clientId, clientId))
+                    .limit(1),
+                catch: (cause) => AuthenticationUnavailable.make({ cause }),
+              }))[0]?.name ?? undefined);
         return {
           status: "authenticated",
           userId: claims.value.sub,
           ...(clientId === undefined ? {} : { clientId }),
+          ...(clientName === undefined ? {} : { clientName }),
         };
       });
       const getConsentRequest = Effect.fn("AuthService.getConsentRequest")(function* (

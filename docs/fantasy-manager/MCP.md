@@ -822,11 +822,12 @@ lacking a scope a different tool needs, does not change whether a call succeeds.
 | `revalidate_transaction_proposal_set` | `transactions:review` |
 | `set_lineup`                          | `lineups:write`       |
 | `set_team_automation`                 | `teams:manage`        |
+| `add_team_agent_note`                 | `notes:write`         |
 
 A scope-coverage test derives this table from the tool declarations, so a tool that omits a
 scope fails the test suite instead of becoming an open endpoint.
 
-Four resource scopes cover the surface, and each exists because a tool needs exactly that risk:
+Five resource scopes cover the surface, and each exists because a tool needs exactly that risk:
 
 - `fantasy:read` is one read scope over everything the owner owns. Reading a connection and
   reading a team are the same act of reading the owner's own data, so they are not separate
@@ -839,6 +840,9 @@ Four resource scopes cover the surface, and each exists because a tool needs exa
   a transaction submission are not the same risk, so they are not the same scope.
 - `teams:manage` changes team-level state the owner keeps in Lineupgrade: automation enrollment,
   pause, and resume, and the owner note on the team page. It never contacts the provider.
+- `notes:write` appends agent notes to a team the account owns. Each note records the authenticated
+  client that wrote it and the time it was written; notes are append-only, and none of them changes
+  the owner's note, a lineup, an automation setting, or a transaction.
 
 `submit_feedback` and `list_feedback` require `fantasy:read` rather than a manage grant.
 Submission creates only the acting account's own report under the same rate limits and owner
@@ -882,7 +886,7 @@ It reads connections, teams, leagues, players, matchups, transaction history, an
 status, submits and reads back feedback, and buys a refresh token. Every other tool answers `403
 insufficient_scope` naming the one scope it needs; authorize again for that scope and keep the
 existing grant. The complete authorization-server set is
-`fantasy:read transactions:review lineups:write teams:manage offline_access`.
+`fantasy:read transactions:review lineups:write teams:manage notes:write offline_access`.
 A client platform that refuses `teams:manage` or `transactions:review` still reads, submits
 feedback, and runs the tools it was granted.
 
@@ -956,8 +960,8 @@ place to look.
 
 ### Discovery documents
 
-Authorization-server metadata publishes all five scopes above. Protected-resource metadata
-publishes the four resource scopes and omits `offline_access`. That difference is deliberate:
+Authorization-server metadata publishes all six scopes above. Protected-resource metadata
+publishes the five resource scopes and omits `offline_access`. That difference is deliberate:
 [RFC 9728 §2](https://www.rfc-editor.org/rfc/rfc9728#section-2) defines protected-resource
 `scopes_supported` as the scope values used to request access to that resource, while
 [OpenID Connect Core §11](https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess)

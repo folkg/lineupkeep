@@ -86,13 +86,13 @@ fantasy:read offline_access
 
 Every tool enforces one scope and only that scope. This baseline reads connections, teams,
 leagues, players, matchups, transaction history, and lineup-run status, submits and reads back
-feedback, and buys a refresh token. A tool that needs `transactions:review`, `lineups:write`, or
-`teams:manage` answers `403 insufficient_scope` with the one scope it needs, so add that scope in a
-new authorization instead of requesting everything up front. The `401` challenge names the same
+feedback, and buys a refresh token. A tool that needs `transactions:review`, `lineups:write`,
+`teams:manage`, or `notes:write` answers `403 insufficient_scope` with the one scope it needs, so add
+that scope in a new authorization instead of requesting everything up front. The `401` challenge names the same
 baseline, or the called tool's scope; the `403` body names the missing scope, so a client that
 surfaces only a response body can still see what is missing. Authorization-server metadata
-publishes the complete set—`fantasy:read transactions:review lineups:write teams:manage offline_access`—while
-protected-resource metadata publishes the four resource scopes, because `offline_access` buys a
+publishes the complete set—`fantasy:read transactions:review lineups:write teams:manage notes:write offline_access`—while
+protected-resource metadata publishes the five resource scopes, because `offline_access` buys a
 refresh token from the authorization server rather than access to the resource. Two retired scope
 names are accepted but never advertised: `connections:read` is read as `fantasy:read`, so a token
 minted before the rename keeps working, and `feedback:manage` has no successor because the feedback

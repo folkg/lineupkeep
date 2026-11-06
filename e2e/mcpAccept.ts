@@ -829,6 +829,11 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
       };
     case "set_team_automation":
       return { teams: [{ team: randomUUID(), action: "enable" }] };
+    case "add_team_agent_note":
+      return {
+        team: randomUUID(),
+        body: "The acceptance command checks the notes scope boundary.",
+      };
     case "submit_feedback":
       return {
         kind: "friction",

@@ -1,4 +1,4 @@
-import type { UserId } from "@lineupkeep/backend/auth/User";
+import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import {
   ConnectionCredentialGeneration,
   ConnectionId,
@@ -48,14 +48,14 @@ export const connectionTools = Toolkit.make(
 );
 
 export function connectionToolHandlers(
-  userId: UserId,
+  agent: AuthenticatedAgent,
 ): Layer.Layer<Tool.HandlersFor<Toolkit.Tools<typeof connectionTools>>, never, Connections> {
   return connectionTools.toLayer(
     Effect.gen(function* () {
       const connections = yield* Connections;
       return connectionTools.of({
         list_connections: () =>
-          connections.list(userId).pipe(
+          connections.list(agent.userId).pipe(
             Effect.map((rows) => ({ connections: rows.map(toConnectionView) })),
             mapOutcome,
           ),

@@ -14,7 +14,7 @@ import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
-import { providerTeams } from "./internal/ConnectionTables.ts";
+import { providerTeamAgentNotes, providerTeams } from "./internal/ConnectionTables.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
@@ -802,10 +802,24 @@ it.effect("reads pending trade offers as a read-only, owner-scoped view", () =>
     const database = yield* ConnectionsDatabase;
     const writtenAt = DateTime.makeUnsafe("2026-10-30T18:00:00.000Z");
     const note = "Dynasty league. Keep both goalies; cost rises by 5 each season.";
+    const redLine = seeded.find((entry) => entry.providerTeamKey === "nhl.l.1.t.1");
+    if (redLine === undefined) {
+      throw new Error("The seeded Red Line team is missing");
+    }
     yield* database
       .update(providerTeams)
       .set({ ownerNote: note, ownerNoteUpdatedAt: DateTime.toDateUtc(writtenAt) })
-      .where(eq(providerTeams.id, teamId(seeded, "nhl.l.1.t.1")));
+      .where(eq(providerTeams.id, redLine.id));
+    const noteWrittenAt = DateTime.makeUnsafe("2026-10-31T09:00:00.000Z");
+    yield* database.insert(providerTeamAgentNotes).values({
+      teamId: redLine.id,
+      connectionId: redLine.connectionId,
+      userId: owner,
+      body: "The manager wants to move a goalie before the deadline.",
+      authorName: "Trade Agent",
+      authorClientId: "client-trade-agent",
+      writtenAt: DateTime.toDateUtc(noteWrittenAt),
+    });
 
     const read = yield* proposals.readPendingOffers(owner, {
       team: teamId(seeded, "nhl.l.1.t.1"),
@@ -817,6 +831,13 @@ it.effect("reads pending trade offers as a read-only, owner-scoped view", () =>
       text: note,
       updatedAt: writtenAt,
     });
+    assert.deepStrictEqual(read.agentNotes, [
+      {
+        author: { clientId: "client-trade-agent", name: "Trade Agent" },
+        body: "The manager wants to move a goalie before the deadline.",
+        writtenAt: noteWrittenAt,
+      },
+    ]);
     assert.strictEqual(read.offers.length, 1);
     const offer = Array.getUnsafe(read.offers, 0);
     assert.isTrue(offer.canRespond);
@@ -849,6 +870,7 @@ it.effect("reads pending trade offers as a read-only, owner-scoped view", () =>
     });
     assert.strictEqual(unsupported.status, "unsupported");
     assert.deepStrictEqual(unsupported.offers, []);
+    assert.strictEqual(unsupported.agentNotes.length, 1);
   }).pipe(Effect.provide(TestLayer)),
 );
 

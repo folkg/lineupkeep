@@ -900,6 +900,7 @@ it.effect(
           status: "authenticated",
           userId: decodeUserId(session.user.id),
           clientId: registered.client_id,
+          clientName: "Retired scope client",
         },
       );
     }).pipe(
@@ -1490,6 +1491,7 @@ it.effect(
           status: "authenticated",
           userId: grant.userId,
           clientId: grant.clientId,
+          clientName: "no-resource@example.test",
         },
       );
       const renewed = yield* jsonOf(
@@ -1502,6 +1504,7 @@ it.effect(
           status: "authenticated",
           userId: grant.userId,
           clientId: grant.clientId,
+          clientName: "no-resource@example.test",
         },
       );
     }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),

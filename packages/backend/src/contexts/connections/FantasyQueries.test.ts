@@ -16,7 +16,7 @@ import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
-import { providerTeams } from "./internal/ConnectionTables.ts";
+import { providerTeamAgentNotes, providerTeams } from "./internal/ConnectionTables.ts";
 import {
   FakeGameSourceWorld,
   fakeGame,
@@ -3072,6 +3072,84 @@ it.effect("returns the owner note as owner context in a team summary", () =>
       text: "Dynasty league. Keep both goalies; cost rises by 5 each season.",
       updatedAt: writtenAt,
     });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("returns recent agent notes newest first and bounds them beside the owner note", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    const writtenAt = DateTime.makeUnsafe("2026-10-30T18:00:00.000Z");
+    yield* database
+      .update(providerTeams)
+      .set({
+        ownerNote: "The owner's instruction.",
+        ownerNoteUpdatedAt: DateTime.toDateUtc(writtenAt),
+      })
+      .where(eq(providerTeams.id, teamId));
+    const stored = yield* database
+      .select({ connectionId: providerTeams.connectionId })
+      .from(providerTeams)
+      .where(eq(providerTeams.id, teamId))
+      .limit(1);
+    const connectionId = stored[0]?.connectionId;
+    if (connectionId === undefined) {
+      throw new Error("The seeded team has no connection");
+    }
+    yield* database.insert(providerTeamAgentNotes).values(
+      Array.makeBy(25, (index) => ({
+        teamId,
+        connectionId,
+        userId: owner,
+        body: `Agent memory ${String(index)}`,
+        authorName: index % 2 === 0 ? "Agent One" : null,
+        authorClientId: index % 2 === 0 ? "client-one" : "client-two",
+        writtenAt: DateTime.toDateUtc(DateTime.makeUnsafe(1_800_000_000_000 + index * 1_000)),
+      })),
+    );
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(summary.agentNotes.length, 20);
+    assert.strictEqual(summary.agentNotes[0]?.body, "Agent memory 24");
+    assert.strictEqual(summary.agentNotes.at(-1)?.body, "Agent memory 5");
+    assert.deepStrictEqual(summary.agentNotes[0]?.author, {
+      clientId: "client-one",
+      name: "Agent One",
+    });
+    assert.strictEqual(summary.agentNotes[1]?.author.name, null);
+    assert.strictEqual(summary.ownerNote.status, "provided");
+    assert.strictEqual(
+      summary.ownerNote.status === "provided" ? summary.ownerNote.text : undefined,
+      "The owner's instruction.",
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("returns an explicitly empty agent-note list when the team has none", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["league"],
+    });
+
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(summary.agentNotes, []);
+    assert.deepStrictEqual(summary.ownerNote, { status: "not_set" });
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 

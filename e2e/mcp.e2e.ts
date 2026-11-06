@@ -70,6 +70,7 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "set_lineup",
     "get_lineup_runs",
     "set_team_automation",
+    "add_team_agent_note",
     "submit_feedback",
     "list_feedback",
   ]);
@@ -147,6 +148,7 @@ test("serves every tool scope after one consent for the documented scope set", a
     ],
     ["get_lineup_runs", {}],
     ["set_team_automation", { teams: [{ team, action: "enable" }] }],
+    ["add_team_agent_note", { team, body: "Scope probe." }],
     [
       "submit_feedback",
       { kind: "friction", title: "Scope probe", body: "Checking the feedback surface." },
@@ -287,6 +289,13 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   });
   expect(automationDenied.status).toBe(403);
   expect(automationDenied.headers.get("www-authenticate")).toContain('scope="teams:manage"');
+
+  const notesDenied = await client.request("tools/call", {
+    name: "add_team_agent_note",
+    arguments: { team: randomUUID(), body: "Checking the notes scope boundary." },
+  });
+  expect(notesDenied.status).toBe(403);
+  expect(notesDenied.headers.get("www-authenticate")).toContain('scope="notes:write"');
 
   const readAuthorization = await authorize(page, origin, "fantasy:read");
   const reader = mcpClient(mcpEndpoint(origin), readAuthorization.credentials.access_token);
@@ -539,6 +548,113 @@ test("proposes transactions without writing to the provider and reads pending of
     ],
   });
   expect(JSON.stringify(offers)).not.toContain("465.p.95001");
+});
+
+test("appends an agent note that reads back with its author on the summary and trade read", async ({
+  page,
+  baseURL,
+  services,
+}) => {
+  const origin = requiredOrigin(baseURL);
+  await signUp(page);
+  const discovered = Schema.decodeUnknownSync(
+    Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
+  )(
+    await services.exercise(
+      page,
+      "link the provider fake and discover teams",
+      "connectYahooAndDiscoverTeams",
+      {},
+    ),
+  );
+  const football = discovered.find((team) => team.name === "Embedded Browser Team");
+  const hockey = discovered.find((team) => team.name === "Hosted Hockey Team");
+  expect(football, "a football team").toBeDefined();
+  expect(hockey, "a hockey team").toBeDefined();
+  if (football === undefined || hockey === undefined) {
+    return;
+  }
+
+  const readOnly = await authorize(page, origin, "fantasy:read");
+  const denied = await mcpClient(mcpEndpoint(origin), readOnly.credentials.access_token).request(
+    "tools/call",
+    {
+      name: "add_team_agent_note",
+      arguments: { team: hockey.id, body: "A read-only grant must not write." },
+    },
+  );
+  expect(denied.status).toBe(403);
+  expect(denied.headers.get("www-authenticate")).toContain('scope="notes:write"');
+
+  const { credentials } = await authorize(page, origin, "fantasy:read notes:write");
+  const client = mcpClient(mcpEndpoint(origin), credentials.access_token);
+
+  const first = await client.callTool("add_team_agent_note", {
+    team: hockey.id,
+    body: "The manager hoards goaltenders before the deadline.",
+  });
+  expect(first.isError).toBe(false);
+  expect(first.structuredContent).toMatchObject({
+    team: hockey.id,
+    author: {
+      clientId: "https://connections-client.test/client.json",
+      name: "Lineupgrade test client",
+    },
+    body: "The manager hoards goaltenders before the deadline.",
+  });
+  expect(first.structuredContent?.["writtenAt"]).toEqual(expect.any(String));
+
+  await delay(10);
+  const second = await client.callTool("add_team_agent_note", {
+    team: hockey.id,
+    body: "A later note about the same bubble.",
+  });
+  expect(second.isError).toBe(false);
+
+  const summary = await client.callTool("get_team_summary", {
+    team: hockey.id,
+    groups: ["league"],
+  });
+  expect(summary.isError).toBe(false);
+  expect(summary.structuredContent).toMatchObject({
+    ownerNote: { status: "not_set" },
+    agentNotes: [
+      {
+        author: { name: "Lineupgrade test client" },
+        body: "A later note about the same bubble.",
+      },
+      {
+        author: { name: "Lineupgrade test client" },
+        body: "The manager hoards goaltenders before the deadline.",
+      },
+    ],
+  });
+
+  const empty = await client.callTool("get_team_summary", {
+    team: football.id,
+    groups: ["league"],
+  });
+  expect(empty.isError).toBe(false);
+  expect(empty.structuredContent).toMatchObject({ agentNotes: [] });
+
+  const offers = await client.callTool("get_pending_trade_offers", { team: hockey.id });
+  expect(offers.isError).toBe(false);
+  expect(offers.structuredContent).toMatchObject({
+    ownerNote: { status: "not_set" },
+    agentNotes: [
+      {
+        author: {
+          clientId: "https://connections-client.test/client.json",
+          name: "Lineupgrade test client",
+        },
+        body: "A later note about the same bubble.",
+      },
+      {
+        author: { name: "Lineupgrade test client" },
+        body: "The manager hoards goaltenders before the deadline.",
+      },
+    ],
+  });
 });
 
 test("changes automation over MCP and reports it through list_teams", async ({
@@ -955,7 +1071,7 @@ function documentedHeaders(method: string): Record<string, string> {
 const protocolVersion = "2026-07-28";
 const onboardingScopes = "fantasy:read offline_access";
 const documentedScopes =
-  "fantasy:read transactions:review lineups:write teams:manage offline_access";
+  "fantasy:read transactions:review lineups:write teams:manage notes:write offline_access";
 const retiredReadScope = "connections:read";
 const registrableScopes = `${documentedScopes} ${retiredReadScope}`;
 const retiredClientName = "Lineupgrade retired scope probe";

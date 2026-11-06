@@ -32,6 +32,8 @@ export const owner = {
   notificationId: "66666666-6666-4666-8666-666666666666",
   hostedSessionId: "77777777-7777-4777-8777-777777777777",
   feedbackId: "99999999-9999-4999-8999-999999999999",
+  agentNoteId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  agentNoteBody: "A durable agent note for the owner team",
   clientId: "agent-client-owner",
 };
 
@@ -44,6 +46,8 @@ export const otherOwner = {
   connectionId: "connection-other",
   teamId: "11111111-1111-4111-8111-aaaaaaaaaaaa",
   runId: "22222222-2222-4222-8222-aaaaaaaaaaaa",
+  agentNoteId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  agentNoteBody: "A note about the untouched owner's team",
   clientId: "agent-client-other",
 };
 
@@ -105,6 +109,16 @@ export const seedOwnedAccount = Effect.gen(function* () {
       (${otherOwner.teamId}, ${otherOwner.connectionId}, ${otherOwner.id}, ${"fixture"},
         ${"team-other"}, ${"league-other"}, ${"nfl"}, ${"football"}, 2026, ${"Other Team"},
         ${'{"enabled":false}'}::jsonb, ${"disabled"}, null, ${instant})`,
+  );
+  yield* run(
+    sql`insert into ${sql.identifier("provider_team_agent_notes")}
+      (id, team_id, connection_id, user_id, body, author_name, author_client_id, written_at)
+      values
+      (${owner.agentNoteId}, ${owner.teamId}, ${owner.connectionId}, ${owner.id},
+        ${owner.agentNoteBody}, ${"Owner's agent"}, ${owner.clientId}, ${instant}),
+      (${otherOwner.agentNoteId}, ${otherOwner.teamId}, ${otherOwner.connectionId},
+        ${otherOwner.id}, ${otherOwner.agentNoteBody}, ${"Other's agent"},
+        ${otherOwner.clientId}, ${instant})`,
   );
   yield* run(
     sql`insert into ${sql.identifier("lineup_requests")} (user_id, id, intent) values

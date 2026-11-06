@@ -9,6 +9,7 @@ export const resourceScopes: ReadonlyArray<AuthorizationScope> = [
   fantasyQueryScopes.reviewTransactions,
   lineupScopes.write,
   teamScopes.manage,
+  teamScopes.agentNotes,
 ];
 
 export const advertisedScopes: ReadonlyArray<AuthorizationScope> = [

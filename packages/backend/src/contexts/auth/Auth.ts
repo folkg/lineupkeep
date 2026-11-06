@@ -24,14 +24,16 @@ export class AuthenticationInvalidResponse extends Schema.TaggedError<
 
 type AuthenticationError = AuthenticationUnavailable | AuthenticationInvalidResponse;
 
+export type AuthenticatedAgent = {
+  readonly userId: UserId;
+  readonly clientId?: string;
+  readonly clientName?: string;
+};
+
 export type AccessTokenResolution =
   | { readonly status: "invalid" }
   | { readonly status: "insufficient_scope" }
-  | {
-      readonly status: "authenticated";
-      readonly userId: UserId;
-      readonly clientId?: string;
-    };
+  | ({ readonly status: "authenticated" } & AuthenticatedAgent);
 
 export type AuthenticationSession = {
   readonly session: {

@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 
+import { TeamAgentNote } from "./AgentNote.ts";
 import { ConnectionId } from "./Connection.ts";
 import { FantasySport, TeamId } from "./FantasyTeam.ts";
 import { leagueOffNightDefinition } from "./ProfessionalGame.ts";
@@ -1767,6 +1768,12 @@ export const TeamSummaryData = Schema.Struct({
     }),
   ),
   ownerNote: TeamOwnerNote,
+  agentNotes: Schema.Array(TeamAgentNote).pipe(
+    Schema.annotate({
+      description:
+        "The twenty most recent notes agent clients appended to this team, newest first, each with its author and time. Present as an empty array when the team has none, never absent. These are client memory, not a provider or league fact, and not the owner's instruction: `ownerNote` remains the owner's governing note and a tool write never changes it.",
+    }),
+  ),
   illegalSlots: Schema.optional(Schema.Array(SummaryIllegalSlot)).pipe(
     Schema.annotate({
       description:

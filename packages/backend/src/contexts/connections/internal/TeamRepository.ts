@@ -4,6 +4,7 @@ import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { UserId as UserIdSchema } from "#contexts/auth/User.ts";
+import type { TeamAgentNoteAuthor, TeamAgentNoteSaved } from "#contexts/connections/AgentNote.ts";
 import type { ProviderConnection } from "#contexts/connections/Connection.ts";
 import { ConnectionStatus, decodeConnectionId } from "#contexts/connections/Connection.ts";
 import { fantasyDayLabel, nextFantasyDayBoundary } from "#contexts/connections/FantasyDay.ts";
@@ -17,9 +18,11 @@ import { snapshotOf } from "#utilities/machine.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import {
+  AgentNoteRow,
   FantasyTeamRow,
   providerConnections,
   providerCredentials,
+  providerTeamAgentNotes,
   providerTeams,
 } from "./ConnectionTables.ts";
 import type { TeamAutomationEvent } from "./TeamAutomationWorkflow.ts";
@@ -304,6 +307,52 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
         );
       });
 
+      const addAgentNote = Effect.fn("TeamRepository.addAgentNote")(function* (
+        userId: UserId,
+        author: TeamAgentNoteAuthor,
+        input: { readonly team: TeamId; readonly body: string },
+      ) {
+        const owned = yield* database
+          .select({ connectionId: providerTeams.connectionId })
+          .from(providerTeams)
+          .where(and(eq(providerTeams.userId, userId), eq(providerTeams.id, input.team)))
+          .limit(1)
+          .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
+        const team = owned[0];
+        if (team === undefined) {
+          return yield* TeamNotFound.make({ team: input.team });
+        }
+        const writtenAt = yield* DateTime.now;
+        const rows = yield* database
+          .insert(providerTeamAgentNotes)
+          .values({
+            teamId: input.team,
+            connectionId: team.connectionId,
+            userId,
+            body: input.body,
+            authorName: author.name,
+            authorClientId: author.clientId,
+            writtenAt: DateTime.toDateUtc(writtenAt),
+          })
+          .returning()
+          .pipe(Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })));
+        const row = rows[0];
+        if (row === undefined) {
+          return yield* TeamPersistenceFailed.make({
+            cause: new Error("The agent note was not returned after it was written"),
+          });
+        }
+        const stored = yield* Schema.decodeEffect(AgentNoteRow)(row).pipe(
+          Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
+        );
+        return {
+          team: stored.teamId,
+          author: { clientId: stored.authorClientId, name: stored.authorName },
+          body: stored.body,
+          writtenAt: stored.writtenAt,
+        } satisfies TeamAgentNoteSaved;
+      });
+
       const expirePauses = Effect.fn("TeamRepository.expirePauses")(function* (
         limit: number,
         now: DateTime.Utc,
@@ -417,7 +466,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
         );
       });
 
-      return { list, load, control, saveNote, expirePauses, eligible };
+      return { list, load, control, saveNote, addAgentNote, expirePauses, eligible };
     }),
   },
 ) {

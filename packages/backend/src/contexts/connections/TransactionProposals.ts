@@ -3,6 +3,7 @@ import type { Effect } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 
+import { TeamAgentNote } from "./AgentNote.ts";
 import { TeamId } from "./FantasyTeam.ts";
 import {
   CounterpartyRef,
@@ -442,6 +443,12 @@ export const PendingTradeOffersResult = Schema.Struct({
   readOnly: Schema.Literal(true),
   offers: Schema.Array(PendingTradeOffer),
   ownerNote: TeamOwnerNote,
+  agentNotes: Schema.Array(TeamAgentNote).pipe(
+    Schema.annotate({
+      description:
+        "The twenty most recent notes agent clients appended to this team, newest first, each with its author and time. Present as an empty array when the team has none, never absent. These are client memory, not a provider or league fact, and not the owner's instruction: `ownerNote` remains the owner's governing note.",
+    }),
+  ),
   coverage: Schema.Array(QueryCoverage),
   detail: Schema.NonEmptyString,
 });

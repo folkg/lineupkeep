@@ -1198,6 +1198,9 @@ export const TransactionProposalsLive = Layer.effect(
         }
       }
       const context = loaded.success;
+      const agentNotes = yield* queries
+        .recentAgentNotes(userId, input.team)
+        .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
       const fetchedAt = yield* DateTime.now;
       const outcome = yield* context.provider
         .readPendingTrades({
@@ -1236,6 +1239,7 @@ export const TransactionProposalsLive = Layer.effect(
           readOnly: true,
           offers: [],
           ownerNote: ownerNoteOf(context.owned.team),
+          agentNotes,
           coverage: [
             {
               resource: "pending_trade_offers",
@@ -1261,6 +1265,7 @@ export const TransactionProposalsLive = Layer.effect(
         readOnly: true,
         offers,
         ownerNote: ownerNoteOf(context.owned.team),
+        agentNotes,
         coverage: [
           {
             resource: "pending_trade_offers",

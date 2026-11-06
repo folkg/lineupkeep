@@ -2,6 +2,7 @@ import type { UserId } from "@lineupkeep/backend/auth/User";
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
+import type { TeamAgentNoteAuthor, TeamAgentNoteSaved } from "./AgentNote.ts";
 import { ConnectionStatus } from "./Connection.ts";
 import {
   FantasyTeam,
@@ -66,6 +67,14 @@ export const TeamNoteSaved = Schema.Struct({
 });
 export type TeamNoteSaved = typeof TeamNoteSaved.Type;
 
+export const TeamAgentNoteInput = Schema.Struct({
+  team: TeamId,
+  body: Schema.String,
+});
+export type TeamAgentNoteInput = typeof TeamAgentNoteInput.Type;
+
+export type TeamAgentNoteError = TeamNotFound | TeamAgentNoteRejected | TeamPersistenceFailed;
+
 export type TeamError = TeamNotFound | TeamControlRejected | TeamPersistenceFailed;
 
 export type TeamNoteError = TeamNotFound | TeamNoteRejected | TeamPersistenceFailed;
@@ -94,6 +103,15 @@ export class TeamNoteRejected extends Schema.TaggedError<
   message: Schema.NonEmptyString,
 }) {}
 
+export class TeamAgentNoteRejected extends Schema.TaggedError<
+  TeamAgentNoteRejected,
+  { readonly brand: unique symbol }
+>()("team.agent_note_rejected", {
+  team: TeamId,
+  reason: Schema.Literals(["empty", "too_long"]),
+  message: Schema.NonEmptyString,
+}) {}
+
 export class TeamPersistenceFailed extends Schema.TaggedError<
   TeamPersistenceFailed,
   { readonly brand: unique symbol }
@@ -119,4 +137,10 @@ export type TeamsShape = {
     userId: UserId,
     input: TeamNoteInput,
   ) => Effect.Effect<TeamNoteSaved, TeamNoteError>;
+
+  readonly addAgentNote: (
+    userId: UserId,
+    author: TeamAgentNoteAuthor,
+    input: TeamAgentNoteInput,
+  ) => Effect.Effect<TeamAgentNoteSaved, TeamAgentNoteError>;
 };

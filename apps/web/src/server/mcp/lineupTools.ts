@@ -1,3 +1,4 @@
+import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import type { UserId } from "@lineupkeep/backend/auth/User";
 import {
   GetLineupRunsInput,
@@ -59,7 +60,7 @@ export const lineupTools = Toolkit.make(
 );
 
 export function lineupToolHandlers(
-  userId: UserId,
+  agent: AuthenticatedAgent,
 ): Layer.Layer<Tool.HandlersFor<Toolkit.Tools<typeof lineupTools>>, never, LineupRuns> {
   return lineupTools.toLayer(
     Effect.gen(function* () {
@@ -68,14 +69,14 @@ export function lineupToolHandlers(
         set_lineup: (input) =>
           Effect.gen(function* () {
             const submitted = yield* runs
-              .submit(userId, { requestId: input.requestId, teams: input.teams })
+              .submit(agent.userId, { requestId: input.requestId, teams: input.teams })
               .pipe(mapOutcome);
             const timeoutMs = input.waitMs ?? 0;
             const settledBeforeWait = submitted.runs.every((run) => isSettled(run.status));
             const waited =
               timeoutMs === 0 || settledBeforeWait
                 ? submitted
-                : yield* waitBounded(userId, runs, submitted, timeoutMs);
+                : yield* waitBounded(agent.userId, runs, submitted, timeoutMs);
             return {
               request: waited.request,
               delivery: waited.delivery,
@@ -86,7 +87,7 @@ export function lineupToolHandlers(
               },
             } satisfies SetLineupResult;
           }),
-        get_lineup_runs: (input) => runs.get(userId, input).pipe(mapOutcome),
+        get_lineup_runs: (input) => runs.get(agent.userId, input).pipe(mapOutcome),
       });
     }),
   );

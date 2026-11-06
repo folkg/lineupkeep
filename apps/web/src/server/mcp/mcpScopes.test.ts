@@ -40,6 +40,7 @@ it("spends a declared allowance on every shipped tool, smallest for the destruct
       .map(({ name }) => name)
       .sort(),
   ).toEqual([
+    "add_team_agent_note",
     "propose_transactions",
     "revalidate_transaction_proposal_set",
     "set_team_automation",
@@ -108,6 +109,7 @@ it("reaches only read tools and feedback submission and read-back with the onboa
   expect(onboarding.has("lineups:write")).toBe(false);
   expect(onboarding.has("transactions:review")).toBe(false);
   expect(onboarding.has("teams:manage")).toBe(false);
+  expect(onboarding.has("notes:write")).toBe(false);
 });
 
 it("reads a connection, a team, and a lineup run under the same read scope", () => {
@@ -117,5 +119,7 @@ it("reads a connection, a team, and a lineup run under the same read scope", () 
   expect(scopeOf.get("list_teams")).toBe("fantasy:read");
   expect(scopeOf.get("get_lineup_runs")).toBe("fantasy:read");
   expect(scopeOf.get("set_lineup")).toBe("lineups:write");
+  expect(scopeOf.get("set_team_automation")).toBe("teams:manage");
+  expect(scopeOf.get("add_team_agent_note")).toBe("notes:write");
   expect(scopeOf.get("submit_feedback")).toBe("fantasy:read");
 });

@@ -1,4 +1,4 @@
-import type { UserId } from "@lineupkeep/backend/auth/User";
+import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import {
   Feedback,
@@ -66,15 +66,15 @@ export const feedbackTools = Toolkit.make(
 );
 
 export function feedbackToolHandlers(
-  userId: UserId,
+  agent: AuthenticatedAgent,
 ): Layer.Layer<Tool.HandlersFor<Toolkit.Tools<typeof feedbackTools>>, never, Feedback> {
   return feedbackTools.toLayer(
     Effect.gen(function* () {
       const feedback = yield* Feedback;
-      const agent = { kind: "agent", reference: "mcp" } as const;
+      const submitter = { kind: "agent", reference: "mcp" } as const;
       return feedbackTools.of({
         submit_feedback: (submission) =>
-          feedback.submit(userId, agent, [submission]).pipe(
+          feedback.submit(agent.userId, submitter, [submission]).pipe(
             Effect.map((reports): SubmitFeedbackResult => {
               const [report] = reports;
               if (report === undefined) {
@@ -88,7 +88,7 @@ export function feedbackToolHandlers(
             mapFailure,
           ),
         list_feedback: (filter) =>
-          feedback.list(userId, { ...filter, limit: filter.limit ?? 20 }).pipe(
+          feedback.list(agent.userId, { ...filter, limit: filter.limit ?? 20 }).pipe(
             Effect.map((reports): ListFeedbackResult => ({
               feedback: reports,
               page: { returned: reports.length, limit: filter.limit ?? 20 },
