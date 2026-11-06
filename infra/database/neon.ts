@@ -7,7 +7,7 @@ import { DatabaseDeployment } from "#infra/services/DatabaseDeployment.ts";
 export const neonDatabase = Layer.effect(DatabaseDeployment)(
   Effect.gen(function* () {
     const database = yield* Neon.Project.ref("Postgres", {
-      stack: "LineupgradeDatabase",
+      stack: "LineupkeepDatabase",
       stage: "production",
     });
     return {

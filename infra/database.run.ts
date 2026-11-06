@@ -9,7 +9,7 @@ import { Effect, Redacted } from "effect";
 import { deploymentState } from "./state.ts";
 
 export default Alchemy.Stack(
-  "LineupgradeDatabase",
+  "LineupkeepDatabase",
   {
     providers: Neon.providers(),
     state: deploymentState,

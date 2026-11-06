@@ -25,7 +25,7 @@ export const localProviders = Layer.mergeAll(
 const providers = Layer.mergeAll(localProviders, gcpProviders);
 
 export default Alchemy.Stack(
-  "LineupgradeWeb",
+  "LineupkeepWeb",
   {
     providers,
     state: deploymentState,

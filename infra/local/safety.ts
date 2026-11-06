@@ -50,7 +50,7 @@ export function developmentSafety(run: LocalRun): DevelopmentSafety {
   const providers = developmentPostgresProvider();
   const options = safetyOptions(run, providers);
   const stack = Alchemy.Stack(
-    "LineupgradeDevelopmentDatabaseSafety",
+    "LineupkeepDevelopmentDatabaseSafety",
     options,
     Effect.gen(function* () {
       const database = yield* DevelopmentPostgres("Postgres", identity);
@@ -64,7 +64,7 @@ export function migrationSafety(run: LocalRun, fail: boolean): MigrationSafety {
   const options = safetyOptions(run, Layer.mergeAll(Command.providers(), postgresProvider));
   const marker = join(run.directory, "migration-activated");
   const stack = Alchemy.Stack(
-    "LineupgradeMigrationGateSafety",
+    "LineupkeepMigrationGateSafety",
     options,
     Effect.gen(function* () {
       const database = yield* DatabaseDeployment.pipe(Effect.provide(localPostgres(options.stage)));

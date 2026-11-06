@@ -42,13 +42,13 @@ export function cloudRunHost(
         timeout: "1 minute",
       });
       const account = yield* GCP.IAM.ServiceAccount("Runtime", {
-        displayName: "Lineupgrade web runtime",
+        displayName: "Lineupkeep web runtime",
       });
       const workerAccount = yield* GCP.IAM.ServiceAccount("WorkerRuntime", {
-        displayName: "Lineupgrade private lineup worker",
+        displayName: "Lineupkeep private lineup worker",
       });
       const browserAccount = yield* GCP.IAM.ServiceAccount("HostedBrowserRuntime", {
-        displayName: "Lineupgrade hosted browser runtime",
+        displayName: "Lineupkeep hosted browser runtime",
       });
       const project = yield* Config.String("GOOGLE_PROJECT_ID").pipe(
         Config.orElse(() => Config.String("GOOGLE_CLOUD_PROJECT")),
@@ -131,7 +131,7 @@ export function cloudRunHost(
         })),
       ].filter((entry) => !telemetryNames.has(entry.name));
       const queueEnqueuer = yield* GCP.IAM.ServiceAccount("QueueEnqueuer", {
-        displayName: "Lineupgrade queue enqueuer and scheduler invoker",
+        displayName: "Lineupkeep queue enqueuer and scheduler invoker",
       });
       const queue = yield* GCP.CloudTasks.Queue("LineupWorkerQueue", {
         location: region,
@@ -175,12 +175,12 @@ export function cloudRunHost(
       const alertChannel = Option.isSome(alertEmail)
         ? yield* GCP.Monitoring.NotificationChannel("LineupRunAlerts", {
             type: "email",
-            displayName: "Lineupgrade lineup run alerts",
+            displayName: "Lineupkeep lineup run alerts",
             labels: { email_address: alertEmail.value },
           })
         : undefined;
       yield* GCP.Monitoring.AlertPolicy("LineupRunFailures", {
-        displayName: "Lineupgrade failed or uncertain lineup runs",
+        displayName: "Lineupkeep failed or uncertain lineup runs",
         combiner: "OR",
         severity: "ERROR",
         conditions: [
@@ -195,7 +195,7 @@ export function cloudRunHost(
         ...(alertChannel === undefined ? {} : { notificationChannels: [alertChannel.name] }),
         alertStrategy: { notificationRateLimit: { period: "300s" } },
         documentation: {
-          subject: "Lineupgrade lineup run needs attention",
+          subject: "Lineupkeep lineup run needs attention",
           mimeType: "text/markdown",
           content:
             "A lineup run finished failed or uncertain. Find the `lineup_run` wide event, then follow its trace to the provider calls. The deployment runbook lists the queries and the support boundary.",

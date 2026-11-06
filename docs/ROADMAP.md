@@ -23,20 +23,37 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                 |
 | Lineup algorithm     | Custom solver live for all five owner teams                                                    |
 | Provider boundary    | Keyed injection at the composition root; some provider-shaped ideas still reach generic layers |
-| MCP surface          | 20 tools, four resource scopes, per-tool enforcement; feedback rounds 2 to 8 closed            |
-| Client feedback      | Zero open items                                                                                |
+| MCP surface          | 19 tools after the legacy review-links tool is removed; four resource scopes; round 19 open    |
+| Client feedback      | Round 9 client notes closed on 5 November: structure, copy, local time, action states          |
 | Connections          | Hosted browser only; local helper and device flow deleted                                      |
-| Interface            | Technical-sheet design language live: paper light, tinted dark, 680 measure, square controls   |
+| Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; actions own their states    |
 | Deployment           | Cloud Run web, worker and hosted browser on GCP; CI on a clean Linux runner, container target  |
 | Publication gate     | Blocked on upstream: a temporary backport of the TanStack advisory is in force                 |
 | Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                       |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                      |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J      |
-| Checks               | 1625 node, 151 browser, 10 chromium; container end to end 58 of 59, one known skip             |
+| Checks               | 1662 node, 180 browser, 10 chromium; container end to end 59 passed, one known skip            |
 
 ---
 
 ## Ship log
+
+### 5 November 2026
+
+- **Renamed the product to Lineupgrade.** Product-visible strings changed; the cloud stack names, the
+  repository, the database and the package scope keep their deployed names, because renaming a stack is a
+  redeploy of production for no user-visible gain. A deploy failed once for exactly that reason and the
+  identities were restored.
+- **Client feedback round 9 closed.** Masthead is Teams and Account; connections and one session list live on
+  the Account page, between appearance and your data; feedback is a quiet footer link. The teams list names
+  the fantasy league, and a read fills a missing league name instead of waiting for a refresh. Activity speaks
+  in the reader's time zone. Report buttons sit at the bottom of the page.
+- **Action states belong to the design system.** Button, ButtonLink, IconButton and Switch take
+  `idle`, `working`, or `done`; the component owns the hairline, the tick, the durations and the reduced-motion
+  rule. A control that shows a value changes it on press, disables itself, and rolls back on refusal.
+- **Landing page rewritten** around what the product does for a person and how an agent helps, with claims
+  checked against what the code actually does.
+- **CI** allows forty minutes and caches Playwright browsers, after a run was cancelled during the install.
 
 ### 4 November 2026
 
