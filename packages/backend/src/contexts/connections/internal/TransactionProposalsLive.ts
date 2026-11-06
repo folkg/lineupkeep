@@ -871,9 +871,6 @@ export const TransactionProposalsLive = Layer.effect(
         if (input.item.kind === "trade") {
           return yield* executeTradeItem(input);
         }
-        if (input.item.kind === "slot_move") {
-          return yield* executeSlotMove(input);
-        }
         const steps: Array<ProposalStepCommand> = [];
         const movementSteps = (
           outcome: ProposalOutcome,
@@ -970,6 +967,10 @@ export const TransactionProposalsLive = Layer.effect(
           }
         }
 
+        if (input.item.kind === "slot_move") {
+          return yield* executeSlotMove(input, steps);
+        }
+
         const transaction = yield* Effect.result(
           input.context.provider.applyTransaction({
             ...providerIdentity(input.context),
@@ -1007,20 +1008,23 @@ export const TransactionProposalsLive = Layer.effect(
       });
     }
 
-    function executeSlotMove(input: {
-      readonly userId: UserId;
-      readonly item: ProposalItemRecord;
-      readonly change: ProposalItemChange;
-      readonly facts: TeamFacts;
-      readonly context: TeamContext;
-    }): Effect.Effect<ItemExecution> {
+    function executeSlotMove(
+      input: {
+        readonly userId: UserId;
+        readonly item: ProposalItemRecord;
+        readonly change: ProposalItemChange;
+        readonly facts: TeamFacts;
+        readonly context: TeamContext;
+      },
+      steps: ReadonlyArray<ProposalStepCommand>,
+    ): Effect.Effect<ItemExecution> {
       return Effect.gen(function* () {
         const move = input.item.slotMove;
         if (move === undefined) {
           return {
             outcome: "skipped",
             detail: "This slot move names no player and destination slot, so nothing was sent.",
-            steps: [],
+            steps,
           };
         }
         const rostered = input.facts.roster.players.find(
@@ -1045,7 +1049,11 @@ export const TransactionProposalsLive = Layer.effect(
           const stepAt = yield* DateTime.now;
           const detail =
             "The league publishes no current date or scoring week, so the slot move could not be targeted. Nothing was sent for this move.";
-          return { outcome: "failed", detail, steps: [step("failed", detail, stepAt)] };
+          return {
+            outcome: "failed",
+            detail,
+            steps: [...steps, step("failed", detail, stepAt)],
+          };
         }
         const applied = yield* Effect.result(
           input.context.provider.applyReserveMove({
@@ -1062,14 +1070,18 @@ export const TransactionProposalsLive = Layer.effect(
             yield* queries.recordSessionRejected(input.userId, input.context.owned);
           }
           const detail = sessionFailureDetail(applied.failure._tag, "slot move");
-          return { outcome: "failed", detail, steps: [step("failed", detail, stepAt)] };
+          return {
+            outcome: "failed",
+            detail,
+            steps: [...steps, step("failed", detail, stepAt)],
+          };
         }
         const outcome = writeOutcome(applied.success);
         const detail = writeDetail(applied.success, "slot move");
         return {
           outcome,
           ...(detail === undefined ? {} : { detail }),
-          steps: [step(outcome, detail, stepAt)],
+          steps: [...steps, step(outcome, detail, stepAt)],
         };
       });
     }

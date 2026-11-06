@@ -214,7 +214,102 @@ it("keeps the declared order when more than one order is legal", () => {
   }
 });
 
-it("reports the search bound instead of claiming no order exists", () => {
+it("holds one player on a bench slot while two players swap slots", () => {
+  const decision = planProposalOrder({
+    slots: [starting("C", 1), bench("BN", 1), bench("HOLD", 1)],
+    players: [player("p1", "Roster One", "C", ["C"]), player("p2", "Roster Two", "BN", ["C"])],
+    timing: skate,
+    items: [
+      move("move-one-to-bench", ref("p1", "Roster One"), "BN"),
+      move("move-two-to-center", ref("p2", "Roster Two"), "C"),
+    ],
+  });
+
+  assert.strictEqual(decision.status, "ordered");
+  if (decision.status === "ordered") {
+    assert.deepStrictEqual(
+      decision.steps.map((step) => [step.item, step.reserveMove]),
+      [
+        [
+          "move-two-to-center",
+          {
+            playerKey: "p1",
+            playerName: "Roster One",
+            fromSlot: "C",
+            toSlot: "HOLD",
+          },
+        ],
+        ["move-one-to-bench", undefined],
+      ],
+    );
+  }
+});
+
+it("refuses a slot swap when no bench slot is free to hold a player", () => {
+  const decision = planProposalOrder({
+    slots: [starting("C", 1), bench("BN", 1)],
+    players: [player("p1", "Roster One", "C", ["C"]), player("p2", "Roster Two", "BN", ["C"])],
+    timing: skate,
+    items: [
+      move("move-one-to-bench", ref("p1", "Roster One"), "BN"),
+      move("move-two-to-center", ref("p2", "Roster Two"), "C"),
+    ],
+  });
+
+  assert.strictEqual(decision.status, "conflict");
+  if (decision.status === "conflict") {
+    assert.deepStrictEqual(decision.conflicts[0]?.items, [
+      "move-one-to-bench",
+      "move-two-to-center",
+    ]);
+    const detail = decision.conflicts[0]?.detail ?? "";
+    assert.include(detail, "Neither operation can go first");
+    assert.include(detail, "Moving Roster One to BN needs a free BN slot");
+    assert.include(detail, "Moving Roster Two to C needs a free C slot");
+    assert.include(detail, "cannot both be legal on 2026-10-31");
+  }
+});
+
+it("refuses a reserve slot when the provider publishes no reserve marker", () => {
+  const decision = planProposalOrder({
+    slots: [starting("C", 1), bench("BN", 1), reserve("IL+", 1)],
+    players: [
+      { ...player("p1", "Roster One", "BN", ["C"]), injured: true },
+      player("p2", "Roster Two", "C", ["C"]),
+    ],
+    timing: skate,
+    items: [move("move-one-to-reserve", ref("p1", "Roster One"), "IL+")],
+  });
+
+  assert.strictEqual(decision.status, "conflict");
+  if (decision.status === "conflict") {
+    assert.deepStrictEqual(
+      decision.conflicts[0]?.reasons?.map((reason) => reason.code),
+      ["slot_illegal"],
+    );
+    const detail = decision.conflicts[0]?.detail ?? "";
+    assert.include(detail, "Roster One");
+    assert.include(detail, "IL+");
+  }
+});
+
+it("refuses an add no open slot accepts", () => {
+  const decision = planProposalOrder({
+    slots: [starting("C", 1), { position: "BN", kind: "bench", count: 2, eligibility: ["C"] }],
+    players: [player("p1", "Roster One", "C", ["C"]), player("p2", "Roster Two", "BN", ["C"])],
+    timing: skate,
+    items: [add("add-wing", [ref("p9", "Pool Wing")])],
+  });
+
+  assert.strictEqual(decision.status, "conflict");
+  if (decision.status === "conflict") {
+    const detail = decision.conflicts[0]?.detail ?? "";
+    assert.include(detail, "Pool Wing");
+    assert.include(detail, "no open slot accepts their positions");
+  }
+});
+
+it("refuses an add the roster cannot hold instead of reporting a search bound", () => {
   const drops = Array.from({ length: 15 }, (_, index) =>
     drop(`drop-${String(index)}`, ref(`p${String(index)}`, `Roster ${String(index)}`)),
   );
@@ -233,10 +328,13 @@ it("reports the search bound instead of claiming no order exists", () => {
     ],
   });
 
-  assert.strictEqual(decision.status, "unresolved");
-  if (decision.status === "unresolved") {
-    assert.include(decision.detail, "20,000");
-    assert.include(decision.detail, "not proof");
+  assert.strictEqual(decision.status, "conflict");
+  if (decision.status === "conflict") {
+    const reason = decision.conflicts[0]?.reasons?.[0];
+    assert.strictEqual(reason?.item, "add-too-many");
+    assert.strictEqual(reason?.code, "roster_full");
+    assert.include(reason?.detail ?? "", "the league allows 16");
+    assert.include(reason?.detail ?? "", "Add a drop item for a player outside a reserve slot");
   }
 });
 
