@@ -31,9 +31,6 @@ import {
   ProposalSetId,
   TransactionProposals,
 } from "@lineupkeep/backend/connections/TransactionProposals";
-import type { ReviewLinksData } from "@lineupkeep/backend/connections/TransactionReview";
-import type { TransactionReviewsShape } from "@lineupkeep/backend/connections/TransactionReview";
-import { TransactionReviews } from "@lineupkeep/backend/connections/TransactionReview";
 import {
   Feedback,
   FeedbackContentInvalid,
@@ -408,7 +405,6 @@ it("lists only the read-only connection tool without exposing account identity",
     "get_matchups",
     "get_team_summary",
     "get_transactions",
-    "generate_transaction_review_links",
     "propose_transactions",
     "get_transaction_proposal_set",
     "revalidate_transaction_proposal_set",
@@ -487,7 +483,6 @@ it("enforces fantasy read scope and serves bounded query results over MCP", asyn
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(unavailableProposals),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -556,7 +551,6 @@ it("accepts ISO 8601 instants for transaction and feedback filters", async () =>
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(unavailableProposals),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -621,7 +615,6 @@ it("refuses a malformed or tagged instant with a readable field message", async 
               permissiveQuota,
               Layer.succeed(Connections)(unavailableConnections),
               Layer.succeed(FantasyQueries)(unavailableQueries),
-              Layer.succeed(TransactionReviews)(unavailableReviews),
               Layer.succeed(TransactionProposals)(unavailableProposals),
               Layer.succeed(LineupRuns)(unavailableLineups),
               Layer.succeed(Teams)(unavailableTeams),
@@ -662,7 +655,6 @@ it("reaches search_players with an empty query and returns the remedy instead of
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(unavailableProposals),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -750,7 +742,6 @@ it("publishes and serves the scoring-period schedule group over MCP", async () =
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(unavailableProposals),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -814,7 +805,6 @@ it("names the cause when a continuation cursor is reused with different argument
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(queries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(unavailableProposals),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -839,91 +829,6 @@ it("names the cause when a continuation cursor is reused with different argument
   expect(text).toContain('\\"code\\":\\"cursor_invalid\\"');
   expect(text).toContain("issued for a different request");
   expect(text).not.toContain("invalid or expired");
-});
-
-it("requires transaction review scope and returns human-review-only links", async () => {
-  const teamId = Schema.decodeSync(TeamId)("00000000-0000-7000-8000-000000000001");
-  const reviewData: ReviewLinksData = {
-    status: "ok",
-    team: {
-      id: teamId,
-      name: "Alpha",
-      provider: decodeProviderKey("yahoo"),
-      league: "nfl",
-      sport: "football",
-      season: 2026,
-    },
-    linkTemplate: { provider: decodeProviderKey("yahoo"), version: "yahoo-review-links-v2" },
-    links: [
-      {
-        status: "review_only",
-        index: 0,
-        kind: "add",
-        url: "https://football.fantasysports.yahoo.com/f1/1000/addplayer?apid=10001",
-        players: [Schema.decodeSync(PlayerRef)("r1.test")],
-        humanReview: "Review this proposal in the provider interface.",
-      },
-    ],
-    instruction: "Review each proposal in the provider interface.",
-    ownerNote: { status: "not_set" },
-    coverage: [],
-    failures: [],
-    page: { returned: 1, complete: true, remaining: 0 },
-    budget: { targetBytes: 12_288, hardLimitBytes: 16_384 },
-  };
-  const reviews: TransactionReviewsShape = {
-    ...unavailableReviews,
-    generate: () => Effect.succeed(reviewData),
-  };
-  const services = Layer.mergeAll(
-    authentication,
-    permissiveQuota,
-    Layer.succeed(Connections)(unavailableConnections),
-    Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionReviews)(reviews),
-    Layer.succeed(TransactionProposals)(unavailableProposals),
-    Layer.succeed(LineupRuns)(unavailableLineups),
-    Layer.succeed(Teams)(unavailableTeams),
-    Layer.succeed(Feedback)(unavailableFeedback),
-  );
-  const run = (invocation: Request): Promise<Response> =>
-    handleMcpRequest(invocation, (_request, _operation, program) =>
-      Effect.runPromise(Effect.provide(program, services)),
-    );
-  const arguments_ = {
-    team: teamId,
-    intents: [{ kind: "add", add: Schema.decodeSync(PlayerRef)("r1.test") }],
-  };
-
-  const denied = await run(
-    request(
-      "tools/call",
-      { name: "generate_transaction_review_links", arguments: arguments_ },
-      "fantasy",
-    ),
-  );
-  const allowed = await run(
-    request(
-      "tools/call",
-      { name: "generate_transaction_review_links", arguments: arguments_ },
-      "review",
-    ),
-  );
-
-  expect(denied.status).toBe(403);
-  expect(denied.headers.get("www-authenticate")).toContain('scope="transactions:review"');
-  expect(allowed.status).toBe(200);
-  const body = await json(allowed);
-  expect(body).toMatchObject({
-    result: {
-      isError: false,
-      structuredContent: {
-        status: "ok",
-        links: [{ status: "review_only", kind: "add" }],
-      },
-    },
-  });
-  expect(JSON.stringify(body)).not.toContain("submit");
 });
 
 it("proposes a transaction set under the review scope and returns the review link", async () => {
@@ -1019,7 +924,6 @@ it("proposes a transaction set under the review scope and returns the review lin
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(proposals),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -1130,7 +1034,6 @@ it("returns a durable queued lineup reference without claiming success", async (
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(unavailableProposals),
     Layer.succeed(LineupRuns)(lineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -1200,7 +1103,6 @@ it("requires teams:manage and changes automation through the shared team service
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(unavailableProposals),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(teams),
@@ -1287,7 +1189,6 @@ it("records agent feedback for the authenticated account on a read grant", async
     permissiveQuota,
     Layer.succeed(Connections)(unavailableConnections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(unavailableProposals),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -1391,7 +1292,6 @@ it("returns an actionable failure for refused feedback instead of leaking persis
               permissiveQuota,
               Layer.succeed(Connections)(unavailableConnections),
               Layer.succeed(FantasyQueries)(unavailableQueries),
-              Layer.succeed(TransactionReviews)(unavailableReviews),
               Layer.succeed(TransactionProposals)(unavailableProposals),
               Layer.succeed(LineupRuns)(unavailableLineups),
               Layer.succeed(Teams)(unavailableTeams),
@@ -1485,7 +1385,6 @@ function handle(
     quota,
     Layer.succeed(Connections)(connections),
     Layer.succeed(FantasyQueries)(unavailableQueries),
-    Layer.succeed(TransactionReviews)(unavailableReviews),
     Layer.succeed(TransactionProposals)(unavailableProposals),
     Layer.succeed(LineupRuns)(unavailableLineups),
     Layer.succeed(Teams)(unavailableTeams),
@@ -1506,9 +1405,6 @@ const unavailableQueries: FantasyQueriesShape = {
   getMatchups: () => Effect.die(new Error("queries unavailable")),
   getTransactions: () => Effect.die(new Error("queries unavailable")),
   getTeamSummary: () => Effect.die(new Error("queries unavailable")),
-};
-const unavailableReviews: TransactionReviewsShape = {
-  generate: () => Effect.die(new Error("reviews unavailable")),
 };
 const unavailableProposals: TransactionProposalsShape = {
   propose: () => Effect.die(new Error("proposals unavailable")),
@@ -1619,7 +1515,6 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(rosterOutput).toContain('"total"');
   expect(tool("get_league").description).toContain("inline player name");
   expect(tool("get_pending_trade_offers").description).toContain("ownerNote");
-  expect(tool("generate_transaction_review_links").description).toContain("ownerNote");
 
   const league = tool("get_league");
   expect(JSON.stringify(league.inputSchema)).toContain("standingsDetail");

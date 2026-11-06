@@ -333,9 +333,6 @@ _Avoid_: Roster submission when referring only to slot assignments
 **Lineup optimization**:
 Choosing roster-slot assignments according to an objective while respecting the applicable roster and eligibility constraints.
 
-**Transaction review link**:
-A link to a provider's human-facing page with a proposed player transaction prefilled for review. Opening the link does not authorize this application to submit that transaction.
-
 **Transaction proposal set**:
 One agent or person's proposed player transactions across any of their own teams, created by one call, grouped by team, and reviewed together. It covers every team the account has at creation, including teams with nothing proposed, records who proposed it, the surface and optional client label, and when, and expires 24 hours after creation.
 _Avoid_: Proposal when the whole set is meant, batch, review queue

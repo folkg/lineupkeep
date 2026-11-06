@@ -1,4 +1,5 @@
 import {
+  acceptedScopeNames,
   currentScopeName,
   retiredScopeAliases,
 } from "@lineupkeep/backend/auth/AuthorizationScopes";
@@ -103,7 +104,7 @@ it("accepts the minimal 401 baseline and the full registration ceiling", () => {
   report.register([
     {
       grant: "requested",
-      scope: advertisedScopes.map((scope) => scope.name).join(" "),
+      scope: acceptedScopeNames(advertisedScopes).join(" "),
     },
   ]);
 

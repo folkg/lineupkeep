@@ -21,7 +21,6 @@ import {
   ProviderOperationUnsupported,
   ProviderRequestFailed,
   ProviderResponseInvalid,
-  ProviderReviewLinkInvalid,
   ProviderSessionMaterial,
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
@@ -59,8 +58,6 @@ import type {
   ProviderRosterCoverage,
   ProviderRosterPlayer,
   ProviderRosterSlot,
-  ProviderReviewIntent,
-  ProviderReviewLinkInput,
   ProviderSchedulePeriod,
   ProviderSchedulePlayer,
   ProviderScheduledGame,
@@ -108,11 +105,6 @@ const reviewHosts: Readonly<Record<FantasySport, string>> = {
   football: "football.fantasysports.yahoo.com",
   hockey: "hockey.fantasysports.yahoo.com",
 };
-const reviewLinkTemplate = { version: "yahoo-review-links-v2" } as const;
-const reviewPaths = {
-  add: "addplayer",
-  drop: "dropplayer",
-} as const;
 const searchStatus = {
   free_agent: "FA",
   waiver: "W",
@@ -1212,43 +1204,9 @@ export const yahooProvider = Effect.gen(function* () {
     }));
   });
 
-  const buildReviewLink = Effect.fn("YahooProvider.buildReviewLink")(function* (
-    input: ProviderReviewLinkInput,
-  ) {
-    yield* Effect.annotateCurrentSpan("provider.operation", "build_review_link");
-    const intent = input.intent;
-    if (intent.kind === "trade") {
-      return yield* ProviderReviewLinkInvalid.make({ reason: "unsupported-review-surface" });
-    }
-    const base = yield* Effect.try({
-      try: () =>
-        reviewBase(input.leagueWebUrl, input.sport, leagueIdFromKey(input.providerLeagueKey)),
-      catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-league-url" }),
-    });
-    const url = yield* intent.kind === "drop"
-      ? dropReviewUrl(base, input.providerTeamKey, intent.drop)
-      : addReviewUrl(base, intent);
-    if (
-      url.origin !== base.origin ||
-      url.username !== "" ||
-      url.password !== "" ||
-      url.hash !== "" ||
-      !url.pathname.startsWith(`${base.pathname}/`) ||
-      [...url.searchParams.keys()].some(
-        (name) =>
-          (intent.kind === "drop" && name !== "pid") ||
-          (intent.kind !== "drop" && name !== "apid" && name !== "dpid"),
-      )
-    ) {
-      return yield* ProviderReviewLinkInvalid.make({ reason: "unsupported-review-surface" });
-    }
-    return url.href;
-  });
-
   return {
     key,
     capabilities: yahooCapabilities,
-    reviewLinkTemplate,
     validateSession,
     discoverTeams,
     readLeague,
@@ -1271,7 +1229,6 @@ export const yahooProvider = Effect.gen(function* () {
     readPendingTrades,
     readDraftResults,
     readLeagueTeams,
-    buildReviewLink,
     scoreRoster: (input: ProviderScoreRequest) =>
       scoreYahooRoster(input, {
         readPlayerFacts: () =>
@@ -3786,45 +3743,6 @@ function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is ReadonlyArray
   return Array.isArray(value);
 }
 
-function addReviewUrl(
-  base: URL,
-  intent: Extract<ProviderReviewIntent, { readonly kind: "add" | "add_drop" }>,
-): Effect.Effect<URL, ProviderReviewLinkInvalid> {
-  return Effect.try({
-    try: () => {
-      const target = new URL(base.href);
-      target.pathname = `${base.pathname}/${reviewPaths.add}`;
-      target.searchParams.append("apid", numericPlayerId(intent.add));
-      if (intent.kind === "add_drop") {
-        target.searchParams.append("dpid", numericPlayerId(intent.drop));
-      }
-      return target;
-    },
-    catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-player-key" }),
-  });
-}
-
-function dropReviewUrl(
-  base: URL,
-  providerTeamKey: string,
-  playerKey: string,
-): Effect.Effect<URL, ProviderReviewLinkInvalid> {
-  return Effect.gen(function* () {
-    const teamNumber = yield* Effect.try({
-      try: () => numericTeamNumber(providerTeamKey),
-      catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-team-key" }),
-    });
-    const playerId = yield* Effect.try({
-      try: () => numericPlayerId(playerKey),
-      catch: () => ProviderReviewLinkInvalid.make({ reason: "unsupported-player-key" }),
-    });
-    const target = new URL(base.href);
-    target.pathname = `${base.pathname}/${teamNumber}/${reviewPaths.drop}`;
-    target.searchParams.append("pid", playerId);
-    return target;
-  });
-}
-
 function reviewBase(url: string, sport: FantasySport, leagueId: string): URL {
   const parsed = new URL(url);
   if (
@@ -3846,22 +3764,6 @@ function reviewBase(url: string, sport: FantasySport, leagueId: string): URL {
     throw new Error("Yahoo review base escaped its league page");
   }
   return parsed;
-}
-
-function numericPlayerId(playerKey: string): string {
-  const match = /^[0-9]+\.p\.([0-9]+)$/u.exec(playerKey);
-  if (match?.[1] === undefined) {
-    throw new Error("Yahoo player key is not numeric");
-  }
-  return match[1];
-}
-
-function numericTeamNumber(teamKey: string): string {
-  const match = /\.t\.([0-9]+)$/u.exec(teamKey);
-  if (match?.[1] === undefined) {
-    throw new Error("Yahoo team key has no team number");
-  }
-  return match[1];
 }
 
 function leagueIdFromKey(leagueKey: string): string {

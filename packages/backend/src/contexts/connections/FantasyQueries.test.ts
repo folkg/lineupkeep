@@ -29,7 +29,6 @@ import { ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
 import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
-import { TransactionReviewsLive } from "./internal/TransactionReviewsLive.ts";
 import { ProfessionalCalendar } from "./ProfessionalCalendar.ts";
 import type {
   ProviderAcquisitionUsage,
@@ -49,9 +48,8 @@ import type {
 import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
 import { ProviderRegistry } from "./ProviderRegistry.ts";
 import { RosterResult, TeamSummaryData, TeamSummaryResult } from "./QueryResults.ts";
-import { CounterpartyRef, StatRef } from "./QueryValues.ts";
+import { StatRef } from "./QueryValues.ts";
 import { QueryTeamNotFound } from "./QueryValues.ts";
-import { TransactionReviews } from "./TransactionReview.ts";
 
 it.effect("lists owned teams with stable paging and owner-bound continuations", () =>
   Effect.gen(function* () {
@@ -2475,215 +2473,6 @@ function receivedToolResultBytes(page: RosterResult): number {
   return new TextEncoder().encode(received).length;
 }
 
-it.effect("builds review-only links for add, add/drop, and drop without provider keys", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const reviews = yield* TransactionReviews;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
-    const teamId = Array.getUnsafe(seeded, 0).id;
-
-    const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
-    assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok" || roster.scope !== "team") {
-      return;
-    }
-    const dropRef = Array.getUnsafe(roster.players, 0).player;
-    const search = yield* queries.searchPlayers(owner, {
-      team: teamId,
-      availability: "free_agent",
-      sort: "name",
-    });
-    assert.strictEqual(search.status, "ok");
-    if (search.status !== "ok") {
-      return;
-    }
-    const addRef = Array.getUnsafe(search.players, 0).player;
-
-    const links = yield* reviews.generate(owner, {
-      team: teamId,
-      intents: [
-        { kind: "add", add: addRef },
-        { kind: "add_drop", add: addRef, drop: dropRef },
-        { kind: "drop", drop: dropRef },
-      ],
-    });
-
-    assert.strictEqual(links.status, "ok");
-    if (links.status !== "ok") {
-      return;
-    }
-    assert.strictEqual(links.links.length, 3);
-    for (const link of links.links) {
-      assert.strictEqual(link.status, "review_only");
-      if (link.status === "review_only") {
-        assert.match(link.url, /^https:\/\//u);
-        assert.notInclude(link.url, "submit");
-        assert.notInclude(link.url, "confirm");
-        assert.include(link.humanReview, "cannot submit");
-      }
-    }
-    assert.include(links.instruction, "cannot submit");
-    assert.deepStrictEqual(links.linkTemplate, {
-      provider: "yahoo",
-      version: "fake-review-links-v1",
-    });
-    assert.isFalse(includesText(links, "461.p.10003"));
-    assert.isFalse(includesText(links, "test-session-cookie"));
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("builds a trade review link only for a league member counterparty", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const reviews = yield* TransactionReviews;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    yield* fake.setLeagueTeams([
-      {
-        providerTeamKey: "461.l.1000.t.2",
-        providerLeagueKey: "461.l.1000",
-        name: "Beta",
-        acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
-      },
-    ]);
-
-    const roster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
-    const search = yield* queries.searchPlayers(owner, {
-      team: teamId,
-      availability: "free_agent",
-      sort: "name",
-    });
-    const matchups = yield* queries.getMatchups(owner, {
-      team: teamId,
-      period: { week: 3 },
-    });
-    assert.strictEqual(roster.status, "ok");
-    assert.strictEqual(search.status, "ok");
-    assert.strictEqual(matchups.status, "ok");
-    if (
-      roster.status !== "ok" ||
-      roster.scope !== "team" ||
-      search.status !== "ok" ||
-      matchups.status !== "ok"
-    ) {
-      return;
-    }
-    const send = Array.getUnsafe(roster.players, 0).player;
-    const receive = Array.getUnsafe(search.players, 0).player;
-    const counterparty = Array.getUnsafe(matchups.matchups, 0).away.team;
-
-    const links = yield* reviews.generate(owner, {
-      team: teamId,
-      intents: [{ kind: "trade", send: [send], receive: [receive], counterparty }],
-    });
-
-    assert.strictEqual(links.status, "unsupported");
-    if (links.status !== "ok" && links.status !== "unsupported") {
-      return;
-    }
-    const link = Array.getUnsafe(links.links, 0);
-    assert.strictEqual(link.status, "unsupported");
-    if (link.status === "unsupported") {
-      assert.strictEqual(link.counterparty, counterparty);
-      assert.include(link.detail, "trade proposal page");
-      assert.strictEqual(link.players.length, 2);
-    }
-
-    yield* fake.setLeagueTeams([]);
-    const notMember = yield* reviews.generate(owner, {
-      team: teamId,
-      intents: [{ kind: "trade", send: [send], receive: [receive], counterparty }],
-    });
-    assert.strictEqual(notMember.status, "unsupported");
-    if (notMember.status === "unsupported") {
-      const foreign = Array.getUnsafe(notMember.links, 0);
-      assert.strictEqual(foreign.status, "unsupported");
-      if (foreign.status === "unsupported") {
-        assert.include(foreign.detail, "not a member of the selected league");
-      }
-    }
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("rejects a provider review URL that reaches a submission stage", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const reviews = yield* TransactionReviews;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    const search = yield* queries.searchPlayers(owner, {
-      team: teamId,
-      availability: "free_agent",
-      sort: "name",
-    });
-    assert.strictEqual(search.status, "ok");
-    if (search.status !== "ok") {
-      return;
-    }
-    yield* fake.setReviewLinkUrl("https://review.example.test/league/461.l.1000/submit");
-    const links = yield* reviews.generate(owner, {
-      team: teamId,
-      intents: [{ kind: "add", add: Array.getUnsafe(search.players, 0).player }],
-    });
-
-    assert.strictEqual(links.status, "unsupported");
-    if (links.status !== "unsupported") {
-      return;
-    }
-    const link = Array.getUnsafe(links.links, 0);
-    assert.strictEqual(link.status, "unsupported");
-    if (link.status === "unsupported") {
-      assert.include(link.detail, "review-only safety check");
-    }
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("marks a drop link unsupported when the player is not on the roster", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const reviews = yield* TransactionReviews;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    const search = yield* queries.searchPlayers(owner, {
-      team: teamId,
-      availability: "free_agent",
-      sort: "name",
-    });
-    assert.strictEqual(search.status, "ok");
-    if (search.status !== "ok") {
-      return;
-    }
-    const freeAgent = Array.getUnsafe(search.players, 0).player;
-
-    const links = yield* reviews.generate(owner, {
-      team: teamId,
-      intents: [{ kind: "drop", drop: freeAgent }],
-    });
-
-    assert.strictEqual(links.status, "unsupported");
-    if (links.status !== "unsupported") {
-      return;
-    }
-    const link = Array.getUnsafe(links.links, 0);
-    assert.strictEqual(link.status, "unsupported");
-    if (link.status === "unsupported") {
-      assert.include(link.detail, "not on the selected roster");
-    }
-
-    const other = yield* Effect.flip(
-      reviews.generate(decodeUserId("other"), {
-        team: teamId,
-        intents: [{ kind: "drop", drop: freeAgent }],
-      }),
-    );
-    assert.instanceOf(other, QueryTeamNotFound);
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
 const thirteenTeamStandings = (providerLeagueKey: string): ProviderStandings => ({
   providerLeagueKey,
   teams: globalThis.Array.from({ length: 13 }, (_, index) => ({
@@ -3206,10 +2995,9 @@ it.effect("returns the owner note as owner context in a team summary", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("carries the owner note on the full roster read and the trade review surface", () =>
+it.effect("carries the owner note on the full roster read", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
-    const reviews = yield* TransactionReviews;
     const database = yield* ConnectionsDatabase;
     const fake = yield* FakeProviderWorld;
     const seeded = yield* seed(fake, [
@@ -3237,28 +3025,6 @@ it.effect("carries the owner note on the full roster read and the trade review s
       return;
     }
     assert.deepStrictEqual(full.ownerNote, {
-      status: "provided",
-      text: note,
-      updatedAt: writtenAt,
-    });
-
-    const player = Array.getUnsafe(full.players, 0).player;
-    const review = yield* reviews.generate(owner, {
-      team: teamId,
-      intents: [
-        {
-          kind: "trade",
-          send: [player],
-          receive: [player],
-          counterparty: yield* Schema.decodeEffect(CounterpartyRef)("r1.counterparty"),
-        },
-      ],
-    });
-    assert.notStrictEqual(review.status, "narrowing_required");
-    if (review.status === "narrowing_required") {
-      return;
-    }
-    assert.deepStrictEqual(review.ownerNote, {
       status: "provided",
       text: note,
       updatedAt: writtenAt,
@@ -6176,7 +5942,6 @@ const queriesTestLayer = (
   gameSource: Layer.Layer<GameSourceRegistry>,
 ): Layer.Layer<
   | FantasyQueries
-  | TransactionReviews
   | Connections
   | QueryRepository
   | ConnectionRepository
@@ -6191,7 +5956,7 @@ const queriesTestLayer = (
     Layer.provideMerge(ScheduleObservationRepositoryTest),
     Layer.provide(gameSource),
   );
-  return Layer.merge(FantasyQueriesLive, TransactionReviewsLive).pipe(
+  return FantasyQueriesLive.pipe(
     Layer.provideMerge(ConnectionsLive),
     Layer.provideMerge(QueryRepositoryTest),
     Layer.provideMerge(ConnectionRepositoryTest),
@@ -6210,7 +5975,6 @@ const queriesTestLayerWithGames = (
   teamCount: number,
 ): Layer.Layer<
   | FantasyQueries
-  | TransactionReviews
   | Connections
   | QueryRepository
   | ConnectionRepository

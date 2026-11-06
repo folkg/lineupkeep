@@ -7,7 +7,6 @@ import {
   ProviderPeriodUnsupported,
   ProviderRequestFailed,
   ProviderResponseInvalid,
-  ProviderReviewLinkInvalid,
   ProviderSessionMaterial,
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
@@ -30,7 +29,6 @@ import type {
   ProviderPlayerScore,
   ProviderPendingTrade,
   ProviderPlayerSearchResult,
-  ProviderReviewLinkInput,
   ProviderRoster,
   ProviderRosterCoverage,
   ProviderRosterSchedule,
@@ -99,8 +97,6 @@ type FakeProviderState = {
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
   readonly leagueRosters: ReadonlyArray<ProviderLeagueRoster> | undefined;
   readonly unsupported: ReadonlySet<ProviderOperation>;
-  readonly reviewLinkFailure: ProviderReviewLinkInvalid | undefined;
-  readonly reviewLinkUrl: string | undefined;
   readonly nativeAction: FakeWriteAction;
   readonly nativeAfter: ProviderRoster | undefined;
   readonly nativeTargets: ReadonlyArray<ProviderNativeTarget>;
@@ -175,8 +171,6 @@ export type FakeProviderWorldShape = {
   readonly unsupportedOperations: (
     operations: ReadonlyArray<ProviderOperation>,
   ) => Effect.Effect<void>;
-  readonly failReviewLinks: (failure: ProviderReviewLinkInvalid | undefined) => Effect.Effect<void>;
-  readonly setReviewLinkUrl: (url: string | undefined) => Effect.Effect<void>;
   readonly setNativeAction: (action: FakeWriteAction) => Effect.Effect<void>;
   readonly setNativeAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly nativeTargets: Effect.Effect<ReadonlyArray<ProviderNativeTarget>>;
@@ -255,8 +249,6 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         leagueTeams: [],
         leagueRosters: undefined,
         unsupported: new Set(),
-        reviewLinkFailure: undefined,
-        reviewLinkUrl: undefined,
         nativeAction: "accept",
         nativeAfter: undefined,
         nativeTargets: [],
@@ -350,9 +342,6 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         setLeagueRosters: (leagueRosters) => modify((current) => ({ ...current, leagueRosters })),
         unsupportedOperations: (operations) =>
           modify((current) => ({ ...current, unsupported: new Set(operations) })),
-        failReviewLinks: (reviewLinkFailure) =>
-          modify((current) => ({ ...current, reviewLinkFailure })),
-        setReviewLinkUrl: (reviewLinkUrl) => modify((current) => ({ ...current, reviewLinkUrl })),
         setNativeAction: (nativeAction) => modify((current) => ({ ...current, nativeAction })),
         setNativeAfter: (nativeAfter) => modify((current) => ({ ...current, nativeAfter })),
         nativeTargets: Effect.map(Ref.get(state), (current) => current.nativeTargets),
@@ -438,7 +427,6 @@ const providerFake = Effect.gen(function* () {
   return {
     key: decodeProviderKey("yahoo"),
     capabilities: fakeCapabilities,
-    reviewLinkTemplate: { version: "fake-review-links-v1" },
     validateSession: Effect.fn("FakeProvider.validateSession")(function* (input) {
       yield* validate(input, "validate_session");
       const current = yield* Ref.get(world.state);
@@ -933,40 +921,6 @@ const providerFake = Effect.gen(function* () {
         });
       }
       return rosters;
-    }),
-    buildReviewLink: Effect.fn("FakeProvider.buildReviewLink")(function* (
-      input: ProviderReviewLinkInput,
-    ) {
-      const current = yield* Ref.get(world.state);
-      if (current.reviewLinkUrl !== undefined) {
-        return current.reviewLinkUrl;
-      }
-      if (current.reviewLinkFailure !== undefined) {
-        return yield* ProviderReviewLinkInvalid.make({
-          reason: current.reviewLinkFailure.reason,
-        });
-      }
-      const url = new URL(`https://review.example.test/league/${input.providerLeagueKey}/add`);
-      const append = (name: "apid" | "dpid", key: string): void => {
-        url.searchParams.append(name, key.slice(key.lastIndexOf(".p.") + 3));
-      };
-      switch (input.intent.kind) {
-        case "add":
-          append("apid", input.intent.add);
-          break;
-        case "add_drop":
-          append("apid", input.intent.add);
-          append("dpid", input.intent.drop);
-          break;
-        case "drop":
-          append("dpid", input.intent.drop);
-          break;
-        case "trade":
-          return yield* ProviderReviewLinkInvalid.make({
-            reason: "unsupported-review-surface",
-          });
-      }
-      return url.href;
     }),
     scoreRoster: Effect.fn("FakeProvider.scoreRoster")(function* (input: ProviderScoreRequest) {
       const current = yield* prepare(input, "read_player_details");

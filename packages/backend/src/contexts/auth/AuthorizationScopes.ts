@@ -21,6 +21,16 @@ export function currentScopeName(name: string): string {
   return retiredScopeAliases[name] ?? name;
 }
 
+export function acceptedScopeNames(
+  scopes: ReadonlyArray<AuthorizationScope>,
+): ReadonlyArray<string> {
+  const advertised = scopes.map((scope) => scope.name);
+  return [
+    ...advertised,
+    ...retiredScopeNames.filter((name) => advertised.includes(currentScopeName(name))),
+  ];
+}
+
 export type AuthorizationScope = {
   readonly name: string;
   readonly description: string;

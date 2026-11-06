@@ -21,7 +21,6 @@ import {
   ProviderPeriodUnsupported,
   ProviderRequestFailed,
   ProviderResponseInvalid,
-  ProviderReviewLinkInvalid,
   ProviderSessionRejected,
 } from "#contexts/connections/Provider.ts";
 import type {
@@ -4224,127 +4223,6 @@ it.effect("rejects league membership that names another league", () => {
     assert.instanceOf(error, ProviderResponseInvalid);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
-
-it.effect.each([
-  {
-    sport: "football" as const,
-    leagueWebUrl: "https://football.fantasysports.yahoo.com/f1/1000",
-    providerLeagueKey: "461.l.1000",
-    name: "add",
-    intent: { kind: "add" as const, add: "461.p.10001" },
-    expected: "https://football.fantasysports.yahoo.com/f1/1000/addplayer?apid=10001",
-  },
-  {
-    sport: "football" as const,
-    leagueWebUrl: "https://football.fantasysports.yahoo.com/f1/1000",
-    providerLeagueKey: "461.l.1000",
-    name: "add/drop",
-    intent: { kind: "add_drop" as const, add: "461.p.10001", drop: "461.p.10002" },
-    expected: "https://football.fantasysports.yahoo.com/f1/1000/addplayer?apid=10001&dpid=10002",
-  },
-  {
-    sport: "football" as const,
-    leagueWebUrl: "https://football.fantasysports.yahoo.com/f1/1000",
-    providerLeagueKey: "461.l.1000",
-    name: "drop",
-    intent: { kind: "drop" as const, drop: "461.p.10002" },
-    expected: "https://football.fantasysports.yahoo.com/f1/1000/4/dropplayer?pid=10002",
-  },
-  {
-    sport: "hockey" as const,
-    leagueWebUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
-    providerLeagueKey: "461.l.2000",
-    name: "add",
-    intent: { kind: "add" as const, add: "461.p.10001" },
-    expected: "https://hockey.fantasysports.yahoo.com/hockey/2000/addplayer?apid=10001",
-  },
-  {
-    sport: "hockey" as const,
-    leagueWebUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
-    providerLeagueKey: "461.l.2000",
-    name: "add/drop",
-    intent: { kind: "add_drop" as const, add: "461.p.10001", drop: "461.p.10002" },
-    expected: "https://hockey.fantasysports.yahoo.com/hockey/2000/addplayer?apid=10001&dpid=10002",
-  },
-  {
-    sport: "hockey" as const,
-    leagueWebUrl: "https://hockey.fantasysports.yahoo.com/hockey/2000",
-    providerLeagueKey: "461.l.2000",
-    name: "drop",
-    intent: { kind: "drop" as const, drop: "461.p.10002" },
-    expected: "https://hockey.fantasysports.yahoo.com/hockey/2000/4/dropplayer?pid=10002",
-  },
-])(
-  "builds the exact $sport review URL for $name",
-  ({ sport, leagueWebUrl, providerLeagueKey, intent, expected }) =>
-    Effect.gen(function* () {
-      const provider = yield* testProvider;
-
-      const link = yield* provider.buildReviewLink({
-        providerLeagueKey,
-        providerTeamKey: `${providerLeagueKey}.t.4`,
-        leagueWebUrl,
-        sport,
-        intent,
-      });
-
-      assert.strictEqual(link, expected);
-      assert.strictEqual(provider.reviewLinkTemplate.version, "yahoo-review-links-v2");
-    }).pipe(Effect.provide(yahooLayer(recordingInternet(() => jsonResponse({}))))),
-);
-
-it.effect("publishes no parameterized trade review link", () =>
-  Effect.gen(function* () {
-    const provider = yield* testProvider;
-
-    const error = yield* Effect.flip(
-      provider.buildReviewLink({
-        providerLeagueKey: "461.l.1000",
-        providerTeamKey: "461.l.1000.t.4",
-        leagueWebUrl: "https://football.fantasysports.yahoo.com/f1/1000",
-        sport: "football",
-        intent: {
-          kind: "trade",
-          send: ["461.p.10001"],
-          receive: ["461.p.10002"],
-        },
-      }),
-    );
-
-    assert.instanceOf(error, ProviderReviewLinkInvalid);
-    assert.strictEqual(error.reason, "unsupported-review-surface");
-  }).pipe(Effect.provide(yahooLayer(recordingInternet(() => jsonResponse({}))))),
-);
-
-it.effect("rejects review links for a foreign host or a non-numeric player key", () =>
-  Effect.gen(function* () {
-    const provider = yield* testProvider;
-
-    const foreign = yield* Effect.flip(
-      provider.buildReviewLink({
-        providerLeagueKey: "461.l.1000",
-        providerTeamKey: "461.l.1000.t.4",
-        leagueWebUrl: "https://evil.test/f1/1000",
-        sport: "football",
-        intent: { kind: "add", add: "461.p.10001" },
-      }),
-    );
-    const nonNumeric = yield* Effect.flip(
-      provider.buildReviewLink({
-        providerLeagueKey: "461.l.1000",
-        providerTeamKey: "461.l.1000.t.4",
-        leagueWebUrl: "https://football.fantasysports.yahoo.com/f1/1000",
-        sport: "football",
-        intent: { kind: "add", add: "461.p.not-a-number" },
-      }),
-    );
-
-    assert.instanceOf(foreign, ProviderReviewLinkInvalid);
-    assert.strictEqual(foreign.reason, "unsupported-league-url");
-    assert.instanceOf(nonNumeric, ProviderReviewLinkInvalid);
-    assert.strictEqual(nonNumeric.reason, "unsupported-player-key");
-  }).pipe(Effect.provide(yahooLayer(recordingInternet(() => jsonResponse({}))))),
-);
 
 type RecordedRequest = {
   readonly url: URL;

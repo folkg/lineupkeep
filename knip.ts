@@ -91,6 +91,7 @@ const productionTestSeams: Record<string, Array<"exports" | "types">> = {
   "packages/backend/src/contexts/connections/internal/yahoo/YahooLineup.ts": ["exports", "types"],
   "packages/backend/src/database/dbUtilities.ts": ["exports"],
   "packages/backend/src/contexts/auth/User.ts": ["exports"],
+  "packages/backend/src/contexts/auth/AuthorizationScopes.ts": ["exports"],
   "packages/backend/src/runtime/ApplicationScopes.ts": ["exports"],
   "packages/backend/src/runtime/GoogleCloudTelemetry.ts": ["exports"],
   "packages/backend/src/contexts/auth/AuthSession.ts": ["types"],

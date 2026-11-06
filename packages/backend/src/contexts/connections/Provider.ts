@@ -23,7 +23,6 @@ const ProviderOperation = Schema.Literals([
   "read_pending_trades",
   "read_draft_results",
   "read_league_teams",
-  "build_review_link",
   "apply_native_action",
   "apply_explicit_assignments",
   "apply_transaction",
@@ -182,18 +181,6 @@ export class ProviderPeriodUnsupported extends Schema.TaggedError<
   declared: Schema.Literals(["native", "aggregated", "unsupported"]),
   reason: Schema.String,
   remedy: Schema.String,
-}) {}
-
-export class ProviderReviewLinkInvalid extends Schema.TaggedError<
-  ProviderReviewLinkInvalid,
-  { readonly brand: unique symbol }
->()("provider.review_link_invalid", {
-  reason: Schema.Literals([
-    "unsupported-player-key",
-    "unsupported-team-key",
-    "unsupported-league-url",
-    "unsupported-review-surface",
-  ]),
 }) {}
 
 export class ProviderUnregistered extends Schema.TaggedError<
@@ -374,12 +361,6 @@ export type ProviderShape = {
   readonly readLeagueTeams: (
     input: ProviderSessionMaterial & { readonly providerLeagueKey: string },
   ) => Effect.Effect<ReadonlyArray<ProviderLeagueTeam>, ProviderReadFailure>;
-
-  readonly reviewLinkTemplate: { readonly version: string };
-
-  readonly buildReviewLink: (
-    input: ProviderReviewLinkInput,
-  ) => Effect.Effect<string, ProviderReviewLinkInvalid>;
 
   readonly scoreRoster: (
     input: ProviderScoreRequest,
@@ -856,34 +837,6 @@ export type ProviderLeagueTeam = {
   readonly managerName?: string;
   readonly acquisitionUsage: ProviderAcquisitionUsage;
   readonly remainingBudget?: number | undefined;
-};
-
-export type ProviderReviewIntent =
-  | {
-      readonly kind: "add";
-      readonly add: string;
-    }
-  | {
-      readonly kind: "add_drop";
-      readonly add: string;
-      readonly drop: string;
-    }
-  | {
-      readonly kind: "drop";
-      readonly drop: string;
-    }
-  | {
-      readonly kind: "trade";
-      readonly send: ReadonlyArray<string>;
-      readonly receive: ReadonlyArray<string>;
-    };
-
-export type ProviderReviewLinkInput = {
-  readonly providerLeagueKey: string;
-  readonly providerTeamKey: string;
-  readonly leagueWebUrl: string;
-  readonly sport: FantasySport;
-  readonly intent: ProviderReviewIntent;
 };
 
 export type ProviderScoreRequest = ProviderSessionMaterial & {

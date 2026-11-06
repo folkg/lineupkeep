@@ -63,7 +63,6 @@ test("discovers and authorizes a stateless client through email sign-in, consent
     "get_matchups",
     "get_team_summary",
     "get_transactions",
-    "generate_transaction_review_links",
     "propose_transactions",
     "get_transaction_proposal_set",
     "revalidate_transaction_proposal_set",
@@ -125,7 +124,6 @@ test("serves every tool scope after one consent for the documented scope set", a
     ["list_connections", {}],
     ["list_teams", {}],
     ["get_calendar", { team }],
-    ["generate_transaction_review_links", { team, intents: [{ kind: "add", add: "r1.test" }] }],
     [
       "propose_transactions",
       {
@@ -267,8 +265,18 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
   expect(denial.error_description).not.toContain("teams:manage");
 
   const reviewDenied = await client.request("tools/call", {
-    name: "generate_transaction_review_links",
-    arguments: { team: randomUUID(), intents: [{ kind: "add", add: "r1.invalid" }] },
+    name: "propose_transactions",
+    arguments: {
+      items: [
+        {
+          team: randomUUID(),
+          kind: "drop",
+          adds: [],
+          drops: ["r1.invalid"],
+          reason: "Checking the review scope boundary.",
+        },
+      ],
+    },
   });
   expect(reviewDenied.status).toBe(403);
   expect(reviewDenied.headers.get("www-authenticate")).toContain('scope="transactions:review"');
@@ -292,10 +300,7 @@ test("enforces fantasy read and transaction review scopes over MCP", async ({ pa
 
   const reviewAuthorization = await authorize(page, origin, "transactions:review");
   const reviewer = mcpClient(mcpEndpoint(origin), reviewAuthorization.credentials.access_token);
-  const review = await reviewer.callTool("generate_transaction_review_links", {
-    team: randomUUID(),
-    intents: [{ kind: "add", add: "r1.invalid" }],
-  });
+  const review = await reviewer.callTool("get_transaction_proposal_set", { set: randomUUID() });
   expect(review.isError).toBe(true);
   expect(JSON.stringify(review)).not.toContain("submit");
 
@@ -704,7 +709,7 @@ test("rejects legacy protocols and registers dynamic clients", async ({ page, ba
   expect(legacy.headers.has("mcp-session-id")).toBe(false);
   expect(registration.status, "dynamic client registration is open for public clients").toBe(201);
   expect(isRecord(registered) && typeof registered["client_id"] === "string").toBe(true);
-  expect(isRecord(registered) ? registered["scope"] : undefined).toBe(documentedScopes);
+  expect(isRecord(registered) ? registered["scope"] : undefined).toBe(registrableScopes);
   expect(isRecord(registered) ? registered["client_secret"] : undefined).toBeUndefined();
 });
 
@@ -952,6 +957,7 @@ const onboardingScopes = "fantasy:read offline_access";
 const documentedScopes =
   "fantasy:read transactions:review lineups:write teams:manage offline_access";
 const retiredReadScope = "connections:read";
+const registrableScopes = `${documentedScopes} ${retiredReadScope}`;
 const retiredClientName = "Lineupgrade retired scope probe";
 
 async function authorize(

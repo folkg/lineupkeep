@@ -15,6 +15,7 @@ import {
 import { Array, Context, DateTime, Effect, Layer } from "effect";
 
 import { AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
+import { acceptedScopeNames } from "#contexts/auth/AuthorizationScopes.ts";
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import { anyOf } from "#database/dbUtilities.ts";
 import { retentionPolicy } from "#retention/RetentionPolicy.ts";
@@ -118,16 +119,17 @@ export class OAuthClientRepository extends Context.Service<OAuthClientRepository
         "OAuthClientRepository.widenDynamicRegistrations",
       )(function* (scopes: ReadonlyArray<AuthorizationScope>) {
         const advertised = scopes.map((scope) => scope.name);
+        const accepted = [...acceptedScopeNames(scopes)];
         const now = DateTime.toDateUtc(yield* DateTime.now);
         const widened = yield* query(() =>
           database
             .update(oauthClient)
-            .set({ scopes: advertised, updatedAt: now })
+            .set({ scopes: accepted, updatedAt: now })
             .where(
               and(
                 dynamicRegistration,
                 isNotNull(oauthClient.scopes),
-                arrayContained(oauthClient.scopes, advertised),
+                arrayContained(oauthClient.scopes, accepted),
                 not(arrayContains(oauthClient.scopes, advertised)),
               ),
             )

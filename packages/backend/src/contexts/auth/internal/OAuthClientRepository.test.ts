@@ -17,9 +17,10 @@ const advertised: ReadonlyArray<AuthorizationScope> = [
 ];
 
 const advertisedNames = advertised.map((scope) => scope.name);
+const registrableNames = [...advertisedNames, "connections:read"];
 
 it.effect(
-  "widens only dynamic registrations whose scopes are a strict subset of the advertised scopes",
+  "widens only dynamic registrations whose scopes are a strict subset of the registrable scopes",
   () =>
     Effect.gen(function* () {
       const database = yield* AuthDatabase;
@@ -51,18 +52,18 @@ it.effect(
 
       const after = yield* Effect.promise(() => database.select().from(oauthClient));
       assert.deepStrictEqual(scopesById(after), {
-        "dynamic-subset": advertisedNames,
+        "dynamic-subset": registrableNames,
         "dynamic-reordered": ["offline_access", "lineups:write", "fantasy:read"],
         "dynamic-current": advertisedNames,
-        "dynamic-retired": ["fantasy:read", "connections:read"],
+        "dynamic-retired": registrableNames,
         "owner-client": ["fantasy:read"],
         "discovered-client": ["fantasy:read"],
         "resource-client": ["fantasy:read"],
         "unscoped-client": null,
       });
       assert.deepStrictEqual(
-        untouchedTimestamps(after, "dynamic-subset"),
-        untouchedTimestamps(before, "dynamic-subset"),
+        untouchedTimestamps(after, ["dynamic-subset", "dynamic-retired"]),
+        untouchedTimestamps(before, ["dynamic-subset", "dynamic-retired"]),
       );
     }).pipe(Effect.provide(OAuthClientRepository.layer.pipe(Layer.provideMerge(AuthDatabaseTest)))),
   30_000,
@@ -98,9 +99,9 @@ function scopesById(
 
 function untouchedTimestamps(
   rows: ReadonlyArray<typeof oauthClient.$inferSelect>,
-  widened: string,
+  widened: ReadonlyArray<string>,
 ): Record<string, Date | null> {
   return Object.fromEntries(
-    rows.filter((row) => row.id !== widened).map((row) => [row.id, row.updatedAt]),
+    rows.filter((row) => !widened.includes(row.id)).map((row) => [row.id, row.updatedAt]),
   );
 }

@@ -155,8 +155,6 @@ export const secondProvider: ProviderShape = {
   proposeTrade: () => notSent,
   withdrawTrade: () => notSent,
   applyReserveMove: () => notSent,
-  reviewLinkTemplate: { version: "atlas-review-links/1" },
-  buildReviewLink: () => Effect.succeed("https://atlas.invalid/review"),
 };
 
 const searchResults: ProviderPlayerSearchResult = {

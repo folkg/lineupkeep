@@ -13,9 +13,9 @@ revisions that carried each change.
   on those leagues the same call now returns 5 players complete at 10,059 and 7,482 structured
   bytes, and a 9-player roster returns 9 complete at 15,776 and 11,633.
 - `get_rosters` with `detail: full` carries the team's `ownerNote`; the compact default still omits
-  it. `generate_transaction_review_links` and `get_pending_trade_offers` also carry the linked
-  team's `ownerNote`, so a trade decision sees the owner's stated intent without a separate
-  `get_team_summary` call. The note remains owner context, never a provider or league fact.
+  it. `get_pending_trade_offers` also carries the linked team's `ownerNote`, so a trade decision
+  sees the owner's stated intent without a separate `get_team_summary` call. The note remains owner
+  context, never a provider or league fact.
 - `get_league`'s `draft_history` group carries the provider's inline player name where its
   `draftresults;out=players` read publishes one, beside the private player reference. A pick the
   provider returns without a name keeps only the reference. On the owner's football league the first

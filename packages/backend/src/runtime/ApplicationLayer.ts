@@ -48,7 +48,6 @@ import { TeamRepository } from "#contexts/connections/internal/TeamRepository.ts
 import { TeamsLive } from "#contexts/connections/internal/TeamsLive.ts";
 import { TransactionProposalRepository } from "#contexts/connections/internal/TransactionProposalRepository.ts";
 import { TransactionProposalsLive } from "#contexts/connections/internal/TransactionProposalsLive.ts";
-import { TransactionReviewsLive } from "#contexts/connections/internal/TransactionReviewsLive.ts";
 import { yahooProvider } from "#contexts/connections/internal/yahoo/YahooProvider.ts";
 import type { LineupRuns } from "#contexts/connections/LineupRuns.ts";
 import type { LineupDispatcher, LineupWorker } from "#contexts/connections/LineupWork.ts";
@@ -58,7 +57,6 @@ import { ProviderRegistry, providerRegistryOf } from "#contexts/connections/Prov
 import type { RetentionSweep } from "#contexts/connections/Retention.ts";
 import type { Teams } from "#contexts/connections/Teams.ts";
 import type { TransactionProposals } from "#contexts/connections/TransactionProposals.ts";
-import type { TransactionReviews } from "#contexts/connections/TransactionReview.ts";
 import type { Feedback } from "#contexts/feedback/Feedback.ts";
 import type { FeedbackRetention } from "#contexts/feedback/FeedbackRetention.ts";
 import { FeedbackDatabase } from "#contexts/feedback/internal/FeedbackDatabase.ts";
@@ -129,7 +127,7 @@ const ProfessionalCalendarLayer = ProfessionalCalendarLive.pipe(
   Layer.provide(ScheduleObservationRepositoryLayer),
   Layer.provide(GameSourceLayer),
 );
-const QueriesLayer = Layer.merge(FantasyQueriesLive, TransactionReviewsLive).pipe(
+const QueriesLayer = FantasyQueriesLive.pipe(
   Layer.provide(QueryRepositoryLayer),
   Layer.provide(ScheduleObservationRepositoryLayer),
   Layer.provide(ProfessionalCalendarLayer),
@@ -269,7 +267,6 @@ export type BackendServices =
   | HostedLinking
   | FantasyQueries
   | ProfessionalCalendar
-  | TransactionReviews
   | TransactionProposals
   | LineupRuns
   | Teams

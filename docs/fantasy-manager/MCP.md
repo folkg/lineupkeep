@@ -14,22 +14,21 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 
 ## Proposed tool families
 
-| Tool                                | Purpose and important limits                                                                                                                                                          |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_connections`                  | Safe owned provider connection metadata/status only                                                                                                                                   |
-| `list_teams`                        | Compact owned team discovery with season/sport/connection filters; stable paging                                                                                                      |
-| `get_calendar`                      | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                                   |
-| `get_league`                        | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages            |
-| `get_rosters`                       | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation on every entry; full detail carries the owner note |
-| `search_players`                    | Bounded league/sport-context player search with ownership/started signals, validated sorts, and optional professional games remaining                                                 |
-| `get_players`                       | Explicit-list hydration of up to 25 selected-player references, returned whole; generic stats/projections/availability groups                                                         |
-| `get_matchups`                      | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                            |
-| `get_transactions`                  | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution              |
-| `get_team_summary`                  | One bounded per-team snapshot: league, standing and record, standings, current matchup, and compact roster                                                                            |
-| `generate_transaction_review_links` | Typed add/add-drop/drop/trade review intents; return provider human-review URLs only                                                                                                  |
-| `set_lineup`                        | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                |
-| `set_team_automation`               | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                      |
-| `get_lineup_runs`                   | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                              |
+| Tool                  | Purpose and important limits                                                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_connections`    | Safe owned provider connection metadata/status only                                                                                                                                   |
+| `list_teams`          | Compact owned team discovery with season/sport/connection filters; stable paging                                                                                                      |
+| `get_calendar`        | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                                   |
+| `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages            |
+| `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation on every entry; full detail carries the owner note |
+| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts, and optional professional games remaining                                                 |
+| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; generic stats/projections/availability groups                                                         |
+| `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                            |
+| `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution              |
+| `get_team_summary`    | One bounded per-team snapshot: league, standing and record, standings, current matchup, and compact roster                                                                            |
+| `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                |
+| `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                      |
+| `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                              |
 
 Do not expose a general policy-mode selector, native/premium action selector, custom formula, or fallback override. Return the implementation actually used. The MCP surface covers automation enrollment, pause, and resume because an agent must be able to manage a team it owns; it still does not expose registration, provider session upload, or every frontend control as tools.
 
@@ -94,11 +93,11 @@ spends the smallest allowance, a `readOnlyHint: true` tool spends the generous o
 spends the write allowance. An unannotated tool defaults to destructive, so forgetting to describe a
 new tool bounds it more tightly rather than leaving it unlimited.
 
-| Class         | Tools                                                                                                    | Window | Per client | Per owner |
-| ------------- | -------------------------------------------------------------------------------------------------------- | ------ | ---------- | --------- |
-| `read`        | every `readOnlyHint: true` tool, including the summaries, searches, proposal read-back, and review links | 1 min  | 60         | 180       |
-| `write`       | `submit_feedback`, `propose_transactions`, `revalidate_transaction_proposal_set`, `set_team_automation`  | 1 hour | 20         | 60        |
-| `destructive` | `set_lineup`                                                                                             | 1 hour | 6          | 18        |
+| Class         | Tools                                                                                                   | Window | Per client | Per owner |
+| ------------- | ------------------------------------------------------------------------------------------------------- | ------ | ---------- | --------- |
+| `read`        | every `readOnlyHint: true` tool, including the summaries, searches, and proposal read-back              | 1 min  | 60         | 180       |
+| `write`       | `submit_feedback`, `propose_transactions`, `revalidate_transaction_proposal_set`, `set_team_automation` | 1 hour | 20         | 60        |
+| `destructive` | `set_lineup`                                                                                            | 1 hour | 6          | 18        |
 
 The numbers are a product judgement, not a measurement. A polling agent reading a team summary a few
 times a minute uses well under a tenth of the read allowance; 60 reads a minute still lets one client
@@ -775,26 +774,6 @@ the trade as pending, accepted, withdrawn, or expired, and can withdraw an offer
 from our own record or from the provider's pending feed. It never accepts, rejects, votes, counters,
 or selects a pick for another manager or the league.
 
-## Review-link safety
-
-Generate links from typed domain intents and verified relationships. Users may choose players/counterparty, not origins, endpoint stages, or submission parameters. Validate provider, league, owning team, membership, and numeric-ID mapping privately.
-
-Return a clear human-review instruction and no guarantee of add/drop/trade eligibility. Review links never carry a submission, confirmation automation, waiver/bid submission, or multi-add/drop behavior the adapter has not validated. They are for a person to inspect in the provider's own interface.
-
-Every result carries `linkTemplate: { provider, version }`, so a client can detect a stale link
-template after an upgrade without guessing from URL shape. It also carries `ownerNote`, the linked
-team's note from Lineupgrade: owner context, not a provider fact, so a person reviewing a proposal
-can see keepers, dynasty cost, salary, or why a player is held. The Yahoo template
-(`yahoo-review-links-v2`) emits an `addplayer` review page for `add` and `add/drop`, and a
-team-scoped `dropplayer` page for `drop`; each was verified against the provider as the intended
-review page for the named player. The provider publishes no parameterized trade proposal page, so a
-`trade` intent returns `unsupported` with that reason instead of a link that opens an empty form.
-This scope also covers the transaction proposal tools, which store proposals and read provider
-state but never submit anything. A pending trade offer another manager made is a separate read
-(`get_pending_trade_offers`); a review link still cannot act on it.
-Review links are season-independent; a provider template change requires a version change and a new
-per-sport URL fixture test.
-
 ## Client onboarding and scopes
 
 ### Per-tool scopes
@@ -818,7 +797,6 @@ lacking a scope a different tool needs, does not change whether a call succeeds.
 | `get_lineup_runs`                     | `fantasy:read`        |
 | `submit_feedback`                     | `fantasy:read`        |
 | `list_feedback`                       | `fantasy:read`        |
-| `generate_transaction_review_links`   | `transactions:review` |
 | `propose_transactions`                | `transactions:review` |
 | `get_transaction_proposal_set`        | `transactions:review` |
 | `revalidate_transaction_proposal_set` | `transactions:review` |
@@ -835,8 +813,8 @@ Four resource scopes cover the surface, and each exists because a tool needs exa
   scopes. It also covers a lineup run's status, because a run read is a read, and feedback
   submission and read-back, because reporting a problem must stay possible under the scope every
   client holds and it writes only the acting account's own report.
-- `transactions:review` stages proposals, reads them back, revalidates them, and generates
-  human-review links. It writes nothing to the provider and submits nothing.
+- `transactions:review` stages proposals, reads them back, and revalidates them. It writes
+  nothing to the provider and submits nothing.
 - `lineups:write` is the roster mutation: `set_lineup` and only `set_lineup`. A lineup change and
   a transaction submission are not the same risk, so they are not the same scope.
 - `teams:manage` changes team-level state the owner keeps in Lineupgrade: automation enrollment,
@@ -855,18 +833,20 @@ behavior section states.
 
 Two earlier scope names are gone. A retired name that has a successor is **accepted but never
 advertised**: a token or authorization request that carries one is resolved to the current scope at
-the enforcement boundary, and neither discovery document, the onboarding baseline, nor a new client
-registration names one.
+the enforcement boundary, and neither discovery document nor the onboarding baseline names one. A
+new client registration may ask for one, and the registration records it as a capability beside the
+current scopes.
 
 | Retired name       | Accepted as    | Why it went                                                                                                             |
 | ------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `connections:read` | `fantasy:read` | Reading a connection and reading a team are the same act of reading the owner's own data.                               |
 | `feedback:manage`  | none           | The feedback surface is submit-and-read only. A token that still holds it keeps working for every other scope it holds. |
 
-`connections:read` is accepted in a token's `scope` claim, in an authorization request, and on the
-consent screen; the consent screen shows the description of the scope it resolves to. A stored
-client registration keeps the scopes it was granted, so a client that still requests
-`connections:read` receives a token whose claim names that scope and every read tool answers it.
+`connections:read` is accepted in a token's `scope` claim, in an authorization request, at dynamic
+client registration, and on the consent screen; the consent screen shows the description of the
+scope it resolves to. A stored client registration keeps the scopes it was granted, so a client
+that still requests `connections:read` receives a token whose claim names that scope and every read
+tool answers it.
 `feedback:manage` has no successor: no tool requires it, and the authorization server no longer
 grants it, so a new registration cannot request it.
 
@@ -899,10 +879,10 @@ capabilities.
 Scope enforcement is per tool, so a token issued before a new scope existed keeps working for
 every tool whose scope it already holds; only a tool that declares the new scope answers `403`.
 Adding a scope is an additive change to the advertised set, not a grant reset. Dynamic
-registration records the whole advertised set as a client's capability ceiling, and the
-application widens a stored dynamic registration that predates a newly advertised scope, so an
-existing client can step up without re-registering. An authorization grant remains exactly the
-scope the authorize request asks for.
+registration records the advertised set and each accepted retired name as a client's capability
+ceiling, and the application widens a stored dynamic registration that predates a newly advertised
+scope, so an existing client can step up without re-registering. An authorization grant remains
+exactly the scope the authorize request asks for.
 
 A client that requests a newly advertised scope and receives `invalid_scope` is hitting a stored
 registration ceiling, not a metadata cache: the authorization server validates the request

@@ -51,7 +51,6 @@ it("spends a declared allowance on every shipped tool, smallest for the destruct
       .map(({ name }) => name)
       .sort(),
   ).toEqual([
-    "generate_transaction_review_links",
     "get_calendar",
     "get_league",
     "get_lineup_runs",

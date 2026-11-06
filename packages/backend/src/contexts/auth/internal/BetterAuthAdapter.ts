@@ -30,10 +30,9 @@ import { appEnvironmentConfig } from "#config/AppEnvironment.ts";
 import { AuthenticationInvalidResponse, AuthenticationUnavailable } from "#contexts/auth/Auth.ts";
 import type { AuthenticationSession, AccessTokenResolution } from "#contexts/auth/Auth.ts";
 import {
+  acceptedScopeNames,
   AuthorizationScopes,
   currentScopeName,
-  retiredScopeAliases,
-  retiredScopeNames,
 } from "#contexts/auth/AuthorizationScopes.ts";
 import type { AuthorizationScope } from "#contexts/auth/AuthorizationScopes.ts";
 import { UserId } from "#contexts/auth/User.ts";
@@ -68,12 +67,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
       const google = yield* googleConfig;
       const scopes = yield* AuthorizationScopes;
       const advertisedScopeNames = scopes.map((scope) => scope.name);
-      const acceptedScopeNames = [
-        ...advertisedScopeNames,
-        ...retiredScopeNames.filter((name) =>
-          advertisedScopeNames.includes(retiredScopeAliases[name] ?? name),
-        ),
-      ];
+      const acceptedNames = acceptedScopeNames(scopes);
       const currentScope = (name: string): string => {
         const target = currentScopeName(name);
         return target !== name && advertisedScopeNames.includes(target) ? target : name;
@@ -102,7 +96,7 @@ export class BetterAuthAdapter extends Context.Service<BetterAuthAdapter>()(
         baseUrl: baseUrl.href,
         oauthResource,
         scopes,
-        acceptedScopeNames,
+        acceptedScopeNames: acceptedNames,
         secret: Redacted.value(secret),
         rateLimitEnabled,
         clientAddress,
@@ -570,6 +564,7 @@ function createAuth(options: AuthFactoryOptions): ApplicationAuth {
         resourceSeedMode: "insertOnly",
         scopes: [...options.acceptedScopeNames],
         clientRegistrationDefaultScopes: options.scopes.map((scope) => scope.name),
+        clientRegistrationAllowedScopes: [...options.acceptedScopeNames],
         advertisedMetadata: { scopes_supported: options.scopes.map((scope) => scope.name) },
         grantTypes: ["authorization_code", "refresh_token"],
         allowDynamicClientRegistration: true,

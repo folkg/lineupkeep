@@ -820,6 +820,97 @@ it.effect(
 );
 
 it.effect(
+  "registers a dynamic client that asks for a retired scope and grants it as the scope that replaced it",
+  () =>
+    Effect.gen(function* () {
+      const adapter = yield* BetterAuthAdapter;
+
+      const retired = yield* adapter.handle(
+        dynamicRegistrationRequest("Retired scope client", "connections:read"),
+      );
+      const unknown = yield* adapter.handle(
+        dynamicRegistrationRequest("Unknown scope client", "connections:write"),
+      );
+
+      assert.strictEqual(retired.status, 201);
+      assert.strictEqual(unknown.status, 400);
+      const refusal = yield* jsonOf(unknown, ErrorDescription);
+      assert.strictEqual(refusal.error, "invalid_scope");
+      assert.include(refusal.error_description, "connections:write");
+
+      const registered = yield* jsonOf(retired, Schema.Struct({ client_id: Schema.String }));
+      yield* adapter.handle(sendCodeRequest("retired.scope@example.test"));
+      const signedIn = yield* adapter.handle(
+        signInRequest(
+          "retired.scope@example.test",
+          yield* latestCode("retired.scope@example.test"),
+        ),
+      );
+      const headers = new Headers({ cookie: cookieHeader(signedIn) });
+      const session = yield* adapter.getSession(headers);
+      if (session === undefined) {
+        throw new Error("Sign-in did not produce a session");
+      }
+      const query = new URLSearchParams({
+        response_type: "code",
+        client_id: registered.client_id,
+        redirect_uri: "http://127.0.0.1:19999/callback",
+        scope: "connections:read offline_access",
+        resource: mcpResource,
+        code_challenge: yield* pkceChallenge(pkceVerifier),
+        code_challenge_method: "S256",
+        state: "retired-scope",
+      });
+      const authorization = yield* adapter.handle(
+        new Request(`http://localhost:5173/api/auth/oauth2/authorize?${query}`, { headers }),
+      );
+      const location = new URL(
+        authorization.headers.get("location") ?? "",
+        baseConfig.BETTER_AUTH_URL,
+      );
+      const consentRequest = yield* adapter.getConsentRequest(headers, location.search.slice(1));
+      assert.deepStrictEqual(
+        consentRequest.status === "valid" ? consentRequest.scopes.map((scope) => scope.name) : [],
+        ["fantasy:read", offlineAccess.name],
+      );
+
+      const consent = yield* adapter.consent(headers, location.search.slice(1), true);
+      const credentials = yield* jsonOf(
+        yield* adapter.handle(
+          new Request("http://localhost:5173/api/auth/oauth2/token", {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              grant_type: "authorization_code",
+              client_id: registered.client_id,
+              redirect_uri: "http://127.0.0.1:19999/callback",
+              resource: mcpResource,
+              code_verifier: pkceVerifier,
+              code: new URL(consent).searchParams.get("code") ?? "",
+            }),
+          }),
+        ),
+        Schema.Struct({ access_token: Schema.String, scope: Schema.String }),
+      );
+
+      assert.strictEqual(credentials.scope, "connections:read offline_access");
+      assert.deepStrictEqual(
+        yield* adapter.resolveAccessToken(credentials.access_token, ["fantasy:read"]),
+        {
+          status: "authenticated",
+          userId: decodeUserId(session.user.id),
+          clientId: registered.client_id,
+        },
+      );
+    }).pipe(
+      Effect.provide(
+        adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),
+      ),
+    ),
+  databaseTestTimeout,
+);
+
+it.effect(
   "refuses a dynamic registration once 100 unapproved registrations are live",
   () =>
     Effect.gen(function* () {
@@ -854,61 +945,58 @@ it.effect(
 );
 
 it.effect(
-  "lets a dynamic registration step up to a scope advertised after it registered",
+  "lets a dynamic registration holding a retired scope step up to a scope advertised after it registered",
   () =>
     Effect.gen(function* () {
       const adapter = yield* BetterAuthAdapter;
       const database = yield* AuthDatabase;
-      const registration = yield* adapter.handle(
-        new Request("http://localhost:5173/api/auth/oauth2/register", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-            client_name: "Early registration",
-            redirect_uris: ["http://127.0.0.1:19999/callback"],
-            grant_types: ["authorization_code"],
-            response_types: ["code"],
-            token_endpoint_auth_method: "none",
-            application_type: "native",
-          }),
-        }),
-      );
+      const registration = yield* adapter.handle(dynamicRegistrationRequest("Early registration"));
       const registered = yield* jsonOf(registration, Schema.Struct({ client_id: Schema.String }));
-      const advertised = [...testScopeDefinitions.map((scope) => scope.name), offlineAccess.name];
-      yield* Effect.promise(() =>
-        database
-          .update(oauthClient)
-          .set({ scopes: ["connections:read"] })
-          .where(eq(oauthClient.clientId, registered.client_id)),
+      const current = advertisedScopes.map((scope) => scope.name);
+      const [registeredClient] = yield* Effect.promise(() =>
+        database.select().from(oauthClient).where(eq(oauthClient.clientId, registered.client_id)),
       );
+      const laterScope = { name: "later:read", description: "Read a scope added later." };
+      const advertised = [...current, laterScope.name];
 
-      const restarted = yield* Effect.provide(BetterAuthAdapter, instanceLayer);
+      const restarted = yield* Effect.provide(
+        BetterAuthAdapter,
+        Layer.fresh(BetterAuthAdapter.layer).pipe(
+          Layer.provide(SignInCodeQuotaRepository.layer),
+          Layer.provide(OAuthClientRepository.layer),
+          Layer.provide(Layer.succeed(AuthorizationScopes)([...advertisedScopes, laterScope])),
+          Layer.provide(NodeCrypto.layer),
+          Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(baseConfig))),
+        ),
+      );
       const query = new URLSearchParams({
         response_type: "code",
         client_id: registered.client_id,
         redirect_uri: "http://127.0.0.1:19999/callback",
         scope: advertised.join(" "),
-        resource: "http://localhost:5173/mcp",
+        resource: mcpResource,
         code_challenge: "a".repeat(43),
         code_challenge_method: "S256",
       });
       const authorization = yield* restarted.handle(
         new Request(`http://localhost:5173/api/auth/oauth2/authorize?${query}`),
       );
-      const clients = yield* Effect.promise(() =>
-        database.select().from(oauthClient).orderBy(oauthClient.clientId),
+      const [widened] = yield* Effect.promise(() =>
+        database.select().from(oauthClient).where(eq(oauthClient.clientId, registered.client_id)),
       );
 
       assert.strictEqual(registration.status, 201);
+      assert.deepStrictEqual(registeredClient?.scopes, [...current, "connections:read"]);
       assert.strictEqual(
         new URL(authorization.headers.get("location") ?? "", baseConfig.BETTER_AUTH_URL).pathname,
         "/auth",
       );
-      assert.deepStrictEqual(
-        clients.find((client) => client.clientId === registered.client_id)?.scopes,
-        advertised,
-      );
-    }).pipe(Effect.provide(adapterLayer(baseConfig, EmailDeliveryTest, testMetadata))),
+      assert.deepStrictEqual(widened?.scopes, [...advertised, "connections:read"]);
+    }).pipe(
+      Effect.provide(
+        adapterLayer(baseConfig, EmailDeliveryTest, publicInternetProcess, realScopes),
+      ),
+    ),
   databaseTestTimeout,
 );
 
@@ -1591,7 +1679,7 @@ function metadataClientAuthorization(): Request {
   );
 }
 
-function dynamicRegistrationRequest(clientName: string): Request {
+function dynamicRegistrationRequest(clientName: string, scope?: string): Request {
   return new Request("http://localhost:5173/api/auth/oauth2/register", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1602,6 +1690,7 @@ function dynamicRegistrationRequest(clientName: string): Request {
       response_types: ["code"],
       token_endpoint_auth_method: "none",
       application_type: "native",
+      ...(scope === undefined ? {} : { scope }),
     }),
   });
 }

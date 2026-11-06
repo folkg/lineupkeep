@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import {
+  acceptedScopeNames,
   currentScopeName,
   offlineAccess,
   retiredScopeAliases,
@@ -213,11 +214,12 @@ export class AcceptanceReport {
 
   register(registrations: ReadonlyArray<RegistrationReport>): void {
     this.registrations = registrations;
+    const registered = acceptedScopeNames(advertisedScopes);
     for (const registration of registrations) {
       const granted = registration.scope.split(" ").filter(Boolean);
-      if (!sameSet(granted, advertisedScopeNames())) {
+      if (!sameSet(granted, registered)) {
         this.addFinding(
-          `Dynamic client registration for the ${registration.grant} grant granted ${registration.scope === "" ? "no scopes" : registration.scope}; expected the full advertised set ${advertisedScopeNames().join(" ")}.`,
+          `Dynamic client registration for the ${registration.grant} grant granted ${registration.scope === "" ? "no scopes" : registration.scope}; expected the full registrable set ${registered.join(" ")}.`,
         );
       }
     }
@@ -803,11 +805,6 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
       return { team, players: [randomUUID()] };
     case "get_matchups":
       return { team, period: { week: 1 } };
-    case "generate_transaction_review_links":
-      return {
-        team: randomUUID(),
-        intents: [{ kind: "add", add: "r1.acceptance" }],
-      };
     case "propose_transactions":
       return {
         items: [

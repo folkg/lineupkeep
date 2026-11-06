@@ -23,7 +23,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Phase 2 (stages 7–8) | Complete, deployed, hourly automation verified                                                 |
 | Lineup algorithm     | Custom solver live for all five owner teams                                                    |
 | Provider boundary    | Keyed injection at the composition root; some provider-shaped ideas still reach generic layers |
-| MCP surface          | 19 tools after the legacy review-links tool is removed; four resource scopes; round 19 open    |
+| MCP surface          | 19 tools; four resource scopes; round 19 open                                                  |
 | Client feedback      | Round 9 client notes closed on 5 November: structure, copy, local time, action states          |
 | Connections          | Hosted browser only; local helper and device flow deleted                                      |
 | Interface            | Technical sheet, renamed to Lineupgrade; nav is Teams and Account; actions own their states    |
@@ -505,9 +505,10 @@ ahead of the framework migration because the migration is waiting on a release t
 group cannot wait forever. If the release lands mid-build, the backend half is framework-independent and the
 screen migrates with everything else.
 
-The current review links do not work. Yahoo's add page ends in a form submission a deep link cannot perform,
-so it lands on a page whose only working action is Cancel, and the Yahoo app claims `*.yahoo.com` on mobile
-before a browser sees it. No link we construct survives either.
+The provider's own review links did not work. Yahoo's add page ends in a form submission a deep link
+cannot perform, so it lands on a page whose only working action is Cancel, and the Yahoo app claims
+`*.yahoo.com` on mobile before a browser sees it. No link we constructed survived either, so that
+surface is gone and a proposal set is reviewed inside Lineupgrade instead.
 
 **What it is:** the agent proposes, a person decides, the server writes.
 
@@ -563,9 +564,8 @@ item both behaving correctly. `M`
 - [x] Move a player to a reserve list as an executable move, so an add can free a roster slot without
       dropping an injured player, under the same per-item outcome and re-validation rules.
 - [x] One team failing never hides the others.
-- [x] **decide** trade staging: no. The provider publishes no parameterized trade proposal page, its
-      write shape is unproven, and a staged trade has no review link that can act on it. Trades stay
-      read-only and link out; incoming offers stay read-only.
+- [x] **decide** trade staging: no. The provider publishes no parameterized trade proposal page and its
+      write shape is unproven. Trades stay read-only and link out; incoming offers stay read-only.
 
 Shipped 2026-10-31: a signed-in person submits the included items from `/transactions/{setId}`.
 The database claims the set once, submission re-runs revalidation immediately before writing, and
@@ -902,14 +902,14 @@ was closed.
   still names the last check. Verified by the three-stretch fixture in `TeamDetailPage.browser.test.tsx`; a
   five-team, 120-run day serialized to 75.6 KiB, 2.0 KiB gzipped.
 
-- **MCP client feedback, rounds 2 to 8.** Per-tool scope enforcement, review links, restricted-client
-  feedback, roto standings, search row fields, team summary coverage and paging, feedback read-back, hockey
-  date windows, compact standings, inlined stat names, two-sided trades with picks, draft history,
+- **MCP client feedback, rounds 2 to 8.** Per-tool scope enforcement, restricted-client feedback, roto
+  standings, search row fields, team summary coverage and paging, feedback read-back, hockey date
+  windows, compact standings, inlined stat names, two-sided trades with picks, draft history,
   scoring-versus-informational categories, injury status on search rows, transaction rules, per-date
   schedules, and per-team acquisition usage. Resolution notes are in the feedback table.
-- **Provider review links.** They do not work in practice: the provider's add page ends in a form
-  submission a link cannot perform, and its mobile app claims the domain before a browser sees it. Group H
-  replaces them.
+- **Provider review links.** They did not work in practice: the provider's add page ends in a form
+  submission a link cannot perform, and its mobile app claims the domain before a browser sees it. The
+  surface is gone; Group H replaced it with a proposal set reviewed inside Lineupgrade.
 - **Interface rework from the owner walkthrough.** Voice without emdashes or slogans, connections that exist
   only after a link succeeds, connection identity without personal data, one switch per team with optimistic
   state, folded quiet activity, local times, back affordances, feedback prefill, and a mobile browser that
