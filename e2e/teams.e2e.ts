@@ -97,6 +97,10 @@ test("saves an owner note on the team page and reads it back over MCP", async ({
     );
   });
 
+  await test.step("Result: [owner] the roster check reports no failure wording", async () => {
+    await expect(page.getByText("The roster could not be checked just now.")).toHaveCount(0);
+  });
+
   await test.step("Result: [owner] reads the note over MCP as owner context", async () => {
     const client = await mcp(["fantasy:read"], page);
     const summary = await client.callTool("get_team_summary", {

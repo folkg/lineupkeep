@@ -95,6 +95,10 @@ The portion of a roster whose players are retained but are not assigned to contr
 **Reserve list**:
 A restricted roster area whose players must meet the league's reserve eligibility rules, such as an injured reserve list.
 
+**Reserve slot suspicion**:
+A named state for a rostered player the league declares in a reserve slot while the provider reports no injury and its own published statistics show the player played recently — inside the last fourteen days, or in the most recently completed scoring week where the provider serves weekly series rather than daily ones. It carries the league's own slot name, the statistics window the evidence came from, and one plain sentence, and it appears on the team summary's attention list and in a player read's availability. It is suspicion from evidence, never a claim that the provider's injury status is wrong, and it never changes what lineup planning does with the player. A player with no qualifying statistics shows nothing: missing evidence is not reported as a clean slot.
+_Avoid_: Healthy-on-IR or provider error when the state is meant, reserve violation when it names one slot or one league rule; unknown-slot when the slot is verified
+
 **Final score**:
 The single signed number a provider publishes for one player for a target period, in that provider's own unit, which is the only value the lineup objective compares. A player without one is unscored rather than zero, and a provider that cannot score a league says so instead of publishing numbers. How the provider arrives at it — which measurement, which arithmetic, which period window — never crosses the provider seam.
 _Avoid_: Selection value when the seam is meant, projection, crowd points

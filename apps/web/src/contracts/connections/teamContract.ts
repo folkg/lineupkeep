@@ -150,6 +150,23 @@ export type TeamNoteRequestResult<A> =
   | UseCaseResult<A, TeamNoteError["type"]>
   | { readonly type: "error"; readonly error: AuthenticationFailure };
 
+export type TeamReserveSlotAttentionView = {
+  readonly name: string;
+  readonly slot: string;
+  readonly detail: string;
+};
+
+export type TeamRosterAttentionData = {
+  readonly attention: ReadonlyArray<TeamReserveSlotAttentionView>;
+};
+
+export type TeamRosterAttentionError = {
+  readonly type: "team.attention_unavailable";
+};
+export type TeamRosterAttentionRequestResult<A> =
+  | UseCaseResult<A, TeamRosterAttentionError["type"]>
+  | { readonly type: "error"; readonly error: AuthenticationFailure };
+
 export type TeamMutationError = {
   readonly type:
     | "team.not_found"

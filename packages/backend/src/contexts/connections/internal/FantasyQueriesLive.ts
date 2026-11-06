@@ -20,6 +20,7 @@ import type {
   ProviderRoster,
   ProviderRosterCoverage,
   ProviderMatchup,
+  ProviderPeriodSupport,
   ProviderRemainingGames,
   ProviderRosterPlayer,
   ProviderRosterSchedule,
@@ -70,6 +71,7 @@ import type {
   SummarySchedulePlayer,
   SummaryScheduleWeek,
   SummaryRosterPlayer,
+  SummaryReserveSlotAttention,
   SummaryMatchupCategory,
   SummaryScheduleWindow,
   TeamSummaryData,
@@ -102,6 +104,16 @@ import {
   type StatRef,
   type TeamOwnerNote,
 } from "#contexts/connections/QueryValues.ts";
+import {
+  recentActivityDays,
+  reserveActivityOf,
+  reserveSlotCandidates,
+  reserveSlotSuspects,
+} from "#contexts/connections/ReserveSlotSuspicion.ts";
+import type {
+  ReserveActivityWindow,
+  ReserveSlotSuspect,
+} from "#contexts/connections/ReserveSlotSuspicion.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
@@ -150,6 +162,11 @@ type PoolGames =
       readonly unresolvedTeamCount: number;
     }
   | { readonly status: "unavailable"; readonly detail: string };
+
+type ReserveSlotActivity = {
+  readonly checked: boolean;
+  readonly activity: ReadonlyMap<string, ReserveActivityWindow>;
+};
 
 export const FantasyQueriesLive = Layer.effect(
   FantasyQueries,
@@ -301,6 +318,80 @@ export const FantasyQueriesLive = Layer.effect(
             message: "The provider league season does not match the linked team.",
           },
         };
+      });
+
+    const reserveSlotActivity = (
+      context: TeamContext,
+      input: {
+        readonly league: ProviderLeagueSettings | undefined;
+        readonly candidates: ReadonlyArray<ProviderRosterPlayer>;
+        readonly coverageEntries: Array<QueryCoverage>;
+        readonly failures: Array<QueryFailure>;
+        readonly now: DateTime.Utc;
+      },
+    ): Effect.Effect<ReserveSlotActivity, QueryPersistenceFailed> =>
+      Effect.gen(function* () {
+        if (input.candidates.length === 0) {
+          return { checked: true, activity: new Map() };
+        }
+        const period = recentActivityPeriod({
+          support: context.provider.capabilities.statPeriods[context.owned.team.sport],
+          currentWeek: input.league?.periodWindow?.current,
+        });
+        yield* Effect.annotateCurrentSpan({
+          "reserve_slot.candidates": input.candidates.length,
+          "reserve_slot.activity_period":
+            period === undefined
+              ? "unsupported"
+              : period.kind === "preset"
+                ? period.preset
+                : period.kind,
+        });
+        if (period === undefined) {
+          return { checked: false, activity: new Map() };
+        }
+        const outcome = yield* readOutcome(
+          context,
+          "players",
+          context.provider.readPlayerDetails({
+            ...providerIdentity(context),
+            providerLeagueKey: context.owned.team.providerLeagueKey,
+            providerPlayerKeys: input.candidates.map((player) => player.providerPlayerKey),
+            sport: context.owned.team.sport,
+            period,
+            currentPeriod: input.league?.periodWindow?.current,
+            seasonStart: input.league?.startDate,
+            seasonEnd: input.league?.endDate,
+          }),
+        );
+        if (outcome._tag !== "ok") {
+          input.coverageEntries.push(
+            outcome._tag === "unsupported"
+              ? unsupportedCoverage("players", "player_details", input.now, outcome.detail)
+              : degradedCoverage("players", "player_details", input.now, outcome.failure.message),
+          );
+          if (outcome._tag === "failed") {
+            input.failures.push(outcome.failure);
+          }
+          return { checked: false, activity: new Map() };
+        }
+        const activity = new Map<string, ReserveActivityWindow>();
+        for (const detail of outcome.value) {
+          const window = reserveActivityOf(detail.actual);
+          if (window !== undefined) {
+            activity.set(detail.providerPlayerKey, window);
+          }
+        }
+        input.coverageEntries.push(
+          coverage(
+            "players",
+            "player_details",
+            input.now,
+            undefined,
+            "Recent player statistics read to check a reserve slot.",
+          ),
+        );
+        return { checked: true, activity };
       });
 
     const readPoolGames = (
@@ -1331,26 +1422,27 @@ export const FantasyQueriesLive = Layer.effect(
           : [],
       );
       const coverageEntries: QueryCoverage[] = [];
-      let league: ProviderLeagueSettings | undefined;
-      if (
+      const scoringGroupsRequested =
         groups.includes("scoring_context") ||
         groups.includes("actual_stats") ||
-        groups.includes("projections")
-      ) {
+        groups.includes("projections");
+      const leagueCoverageResource = scoringGroupsRequested ? "scoring" : "availability";
+      let league: ProviderLeagueSettings | undefined;
+      if (scoringGroupsRequested || groups.includes("availability")) {
         const leagueOutcome = yield* readLeague(context);
         if (leagueOutcome._tag === "ok") {
           league = leagueOutcome.value;
-          coverageEntries.push(coverage("scoring", "league_settings", fetchedAt));
+          coverageEntries.push(coverage(leagueCoverageResource, "league_settings", fetchedAt));
         } else {
           coverageEntries.push(
             leagueOutcome._tag === "failed"
               ? degradedCoverage(
-                  "scoring",
+                  leagueCoverageResource,
                   "league_settings",
                   fetchedAt,
                   leagueOutcome.failure.message,
                 )
-              : unsupportedCoverage("scoring", "league_settings", fetchedAt),
+              : unsupportedCoverage(leagueCoverageResource, "league_settings", fetchedAt),
           );
           if (leagueOutcome._tag === "failed") {
             failures.push(leagueOutcome.failure);
@@ -1388,6 +1480,34 @@ export const FantasyQueriesLive = Layer.effect(
       }
       const rosterByKey = new Map(
         (roster?.players ?? []).map((player) => [player.providerPlayerKey, player]),
+      );
+      const requestedKeys = new Set(valid.map((row) => row.providerPlayerKey));
+      const reserveCandidates = groups.includes("availability")
+        ? reserveSlotCandidates({
+            positions: league?.rosterPositions ?? [],
+            players: [...rosterByKey.values()].filter((player) =>
+              requestedKeys.has(player.providerPlayerKey),
+            ),
+          })
+        : [];
+      const reserveActivity = yield* reserveSlotActivity(context, {
+        league,
+        candidates: reserveCandidates,
+        coverageEntries,
+        failures,
+        now: fetchedAt,
+      });
+      const reserveSuspects = new Map(
+        (league === undefined || !reserveActivity.checked
+          ? []
+          : reserveSlotSuspects({
+              positions: league.rosterPositions,
+              players: reserveCandidates,
+              activity: reserveActivity.activity,
+              currentWeek: league.periodWindow?.current,
+              now: fetchedAt,
+            })
+        ).map(({ player, suspect }) => [player.providerPlayerKey, suspect] as const),
       );
       const requestedPeriod = normalizeStatPeriod(input.period);
       const includesActualStats = groups.includes("actual_stats");
@@ -1580,7 +1700,11 @@ export const FantasyQueriesLive = Layer.effect(
             const availability = !groups.includes("availability")
               ? undefined
               : rosterPlayer !== undefined
-                ? { rosterStatus: "rostered" as const, injury: injuryOf(rosterPlayer) }
+                ? {
+                    rosterStatus: "rostered" as const,
+                    injury: injuryOf(rosterPlayer),
+                    ...reserveSlotField(reserveSuspects.get(row.providerPlayerKey)),
+                  }
                 : detail === undefined
                   ? undefined
                   : { rosterStatus: detail.rosterStatus, injury: { reported: false as const } };
@@ -2384,7 +2508,9 @@ export const FantasyQueriesLive = Layer.effect(
         playerKeys: rosterPlayers.map((player) => player.providerPlayerKey),
       });
       const rosterRowByKey = new Map<string, SummaryRosterPlayer>();
+      const rosterRefByKey = new Map<string, PlayerRef>();
       for (const [player, ref] of EffectArray.zip(rosterPlayers, rosterRefs)) {
+        rosterRefByKey.set(player.providerPlayerKey, ref);
         rosterRowByKey.set(player.providerPlayerKey, {
           player: ref,
           name: player.name,
@@ -2401,6 +2527,38 @@ export const FantasyQueriesLive = Layer.effect(
         rosterOutcome?._tag === "ok" && rosterOutcome.value.coverage.type === "week"
           ? { week: rosterOutcome.value.coverage.week }
           : undefined;
+
+      const reserveCandidates = reserveSlotCandidates({
+        positions: league?.rosterPositions ?? [],
+        players: rosterPlayers,
+      });
+      const reserveActivity = yield* reserveSlotActivity(context, {
+        league,
+        candidates: reserveCandidates,
+        coverageEntries,
+        failures,
+        now: fetchedAt,
+      });
+      const attention: ReadonlyArray<SummaryReserveSlotAttention> | undefined =
+        !includes("roster") || league === undefined || rosterOutcome?._tag !== "ok"
+          ? undefined
+          : reserveActivity.checked
+            ? reserveSlotSuspects({
+                positions: league.rosterPositions,
+                players: rosterPlayers,
+                activity: reserveActivity.activity,
+                currentWeek: league.periodWindow?.current,
+                now: fetchedAt,
+              }).flatMap(({ player, suspect }) => {
+                const ref = rosterRefByKey.get(player.providerPlayerKey);
+                return ref === undefined
+                  ? []
+                  : [{ player: ref, name: player.name, reserveSlot: suspect }];
+              })
+            : undefined;
+      yield* Effect.annotateCurrentSpan({
+        "reserve_slot.suspects": attention === undefined ? "unchecked" : attention.length,
+      });
 
       const matchupOutcome =
         (!includes("matchup") && !includes("schedule")) || period === undefined
@@ -2877,6 +3035,7 @@ export const FantasyQueriesLive = Layer.effect(
               },
             }
           : {}),
+        ...(attention === undefined ? {} : { attention }),
         ownerNote: ownerNoteOf(context.owned.team),
         coverage: coverageEntries,
         failures,
@@ -2967,6 +3126,29 @@ export const FantasyQueriesLive = Layer.effect(
     });
   }),
 );
+
+function recentActivityPeriod(input: {
+  readonly support: ProviderPeriodSupport;
+  readonly currentWeek: number | undefined;
+}): ProviderStatPeriod | undefined {
+  const preset = input.support.presets
+    .filter((entry) => entry.days <= recentActivityDays)
+    .reduce<(typeof input.support.presets)[number] | undefined>(
+      (largest, entry) => (largest === undefined || entry.days > largest.days ? entry : largest),
+      undefined,
+    );
+  if (preset !== undefined && input.support.kinds.preset !== "unsupported") {
+    return { kind: "preset", preset: preset.preset };
+  }
+  if (
+    input.support.kinds.week !== "unsupported" &&
+    input.currentWeek !== undefined &&
+    input.currentWeek > 1
+  ) {
+    return { kind: "week", week: input.currentWeek - 1 };
+  }
+  return undefined;
+}
 
 function statRefFor(
   context: TeamContext,
@@ -4388,6 +4570,12 @@ function injuryOf(player: ProviderRosterPlayer): {
     ...(player.injuryCode === undefined ? {} : { code: player.injuryCode }),
     ...(player.injuryDetail === undefined ? {} : { detail: player.injuryDetail }),
   };
+}
+
+function reserveSlotField(suspect: ReserveSlotSuspect | undefined): {
+  readonly reserveSlot?: ReserveSlotSuspect;
+} {
+  return suspect === undefined ? {} : { reserveSlot: suspect };
 }
 
 function rosterPlayer(

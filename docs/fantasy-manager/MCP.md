@@ -396,7 +396,10 @@ count, so `transactionRules.detailNote` states that only the league's games cap 
 
 `get_team_summary` composes the league overview, the linked team's standing and record, league
 standings, the owning team's acquisition usage, the current matchup, this week's and next week's
-remaining player-games, and, only when the `roster` group is selected, a compact roster. The team
+remaining player-games, and, only when the `roster` group is selected, a compact roster. With
+`roster` selected it also carries `attention`, the roster issues the provider's own facts raise for a
+person to fix; see [reserve slot suspicion](#reserve-slot-suspicion). `attention` is absent rather
+than empty when the roster could not be checked, and it never changes what a lineup plan does. The team
 object also carries the owner's own note as `ownerNote`: `{ status: "provided", text, updatedAt }`
 when one is stored or `{ status: "not_set" }` otherwise. It is owner context, not league or provider
 data, and the field description says so; it is never sent to the provider. A note is limited to
@@ -686,6 +689,23 @@ An aggregated group states its covered dates, its `daily_sum` method, and a `not
 categories the provider publishes as rates or percentages (Yahoo hockey goals against average and
 save percentage): a rate is never summed across days, and an unpublished day stays null rather than
 becoming zero.
+
+### Reserve slot suspicion
+
+A player can sit in a reserve slot the league declares while the provider reports no injury. The provider
+then refuses the team's next transaction, naming that player rather than any move in the request, and no
+read answers why. `get_team_summary`'s `attention` list and `get_players`' availability group report
+that state as `reserve_slot_suspect`. It is reported only when three facts agree: the player occupies a
+slot the league declares with `kind: "reserve"`, the provider reports no injury for them, and the
+provider's own published player statistics show a positive value in a window that ends inside the last
+fourteen days (or in the most recently completed scoring week, where the provider serves weekly series
+rather than daily ones). Each entry carries the league's own slot name — never a hardcoded slot string,
+so a second provider's `RESERVE` reads the same way — the statistics window the evidence came from, and one
+plain sentence ending in what may happen next. The check costs one bounded recent-statistics read for
+the reserve players on the roster; a league with no reserve slots, no reserve-slot player without an
+injury, or no dated or weekly statistics surface makes no read and reports nothing. The state is
+information only: lineup planning treats the player exactly as before, and the entry says the roster
+_may_ be refused rather than claiming the provider's injury status is wrong.
 
 A coverage entry has one of three states. `available` means the resource was read and verified. `unsupported` means the provider or league does not establish it, and the entry, or a typed group result beside it, carries the reason. `degraded` means a dependency could not be verified while the read still returned what does not depend on it: the entry names the failed field, the affected resource lists a bounded failure, and roster and matchup reads are not erased because league settings failed. A calendar that needs the scoring-week window reports the degraded dependency instead of inventing periods. A group that declares itself unsupported never also reports a period failure; the two statements would contradict each other.
 
