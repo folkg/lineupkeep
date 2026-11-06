@@ -41,6 +41,7 @@ export function useTeamsPage(props: TeamsPageOptions): TeamsPageController {
     teams: () => teams.data,
     isLoading: () => teams.isPending,
     loadFailure: () => teams.error,
+    dataUpdatedAt: () => teams.dataUpdatedAt,
     feedback,
     refreshState: (): ActionState => actionState(refreshTeams.isPending, refreshFinished()),
     refresh: () => props.onRefresh(),
@@ -56,6 +57,7 @@ export type TeamsPageController = {
   readonly teams: Accessor<ReadonlyArray<TeamSummaryView>>;
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
+  readonly dataUpdatedAt: Accessor<number>;
   readonly feedback: Accessor<ActionFeedbackState | undefined>;
   readonly refreshState: Accessor<ActionState>;
   readonly refresh: () => Promise<void>;

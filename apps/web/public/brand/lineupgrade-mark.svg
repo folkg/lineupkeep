@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <title>Lineupgrade</title>
   <rect width="64" height="64" fill="#e0b64a"/>
-  <path d="M21 17v30M33 17v30M46 29 34 39l14 8" fill="none" stroke="#101014" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M14 12v32M14 44h12M34 22v16a6 6 0 0 0 6 6h8V22" fill="none" stroke="#101014" stroke-width="6"/>
 </svg>

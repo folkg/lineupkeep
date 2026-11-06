@@ -96,6 +96,7 @@ const productionTestSeams: Record<string, Array<"exports" | "types">> = {
   "packages/backend/src/contexts/auth/AuthSession.ts": ["types"],
   "packages/backend/src/contexts/connections/Connection.ts": ["exports"],
   "apps/web/src/browser/session/authClient.ts": ["exports"],
+  "apps/web/src/browser/teams/teamStatus.ts": ["exports"],
   "apps/web/src/browser/shared-ui/icons.tsx": ["exports"],
   "apps/web/src/browser/telemetry/telemetry.ts": ["exports", "types"],
   "apps/web/src/server/mcp/mcpServer.ts": ["exports"],

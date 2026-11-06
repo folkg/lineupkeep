@@ -177,7 +177,7 @@ it("names the league context and keeps quiet states off the page", async () => {
     .not.toBeInTheDocument();
 });
 
-it("shows the fantasy league name and a provider jump out for the team", async () => {
+it("puts the provider jump out beside the team name and above the controls", async () => {
   using _app = setupTeamDetailPage({
     ...team,
     team: {
@@ -188,8 +188,51 @@ it("shows the fantasy league name and a provider jump out for the team", async (
   });
 
   await expect.element(page.getByText("Irish Lax · Football · 2026")).toBeVisible();
+  const name = page.getByRole("heading", { name: "Alpha" });
   const jumpOut = page.getByRole("link", { name: "Open Alpha in Yahoo" });
+  const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
+  const context = page.getByText("Irish Lax · Football · 2026");
   await expect.element(jumpOut).toHaveAttribute("href", "https://provider.example/f1/1000/1");
+
+  const nameBox = name.element().getBoundingClientRect();
+  const jumpBox = jumpOut.element().getBoundingClientRect();
+  expect(jumpBox.left, "the popout sits to the right of the team name").toBeGreaterThanOrEqual(
+    nameBox.right,
+  );
+  expect(
+    jumpBox.bottom,
+    "the popout sits with the name, not in the control row",
+  ).toBeLessThanOrEqual(toggle.element().getBoundingClientRect().top);
+  expect(
+    jumpOut.element().compareDocumentPosition(context.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the popout comes before the metadata line",
+  ).toBeTruthy();
+});
+
+it("keeps the popout beside a long team name on a phone", async () => {
+  const longName = "Embedded Browser Team With A Long Name";
+  using _app = setupTeamDetailPage({
+    ...team,
+    team: {
+      ...team.team,
+      name: longName,
+      providerUrl: "https://provider.example/f1/1000/1",
+    },
+  });
+  await page.viewport(390, 844);
+
+  const heading = page.getByRole("heading", { name: longName });
+  const jumpOut = page.getByRole("link", { name: `Open ${longName} in Yahoo` });
+  await expect.element(heading).toBeVisible();
+  await expect.element(jumpOut).toBeVisible();
+
+  const headingBox = heading.element().getBoundingClientRect();
+  const jumpBox = jumpOut.element().getBoundingClientRect();
+  expect(jumpBox.left, "the popout stays to the right of the name").toBeGreaterThanOrEqual(
+    headingBox.right,
+  );
+  expect(jumpBox.bottom, "the popout shares the name's lines").toBeGreaterThan(headingBox.top);
+  expect(jumpBox.top).toBeLessThan(headingBox.bottom);
 });
 
 it("puts recent activity above the owner note and leaves the roster off the page", async () => {

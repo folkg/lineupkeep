@@ -238,8 +238,10 @@ before commas and full stops.
 weight and tracking, beside the square mark. Use Lineupgrade in prose. Do not uppercase, split,
 outline, or colour the syllables.
 
-**The Mark.** A 20px gold square with ink `lk` strokes, square corners, placed at the masthead's
-left edge. The same artwork is the favicon. Gold appears nowhere else.
+**The Mark.** A 20px gold square with ink `lu` strokes: a lowercase l with a short foot so it
+cannot read as an I, and a square u with a rounded inner corner, 6 units of stroke in a 64 unit
+box. It sits at the masthead's left edge. The same artwork is the favicon. Gold appears nowhere
+else.
 
 ## Layout
 
@@ -260,11 +262,11 @@ place and is disabled while checks are off. Below 560px a row stacks: full-width
 the controls on their own line, aligned left. A long team or league name wraps; it never
 truncates. Controls never overlap a name.
 
-**Team detail order** is fixed: back link, title, one metadata line (sport and league), one
-control row with toggle, pause, and provider jump-out on the same line, a quiet report link, then
-the activity section behind its rule, then the owner note. The provider jump-out sits in the
-control row here; on the list it sits with the name. Nothing floats to the right of the metadata
-line.
+**Team detail order** is fixed: back link, title with the provider jump-out beside it, one
+metadata line (sport and league), one control row with toggle and pause on the same line, a quiet
+report link, then the activity section behind its rule, then the owner note. The provider jump-out
+sits beside the title here and beside the name on the list. Nothing floats to the right of the
+metadata line.
 
 **Activity ranges** omit a repeated date: `Nov 1, 11:44 AM to 1:12 PM`. When the group is a
 single instant, say `at Nov 1, 11:44 AM`; when it crosses the reader's midnight, show both full
@@ -321,9 +323,11 @@ an explanatory title rather than removed.
 
 Team and connection rows use 15px text with 12px meta, a 22px name where the row is a primary
 destination, and a bottom hairline. Status is a labelled word in caps, never a colour alone. Team
-rows show what the last check did, when, the recent tally, and a paused sentence in the text
-column. A provider jump-out sits beside the team name; the right cluster is the toggle and pause
-only. A list never repeats a control label on every row.
+rows keep one status line under the league context in every state — the next check, a pause with
+its resume time, checks off, or a check in progress — then what the last check did, when, and the
+recent tally. The status line reserves two lines so its sentence cannot change the row's height. A
+provider jump-out sits beside the team name; the right cluster is the toggle and pause only. A
+list never repeats a control label on every row.
 
 Notices are a 1px leading rule with caps title and 12px detail. Empty and loading states are a
 top rule with a 15px title and soft text. The live status region stays in the accessibility tree
@@ -359,9 +363,11 @@ The control owns no value of its own.
 While working, the control is natively disabled with `aria-busy`, keeps its label, and draws one
 indeterminate hairline inside its own box: under a button's edge, inside a switch's track, inside
 an icon's frame. `done` draws a tick only when the call site passes `confirmed`, because most
-actions confirm themselves by changing something else. A page never inserts words beside a
-control to describe its progress. `ButtonLink` takes the action state as `actionState`, because
-TanStack Router owns `state` for history.
+actions confirm themselves by changing something else. In an icon button the glyph fades fully out
+before the tick draws alone in the same box, and returns after the tick has held; both are never
+visible at once. A page never inserts words beside a control to describe its progress.
+`ButtonLink` takes the action state as `actionState`, because TanStack Router owns `state` for
+history.
 
 `--theme-duration-work`, `--theme-duration-tick`, and `--theme-duration-confirm` in
 [brand-theme.css](apps/web/src/theme/brand-theme.css) own the timing; components do not invent

@@ -26,6 +26,7 @@ export function TeamsPage(props: TeamsPageProps): JSX.Element {
       >
         <Stack gap="lg">
           <TeamList
+            dataUpdatedAt={page.dataUpdatedAt}
             isLoading={page.isLoading}
             loadFailure={page.loadFailure}
             refreshState={page.refreshState}

@@ -12,7 +12,6 @@ import { Text } from "#browser/shared-ui/Text.tsx";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { pauseResumeLabel } from "./teamLabels";
-import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
 import { useTeamControls } from "./useTeamControls";
 
@@ -61,9 +60,6 @@ export function TeamControls(props: TeamControlsProps): JSX.Element {
             <PlayIcon size="md" />
           </Show>
         </IconButton>
-        <Show when={props.showProvider !== false}>
-          <TeamProviderLink team={props.team.team} />
-        </Show>
       </Inline>
       <Show when={props.showPauseNote !== false && pauseResumeLabel(controls.automation())}>
         {(note) => (
@@ -81,7 +77,6 @@ type TeamControlsProps = {
   readonly align?: "start" | "end";
   readonly compact?: boolean;
   readonly showPauseNote?: boolean;
-  readonly showProvider?: boolean;
   readonly team: TeamSummaryView;
   readonly remote: TeamRemote;
 };

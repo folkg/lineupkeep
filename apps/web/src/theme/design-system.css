@@ -170,6 +170,26 @@
       opacity: 0;
     }
   }
+
+  @keyframes action-glyph-yield {
+    from {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes action-glyph-return {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
 }
 
 :root {
@@ -204,6 +224,22 @@
   stroke-dasharray: 18;
   stroke-dashoffset: 18;
   animation: action-tick-draw var(--theme-duration-tick) var(--theme-ease-out) forwards;
+}
+
+[data-confirmation="tick"][data-state="done"] [data-action-glyph] {
+  animation:
+    action-glyph-yield var(--theme-duration-tick) var(--theme-ease-out) forwards,
+    action-glyph-return var(--theme-duration-tick) var(--theme-ease-out)
+      calc(var(--theme-duration-tick) + var(--theme-duration-confirm)) forwards;
+}
+
+[data-action-mark="tick"].tick-alone {
+  opacity: 0;
+  animation-delay: var(--theme-duration-tick);
+}
+
+[data-action-mark="tick"].tick-alone path {
+  animation-delay: var(--theme-duration-tick);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -18,9 +18,9 @@ Professional quality comes from typography, alignment, information design, usefu
 
 Continuous lowercase **lineupgrade**, Schibsted Grotesk Variable at weight 600 on the 11px label scale with 0.16em tracking. One baseline, one colour; no added gap or separation around up. Do not distort, tilt, outline, turn letters into arrows, or colour separate syllables.
 
-The wordmark sits beside the square brand mark: a 20px gold square with ink **lk** strokes, square corners. Gold is the mark's only job. No trophy, shield, whistle, robot head, sports-ball mashup, or generic AI sparkle.
+The wordmark sits beside the square brand mark: a 20px gold square with ink **lu** strokes — a lowercase l with a short foot, and a square u with a rounded inner corner — in square corners. Gold is the mark's only job. No trophy, shield, whistle, robot head, sports-ball mashup, or generic AI sparkle.
 
-At small sizes use the wordmark and mark together; the gold lk favicon is the mark's browser utility, not a second logo. The app's accessible home-link name remains “Lineupgrade home.”
+At small sizes use the wordmark and mark together; the gold lu favicon is the mark's browser utility, not a second logo. The app's accessible home-link name remains “Lineupgrade home.”
 
 Use **Lineupgrade** in sentences, headings, release notes, email sender names, legal documents, and speech. Never LineUPkeep, LineUpKeep, LineupKeep, Line Upkeep, or Lineup Keep as the product name.
 

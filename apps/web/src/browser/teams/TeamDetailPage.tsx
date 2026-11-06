@@ -25,6 +25,7 @@ import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
 import { teamContextLabel } from "./teamLabels";
 import { TeamNote } from "./TeamNote";
+import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamListQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
 import { useTeamNote } from "./useTeamNote";
@@ -38,6 +39,10 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
   });
   const team = (): TeamSummaryView | undefined =>
     page.teams().find((candidate) => candidate.team.id === props.teamId);
+  const titleAside = (): JSX.Element | undefined => {
+    const summary = team();
+    return summary === undefined ? undefined : <TeamProviderLink team={summary.team} />;
+  };
 
   return (
     <AppShell>
@@ -48,6 +53,7 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
           </TextLink>
         }
         title={team()?.team.name ?? "Team"}
+        titleAside={titleAside()}
       >
         <UnsavedChangesScope>
           <Stack gap="lg">

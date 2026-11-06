@@ -16,7 +16,7 @@ import "#web/styles.css";
 import type { RouterContext } from "#browser/app-shell/routerContext.ts";
 import { createQueryClient } from "#browser/query/queryClient.ts";
 import type { SessionRemote } from "#browser/session/sessionRemote.ts";
-import { formatDateTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
+import { formatClockTime, formatReaderTime } from "#browser/shared-ui/formatTime.ts";
 import type {
   LineupRunView,
   TeamChangeView,
@@ -110,6 +110,19 @@ const enabledTeam: TeamSummaryView = {
     ...baseTeam.team,
     automation: { changedAt: baseTeam.team.automation.changedAt, status: "enabled" },
   },
+};
+
+const checkingRun: LineupRunView = {
+  ...noOpRun,
+  run: "018f79ea-7d86-7c18-9b4a-8b4d0c9165b4",
+  status: "verifying",
+  outcome: undefined,
+};
+
+const longName = "Skinner? I barely know her! The second coming of a very long team name";
+const longNamedTeam: TeamSummaryView = {
+  ...enabledTeam,
+  team: { ...enabledTeam.team, id: "018f79ea-7d86-7c18-9b4a-8b4d0c916599", name: longName },
 };
 
 const pausedTeam: TeamSummaryView = {
@@ -239,16 +252,18 @@ it("keeps the pause control in place and disabled while lineup checks are off", 
 
 it("keeps every control inside a phone viewport without sideways scroll", async () => {
   await page.viewport(390, 844);
-  using _app = setupTeamsPage([enabledTeam]);
+  using _app = setupTeamsPage([enabledTeam, longNamedTeam]);
 
-  const toggle = page.getByRole("switch", { name: "Lineup checks for Alpha" });
-  await expect.element(toggle).toBeVisible();
-  const bounds = toggle.element().getBoundingClientRect();
-  const root = document.documentElement;
+  for (const name of ["Alpha", longName]) {
+    const toggle = page.getByRole("switch", { name: `Lineup checks for ${name}` });
+    await expect.element(toggle).toBeVisible();
+    const bounds = toggle.element().getBoundingClientRect();
+    const root = document.documentElement;
 
-  expect(bounds.left).toBeGreaterThanOrEqual(0);
-  expect(bounds.right).toBeLessThanOrEqual(root.clientWidth);
-  expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(root.clientWidth);
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+  }
 });
 
 it("labels a pause as the rest of the fantasy day and resumes through the control action", async () => {
@@ -263,9 +278,9 @@ it("labels a pause as the rest of the fantasy day and resumes through the contro
   await expect
     .element(
       page.getByText(
-        `Paused for the rest of the fantasy day. Resumes after ${formatDateTime(
+        `Paused for the rest of the fantasy day · resumes at ${formatClockTime(
           pausedTeam.team.automation.resumesAt ?? "",
-        )}.`,
+        )}`,
       ),
     )
     .toBeVisible();
@@ -284,8 +299,9 @@ it("labels a pause as the rest of the fantasy day and resumes through the contro
     .element(page.getByRole("switch", { name: "Lineup checks for Alpha" }))
     .toHaveAttribute("aria-checked", "true");
   await expect
-    .element(page.getByText(/^Paused for the rest of the fantasy day\./u))
+    .element(page.getByText(/^Paused for the rest of the fantasy day/u))
     .not.toBeInTheDocument();
+  await expect.element(page.getByText(/^Next check at /u)).toBeVisible();
   expect(changes).toEqual([{ team: teamId, action: "resume" }]);
 });
 
@@ -316,9 +332,9 @@ it("pauses an enabled team for the rest of the fantasy day", async () => {
   await expect
     .element(
       page.getByText(
-        `Paused for the rest of the fantasy day. Resumes after ${formatDateTime(
+        `Paused for the rest of the fantasy day · resumes at ${formatClockTime(
           pausedTeam.team.automation.resumesAt ?? "",
-        )}.`,
+        )}`,
       ),
     )
     .toBeVisible();
@@ -415,7 +431,7 @@ it("names the connection only when the account has more than one", async () => {
   await expect.element(page.getByText("Football · NFL 2026 · Yahoo")).toBeVisible();
 });
 
-it("keeps a team row in the order of name, league, last check, tally, and attention", async () => {
+it("keeps a team row in the order of name, league, status, last check, and tally", async () => {
   const tally = "1 of the last 3 checks changed the lineup";
   using _app = setupTeamsPage([
     {
@@ -429,6 +445,7 @@ it("keeps a team row in the order of name, league, last check, tally, and attent
   const row = page.getByRole("listitem").filter({ hasText: "Alpha" });
   const name = row.getByRole("link", { name: "Alpha", exact: true });
   const league = row.getByText("Elite League 25 · Football · 2026");
+  const status = row.getByText(/^Next check at /u);
   const lastCheck = row.getByText(
     `Last check changed 2 players · ${formatReaderTime(twoHoursAgo)}`,
   );
@@ -436,22 +453,121 @@ it("keeps a team row in the order of name, league, last check, tally, and attent
 
   await expect.element(name).toBeVisible();
   await expect.element(league).toBeVisible();
+  await expect.element(status).toBeVisible();
   await expect.element(lastCheck).toBeVisible();
   await expect.element(tallyLine).toBeVisible();
 
-  for (const later of [league, lastCheck, tallyLine]) {
+  for (const later of [league, status, lastCheck, tallyLine]) {
     expect(
       name.element().compareDocumentPosition(later.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   }
+  for (const later of [status, lastCheck, tallyLine]) {
+    expect(
+      league.element().compareDocumentPosition(later.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  }
   expect(
-    league.element().compareDocumentPosition(lastCheck.element()) &
+    status.element().compareDocumentPosition(lastCheck.element()) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(
     lastCheck.element().compareDocumentPosition(tallyLine.element()) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
+});
+
+it("keeps the same row height in every check state on a phone and a desktop", async () => {
+  const inFlight = { ...enabledTeam, lastRun: checkingRun, recentRuns: [checkingRun] };
+  const states = [
+    { name: "checks on", team: enabledTeam },
+    { name: "paused", team: pausedTeam },
+    { name: "checks off", team: baseTeam },
+    { name: "in flight", team: inFlight },
+  ];
+  const heights: Array<{ width: number; state: string; height: number }> = [];
+
+  for (const width of [390, 1440]) {
+    await page.viewport(width, 844);
+    for (const state of states) {
+      const mounted = setupTeamsPage([state.team]);
+      try {
+        const row = page.getByRole("listitem").filter({ hasText: "Alpha" });
+        await expect.element(row).toBeVisible();
+        expect(
+          row
+            .getByText(/^(Next check at|Paused for the rest|Lineup checks are off|Checking now)/u)
+            .element()
+            .getBoundingClientRect().height,
+          "the status line reserves two lines",
+        ).toBe(36);
+        heights.push({
+          width,
+          state: state.name,
+          height: row.element().getBoundingClientRect().height,
+        });
+      } finally {
+        mounted[Symbol.dispose]();
+      }
+    }
+  }
+
+  for (const width of [390, 1440]) {
+    const measured = heights.filter((entry) => entry.width === width);
+    expect(measured, `${width}px measures every state`).toHaveLength(4);
+    expect(
+      new Set(measured.map((entry) => entry.height)).size,
+      `${width}px keeps one row height across ${measured.map((entry) => entry.state).join(", ")}`,
+    ).toBe(1);
+  }
+});
+
+it("says the next check, the pause, checks off, or a check in flight", async () => {
+  const mounted = setupTeamsPage([enabledTeam]);
+  try {
+    await expect.element(page.getByText(/^Next check at \d{1,2}:\d{2}( [ap]m)?$/u)).toBeVisible();
+  } finally {
+    mounted[Symbol.dispose]();
+  }
+
+  const paused = setupTeamsPage([pausedTeam]);
+  try {
+    await expect
+      .element(
+        page.getByText(
+          `Paused for the rest of the fantasy day · resumes at ${formatClockTime(
+            pausedTeam.team.automation.resumesAt ?? "",
+          )}`,
+        ),
+      )
+      .toBeVisible();
+  } finally {
+    paused[Symbol.dispose]();
+  }
+
+  const off = setupTeamsPage([baseTeam]);
+  try {
+    await expect
+      .element(
+        page.getByText("Lineup checks are off. Turn them on to check this team hourly.", {
+          exact: true,
+        }),
+      )
+      .toBeVisible();
+  } finally {
+    off[Symbol.dispose]();
+  }
+
+  const inFlight = setupTeamsPage([
+    { ...enabledTeam, lastRun: checkingRun, recentRuns: [checkingRun] },
+  ]);
+  try {
+    await expect
+      .element(page.getByText("Checking now. This usually takes under a minute.", { exact: true }))
+      .toBeVisible();
+  } finally {
+    inFlight[Symbol.dispose]();
+  }
 });
 
 it("says what the last check did and tallies the checks that changed the lineup", async () => {

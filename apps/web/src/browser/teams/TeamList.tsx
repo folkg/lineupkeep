@@ -14,15 +14,19 @@ import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
+import { createMinuteClock } from "#browser/timing/minuteClock.ts";
 import type { TeamSummaryView } from "#contracts/connections/teamContract.ts";
 
 import { TeamAttention } from "./TeamAttention";
 import { TeamControls } from "./TeamControls";
-import { checkTallyLabel, lastCheckLine, pauseResumeLabel, teamContextLabel } from "./teamLabels";
+import { checkTallyLabel, lastCheckLine, teamContextLabel } from "./teamLabels";
 import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamRemote } from "./teamRemote";
+import { teamStatusLine } from "./teamStatus";
 
 export function TeamList(props: TeamListProps): JSX.Element {
+  const clock = createMinuteClock(() => props.dataUpdatedAt());
+
   return (
     <Stack as="section" gap="md" labelledBy="teams-list-title">
       <SectionTitle
@@ -80,7 +84,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
           >
             <RuleList>
               <For each={props.teams()}>
-                {(team) => <TeamRow team={team} remote={props.remote} />}
+                {(team) => <TeamRow now={clock.now} team={team} remote={props.remote} />}
               </For>
             </RuleList>
           </Show>
@@ -103,6 +107,9 @@ function TeamRow(props: TeamRowProps): JSX.Element {
         <Text size="caption" tone="muted">
           {teamContextLabel(props.team.team, props.team.connectionCount)}
         </Text>
+        <Text reserve="two-lines" size="caption" tone="muted">
+          {teamStatusLine(props.team, props.now())}
+        </Text>
         <Show
           fallback={
             <Text numeric size="caption" tone="muted">
@@ -124,20 +131,12 @@ function TeamRow(props: TeamRowProps): JSX.Element {
             </Text>
           )}
         </Show>
-        <Show when={pauseResumeLabel(props.team.team.automation)}>
-          {(note) => (
-            <Text size="caption" tone="muted">
-              {note()}
-            </Text>
-          )}
-        </Show>
         <TeamAttention team={props.team} />
       </Stack>
       <TeamControls
         align="end"
         compact
         showPauseNote={false}
-        showProvider={false}
         team={props.team}
         remote={props.remote}
       />
@@ -150,6 +149,7 @@ type TeamListProps = {
   readonly isLoading: Accessor<boolean>;
   readonly loadFailure: Accessor<Error | null>;
   readonly refreshState: Accessor<ActionState>;
+  readonly dataUpdatedAt: Accessor<number>;
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshTeams: () => void;
   readonly remote: TeamRemote;
@@ -157,6 +157,7 @@ type TeamListProps = {
 
 type TeamRowProps = {
   readonly team: TeamSummaryView;
+  readonly now: Accessor<Date>;
   readonly remote: TeamRemote;
 };
 

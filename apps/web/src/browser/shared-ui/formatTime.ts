@@ -65,11 +65,22 @@ export function formatWeekday(value: string | Date): string {
   return weekdayFormat.format(toDate(value));
 }
 
-export function formatClockTime(value: string | Date): string {
-  return rangeTimeFormat
-    .format(toDate(value))
-    .replace(/\b(AM|PM)\b/gu, (period) => period.toLowerCase());
+export function formatClockTime(value: string | Date, reader: ClockReader = {}): string {
+  const format =
+    reader.locale === undefined && reader.timeZone === undefined
+      ? rangeTimeFormat
+      : new Intl.DateTimeFormat(reader.locale, {
+          hour: "numeric",
+          minute: "2-digit",
+          ...(reader.timeZone === undefined ? {} : { timeZone: reader.timeZone }),
+        });
+  return format.format(toDate(value)).replace(/\b(AM|PM)\b/gu, (period) => period.toLowerCase());
 }
+
+export type ClockReader = {
+  readonly locale?: string;
+  readonly timeZone?: string;
+};
 
 function sameReaderDay(left: Date, right: Date): boolean {
   return (

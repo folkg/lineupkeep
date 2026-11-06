@@ -88,6 +88,63 @@ it("keeps an icon button's box and the page height through every state", async (
   expect(measure(button.element(), mounted.host)).toEqual(idle);
 });
 
+it("keeps an icon's glyph when the icon confirms without a tick", async () => {
+  const [state, setState] = createSignal<ActionState>("idle");
+  using _app = mount(() => (
+    <IconButton label="Refresh teams" state={state()} onClick={() => undefined}>
+      <svg aria-hidden="true" height="17" viewBox="0 0 16 16" width="17">
+        <path d="M13 8a5 5 0 1 1-1.7-3.8" fill="none" stroke="currentColor" />
+      </svg>
+    </IconButton>
+  ));
+  const button = page.getByRole("button", { name: "Refresh teams" });
+  setState("done");
+  await expect.element(button).toHaveAttribute("data-state", "done");
+
+  const glyph = requiredGlyph(button.element());
+  expect(getComputedStyle(glyph).animationName, "no tick means no glyph yield").toBe("none");
+  expect(opacity(glyph)).toBe(1);
+});
+
+it("fades an icon's glyph fully out before the tick draws alone", async () => {
+  const [state, setState] = createSignal<ActionState>("idle");
+  using mounted = mount(() => (
+    <IconButton confirmed label="Refresh teams" state={state()} onClick={() => undefined}>
+      <svg aria-hidden="true" height="17" viewBox="0 0 16 16" width="17">
+        <path d="M13 8a5 5 0 1 1-1.7-3.8" fill="none" stroke="currentColor" />
+      </svg>
+    </IconButton>
+  ));
+  const button = page.getByRole("button", { name: "Refresh teams" });
+  const control = button.element();
+  const glyph = control.querySelector<HTMLElement>("[data-action-glyph]");
+  const idle = measure(control, mounted.host);
+  const sampling = sampleOpacity(control);
+
+  setState("done");
+  await expect.element(button).toHaveAttribute("data-state", "done");
+  const tick = await waitFor(() => control.querySelector<HTMLElement>('[data-action-mark="tick"]'));
+
+  await expect.poll(() => opacity(glyph), { timeout: 2_000 }).toBe(0);
+  expect(opacity(tick), "the tick is visible while the glyph is gone").toBe(1);
+
+  const buttonBox = control.getBoundingClientRect();
+  const tickSvg = tick.querySelector("svg");
+  expect(tickSvg).not.toBeNull();
+  const tickBox = (tickSvg ?? tick).getBoundingClientRect();
+  expect(
+    Math.abs(tickBox.left + tickBox.width / 2 - (buttonBox.left + buttonBox.width / 2)),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(tickBox.top + tickBox.height / 2 - (buttonBox.top + buttonBox.height / 2)),
+  ).toBeLessThanOrEqual(1);
+
+  await expect.poll(() => opacity(glyph), { timeout: 3_000 }).toBe(1);
+  expect(opacity(tick), "the tick is gone before the glyph returns").toBe(0);
+  expect(sampling.stop(), "the glyph and the tick are never visible together").toBe(0);
+  expect(measure(control, mounted.host)).toEqual(idle);
+});
+
 it("keeps a switch's box and the page height through every state", async () => {
   const [state, setState] = createSignal<ActionState>("idle");
   using mounted = mount(() => (
@@ -245,6 +302,57 @@ function measure(
     box: [box.x, box.y, box.width, box.height],
     hostHeight: host.getBoundingClientRect().height,
     pageHeight: document.body.scrollHeight,
+  };
+}
+
+function requiredGlyph(button: Element): Element {
+  const glyph = button.querySelector("[data-action-glyph]");
+  if (glyph === null) {
+    throw new Error("The icon button has no glyph.");
+  }
+  return glyph;
+}
+
+function opacity(element: Element | null): number {
+  return element === null ? Number.NaN : Number(getComputedStyle(element).opacity);
+}
+
+async function waitFor<A>(read: () => A | null, timeoutMs = 2_000): Promise<A> {
+  const deadline = performance.now() + timeoutMs;
+  for (;;) {
+    const value = read();
+    if (value !== null) {
+      return value;
+    }
+    if (performance.now() > deadline) {
+      throw new Error("The confirmation tick never appeared.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  }
+}
+
+function sampleOpacity(control: Element): { stop: () => number } {
+  let overlaps = 0;
+  let running = true;
+  const step = (): void => {
+    if (!running) {
+      return;
+    }
+    const pair = Math.min(
+      opacity(control.querySelector("[data-action-glyph]")),
+      opacity(control.querySelector('[data-action-mark="tick"]')),
+    );
+    if (pair > 0.01) {
+      overlaps += 1;
+    }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  return {
+    stop: () => {
+      running = false;
+      return overlaps;
+    },
   };
 }
 

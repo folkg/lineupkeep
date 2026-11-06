@@ -26,6 +26,7 @@ export function IconButton(props: IconButtonProps): JSX.Element {
         aria-disabled={disabled() ? "true" : undefined}
         aria-label={props.label}
         class={iconButtonClass}
+        data-confirmation={props.confirmed === true ? "tick" : undefined}
         data-state={state()}
         disabled={working()}
         title={props.title ?? props.label}
@@ -33,14 +34,16 @@ export function IconButton(props: IconButtonProps): JSX.Element {
         onClick={handleClick}
       >
         <span aria-hidden="true" class={iconButtonFrameClass} />
-        <span class="relative">{props.children}</span>
+        <span class="relative" data-action-glyph>
+          {props.children}
+        </span>
         <Show when={working()}>
           <span class="pointer-events-none absolute inset-x-2 bottom-[calc(0.5rem+1px)] h-px overflow-hidden">
             <WorkMark class="start-0 top-0 w-[34%]" />
           </span>
         </Show>
         <Show when={state() === "done" && props.confirmed === true}>
-          <ConfirmedMark class="inset-0 grid place-items-center" />
+          <ConfirmedMark class="tick-alone inset-0 grid place-items-center" />
         </Show>
       </button>
     </span>

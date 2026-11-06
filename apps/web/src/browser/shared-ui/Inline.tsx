@@ -9,8 +9,8 @@ export function Inline(props: InlineProps): JSX.Element {
   return (
     <div
       class={cx(
-        "flex flex-wrap",
-        props.nowrap === true && "flex-nowrap",
+        "flex",
+        props.nowrap === true ? "flex-nowrap" : "flex-wrap",
         gapClass[props.gap],
         props.align === "start"
           ? "items-start"

@@ -213,6 +213,26 @@ export function runIsInProgress(status: LineupRunView["status"]): boolean {
   }
 }
 
+export function runIsCheckingNow(status: LineupRunView["status"]): boolean {
+  switch (status) {
+    case "queued":
+    case "reading":
+    case "planning":
+    case "validating":
+    case "applying":
+    case "verifying":
+      return true;
+    case "completed":
+    case "skipped":
+    case "blocked":
+    case "failed":
+    case "uncertain":
+    case "superseded":
+    case "retry-wait":
+      return false;
+  }
+}
+
 function skippedExplanation(outcome: NonNullable<LineupRunView["outcome"]>): string | undefined {
   if (outcome.kind !== "skipped" || outcome.nextTickAt === undefined) {
     return undefined;
