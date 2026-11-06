@@ -17,13 +17,6 @@ export const teamQueries = {
       queryKey: ["runs", "detail", run] as const,
       queryFn: () => remote.readRun({ run }),
     }),
-  attentionKey: (team: string) => ["teams", "attention", team] as const,
-  attention: (remote: Pick<TeamRemote, "readAttention">, team: string) =>
-    queryOptions({
-      queryKey: ["teams", "attention", team] as const,
-      queryFn: () => remote.readAttention({ team }),
-      retry: false,
-    }),
 };
 
 export function refreshTeamLists(queryClient: QueryClient): Promise<void> {

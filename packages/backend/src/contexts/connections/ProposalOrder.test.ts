@@ -1,11 +1,12 @@
 import { assert, it } from "@effect/vitest";
 
-import { ineligibleSlotOccupants, planProposalOrder } from "./ProposalOrder.ts";
+import { planProposalOrder } from "./ProposalOrder.ts";
 import type {
   ProposalOrderInput,
   ProposalOrderItem,
   ProposalOrderPlayer,
 } from "./ProposalOrder.ts";
+import { ineligibleSlotOccupants } from "./RosterSlots.ts";
 
 type Slot = ProposalOrderInput["slots"][number];
 type PlayerRef = ProposalOrderInput["items"][number]["adds"][number];

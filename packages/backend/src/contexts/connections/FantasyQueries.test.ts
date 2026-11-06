@@ -29,11 +29,6 @@ import { ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
 import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
-import {
-  secondProvider,
-  secondProviderKey,
-  secondProviderRoster,
-} from "./internal/SecondProviderFakeTest.ts";
 import { ProfessionalCalendar } from "./ProfessionalCalendar.ts";
 import type {
   ProviderAcquisitionUsage,
@@ -47,12 +42,11 @@ import type {
   ProviderPlayerDetail,
   ProviderPlayerSearchResult,
   ProviderRoster,
-  ProviderShape,
   ProviderStandings,
   ProviderTeam,
 } from "./Provider.ts";
 import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
-import { ProviderRegistry, providerRegistryOf } from "./ProviderRegistry.ts";
+import { ProviderRegistry } from "./ProviderRegistry.ts";
 import { RosterResult, TeamSummaryData, TeamSummaryResult } from "./QueryResults.ts";
 import { StatRef } from "./QueryValues.ts";
 import { QueryTeamNotFound } from "./QueryValues.ts";
@@ -1038,189 +1032,84 @@ it.effect(
     }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("reports a player in a slot the league does not allow them to occupy", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: reserveLeagueFixture,
-      roster: reserveRoster([
-        { key: "465.p.90001", name: "Marcus Reserve", slot: "IR" },
-        { key: "465.p.90002", name: "Starting Skater", slot: "C" },
-      ]),
-    });
-
-    const summary = yield* queries.getTeamSummary(owner, {
-      team: Array.getUnsafe(seeded, 0).id,
-      groups: ["roster"],
-    });
-
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
-      return;
-    }
-    assert.deepStrictEqual(
-      summary.attention?.map((item) => [
-        item.name,
-        item.illegalSlot.code,
-        item.illegalSlot.slot,
-        item.illegalSlot.positions,
-      ]),
-      [["Marcus Reserve", "slot_illegal", "IR", ["C"]]],
-    );
-    assert.strictEqual(
-      summary.attention?.[0]?.illegalSlot.detail,
-      "Marcus Reserve is in the IR slot, but it does not accept their positions (C). The roster may be refused until they are moved or dropped.",
-    );
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("reports the illegal slot in the player read's availability", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: reserveLeagueFixture,
-      roster: reserveRoster([
-        { key: "465.p.90001", name: "Marcus Reserve", slot: "IR" },
-        { key: "465.p.90002", name: "Starting Skater", slot: "C" },
-        { key: "465.p.90003", name: "Benched Skater", slot: "BN" },
-      ]),
-    });
-    const teamId = Array.getUnsafe(seeded, 0).id;
-    const roster = yield* queries.getRosters(owner, { team: teamId });
-    assert.strictEqual(roster.status, "ok");
-    if (roster.status !== "ok" || roster.scope !== "team") {
-      return;
-    }
-
-    const hydrated = yield* queries.getPlayers(owner, {
-      team: teamId,
-      players: roster.players.map((player) => player.player),
-      groups: ["availability"],
-    });
-
-    assert.strictEqual(hydrated.status, "ok");
-    if (hydrated.status !== "ok") {
-      return;
-    }
-    const [reserve, starter, benched] = hydrated.players;
-    assert.strictEqual(reserve?.identity?.name, "Marcus Reserve");
-    assert.strictEqual(reserve?.availability?.illegalSlot?.slot, "IR");
-    assert.deepStrictEqual(reserve?.availability?.illegalSlot?.positions, ["C"]);
-    assert.strictEqual(
-      reserve?.availability?.illegalSlot?.detail,
-      "Marcus Reserve is in the IR slot, but it does not accept their positions (C). The roster may be refused until they are moved or dropped.",
-    );
-    assert.isUndefined(starter?.availability?.illegalSlot);
-    assert.isUndefined(benched?.availability?.illegalSlot);
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("does not consult the injury report when deciding the slot is illegal", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: reserveLeagueFixture,
-      roster: reserveRoster([
-        {
-          key: "465.p.90001",
-          name: "Marcus Reserve",
-          slot: "IR",
-          injury: { code: "IR", detail: "Injured reserve" },
+it.effect(
+  "names a player whose eligible positions do not include the slot the league gave them",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      const league: ProviderLeagueSettings = {
+        ...leagueFixture,
+        rosterPositions: [
+          ...leagueFixture.rosterPositions,
+          { position: "IR", positionType: "R", count: 1, kind: "reserve", eligibility: ["IR"] },
+        ],
+      };
+      const base = rosterFixture({ count: 2 });
+      const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+        league,
+        roster: {
+          ...base,
+          players: base.players.map((player, index) =>
+            index === 0
+              ? { ...player, slot: { status: "verified", slot: "IR" }, eligiblePositions: ["QB"] }
+              : player,
+          ),
         },
-      ]),
-    });
+      });
 
-    const summary = yield* queries.getTeamSummary(owner, {
-      team: Array.getUnsafe(seeded, 0).id,
-      groups: ["roster"],
-    });
+      const summary = yield* queries.getTeamSummary(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+        groups: ["roster"],
+      });
 
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
-      return;
-    }
-    assert.deepStrictEqual(
-      summary.attention?.map((item) => [item.name, item.illegalSlot.slot]),
-      [["Marcus Reserve", "IR"]],
-    );
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
+      assert.strictEqual(summary.status, "ok");
+      if (summary.status !== "ok") {
+        return;
+      }
+      assert.deepStrictEqual(
+        summary.illegalSlots?.map((entry) => ({
+          name: entry.name,
+          slot: entry.slot,
+          eligiblePositions: entry.eligiblePositions,
+          detail: entry.detail,
+        })),
+        [
+          {
+            name: "Synthetic 0",
+            slot: "IR",
+            eligiblePositions: ["QB"],
+            detail: "Synthetic 0 is in the IR slot, but it does not accept their positions (QB).",
+          },
+        ],
+      );
 
-it.effect("omits the attention list when the roster group is not requested", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const seeded = yield* seed(fake, [team("465.l.2000.t.9", "Gamma", "nhl")], {
-      league: reserveLeagueFixture,
-      roster: reserveRoster([{ key: "465.p.90001", name: "Marcus Reserve", slot: "IR" }]),
-    });
-
-    const summary = yield* queries.getTeamSummary(owner, {
-      team: Array.getUnsafe(seeded, 0).id,
-      groups: ["league"],
-    });
-
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
-      return;
-    }
-    assert.isUndefined(summary.attention);
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
-it.effect("reports a slot the second provider calls RESERVE, using that league's eligibility", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const connections = yield* Connections;
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [
-        { provider: secondProviderKey, session: Redacted.make("A1=atlas-session") },
-      ]),
-      0,
-    );
-    const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
-    const teamId = Array.getUnsafe(discovered, 0).id;
-
-    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
-
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
-      return;
-    }
-    const [entry] = summary.attention ?? [];
-    assert.strictEqual(entry?.name, "Eve Reserve");
-    assert.strictEqual(entry?.illegalSlot.code, "slot_illegal");
-    assert.strictEqual(entry?.illegalSlot.slot, "RESERVE");
-    assert.deepStrictEqual(entry?.illegalSlot.positions, ["SF"]);
-    assert.notInclude(entry?.illegalSlot.detail ?? "", "IR");
-    assert.include(entry?.illegalSlot.detail ?? "", "RESERVE");
-  }).pipe(Effect.provide(queriesTestLayerWithProvider(atlasWithIllegalReserve))),
-);
-
-it.effect("says nothing about a player whose positions the slot accepts", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const connections = yield* Connections;
-    const linked = Array.getUnsafe(
-      yield* connections.link(owner, [
-        { provider: secondProviderKey, session: Redacted.make("A1=atlas-session") },
-      ]),
-      0,
-    );
-    const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
-    const teamId = Array.getUnsafe(discovered, 0).id;
-
-    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
-
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
-      return;
-    }
-    assert.deepStrictEqual(summary.attention, []);
-  }).pipe(Effect.provide(queriesTestLayerWithProvider(secondProvider))),
+      const eligible = yield* seed(fake, [team("461.l.1001.t.1", "Beta")], {
+        league,
+        roster: {
+          ...base,
+          providerTeamKey: "461.l.1001.t.1",
+          providerLeagueKey: "461.l.1001",
+          players: base.players.map((player, index) =>
+            index === 0
+              ? {
+                  ...player,
+                  slot: { status: "verified", slot: "IR" },
+                  eligiblePositions: ["QB", "IR"],
+                }
+              : player,
+          ),
+        },
+      });
+      const eligibleSummary = yield* queries.getTeamSummary(owner, {
+        team: Array.getUnsafe(eligible, 0).id,
+        groups: ["roster"],
+      });
+      assert.deepStrictEqual(
+        eligibleSummary.status === "ok" ? eligibleSummary.illegalSlots : "not ok",
+        [],
+      );
+    }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
 it.effect("rejects a blank player search query with the remedy instead of a generic failure", () =>
@@ -6046,69 +5935,6 @@ function leagueRosterFixture(
   };
 }
 
-const reserveLeagueFixture: ProviderLeagueSettings = {
-  ...hockeyLeagueFixture,
-  rosterPositions: [
-    { position: "C", positionType: "P", count: 2, kind: "starting", eligibility: ["C"] },
-    { position: "BN", positionType: "B", count: 3, kind: "bench", eligibility: [] },
-    { position: "IR", positionType: "I", count: 1, kind: "reserve", eligibility: ["IR"] },
-  ],
-};
-
-function reserveRoster(
-  members: ReadonlyArray<{
-    readonly key: string;
-    readonly name: string;
-    readonly slot: string;
-    readonly injury?: { readonly code?: string; readonly detail?: string };
-  }>,
-): ProviderRoster {
-  return {
-    providerTeamKey: "465.l.2000.t.9",
-    providerLeagueKey: "465.l.2000",
-    coverage: { type: "date", date: "2026-10-26" },
-    players: members.map((member) => ({
-      providerPlayerKey: member.key,
-      name: member.name,
-      displayPosition: "C",
-      primaryPosition: "C",
-      positionType: "P",
-      proTeamAbbreviation: "SYN",
-      eligiblePositions: ["C"],
-      slot: { status: "verified" as const, slot: member.slot },
-      isEditable: true,
-      injuryCode: member.injury?.code,
-      injuryDetail: member.injury?.detail,
-      byeWeek: null,
-      scheduled: true,
-      startingLineup: "unconfirmed" as const,
-      undroppable: null,
-      transactionTrend: {
-        status: "not_published" as const,
-        reason: "The fake publishes no move counts.",
-      },
-    })),
-  };
-}
-
-const atlasWithIllegalReserve: ProviderShape = {
-  ...secondProvider,
-  readRoster: () =>
-    Effect.succeed({
-      ...secondProviderRoster,
-      players: secondProviderRoster.players.map((player) =>
-        player.providerPlayerKey === "atlas.p.5"
-          ? {
-              ...player,
-              primaryPosition: "SF",
-              displayPosition: "SF",
-              eligiblePositions: ["SF"],
-            }
-          : player,
-      ),
-    }),
-};
-
 const playerDetails = [
   {
     providerPlayerKey: "461.p.10001",
@@ -6217,42 +6043,6 @@ const queriesTestLayer = (
     Layer.provideMerge(ProviderFakeTest),
     Layer.provideMerge(ScheduleObservationRepositoryTest),
     Layer.provideMerge(gameSource),
-    Layer.provideMerge(calendar),
-    Layer.provide(EncryptionTestLayer),
-    Layer.provide(QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars")),
-    Layer.provide(NodeCrypto.layer),
-    Layer.orDie,
-  );
-};
-
-const queriesTestLayerWithProvider = (
-  provider: ProviderShape,
-): Layer.Layer<
-  | FantasyQueries
-  | Connections
-  | QueryRepository
-  | ConnectionRepository
-  | ProviderRegistry
-  | ScheduleObservationRepository
-  | GameSourceRegistry
-  | ProfessionalCalendar
-  | ConnectionsDatabase
-> => {
-  const calendar = ProfessionalCalendarLive.pipe(
-    Layer.provideMerge(ScheduleObservationRepositoryTest),
-    Layer.provide(EmptyGameSourceTest),
-  );
-  return FantasyQueriesLive.pipe(
-    Layer.provideMerge(ConnectionsLive),
-    Layer.provideMerge(QueryRepositoryTest),
-    Layer.provideMerge(ConnectionRepositoryTest),
-    Layer.provideMerge(
-      Layer.effect(ProviderRegistry)(
-        Effect.succeed(ProviderRegistry.of(providerRegistryOf([provider]))),
-      ),
-    ),
-    Layer.provideMerge(ScheduleObservationRepositoryTest),
-    Layer.provideMerge(EmptyGameSourceTest),
     Layer.provideMerge(calendar),
     Layer.provide(EncryptionTestLayer),
     Layer.provide(QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars")),

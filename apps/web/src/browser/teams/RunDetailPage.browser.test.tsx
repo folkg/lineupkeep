@@ -209,7 +209,6 @@ function setupRunDetailPage(lineupRun: LineupRunView): { [Symbol.dispose](): voi
     refresh: () => Promise.resolve({ teams: [team] }),
     control: () => Promise.resolve({ changed: [], teams: [team] }),
     readRun: () => Promise.resolve({ run: lineupRun }),
-    readAttention: () => Promise.reject(new Error("Unexpected attention read")),
     saveNote: () => Promise.reject(new Error("Unexpected note save")),
   };
   const sessionRemote: SessionRemote = {

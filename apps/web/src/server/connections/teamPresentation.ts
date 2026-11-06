@@ -2,7 +2,6 @@ import type { ConnectionError } from "@lineupkeep/backend/connections/Connection
 import type { LineupRun } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupError } from "@lineupkeep/backend/connections/LineupRun";
 import type { LineupRunOutcome } from "@lineupkeep/backend/connections/LineupRun";
-import type { TeamSummaryResult } from "@lineupkeep/backend/connections/QueryResults";
 import { teamNoteLimit } from "@lineupkeep/backend/connections/TeamNote";
 import type { TeamSummary } from "@lineupkeep/backend/connections/Teams";
 import type {
@@ -16,29 +15,10 @@ import type {
   LineupRunView,
   TeamMutationError,
   TeamNoteSaveResult,
-  TeamRosterAttentionData,
-  TeamRosterAttentionError,
   TeamSummaryView,
   TeamView,
 } from "#contracts/connections/teamContract.ts";
 import type { ExpectedFailure } from "#server/backendEntry.ts";
-
-export function toTeamRosterAttention(summary: TeamSummaryResult): TeamRosterAttentionData {
-  return summary.status === "narrowing_required"
-    ? { attention: [] }
-    : {
-        attention: (summary.attention ?? []).map((item) => ({
-          name: item.name,
-          slot: item.illegalSlot.slot,
-          detail: item.illegalSlot.detail,
-        })),
-      };
-}
-
-export const teamRosterAttentionFailure: ExpectedFailure<TeamRosterAttentionError["type"]> = {
-  type: "team.attention_unavailable",
-  outcome: "failure",
-};
 
 export function toTeamSummaryView(summary: TeamSummary): TeamSummaryView {
   return {

@@ -664,7 +664,6 @@ function setupTeamsPage(
     refresh: overrides.refresh ?? (() => Promise.resolve({ teams })),
     control: overrides.control ?? (() => Promise.resolve({ changed: [], teams })),
     readRun: () => Promise.reject(new Error("Unexpected run read")),
-    readAttention: () => Promise.reject(new Error("Unexpected attention read")),
     saveNote: () => Promise.reject(new Error("Unexpected note save")),
   };
   const teamsQuery = teamQueries.list(remote);

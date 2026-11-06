@@ -28,8 +28,6 @@ import { TeamNote } from "./TeamNote";
 import { TeamProviderLink } from "./TeamProviderLink";
 import type { TeamListQueryOptions } from "./teamQueries";
 import type { TeamRemote } from "./teamRemote";
-import { TeamRosterAttention } from "./TeamRosterAttention";
-import { useTeamAttention } from "./useTeamAttention";
 import { useTeamNote } from "./useTeamNote";
 import { useTeamsPage } from "./useTeamsPage";
 
@@ -85,10 +83,6 @@ export function TeamDetailPage(props: TeamDetailPageProps): JSX.Element {
 
 function TeamDetail(props: TeamDetailProps): JSX.Element {
   const note = useTeamNote({ team: () => props.team, remote: () => props.remote });
-  const attention = useTeamAttention({
-    team: () => props.team.team.id,
-    remote: () => props.remote,
-  });
   return (
     <Stack gap="lg">
       <Stack gap="md">
@@ -97,7 +91,6 @@ function TeamDetail(props: TeamDetailProps): JSX.Element {
             {teamContextLabel(props.team.team, props.team.connectionCount)}
           </Text>
           <TeamAttention team={props.team} />
-          <TeamRosterAttention attention={attention.attention} />
         </Stack>
         <TeamControls team={props.team} remote={props.remote} />
       </Stack>

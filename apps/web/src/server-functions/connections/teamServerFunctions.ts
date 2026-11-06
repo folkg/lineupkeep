@@ -1,6 +1,4 @@
 import { Connections } from "@lineupkeep/backend/connections/Connections";
-import { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
-import { TeamId } from "@lineupkeep/backend/connections/FantasyTeam";
 import { LineupRunId } from "@lineupkeep/backend/connections/LineupRun";
 import { LineupRuns } from "@lineupkeep/backend/connections/LineupRuns";
 import {
@@ -27,10 +25,8 @@ import {
   mapTeamError,
   mapTeamNoteError,
   mapTeamRefreshError,
-  teamRosterAttentionFailure,
   toLineupRunView,
   toTeamNoteSaveResult,
-  toTeamRosterAttention,
   toTeamSummaryView,
 } from "#server/connections/teamPresentation.ts";
 
@@ -112,31 +108,6 @@ export const controlTeamServerFn = createServerFn({ method: "POST" })
         error._tag === "TeamInputInvalid"
           ? { type: "team.input_invalid", outcome: "rejected" }
           : mapTeamError(error),
-    );
-  });
-
-export const readTeamRosterAttentionServerFn = createServerFn({ method: "POST" })
-  .validator((raw: { readonly team: string }) =>
-    Schema.decodeResult(Schema.Struct({ team: TeamId }))(raw),
-  )
-  .handler(({ data }) => {
-    const request = getRequest();
-    return runUseCase(
-      request,
-      "teams.read_attention",
-      (userId) =>
-        Effect.gen(function* () {
-          const input = yield* Effect.fromResult(data).pipe(
-            Effect.mapError(() => TeamInputInvalid.make({})),
-          );
-          const queries = yield* FantasyQueries;
-          const summary = yield* queries.getTeamSummary(userId, {
-            team: input.team,
-            groups: ["roster"],
-          });
-          return toTeamRosterAttention(summary);
-        }),
-      () => teamRosterAttentionFailure,
     );
   });
 

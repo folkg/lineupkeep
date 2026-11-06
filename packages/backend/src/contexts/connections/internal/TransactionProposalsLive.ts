@@ -2,11 +2,7 @@ import { Array, DateTime, Effect, Layer, Result, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
-import {
-  planProposalOrder,
-  slotAcceptsPositions,
-  slotMismatchDetail,
-} from "#contexts/connections/ProposalOrder.ts";
+import { planProposalOrder } from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProposalOrderItem,
   ProposalOrderPlan,
@@ -28,6 +24,7 @@ import type {
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import type { QueryError, QueryTeam } from "#contexts/connections/QueryValues.ts";
 import type { CounterpartyRef, PlayerRef } from "#contexts/connections/QueryValues.ts";
+import { slotAcceptsPositions, slotMismatchDetail } from "#contexts/connections/RosterSlots.ts";
 import type {
   PendingTradeOffer,
   ProposalBudget,

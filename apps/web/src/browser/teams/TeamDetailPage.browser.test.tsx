@@ -235,44 +235,6 @@ it("keeps the popout beside a long team name on a phone", async () => {
   expect(jumpBox.top).toBeLessThan(headingBox.bottom);
 });
 
-it("shows a slot the league's eligibility rules reject above the controls", async () => {
-  const detail =
-    "Marcus Reserve is in the IR slot, but it does not accept their positions (C). The roster may be refused until they are moved or dropped.";
-  using _app = setupTeamDetailPage(team, {
-    readAttention: () =>
-      Promise.resolve({
-        attention: [{ name: "Marcus Reserve", slot: "IR", detail }],
-      }),
-  });
-
-  const sentence = page.getByText(detail);
-  const controls = page.getByRole("switch", { name: "Lineup checks for Alpha" });
-  await expect.element(sentence).toBeVisible();
-  expect(
-    sentence.element().compareDocumentPosition(controls.element()) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-});
-
-it("says the roster could not be checked without holding up the page", async () => {
-  using _app = setupTeamDetailPage(team, {
-    readAttention: () => Promise.reject(new Error("The roster read failed")),
-  });
-
-  await expect.element(page.getByText("The roster could not be checked just now.")).toBeVisible();
-  await expect.element(page.getByRole("heading", { name: "Recent activity" })).toBeVisible();
-});
-
-it("stays quiet when the roster raises nothing", async () => {
-  using _app = setupTeamDetailPage(team);
-
-  await expect.element(page.getByRole("heading", { name: "Recent activity" })).toBeVisible();
-  await expect
-    .element(page.getByText("The roster could not be checked just now."))
-    .not.toBeInTheDocument();
-  await expect.element(page.getByText(/is in a reserve slot/)).not.toBeInTheDocument();
-});
-
 it("puts recent activity above the owner note and leaves the roster off the page", async () => {
   using _app = setupTeamDetailPage(team);
 
@@ -637,7 +599,7 @@ function foldedLabel(runs: ReadonlyArray<LineupRunView>): string {
 
 function setupTeamDetailPage(
   teamSummary: TeamSummaryView,
-  overrides: Partial<Pick<TeamRemote, "saveNote" | "readAttention">> = {},
+  overrides: Partial<Pick<TeamRemote, "saveNote">> = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
   const remote: TeamRemote = {
@@ -645,7 +607,6 @@ function setupTeamDetailPage(
     refresh: () => Promise.resolve({ teams: [teamSummary] }),
     control: () => Promise.resolve({ changed: [], teams: [teamSummary] }),
     readRun: () => Promise.reject(new Error("Unexpected run read")),
-    readAttention: overrides.readAttention ?? (() => Promise.resolve({ attention: [] })),
     saveNote:
       overrides.saveNote ??
       ((input) =>

@@ -973,7 +973,7 @@ export const GetPlayersInput = Schema.Struct({
     Schema.Array(PlayerGroup).pipe(
       Schema.annotate({
         description:
-          "Groups to hydrate. `actual_stats` states the basis the provider declares: a completed week, season totals, or a daily-summed window with its covered dates. `projections` is available only where the provider publishes them; otherwise the group returns an unsupported status naming that limitation. `availability` reads the provider's selected-player status for references that are not on the current roster, such as a free agent, waiver player, or dropped player; that is one provider read for those references and it does not require `actual_stats`. A player the provider publishes no status for carries no `availability` and is named in `failures`. For a player on this team's roster, `availability` also carries `illegalSlot` when the league declares the player's slot and its eligibility accepts none of the player's published positions; that is decided from the league settings and the roster already read, so it needs no player statistic and no injury report.",
+          "Groups to hydrate. `actual_stats` states the basis the provider declares: a completed week, season totals, or a daily-summed window with its covered dates. `projections` is available only where the provider publishes them; otherwise the group returns an unsupported status naming that limitation. `availability` reads the provider's selected-player status for references that are not on the current roster, such as a free agent, waiver player, or dropped player; that is one provider read for those references and it does not require `actual_stats`. A player the provider publishes no status for carries no `availability` and is named in `failures`.",
       }),
     ),
   ),
@@ -1055,33 +1055,6 @@ const ScoringContext = Schema.Union([
   }),
 ]);
 
-export const IllegalSlot = Schema.Struct({
-  code: Schema.Literal("slot_illegal"),
-  slot: Schema.NonEmptyString.pipe(
-    Schema.annotate({
-      description:
-        "The league's own name for the slot this player occupies. It is the declared position, never a hardcoded slot name.",
-    }),
-  ),
-  positions: Schema.Array(Schema.NonEmptyString).pipe(
-    Schema.annotate({
-      description: "The player's own published eligible positions, which the slot accepts none of.",
-    }),
-  ),
-  detail: Schema.NonEmptyString.pipe(
-    Schema.annotate({
-      description:
-        "One plain sentence naming the player, the slot, the player's positions, and what may happen next.",
-    }),
-  ),
-}).pipe(
-  Schema.annotate({
-    description:
-      "A rostered player whose current slot accepts none of their eligible positions. The league declares each slot's eligibility, so a reserve list is one such slot, not a special case. This is information from the league's rule and the provider's eligibility fact: the player is still placeable by the lineup plan, and the state may explain a transaction the provider refuses.",
-  }),
-);
-export type IllegalSlot = typeof IllegalSlot.Type;
-
 const PlayerAvailability = Schema.Struct({
   rosterStatus: Schema.Literals(["rostered", "free_agent", "waiver", "unknown"]),
   injury: Schema.Struct({
@@ -1089,12 +1062,6 @@ const PlayerAvailability = Schema.Struct({
     code: Schema.optional(Schema.String),
     detail: Schema.optional(Schema.String),
   }),
-  illegalSlot: Schema.optional(IllegalSlot).pipe(
-    Schema.annotate({
-      description:
-        "Present only when this player is on the linked team's roster in a slot the league declares and none of the player's published eligible positions is accepted by that slot. The league's own slot name, the player's positions, and one plain sentence are reported. Absent means the roster did not place them illegally; the injury report is never consulted, because it does not decide whether the slot accepts them.",
-    }),
-  ),
 });
 
 const PlayerIdentity = Schema.Struct({
@@ -1751,6 +1718,12 @@ const SummaryRosterPlayer = Schema.Struct({
   name: Schema.NonEmptyString,
   slot: RosterSlot,
   primaryPosition: Schema.NonEmptyString,
+  eligiblePositions: Schema.Array(Schema.NonEmptyString).pipe(
+    Schema.annotate({
+      description:
+        "Every position the provider says this player can fill, including a reserve marker while the player is eligible for that list. Read it against `slot` to see why a player is or is not legal where they sit; an empty list means the provider published none, not that the player can fill nothing.",
+    }),
+  ),
   proTeam: Schema.NullOr(Schema.NonEmptyString),
   injury: Schema.Struct({
     reported: Schema.Boolean,
@@ -1759,12 +1732,14 @@ const SummaryRosterPlayer = Schema.Struct({
 });
 export type SummaryRosterPlayer = typeof SummaryRosterPlayer.Type;
 
-const SummaryIllegalSlotAttention = Schema.Struct({
+const SummaryIllegalSlot = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
-  illegalSlot: IllegalSlot,
+  slot: Schema.NonEmptyString,
+  eligiblePositions: Schema.Array(Schema.NonEmptyString),
+  detail: Schema.NonEmptyString,
 });
-export type SummaryIllegalSlotAttention = typeof SummaryIllegalSlotAttention.Type;
+export type SummaryIllegalSlot = typeof SummaryIllegalSlot.Type;
 
 export const TeamSummaryData = Schema.Struct({
   status: QueryStatus,
@@ -1791,13 +1766,13 @@ export const TeamSummaryData = Schema.Struct({
       detail: Schema.String,
     }),
   ),
-  attention: Schema.optional(Schema.Array(SummaryIllegalSlotAttention)).pipe(
+  ownerNote: TeamOwnerNote,
+  illegalSlots: Schema.optional(Schema.Array(SummaryIllegalSlot)).pipe(
     Schema.annotate({
       description:
-        "Roster issues a person should fix before a roster move can succeed. Present only when the `roster` group was requested and the league and roster could both be read; absent means it was not checked, which is different from an empty list. Today it carries `slot_illegal`: a player in a slot the league declares whose eligibility accepts none of the player's published positions. No injury report and no player statistic is consulted. It is information, never a lineup decision.",
+        "Rostered players whose eligible positions do not include the slot the league declares for them, so the provider may refuse a transaction until they move. Present only when the roster was read; absent means it was not checked, which is not the same as none. It is the league's own slot rules against the provider's own eligible positions, and nothing else: no injury check, no statistics, and no lineup decision.",
     }),
   ),
-  ownerNote: TeamOwnerNote,
   roster: Schema.optional(Schema.Array(SummaryRosterPlayer)).pipe(
     Schema.annotate({
       description:

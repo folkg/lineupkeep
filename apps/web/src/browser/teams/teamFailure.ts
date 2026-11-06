@@ -6,8 +6,6 @@ import type {
   TeamNoteError,
   TeamNoteRequestResult,
   TeamRequestResult,
-  TeamRosterAttentionError,
-  TeamRosterAttentionRequestResult,
 } from "#contracts/connections/teamContract.ts";
 
 export function requireTeamSuccess<TData>(result: TeamRequestResult<TData>): TData {
@@ -46,20 +44,6 @@ export function requireRunSuccess<TData>(result: LineupRunRequestResult<TData>):
   }
 }
 
-export function requireAttentionSuccess<TData>(
-  result: TeamRosterAttentionRequestResult<TData>,
-): TData {
-  switch (result.type) {
-    case "success":
-      return result.data;
-    case "error":
-      if (result.error.type === "auth.required") {
-        throw new AuthenticationRequestFailure(result.error);
-      }
-      throw new RosterAttentionFailure(result.error);
-  }
-}
-
 class TeamWriteFailure extends Error {
   constructor(readonly reason: TeamMutationError) {
     super(reason.type);
@@ -74,12 +58,6 @@ class TeamNoteFailure extends Error {
 
 class RunReadFailure extends Error {
   constructor(readonly reason: LineupRunError) {
-    super(reason.type);
-  }
-}
-
-class RosterAttentionFailure extends Error {
-  constructor(readonly reason: TeamRosterAttentionError) {
     super(reason.type);
   }
 }

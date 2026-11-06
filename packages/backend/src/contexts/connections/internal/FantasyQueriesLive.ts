@@ -8,8 +8,6 @@ import { GameSourceRegistry } from "#contexts/connections/GameSource.ts";
 import { ProfessionalCalendar } from "#contexts/connections/ProfessionalCalendar.ts";
 import { leagueOffNightDefinition } from "#contexts/connections/ProfessionalGame.ts";
 import type { ProfessionalGame } from "#contexts/connections/ProfessionalGame.ts";
-import { ineligibleSlotOccupants } from "#contexts/connections/ProposalOrder.ts";
-import type { IneligibleSlotOccupant, SlotOccupancy } from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProviderAcquisitionUsage,
   ProviderDraftPick,
@@ -71,9 +69,8 @@ import type {
   SummaryGroup,
   SummarySchedulePlayer,
   SummaryScheduleWeek,
+  SummaryIllegalSlot,
   SummaryRosterPlayer,
-  SummaryIllegalSlotAttention,
-  IllegalSlot,
   SummaryMatchupCategory,
   SummaryScheduleWindow,
   TeamSummaryData,
@@ -106,6 +103,7 @@ import {
   type StatRef,
   type TeamOwnerNote,
 } from "#contexts/connections/QueryValues.ts";
+import { ineligibleSlotOccupants } from "#contexts/connections/RosterSlots.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
@@ -1335,27 +1333,26 @@ export const FantasyQueriesLive = Layer.effect(
           : [],
       );
       const coverageEntries: QueryCoverage[] = [];
-      const scoringGroupsRequested =
+      let league: ProviderLeagueSettings | undefined;
+      if (
         groups.includes("scoring_context") ||
         groups.includes("actual_stats") ||
-        groups.includes("projections");
-      const leagueCoverageResource = scoringGroupsRequested ? "scoring" : "availability";
-      let league: ProviderLeagueSettings | undefined;
-      if (scoringGroupsRequested || groups.includes("availability")) {
+        groups.includes("projections")
+      ) {
         const leagueOutcome = yield* readLeague(context);
         if (leagueOutcome._tag === "ok") {
           league = leagueOutcome.value;
-          coverageEntries.push(coverage(leagueCoverageResource, "league_settings", fetchedAt));
+          coverageEntries.push(coverage("scoring", "league_settings", fetchedAt));
         } else {
           coverageEntries.push(
             leagueOutcome._tag === "failed"
               ? degradedCoverage(
-                  leagueCoverageResource,
+                  "scoring",
                   "league_settings",
                   fetchedAt,
                   leagueOutcome.failure.message,
                 )
-              : unsupportedCoverage(leagueCoverageResource, "league_settings", fetchedAt),
+              : unsupportedCoverage("scoring", "league_settings", fetchedAt),
           );
           if (leagueOutcome._tag === "failed") {
             failures.push(leagueOutcome.failure);
@@ -1393,20 +1390,6 @@ export const FantasyQueriesLive = Layer.effect(
       }
       const rosterByKey = new Map(
         (roster?.players ?? []).map((player) => [player.providerPlayerKey, player]),
-      );
-      const requestedKeys = new Set(valid.map((row) => row.providerPlayerKey));
-      const illegalSlots = new Map(
-        (groups.includes("availability") && league !== undefined
-          ? ineligibleSlotOccupants({
-              slots: league.rosterPositions,
-              players: occupanciesOf(
-                [...rosterByKey.values()].filter((player) =>
-                  requestedKeys.has(player.providerPlayerKey),
-                ),
-              ),
-            })
-          : []
-        ).map((occupant) => [occupant.key, illegalSlotView(occupant)] as const),
       );
       const requestedPeriod = normalizeStatPeriod(input.period);
       const includesActualStats = groups.includes("actual_stats");
@@ -1599,11 +1582,7 @@ export const FantasyQueriesLive = Layer.effect(
             const availability = !groups.includes("availability")
               ? undefined
               : rosterPlayer !== undefined
-                ? {
-                    rosterStatus: "rostered" as const,
-                    injury: injuryOf(rosterPlayer),
-                    ...illegalSlotField(illegalSlots.get(row.providerPlayerKey)),
-                  }
+                ? { rosterStatus: "rostered" as const, injury: injuryOf(rosterPlayer) }
                 : detail === undefined
                   ? undefined
                   : { rosterStatus: detail.rosterStatus, injury: { reported: false as const } };
@@ -2407,14 +2386,13 @@ export const FantasyQueriesLive = Layer.effect(
         playerKeys: rosterPlayers.map((player) => player.providerPlayerKey),
       });
       const rosterRowByKey = new Map<string, SummaryRosterPlayer>();
-      const rosterRefByKey = new Map<string, PlayerRef>();
       for (const [player, ref] of EffectArray.zip(rosterPlayers, rosterRefs)) {
-        rosterRefByKey.set(player.providerPlayerKey, ref);
         rosterRowByKey.set(player.providerPlayerKey, {
           player: ref,
           name: player.name,
           slot: player.slot,
           primaryPosition: player.primaryPosition,
+          eligiblePositions: player.eligiblePositions,
           proTeam: player.proTeamAbbreviation ?? null,
           injury: {
             reported: player.injuryCode !== undefined || player.injuryDetail !== undefined,
@@ -2426,28 +2404,6 @@ export const FantasyQueriesLive = Layer.effect(
         rosterOutcome?._tag === "ok" && rosterOutcome.value.coverage.type === "week"
           ? { week: rosterOutcome.value.coverage.week }
           : undefined;
-
-      const attention: ReadonlyArray<SummaryIllegalSlotAttention> | undefined =
-        !includes("roster") || league === undefined || rosterOutcome?._tag !== "ok"
-          ? undefined
-          : ineligibleSlotOccupants({
-              slots: league.rosterPositions,
-              players: occupanciesOf(rosterPlayers),
-            }).flatMap((occupant) => {
-              const ref = rosterRefByKey.get(occupant.key);
-              return ref === undefined
-                ? []
-                : [
-                    {
-                      player: ref,
-                      name: occupant.name,
-                      illegalSlot: illegalSlotView(occupant),
-                    },
-                  ];
-            });
-      yield* Effect.annotateCurrentSpan({
-        "slot_illegal.count": attention === undefined ? "unchecked" : attention.length,
-      });
 
       const matchupOutcome =
         (!includes("matchup") && !includes("schedule")) || period === undefined
@@ -2899,6 +2855,34 @@ export const FantasyQueriesLive = Layer.effect(
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
+      const illegalSlots: ReadonlyArray<SummaryIllegalSlot> =
+        !includes("roster") || rosterOutcome?._tag !== "ok" || league === undefined
+          ? []
+          : ineligibleSlotOccupants({
+              slots: league.rosterPositions.map((position) => ({
+                position: position.position,
+                eligibility: position.eligibility,
+              })),
+              players: rosterPlayers.map((player) => ({
+                key: player.providerPlayerKey,
+                name: player.name,
+                slot: player.slot.status === "verified" ? player.slot.slot : player.slot.rawValue,
+                positions: player.eligiblePositions,
+              })),
+            }).flatMap((occupant) => {
+              const row = rosterRowByKey.get(occupant.key);
+              return row === undefined
+                ? []
+                : [
+                    {
+                      player: row.player,
+                      name: occupant.name,
+                      slot: occupant.slot,
+                      eligiblePositions: occupant.positions,
+                      detail: occupant.detail,
+                    },
+                  ];
+            });
       const base: Omit<TeamSummaryData, "roster" | "page" | "schedule"> = {
         status,
         team,
@@ -2922,9 +2906,9 @@ export const FantasyQueriesLive = Layer.effect(
                 status: "unsupported" as const,
                 detail: limitation(context.provider, "probable_starters"),
               },
+              illegalSlots,
             }
           : {}),
-        ...(attention === undefined ? {} : { attention }),
         ownerNote: ownerNoteOf(context.owned.team),
         coverage: coverageEntries,
         failures,
@@ -4436,36 +4420,6 @@ function injuryOf(player: ProviderRosterPlayer): {
     ...(player.injuryCode === undefined ? {} : { code: player.injuryCode }),
     ...(player.injuryDetail === undefined ? {} : { detail: player.injuryDetail }),
   };
-}
-
-function occupanciesOf(players: ReadonlyArray<ProviderRosterPlayer>): ReadonlyArray<SlotOccupancy> {
-  return players.flatMap((player) =>
-    player.slot.status === "verified"
-      ? [
-          {
-            key: player.providerPlayerKey,
-            name: player.name,
-            slot: player.slot.slot,
-            positions: player.eligiblePositions,
-          },
-        ]
-      : [],
-  );
-}
-
-function illegalSlotView(occupant: IneligibleSlotOccupant): IllegalSlot {
-  return {
-    code: "slot_illegal",
-    slot: occupant.slot,
-    positions: [...occupant.positions],
-    detail: `${occupant.detail} The roster may be refused until they are moved or dropped.`,
-  };
-}
-
-function illegalSlotField(illegalSlot: IllegalSlot | undefined): {
-  readonly illegalSlot?: IllegalSlot;
-} {
-  return illegalSlot === undefined ? {} : { illegalSlot };
 }
 
 function rosterPlayer(

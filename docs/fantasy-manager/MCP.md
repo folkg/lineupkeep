@@ -227,7 +227,11 @@ per-professional-team remaining-game count and no probable-starter field; Lineup
 professional team's games from the league's own schedule instead. `get_rosters` reports `proTeam`,
 injury, and the bye week where published; its `playerSchedule` declaration states the per-player
 schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group publishes the
-games themselves and each player's games remaining. With `detail: full`, `get_rosters` also carries
+games themselves and each player's games remaining. With `roster` selected, the summary also carries
+`illegalSlots`: rostered players whose eligible positions do not include the slot the league declares
+for them, each with the league's own slot name, the positions the player does hold, and one sentence.
+It compares the league's slot rules with the provider's eligible positions and nothing else, and it is
+absent rather than empty when the roster was not read. With `detail: full`, `get_rosters` also carries
 the team's `ownerNote`, while the compact default omits it; the note is the owner's stated intent
 for that team, not a provider or league fact, and it belongs with the roster facts a trade or lineup
 decision reads. `search_players` reports provider
@@ -396,10 +400,7 @@ count, so `transactionRules.detailNote` states that only the league's games cap 
 
 `get_team_summary` composes the league overview, the linked team's standing and record, league
 standings, the owning team's acquisition usage, the current matchup, this week's and next week's
-remaining player-games, and, only when the `roster` group is selected, a compact roster. With
-`roster` selected it also carries `attention`, the roster issues a person should fix; see
-[illegal roster positions](#illegal-roster-positions). `attention` is absent rather than empty when the
-league or roster could not be read, and it never changes what a lineup plan does. The team
+remaining player-games, and, only when the `roster` group is selected, a compact roster. The team
 object also carries the owner's own note as `ownerNote`: `{ status: "provided", text, updatedAt }`
 when one is stored or `{ status: "not_set" }` otherwise. It is owner context, not league or provider
 data, and the field description says so; it is never sent to the provider. A note is limited to
@@ -689,21 +690,6 @@ An aggregated group states its covered dates, its `daily_sum` method, and a `not
 categories the provider publishes as rates or percentages (Yahoo hockey goals against average and
 save percentage): a rate is never summed across days, and an unpublished day stays null rather than
 becoming zero.
-
-### Illegal roster positions
-
-A league declares which positions each slot accepts. A rostered player whose current slot accepts none of
-their published positions is illegal there: the provider refuses the team's next transaction naming that
-player rather than any move in the request, and no read answered why before this one.
-`get_team_summary`'s `attention` list and `get_players`' availability group report that state as
-`slot_illegal`. It is decided from two facts the reads already hold: the league's declared slot
-eligibility and the provider's published eligible positions. A reserve list is one such slot, not a
-special case; a starting slot, a bench slot, and a second provider's `RESERVE` all use the same rule. Each
-entry carries the league's own slot name — never a hardcoded slot string — the player's own positions, and
-one plain sentence ending in what may happen next. The injury report and the player's statistics are not
-consulted, because neither decides whether the slot accepts them, and the check costs no extra provider
-read. The state is information only: lineup planning treats the player exactly as before, and the entry
-says the roster _may_ be refused rather than predicting the provider's answer.
 
 A coverage entry has one of three states. `available` means the resource was read and verified. `unsupported` means the provider or league does not establish it, and the entry, or a typed group result beside it, carries the reason. `degraded` means a dependency could not be verified while the read still returned what does not depend on it: the entry names the failed field, the affected resource lists a bounded failure, and roster and matchup reads are not erased because league settings failed. A calendar that needs the scoring-week window reports the degraded dependency instead of inventing periods. A group that declares itself unsupported never also reports a period failure; the two statements would contradict each other.
 
