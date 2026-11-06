@@ -51,8 +51,14 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
   only current ones, verified against the deployed origin (`201`, grant carries the name; `connections:write`
   still `400`). `generate_transaction_review_links` and everything that existed only for it are deleted.
   Proposal sets are validated through their own planned order and that order is published before submission.
-  A reserve-slot player the statistics say is playing is reported as a named suspicion on the summary, the
-  team page and the player read, judged from provider statistics rather than a hardcoded slot name.
+- **A roster position is judged by published positions and nothing else.** The first answer to the reserve-slot
+  feedback looked at player statistics and the injury report to guess that a player should not be sitting where
+  he sits. The owner rejected it: the rule was already there. A player is illegal where he sits when none of the
+  positions the league allows for that slot is among the positions the provider publishes for him, a reserve slot
+  being one slot among others. That reply is deleted, along with the statistics read, the suspicion state and the
+  provider reads the team page spent on load. The team summary now publishes each roster entry's
+  `eligiblePositions` beside his `slot`, and names the mismatches as `illegalSlots`, so the comparison is
+  visible instead of inferred.
 - **Switch colours unchanged** by the owner's ruling; the similarity between a disabled switch and an off
   switch is recorded and accepted rather than fixed.
 
