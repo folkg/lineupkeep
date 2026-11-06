@@ -38,12 +38,58 @@ export const StoredProposalStaleness = Schema.Struct({
 }).pipe(Schema.toType);
 export type StoredProposalStaleness = typeof StoredProposalStaleness.Type;
 
+const StoredProposalOrderStep = Schema.Struct({
+  item: ProposalItemId,
+  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+
+const StoredProposalOrderConflict = Schema.Struct({
+  items: Schema.Array(ProposalItemId),
+  detail: Schema.NonEmptyString,
+});
+
+const StoredProposalOrderTiming = Schema.Literals([
+  "same_day",
+  "next_day",
+  "weekly_lock",
+  "not_published",
+]);
+
+export const StoredProposalOrderPlan = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("ordered"),
+    timing: StoredProposalOrderTiming,
+    effectiveDate: Schema.optional(Schema.NonEmptyString),
+    steps: Schema.Array(StoredProposalOrderStep),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("conflict"),
+    timing: StoredProposalOrderTiming,
+    effectiveDate: Schema.optional(Schema.NonEmptyString),
+    conflicts: Schema.Array(StoredProposalOrderConflict),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unresolved"),
+    timing: StoredProposalOrderTiming,
+    effectiveDate: Schema.optional(Schema.NonEmptyString),
+    detail: Schema.NonEmptyString,
+  }),
+]);
+export type StoredProposalOrderPlan = typeof StoredProposalOrderPlan.Type;
+
+export const StoredProposalOrder = Schema.Struct({
+  team: TeamId,
+  order: StoredProposalOrderPlan,
+});
+export type StoredProposalOrder = typeof StoredProposalOrder.Type;
+
 export const ProposalSetRecord = Schema.Struct({
   id: ProposalSetId,
   userId: UserId,
   proposedBy: ProposalSetProvenance,
   fingerprint: Schema.NonEmptyString,
   teams: Schema.Array(TeamId),
+  orders: Schema.Array(StoredProposalOrder),
   submittedBy: Schema.optional(UserId),
   submittedAt: Schema.optional(Schema.DateTimeUtc),
   completedAt: Schema.optional(Schema.DateTimeUtc),
@@ -70,6 +116,14 @@ export const StoredSlotMove = Schema.Struct({
 }).pipe(Schema.toType);
 export type StoredSlotMove = typeof StoredSlotMove.Type;
 
+export const StoredReserveMove = Schema.Struct({
+  playerKey: Schema.NonEmptyString,
+  playerName: Schema.optional(Schema.NonEmptyString),
+  fromSlot: Schema.NonEmptyString,
+  toSlot: Schema.NonEmptyString,
+});
+export type StoredReserveMove = typeof StoredReserveMove.Type;
+
 export const ProposalItemRecord = Schema.Struct({
   id: ProposalItemId,
   setId: ProposalSetId,
@@ -81,6 +135,7 @@ export const ProposalItemRecord = Schema.Struct({
   adds: Schema.Array(StoredProposalPlayer),
   drops: Schema.Array(StoredProposalPlayer),
   slotMove: Schema.optional(StoredSlotMove),
+  reserveMove: Schema.optional(StoredReserveMove),
   counterpartyKey: Schema.optional(Schema.NonEmptyString),
   counterpartyName: Schema.optional(Schema.NonEmptyString),
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
@@ -113,13 +168,6 @@ export const ProposalStepRecord = Schema.Struct({
   decidedAt: Schema.DateTimeUtc,
 }).pipe(Schema.toType);
 export type ProposalStepRecord = typeof ProposalStepRecord.Type;
-
-export type StoredReserveMove = {
-  readonly playerKey: string;
-  readonly playerName?: string;
-  readonly fromSlot: string;
-  readonly toSlot: string;
-};
 
 export type ProposalTeamRecord = {
   readonly id: TeamId;

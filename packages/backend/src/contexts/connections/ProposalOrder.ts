@@ -9,6 +9,9 @@ export function planProposalOrder(input: ProposalOrderInput): ProposalOrderPlan 
   const slots = new Map(input.slots.map((slot) => [slot.position, slot] as const));
   const timing = timingOf(input.timing);
   const initial = initialState(input.players);
+  const declaredMoveKeys = new Set(
+    input.items.flatMap((item) => (item.move === undefined ? [] : [item.move.player.key])),
+  );
   const locked = input.items.flatMap((item) => lockedConflicts(item, input.players, timing));
   if (locked.length > 0) {
     return {
@@ -18,14 +21,18 @@ export function planProposalOrder(input: ProposalOrderInput): ProposalOrderPlan 
       conflicts: locked,
     };
   }
-  const searched = searchOrder(initial, input.items, slots, timing);
+  const searched = searchOrder(initial, input.items, slots, timing, declaredMoveKeys);
   switch (searched.status) {
     case "ordered":
       return {
         status: "ordered",
         timing: timing.rule,
         ...(timing.effectiveDate === undefined ? {} : { effectiveDate: timing.effectiveDate }),
-        steps: searched.steps.map((item) => ({ item })),
+        steps: searched.steps.map((step, position) => ({
+          item: step.item,
+          position,
+          ...(step.repair === undefined ? {} : { reserveMove: step.repair }),
+        })),
       };
     case "exhausted":
       return {
@@ -39,7 +46,7 @@ export function planProposalOrder(input: ProposalOrderInput): ProposalOrderPlan 
         status: "conflict",
         timing: timing.rule,
         ...(timing.effectiveDate === undefined ? {} : { effectiveDate: timing.effectiveDate }),
-        conflicts: explainConflicts(initial, input.items, slots, timing),
+        conflicts: explainConflicts(initial, input.items, slots, timing, declaredMoveKeys),
       };
   }
 }
@@ -51,8 +58,13 @@ export function slotAcceptsPositions(
   return eligibility.length === 0 || eligibility.some((position) => positions.includes(position));
 }
 
+type OrderedStep = {
+  readonly item: string;
+  readonly repair?: ProposalOrderRepair;
+};
+
 type SearchResult =
-  | { readonly status: "ordered"; readonly steps: ReadonlyArray<string> }
+  | { readonly status: "ordered"; readonly steps: ReadonlyArray<OrderedStep> }
   | { readonly status: "impossible" }
   | { readonly status: "exhausted" };
 
@@ -61,6 +73,7 @@ function searchOrder(
   items: ReadonlyArray<ProposalOrderItem>,
   slots: SlotMap,
   timing: Timing,
+  declaredMoveKeys: ReadonlySet<string>,
 ): SearchResult {
   const failed = new Set<string>();
   const visited = { count: 0 };
@@ -68,7 +81,7 @@ function searchOrder(
   function visit(
     state: RosterState,
     remaining: ReadonlyArray<ProposalOrderItem>,
-  ): string[] | typeof exhausted | undefined {
+  ): OrderedStep[] | typeof exhausted | undefined {
     if (remaining.length === 0) {
       return isLegal(state, slots) ? [] : undefined;
     }
@@ -81,7 +94,7 @@ function searchOrder(
       return exhausted;
     }
     for (const [index, item] of remaining.entries()) {
-      const applied = applyItem(state, item, slots, timing);
+      const applied = applyItem(state, item, slots, timing, declaredMoveKeys);
       if (applied.status === "refused" || !isLegal(applied.state, slots)) {
         continue;
       }
@@ -91,7 +104,13 @@ function searchOrder(
         return exhausted;
       }
       if (steps !== undefined) {
-        return [item.id, ...steps];
+        return [
+          {
+            item: item.id,
+            ...(applied.repair === undefined ? {} : { repair: applied.repair }),
+          },
+          ...steps,
+        ];
       }
     }
     failed.add(key);
@@ -117,14 +136,23 @@ function memoKey(state: RosterState, remaining: ReadonlyArray<ProposalOrderItem>
 }
 
 type Application =
-  | { readonly status: "applied"; readonly state: RosterState }
-  | { readonly status: "refused"; readonly detail: string };
+  | {
+      readonly status: "applied";
+      readonly state: RosterState;
+      readonly repair?: ProposalOrderRepair;
+    }
+  | {
+      readonly status: "refused";
+      readonly code: ProposalOrderRefusalCode;
+      readonly detail: string;
+    };
 
 function applyItem(
   state: RosterState,
   item: ProposalOrderItem,
   slots: SlotMap,
   timing: Timing,
+  declaredMoveKeys: ReadonlySet<string>,
 ): Application {
   const next = new Map(state);
   if (item.move !== undefined) {
@@ -132,18 +160,21 @@ function applyItem(
     if (moving === undefined) {
       return {
         status: "refused",
+        code: "move_not_rostered",
         detail: `${item.move.player.name} is no longer on the roster, so the move cannot be made.`,
       };
     }
     if (moving.slot === undefined) {
       return {
         status: "refused",
+        code: "slot_illegal",
         detail: `The provider reports no verified slot for ${moving.name}, so the move cannot be planned.`,
       };
     }
     if (!moving.editable) {
       return {
         status: "refused",
+        code: "move_locked",
         detail: `${moving.name} is locked, and the league applies roster changes ${timing.phrase}, so moving them to ${item.move.toSlot} cannot be legal ${timing.moment}.`,
       };
     }
@@ -151,12 +182,14 @@ function applyItem(
     if (slot === undefined) {
       return {
         status: "refused",
+        code: "move_slot_unknown",
         detail: `The league does not declare a ${item.move.toSlot} slot, so ${moving.name} cannot move there.`,
       };
     }
     if (!slotAcceptsPositions(slot.eligibility, moving.positions)) {
       return {
         status: "refused",
+        code: "slot_illegal",
         detail: `${moving.name} is not eligible for the ${slot.position} slot: it does not accept their positions (${moving.positions.join(", ")}).`,
       };
     }
@@ -164,6 +197,7 @@ function applyItem(
     if (occupants >= slot.count) {
       return {
         status: "refused",
+        code: "move_slot_full",
         detail: `Moving ${moving.name} to ${slot.position} needs a free ${slot.position} slot, and ${slot.count === 1 ? "it is full" : `${String(occupants)} of ${String(slot.count)} are occupied`}.`,
       };
     }
@@ -174,6 +208,7 @@ function applyItem(
     if (dropped === undefined) {
       return {
         status: "refused",
+        code: "drop_not_rostered",
         detail: `${drop.name} is no longer on the roster, so the drop cannot be made.`,
       };
     }
@@ -183,6 +218,7 @@ function applyItem(
     if (next.has(add.key)) {
       return {
         status: "refused",
+        code: "add_already_rostered",
         detail: `${add.name} is already on the roster, so the add cannot be made.`,
       };
     }
@@ -192,9 +228,161 @@ function applyItem(
       positions: add.positions ?? [],
       slot: undefined,
       editable: true,
+      injured: false,
     });
   }
-  return { status: "applied", state: next };
+  if (isLegal(next, slots)) {
+    return { status: "applied", state: next };
+  }
+  if (!item.mayRepair) {
+    return { status: "refused", ...compositionRefusal(next, slots) };
+  }
+  const repaired = planRepair(next, slots, item, declaredMoveKeys);
+  return repaired === undefined
+    ? { status: "refused", ...compositionRefusal(next, slots) }
+    : { status: "applied", state: repaired.state, repair: repaired.repair };
+}
+
+function planRepair(
+  state: RosterState,
+  slots: SlotMap,
+  item: ProposalOrderItem,
+  declaredMoveKeys: ReadonlySet<string>,
+): { readonly state: RosterState; readonly repair: ProposalOrderRepair } | undefined {
+  for (const player of state.values()) {
+    if (player.slot === undefined || !player.editable) {
+      continue;
+    }
+    const slot = slots.get(player.slot);
+    if (slot === undefined || slotAcceptsPositions(slot.eligibility, player.positions)) {
+      continue;
+    }
+    for (const destination of openDestinations(state, slots, player)) {
+      const repaired = relocate(state, player.key, destination);
+      if (isLegal(repaired, slots)) {
+        return { state: repaired, repair: repairOf(player, player.slot, destination) };
+      }
+    }
+  }
+  const blocked = new Set([
+    ...item.adds.map((add) => add.key),
+    ...item.drops.map((drop) => drop.key),
+    ...declaredMoveKeys,
+  ]);
+  const candidates = [...state.values()]
+    .filter((player) => {
+      if (player.slot === undefined || !player.editable || blocked.has(player.key)) {
+        return false;
+      }
+      const slot = slots.get(player.slot);
+      return slot !== undefined && slot.kind !== "reserve";
+    })
+    .sort(
+      (left, right) =>
+        Number(right.injured === true) - Number(left.injured === true) ||
+        left.name.localeCompare(right.name) ||
+        left.key.localeCompare(right.key),
+    );
+  for (const player of candidates) {
+    if (player.slot === undefined) {
+      continue;
+    }
+    for (const destination of openDestinations(state, slots, player)) {
+      if (slots.get(destination)?.kind !== "reserve") {
+        continue;
+      }
+      const repaired = relocate(state, player.key, destination);
+      if (isLegal(repaired, slots)) {
+        return { state: repaired, repair: repairOf(player, player.slot, destination) };
+      }
+    }
+  }
+  return undefined;
+}
+
+function openDestinations(
+  state: RosterState,
+  slots: SlotMap,
+  player: RosterMember,
+): ReadonlyArray<string> {
+  const kindOrder = { bench: 0, starting: 1, reserve: 2 } as const;
+  return [...slots.values()]
+    .filter(
+      (slot) =>
+        slot.position !== player.slot &&
+        slotAcceptsPositions(slot.eligibility, player.positions) &&
+        occupancyOf(state, slot.position) < slot.count,
+    )
+    .sort((left, right) => kindOrder[left.kind] - kindOrder[right.kind])
+    .map((slot) => slot.position);
+}
+
+function relocate(state: RosterState, playerKey: string, slot: string): RosterState {
+  const next = new Map(state);
+  const player = next.get(playerKey);
+  if (player !== undefined) {
+    next.set(playerKey, { ...player, slot });
+  }
+  return next;
+}
+
+function repairOf(player: RosterMember, fromSlot: string, toSlot: string): ProposalOrderRepair {
+  return {
+    playerKey: player.key,
+    playerName: player.name,
+    fromSlot,
+    toSlot,
+  };
+}
+
+function compositionRefusal(state: RosterState, slots: SlotMap): CompositionRefusal {
+  const capacity = capacityOf(slots);
+  let nonReserve = 0;
+  let illegalPlacement: { readonly player: RosterMember; readonly slot: string } | undefined;
+  for (const player of state.values()) {
+    if (player.slot === undefined) {
+      nonReserve += 1;
+      continue;
+    }
+    const slot = slots.get(player.slot);
+    if (slot === undefined) {
+      nonReserve += 1;
+      continue;
+    }
+    if (
+      illegalPlacement === undefined &&
+      !slotAcceptsPositions(slot.eligibility, player.positions)
+    ) {
+      illegalPlacement = { player, slot: slot.position };
+    }
+    if (slot.kind !== "reserve") {
+      nonReserve += 1;
+    }
+  }
+  if (nonReserve > capacity) {
+    return {
+      code: "roster_full",
+      detail: `The team would hold ${String(nonReserve)} players outside its reserve slots, but the league allows ${String(capacity)}. Add a drop item for a player outside a reserve slot, or a slot move into a reserve slot, to this set.`,
+    };
+  }
+  if (illegalPlacement !== undefined) {
+    const { player, slot } = illegalPlacement;
+    return {
+      code: "slot_illegal",
+      detail: `${player.name} is in the ${slot} slot, but it does not accept his positions (${player.positions.join(", ")}). No open slot accepts him, and choosing which player to drop is yours. Add that drop to this set, or add a slot move that gives him a legal slot.`,
+    };
+  }
+  return {
+    code: "slot_illegal",
+    detail: `${illegalDetail(state, slots) ?? "The roster cannot be made legal."} Add a move that resolves it to this set.`,
+  };
+}
+
+function capacityOf(slots: SlotMap): number {
+  return [...slots.values()].reduce(
+    (total, slot) => (slot.kind === "reserve" ? total : total + slot.count),
+    0,
+  );
 }
 
 function initialState(players: ReadonlyArray<ProposalOrderPlayer>): RosterState {
@@ -207,6 +395,7 @@ function initialState(players: ReadonlyArray<ProposalOrderPlayer>): RosterState 
         positions: player.positions,
         slot: player.slot,
         editable: player.editable,
+        injured: player.injured ?? false,
       },
     ]),
   );
@@ -287,6 +476,7 @@ type Simulation =
   | {
       readonly valid: false;
       readonly item: ProposalOrderItem;
+      readonly code: ProposalOrderRefusalCode;
       readonly detail: string;
     };
 
@@ -295,16 +485,17 @@ function simulatePair(
   pair: readonly [ProposalOrderItem, ProposalOrderItem],
   slots: SlotMap,
   timing: Timing,
+  declaredMoveKeys: ReadonlySet<string>,
 ): Simulation {
   let state = initial;
   for (const item of pair) {
-    const applied = applyItem(state, item, slots, timing);
+    const applied = applyItem(state, item, slots, timing, declaredMoveKeys);
     if (applied.status === "refused") {
-      return { valid: false, item, detail: applied.detail };
+      return { valid: false, item, code: applied.code, detail: applied.detail };
     }
     const illegal = illegalDetail(applied.state, slots);
     if (illegal !== undefined) {
-      return { valid: false, item, detail: illegal };
+      return { valid: false, item, code: "slot_illegal", detail: illegal };
     }
     state = applied.state;
   }
@@ -316,6 +507,7 @@ function explainConflicts(
   items: ReadonlyArray<ProposalOrderItem>,
   slots: SlotMap,
   timing: Timing,
+  declaredMoveKeys: ReadonlySet<string>,
 ): ReadonlyArray<ProposalOrderPlanConflict> {
   const pairs: Array<ProposalOrderPlanConflict> = [];
   for (let left = 0; left < items.length; left += 1) {
@@ -325,8 +517,8 @@ function explainConflicts(
       if (first === undefined || second === undefined) {
         continue;
       }
-      const forward = simulatePair(initial, [first, second], slots, timing);
-      const backward = simulatePair(initial, [second, first], slots, timing);
+      const forward = simulatePair(initial, [first, second], slots, timing, declaredMoveKeys);
+      const backward = simulatePair(initial, [second, first], slots, timing, declaredMoveKeys);
       if (forward.valid || backward.valid) {
         continue;
       }
@@ -340,6 +532,7 @@ function explainConflicts(
           initial,
           timing,
         }),
+        ...pairReasons(first, second, forward, backward),
       });
       if (pairs.length >= conflictLimit) {
         return pairs;
@@ -349,7 +542,40 @@ function explainConflicts(
   if (pairs.length > 0) {
     return pairs;
   }
-  return [generalConflict(initial, items, slots, timing)];
+  return [generalConflict(initial, items, slots, timing, declaredMoveKeys)];
+}
+
+function pairReasons(
+  first: ProposalOrderItem,
+  second: ProposalOrderItem,
+  forward: Simulation,
+  backward: Simulation,
+): {
+  readonly reasons?: ReadonlyArray<{
+    readonly item: string;
+    readonly code: ProposalOrderRefusalCode;
+    readonly detail: string;
+  }>;
+} {
+  const reasons = new Map<
+    string,
+    { readonly code: ProposalOrderRefusalCode; readonly detail: string }
+  >();
+  if (!forward.valid && forward.item === second && forward.code === "roster_full") {
+    reasons.set(second.id, { code: forward.code, detail: forward.detail });
+  }
+  if (!backward.valid && backward.item === first && backward.code === "roster_full") {
+    reasons.set(first.id, { code: backward.code, detail: backward.detail });
+  }
+  return reasons.size === 0
+    ? {}
+    : {
+        reasons: [...reasons.entries()].map(([item, reason]) => ({
+          item,
+          code: reason.code,
+          detail: reason.detail,
+        })),
+      };
 }
 
 function pairDetail(input: {
@@ -414,20 +640,49 @@ function generalConflict(
   items: ReadonlyArray<ProposalOrderItem>,
   slots: SlotMap,
   timing: Timing,
+  declaredMoveKeys: ReadonlySet<string>,
 ): ProposalOrderPlanConflict {
   const reasons = items.flatMap((item) => {
-    const applied = applyItem(initial, item, slots, timing);
+    const applied = applyItem(initial, item, slots, timing, declaredMoveKeys);
     if (applied.status === "refused") {
-      return [`${item.label}: ${applied.detail}`];
+      return [
+        {
+          item: item.id,
+          code: applied.code,
+          label: `${item.label}: ${applied.detail}`,
+        },
+      ];
     }
     const illegal = illegalDetail(applied.state, slots);
-    return illegal === undefined ? [] : [`${item.label} leaves the team illegal: ${illegal}`];
+    return illegal === undefined
+      ? []
+      : [
+          {
+            item: item.id,
+            code: "slot_illegal" as const,
+            label: `${item.label} leaves the team illegal: ${illegal}`,
+          },
+        ];
   });
   const detail =
     reasons.length === 0
       ? `No order of these operations keeps the lineup legal ${timing.phrase}.`
-      : `No order of these operations keeps the lineup legal ${timing.phrase}. ${reasons.join(" ")}`;
-  return { items: items.map((item) => item.id), detail };
+      : `No order of these operations keeps the lineup legal ${timing.phrase}. ${reasons
+          .map((reason) => reason.label)
+          .join(" ")}`;
+  return {
+    items: items.map((item) => item.id),
+    detail,
+    ...(reasons.length === 0
+      ? {}
+      : {
+          reasons: reasons.map((reason) => ({
+            item: reason.item,
+            code: reason.code,
+            detail: reason.label,
+          })),
+        }),
+  };
 }
 
 type Timing = {
@@ -487,13 +742,7 @@ function nextCalendarDate(date: string): string | undefined {
   return DateTime.formatIsoDate(DateTime.add(parsed, { days: 1 }));
 }
 
-type RosterMember = {
-  readonly key: string;
-  readonly name: string;
-  readonly positions: ReadonlyArray<string>;
-  readonly slot: string | undefined;
-  readonly editable: boolean;
-};
+type RosterMember = ProposalOrderPlayer;
 
 type RosterState = ReadonlyMap<string, RosterMember>;
 
@@ -512,6 +761,7 @@ export type ProposalOrderPlayer = {
   readonly positions: ReadonlyArray<string>;
   readonly slot: string | undefined;
   readonly editable: boolean;
+  readonly injured?: boolean;
 };
 
 type ProposalOrderPlayerRef = {
@@ -523,7 +773,6 @@ type ProposalOrderPlayerRef = {
 type ProposalOrderMove = {
   readonly player: ProposalOrderPlayerRef;
   readonly toSlot: string;
-  readonly origin: "declared" | "repair";
 };
 
 export type ProposalOrderItem = {
@@ -532,6 +781,7 @@ export type ProposalOrderItem = {
   readonly adds: ReadonlyArray<ProposalOrderPlayerRef>;
   readonly drops: ReadonlyArray<ProposalOrderPlayerRef>;
   readonly move: ProposalOrderMove | undefined;
+  readonly mayRepair: boolean;
 };
 
 type ProposalOrderTimingRule = "same_day" | "next_day" | "weekly_lock" | "not_published";
@@ -548,8 +798,35 @@ export type ProposalOrderInput = {
   readonly items: ReadonlyArray<ProposalOrderItem>;
 };
 
+type ProposalOrderRepair = {
+  readonly playerKey: string;
+  readonly playerName: string;
+  readonly fromSlot: string;
+  readonly toSlot: string;
+};
+
 type ProposalOrderPlanConflict = {
   readonly items: ReadonlyArray<string>;
+  readonly detail: string;
+  readonly reasons?: ReadonlyArray<{
+    readonly item: string;
+    readonly code: ProposalOrderRefusalCode;
+    readonly detail: string;
+  }>;
+};
+
+type ProposalOrderRefusalCode =
+  | "roster_full"
+  | "slot_illegal"
+  | "move_not_rostered"
+  | "move_locked"
+  | "move_slot_unknown"
+  | "move_slot_full"
+  | "drop_not_rostered"
+  | "add_already_rostered";
+
+type CompositionRefusal = {
+  readonly code: "roster_full" | "slot_illegal";
   readonly detail: string;
 };
 
@@ -558,7 +835,11 @@ export type ProposalOrderPlan =
       readonly status: "ordered";
       readonly timing: ProposalOrderTimingRule;
       readonly effectiveDate?: string;
-      readonly steps: ReadonlyArray<{ readonly item: string }>;
+      readonly steps: ReadonlyArray<{
+        readonly item: string;
+        readonly position: number;
+        readonly reserveMove?: ProposalOrderRepair;
+      }>;
     }
   | {
       readonly status: "conflict";

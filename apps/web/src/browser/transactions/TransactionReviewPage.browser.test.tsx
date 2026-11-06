@@ -482,7 +482,10 @@ it("shows the order the server chose before the moves", async () => {
           status: "ordered",
           timing: "same_day",
           effectiveDate: "2026-11-04",
-          steps: [{ item: waiverItem().id }, { item: freeAgentItem().id }],
+          steps: [
+            { item: waiverItem().id, position: 0 },
+            { item: freeAgentItem().id, position: 1 },
+          ],
         },
       },
       ...base.teams.slice(1),

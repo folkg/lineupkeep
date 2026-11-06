@@ -135,10 +135,13 @@ it("starts an illegal roster with the move that makes it legal", () => {
   }
 });
 
-it("refuses a set that never makes an illegal roster legal", () => {
+it("refuses a set that never makes a locked illegal roster legal", () => {
   const decision = planProposalOrder({
     slots: [starting("C", 1), bench("BN", 1), reserve("IR", 1)],
-    players: [player("p1", "Roster One", "IR", ["C"]), player("p2", "Roster Two", "C", ["C"])],
+    players: [
+      player("p1", "Roster One", "IR", ["C"], false),
+      player("p2", "Roster Two", "C", ["C"]),
+    ],
     timing: skate,
     items: [drop("drop-two", ref("p2", "Roster Two"))],
   });
@@ -167,7 +170,7 @@ it("orders a drop before an add that needs the roster spot", () => {
   }
 });
 
-it("applies a server repair move before the add that needs it", () => {
+it("plans the roster move an add needs to fit", () => {
   const decision = planProposalOrder({
     slots: [starting("C", 1), bench("BN", 1), reserve("IR", 1)],
     players: [
@@ -175,19 +178,7 @@ it("applies a server repair move before the add that needs it", () => {
       player("p2", "Roster Two", "BN", ["C", "IR"]),
     ],
     timing: skate,
-    items: [
-      {
-        id: "add-pool",
-        label: "Add Pool One",
-        adds: [ref("p9", "Pool One")],
-        drops: [],
-        move: {
-          player: ref("p2", "Roster Two"),
-          toSlot: "IR",
-          origin: "repair",
-        },
-      },
-    ],
+    items: [add("add-pool", [ref("p9", "Pool One")])],
   });
 
   assert.strictEqual(decision.status, "ordered");
@@ -196,6 +187,12 @@ it("applies a server repair move before the add that needs it", () => {
       decision.steps.map((step) => step.item),
       ["add-pool"],
     );
+    assert.deepStrictEqual(decision.steps[0]?.reserveMove, {
+      playerKey: "p2",
+      playerName: "Roster Two",
+      fromSlot: "BN",
+      toSlot: "IR",
+    });
   }
 });
 
@@ -280,7 +277,8 @@ function move(
     label: `Move ${player.name} to ${toSlot}`,
     adds: [],
     drops: [],
-    move: { player, toSlot, origin: "declared" },
+    move: { player, toSlot },
+    mayRepair: false,
   };
 }
 
@@ -294,6 +292,7 @@ function drop(
     adds: [],
     drops: [player],
     move: undefined,
+    mayRepair: true,
   };
 }
 
@@ -304,5 +303,6 @@ function add(id: string, players: ReadonlyArray<PlayerRef>): ProposalOrderItem {
     adds: players,
     drops: [],
     move: undefined,
+    mayRepair: true,
   };
 }

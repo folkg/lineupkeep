@@ -700,7 +700,8 @@ one team, a kind (`free_agent_add`, `waiver_claim`, `drop`, `slot_move`, or `tra
 add and drop or the player and destination slot of a slot move, an optional FAAB bid, and a required
 reason. A slot move names one rostered player and one slot the league declares, into a reserve list
 or back out of one; it adds and drops nobody and carries no bid. The client declares intent per team;
-the server owns the order of that team's moves, the effective date, and the timing. A trade names
+the server owns the order of that team's moves, the effective date, and the timing, and validates the
+items against the roster projected through that order. A trade names
 `counterparty` from the league's teams read, the players going out in `drops`, and the players coming
 back in `adds`; it carries players only in this version, no bid, and no draft pick. The linked provider
 declares the assets its own trade proposal request can name, and a draft pick it cannot name is
@@ -724,30 +725,44 @@ A set expires 24 hours after creation. `revalidate_transaction_proposal_set` re-
 once per team (its roster, its league rules, the pool state of the players it adds, and its FAAB
 balance when a bid is present) and marks each open item `current`, `stale`, or `illegal` with
 reasons: the added player is no longer in the pool, a dropped player is no longer on the roster, the
-roster would exceed the league's declared capacity, a rostered player sits in a slot that does not
-accept him, the league's period has closed, the bid exceeds the team's remaining budget, the league
-has no FAAB budget, or the team's state could not be read. Stale and illegal are different states:
-stale means the facts behind the item changed, while illegal means the roster cannot be submitted as
-it stands. An illegal item names every offending player, his slot, and what resolves it, and the
-check covers every rostered player because one illegal player blocks any transaction for that team.
-When a legal slot has room for an offending player, the item carries a roster move before the
-transaction, and the review reports that move as its own step. When no legal slot is open, the item
-refuses and names the choice only the person can make, which is who to drop. An item that drops the
-offending player is allowed, because that drop resolves the slot. Every team also carries its
-`order`: the sequence the server chose so each move leaves the roster legal under the league's slots
-and published roster-change timing. When no order exists, that team's whole set is refused at the
-check: every move in it is illegal, the reason names the operations that conflict in plain words,
-and nothing in that team's set can be submitted. A trade is not part of the order, because it changes
-no roster until the other manager accepts. A trade is re-checked against both
+set has no way to give the add a roster place, a rostered player sits in a slot that does not accept
+him and the set cannot resolve it, the league's period has closed, the bid exceeds the team's
+remaining budget, the league has no FAAB budget, or the team's state could not be read. It validates
+one team's set as a set: it first chooses the team's order, then walks that team's items against a
+roster projected through the earlier ones. A drop already in the set is gone, an add is already
+rostered, and a declared slot move into or out of reserve has already changed what counts against
+the team's non-reserve places. A later add therefore relies on the drop or slot move that funds it
+instead of being judged against the roster as it stood before the set. Stale and illegal are
+different states: stale means the facts behind the item changed or the set itself cannot make it
+legal, while illegal means the roster cannot be submitted as it stands. An add that no operation in
+the set frees a place for stays stale with `roster_full`, and its reason names the missing operation:
+a drop for a player outside a reserve slot, or a slot move into a reserve slot. An illegal item names
+the offending player, his slot, and what resolves it, and the check covers every rostered player
+because one illegal player blocks any transaction for that team. When a slot the set opens accepts
+the offending player, the item carries a roster move before the transaction, and the review reports
+that move as its own step. The slot can be opened by a drop in the same item or an earlier item.
+When no slot in the set is open, the item refuses and names the choice only the person can make,
+which is who to drop, and the drop or slot move that would resolve it in this set. Every team with
+roster moves also carries its `order`: the sequence the server chose so each move leaves the roster
+legal under the league's slots and published roster-change timing, with a `position` for every move.
+Every surface shows that sequence before submission, and the set read returns the sequence saved by
+its last check. When no order exists, that team's whole set is refused at the check: every move in it is
+illegal, the reason names the operations that conflict in plain words, and nothing in that team's
+set can be submitted. An item that no operation in the set can make legal is named on its own and
+does not make the rest of the team's plan illegal. A trade follows the roster moves in the
+published sequence, because it changes no roster until the other manager accepts. A trade is
+re-checked against both
 rosters, the counterparty's continuing place in the league, and the trade window, and carries its
 current state back to the review. Staleness and illegality are recorded beside the item's state and
 are never failures; an item stays `proposed`. A team whose state cannot be read marks only its own
 items, and the review reports the failure beside that team. An expired set refuses re-validation
 instead of re-checking or executing, so a set that sat overnight cannot be executed from facts nobody
 re-checked. `get_transaction_proposal_set` reads the set back with every team, including the teams
-that had nothing proposed, each item's state, last check, and any recorded submission and step
-outcomes, and the same review link. A rejected write carries the provider's exact wording, and that
-wording reaches both the review page and this tool result. Another account's set is reported as not
+that had nothing proposed, each item's state, last check, each team's planned `order` with its
+positions, an item's server roster move as `reserveMove`, and any recorded submission and step
+outcomes, and the same review link. It contacts no provider: the order is the one the last check
+planned and saved. A rejected write carries the provider's exact wording, and that wording reaches
+both the review page and this tool result. Another account's set is reported as not
 found.
 
 The item state vocabulary is `proposed`, `executed`, `pending`, `failed`, `skipped`, and `unknown`.
@@ -755,8 +770,9 @@ No MCP tool submits, accepts, or spends anything. Execution happens only when a 
 submits the included items from the review page. Submission claims the set once in the database,
 re-runs the same revalidation immediately before writing, and skips an item that went stale with its
 reason rather than attempting it. The included moves for each team then run in the order the server
-computed, never in the order the client sent. Each executed item records its position in that order
-and its steps, so the review shows afterwards that the drop ran before the reserve move. Each item is
+computed, never in the order the client sent, and in the same positions the review published. Each
+executed item records its position in that order and its steps, so the review shows afterwards that
+the drop ran before the reserve move. Each item is
 one provider transaction carrying its add and drop together, sent once with no retry; an optional
 reserve move is its own recorded step before the add, and a declared slot move is one recorded step on
 its own. A waiver claim is `pending` until the provider processes it, and `unknown` means a request

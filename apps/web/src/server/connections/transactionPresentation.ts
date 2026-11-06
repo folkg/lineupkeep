@@ -90,7 +90,7 @@ function toOrderView(
         status: "ordered",
         timing: order.timing,
         ...(order.effectiveDate === undefined ? {} : { effectiveDate: order.effectiveDate }),
-        steps: order.steps.map((step) => ({ item: step.item })),
+        steps: order.steps.map((step) => ({ item: step.item, position: step.position })),
       };
     case "conflict":
       return {

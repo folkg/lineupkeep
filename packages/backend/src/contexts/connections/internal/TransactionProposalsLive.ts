@@ -17,7 +17,6 @@ import type {
   ProviderPlayerDetail,
   ProviderReadFailure,
   ProviderRoster,
-  ProviderRosterPlayer,
   ProviderTransaction,
   ProviderTransactionTeam,
   ProviderWriteResult,
@@ -70,16 +69,18 @@ import { loadTeamContext, ownerNoteOf, providerIdentity } from "./QueryContext.t
 import type { TeamContext } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 import { QueryTokens } from "./QueryTokens.ts";
-import type {
-  ProposalItemRecord,
-  ProposalSetRecord,
-  ProposalStepRecord,
-  ProposalTeamRecord,
-  StoredProposalPlayer,
-  StoredProposalStaleReason,
-  StoredProposalStaleness,
-  StoredProposalTrade,
-  StoredReserveMove,
+import {
+  StoredProposalOrderPlan,
+  type ProposalItemRecord,
+  type ProposalSetRecord,
+  type ProposalStepRecord,
+  type ProposalTeamRecord,
+  type StoredProposalOrder,
+  type StoredProposalPlayer,
+  type StoredProposalStaleReason,
+  type StoredProposalStaleness,
+  type StoredProposalTrade,
+  type StoredReserveMove,
 } from "./TransactionProposalRecord.ts";
 import { TransactionProposalRepository } from "./TransactionProposalRepository.ts";
 import type {
@@ -578,15 +579,14 @@ export const TransactionProposalsLive = Layer.effect(
         { concurrency: 3 },
       );
       const changes = checks.flatMap((check) => check.changes);
-      const saved =
-        changes.length === 0
-          ? []
-          : yield* repository.saveChecks({
-              userId,
-              setId: loaded.set.id,
-              changes,
-              at: now,
-            });
+      const orders = yield* storedOrders(loaded.set.orders, checks);
+      const saved = yield* repository.saveChecks({
+        userId,
+        setId: loaded.set.id,
+        changes,
+        orders,
+        at: now,
+      });
       const savedById = new Map(saved.map((item) => [item.id, item] as const));
       const checkedByTeam = new Map(checks.map((check) => [check.team, check] as const));
       const items = loaded.items.map((item) => savedById.get(item.id) ?? item);
@@ -689,15 +689,14 @@ export const TransactionProposalsLive = Layer.effect(
       }
 
       const changes = checks.flatMap((check) => check.changes);
-      const saved =
-        changes.length === 0
-          ? []
-          : yield* repository.saveChecks({
-              userId,
-              setId: loaded.set.id,
-              changes,
-              at: now,
-            });
+      const orders = yield* storedOrders(loaded.set.orders, checks);
+      const saved = yield* repository.saveChecks({
+        userId,
+        setId: loaded.set.id,
+        changes,
+        orders,
+        at: now,
+      });
       const savedById = new Map(saved.map((item) => [item.id, item] as const));
       const itemById = new Map(
         loaded.items.map((item) => [item.id, savedById.get(item.id) ?? item] as const),
@@ -711,6 +710,7 @@ export const TransactionProposalsLive = Layer.effect(
         const sequence = executionSequence(
           openIncluded.filter((item) => item.team === teamId),
           checkByTeam.get(teamId)?.order,
+          changeById,
         );
         sequenceByTeam.set(teamId, sequence);
         for (const [index, item] of sequence.entries()) {
@@ -1937,24 +1937,17 @@ export const TransactionProposalsLive = Layer.effect(
           ),
         };
         const budget = budgetOf(facts, items);
-        const declaredMoveKeys = new Set(
-          items.flatMap((item) =>
-            item.kind === "slot_move" && item.slotMove !== undefined
-              ? [item.slotMove.playerKey]
-              : [],
-          ),
-        );
-        const changes = items.map((item) =>
-          evaluateItem(item, facts, budget, at, feed, declaredMoveKeys),
-        );
-        const order = orderFor(facts, items, changes);
+        const changes = items.map((item) => evaluateItem(item, facts, budget, at, feed));
+        const plan = orderFor(facts, items, changes);
+        const ordered = orderChanges(changes, items, plan, at);
+        const order = publishedOrder(plan.plan, items, ordered);
         return {
           team: teamId,
           ...(budget === undefined ? {} : { budget }),
           facts,
           context,
           ...(feed === undefined ? {} : { tradeFeed: feed }),
-          changes: orderChanges(changes, items, order, at),
+          changes: ordered,
           ...(order === undefined ? {} : { order }),
         };
       });
@@ -1980,21 +1973,26 @@ export const TransactionProposalsLive = Layer.effect(
   }),
 );
 
+type TeamPlan = {
+  readonly plan: ProposalOrderPlan | undefined;
+  readonly refused: ReadonlyMap<string, { readonly code: string; readonly detail: string }>;
+};
+
 function orderFor(
   facts: TeamFacts,
   items: ReadonlyArray<ProposalItemRecord>,
   changes: ReadonlyArray<ProposalItemChange>,
-): ProposalOrderPlan | undefined {
-  const current: Array<ProposalOrderItem> = [];
+): TeamPlan {
+  let remaining: Array<ProposalOrderItem> = [];
   for (const [index, change] of changes.entries()) {
     const item = items[index];
     if (item === undefined || item.kind === "trade" || change.staleness.status !== "current") {
       continue;
     }
-    current.push(orderItemOf(facts, item, change));
+    remaining.push(orderItemOf(facts, item, change));
   }
-  if (current.length === 0) {
-    return undefined;
+  if (remaining.length === 0) {
+    return { plan: undefined, refused: new Map() };
   }
   const players: ReadonlyArray<ProposalOrderPlayer> = facts.roster.players.map((player) => ({
     key: player.providerPlayerKey,
@@ -2002,21 +2000,39 @@ function orderFor(
     positions: player.eligiblePositions,
     slot: player.slot.status === "verified" ? player.slot.slot : undefined,
     editable: player.isEditable === true,
+    injured: player.injuryCode !== undefined || player.injuryDetail !== undefined,
   }));
-  return planProposalOrder({
-    slots: facts.league.rosterPositions.map((slot) => ({
-      position: slot.position,
-      kind: slot.kind,
-      count: slot.count,
-      eligibility: slot.eligibility,
-    })),
-    players,
-    timing: {
-      rule: facts.league.rosterChange?.rule,
-      currentDate: facts.league.currentDate,
-    },
-    items: current,
-  });
+  const slots = facts.league.rosterPositions.map((slot) => ({
+    position: slot.position,
+    kind: slot.kind,
+    count: slot.count,
+    eligibility: slot.eligibility,
+  }));
+  const timing = {
+    rule: facts.league.rosterChange?.rule,
+    currentDate: facts.league.currentDate,
+  };
+  const refused = new Map<string, { readonly code: string; readonly detail: string }>();
+  for (;;) {
+    const plan = planProposalOrder({ slots, players, timing, items: remaining });
+    if (plan.status !== "conflict") {
+      return { plan, refused };
+    }
+    const blocked = plan.conflicts
+      .flatMap((conflict) => conflict.reasons ?? [])
+      .filter((reason) => reason.code === "roster_full" || reason.code === "slot_illegal");
+    const removed = new Set(blocked.map((reason) => reason.item));
+    if (removed.size === 0) {
+      return { plan, refused };
+    }
+    for (const reason of blocked) {
+      refused.set(reason.item, { code: reason.code, detail: reason.detail });
+    }
+    remaining = remaining.filter((item) => !removed.has(item.id));
+    if (remaining.length === 0) {
+      return { plan: undefined, refused };
+    }
+  }
 }
 
 function orderItemOf(
@@ -2034,23 +2050,13 @@ function orderItemOf(
         declared.playerKey);
   const move =
     declared === undefined
-      ? change.reserveMove === undefined
-        ? undefined
-        : {
-            player: {
-              key: change.reserveMove.playerKey,
-              name: change.reserveMove.playerName ?? change.reserveMove.playerKey,
-            },
-            toSlot: change.reserveMove.toSlot,
-            origin: "repair" as const,
-          }
+      ? undefined
       : {
           player: {
             key: declared.playerKey,
             name: declaredName ?? declared.playerKey,
           },
           toSlot: declared.toSlot,
-          origin: "declared" as const,
         };
   const adds = change.adds.map((add) => ({
     key: add.key,
@@ -2067,6 +2073,7 @@ function orderItemOf(
     adds,
     drops,
     move,
+    mayRepair: item.kind !== "slot_move",
   };
 }
 
@@ -2092,15 +2099,20 @@ function orderItemLabel(
 function orderChanges(
   changes: ReadonlyArray<ProposalItemChange>,
   items: ReadonlyArray<ProposalItemRecord>,
-  order: ProposalOrderPlan | undefined,
+  teamPlan: TeamPlan,
   at: DateTime.Utc,
 ): ReadonlyArray<ProposalItemChange> {
-  if (order === undefined || order.status === "ordered") {
-    return changes;
-  }
+  const order = teamPlan.plan;
+  const repairs = new Map(
+    order?.status === "ordered"
+      ? order.steps.flatMap((step) =>
+          step.reserveMove === undefined ? [] : [[step.item, step.reserveMove] as const],
+        )
+      : [],
+  );
   const sequenced = new Set(items.filter((item) => item.kind !== "trade").map((item) => item.id));
   const details = new Map<string, Array<string>>();
-  if (order.status === "conflict") {
+  if (order?.status === "conflict") {
     const blocked =
       "No order of this team's moves keeps the lineup legal, so the whole set is refused and nothing is sent.";
     const all = order.conflicts.map((conflict) => conflict.detail);
@@ -2113,7 +2125,7 @@ function orderChanges(
         .map((conflict) => conflict.detail);
       details.set(change.id, named.length > 0 ? named : [blocked, ...all]);
     }
-  } else {
+  } else if (order?.status === "unresolved") {
     for (const change of changes) {
       if (change.staleness.status === "current" && sequenced.has(change.id)) {
         details.set(change.id, [order.detail]);
@@ -2121,14 +2133,32 @@ function orderChanges(
     }
   }
   return changes.map((change) => {
+    if (change.staleness.status !== "current") {
+      return change;
+    }
+    const called = teamPlan.refused.get(change.id);
+    if (called !== undefined) {
+      return {
+        ...change,
+        ...(called.code === "roster_full"
+          ? { staleness: staleCheck([{ code: "roster_full", detail: called.detail }], at) }
+          : {
+              staleness: checked([], [{ code: "slot_illegal", detail: called.detail }], at),
+            }),
+      };
+    }
+    const repair = repairs.get(change.id);
+    if (repair !== undefined) {
+      return { ...change, reserveMove: repair };
+    }
     const reasons = details.get(change.id);
-    if (reasons === undefined || change.staleness.status !== "current") {
+    if (reasons === undefined) {
       return change;
     }
     return {
       ...change,
       staleness:
-        order.status === "unresolved"
+        order?.status === "unresolved"
           ? staleCheck(
               reasons.map((detail) => ({ code: "order_unresolved" as const, detail })),
               at,
@@ -2140,6 +2170,83 @@ function orderChanges(
             ),
     };
   });
+}
+
+function publishedOrder(
+  plan: ProposalOrderPlan | undefined,
+  items: ReadonlyArray<ProposalItemRecord>,
+  changes: ReadonlyArray<ProposalItemChange>,
+): ProposalOrderPlan | undefined {
+  if (plan === undefined || plan.status !== "ordered") {
+    return plan;
+  }
+  const trades = items.flatMap((item, index) => {
+    const change = changes[index];
+    return item.kind !== "trade" || change?.staleness.status !== "current"
+      ? []
+      : [{ item: item.id, position: plan.steps.length }];
+  });
+  if (trades.length === 0) {
+    return plan;
+  }
+  return {
+    ...plan,
+    steps: [
+      ...plan.steps,
+      ...trades.map((trade, index) => ({ ...trade, position: plan.steps.length + index })),
+    ],
+  };
+}
+
+function storedOrders(
+  existing: ReadonlyArray<StoredProposalOrder>,
+  checks: ReadonlyArray<TeamCheck>,
+): Effect.Effect<ReadonlyArray<StoredProposalOrder>, ProposalPersistenceFailed> {
+  if (checks.length === 0) {
+    return Effect.succeed(existing);
+  }
+  const checked = new Set(checks.map((check) => check.team));
+  const planned = checks.filter(
+    (check): check is TeamCheck & { readonly order: ProposalOrderPlan } =>
+      check.order !== undefined,
+  );
+  return Effect.forEach(planned, (check) =>
+    Schema.decodeUnknownEffect(StoredProposalOrderPlan)(orderJson(check.order)).pipe(
+      Effect.map((order) => ({ team: check.team, order })),
+      Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+    ),
+  ).pipe(
+    Effect.map((entries) => [...existing.filter((entry) => !checked.has(entry.team)), ...entries]),
+  );
+}
+
+function orderJson(order: ProposalOrderPlan): unknown {
+  switch (order.status) {
+    case "ordered":
+      return {
+        status: "ordered",
+        timing: order.timing,
+        ...(order.effectiveDate === undefined ? {} : { effectiveDate: order.effectiveDate }),
+        steps: order.steps.map((step) => ({ item: step.item, position: step.position })),
+      };
+    case "conflict":
+      return {
+        status: "conflict",
+        timing: order.timing,
+        ...(order.effectiveDate === undefined ? {} : { effectiveDate: order.effectiveDate }),
+        conflicts: order.conflicts.map((conflict) => ({
+          items: [...conflict.items],
+          detail: conflict.detail,
+        })),
+      };
+    case "unresolved":
+      return {
+        status: "unresolved",
+        timing: order.timing,
+        ...(order.effectiveDate === undefined ? {} : { effectiveDate: order.effectiveDate }),
+        detail: order.detail,
+      };
+  }
 }
 
 function buildReview(
@@ -2174,6 +2281,7 @@ function buildReview(
         continue;
       }
       const check = checks?.get(teamId);
+      const order = check?.order ?? set.orders.find((entry) => entry.team === teamId)?.order;
       const teamItems = [];
       for (const item of itemsByTeam.get(teamId) ?? []) {
         teamItems.push(
@@ -2183,7 +2291,7 @@ function buildReview(
             team,
             item,
             check?.facts,
-            check?.changes.find((change) => change.id === item.id)?.reserveMove,
+            check?.changes.find((change) => change.id === item.id)?.reserveMove ?? item.reserveMove,
             stepsByItem.get(item.id),
           ),
         );
@@ -2208,7 +2316,7 @@ function buildReview(
                 },
               }),
           ...(check?.failure === undefined ? {} : { failure: check.failure }),
-          ...(check?.order === undefined ? {} : { order: check.order }),
+          ...(order === undefined ? {} : { order }),
           items: teamItems,
           pendingOffers: offersByTeam?.get(teamId) ?? [],
         }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause }))),
@@ -2227,7 +2335,6 @@ function evaluateItem(
   budget: ProposalBudget | undefined,
   at: DateTime.Utc,
   feed: TradeFeed | undefined,
-  declaredMoveKeys: ReadonlySet<string>,
 ): ProposalItemChange {
   if (item.kind === "trade") {
     return evaluateTradeItem(item, facts, at, feed);
@@ -2301,45 +2408,6 @@ function evaluateItem(
       drop.availability = availability;
     }
   }
-  const reservePositions = facts.league.rosterPositions.filter(
-    (position) => position.kind === "reserve",
-  );
-  const reserveNames = new Set(reservePositions.map((position) => position.position));
-  const inReserve = facts.roster.players.filter(
-    (player) => player.slot.status === "verified" && reserveNames.has(player.slot.slot),
-  );
-  const capacity = facts.league.rosterPositions.reduce(
-    (total, position) => (position.kind === "reserve" ? total : total + position.count),
-    0,
-  );
-  const occupied = facts.roster.players.length - inReserve.length;
-  const droppedKeys = new Set(drops.map((drop) => drop.key));
-  const legality = illegalSlots(facts, droppedKeys, "repair", declaredMoveKeys);
-  const repair = legality.reasons.length === 0 ? legality.repair : undefined;
-  const occupiedAfterRepair = occupied + occupancyDelta(repair, facts.league);
-  const dropped = drops.filter((drop) => rostered.has(drop.key)).length;
-  const needed = adds.length - (capacity - (occupiedAfterRepair - dropped));
-  let reserveMove: StoredReserveMove | undefined = repair;
-  if (capacity > 0 && needed > 0) {
-    if (reserveMove !== undefined) {
-      reasons.push({
-        code: "roster_full",
-        detail: `This team holds ${String(occupiedAfterRepair)} roster players and the league allows ${String(capacity)}. Adding ${String(adds.length)} while dropping ${String(dropped)} still exceeds it, and this item can send only one roster move.`,
-      });
-    } else {
-      reserveMove =
-        needed === 1 ? planReserveMove(item, facts, reservePositions, declaredMoveKeys) : undefined;
-      if (reserveMove === undefined) {
-        reasons.push({
-          code: "roster_full",
-          detail:
-            needed === 1
-              ? `This team holds ${String(occupiedAfterRepair)} roster players and the league allows ${String(capacity)}. Adding ${String(adds.length)} while dropping ${String(dropped)} would exceed it, and no roster player is eligible for an open reserve slot.`
-              : `This team holds ${String(occupiedAfterRepair)} roster players and the league allows ${String(capacity)}. Adding ${String(adds.length)} while dropping ${String(dropped)} needs ${String(needed)} roster spots, and one item can open only one by moving a player to a reserve slot.`,
-        });
-      }
-    }
-  }
   if (
     facts.league.endDate !== undefined &&
     facts.league.currentDate !== undefined &&
@@ -2367,8 +2435,7 @@ function evaluateItem(
     id: item.id,
     adds,
     drops,
-    ...(reserveMove === undefined ? {} : { reserveMove }),
-    staleness: checked(reasons, legality.reasons, at),
+    staleness: checked(reasons, [], at),
   };
 }
 
@@ -2545,8 +2612,8 @@ function evaluateTradeItem(
   );
   const occupied = facts.roster.players.length - inReserve.length;
   const droppedKeys = new Set(drops.map((drop) => drop.key));
-  const legality = illegalSlots(facts, droppedKeys, "refuse");
-  for (const reason of legality.reasons) {
+  const legality = illegalSlots(facts, droppedKeys);
+  for (const reason of legality) {
     reasons.push(reason);
   }
   const dropped = drops.filter((drop) => rostered.has(drop.key)).length;
@@ -2561,7 +2628,7 @@ function evaluateTradeItem(
     id: item.id,
     adds,
     drops,
-    staleness: checked(reasons, legality.reasons, at),
+    staleness: checked(reasons, legality, at),
   };
 }
 
@@ -3258,6 +3325,7 @@ function checkOutcomeDetail(staleness: StoredProposalStaleness | undefined): str
 function executionSequence(
   items: ReadonlyArray<ProposalItemRecord>,
   order: ProposalOrderPlan | undefined,
+  changes: ReadonlyMap<string, ProposalItemChange>,
 ): ReadonlyArray<ProposalItemRecord> {
   const byId = new Map<string, ProposalItemRecord>(items.map((item) => [item.id, item] as const));
   const ordered =
@@ -3268,7 +3336,9 @@ function executionSequence(
         })
       : [];
   const placed = new Set(ordered.map((item) => item.id));
-  const rest = items.filter((item) => !placed.has(item.id));
+  const rest = items.filter(
+    (item) => !placed.has(item.id) && changes.get(item.id)?.staleness.status === "current",
+  );
   return [...ordered, ...rest];
 }
 
@@ -3439,182 +3509,34 @@ function clamped(value: string): string {
   return value.length <= 500 ? value : `${value.slice(0, 497)}...`;
 }
 
-function planReserveMove(
-  item: ProposalItemRecord,
-  facts: TeamFacts,
-  reserves: ProviderLeagueSettings["rosterPositions"],
-  declaredMoveKeys: ReadonlySet<string>,
-): StoredReserveMove | undefined {
-  const reserveNames = new Set(reserves.map((position) => position.position));
-  const occupants = new Map<string, number>();
-  for (const player of facts.roster.players) {
-    if (player.slot.status === "verified" && reserveNames.has(player.slot.slot)) {
-      occupants.set(player.slot.slot, (occupants.get(player.slot.slot) ?? 0) + 1);
-    }
-  }
-  const open = reserves.flatMap((position) => {
-    const remaining = position.count - (occupants.get(position.position) ?? 0);
-    return remaining > 0
-      ? [{ position: position.position, eligibility: position.eligibility, remaining }]
-      : [];
-  });
-  const addKeys = new Set(item.adds.map((add) => add.key));
-  const dropKeys = new Set(item.drops.map((drop) => drop.key));
-  const candidates = facts.roster.players
-    .filter(
-      (player) =>
-        player.isEditable === true &&
-        player.slot.status === "verified" &&
-        !reserveNames.has(player.slot.slot) &&
-        !addKeys.has(player.providerPlayerKey) &&
-        !dropKeys.has(player.providerPlayerKey) &&
-        !declaredMoveKeys.has(player.providerPlayerKey),
-    )
-    .flatMap((player) => {
-      const target = open.find((entry) =>
-        slotAcceptsPositions(entry.eligibility, player.eligiblePositions),
-      );
-      return target === undefined
-        ? []
-        : [
-            {
-              player,
-              target: target.position,
-              injured: player.injuryCode !== undefined || player.injuryDetail !== undefined ? 0 : 1,
-            },
-          ];
-    })
-    .sort(
-      (left, right) =>
-        left.injured - right.injured ||
-        left.player.name.localeCompare(right.player.name) ||
-        left.player.providerPlayerKey.localeCompare(right.player.providerPlayerKey),
-    );
-  const chosen = candidates[0];
-  if (chosen === undefined || chosen.player.slot.status !== "verified") {
-    return undefined;
-  }
-  return {
-    playerKey: chosen.player.providerPlayerKey,
-    playerName: chosen.player.name,
-    fromSlot: chosen.player.slot.slot,
-    toSlot: chosen.target,
-  };
-}
-
 function illegalSlots(
   facts: TeamFacts,
   droppedKeys: ReadonlySet<string>,
-  mode: "repair" | "refuse",
-  declaredMoveKeys: ReadonlySet<string> = new Set(),
-): {
-  readonly reasons: ReadonlyArray<StoredProposalStaleReason>;
-  readonly repair: StoredReserveMove | undefined;
-} {
+): ReadonlyArray<StoredProposalStaleReason> {
   const slotsByName = new Map(
     facts.league.rosterPositions.map((position) => [position.position, position] as const),
   );
-  const occupancy = slotOccupancy(facts.roster);
   const reasons: Array<StoredProposalStaleReason> = [];
-  let repair: StoredReserveMove | undefined;
   for (const player of facts.roster.players) {
-    if (
-      player.slot.status !== "verified" ||
-      droppedKeys.has(player.providerPlayerKey) ||
-      declaredMoveKeys.has(player.providerPlayerKey)
-    ) {
+    if (player.slot.status !== "verified" || droppedKeys.has(player.providerPlayerKey)) {
       continue;
     }
     const slot = slotsByName.get(player.slot.slot);
     if (slot === undefined) {
       continue;
     }
-    const acceptsPositions = slotAcceptsPositions(slot.eligibility, player.eligiblePositions);
-    if (acceptsPositions) {
+    if (slotAcceptsPositions(slot.eligibility, player.eligiblePositions)) {
       continue;
     }
-    const destination =
-      mode === "repair" && repair === undefined
-        ? openSlotFor(player, facts.league, occupancy)
-        : undefined;
-    if (destination !== undefined) {
-      repair = {
-        playerKey: player.providerPlayerKey,
-        playerName: player.name,
-        fromSlot: player.slot.slot,
-        toSlot: destination.position,
-      };
-      continue;
-    }
+    const providerNote =
+      player.injuryDetail === undefined ? "" : ` The provider reports "${player.injuryDetail}".`;
     reasons.push({
       code: "slot_illegal",
       playerKey: player.providerPlayerKey,
-      detail: illegalSlotDetail({ player, slot, mode }),
+      detail: `${player.name} is in the ${slot.position} slot, but it does not accept his positions (${player.eligiblePositions.join(", ")}).${providerNote} Move him to a legal slot at the provider, then revalidate this set.`,
     });
   }
-  return { reasons, repair };
-}
-
-function openSlotFor(
-  player: ProviderRosterPlayer,
-  league: ProviderLeagueSettings,
-  occupancy: ReadonlyMap<string, number>,
-): ProviderLeagueSettings["rosterPositions"][number] | undefined {
-  const current = player.slot.status === "verified" ? player.slot.slot : undefined;
-  const kindOrder = { bench: 0, starting: 1, reserve: 2 } as const;
-  return league.rosterPositions
-    .filter((slot) => {
-      if (slot.position === current) {
-        return false;
-      }
-      const acceptsPositions = slotAcceptsPositions(slot.eligibility, player.eligiblePositions);
-      return acceptsPositions && (occupancy.get(slot.position) ?? 0) < slot.count;
-    })
-    .sort((left, right) => kindOrder[left.kind] - kindOrder[right.kind])[0];
-}
-
-function slotOccupancy(roster: ProviderRoster): ReadonlyMap<string, number> {
-  const occupancy = new Map<string, number>();
-  for (const player of roster.players) {
-    if (player.slot.status !== "verified") {
-      continue;
-    }
-    occupancy.set(player.slot.slot, (occupancy.get(player.slot.slot) ?? 0) + 1);
-  }
-  return occupancy;
-}
-
-function illegalSlotDetail(input: {
-  readonly player: ProviderRosterPlayer;
-  readonly slot: ProviderLeagueSettings["rosterPositions"][number];
-  readonly mode: "repair" | "refuse";
-}): string {
-  const providerNote =
-    input.player.injuryDetail === undefined
-      ? ""
-      : ` The provider reports "${input.player.injuryDetail}".`;
-  const resolution =
-    input.mode === "repair"
-      ? " No open slot accepts him, and choosing which player to drop is yours. Drop a player to make room, then propose this transaction again."
-      : " Move him to a legal slot at the provider, then revalidate this set.";
-  return `${input.player.name} is in the ${input.slot.position} slot, but it does not accept his positions (${input.player.eligiblePositions.join(", ")}).${providerNote}${resolution}`;
-}
-
-function occupancyDelta(
-  move: StoredReserveMove | undefined,
-  league: ProviderLeagueSettings,
-): number {
-  if (move === undefined) {
-    return 0;
-  }
-  const from = league.rosterPositions.find((position) => position.position === move.fromSlot);
-  const to = league.rosterPositions.find((position) => position.position === move.toSlot);
-  if (from === undefined || to === undefined) {
-    return 0;
-  }
-  const fromReserve = from.kind === "reserve";
-  const toReserve = to.kind === "reserve";
-  return fromReserve === toReserve ? 0 : fromReserve ? 1 : -1;
+  return reasons;
 }
 
 function toPendingTradeOffers(

@@ -255,7 +255,10 @@ const ProposalOrderTiming = Schema.Literals([
   "not_published",
 ]);
 
-const ProposalOrderStep = Schema.Struct({ item: ProposalItemId });
+const ProposalOrderStep = Schema.Struct({
+  item: ProposalItemId,
+  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
 
 const ProposalOrderConflict = Schema.Struct({
   items: Schema.Array(ProposalItemId),

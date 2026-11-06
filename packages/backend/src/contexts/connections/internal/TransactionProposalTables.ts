@@ -28,6 +28,8 @@ import {
   ProposalItemRecord,
   ProposalSetRecord,
   ProposalStepRecord,
+  StoredProposalOrder,
+  StoredReserveMove,
   StoredSlotMove,
   StoredProposalPlayer,
   StoredProposalStaleReason,
@@ -44,6 +46,7 @@ export const transactionProposalSets = pgTable(
     clientLabel: text("client_label"),
     fingerprint: text("fingerprint").notNull(),
     teams: jsonb("teams").notNull(),
+    orders: jsonb("orders"),
     submittedByUserId: text("submitted_by_user_id"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -75,6 +78,7 @@ export const transactionProposalItems = pgTable(
     addPlayers: jsonb("add_players").notNull(),
     dropPlayers: jsonb("drop_players").notNull(),
     slotMove: jsonb("slot_move"),
+    reserveMove: jsonb("reserve_move"),
     counterpartyTeamKey: text("counterparty_team_key"),
     counterpartyName: text("counterparty_name"),
     bid: integer("bid"),
@@ -156,6 +160,7 @@ const ProposalSetSelect = createSelectSchema(transactionProposalSets, {
   clientLabel: Schema.NullOr(Schema.NonEmptyString),
   fingerprint: Schema.NonEmptyString,
   teams: Schema.Unknown,
+  orders: Schema.Unknown,
   submittedByUserId: Schema.NullOr(UserId),
   submittedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   completedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
@@ -171,6 +176,12 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
       decode: (row) =>
         Effect.gen(function* () {
           const teams = yield* SchemaParser.decodeUnknownEffect(Schema.Array(TeamId))(row.teams);
+          const orders =
+            row.orders === null
+              ? []
+              : yield* SchemaParser.decodeUnknownEffect(Schema.Array(StoredProposalOrder))(
+                  row.orders,
+                );
           return {
             id: row.id,
             userId: row.userId,
@@ -182,6 +193,7 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             },
             fingerprint: row.fingerprint,
             teams,
+            orders,
             ...(row.submittedByUserId === null ? {} : { submittedBy: row.submittedByUserId }),
             ...(row.submittedAt === null ? {} : { submittedAt: row.submittedAt }),
             ...(row.completedAt === null ? {} : { completedAt: row.completedAt }),
@@ -202,6 +214,7 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             clientLabel: record.proposedBy.client ?? null,
             fingerprint: record.fingerprint,
             teams,
+            orders: record.orders.length === 0 ? null : record.orders,
             submittedByUserId: record.submittedBy ?? null,
             submittedAt: record.submittedAt ?? null,
             completedAt: record.completedAt ?? null,
@@ -225,6 +238,7 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   addPlayers: Schema.Unknown,
   dropPlayers: Schema.Unknown,
   slotMove: Schema.Unknown,
+  reserveMove: Schema.Unknown,
   counterpartyTeamKey: Schema.NullOr(Schema.NonEmptyString),
   counterpartyName: Schema.NullOr(Schema.NonEmptyString),
   bid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
@@ -265,6 +279,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
           const slotMove = yield* SchemaParser.decodeUnknownEffect(Schema.NullOr(StoredSlotMove))(
             row.slotMove,
           );
+          const reserveMove = yield* SchemaParser.decodeUnknownEffect(
+            Schema.NullOr(StoredReserveMove),
+          )(row.reserveMove);
           if (row.staleness === "unchecked" && (row.checkedAt !== null || reasons.length > 0)) {
             return yield* Effect.die(
               new Error("An unchecked proposal item cannot carry a check time or a stale reason"),
@@ -324,6 +341,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             adds,
             drops,
             ...(slotMove === null ? {} : { slotMove }),
+            ...(reserveMove === null ? {} : { reserveMove }),
             ...(row.counterpartyTeamKey === null
               ? {}
               : { counterpartyKey: row.counterpartyTeamKey }),
@@ -378,6 +396,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             addPlayers: adds,
             dropPlayers: drops,
             slotMove: record.slotMove ?? null,
+            reserveMove: record.reserveMove ?? null,
             counterpartyTeamKey: record.counterpartyKey ?? null,
             counterpartyName: record.counterpartyName ?? null,
             bid: record.bid ?? null,

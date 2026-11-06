@@ -321,10 +321,18 @@ function move(id: string, player: OrderPlayerRef, toSlot: string): ProposalOrder
     label: `Move ${player.name} to ${toSlot}`,
     adds: [],
     drops: [],
-    move: { player, toSlot, origin: "declared" },
+    move: { player, toSlot },
+    mayRepair: false,
   };
 }
 
 function drop(id: string, player: OrderPlayerRef): ProposalOrderItem {
-  return { id, label: `Drop ${player.name}`, adds: [], drops: [player], move: undefined };
+  return {
+    id,
+    label: `Drop ${player.name}`,
+    adds: [],
+    drops: [player],
+    move: undefined,
+    mayRepair: true,
+  };
 }

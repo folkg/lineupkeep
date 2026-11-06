@@ -419,11 +419,11 @@ function OrderedNotice(props: OrderedNoticeProps): JSX.Element {
     <Notice tone="neutral" title="The order the server chose">
       <Stack gap="2xs">
         <For each={props.order.steps}>
-          {(step, index) => {
+          {(step) => {
             const item = props.items.find((entry) => entry.id === step.item);
             return (
               <Text size="caption" tone="muted">
-                {`${String(index() + 1)}. ${item === undefined ? "This move" : moveSummary(item)}`}
+                {`${String(step.position + 1)}. ${item === undefined ? "This move" : moveSummary(item)}`}
               </Text>
             );
           }}

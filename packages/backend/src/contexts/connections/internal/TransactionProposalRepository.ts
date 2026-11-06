@@ -25,6 +25,7 @@ import type {
   ProposalSetRecord,
   ProposalStepRecord,
   ProposalTeamRecord,
+  StoredProposalOrder,
   StoredSlotMove,
   StoredProposalPlayer,
   StoredProposalStaleness,
@@ -262,43 +263,59 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         readonly userId: UserId;
         readonly setId: ProposalSetId;
         readonly changes: ReadonlyArray<ProposalItemChange>;
+        readonly orders: ReadonlyArray<StoredProposalOrder>;
         readonly at: DateTime.Utc;
       }) {
         const ids = input.changes.map((change) => change.id);
-        if (!Array.isArrayNonEmpty(ids)) {
-          return [];
-        }
         const changeById = new Map(input.changes.map((change) => [change.id, change] as const));
         return yield* database
           .transaction((tx) =>
-            mutateRows(tx, transactionProposalItems, {
-              where: and(
-                eq(transactionProposalItems.userId, input.userId),
-                eq(transactionProposalItems.setId, input.setId),
-              ),
-              ids,
-              codec: ProposalItemRow,
-              plan: (locked) =>
-                Effect.sync(() => {
-                  const planned: Array<ProposalItemRecord> = [];
-                  for (const id of ids) {
-                    const change = changeById.get(id);
-                    const record = locked.get(id);
-                    if (change === undefined || record === undefined) {
-                      continue;
-                    }
-                    planned.push({
-                      ...record,
-                      adds: change.adds,
-                      drops: change.drops,
-                      staleness: change.staleness,
-                      ...(change.trade === undefined ? {} : { trade: change.trade }),
-                      ...(change.state === undefined ? {} : { state: change.state }),
-                      updatedAt: input.at,
-                    });
-                  }
-                  return planned;
-                }),
+            Effect.gen(function* () {
+              const planned = Array.isArrayNonEmpty(ids)
+                ? yield* mutateRows(tx, transactionProposalItems, {
+                    where: and(
+                      eq(transactionProposalItems.userId, input.userId),
+                      eq(transactionProposalItems.setId, input.setId),
+                    ),
+                    ids,
+                    codec: ProposalItemRow,
+                    plan: (locked) =>
+                      Effect.sync(() => {
+                        const records: Array<ProposalItemRecord> = [];
+                        for (const id of ids) {
+                          const change = changeById.get(id);
+                          const record = locked.get(id);
+                          if (change === undefined || record === undefined) {
+                            continue;
+                          }
+                          records.push({
+                            ...record,
+                            adds: change.adds,
+                            drops: change.drops,
+                            reserveMove: change.reserveMove,
+                            staleness: change.staleness,
+                            ...(change.trade === undefined ? {} : { trade: change.trade }),
+                            ...(change.state === undefined ? {} : { state: change.state }),
+                            updatedAt: input.at,
+                          });
+                        }
+                        return records;
+                      }),
+                  })
+                : [];
+              yield* tx
+                .update(transactionProposalSets)
+                .set({
+                  orders: input.orders.length === 0 ? null : [...input.orders],
+                  updatedAt: DateTime.toDateUtc(input.at),
+                })
+                .where(
+                  and(
+                    eq(transactionProposalSets.userId, input.userId),
+                    eq(transactionProposalSets.id, input.setId),
+                  ),
+                );
+              return planned;
             }),
           )
           .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));

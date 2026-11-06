@@ -1,0 +1,63 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "17084436-e528-4fc8-af6f-5eb3f0d89c30",
+  "prevIds": ["f2276171-4cc2-4627-8926-16e80dc14ec2"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "reserve_move"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.reserve_move",
+        "n|col|public.transaction_proposal_items.reserve_move",
+        "e|col|public.transaction_proposal_items.reserve_move"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_sets", "orders"],
+      "writes": [
+        "s|col|public.transaction_proposal_sets.orders",
+        "n|col|public.transaction_proposal_sets.orders",
+        "e|col|public.transaction_proposal_sets.orders"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_sets", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "reserve_move",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_sets",
+        "name": "orders",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}
