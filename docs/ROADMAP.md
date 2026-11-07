@@ -875,6 +875,58 @@ to explore, `L` to apply.
 
 ---
 
+## R. Identifiers as ULIDs
+
+The owner prefers ULIDs to UUIDv7 for anything a person ever sees, mainly in URLs: a ULID is shorter,
+sortable, and does not look like a hex accident.
+
+- [ ] Replace UUID generation at every new-identifier site with ULID, keeping sortability and the same
+      storage width decisions.
+- [ ] Decide the migration for rows already stored: converting identifiers in place means rewriting every
+      foreign key and every reference an outside client may already hold. If that is not practical, new
+      identifiers are ULIDs and stored ones keep their values, with the boundary saying which is which.
+- [ ] Keep provider identifiers untouched: a provider key is the provider's, never ours.
+
+**Verify**: a freshly created team, proposal set and run read back with a ULID, the old rows still resolve,
+and no join assumes one format. `S`
+
+## S. A Yahoo API SDK outside the app
+
+Modelled on how alchemy distilled its providers: an Effect-native package that owns Yahoo's endpoints,
+payloads and refusals, with the application calling a typed client instead of carrying promise-shaped
+provider code.
+
+- [ ] Survey what the application already knows: hosts, read and write paths, the crumb, rate limits, the
+      captured refusals, the XML transaction body, and the leagues, rosters, players and matchups reads.
+- [ ] Design the public surface as Effect services with typed errors that carry the provider's own words,
+      so a caller never sees a raw response.
+- [ ] Build it in its own package, tested against recorded payloads, without wiring it into the application.
+- [ ] Cut over only when it covers everything the product calls, and only after the app's boundary tests can
+      run against either implementation.
+
+This can proceed in parallel with product work because nothing cuts over until it is complete. A signed-in
+browser tab is available for checking shapes the recordings do not cover.
+
+**Verify**: the package answers the same reads and writes as the current adapter against the same recorded
+payloads, and the cutover is one wiring change. `L`
+
+## T. Motion that earns its place
+
+The owner asked for a pass over small animations, with the guidance from Emil Kowalski's work: most things
+need no animation, frequent interactions should not be animated, and motion exists to delight on the rarer
+moments.
+
+- [ ] Read the skills before deciding anything, and record the handful of principles this product will keep,
+      in the same voice as `DESIGN.md`.
+- [ ] Pick a small number of infrequent moments where motion would genuinely help (a first sign-in, a set
+      settling, an empty state becoming a first team), not a sweep of the interface.
+- [ ] Keep every duration and easing in the theme tokens that already exist, and keep the reduced-motion rule
+      authoritative.
+- [ ] Do not animate the action states: their timing is already decided and written down.
+
+**Verify**: each added motion names the moment it serves, its duration comes from a token, and a
+reduced-motion capture shows the same content without it. `S`
+
 ## Q. Standing loops
 
 ### Q1 — Client feedback
