@@ -317,6 +317,7 @@ export function mapTransactionReviewError(
       return { type: "transactions.set_not_found", outcome: "rejected" };
     case "proposal.content_invalid":
     case "proposal.nothing_accepted":
+    case "proposal.items_not_withdrawable":
       return { type: "transactions.input_invalid", outcome: "rejected" };
     case "proposal.nothing_included":
       return { type: "transactions.nothing_included", outcome: "rejected" };

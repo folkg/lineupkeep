@@ -178,10 +178,10 @@ export const seedOwnedAccount = Effect.gen(function* () {
   yield* run(
     sql`insert into ${sql.identifier("transaction_proposal_items")}
       (id, set_id, position, user_id, team_id, connection_id, kind, add_players, drop_players,
-        reason, state, staleness, stale_reasons) values
+        reason, state, staleness, stale_reasons, checked_at) values
       (${owner.proposalItemId}, ${owner.proposalSetId}, 0, ${owner.id}, ${owner.teamId},
         ${owner.connectionId}, ${"drop"}, ${"[]"}::jsonb, ${"[]"}::jsonb, ${"A reason"},
-        ${"proposed"}, ${"unchecked"}, ${"[]"}::jsonb)`,
+        ${"proposed"}, ${"current"}, ${"[]"}::jsonb, ${instant})`,
   );
   yield* run(
     sql`insert into ${sql.identifier("transaction_proposal_steps")}

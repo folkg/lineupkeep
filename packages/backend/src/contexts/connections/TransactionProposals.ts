@@ -62,12 +62,7 @@ export const ProposalOutcome = Schema.Literals([
 ]);
 export type ProposalOutcome = typeof ProposalOutcome.Type;
 
-export const ProposalStalenessStatus = Schema.Literals([
-  "unchecked",
-  "current",
-  "stale",
-  "illegal",
-]);
+export const ProposalStalenessStatus = Schema.Literals(["current", "stale", "illegal"]);
 export type ProposalStalenessStatus = typeof ProposalStalenessStatus.Type;
 
 export const ProposalStaleCode = Schema.Literals([
@@ -374,7 +369,13 @@ export const ProposalItemDraft = Schema.Struct({
 });
 export type ProposalItemDraft = typeof ProposalItemDraft.Type;
 
+const ProposeSetTarget = Schema.optional(Schema.NullOr(ProposalSetId)).annotate({
+  description:
+    "The id of an existing set that has not been submitted, to append these items after its existing ones. The whole set is validated again as one set and its stored order is recomputed. Omit it to create a new set. A submitted or expired set refuses new items.",
+});
+
 export const ProposeTransactionsInput = Schema.Struct({
+  set: ProposeSetTarget,
   items: Schema.Array(ProposalItemDraft).pipe(
     Schema.check(Schema.isMinLength(1), Schema.isMaxLength(20)),
   ),
@@ -382,7 +383,7 @@ export const ProposeTransactionsInput = Schema.Struct({
 });
 export type ProposeTransactionsInput = typeof ProposeTransactionsInput.Type;
 
-const ProposalItemRefusal = Schema.Literals([
+export const ProposalItemRefusal = Schema.Literals([
   "team_not_owned",
   "reference_invalid",
   "kind_invalid",
@@ -394,37 +395,81 @@ const ProposalItemRefusal = Schema.Literals([
   "trade_player_not_rostered",
   "trade_window_closed",
   "trade_state_unavailable",
+  "player_unavailable",
+  "drop_not_rostered",
+  "move_not_rostered",
+  "move_slot_unknown",
+  "roster_full",
+  "slot_illegal",
+  "order_conflict",
+  "order_unresolved",
+  "period_closed",
+  "bid_exceeds_budget",
+  "bid_not_available",
+  "state_unavailable",
+  "trade_counterparty_missing",
 ]);
-type ProposalItemRefusal = typeof ProposalItemRefusal.Type;
+export type ProposalItemRefusal = typeof ProposalItemRefusal.Type;
 
 const ProposalItemAccepted = Schema.Struct({
-  index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+    description: "The item's 1-based position in the request that stored it.",
+  }),
   outcome: Schema.Literal("accepted"),
   item: ProposalItem,
 });
 type ProposalItemAccepted = typeof ProposalItemAccepted.Type;
 
 export const ProposalItemRefused = Schema.Struct({
-  index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+    description: "The item's 1-based position in this request.",
+  }),
   outcome: Schema.Literal("refused"),
   refusal: ProposalItemRefusal,
-  detail: Schema.NonEmptyString,
+  reason: Schema.NonEmptyString.annotate({
+    description: "Why the item cannot run against the set's end state, in plain words.",
+  }),
+  fix: Schema.NonEmptyString.annotate({
+    description: "What would make the item valid, so the client can try again.",
+  }),
 });
 export type ProposalItemRefused = typeof ProposalItemRefused.Type;
 
-const ProposalItemOutcome = Schema.Union([ProposalItemAccepted, ProposalItemRefused]);
-type ProposalItemOutcome = typeof ProposalItemOutcome.Type;
+export const ProposalItemToWithdraw = Schema.Struct({
+  item: ProposalItemId,
+  team: TeamId,
+  label: Schema.NonEmptyString,
+  detail: Schema.NonEmptyString,
+});
+export type ProposalItemToWithdraw = typeof ProposalItemToWithdraw.Type;
 
 export const ProposeTransactionsResult = Schema.Struct({
   set: ProposalSet,
   created: Schema.Boolean,
-  items: Schema.Array(ProposalItemOutcome),
+  extended: Schema.Boolean,
+  items: Schema.Array(ProposalItemAccepted),
+  refused: Schema.Array(ProposalItemRefused),
   detail: Schema.NonEmptyString,
 });
 export type ProposeTransactionsResult = typeof ProposeTransactionsResult.Type;
 
 export const ProposalSetInput = Schema.Struct({ set: ProposalSetId });
 export type ProposalSetInput = typeof ProposalSetInput.Type;
+
+export const WithdrawProposalItemsInput = Schema.Struct({
+  set: ProposalSetId,
+  items: Schema.Array(ProposalItemId).pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(20)),
+  ),
+});
+export type WithdrawProposalItemsInput = typeof WithdrawProposalItemsInput.Type;
+
+export const ProposalItemWithdrawalRefusal = Schema.Struct({
+  item: ProposalItemId,
+  state: Schema.optional(ProposalItemState),
+  detail: Schema.NonEmptyString,
+});
+export type ProposalItemWithdrawalRefusal = typeof ProposalItemWithdrawalRefusal.Type;
 
 export const SubmitTransactionProposalInput = Schema.Struct({
   set: ProposalSetId,
@@ -485,6 +530,11 @@ export type TransactionProposalsShape = {
     input: ProposalSetInput,
   ) => Effect.Effect<ProposalSetReview, ProposalError>;
 
+  readonly withdrawItems: (
+    userId: UserId,
+    input: WithdrawProposalItemsInput,
+  ) => Effect.Effect<ProposalSetReview, ProposalError>;
+
   readonly read: (
     userId: UserId,
     input: ProposalSetInput,
@@ -516,6 +566,7 @@ export type ProposalError =
   | ProposalTeamNotFound
   | ProposalTradeNotFound
   | ProposalTradeNotPending
+  | ProposalItemsNotWithdrawable
   | ProposalConnectionNotReady
   | ProposalProviderUnavailable
   | ProposalPersistenceFailed;
@@ -532,6 +583,7 @@ export class ProposalNothingAccepted extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("proposal.nothing_accepted", {
   refusals: Schema.Array(ProposalItemRefused),
+  withdraw: Schema.Array(ProposalItemToWithdraw),
   detail: Schema.NonEmptyString,
 }) {}
 
@@ -569,6 +621,14 @@ export class ProposalTradeNotPending extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("proposal.trade_not_pending", {
   state: ProposalTradeState,
+  detail: Schema.NonEmptyString,
+}) {}
+
+export class ProposalItemsNotWithdrawable extends Schema.TaggedError<
+  ProposalItemsNotWithdrawable,
+  { readonly brand: unique symbol }
+>()("proposal.items_not_withdrawable", {
+  items: Schema.Array(ProposalItemWithdrawalRefusal),
   detail: Schema.NonEmptyString,
 }) {}
 

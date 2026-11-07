@@ -54,6 +54,13 @@ export type ProposalItemCommand = {
   readonly reason: string;
 };
 
+type ProposalItemStore = {
+  readonly id: ProposalItemId;
+  readonly command: ProposalItemCommand;
+  readonly check: StoredProposalStaleness;
+  readonly reserveMove: StoredReserveMove | undefined;
+};
+
 type LoadedProposalSet = {
   readonly set: ProposalSetRecord;
   readonly items: ReadonlyArray<ProposalItemRecord>;
@@ -108,97 +115,222 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
       const newId = crypto
         .randomUUIDv7()
         .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+      const newItemId = newId.pipe(Effect.map((id) => Schema.decodeSync(ProposalItemId)(id)));
+      const newSetId = newId.pipe(Effect.map((id) => Schema.decodeSync(ProposalSetId)(id)));
 
-      const create = Effect.fn("TransactionProposalRepository.create")(function* (input: {
+      const create = Effect.fn("TransactionProposalRepository.create")(
+        (input: {
+          readonly userId: UserId;
+          readonly setId: ProposalSetId;
+          readonly proposedBy: ProposalSetProvenance;
+          readonly fingerprintSource: string;
+          readonly teams: ReadonlyArray<TeamId>;
+          readonly items: ReadonlyArray<ProposalItemStore>;
+          readonly orders: ReadonlyArray<StoredProposalOrder>;
+          readonly at: DateTime.Utc;
+        }) =>
+          Effect.gen(function* () {
+            const fingerprint = yield* fingerprintOf(crypto, input.fingerprintSource);
+            const teams = yield* Schema.encodeEffect(Schema.Array(TeamId))(input.teams);
+            return yield* database.transaction((tx) =>
+              Effect.gen(function* () {
+                const inserted = yield* tx
+                  .insert(transactionProposalSets)
+                  .values({
+                    id: input.setId,
+                    userId: input.userId,
+                    proposerKind: input.proposedBy.kind,
+                    proposerReference: input.proposedBy.reference,
+                    surface: input.proposedBy.surface,
+                    clientLabel: input.proposedBy.client ?? null,
+                    fingerprint,
+                    teams,
+                    orders: input.orders.length === 0 ? null : [...input.orders],
+                    createdAt: DateTime.toDateUtc(input.at),
+                    expiresAt: DateTime.toDateUtc(
+                      DateTime.addDuration(input.at, proposalSetLifetimeMillis),
+                    ),
+                    updatedAt: DateTime.toDateUtc(input.at),
+                  })
+                  .onConflictDoNothing({
+                    target: [transactionProposalSets.userId, transactionProposalSets.fingerprint],
+                  })
+                  .returning();
+                const insertedSet = inserted[0];
+                if (insertedSet === undefined) {
+                  return yield* loadByFingerprint(tx, input.userId, fingerprint);
+                }
+                const set = yield* decodeSet(insertedSet);
+                const rows = input.items.map((item, index) => storeRow(input, set.id, item, index));
+                const insertedItems = yield* chunked(
+                  rows,
+                  maxInsertRows(transactionProposalItems),
+                  (chunk) =>
+                    tx
+                      .insert(transactionProposalItems)
+                      .values([...chunk])
+                      .returning(),
+                );
+                const items = yield* Effect.forEach(insertedItems, decodeItem);
+                const byId = new Map(items.map((item) => [item.id, item] as const));
+                return {
+                  set,
+                  items: input.items.map((item) => {
+                    const stored = byId.get(item.id);
+                    if (stored === undefined) {
+                      throw new Error("A created proposal item was not returned");
+                    }
+                    return stored;
+                  }),
+                  steps: [],
+                  created: true,
+                };
+              }),
+            );
+          }).pipe(Effect.mapError(persistenceFailure)),
+      );
+
+      const append = Effect.fn("TransactionProposalRepository.append")(
+        (input: {
+          readonly userId: UserId;
+          readonly setId: ProposalSetId;
+          readonly teams: ReadonlyArray<TeamId>;
+          readonly items: ReadonlyArray<ProposalItemStore>;
+          readonly changes: ReadonlyArray<ProposalItemChange>;
+          readonly orders: ReadonlyArray<StoredProposalOrder>;
+          readonly at: DateTime.Utc;
+        }) =>
+          Effect.gen(function* () {
+            const teams = yield* Schema.encodeEffect(Schema.Array(TeamId))(input.teams);
+            const fingerprint = yield* newId;
+            return yield* database.transaction((tx) =>
+              Effect.gen(function* () {
+                const setRows = yield* tx
+                  .select()
+                  .from(transactionProposalSets)
+                  .where(
+                    and(
+                      eq(transactionProposalSets.userId, input.userId),
+                      eq(transactionProposalSets.id, input.setId),
+                    ),
+                  )
+                  .for("update");
+                const setRow = setRows[0];
+                if (setRow === undefined || setRow.submittedAt !== null) {
+                  return undefined;
+                }
+                const positionRows = yield* tx
+                  .select({ position: transactionProposalItems.position })
+                  .from(transactionProposalItems)
+                  .where(
+                    and(
+                      eq(transactionProposalItems.userId, input.userId),
+                      eq(transactionProposalItems.setId, input.setId),
+                    ),
+                  );
+                const nextPosition = positionRows.reduce(
+                  (next, row) => Math.max(next, row.position + 1),
+                  0,
+                );
+                const rows = input.items.map((item, index) =>
+                  storeRow(input, input.setId, item, nextPosition + index),
+                );
+                const insertedItems = yield* chunked(
+                  rows,
+                  maxInsertRows(transactionProposalItems),
+                  (chunk) =>
+                    tx
+                      .insert(transactionProposalItems)
+                      .values([...chunk])
+                      .returning(),
+                );
+                const items = yield* Effect.forEach(insertedItems, decodeItem);
+                yield* applyChanges(tx, input);
+                yield* tx
+                  .update(transactionProposalSets)
+                  .set({
+                    fingerprint,
+                    teams,
+                    orders: input.orders.length === 0 ? null : [...input.orders],
+                    updatedAt: DateTime.toDateUtc(input.at),
+                  })
+                  .where(
+                    and(
+                      eq(transactionProposalSets.userId, input.userId),
+                      eq(transactionProposalSets.id, input.setId),
+                    ),
+                  );
+                return items;
+              }),
+            );
+          }).pipe(Effect.mapError(persistenceFailure)),
+      );
+
+      const withdraw = Effect.fn("TransactionProposalRepository.withdraw")(function* (input: {
         readonly userId: UserId;
-        readonly proposedBy: ProposalSetProvenance;
-        readonly fingerprintSource: string;
-        readonly teams: ReadonlyArray<TeamId>;
-        readonly items: ReadonlyArray<ProposalItemCommand>;
+        readonly setId: ProposalSetId;
+        readonly remove: ReadonlyArray<ProposalItemId>;
+        readonly changes: ReadonlyArray<ProposalItemChange>;
+        readonly orders: ReadonlyArray<StoredProposalOrder>;
         readonly at: DateTime.Utc;
       }) {
-        const fingerprint = yield* fingerprintOf(crypto, input.fingerprintSource);
-        const teams = yield* Schema.encodeEffect(Schema.Array(TeamId))(input.teams).pipe(
-          Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
-        );
-        const ids = yield* Effect.replicateEffect(input.items.length)(newId);
+        const fingerprint = yield* newId;
         return yield* database
           .transaction((tx) =>
             Effect.gen(function* () {
-              const inserted = yield* tx
-                .insert(transactionProposalSets)
-                .values({
-                  userId: input.userId,
-                  proposerKind: input.proposedBy.kind,
-                  proposerReference: input.proposedBy.reference,
-                  surface: input.proposedBy.surface,
-                  clientLabel: input.proposedBy.client ?? null,
-                  fingerprint,
-                  teams,
-                  createdAt: DateTime.toDateUtc(input.at),
-                  expiresAt: DateTime.toDateUtc(
-                    DateTime.addDuration(input.at, proposalSetLifetimeMillis),
+              const setRows = yield* tx
+                .select()
+                .from(transactionProposalSets)
+                .where(
+                  and(
+                    eq(transactionProposalSets.userId, input.userId),
+                    eq(transactionProposalSets.id, input.setId),
                   ),
-                  updatedAt: DateTime.toDateUtc(input.at),
-                })
-                .onConflictDoNothing({
-                  target: [transactionProposalSets.userId, transactionProposalSets.fingerprint],
-                })
-                .returning();
-              const insertedSet = inserted[0];
-              if (insertedSet === undefined) {
-                return yield* loadByFingerprint(tx, input.userId, fingerprint);
+                )
+                .for("update");
+              const setRow = setRows[0];
+              if (setRow === undefined || setRow.submittedAt !== null) {
+                return undefined;
               }
-              const set = yield* decodeSet(insertedSet);
-              const itemIds = ids.map((id) => Schema.decodeSync(ProposalItemId)(id));
-              const rows = itemIds.map((id, index) => {
-                const item = Array.getUnsafe(input.items, index);
-                return {
-                  id,
-                  setId: set.id,
-                  position: index,
-                  userId: input.userId,
-                  teamId: item.team,
-                  connectionId: item.connection,
-                  kind: item.kind,
-                  addPlayers: item.adds,
-                  dropPlayers: item.drops,
-                  slotMove: item.slotMove ?? null,
-                  counterpartyTeamKey: item.counterpartyKey ?? null,
-                  counterpartyName: item.counterpartyName ?? null,
-                  bid: item.bid ?? null,
-                  reason: item.reason,
-                  state: "proposed" as const,
-                  staleness: "unchecked" as const,
-                  staleReasons: [],
-                  checkedAt: null,
-                  createdAt: DateTime.toDateUtc(input.at),
+              const ids = [...input.remove];
+              if (!Array.isArrayNonEmpty(ids)) {
+                return yield* ProposalPersistenceFailed.make({
+                  cause: new Error("A withdrawal names no items"),
+                });
+              }
+              yield* tx
+                .delete(transactionProposalSteps)
+                .where(
+                  and(
+                    eq(transactionProposalSteps.userId, input.userId),
+                    eq(transactionProposalSteps.setId, input.setId),
+                    anyOf(transactionProposalSteps.itemId, ids),
+                  ),
+                );
+              yield* tx
+                .delete(transactionProposalItems)
+                .where(
+                  and(
+                    eq(transactionProposalItems.userId, input.userId),
+                    eq(transactionProposalItems.setId, input.setId),
+                    anyOf(transactionProposalItems.id, ids),
+                  ),
+                );
+              const planned = yield* applyChanges(tx, input);
+              yield* tx
+                .update(transactionProposalSets)
+                .set({
+                  fingerprint,
+                  orders: input.orders.length === 0 ? null : [...input.orders],
                   updatedAt: DateTime.toDateUtc(input.at),
-                };
-              });
-              const insertedItems = yield* chunked(
-                rows,
-                maxInsertRows(transactionProposalItems),
-                (chunk) =>
-                  tx
-                    .insert(transactionProposalItems)
-                    .values([...chunk])
-                    .returning(),
-              );
-              const items = yield* Effect.forEach(insertedItems, decodeItem);
-              const byId = new Map(items.map((item) => [item.id, item] as const));
-              return {
-                set,
-                items: itemIds.map((id) => {
-                  const item = byId.get(id);
-                  if (item === undefined) {
-                    throw new Error("A created proposal item was not returned");
-                  }
-                  return item;
-                }),
-                steps: [],
-                created: true,
-              };
+                })
+                .where(
+                  and(
+                    eq(transactionProposalSets.userId, input.userId),
+                    eq(transactionProposalSets.id, input.setId),
+                  ),
+                );
+              return planned;
             }),
           )
           .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
@@ -266,43 +398,10 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         readonly orders: ReadonlyArray<StoredProposalOrder>;
         readonly at: DateTime.Utc;
       }) {
-        const ids = input.changes.map((change) => change.id);
-        const changeById = new Map(input.changes.map((change) => [change.id, change] as const));
         return yield* database
           .transaction((tx) =>
             Effect.gen(function* () {
-              const planned = Array.isArrayNonEmpty(ids)
-                ? yield* mutateRows(tx, transactionProposalItems, {
-                    where: and(
-                      eq(transactionProposalItems.userId, input.userId),
-                      eq(transactionProposalItems.setId, input.setId),
-                    ),
-                    ids,
-                    codec: ProposalItemRow,
-                    plan: (locked) =>
-                      Effect.sync(() => {
-                        const records: Array<ProposalItemRecord> = [];
-                        for (const id of ids) {
-                          const change = changeById.get(id);
-                          const record = locked.get(id);
-                          if (change === undefined || record === undefined) {
-                            continue;
-                          }
-                          records.push({
-                            ...record,
-                            adds: change.adds,
-                            drops: change.drops,
-                            reserveMove: change.reserveMove,
-                            staleness: change.staleness,
-                            ...(change.trade === undefined ? {} : { trade: change.trade }),
-                            ...(change.state === undefined ? {} : { state: change.state }),
-                            updatedAt: input.at,
-                          });
-                        }
-                        return records;
-                      }),
-                  })
-                : [];
+              const planned = yield* applyChanges(tx, input);
               yield* tx
                 .update(transactionProposalSets)
                 .set({
@@ -554,6 +653,10 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
 
       return {
         create,
+        append,
+        withdraw,
+        newItemId,
+        newSetId,
         load,
         loadItem,
         listTeams,
@@ -564,6 +667,52 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         recordItemOutcomes,
         completeSubmission,
       };
+
+      function applyChanges(
+        tx: Pick<Parameters<Parameters<typeof database.transaction>[0]>[0], "select" | "update">,
+        input: {
+          readonly userId: UserId;
+          readonly setId: ProposalSetId;
+          readonly changes: ReadonlyArray<ProposalItemChange>;
+          readonly at: DateTime.Utc;
+        },
+      ): Effect.Effect<ReadonlyArray<ProposalItemRecord>, ProposalPersistenceFailed> {
+        const ids = input.changes.map((change) => change.id);
+        if (!Array.isArrayNonEmpty(ids)) {
+          return Effect.succeed([]);
+        }
+        const changeById = new Map(input.changes.map((change) => [change.id, change] as const));
+        return mutateRows(tx, transactionProposalItems, {
+          where: and(
+            eq(transactionProposalItems.userId, input.userId),
+            eq(transactionProposalItems.setId, input.setId),
+          ),
+          ids,
+          codec: ProposalItemRow,
+          plan: (locked) =>
+            Effect.sync(() => {
+              const records: Array<ProposalItemRecord> = [];
+              for (const id of ids) {
+                const change = changeById.get(id);
+                const record = locked.get(id);
+                if (change === undefined || record === undefined) {
+                  continue;
+                }
+                records.push({
+                  ...record,
+                  adds: change.adds,
+                  drops: change.drops,
+                  reserveMove: change.reserveMove,
+                  staleness: change.staleness,
+                  ...(change.trade === undefined ? {} : { trade: change.trade }),
+                  ...(change.state === undefined ? {} : { state: change.state }),
+                  updatedAt: input.at,
+                });
+              }
+              return records;
+            }),
+        }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+      }
 
       function loadByFingerprint(
         tx: Parameters<Parameters<typeof database.transaction>[0]>[0],
@@ -610,6 +759,44 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
   },
 ) {
   static readonly layer = Layer.effect(this)(this.make);
+}
+
+function persistenceFailure(cause: unknown): ProposalPersistenceFailed {
+  return Schema.is(ProposalPersistenceFailed)(cause)
+    ? cause
+    : ProposalPersistenceFailed.make({ cause });
+}
+
+function storeRow(
+  input: { readonly userId: UserId; readonly at: DateTime.Utc },
+  setId: ProposalSetId,
+  item: ProposalItemStore,
+  position: number,
+): typeof transactionProposalItems.$inferInsert {
+  const command = item.command;
+  return {
+    id: item.id,
+    setId,
+    position,
+    userId: input.userId,
+    teamId: command.team,
+    connectionId: command.connection,
+    kind: command.kind,
+    addPlayers: command.adds,
+    dropPlayers: command.drops,
+    slotMove: command.slotMove ?? null,
+    reserveMove: item.reserveMove ?? null,
+    counterpartyTeamKey: command.counterpartyKey ?? null,
+    counterpartyName: command.counterpartyName ?? null,
+    bid: command.bid ?? null,
+    reason: command.reason,
+    state: "proposed" as const,
+    staleness: item.check.status,
+    staleReasons: item.check.reasons,
+    checkedAt: item.check.checkedAt === undefined ? null : DateTime.toDateUtc(item.check.checkedAt),
+    createdAt: DateTime.toDateUtc(input.at),
+    updatedAt: DateTime.toDateUtc(input.at),
+  };
 }
 
 const teamColumns = {

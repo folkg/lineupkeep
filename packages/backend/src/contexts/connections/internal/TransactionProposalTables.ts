@@ -96,7 +96,7 @@ export const transactionProposalItems = pgTable(
         "expired",
       ],
     }).notNull(),
-    staleness: text("staleness", { enum: ["unchecked", "current", "stale", "illegal"] }).notNull(),
+    staleness: text("staleness", { enum: ["current", "stale", "illegal"] }).notNull(),
     staleReasons: jsonb("stale_reasons").notNull(),
     checkedAt: timestamp("checked_at", { withTimezone: true }),
     outcome: text("outcome", {
@@ -282,14 +282,9 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
           const reserveMove = yield* SchemaParser.decodeUnknownEffect(
             Schema.NullOr(StoredReserveMove),
           )(row.reserveMove);
-          if (row.staleness === "unchecked" && (row.checkedAt !== null || reasons.length > 0)) {
+          if (row.checkedAt === null) {
             return yield* Effect.die(
-              new Error("An unchecked proposal item cannot carry a check time or a stale reason"),
-            );
-          }
-          if (row.staleness !== "unchecked" && row.checkedAt === null) {
-            return yield* Effect.die(
-              new Error("A checked proposal item requires the time of its check"),
+              new Error("A stored proposal item requires the time of its check"),
             );
           }
           if ((row.staleness === "stale" || row.staleness === "illegal") !== reasons.length > 0) {
@@ -351,7 +346,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             state: row.state,
             staleness: {
               status: row.staleness,
-              ...(row.checkedAt === null ? {} : { checkedAt: row.checkedAt }),
+              checkedAt: row.checkedAt,
               reasons,
             },
             ...(row.outcome === null ? {} : { outcome: row.outcome }),

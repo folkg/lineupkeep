@@ -408,6 +408,7 @@ it("lists only the read-only connection tool without exposing account identity",
     "propose_transactions",
     "get_transaction_proposal_set",
     "revalidate_transaction_proposal_set",
+    "withdraw_transaction_proposal_items",
     "get_pending_trade_offers",
     "set_lineup",
     "get_lineup_runs",
@@ -908,7 +909,9 @@ it("proposes a transaction set under the review scope and returns the review lin
       return Effect.succeed({
         set,
         created: true,
+        extended: false,
         items: [],
+        refused: [],
         detail: "Created the set.",
       } satisfies ProposeTransactionsResult);
     },
@@ -916,8 +919,8 @@ it("proposes a transaction set under the review scope and returns the review lin
     revalidate: () => {
       revalidations += 1;
       return revalidations === 1
-        ? Effect.succeed(review)
-        : Effect.fail(ProposalSetExpired.make({ set: set.id, expiresAt: set.expiresAt }));
+        ? Effect.fail(ProposalSetExpired.make({ set: set.id, expiresAt: set.expiresAt }))
+        : Effect.succeed(review);
     },
     readPendingOffers: () => Effect.die(new Error("pending offers are not read here")),
   };
@@ -969,7 +972,7 @@ it("proposes a transaction set under the review scope and returns the review lin
       proposer: { kind: "agent", reference: "mcp", surface: "mcp" },
     },
   ]);
-  expect(revalidations).toBe(1);
+  expect(revalidations).toBe(0);
 
   const read = await call(
     request(
@@ -1487,6 +1490,7 @@ const unavailableQueries: FantasyQueriesShape = {
 const unavailableProposals: TransactionProposalsShape = {
   propose: () => Effect.die(new Error("proposals unavailable")),
   revalidate: () => Effect.die(new Error("proposals unavailable")),
+  withdrawItems: () => Effect.die(new Error("proposals unavailable")),
   read: () => Effect.die(new Error("proposals unavailable")),
   submit: () => Effect.die(new Error("proposals unavailable")),
   readPendingOffers: () => Effect.die(new Error("proposals unavailable")),

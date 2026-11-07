@@ -32,12 +32,16 @@ import type {
   ProposalExecutionStep,
   ProposalItem,
   ProposalItemDraft,
+  ProposalItemRefusal,
   ProposalItemRefused,
   ProposalItemState,
+  ProposalItemToWithdraw,
+  ProposalItemWithdrawalRefusal,
   ProposalOutcome,
   ProposalSet,
   ProposalSetProvenance,
   ProposalSetReview,
+  ProposalStaleCode,
   ProposalSubmission,
   ProposeTransactionsResult,
 } from "#contexts/connections/TransactionProposals.ts";
@@ -46,6 +50,7 @@ import {
   ProposalConnectionNotReady,
   ProposalContentInvalid,
   ProposalItem as ProposalItemSchema,
+  ProposalItemsNotWithdrawable,
   ProposalNothingAccepted,
   ProposalNothingIncluded,
   ProposalPersistenceFailed,
@@ -54,7 +59,6 @@ import {
   ProposalSetExpired,
   ProposalSetNotFound,
   ProposalSetReview as ProposalSetReviewSchema,
-  ProposalStaleCode,
   ProposalTeam as ProposalTeamSchema,
   ProposalTeamNotFound,
   ProposalTradeNotFound,
@@ -63,6 +67,7 @@ import {
   ProposeTransactionsResult as ProposeTransactionsResultSchema,
   SubmitTransactionProposalInput,
   TransactionProposals,
+  WithdrawProposalItemsInput,
   WithdrawTradeInput,
   WithdrawTradeResult as WithdrawTradeResultSchema,
 } from "#contexts/connections/TransactionProposals.ts";
@@ -98,6 +103,8 @@ const contentInvalidDetail =
 
 const submitInvalidDetail =
   "A submission names one proposal set and one to twenty of its move ids. Reload the review and submit again.";
+const withdrawInvalidDetail =
+  "A withdrawal names one proposal set and one to twenty of its move ids. Reload the set and withdraw again.";
 const excludedDetail = "Left out of this submission.";
 const skippedMovementDetail =
   "Not attempted because the reserve move did not complete, so the transaction was not sent.";
@@ -167,6 +174,15 @@ type TeamCheck = {
   readonly tradeFeed?: TradeFeed;
 };
 
+type TeamData =
+  | {
+      readonly status: "ready";
+      readonly facts: TeamFacts;
+      readonly context: TeamContext;
+      readonly tradeFeed: TradeFeed | undefined;
+    }
+  | { readonly status: "failed"; readonly detail: string };
+
 type TradeFeed = {
   readonly pending: ReadonlyArray<ProviderPendingTrade>;
   readonly completed: ReadonlyArray<ProviderTransaction>;
@@ -195,11 +211,38 @@ export const TransactionProposalsLive = Layer.effect(
       const decoded = yield* Schema.decodeEffect(ProposeTransactionsInput)(input).pipe(
         Effect.mapError(() => ProposalContentInvalid.make({ detail: contentInvalidDetail })),
       );
+      const now = yield* DateTime.now;
       const ownedTeams = yield* repository.listTeams(userId);
       const teamsById = new Map(ownedTeams.map((team) => [team.id, team] as const));
+      const target = decoded.set ?? undefined;
+      const existing = target === undefined ? undefined : yield* repository.load(userId, target);
+      if (target !== undefined && existing === undefined) {
+        return yield* ProposalSetNotFound.make({ set: target });
+      }
+      if (existing !== undefined) {
+        if (existing.set.submittedAt !== undefined) {
+          return yield* ProposalSetAlreadySubmitted.make({
+            set: existing.set.id,
+            submittedAt: existing.set.submittedAt,
+          });
+        }
+        if (isExpired(existing.set, now)) {
+          return yield* ProposalSetExpired.make({
+            set: existing.set.id,
+            expiresAt: existing.set.expiresAt,
+          });
+        }
+      }
+
       const refusals: Array<ProposalItemRefused> = [];
       const accepted: Array<AcceptedDraft> = [];
       const firstIndexByKey = new Map<string, number>();
+      const existingByMove = new Map(
+        (existing?.items ?? []).map(
+          (item, position) =>
+            [recordMoveKey(item), { position: position + 1, label: moveLabel(item) }] as const,
+        ),
+      );
       const pickProviderKeys = [
         ...new Set(
           decoded.items.flatMap((draft) => {
@@ -221,12 +264,14 @@ export const TransactionProposalsLive = Layer.effect(
       for (const [index, draft] of decoded.items.entries()) {
         const team = teamsById.get(draft.team);
         if (team === undefined) {
-          refusals.push({
-            index,
-            outcome: "refused",
-            refusal: "team_not_owned",
-            detail: `Item ${String(index + 1)} names a team this account does not have. List your teams and propose the item against one of them.`,
-          });
+          refusals.push(
+            refusedItem(
+              index,
+              "team_not_owned",
+              `Item ${String(index + 1)} names a team this account does not have.`,
+              "List your teams and name a team this account owns.",
+            ),
+          );
           continue;
         }
         if ((draft.picks ?? []).length > 0) {
@@ -239,22 +284,28 @@ export const TransactionProposalsLive = Layer.effect(
               "A provider accepts draft picks in a trade proposal, but a proposal item cannot carry one",
             );
           }
-          refusals.push({
-            index,
-            outcome: "refused",
-            refusal: "draft_pick_included",
-            detail: tradeProposal.detail,
-          });
+          refusals.push(
+            refusedItem(
+              index,
+              "draft_pick_included",
+              tradeProposal.detail,
+              "Remove `picks`. A transaction item carries players only because the provider publishes pick trades only on its website.",
+            ),
+          );
           continue;
         }
         const shape = proposalShape(draft);
         if (shape !== undefined) {
-          refusals.push({
-            index,
-            outcome: "refused",
-            refusal: shape.refusal,
-            detail: shape.detail,
-          });
+          refusals.push(
+            refusedItem(
+              index,
+              shape.refusal,
+              shape.detail,
+              shape.refusal === "bid_invalid"
+                ? "Remove the bid for this kind, or use a waiver claim to spend a FAAB bid."
+                : "Declare a kind whose players match the item: a drop drops only, an add adds only, a trade names players both ways, and a slot move names one player and one destination slot.",
+            ),
+          );
           continue;
         }
         prepared.push({ index, team, draft });
@@ -339,42 +390,50 @@ export const TransactionProposalsLive = Layer.effect(
         const adds = addKeys.filter(isPlayerKey);
         const drops = dropKeys.filter(isPlayerKey);
         if (adds.length !== addKeys.length || drops.length !== dropKeys.length) {
-          refusals.push({
-            index,
-            outcome: "refused",
-            refusal: "reference_invalid",
-            detail: `Item ${String(index + 1)} carries a player reference this account did not receive from a read of that team's league. Read the roster or the player pool again and propose with those references.`,
-          });
+          refusals.push(
+            refusedItem(
+              index,
+              "reference_invalid",
+              `Item ${String(index + 1)} carries a player reference this account did not receive from a read of that team's league.`,
+              "Read the roster or the player pool again and propose with the references from that read.",
+            ),
+          );
           continue;
         }
         if (draft.kind === "slot_move" && !isPlayerKey(moveRef)) {
-          refusals.push({
-            index,
-            outcome: "refused",
-            refusal: "reference_invalid",
-            detail: `Item ${String(index + 1)} carries a player reference this account did not receive from a read of that team's league. Read the roster again and name the player to move from that read.`,
-          });
+          refusals.push(
+            refusedItem(
+              index,
+              "reference_invalid",
+              `Item ${String(index + 1)} carries a player reference this account did not receive from a read of that team's league.`,
+              "Read the roster again and name the player to move from that read.",
+            ),
+          );
           continue;
         }
         if (
           draft.kind === "trade" &&
           (draft.counterparty === undefined || draft.counterparty === null)
         ) {
-          refusals.push({
-            index,
-            outcome: "refused",
-            refusal: "kind_invalid",
-            detail: `Item ${String(index + 1)} is a trade without a counterparty team. Name the team the offer goes to.`,
-          });
+          refusals.push(
+            refusedItem(
+              index,
+              "kind_invalid",
+              `Item ${String(index + 1)} is a trade without a counterparty team.`,
+              "Name the team the offer goes to, from the league's teams read.",
+            ),
+          );
           continue;
         }
         if (counterpartyInvalid.has(index)) {
-          refusals.push({
-            index,
-            outcome: "refused",
-            refusal: "reference_invalid",
-            detail: `Item ${String(index + 1)} carries a counterparty reference this account did not receive from a read of that team's league. Read the league's teams again and name the counterparty from that read.`,
-          });
+          refusals.push(
+            refusedItem(
+              index,
+              "reference_invalid",
+              `Item ${String(index + 1)} carries a counterparty reference this account did not receive from a read of that team's league.`,
+              "Read the league's teams again and name the counterparty from that read.",
+            ),
+          );
           continue;
         }
         candidates.push({
@@ -398,6 +457,7 @@ export const TransactionProposalsLive = Layer.effect(
           refusals.push(staged.refusal);
           continue;
         }
+
         const adds =
           staged?.outcome === "staged" ? staged.adds.map((player) => player.key) : candidate.adds;
         const drops =
@@ -406,12 +466,14 @@ export const TransactionProposalsLive = Layer.effect(
           staged?.outcome === "staged" ? staged.counterpartyKey : candidate.counterpartyKey;
         const both = adds.find((key) => drops.includes(key));
         if (both !== undefined) {
-          refusals.push({
-            index,
-            outcome: "refused",
-            refusal: "player_in_both",
-            detail: `Item ${String(index + 1)} adds and drops the same player. A transaction moves a player once.`,
-          });
+          refusals.push(
+            refusedItem(
+              index,
+              "player_in_both",
+              `Item ${String(index + 1)} adds and drops the same player.`,
+              "Name the player once, on one side of the move.",
+            ),
+          );
           continue;
         }
         const slotMove =
@@ -439,14 +501,28 @@ export const TransactionProposalsLive = Layer.effect(
           slotMove,
           draft.bid ?? undefined,
         );
+        const repeated = existingByMove.get(moveKey);
+        if (repeated !== undefined) {
+          refusals.push(
+            refusedItem(
+              index,
+              "duplicate_item",
+              `Item ${String(index + 1)} repeats ${repeated.label}, move ${String(repeated.position)} of this set.`,
+              "Leave this item out; the set already carries that move. Propose a different move to extend the set.",
+            ),
+          );
+          continue;
+        }
         const firstIndex = firstIndexByKey.get(moveKey);
         if (firstIndex !== undefined) {
-          refusals.push({
-            index,
-            outcome: "refused",
-            refusal: "duplicate_item",
-            detail: `Item ${String(index + 1)} repeats item ${String(firstIndex + 1)} for the same team and players. Keep one of them.`,
-          });
+          refusals.push(
+            refusedItem(
+              index,
+              "duplicate_item",
+              `Item ${String(index + 1)} repeats item ${String(firstIndex + 1)} for the same team and players.`,
+              "Keep one of them, or change the players or bid so the moves differ.",
+            ),
+          );
           continue;
         }
         firstIndexByKey.set(moveKey, index);
@@ -473,58 +549,235 @@ export const TransactionProposalsLive = Layer.effect(
         });
       }
 
-      if (accepted.length === 0) {
+      const itemIds = yield* Effect.replicateEffect(accepted.length)(repository.newItemId);
+      const setId = existing?.set.id ?? (yield* repository.newSetId);
+      const candidateRecords = accepted.map((entry, index) => ({
+        entry,
+        record: commandRecord({
+          command: entry.command,
+          id: Array.getUnsafe(itemIds, index),
+          setId,
+          position: (existing?.items.length ?? 0) + index,
+          userId,
+          at: now,
+        }),
+      }));
+
+      const existingItems = existing?.items ?? [];
+      const combinedByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
+      for (const item of [...existingItems, ...candidateRecords.map((entry) => entry.record)]) {
+        const current = combinedByTeam.get(item.team) ?? [];
+        current.push(item);
+        combinedByTeam.set(item.team, current);
+      }
+      const checks = new Map<TeamId, TeamCheck>();
+      const existingChecks = new Map<TeamId, TeamCheck>();
+      for (const teamId of new Set(candidateRecords.map((entry) => entry.entry.team.id))) {
+        const items = combinedByTeam.get(teamId) ?? [];
+        const data = yield* loadTeamData(userId, teamsById.get(teamId), items);
+        checks.set(teamId, evaluateTeam(teamId, data, items, now));
+        if (existing !== undefined) {
+          existingChecks.set(
+            teamId,
+            evaluateTeam(
+              teamId,
+              data,
+              existingItems.filter((item) => item.team === teamId),
+              now,
+            ),
+          );
+        }
+      }
+      const changeByTeam = new Map(
+        [...checks.entries()].map(
+          ([teamId, check]) =>
+            [teamId, new Map(check.changes.map((change) => [change.id, change] as const))] as const,
+        ),
+      );
+
+      const acceptedCandidates: Array<{
+        readonly entry: AcceptedDraft;
+        readonly record: ProposalItemRecord;
+        readonly change: ProposalItemChange;
+      }> = [];
+      for (const candidate of candidateRecords) {
+        const change = changeByTeam.get(candidate.entry.team.id)?.get(candidate.record.id);
+        if (change === undefined) {
+          throw new Error("A declared proposal item was not checked");
+        }
+        if (change.staleness.status === "current") {
+          acceptedCandidates.push({ ...candidate, change });
+        } else {
+          refusals.push(refusalFromCheck(candidate.entry.index + 1, change));
+        }
+      }
+
+      const withdraw: Array<ProposalItemToWithdraw> = [];
+      if (existing !== undefined) {
+        for (const item of existingItems) {
+          const before = existingChecks
+            .get(item.team)
+            ?.changes.find((change) => change.id === item.id);
+          const after = changeByTeam.get(item.team)?.get(item.id);
+          if (
+            before?.staleness.status !== "current" ||
+            after === undefined ||
+            after.staleness.status === "current"
+          ) {
+            continue;
+          }
+          withdraw.push({
+            item: item.id,
+            team: item.team,
+            label: moveLabel(item),
+            detail: after.staleness.reasons.map((reason) => reason.detail).join(" "),
+          });
+        }
+      }
+      if (withdraw.length > 0 && existing !== undefined) {
         return yield* ProposalNothingAccepted.make({
           refusals,
-          detail:
-            "No item was accepted into a set, so no review was created. Fix the refused items and propose again.",
+          withdraw,
+          detail: `Nothing was stored. The moves added in this request make ${withdraw
+            .map((entry) => `item ${entry.item} (${entry.label})`)
+            .join(" and ")} impossible, so set ${existing.set.id} is unchanged. Withdraw ${
+            withdraw.length === 1 ? "that item" : "those items"
+          } with withdraw_transaction_proposal_items, then propose this addition again.`,
         });
       }
 
-      const now = yield* DateTime.now;
-      const client = decoded.client ?? undefined;
-      const created = yield* repository.create({
-        userId,
-        proposedBy: client === undefined ? proposer : { ...proposer, client },
-        fingerprintSource: accepted
-          .map((entry) => entry.key)
-          .sort()
-          .join("\n"),
-        teams: ownedTeams.map((team) => team.id),
-        items: accepted.map((entry) => entry.command),
-        at: now,
-      });
-      const recordsByKey = new Map(
-        created.items.map((item) => [recordItemKey(item), item] as const),
-      );
-      const outcomes: Array<ProposeTransactionsResult["items"][number]> = [];
-      for (const entry of accepted) {
-        const record = recordsByKey.get(entry.key);
-        if (record === undefined) {
-          throw new Error("A created proposal item is missing from the set");
-        }
-        outcomes.push({
-          index: entry.index,
-          outcome: "accepted",
-          item: yield* toItem(tokens, userId, entry.team, record, undefined, undefined, undefined),
+      if (acceptedCandidates.length === 0) {
+        return yield* ProposalNothingAccepted.make({
+          refusals,
+          withdraw: [],
+          detail:
+            existing === undefined
+              ? "No item can run against the set's end state, so no set was stored. Fix the refused items and propose again."
+              : `No item can run against this set's end state, so nothing was added to set ${existing.set.id}. Fix the refused items and propose again.`,
         });
       }
-      for (const refusal of refusals) {
-        outcomes.push(refusal);
+
+      const orderedChecks = [...checks.values()];
+      const orders = yield* storedOrders(existing?.set.orders ?? [], orderedChecks);
+      const existingIds = new Set(existingItems.map((item) => item.id));
+      const storedChanges = orderedChecks.flatMap((check) =>
+        check.changes.filter((change) => existingIds.has(change.id)),
+      );
+      const storedTeams = [
+        ...new Set([...(existing?.set.teams ?? []), ...ownedTeams.map((team) => team.id)]),
+      ];
+      const storeItems = acceptedCandidates.map((candidate) => ({
+        id: candidate.record.id,
+        command: {
+          ...candidate.entry.command,
+          adds: candidate.change.adds,
+          drops: candidate.change.drops,
+        },
+        check: candidate.change.staleness,
+        reserveMove: candidate.change.reserveMove,
+      }));
+
+      let currentSet: ProposalSetRecord;
+      let created = false;
+      let extended = false;
+      let stored: ReadonlyArray<ProposalItemRecord>;
+      if (existing === undefined) {
+        const createdResult = yield* repository.create({
+          userId,
+          setId,
+          proposedBy:
+            decoded.client === undefined || decoded.client === null
+              ? proposer
+              : { ...proposer, client: decoded.client },
+          fingerprintSource: acceptedCandidates
+            .map((candidate) => candidate.entry.key)
+            .sort()
+            .join("\n"),
+          teams: ownedTeams.map((team) => team.id),
+          items: storeItems,
+          orders,
+          at: now,
+        });
+        currentSet = createdResult.set;
+        created = createdResult.created;
+        stored = createdResult.items;
+      } else {
+        const appended = yield* repository.append({
+          userId,
+          setId: existing.set.id,
+          teams: storedTeams,
+          items: storeItems,
+          changes: storedChanges,
+          orders,
+          at: now,
+        });
+        if (appended === undefined) {
+          const latest = yield* repository.load(userId, existing.set.id);
+          if (latest?.set.submittedAt !== undefined) {
+            return yield* ProposalSetAlreadySubmitted.make({
+              set: latest.set.id,
+              submittedAt: latest.set.submittedAt,
+            });
+          }
+          return yield* ProposalSetExpired.make({
+            set: existing.set.id,
+            expiresAt: existing.set.expiresAt,
+          });
+        }
+        currentSet = existing.set;
+        extended = true;
+        stored = appended;
       }
-      outcomes.sort((left, right) => left.index - right.index);
+
+      const storedById = new Map(stored.map((item) => [item.id, item] as const));
+      const storedByKey = new Map(stored.map((item) => [recordItemKey(item), item] as const));
+      const items: Array<ProposeTransactionsResult["items"][number]> = [];
+      for (const candidate of acceptedCandidates) {
+        const record = storedById.get(candidate.record.id) ?? storedByKey.get(candidate.entry.key);
+        if (record === undefined) {
+          throw new Error("A stored proposal item is missing from the set");
+        }
+        const team = teamsById.get(record.team);
+        if (team === undefined) {
+          throw new Error("A stored proposal item names a team this account does not have");
+        }
+        items.push({
+          position: candidate.entry.index + 1,
+          outcome: "accepted",
+          item: yield* toItem(
+            tokens,
+            userId,
+            team,
+            record,
+            checks.get(record.team)?.facts,
+            record.reserveMove,
+            undefined,
+          ),
+        });
+      }
+      const refusedNote =
+        refusals.length === 0
+          ? ""
+          : ` ${String(refusals.length)} item${refusals.length === 1 ? " could" : "s could"} not run and ${refusals.length === 1 ? "was" : "were"} not stored; each refusal gives its position, the reason, and what would make it valid.`;
+      const detail =
+        existing === undefined
+          ? created
+            ? `Created proposal set ${currentSet.id} with ${String(items.length)} item${items.length === 1 ? "" : "s"}.${refusedNote} It is ready for the review screen; nothing has been sent to the provider.`
+            : `This exact set was already proposed as ${currentSet.id}. The existing set is returned instead of a duplicate; nothing has been sent to the provider.${refusedNote}`
+          : `Appended ${String(items.length)} item${items.length === 1 ? "" : "s"} to proposal set ${currentSet.id}.${refusedNote} The whole set was validated again and its order recomputed; nothing has been sent to the provider.`;
       yield* Effect.annotateCurrentSpan({
-        "proposal.set_created": created.created,
-        "proposal.items": accepted.length,
+        "proposal.set_created": created,
+        "proposal.set_extended": extended,
+        "proposal.items": items.length,
         "proposal.items_refused": refusals.length,
       });
       return yield* Schema.decodeEffect(ProposeTransactionsResultSchema)({
-        set: toSet(created.set, now),
-        created: created.created,
-        items: outcomes,
-        detail: created.created
-          ? `Created proposal set ${created.set.id} with ${String(accepted.length)} item${accepted.length === 1 ? "" : "s"}. It is ready for the review screen; nothing has been sent to the provider.`
-          : `This exact set was already proposed as ${created.set.id}. The existing set is returned instead of a duplicate; nothing has been sent to the provider.`,
+        set: toSet(currentSet, now),
+        created,
+        extended,
+        items,
+        refused: [...refusals].sort((left, right) => left.position - right.position),
+        detail,
       }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
     });
 
@@ -610,6 +863,123 @@ export const TransactionProposalsLive = Layer.effect(
         now,
         checkedByTeam,
         offersByTeam,
+      );
+    });
+
+    const withdrawItems: TransactionProposals["Service"]["withdrawItems"] = Effect.fn(
+      "TransactionProposals.withdrawItems",
+    )(function* (userId: UserId, input) {
+      const decoded = yield* Schema.decodeEffect(WithdrawProposalItemsInput)(input).pipe(
+        Effect.mapError(() => ProposalContentInvalid.make({ detail: withdrawInvalidDetail })),
+      );
+      const now = yield* DateTime.now;
+      const loaded = yield* repository.load(userId, decoded.set);
+      if (loaded === undefined) {
+        return yield* ProposalSetNotFound.make({ set: decoded.set });
+      }
+      if (loaded.set.submittedAt !== undefined) {
+        return yield* ProposalSetAlreadySubmitted.make({
+          set: loaded.set.id,
+          submittedAt: loaded.set.submittedAt,
+        });
+      }
+      if (isExpired(loaded.set, now)) {
+        return yield* ProposalSetExpired.make({
+          set: loaded.set.id,
+          expiresAt: loaded.set.expiresAt,
+        });
+      }
+      const requested = [...new Set(decoded.items)];
+      const byId = new Map(loaded.items.map((item) => [item.id, item] as const));
+      const refusals: Array<ProposalItemWithdrawalRefusal> = [];
+      for (const itemId of requested) {
+        const item = byId.get(itemId);
+        if (item === undefined) {
+          refusals.push({
+            item: itemId,
+            detail:
+              "This move does not belong to the set. Read the set again and name a move it contains.",
+          });
+          continue;
+        }
+        if (item.state !== "proposed") {
+          refusals.push({
+            item: itemId,
+            state: item.state,
+            detail: `This move is ${item.state} and can no longer be withdrawn. ${withdrawalStateDetail(item.state)}`,
+          });
+        }
+      }
+      if (refusals.length > 0) {
+        return yield* ProposalItemsNotWithdrawable.make({
+          items: refusals,
+          detail: "Nothing was withdrawn. Fix the refused moves and withdraw again.",
+        });
+      }
+
+      const remove = new Set(requested);
+      const remaining = loaded.items.filter((item) => !remove.has(item.id));
+      const teams = yield* repository.loadTeams(userId, loaded.set.teams);
+      const teamsById = new Map(teams.map((team) => [team.id, team] as const));
+      const remainingByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
+      for (const item of remaining) {
+        const current = remainingByTeam.get(item.team) ?? [];
+        current.push(item);
+        remainingByTeam.set(item.team, current);
+      }
+      const affectedTeams = [...new Set(requested.map((itemId) => byId.get(itemId)?.team))].flatMap(
+        (team) =>
+          team === undefined || (remainingByTeam.get(team)?.length ?? 0) === 0 ? [] : [team],
+      );
+      const checks = yield* Effect.forEach(
+        affectedTeams,
+        (teamId) =>
+          checkTeam(userId, teamId, teamsById.get(teamId), remainingByTeam.get(teamId) ?? [], now),
+        { concurrency: 3 },
+      );
+      const changes = checks.flatMap((check) => check.changes);
+      const orders = yield* storedOrders(loaded.set.orders, checks);
+      const keptOrders = orders.filter(
+        (entry) => (remainingByTeam.get(entry.team)?.length ?? 0) > 0,
+      );
+      const saved = yield* repository.withdraw({
+        userId,
+        setId: loaded.set.id,
+        remove: requested,
+        changes,
+        orders: keptOrders,
+        at: now,
+      });
+      if (saved === undefined) {
+        const latest = yield* repository.load(userId, loaded.set.id);
+        if (latest?.set.submittedAt !== undefined) {
+          return yield* ProposalSetAlreadySubmitted.make({
+            set: latest.set.id,
+            submittedAt: latest.set.submittedAt,
+          });
+        }
+        return yield* ProposalSetExpired.make({
+          set: loaded.set.id,
+          expiresAt: loaded.set.expiresAt,
+        });
+      }
+      const savedById = new Map(saved.map((item) => [item.id, item] as const));
+      const items = remaining.map((item) => savedById.get(item.id) ?? item);
+      const checkedByTeam = new Map(checks.map((check) => [check.team, check] as const));
+      yield* Effect.annotateCurrentSpan({
+        "proposal.items_withdrawn": requested.length,
+        "proposal.items_remaining": items.length,
+        "proposal.teams_checked": checks.length,
+      });
+      return yield* buildReview(
+        tokens,
+        userId,
+        teams,
+        { ...loaded.set, orders: keptOrders },
+        items,
+        loaded.steps,
+        now,
+        checkedByTeam,
       );
     });
 
@@ -1536,6 +1906,7 @@ export const TransactionProposalsLive = Layer.effect(
     return TransactionProposals.of({
       propose,
       revalidate,
+      withdrawItems,
       read,
       submit,
       readPendingOffers,
@@ -1583,6 +1954,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_state_unavailable",
                 `Item ${String(candidate.index + 1)} cannot be checked because ${queryFailureDetail(context.failure)}`,
+                "Read the team, the league, and both rosters again, then propose the trade.",
               ),
             });
           }
@@ -1636,6 +2008,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_state_unavailable",
                 `Item ${String(candidate.index + 1)} cannot be checked against the provider (${failure}).`,
+                "Read the team, the league, and both rosters again, then propose the trade.",
               ),
             });
           }
@@ -1681,6 +2054,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_counterparty_invalid",
                 `Item ${String(candidate.index + 1)} names a counterparty that is not another team in this league.`,
+                "Read this league's teams again and name another team in the same league as the counterparty.",
               ),
             });
             continue;
@@ -1692,7 +2066,8 @@ export const TransactionProposalsLive = Layer.effect(
               refusal: tradeRefusal(
                 candidate.index,
                 "trade_counterparty_invalid",
-                `Item ${String(candidate.index + 1)} names a counterparty in another league. Read this league's teams and name one of them.`,
+                `Item ${String(candidate.index + 1)} names a counterparty in another league.`,
+                "Read this league's teams again and name another team in the same league as the counterparty.",
               ),
             });
             continue;
@@ -1704,6 +2079,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_state_unavailable",
                 `Item ${String(candidate.index + 1)} cannot be checked because the league publishes no trade end date or current date.`,
+                "Read the league again; a trade cannot be checked until the provider publishes both dates.",
               ),
             });
             continue;
@@ -1715,6 +2091,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_window_closed",
                 `Item ${String(candidate.index + 1)} cannot be proposed because the league's trade window closed on ${league.tradeEndDate}.`,
+                "Wait for the league's next trade window and propose the trade then.",
               ),
             });
             continue;
@@ -1727,6 +2104,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_state_unavailable",
                 `Item ${String(candidate.index + 1)} cannot be checked because the counterparty's roster could not be read.`,
+                "Read the league's teams and the counterparty's roster again, then propose the trade.",
               ),
             });
             continue;
@@ -1744,6 +2122,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_player_not_rostered",
                 `Item ${String(candidate.index + 1)} sends a player who is not on this team's roster.`,
+                "Read this team's roster again and name only a player the provider still lists on it.",
               ),
             });
             continue;
@@ -1756,6 +2135,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_player_not_rostered",
                 `Item ${String(candidate.index + 1)} asks for a player who is not on ${counterparty.name}'s roster.`,
+                "Read both rosters again and name only players the provider still lists on the team they would leave.",
               ),
             });
             continue;
@@ -1784,32 +2164,27 @@ export const TransactionProposalsLive = Layer.effect(
       });
     }
 
-    function checkTeam(
+    function loadTeamData(
       userId: UserId,
-      teamId: TeamId,
       team: ProposalTeamRecord | undefined,
       items: ReadonlyArray<ProposalItemRecord>,
-      at: DateTime.Utc,
-    ): Effect.Effect<TeamCheck> {
+    ): Effect.Effect<TeamData> {
       return Effect.gen(function* () {
         if (team === undefined) {
-          return failedCheck(
-            teamId,
-            items,
-            "Current state could not be read: this team is no longer linked to the account.",
-            at,
-          );
+          return {
+            status: "failed",
+            detail:
+              "Current state could not be read: this team is no longer linked to the account.",
+          } satisfies TeamData;
         }
         const loaded = yield* Effect.result(
           loadTeamContext(queries, encryption, registry, userId, team.id),
         );
         if (loaded._tag === "Failure") {
-          return failedCheck(
-            teamId,
-            items,
-            `Current state could not be read: ${queryFailureDetail(loaded.failure)}`,
-            at,
-          );
+          return {
+            status: "failed",
+            detail: `Current state could not be read: ${queryFailureDetail(loaded.failure)}`,
+          } satisfies TeamData;
         }
         const context = loaded.success;
         const league = yield* Effect.result(
@@ -1820,7 +2195,10 @@ export const TransactionProposalsLive = Layer.effect(
           }),
         );
         if (league._tag === "Failure") {
-          return yield* providerFailedCheck(userId, context, items, league.failure._tag, at);
+          return {
+            status: "failed",
+            detail: yield* providerFailureDetail(userId, context, league.failure._tag),
+          } satisfies TeamData;
         }
         const settings = league.success;
         const addKeys = [
@@ -1934,13 +2312,22 @@ export const TransactionProposalsLive = Layer.effect(
             concurrency: "unbounded",
           });
         if (rosterResult._tag === "Failure") {
-          return yield* providerFailedCheck(userId, context, items, rosterResult.failure._tag, at);
+          return {
+            status: "failed",
+            detail: yield* providerFailureDetail(userId, context, rosterResult.failure._tag),
+          } satisfies TeamData;
         }
         if (teamsResult._tag === "Failure") {
-          return yield* providerFailedCheck(userId, context, items, teamsResult.failure._tag, at);
+          return {
+            status: "failed",
+            detail: yield* providerFailureDetail(userId, context, teamsResult.failure._tag),
+          } satisfies TeamData;
         }
         if (detailsResult._tag === "Failure") {
-          return yield* providerFailedCheck(userId, context, items, detailsResult.failure._tag, at);
+          return {
+            status: "failed",
+            detail: yield* providerFailureDetail(userId, context, detailsResult.failure._tag),
+          } satisfies TeamData;
         }
         const facts: TeamFacts = {
           league: settings,
@@ -1956,39 +2343,63 @@ export const TransactionProposalsLive = Layer.effect(
             ),
           ),
         };
-        const budget = budgetOf(facts, items);
-        const changes = items.map((item) => evaluateItem(item, facts, budget, at, feed));
-        const plan = orderFor(facts, items, changes);
-        const ordered = orderChanges(changes, items, plan, at);
-        const order = publishedOrder(plan.plan, items, ordered);
         return {
-          team: teamId,
-          ...(budget === undefined ? {} : { budget }),
+          status: "ready",
           facts,
           context,
-          ...(feed === undefined ? {} : { tradeFeed: feed }),
-          changes: ordered,
-          ...(order === undefined ? {} : { order }),
-        };
+          tradeFeed: feed,
+        } satisfies TeamData;
       });
     }
 
-    function providerFailedCheck(
+    function providerFailureDetail(
       userId: UserId,
       context: TeamContext,
-      items: ReadonlyArray<ProposalItemRecord>,
       failure: string,
+    ): Effect.Effect<string> {
+      const detail = `Current state could not be read: a provider read failed (${failure}).`;
+      return failure === "provider.session_rejected"
+        ? queries.recordSessionRejected(userId, context.owned).pipe(Effect.as(detail))
+        : Effect.succeed(detail);
+    }
+
+    function evaluateTeam(
+      teamId: TeamId,
+      data: TeamData,
+      items: ReadonlyArray<ProposalItemRecord>,
+      at: DateTime.Utc,
+    ): TeamCheck {
+      if (data.status === "failed") {
+        return failedCheck(teamId, items, data.detail, at);
+      }
+      const budget = budgetOf(data.facts, items);
+      const changes = items.map((item) =>
+        evaluateItem(item, data.facts, budget, at, data.tradeFeed),
+      );
+      const plan = orderFor(data.facts, items, changes);
+      const ordered = orderChanges(changes, items, plan, at);
+      const order = publishedOrder(plan.plan, items, ordered);
+      return {
+        team: teamId,
+        ...(budget === undefined ? {} : { budget }),
+        facts: data.facts,
+        context: data.context,
+        ...(data.tradeFeed === undefined ? {} : { tradeFeed: data.tradeFeed }),
+        changes: ordered,
+        ...(order === undefined ? {} : { order }),
+      };
+    }
+
+    function checkTeam(
+      userId: UserId,
+      teamId: TeamId,
+      team: ProposalTeamRecord | undefined,
+      items: ReadonlyArray<ProposalItemRecord>,
       at: DateTime.Utc,
     ): Effect.Effect<TeamCheck> {
-      const failed = failedCheck(
-        context.owned.team.id,
-        items,
-        `Current state could not be read: a provider read failed (${failure}).`,
-        at,
+      return loadTeamData(userId, team, items).pipe(
+        Effect.map((data) => evaluateTeam(teamId, data, items, at)),
       );
-      return failure === "provider.session_rejected"
-        ? queries.recordSessionRejected(userId, context.owned).pipe(Effect.as(failed))
-        : Effect.succeed(failed);
     }
   }),
 );
@@ -2812,9 +3223,10 @@ function tradeWindowClosed(league: ProviderLeagueSettings): boolean {
 function tradeRefusal(
   index: number,
   refusal: ProposalItemRefused["refusal"],
-  detail: string,
+  reason: string,
+  fix: string,
 ): ProposalItemRefused {
-  return { index, outcome: "refused", refusal, detail };
+  return { position: index + 1, outcome: "refused", refusal, reason, fix };
 }
 
 function proposalPlayerOf(player: ProviderRoster["players"][number]): StoredProposalPlayer {
@@ -3063,6 +3475,115 @@ function recordItemKey(item: ProposalItemRecord): string {
     bid: item.bid,
     reason: item.reason,
   });
+}
+
+function recordMoveKey(item: ProposalItemRecord): string {
+  return proposalMoveKey(
+    item.team,
+    item.kind,
+    item.counterpartyKey,
+    item.adds.map((add) => add.key),
+    item.drops.map((drop) => drop.key),
+    item.slotMove === undefined
+      ? undefined
+      : { player: item.slotMove.playerKey, toSlot: item.slotMove.toSlot },
+    item.bid,
+  );
+}
+
+function refusedItem(
+  index: number,
+  refusal: ProposalItemRefusal,
+  reason: string,
+  fix: string,
+): ProposalItemRefused {
+  return { position: index + 1, outcome: "refused", refusal, reason, fix };
+}
+
+function refusalFromCheck(position: number, change: ProposalItemChange): ProposalItemRefused {
+  const reasons = change.staleness.reasons;
+  const first = reasons[0];
+  return {
+    position,
+    outcome: "refused",
+    refusal: first?.code ?? "state_unavailable",
+    reason:
+      reasons.length === 0
+        ? "This move cannot run against the set's end state."
+        : reasons.map((reason) => reason.detail).join(" "),
+    fix:
+      reasons.length === 0
+        ? staleFix("state_unavailable")
+        : [...new Set(reasons.map((reason) => staleFix(reason.code)))].join(" "),
+  };
+}
+
+function staleFix(code: ProposalStaleCode): string {
+  switch (code) {
+    case "player_unavailable":
+      return "Read the player pool again and name a player the provider still publishes as available; a player already rostered in this league cannot be added.";
+    case "drop_not_rostered":
+      return "Read this team's roster again and name only a player the provider still lists on it.";
+    case "move_not_rostered":
+      return "Read this team's roster again and name a player the provider still lists on it.";
+    case "move_slot_unknown":
+      return "Read the league again and name a slot it declares.";
+    case "roster_full":
+      return "Add the drop or slot move that frees a roster place to this set, then propose again.";
+    case "slot_illegal":
+      return "Make the named player's slot legal: move them at the provider, or propose a slot move or drop that opens a slot accepting them.";
+    case "order_conflict":
+      return "Withdraw or change one of the named moves so the team has a legal order, then propose again.";
+    case "order_unresolved":
+      return "Split this team's moves into smaller sets and propose them separately.";
+    case "period_closed":
+      return "Wait for the league's next period and propose again.";
+    case "bid_exceeds_budget":
+      return "Lower the bid to the team's remaining FAAB balance or less, then propose again.";
+    case "bid_not_available":
+      return "Remove the bid; this league does not use a FAAB budget.";
+    case "state_unavailable":
+      return "Read the team, roster, and league again; the provider did not publish the state this move needs.";
+    case "trade_window_closed":
+      return "Wait for the league's next trade window and propose the trade then.";
+    case "trade_counterparty_missing":
+      return "Read the league's teams again and name a counterparty that is still in the league.";
+    case "trade_player_not_rostered":
+      return "Read both rosters again and name only players the provider still lists on the team they would leave.";
+  }
+}
+
+function commandRecord(input: {
+  readonly command: ProposalItemCommand;
+  readonly id: ProposalItemRecord["id"];
+  readonly setId: ProposalSetRecord["id"];
+  readonly position: number;
+  readonly userId: UserId;
+  readonly at: DateTime.Utc;
+}): ProposalItemRecord {
+  const command = input.command;
+  return {
+    id: input.id,
+    setId: input.setId,
+    position: input.position,
+    userId: input.userId,
+    team: command.team,
+    connection: command.connection,
+    kind: command.kind,
+    adds: command.adds,
+    drops: command.drops,
+    ...(command.slotMove === undefined ? {} : { slotMove: command.slotMove }),
+    ...(command.counterpartyKey === undefined ? {} : { counterpartyKey: command.counterpartyKey }),
+    ...(command.counterpartyName === undefined
+      ? {}
+      : { counterpartyName: command.counterpartyName }),
+    ...(command.bid === undefined ? {} : { bid: command.bid }),
+    reason: command.reason,
+    state: "proposed",
+    staleness: currentCheck(input.at),
+    createdAt: input.at,
+    updatedAt: input.at,
+  };
 }
 
 function toSet(set: ProposalSetRecord, now: DateTime.Utc): ProposalSet {
@@ -3431,6 +3952,29 @@ function stoppedDetailFor(
     case "skipped":
     case "executed":
       return "Not attempted because an earlier move on this team did not complete.";
+  }
+}
+
+function withdrawalStateDetail(state: ProposalItemState): string {
+  switch (state) {
+    case "proposed":
+      return "It is still open.";
+    case "executed":
+      return "It has already run.";
+    case "pending":
+      return "It is waiting on the provider or the other manager.";
+    case "failed":
+      return "It was attempted and failed; its outcome is part of the record.";
+    case "skipped":
+      return "It was submitted and skipped; its outcome is part of the record.";
+    case "unknown":
+      return "It may or may not have run and is never retried automatically.";
+    case "accepted":
+      return "The other manager accepted it, so it is no longer open.";
+    case "withdrawn":
+      return "It was already withdrawn.";
+    case "expired":
+      return "The provider expired it, so it is no longer open.";
   }
 }
 

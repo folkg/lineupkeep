@@ -93,11 +93,11 @@ spends the smallest allowance, a `readOnlyHint: true` tool spends the generous o
 spends the write allowance. An unannotated tool defaults to destructive, so forgetting to describe a
 new tool bounds it more tightly rather than leaving it unlimited.
 
-| Class         | Tools                                                                                                   | Window | Per client | Per owner |
-| ------------- | ------------------------------------------------------------------------------------------------------- | ------ | ---------- | --------- |
-| `read`        | every `readOnlyHint: true` tool, including the summaries, searches, and proposal read-back              | 1 min  | 60         | 180       |
-| `write`       | `submit_feedback`, `propose_transactions`, `revalidate_transaction_proposal_set`, `set_team_automation` | 1 hour | 20         | 60        |
-| `destructive` | `set_lineup`                                                                                            | 1 hour | 6          | 18        |
+| Class         | Tools                                                                                                                                          | Window | Per client | Per owner |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | --------- |
+| `read`        | every `readOnlyHint: true` tool, including the summaries, searches, and proposal read-back                                                     | 1 min  | 60         | 180       |
+| `write`       | `submit_feedback`, `propose_transactions`, `revalidate_transaction_proposal_set`, `withdraw_transaction_proposal_items`, `set_team_automation` | 1 hour | 20         | 60        |
+| `destructive` | `set_lineup`                                                                                                                                   | 1 hour | 6          | 18        |
 
 The numbers are a product judgement, not a measurement. A polling agent reading a team summary a few
 times a minute uses well under a tenth of the read allowance; 60 reads a minute still lets one client
@@ -696,10 +696,13 @@ A coverage entry has one of three states. `available` means the resource was rea
 ## Transaction proposals
 
 `propose_transactions` stores what an agent proposes; it writes nothing to the provider. Before it
-returns, it reads current state once per team, the same check `revalidate_transaction_proposal_set`
-performs, so each accepted item comes back `current`, `stale`, or `illegal` with the reasons instead
-of an unchecked promise. One call covers every team the account has, and the set it creates is grouped by
-team, so teams with nothing proposed still appear as an empty section on the review. Each item names
+stores anything, it reads current state once per team the request touches and validates every declared
+item against the set's end state, the roster projected through the order the set would run. An item
+that cannot run is never stored: it is returned in `refused` with its 1-based position in the request,
+a plain reason, and what would make it valid, while the valid items in the same call are stored as
+usual. When no item can run, the call refuses and stores nothing. One call covers every team the
+account has, and the set is grouped by team, so teams with nothing proposed still appear as an empty
+section on the review. Each item names
 one team, a kind (`free_agent_add`, `waiver_claim`, `drop`, `slot_move`, or `trade`), the players to
 add and drop or the player and destination slot of a slot move, an optional FAAB bid, and a required
 reason. A slot move names one rostered player and one slot the league declares, into a reserve list
@@ -723,7 +726,17 @@ outcome by position: accepted with its stored state, or refused with a code and 
 names the item. A reference from another account or league, a team the account does not have, a
 player named in both adds and drops, a kind and bid that disagree, or the same move repeated are
 refused and named. Repeating the identical set returns the existing set with `created: false`
-rather than stacking a duplicate.
+rather than stacking a duplicate. Once a set is extended or a stored move is withdrawn, its contents
+no longer match the original request, so proposing the original items again creates a new set.
+
+Passing `set` appends the items after an existing set that has not been submitted. Every team that
+receives an item is validated again with its existing items as one set against the league's slots,
+and that team's stored order is recomputed. If an added item makes an existing item impossible, nothing is stored; the refusal names
+the existing item to withdraw. `withdraw_transaction_proposal_items` takes a set and one to twenty
+item ids, removes them, revalidates the remaining moves as a set, and returns the set with its new
+order and review link. Removing the last move for a team is allowed. A move that already ran or is
+otherwise settled cannot be withdrawn, and a submitted set is an audit record and refuses both new
+moves and withdrawals.
 
 A set expires 24 hours after creation. `revalidate_transaction_proposal_set` re-reads current state
 once per team (its roster, its league rules, the pool state of the players it adds, and its FAAB
@@ -758,8 +771,10 @@ published sequence, because it changes no roster until the other manager accepts
 re-checked against both
 rosters, the counterparty's continuing place in the league, and the trade window, and carries its
 current state back to the review. Staleness and illegality are recorded beside the item's state and
-are never failures; an item stays `proposed`. A team whose state cannot be read marks only its own
-items, and the review reports the failure beside that team. An expired set refuses re-validation
+are never failures; an item stays `proposed`. A set stores only moves that passed the check when they
+were proposed, so a fresh set is current; a later check can still make a stored move stale. A team
+whose state cannot be read marks only its own items, and the review reports the failure beside that
+team. An expired set refuses re-validation
 instead of re-checking or executing, so a set that sat overnight cannot be executed from facts nobody
 re-checked. `get_transaction_proposal_set` reads the set back with every team, including the teams
 that had nothing proposed, each item's state, last check, each team's planned `order` with its
@@ -820,6 +835,7 @@ lacking a scope a different tool needs, does not change whether a call succeeds.
 | `propose_transactions`                | `transactions:review` |
 | `get_transaction_proposal_set`        | `transactions:review` |
 | `revalidate_transaction_proposal_set` | `transactions:review` |
+| `withdraw_transaction_proposal_items` | `transactions:review` |
 | `set_lineup`                          | `lineups:write`       |
 | `set_team_automation`                 | `teams:manage`        |
 | `add_team_agent_note`                 | `notes:write`         |
@@ -834,8 +850,8 @@ Five resource scopes cover the surface, and each exists because a tool needs exa
   scopes. It also covers a lineup run's status, because a run read is a read, and feedback
   submission and read-back, because reporting a problem must stay possible under the scope every
   client holds and it writes only the acting account's own report.
-- `transactions:review` stages proposals, reads them back, and revalidates them. It writes
-  nothing to the provider and submits nothing.
+- `transactions:review` stages proposals, reads them back, revalidates them, and withdraws stored
+  moves before submission. It writes nothing to the provider and submits nothing.
 - `lineups:write` is the roster mutation: `set_lineup` and only `set_lineup`. A lineup change and
   a transaction submission are not the same risk, so they are not the same scope.
 - `teams:manage` changes team-level state the owner keeps in Lineupgrade: automation enrollment,

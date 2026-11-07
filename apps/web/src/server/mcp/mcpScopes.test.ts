@@ -45,6 +45,7 @@ it("spends a declared allowance on every shipped tool, smallest for the destruct
     "revalidate_transaction_proposal_set",
     "set_team_automation",
     "submit_feedback",
+    "withdraw_transaction_proposal_items",
   ]);
   expect(
     toolClasses

@@ -820,6 +820,8 @@ function callArguments(tool: string, team: string): Record<string, unknown> {
     case "get_transaction_proposal_set":
     case "revalidate_transaction_proposal_set":
       return { set: randomUUID() };
+    case "withdraw_transaction_proposal_items":
+      return { set: randomUUID(), items: [randomUUID()] };
     case "get_pending_trade_offers":
       return { team: randomUUID() };
     case "set_lineup":

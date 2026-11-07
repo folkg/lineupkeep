@@ -20,6 +20,10 @@ import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
 import { TransactionProposalRepository } from "./internal/TransactionProposalRepository.ts";
 import { TransactionProposalsLive } from "./internal/TransactionProposalsLive.ts";
+import {
+  transactionProposalItems,
+  transactionProposalSets,
+} from "./internal/TransactionProposalTables.ts";
 import type {
   ProviderLeagueSettings,
   ProviderLeagueTeam,
@@ -36,6 +40,7 @@ import type { CounterpartyRef, PlayerRef } from "./QueryValues.ts";
 import {
   ProposalContentInvalid,
   ProposalItemDraft,
+  ProposalItemsNotWithdrawable,
   ProposalSetAlreadySubmitted,
   ProposalSetExpired,
   ProposalSetNotFound,
@@ -44,75 +49,60 @@ import {
   proposalSetLifetimeMillis,
 } from "./TransactionProposals.ts";
 
-it.effect("stores an owner-scoped proposal set without contacting the provider", () =>
+it.effect("stores an owner-scoped proposal set after checking it against current state", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
     const tokens = yield* QueryTokens;
-    const seeded = yield* seed(fake, [
-      team("nhl.l.1.t.1", "Red Line"),
-      team("nhl.l.2.t.1", "Blue Line"),
-      team("nfl.l.3.t.1", "Grid", "nfl"),
-    ]);
-    yield* fake.unsupportedOperations([
-      "read_league",
-      "read_roster",
-      "read_player_details",
-      "read_league_teams",
-      "read_transactions",
-      "read_pending_trades",
-    ]);
+    const seeded = yield* seed(
+      fake,
+      [
+        team("nhl.l.1.t.1", "Red Line"),
+        team("nhl.l.1.t.2", "Blue Line"),
+        team("nhl.l.1.t.3", "Grid"),
+      ],
+      { playerDetails },
+    );
 
     const result = yield* proposals.propose(owner, proposer, {
       items: [
         {
           team: teamId(seeded, "nhl.l.1.t.1"),
           kind: "free_agent_add",
-          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
-          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
           reason: "Cover the light night at center.",
-        },
-        {
-          team: teamId(seeded, "nhl.l.2.t.1"),
-          kind: "waiver_claim",
-          adds: yield* refs(tokens, "nhl.l.2", ["nhl.p.90003"]),
-          drops: [],
-          bid: 0,
-          reason: "Win the wing before the weekend with a zero bid.",
         },
       ],
     });
 
     assert.isTrue(result.created);
+    assert.isFalse(result.extended);
     assert.strictEqual(result.set.expired, false);
     assert.strictEqual(result.set.proposedBy.kind, "agent");
     assert.strictEqual(result.set.proposedBy.surface, "mcp");
     assert.strictEqual(result.set.reviewPath, `/transactions/${result.set.id}`);
-    assert.deepStrictEqual(
-      result.items.map((item) => item.outcome),
-      ["accepted", "accepted"],
-    );
+    assert.deepStrictEqual(result.refused, []);
+    assert.strictEqual(result.items.length, 1);
     const first = result.items[0];
+    assert.strictEqual(first?.position, 1);
     assert.strictEqual(first?.outcome, "accepted");
-    if (first?.outcome === "accepted") {
+    if (first !== undefined) {
       assert.strictEqual(first.item.state, "proposed");
-      assert.deepStrictEqual(first.item.staleness, { status: "unchecked", reasons: [] });
+      assert.strictEqual(first.item.staleness.status, "current");
+      assert.isDefined(first.item.staleness.checkedAt);
       assert.strictEqual(first.item.bid, undefined);
-    }
-    const second = result.items[1];
-    if (second?.outcome === "accepted") {
-      assert.strictEqual(second.item.bid, 0);
-      assert.strictEqual(second.item.kind, "waiver_claim");
+      assert.strictEqual(first.item.adds[0]?.name, "Pool Forward");
     }
 
-    assert.deepStrictEqual(yield* fake.rosterPeriods, []);
+    assert.deepStrictEqual(yield* fake.rosterPeriods, [undefined]);
     assert.strictEqual(yield* fake.nativeCallCount, 0);
     assert.strictEqual(yield* fake.explicitCallCount, 0);
 
     const review = yield* proposals.read(owner, { set: result.set.id });
     assert.deepStrictEqual(
       Object.fromEntries(review.teams.map((entry) => [entry.team.name, entry.items.length])),
-      { Grid: 0, "Red Line": 1, "Blue Line": 1 },
+      { Grid: 0, "Blue Line": 0, "Red Line": 1 },
     );
 
     const foreign = yield* Effect.flip(proposals.read(other, { set: result.set.id }));
@@ -125,8 +115,8 @@ it.effect("refuses an empty set, names a refused item, and is idempotent", () =>
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
     const tokens = yield* QueryTokens;
-    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")]);
-    const add = yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]);
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], { playerDetails });
+    const add = yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]);
 
     const empty = yield* Effect.flip(proposals.propose(owner, proposer, { items: [] }));
     assert.strictEqual(empty._tag, "proposal.content_invalid");
@@ -154,14 +144,26 @@ it.effect("refuses an empty set, names a refused item, and is idempotent", () =>
     assert.strictEqual(nothing._tag, "proposal.nothing_accepted");
     if (nothing._tag === "proposal.nothing_accepted") {
       assert.deepStrictEqual(
-        nothing.refusals.map((refusal) => [refusal.index, refusal.refusal]),
+        nothing.refusals.map((refusal) => [refusal.position, refusal.refusal]),
         [
-          [0, "team_not_owned"],
           [1, "team_not_owned"],
+          [2, "team_not_owned"],
         ],
       );
-      assert.include(nothing.refusals[0]?.detail, "Item 1");
+      assert.include(nothing.refusals[0]?.reason, "Item 1");
+      assert.isNotEmpty(nothing.refusals[0]?.fix ?? "");
     }
+    const database = yield* ConnectionsDatabase;
+    assert.strictEqual(
+      (yield* database.select({ id: transactionProposalSets.id }).from(transactionProposalSets))
+        .length,
+      0,
+    );
+    assert.strictEqual(
+      (yield* database.select({ id: transactionProposalItems.id }).from(transactionProposalItems))
+        .length,
+      0,
+    );
 
     const first = yield* proposals.propose(owner, proposer, {
       items: [
@@ -188,6 +190,7 @@ it.effect("refuses an empty set, names a refused item, and is idempotent", () =>
 
     assert.isTrue(first.created);
     assert.isFalse(repeated.created);
+    assert.isFalse(repeated.extended);
     assert.strictEqual(repeated.set.id, first.set.id);
     assert.include(repeated.detail, "already proposed");
 
@@ -223,177 +226,194 @@ it.effect("refuses an empty set, names a refused item, and is idempotent", () =>
         },
       ],
     });
-    assert.deepStrictEqual(
-      duplicated.items.map((item) => item.outcome),
-      ["accepted", "refused"],
-    );
-    const refused = duplicated.items[1];
-    if (refused?.outcome === "refused") {
-      assert.strictEqual(refused.refusal, "duplicate_item");
-      assert.include(refused.detail, "Item 2");
-    }
-  }).pipe(Effect.provide(TestLayer)),
-);
-
-it.effect("marks each item current or stale with a reason in one read per team", () =>
-  Effect.gen(function* () {
-    const proposals = yield* TransactionProposals;
-    const fake = yield* FakeProviderWorld;
-    const tokens = yield* QueryTokens;
-    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line", "nhl")], {
-      league: leagueFixture({ usesFaab: true }),
-      roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
-      playerDetails: playerDetails,
-      leagueTeams: [
-        {
-          providerTeamKey: "nhl.l.1.t.1",
-          providerLeagueKey: "nhl.l.1",
-          name: "Red Line",
-          acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
-          remainingBudget: 50,
-        },
-      ],
-    });
-    const redLine = teamId(seeded, "nhl.l.1.t.1");
-    const result = yield* proposals.propose(owner, proposer, {
-      items: [
-        {
-          team: redLine,
-          kind: "free_agent_add",
-          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
-          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
-          reason: "Swap one center for another.",
-        },
-        {
-          team: redLine,
-          kind: "free_agent_add",
-          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90005"]),
-          drops: [],
-          reason: "Add a rostered player.",
-        },
-        {
-          team: redLine,
-          kind: "drop",
-          adds: [],
-          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90009"]),
-          reason: "Drop someone who left.",
-        },
-        {
-          team: redLine,
-          kind: "free_agent_add",
-          adds: yield* refs(tokens, "nhl.l.1", [
-            "nhl.p.90012",
-            "nhl.p.90013",
-            "nhl.p.90014",
-            "nhl.p.90015",
-            "nhl.p.90016",
-            "nhl.p.90017",
-          ]),
-          drops: [],
-          reason: "Add six players with no drop.",
-        },
-        {
-          team: redLine,
-          kind: "waiver_claim",
-          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
-          drops: [],
-          bid: 60,
-          reason: "Spend more than the budget.",
-        },
-      ],
-    });
-
-    const review = yield* proposals.revalidate(owner, { set: result.set.id });
-    const items = itemsOf(review);
-    assert.deepStrictEqual(
-      items.map((item) => item.staleness.status),
-      ["current", "stale", "stale", "stale", "stale"],
-    );
-    assert.deepStrictEqual(reasonCodes(items[0]), []);
-    assert.deepStrictEqual(reasonCodes(items[1]), ["player_unavailable"]);
-    assert.deepStrictEqual(reasonCodes(items[2]), ["drop_not_rostered"]);
-    assert.deepStrictEqual(reasonCodes(items[3]), ["roster_full"]);
-    assert.deepStrictEqual(reasonCodes(items[4]), ["bid_exceeds_budget"]);
-    const first = Array.getUnsafe(items, 0);
-    assert.strictEqual(first.state, "proposed");
-    assert.isDefined(first.staleness.checkedAt);
-    assert.strictEqual(first.adds[0]?.name, "Pool Forward");
-    assert.strictEqual(first.adds[0]?.position, "C");
-    assert.strictEqual(first.adds[0]?.proTeam, "SYN");
-    assert.strictEqual(first.adds[0]?.availability, "Free agent");
-    assert.strictEqual(first.drops[0]?.name, "Roster One");
-    assert.strictEqual(first.drops[0]?.position, "C");
-    assert.strictEqual(first.drops[0]?.proTeam, "SYN");
-    assert.strictEqual(first.drops[0]?.availability, undefined);
-    assert.deepStrictEqual(yield* fake.rosterPeriods, [undefined]);
-    const teamEntry = Array.getUnsafe(review.teams, 0);
-    assert.deepStrictEqual(teamEntry.budget, { status: "published", remaining: 50 });
-  }).pipe(Effect.provide(TestLayer)),
-);
-
-it.effect("marks a proposal illegal when a reserve slot does not accept a player's positions", () =>
-  Effect.gen(function* () {
-    const proposals = yield* TransactionProposals;
-    const fake = yield* FakeProviderWorld;
-    const tokens = yield* QueryTokens;
-    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
-      league: reserveBenchLeague,
-      roster: rosterWithSlots("nhl.l.1.t.1", [
-        { slot: "C", eligible: ["C"] },
-        { slot: "IR", eligible: ["C"] },
-        { slot: "BN", eligible: ["C"] },
-      ]),
-      playerDetails,
-    });
-    const redLine = teamId(seeded, "nhl.l.1.t.1");
-    const result = yield* proposals.propose(owner, proposer, {
-      items: [
-        {
-          team: redLine,
-          kind: "drop",
-          adds: [],
-          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
-          reason: "Drop the player on the bench.",
-        },
-      ],
-    });
-
-    const review = yield* proposals.revalidate(owner, { set: result.set.id });
-    const item = Array.getUnsafe(itemsOf(review), 0);
-    assert.strictEqual(item.staleness.status, "illegal");
-    assert.notStrictEqual(item.staleness.status, "stale");
-    assert.deepStrictEqual(reasonCodes(item), ["slot_illegal"]);
-    const reason = Array.getUnsafe(item.staleness.reasons, 0);
-    assert.include(reason.detail, "Roster Two");
-    assert.include(reason.detail, "IR");
-    assert.include(reason.detail, "choosing which player to drop is yours");
-
-    const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
-    const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
-    assert.strictEqual(submittedItem.state, "skipped");
-    assert.include(submittedItem.execution?.detail ?? "", "Roster Two");
-    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+    assert.strictEqual(duplicated.items.length, 1);
+    const refused = duplicated.refused[0];
+    assert.strictEqual(refused?.position, 2);
+    assert.strictEqual(refused?.refusal, "duplicate_item");
+    assert.include(refused?.reason, "item 1");
+    assert.isNotEmpty(refused?.fix ?? "");
   }).pipe(Effect.provide(TestLayer)),
 );
 
 it.effect(
-  "marks a proposal illegal when a starting slot does not accept a player's positions",
+  "stores the valid item and refuses the impossible ones with a position, reason, and fix",
+  () =>
+    Effect.gen(function* () {
+      const proposals = yield* TransactionProposals;
+      const fake = yield* FakeProviderWorld;
+      const tokens = yield* QueryTokens;
+      const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line", "nhl")], {
+        league: leagueFixture({ usesFaab: true }),
+        roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+        playerDetails: playerDetails,
+        leagueTeams: [
+          {
+            providerTeamKey: "nhl.l.1.t.1",
+            providerLeagueKey: "nhl.l.1",
+            name: "Red Line",
+            acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+            remainingBudget: 50,
+          },
+        ],
+      });
+      const redLine = teamId(seeded, "nhl.l.1.t.1");
+      const result = yield* proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "free_agent_add",
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
+            reason: "Swap one center for another.",
+          },
+          {
+            team: redLine,
+            kind: "free_agent_add",
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90005"]),
+            drops: [],
+            reason: "Add a rostered player.",
+          },
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90009"]),
+            reason: "Drop someone who left.",
+          },
+          {
+            team: redLine,
+            kind: "free_agent_add",
+            adds: yield* refs(tokens, "nhl.l.1", [
+              "nhl.p.90012",
+              "nhl.p.90013",
+              "nhl.p.90014",
+              "nhl.p.90015",
+              "nhl.p.90016",
+              "nhl.p.90017",
+            ]),
+            drops: [],
+            reason: "Add six players with no drop.",
+          },
+          {
+            team: redLine,
+            kind: "waiver_claim",
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+            drops: [],
+            bid: 60,
+            reason: "Spend more than the budget.",
+          },
+        ],
+      });
+
+      assert.deepStrictEqual(
+        result.items.map((item) => [item.position, item.item.reason]),
+        [[1, "Swap one center for another."]],
+      );
+      assert.deepStrictEqual(
+        result.refused.map((refusal) => [refusal.position, refusal.refusal]),
+        [
+          [2, "player_unavailable"],
+          [3, "drop_not_rostered"],
+          [4, "roster_full"],
+          [5, "bid_exceeds_budget"],
+        ],
+      );
+      for (const refusal of result.refused) {
+        assert.isNotEmpty(refusal.reason);
+        assert.isNotEmpty(refusal.fix);
+        assert.notInclude(refusal.reason, "undefined");
+      }
+
+      const database = yield* ConnectionsDatabase;
+      const rows = yield* database
+        .select({ id: transactionProposalItems.id })
+        .from(transactionProposalItems);
+      assert.strictEqual(rows.length, 1);
+
+      const review = yield* proposals.read(owner, { set: result.set.id });
+      const stored = itemsOf(review);
+      assert.deepStrictEqual(
+        stored.map((item) => item.reason),
+        ["Swap one center for another."],
+      );
+      const first = Array.getUnsafe(stored, 0);
+      assert.strictEqual(first.state, "proposed");
+      assert.strictEqual(first.staleness.status, "current");
+      assert.isDefined(first.staleness.checkedAt);
+      assert.strictEqual(first.adds[0]?.name, "Pool Forward");
+      assert.strictEqual(first.adds[0]?.position, "C");
+      assert.strictEqual(first.adds[0]?.proTeam, "SYN");
+      assert.strictEqual(first.adds[0]?.availability, "Free agent");
+      assert.strictEqual(first.drops[0]?.name, "Roster One");
+      assert.strictEqual(first.drops[0]?.position, "C");
+      assert.strictEqual(first.drops[0]?.proTeam, "SYN");
+      assert.strictEqual(first.drops[0]?.availability, undefined);
+      assert.deepStrictEqual(yield* fake.rosterPeriods, [undefined]);
+    }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect(
+  "refuses a drop that leaves an illegal reserve slot and names the player and the choice",
   () =>
     Effect.gen(function* () {
       const proposals = yield* TransactionProposals;
       const fake = yield* FakeProviderWorld;
       const tokens = yield* QueryTokens;
       const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
-        league: wingBenchLeague,
+        league: reserveBenchLeague,
         roster: rosterWithSlots("nhl.l.1.t.1", [
           { slot: "C", eligible: ["C"] },
-          { slot: "LW", eligible: ["C"] },
+          { slot: "IR", eligible: ["C"] },
           { slot: "BN", eligible: ["C"] },
         ]),
         playerDetails,
       });
       const redLine = teamId(seeded, "nhl.l.1.t.1");
-      const result = yield* proposals.propose(owner, proposer, {
+      const refused = yield* Effect.flip(
+        proposals.propose(owner, proposer, {
+          items: [
+            {
+              team: redLine,
+              kind: "drop",
+              adds: [],
+              drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+              reason: "Drop the player on the bench.",
+            },
+          ],
+        }),
+      );
+      assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+      if (refused._tag === "proposal.nothing_accepted") {
+        const refusal = Array.getUnsafe(refused.refusals, 0);
+        assert.strictEqual(refusal.position, 1);
+        assert.strictEqual(refusal.refusal, "slot_illegal");
+        assert.include(refusal.reason, "Roster Two");
+        assert.include(refusal.reason, "IR");
+        assert.include(refusal.reason, "choosing which player to drop is yours");
+        assert.isNotEmpty(refusal.fix);
+      }
+      assert.deepStrictEqual(yield* fake.transactionRequests, []);
+      assert.deepStrictEqual(yield* fake.reserveRequests, []);
+    }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses a drop that leaves an illegal starting slot and names the slot", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: wingBenchLeague,
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "LW", eligible: ["C"] },
+        { slot: "BN", eligible: ["C"] },
+      ]),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
         items: [
           {
             team: redLine,
@@ -403,20 +423,21 @@ it.effect(
             reason: "Drop the player on the bench.",
           },
         ],
-      });
-
-      const review = yield* proposals.revalidate(owner, { set: result.set.id });
-      const item = Array.getUnsafe(itemsOf(review), 0);
-      assert.strictEqual(item.staleness.status, "illegal");
-      assert.deepStrictEqual(reasonCodes(item), ["slot_illegal"]);
-      const reason = Array.getUnsafe(item.staleness.reasons, 0);
-      assert.include(reason.detail, "Roster Two");
-      assert.include(reason.detail, "LW");
-      assert.include(reason.detail, "does not accept their positions");
-    }).pipe(Effect.provide(TestLayer)),
+      }),
+    );
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.refusal, "slot_illegal");
+      assert.include(refusal.reason, "Roster Two");
+      assert.include(refusal.reason, "LW");
+      assert.include(refusal.reason, "does not accept their positions");
+      assert.isNotEmpty(refusal.fix);
+    }
+  }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("marks a proposal illegal in a league whose reserve slot is called IL+", () =>
+it.effect("refuses a drop that leaves an illegal slot named IL+", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -431,25 +452,26 @@ it.effect("marks a proposal illegal in a league whose reserve slot is called IL+
       playerDetails,
     });
     const redLine = teamId(seeded, "nhl.l.1.t.1");
-    const result = yield* proposals.propose(owner, proposer, {
-      items: [
-        {
-          team: redLine,
-          kind: "drop",
-          adds: [],
-          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
-          reason: "Drop the player on the bench.",
-        },
-      ],
-    });
-
-    const review = yield* proposals.revalidate(owner, { set: result.set.id });
-    const item = Array.getUnsafe(itemsOf(review), 0);
-    assert.strictEqual(item.staleness.status, "illegal");
-    assert.deepStrictEqual(reasonCodes(item), ["slot_illegal"]);
-    const reason = Array.getUnsafe(item.staleness.reasons, 0);
-    assert.include(reason.detail, "Roster Two");
-    assert.include(reason.detail, "IL+");
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "drop",
+            adds: [],
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+            reason: "Drop the player on the bench.",
+          },
+        ],
+      }),
+    );
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.refusal, "slot_illegal");
+      assert.include(refusal.reason, "Roster Two");
+      assert.include(refusal.reason, "IL+");
+    }
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -481,13 +503,11 @@ it.effect("moves an illegal reserve player to an open legal slot before the add"
       ],
     });
 
-    const review = yield* proposals.revalidate(owner, { set: result.set.id });
-    const item = Array.getUnsafe(itemsOf(review), 0);
-    assert.strictEqual(item.staleness.status, "current");
-    assert.deepStrictEqual(reasonCodes(item), []);
-    assert.strictEqual(item.reserveMove?.player.name, "Roster Two");
-    assert.strictEqual(item.reserveMove?.fromSlot, "IR");
-    assert.strictEqual(item.reserveMove?.toSlot, "BN");
+    const item = Array.getUnsafe(result.items, 0);
+    assert.strictEqual(item.item.staleness.status, "current");
+    assert.strictEqual(item.item.reserveMove?.player.name, "Roster Two");
+    assert.strictEqual(item.item.reserveMove?.fromSlot, "IR");
+    assert.strictEqual(item.item.reserveMove?.toSlot, "BN");
 
     const read = yield* proposals.read(owner, { set: result.set.id });
     const readItem = Array.getUnsafe(itemsOf(read), 0);
@@ -495,7 +515,10 @@ it.effect("moves an illegal reserve player to an open legal slot before the add"
     assert.strictEqual(readItem.reserveMove?.fromSlot, "IR");
     assert.strictEqual(readItem.reserveMove?.toSlot, "BN");
 
-    const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
+    const submitted = yield* proposals.submit(owner, {
+      set: result.set.id,
+      include: [readItem.id],
+    });
     const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
     assert.strictEqual(submittedItem.state, "executed");
     assert.deepStrictEqual(
@@ -537,33 +560,32 @@ it.effect("refuses an illegal roster when no legal slot is open and names the ch
       playerDetails,
     });
     const redLine = teamId(seeded, "nhl.l.1.t.1");
-    const result = yield* proposals.propose(owner, proposer, {
-      items: [
-        {
-          team: redLine,
-          kind: "free_agent_add",
-          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
-          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
-          reason: "Swap a bench center for a better one.",
-        },
-      ],
-    });
-
-    const review = yield* proposals.revalidate(owner, { set: result.set.id });
-    const item = Array.getUnsafe(itemsOf(review), 0);
-    assert.strictEqual(item.staleness.status, "illegal");
-    assert.isUndefined(item.reserveMove);
-    const reason = Array.getUnsafe(item.staleness.reasons, 0);
-    assert.include(reason.detail, "choosing which player to drop is yours");
-
-    const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
-    assert.strictEqual(Array.getUnsafe(itemsOf(submitted), 0).state, "skipped");
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "free_agent_add",
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+            drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]),
+            reason: "Swap a bench center for a better one.",
+          },
+        ],
+      }),
+    );
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.refusal, "slot_illegal");
+      assert.include(refusal.reason, "choosing which player to drop is yours");
+      assert.isNotEmpty(refusal.fix);
+    }
     assert.deepStrictEqual(yield* fake.reserveRequests, []);
     assert.deepStrictEqual(yield* fake.transactionRequests, []);
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("keeps a stale proposal stale when its roster is legal", () =>
+it.effect("keeps a valid proposal current until the pool changes under it", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -571,7 +593,7 @@ it.effect("keeps a stale proposal stale when its roster is legal", () =>
     const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
       league: leagueFixture({}),
       roster: rosterFixture(["nhl.p.90001", "nhl.p.90002"]),
-      playerDetails: playerDetails.filter((entry) => entry.providerPlayerKey !== "nhl.p.90004"),
+      playerDetails,
     });
     const redLine = teamId(seeded, "nhl.l.1.t.1");
     const result = yield* proposals.propose(owner, proposer, {
@@ -581,10 +603,15 @@ it.effect("keeps a stale proposal stale when its roster is legal", () =>
           kind: "free_agent_add",
           adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
           drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]),
-          reason: "Add a center who is no longer in the pool.",
+          reason: "Add a center from the pool.",
         },
       ],
     });
+    assert.strictEqual(Array.getUnsafe(result.items, 0).item.staleness.status, "current");
+
+    yield* fake.setPlayerDetails(
+      playerDetails.filter((entry) => entry.providerPlayerKey !== "nhl.p.90004"),
+    );
 
     const review = yield* proposals.revalidate(owner, { set: result.set.id });
     const item = Array.getUnsafe(itemsOf(review), 0);
@@ -699,27 +726,26 @@ it.effect("names the HTTP status beside the provider's exact refusal wording", (
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect(
-  "marks a closed period, a missing budget, and an unreadable team without hiding others",
-  () =>
-    Effect.gen(function* () {
-      const proposals = yield* TransactionProposals;
-      const fake = yield* FakeProviderWorld;
-      const tokens = yield* QueryTokens;
-      const seeded = yield* seed(
-        fake,
-        [team("nhl.l.1.t.1", "Closed Season", "nhl"), team("nhl.l.2.t.1", "Unreadable", "nhl")],
-        {
-          league: leagueFixture({
-            usesFaab: false,
-            endDate: "2026-10-01",
-            currentDate: "2026-10-31",
-          }),
-          roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
-          playerDetails: playerDetails,
-        },
-      );
-      const result = yield* proposals.propose(owner, proposer, {
+it.effect("refuses a closed period, a missing budget, and an unreadable team per item", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(
+      fake,
+      [team("nhl.l.1.t.1", "Closed Season", "nhl"), team("nhl.l.2.t.1", "Unreadable", "nhl")],
+      {
+        league: leagueFixture({
+          usesFaab: false,
+          endDate: "2026-10-01",
+          currentDate: "2026-10-31",
+        }),
+        roster: rosterFixture(["nhl.p.90001", "nhl.p.90002", "nhl.p.90003"]),
+        playerDetails: playerDetails,
+      },
+    );
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
         items: [
           {
             team: teamId(seeded, "nhl.l.1.t.1"),
@@ -737,27 +763,29 @@ it.effect(
             reason: "This team cannot be read.",
           },
         ],
-      });
+      }),
+    );
 
-      const review = yield* proposals.revalidate(owner, { set: result.set.id });
-      const closed = Array.getUnsafe(review.teams, 0);
-      const unreadable = Array.getUnsafe(review.teams, 1);
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
       assert.deepStrictEqual(
-        closed.items.flatMap((item) => reasonCodes(item)),
-        ["period_closed", "bid_not_available"],
+        refused.refusals.map((refusal) => [refusal.position, refusal.refusal]),
+        [
+          [1, "period_closed"],
+          [2, "state_unavailable"],
+        ],
       );
-      assert.deepStrictEqual(closed.budget, {
-        status: "not_published",
-        detail: "This league does not use a FAAB waiver budget.",
-      });
-      assert.strictEqual(unreadable.items[0]?.staleness.status, "stale");
-      assert.deepStrictEqual(
-        unreadable.items.flatMap((item) => reasonCodes(item)),
-        ["state_unavailable"],
-      );
-      assert.isString(unreadable.failure);
-      assert.include(unreadable.failure, "provider read failed");
-    }).pipe(Effect.provide(TestLayer)),
+      const closed = Array.getUnsafe(refused.refusals, 0);
+      assert.include(closed.reason, "period ended");
+      assert.include(closed.reason, "does not use a FAAB waiver budget");
+      assert.include(closed.fix, "next period");
+      const unreadable = Array.getUnsafe(refused.refusals, 1);
+      assert.include(unreadable.reason, "provider read failed");
+      assert.isNotEmpty(unreadable.fix);
+      assert.include(refused.detail, "no set was stored");
+    }
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
 );
 
 it.effect("refuses to revalidate an expired set and keeps it readable", () =>
@@ -778,10 +806,11 @@ it.effect("refuses to revalidate an expired set and keeps it readable", () =>
       ],
     });
 
+    const reads = (yield* fake.rosterPeriods).length;
     yield* TestClock.adjust(proposalSetLifetimeMillis);
     const expired = yield* Effect.flip(proposals.revalidate(owner, { set: result.set.id }));
     assert.instanceOf(expired, ProposalSetExpired);
-    assert.deepStrictEqual(yield* fake.rosterPeriods, []);
+    assert.strictEqual((yield* fake.rosterPeriods).length, reads);
 
     const review = yield* proposals.read(owner, { set: result.set.id });
     assert.isTrue(review.set.expired);
@@ -1194,7 +1223,7 @@ it.effect("accepts a declared slot move and reads back its destination slot", ()
     const fake = yield* FakeProviderWorld;
     const tokens = yield* QueryTokens;
     const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
-      league: fullReserveLeague,
+      league: openBenchLeague,
       roster: rosterWithSlots("nhl.l.1.t.1", [
         { slot: "C", eligible: ["C"] },
         { slot: "BN", eligible: ["C", "IR"] },
@@ -1220,13 +1249,11 @@ it.effect("accepts a declared slot move and reads back its destination slot", ()
     });
     const accepted = Array.getUnsafe(result.items, 0);
     assert.strictEqual(accepted.outcome, "accepted");
-    if (accepted.outcome === "accepted") {
-      assert.strictEqual(accepted.item.kind, "slot_move");
-      assert.strictEqual(accepted.item.slotMove?.player.name, undefined);
-      assert.isString(accepted.item.slotMove?.player.ref);
-      assert.isUndefined(accepted.item.slotMove?.fromSlot);
-      assert.strictEqual(accepted.item.slotMove?.toSlot, "BN");
-    }
+    assert.strictEqual(accepted.item.kind, "slot_move");
+    assert.strictEqual(accepted.item.slotMove?.player.name, "Roster Three");
+    assert.isString(accepted.item.slotMove?.player.ref);
+    assert.strictEqual(accepted.item.slotMove?.fromSlot, "IR");
+    assert.strictEqual(accepted.item.slotMove?.toSlot, "BN");
 
     const read = yield* proposals.read(owner, { set: result.set.id });
     const item = Array.getUnsafe(itemsOf(read), 0);
@@ -1303,9 +1330,6 @@ it.effect("refuses an item that names more adds than the provider's request allo
     });
     const accepted = Array.getUnsafe(result.items, 0);
     assert.strictEqual(accepted.outcome, "accepted");
-    if (accepted.outcome !== "accepted") {
-      return;
-    }
 
     const review = yield* proposals.revalidate(owner, { set: result.set.id });
     assert.strictEqual(Array.getUnsafe(itemsOf(review), 0).staleness.status, "current");
@@ -1340,9 +1364,6 @@ it.effect("attributes the provider's own words when it does not send a write", (
     });
     const accepted = Array.getUnsafe(result.items, 0);
     assert.strictEqual(accepted.outcome, "accepted");
-    if (accepted.outcome !== "accepted") {
-      return;
-    }
     yield* fake.setTransactionAction(
       "unavailable",
       "This write would exceed the provider's request allowance.",
@@ -1614,7 +1635,7 @@ it.effect("composes a drop pair and an add that the drops make legal", () =>
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("keeps the two reserve cures current when the set's add has no place", () =>
+it.effect("stores the two reserve cures and refuses an add with no place", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -1625,59 +1646,49 @@ it.effect("keeps the two reserve cures current when the set's add has no place",
       playerDetails: twoReservePlayerDetails,
     });
     const redLine = teamId(seeded, "nhl.l.1.t.1");
-    const result = yield* proposals.propose(owner, proposer, {
-      items: [
-        {
-          team: redLine,
-          kind: "drop",
-          adds: [],
-          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90022"]),
-          reason: "Drop a bench center.",
+    const cures = [
+      {
+        team: redLine,
+        kind: "drop" as const,
+        adds: [],
+        drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90022"]),
+        reason: "Drop a bench center.",
+      },
+      {
+        team: redLine,
+        kind: "drop" as const,
+        adds: [],
+        drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90027"]),
+        reason: "Drop the reserve-plus center.",
+      },
+      {
+        team: redLine,
+        kind: "slot_move" as const,
+        adds: [],
+        drops: [],
+        slotMove: {
+          player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90026"]), 0),
+          toSlot: "BN",
         },
-        {
-          team: redLine,
-          kind: "drop",
-          adds: [],
-          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90027"]),
-          reason: "Drop the reserve-plus center.",
-        },
-        {
-          team: redLine,
-          kind: "slot_move",
-          adds: [],
-          drops: [],
-          slotMove: {
-            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90026"]), 0),
-            toSlot: "BN",
-          },
-          reason: "Activate the reserve center onto the bench.",
-        },
-        {
-          team: redLine,
-          kind: "free_agent_add",
-          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
-          drops: [],
-          reason: "Add a pool forward.",
-        },
-      ],
-    });
-
-    const review = yield* proposals.revalidate(owner, { set: result.set.id });
-    const teamReview = Array.getUnsafe(review.teams, 0);
-    const benchDrop = itemByReason(review, "Drop a bench center.");
-    const reserveDrop = itemByReason(review, "Drop the reserve-plus center.");
-    const moveItem = itemByReason(review, "Activate the reserve center onto the bench.");
-    const addItem = itemByReason(review, "Add a pool forward.");
+        reason: "Activate the reserve center onto the bench.",
+      },
+    ];
+    const result = yield* proposals.propose(owner, proposer, { items: cures });
+    assert.deepStrictEqual(result.refused, []);
     assert.deepStrictEqual(
-      [benchDrop, reserveDrop, moveItem, addItem].map((item) => item.staleness.status),
-      ["current", "current", "current", "stale"],
+      result.items.map((item) => item.item.reason),
+      [
+        "Drop a bench center.",
+        "Drop the reserve-plus center.",
+        "Activate the reserve center onto the bench.",
+      ],
     );
-    assert.deepStrictEqual(reasonCodes(addItem), ["roster_full"]);
-    const detail = addItem.staleness.reasons[0]?.detail ?? "";
-    assert.include(detail, "Add Pool Forward");
-    assert.include(detail, "allows 5");
-    assert.notInclude(detail, "Add a drop item");
-    assert.notInclude(detail, "add a slot move");
+
+    const read = yield* proposals.read(owner, { set: result.set.id });
+    const teamReview = Array.getUnsafe(read.teams, 0);
+    const benchDrop = itemByReason(read, "Drop a bench center.");
+    const reserveDrop = itemByReason(read, "Drop the reserve-plus center.");
+    const moveItem = itemByReason(read, "Activate the reserve center onto the bench.");
     assert.strictEqual(teamReview.order?.status, "ordered");
     if (teamReview.order?.status === "ordered") {
       assert.deepStrictEqual(
@@ -1686,27 +1697,35 @@ it.effect("keeps the two reserve cures current when the set's add has no place",
       );
     }
 
-    const submitted = yield* proposals.submit(owner, {
-      set: result.set.id,
-      include: [benchDrop.id, reserveDrop.id, moveItem.id, addItem.id],
-    });
-    assert.deepStrictEqual(
-      itemsOf(submitted).map((item) => item.state),
-      ["executed", "executed", "executed", "skipped"],
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        set: result.set.id,
+        items: [
+          {
+            team: redLine,
+            kind: "free_agent_add",
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+            drops: [],
+            reason: "Add a pool forward.",
+          },
+        ],
+      }),
     );
-    assert.deepStrictEqual(yield* fake.writeSequence, [
-      "transaction",
-      "reserve_move",
-      "transaction",
-    ]);
-    assert.deepStrictEqual(
-      (yield* fake.transactionRequests).map((request) => request.drops),
-      [["nhl.p.90022"], ["nhl.p.90027"]],
-    );
-    assert.deepStrictEqual(
-      (yield* fake.reserveRequests).map((request) => [request.providerPlayerKey, request.slot]),
-      [["nhl.p.90026", "BN"]],
-    );
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      assert.deepStrictEqual(refused.withdraw, []);
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.position, 1);
+      assert.strictEqual(refusal.refusal, "roster_full");
+      assert.include(refusal.reason, "Add Pool Forward");
+      assert.include(refusal.reason, "allows 5");
+      assert.notInclude(refusal.reason, "Add a drop item");
+      assert.notInclude(refusal.reason, "add a slot move");
+      assert.isNotEmpty(refusal.fix);
+    }
+    const unchanged = yield* proposals.read(owner, { set: result.set.id });
+    assert.strictEqual(itemsOf(unchanged).length, 3);
+    assert.deepStrictEqual(yield* fake.writeSequence, []);
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -1880,25 +1899,28 @@ it.effect("names the operation a full roster still needs", () =>
       playerDetails,
     });
     const redLine = teamId(seeded, "nhl.l.1.t.1");
-    const result = yield* proposals.propose(owner, proposer, {
-      items: [
-        {
-          team: redLine,
-          kind: "free_agent_add",
-          adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
-          drops: [],
-          reason: "Add with no place for him.",
-        },
-      ],
-    });
-
-    const review = yield* proposals.revalidate(owner, { set: result.set.id });
-    const item = Array.getUnsafe(itemsOf(review), 0);
-    assert.strictEqual(item.staleness.status, "stale");
-    assert.deepStrictEqual(reasonCodes(item), ["roster_full"]);
-    const detail = item.staleness.reasons[0]?.detail ?? "";
-    assert.include(detail, "Add a drop item for a player outside a reserve slot");
-    assert.include(detail, "or a slot move into a reserve slot");
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "free_agent_add",
+            adds: yield* refs(tokens, "nhl.l.1", ["nhl.p.90004"]),
+            drops: [],
+            reason: "Add with no place for him.",
+          },
+        ],
+      }),
+    );
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.refusal, "roster_full");
+      assert.include(refusal.reason, "Add a drop item for a player outside a reserve slot");
+      assert.include(refusal.reason, "or a slot move into a reserve slot");
+      assert.isNotEmpty(refusal.fix);
+      assert.include(refused.detail, "no set was stored");
+    }
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -1994,17 +2016,22 @@ it.effect("refuses only the move whose drop frees a different slot than it needs
       ],
     });
 
+    assert.deepStrictEqual(
+      result.items.map((item) => [item.position, item.item.reason]),
+      [[2, "Drop the starting center."]],
+    );
+    const refusal = Array.getUnsafe(result.refused, 0);
+    assert.strictEqual(refusal.position, 1);
+    assert.strictEqual(refusal.refusal, "slot_illegal");
+    assert.include(refusal.reason, "Moving Roster Three to BN needs a free BN slot");
+    assert.include(refusal.reason, "Dropping Roster One frees the C slot, not BN.");
+    assert.isNotEmpty(refusal.fix);
+
     const review = yield* proposals.revalidate(owner, { set: result.set.id });
     const teamReview = Array.getUnsafe(review.teams, 0);
-    const moveItem = itemByReason(review, "Move the reserve center to the bench.");
-    const dropItem = itemByReason(review, "Drop the starting center.");
-    assert.strictEqual(moveItem.staleness.status, "illegal");
+    const dropItem = Array.getUnsafe(itemsOf(review), 0);
+    assert.strictEqual(dropItem.reason, "Drop the starting center.");
     assert.strictEqual(dropItem.staleness.status, "current");
-    assert.deepStrictEqual(reasonCodes(moveItem), ["slot_illegal"]);
-    assert.deepStrictEqual(reasonCodes(dropItem), []);
-    const detail = moveItem.staleness.reasons[0]?.detail ?? "";
-    assert.include(detail, "Moving Roster Three to BN needs a free BN slot");
-    assert.include(detail, "Dropping Roster One frees the C slot, not BN.");
     assert.strictEqual(teamReview.order?.status, "ordered");
     if (teamReview.order?.status === "ordered") {
       assert.deepStrictEqual(
@@ -2015,11 +2042,11 @@ it.effect("refuses only the move whose drop frees a different slot than it needs
 
     const submitted = yield* proposals.submit(owner, {
       set: result.set.id,
-      include: [moveItem.id, dropItem.id],
+      include: [dropItem.id],
     });
     assert.deepStrictEqual(
       itemsOf(submitted).map((item) => item.state),
-      ["skipped", "executed"],
+      ["executed"],
     );
     assert.deepStrictEqual(yield* fake.reserveRequests, []);
     assert.deepStrictEqual(
@@ -2368,10 +2395,23 @@ it.effect("refuses the move that cannot reach its slot and keeps the others", ()
       ],
     });
 
+    assert.deepStrictEqual(
+      result.items.map((item) => [item.position, item.item.reason]),
+      [
+        [1, "Stash the first center."],
+        [3, "Drop the spare wing."],
+      ],
+    );
+    const secondRefusal = Array.getUnsafe(result.refused, 0);
+    assert.strictEqual(secondRefusal.position, 2);
+    assert.strictEqual(secondRefusal.refusal, "slot_illegal");
+    assert.include(secondRefusal.reason, "Moving Roster Three to IR needs a free IR slot");
+    assert.include(secondRefusal.reason, "Dropping Roster 3 frees the BN slot, not IR.");
+    assert.isNotEmpty(secondRefusal.fix);
+
     const review = yield* proposals.revalidate(owner, { set: result.set.id });
     const teamReview = Array.getUnsafe(review.teams, 0);
     const firstMove = itemByReason(review, "Stash the first center.");
-    const secondMove = itemByReason(review, "Stash the second center.");
     const spare = itemByReason(review, "Drop the spare wing.");
     assert.strictEqual(teamReview.order?.status, "ordered");
     if (teamReview.order?.status === "ordered") {
@@ -2381,13 +2421,9 @@ it.effect("refuses the move that cannot reach its slot and keeps the others", ()
       );
     }
     assert.deepStrictEqual(
-      [firstMove, secondMove, spare].map((item) => item.staleness.status),
-      ["current", "illegal", "current"],
+      [firstMove, spare].map((item) => item.staleness.status),
+      ["current", "current"],
     );
-    assert.deepStrictEqual(reasonCodes(secondMove), ["slot_illegal"]);
-    const detail = secondMove.staleness.reasons[0]?.detail ?? "";
-    assert.include(detail, "Moving Roster Three to IR needs a free IR slot");
-    assert.include(detail, "Dropping Roster 3 frees the BN slot, not IR.");
 
     const submitted = yield* proposals.submit(owner, {
       set: result.set.id,
@@ -2395,7 +2431,7 @@ it.effect("refuses the move that cannot reach its slot and keeps the others", ()
     });
     assert.deepStrictEqual(
       itemsOf(submitted).map((item) => item.state),
-      ["executed", "skipped", "executed"],
+      ["executed", "executed"],
     );
     assert.deepStrictEqual(yield* fake.writeSequence, ["reserve_move", "transaction"]);
     assert.deepStrictEqual(
@@ -2429,10 +2465,12 @@ it.effect("refuses a draft pick in a trade with the provider's own reason", () =
         refused.refusals.map((refusal) => refusal.refusal),
         ["draft_pick_included"],
       );
+      const refusal = Array.getUnsafe(refused.refusals, 0);
       assert.strictEqual(
-        Array.getUnsafe(refused.refusals, 0).detail,
+        refusal.reason,
         "The fake provider's trade proposal request names players only and publishes no element for a draft pick.",
       );
+      assert.include(refusal.fix, "players only");
     }
     assert.deepStrictEqual(yield* fake.writeSequence, []);
     assert.deepStrictEqual(yield* fake.tradeProposalRequests, []);
@@ -2454,43 +2492,49 @@ it.effect("refuses a move to an unknown or ineligible slot", () =>
       playerDetails,
     });
     const redLine = teamId(seeded, "nhl.l.1.t.1");
-    const result = yield* proposals.propose(owner, proposer, {
-      items: [
-        {
-          team: redLine,
-          kind: "slot_move",
-          adds: [],
-          drops: [],
-          slotMove: {
-            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]), 0),
-            toSlot: "IR",
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "slot_move",
+            adds: [],
+            drops: [],
+            slotMove: {
+              player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]), 0),
+              toSlot: "IR",
+            },
+            reason: "Move the center to a slot he cannot fill.",
           },
-          reason: "Move the center to a slot he cannot fill.",
-        },
-        {
-          team: redLine,
-          kind: "slot_move",
-          adds: [],
-          drops: [],
-          slotMove: {
-            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]), 0),
-            toSlot: "BENCH",
+          {
+            team: redLine,
+            kind: "slot_move",
+            adds: [],
+            drops: [],
+            slotMove: {
+              player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]), 0),
+              toSlot: "BENCH",
+            },
+            reason: "Move the reserve center to a slot the league does not declare.",
           },
-          reason: "Move the reserve center to a slot the league does not declare.",
-        },
-      ],
-    });
-
-    const review = yield* proposals.revalidate(owner, { set: result.set.id });
-    const ineligible = itemByReason(review, "Move the center to a slot he cannot fill.");
-    const unknown = itemByReason(
-      review,
-      "Move the reserve center to a slot the league does not declare.",
+        ],
+      }),
     );
-    assert.deepStrictEqual(reasonCodes(ineligible), ["slot_illegal"]);
-    assert.include(ineligible.staleness.reasons[0]?.detail ?? "", "does not accept");
-    assert.deepStrictEqual(reasonCodes(unknown), ["move_slot_unknown"]);
-    assert.include(unknown.staleness.reasons[0]?.detail ?? "", "BENCH");
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      assert.deepStrictEqual(
+        refused.refusals.map((refusal) => [refusal.position, refusal.refusal]),
+        [
+          [1, "slot_illegal"],
+          [2, "move_slot_unknown"],
+        ],
+      );
+      assert.include(Array.getUnsafe(refused.refusals, 0).reason, "does not accept");
+      assert.include(Array.getUnsafe(refused.refusals, 1).reason, "BENCH");
+      for (const refusal of refused.refusals) {
+        assert.isNotEmpty(refusal.fix);
+      }
+    }
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -2500,7 +2544,7 @@ it.effect("marks a declared move stale when its player leaves the roster", () =>
     const fake = yield* FakeProviderWorld;
     const tokens = yield* QueryTokens;
     const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
-      league: fullReserveLeague,
+      league: openBenchLeague,
       roster: rosterWithSlots("nhl.l.1.t.1", [
         { slot: "C", eligible: ["C"] },
         { slot: "BN", eligible: ["C", "IR"] },
@@ -2569,28 +2613,31 @@ it.effect("refuses a locked player's move on the league's effective date", () =>
       playerDetails,
     });
     const redLine = teamId(seeded, "nhl.l.1.t.1");
-    const result = yield* proposals.propose(owner, proposer, {
-      items: [
-        {
-          team: redLine,
-          kind: "slot_move",
-          adds: [],
-          drops: [],
-          slotMove: {
-            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]), 0),
-            toSlot: "IR",
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: redLine,
+            kind: "slot_move",
+            adds: [],
+            drops: [],
+            slotMove: {
+              player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]), 0),
+              toSlot: "IR",
+            },
+            reason: "Move the locked player to reserve.",
           },
-          reason: "Move the locked player to reserve.",
-        },
-      ],
-    });
-
-    const review = yield* proposals.revalidate(owner, { set: result.set.id });
-    const item = itemByReason(review, "Move the locked player to reserve.");
-    assert.strictEqual(item.staleness.status, "illegal");
-    assert.deepStrictEqual(reasonCodes(item), ["slot_illegal"]);
-    assert.include(item.staleness.reasons[0]?.detail ?? "", "Roster Two is locked");
-    assert.include(item.staleness.reasons[0]?.detail ?? "", "2026-10-31");
+        ],
+      }),
+    );
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.refusal, "slot_illegal");
+      assert.include(refusal.reason, "Roster Two is locked");
+      assert.include(refusal.reason, "2026-10-31");
+      assert.isNotEmpty(refusal.fix);
+    }
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -2910,9 +2957,6 @@ it.effect("stages a trade with both rosters and the league's trade window checke
     assert.isTrue(result.created);
     const item = Array.getUnsafe(result.items, 0);
     assert.strictEqual(item.outcome, "accepted");
-    if (item.outcome !== "accepted") {
-      return;
-    }
     assert.strictEqual(item.item.kind, "trade");
     assert.strictEqual(item.item.counterparty?.name, "Blue Line");
     assert.isTrue(item.item.counterparty?.ref.startsWith("r1."));
@@ -2965,7 +3009,7 @@ it.effect(
         closedRefusals.refusals.map((refusal) => refusal.refusal),
         ["trade_window_closed"],
       );
-      assert.include(Array.getUnsafe(closedRefusals.refusals, 0).detail, "Item 1");
+      assert.include(Array.getUnsafe(closedRefusals.refusals, 0).reason, "Item 1");
     }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -3020,7 +3064,7 @@ it.effect("refuses a trade counterparty in another league and a player on the wr
       rosterRefusals.refusals.map((refusal) => refusal.refusal),
       ["trade_player_not_rostered"],
     );
-    assert.include(Array.getUnsafe(rosterRefusals.refusals, 0).detail, "Item 1");
+    assert.include(Array.getUnsafe(rosterRefusals.refusals, 0).reason, "Item 1");
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -3206,6 +3250,368 @@ it.effect("refuses a trade write when the team's connection changed after stagin
     assert.strictEqual(item.state, "skipped");
     assert.include(item.execution?.detail ?? "", "different provider connection");
     assert.strictEqual((yield* fake.tradeProposalRequests).length, 0);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("extends a set, appends the new move, and recomputes the whole order", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: fullReserveLeague,
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C", "IR"] },
+        { slot: "IR", eligible: ["C", "IR"] },
+      ]),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const first = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Free the bench slot.",
+        },
+      ],
+    });
+    assert.isTrue(first.created);
+    assert.isFalse(first.extended);
+
+    const extended = yield* proposals.propose(owner, proposer, {
+      set: first.set.id,
+      items: [
+        {
+          team: redLine,
+          kind: "slot_move",
+          adds: [],
+          drops: [],
+          slotMove: {
+            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]), 0),
+            toSlot: "BN",
+          },
+          reason: "Move the reserve center to the bench.",
+        },
+      ],
+    });
+    assert.isFalse(extended.created);
+    assert.isTrue(extended.extended);
+    assert.strictEqual(extended.set.id, first.set.id);
+    assert.deepStrictEqual(extended.refused, []);
+    assert.deepStrictEqual(
+      extended.items.map((item) => [item.position, item.item.reason]),
+      [[1, "Move the reserve center to the bench."]],
+    );
+
+    const review = yield* proposals.read(owner, { set: first.set.id });
+    const teamReview = Array.getUnsafe(review.teams, 0);
+    assert.deepStrictEqual(
+      itemsOf(review).map((item) => item.reason),
+      ["Free the bench slot.", "Move the reserve center to the bench."],
+    );
+    const dropItem = itemByReason(review, "Free the bench slot.");
+    const moveItem = itemByReason(review, "Move the reserve center to the bench.");
+    assert.strictEqual(dropItem.staleness.status, "current");
+    assert.strictEqual(moveItem.staleness.status, "current");
+    assert.strictEqual(teamReview.order?.status, "ordered");
+    if (teamReview.order?.status === "ordered") {
+      assert.deepStrictEqual(
+        teamReview.order.steps.map((step) => [step.item, step.position]),
+        [
+          [dropItem.id, 0],
+          [moveItem.id, 1],
+        ],
+      );
+    }
+
+    const submitted = yield* proposals.submit(owner, {
+      set: first.set.id,
+      include: [dropItem.id, moveItem.id],
+    });
+    assert.deepStrictEqual(
+      itemsOf(submitted).map((item) => [item.reason, item.state, item.execution?.position]),
+      [
+        ["Free the bench slot.", "executed", 0],
+        ["Move the reserve center to the bench.", "executed", 1],
+      ],
+    );
+    assert.deepStrictEqual(yield* fake.writeSequence, ["transaction", "reserve_move"]);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses an extension that breaks an existing move and names the move to withdraw", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: leagueFixture({
+        rosterPositions: [
+          { position: "C", positionType: "O", count: 1, kind: "starting", eligibility: ["C"] },
+          { position: "LW", positionType: "O", count: 1, kind: "starting", eligibility: ["LW"] },
+          { position: "RW", positionType: "O", count: 1, kind: "starting", eligibility: ["RW"] },
+        ],
+      }),
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["LW", "RW"] },
+        { slot: "LW", eligible: ["LW", "RW"] },
+      ]),
+      playerDetails: playerDetails.filter(
+        (entry) =>
+          entry.providerPlayerKey === "nhl.p.90001" || entry.providerPlayerKey === "nhl.p.90002",
+      ),
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const first = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "slot_move",
+          adds: [],
+          drops: [],
+          slotMove: {
+            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]), 0),
+            toSlot: "RW",
+          },
+          reason: "Move the second center to the right wing.",
+        },
+        {
+          team: redLine,
+          kind: "slot_move",
+          adds: [],
+          drops: [],
+          slotMove: {
+            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]), 0),
+            toSlot: "LW",
+          },
+          reason: "Move the illegal center to the left wing.",
+        },
+      ],
+    });
+    assert.isTrue(first.created);
+    assert.strictEqual(first.items.length, 2);
+    const existingIds = itemsOf(yield* proposals.read(owner, { set: first.set.id })).map(
+      (item) => item.id,
+    );
+
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        set: first.set.id,
+        items: [
+          {
+            team: redLine,
+            kind: "slot_move",
+            adds: [],
+            drops: [],
+            slotMove: {
+              player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90001"]), 0),
+              toSlot: "RW",
+            },
+            reason: "Move the illegal center to the right wing.",
+          },
+        ],
+      }),
+    );
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const refusal = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(refusal.position, 1);
+      assert.strictEqual(refusal.refusal, "order_conflict");
+      assert.include(refusal.reason, "No order of this team's moves keeps the lineup legal");
+      assert.isNotEmpty(refusal.fix);
+      assert.deepStrictEqual(
+        refused.withdraw.map((entry) => entry.item),
+        existingIds,
+      );
+      for (const entry of refused.withdraw) {
+        assert.isNotEmpty(entry.label);
+        assert.include(entry.detail, "Neither operation can go first");
+      }
+      assert.include(refused.detail, "Nothing was stored");
+      assert.include(refused.detail, "withdraw_transaction_proposal_items");
+    }
+
+    const review = yield* proposals.read(owner, { set: first.set.id });
+    assert.strictEqual(itemsOf(review).length, 2);
+    assert.deepStrictEqual(yield* fake.writeSequence, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("withdraws a move, revalidates the rest, and returns the new order", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: fullReserveLeague,
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C", "IR"] },
+        { slot: "IR", eligible: ["C", "IR"] },
+      ]),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Free the bench slot.",
+        },
+        {
+          team: redLine,
+          kind: "slot_move",
+          adds: [],
+          drops: [],
+          slotMove: {
+            player: Array.getUnsafe(yield* refs(tokens, "nhl.l.1", ["nhl.p.90003"]), 0),
+            toSlot: "BN",
+          },
+          reason: "Move the reserve center to the bench.",
+        },
+      ],
+    });
+    const before = yield* proposals.read(owner, { set: created.set.id });
+    const dropItem = itemByReason(before, "Free the bench slot.");
+    const moveItem = itemByReason(before, "Move the reserve center to the bench.");
+
+    const after = yield* proposals.withdrawItems(owner, {
+      set: created.set.id,
+      items: [moveItem.id],
+    });
+    const teamReview = Array.getUnsafe(after.teams, 0);
+    assert.deepStrictEqual(
+      itemsOf(after).map((item) => [item.reason, item.staleness.status]),
+      [["Free the bench slot.", "current"]],
+    );
+    assert.isDefined(teamReview.items[0]?.staleness.checkedAt);
+    assert.strictEqual(teamReview.order?.status, "ordered");
+    if (teamReview.order?.status === "ordered") {
+      assert.deepStrictEqual(
+        teamReview.order.steps.map((step) => [step.item, step.position]),
+        [[dropItem.id, 0]],
+      );
+    }
+
+    const read = yield* proposals.read(owner, { set: created.set.id });
+    assert.deepStrictEqual(
+      itemsOf(read).map((item) => item.reason),
+      ["Free the bench slot."],
+    );
+
+    const empty = yield* proposals.withdrawItems(owner, {
+      set: created.set.id,
+      items: [dropItem.id],
+    });
+    assert.deepStrictEqual(itemsOf(empty), []);
+    assert.isUndefined(Array.getUnsafe(empty.teams, 0).order);
+
+    const reproposed = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Free the bench slot.",
+        },
+      ],
+    });
+    assert.isTrue(reproposed.created);
+    assert.notStrictEqual(reproposed.set.id, created.set.id);
+    assert.deepStrictEqual(yield* fake.writeSequence, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses to withdraw a move that already ran", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const database = yield* ConnectionsDatabase;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: fullReserveLeague,
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C", "IR"] },
+        { slot: "IR", eligible: ["C", "IR"] },
+      ]),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Drop the bench center.",
+        },
+      ],
+    });
+    const item = Array.getUnsafe(itemsOf(yield* proposals.read(owner, { set: created.set.id })), 0);
+    yield* database
+      .update(transactionProposalItems)
+      .set({ state: "executed" })
+      .where(eq(transactionProposalItems.id, item.id));
+
+    const refused = yield* Effect.flip(
+      proposals.withdrawItems(owner, { set: created.set.id, items: [item.id] }),
+    );
+    assert.instanceOf(refused, ProposalItemsNotWithdrawable);
+    const entry = Array.getUnsafe(refused.items, 0);
+    assert.strictEqual(entry.item, item.id);
+    assert.strictEqual(entry.state, "executed");
+    assert.include(entry.detail, "already run");
+    assert.include(refused.detail, "Nothing was withdrawn");
+    assert.strictEqual(itemsOf(yield* proposals.read(owner, { set: created.set.id })).length, 1);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("refuses to withdraw from a submitted set", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Red Line")], {
+      league: fullReserveLeague,
+      roster: rosterWithSlots("nhl.l.1.t.1", [
+        { slot: "C", eligible: ["C"] },
+        { slot: "BN", eligible: ["C", "IR"] },
+        { slot: "IR", eligible: ["C", "IR"] },
+      ]),
+      playerDetails,
+    });
+    const redLine = teamId(seeded, "nhl.l.1.t.1");
+    const created = yield* proposals.propose(owner, proposer, {
+      items: [
+        {
+          team: redLine,
+          kind: "drop",
+          adds: [],
+          drops: yield* refs(tokens, "nhl.l.1", ["nhl.p.90002"]),
+          reason: "Drop the bench center.",
+        },
+      ],
+    });
+    const item = Array.getUnsafe(itemsOf(yield* proposals.read(owner, { set: created.set.id })), 0);
+    yield* proposals.submit(owner, { set: created.set.id, include: [item.id] });
+    const writes = (yield* fake.transactionRequests).length;
+
+    const refused = yield* Effect.flip(
+      proposals.withdrawItems(owner, { set: created.set.id, items: [item.id] }),
+    );
+    assert.instanceOf(refused, ProposalSetAlreadySubmitted);
+    assert.strictEqual((yield* fake.transactionRequests).length, writes);
+    assert.strictEqual(itemsOf(yield* proposals.read(owner, { set: created.set.id })).length, 1);
   }).pipe(Effect.provide(TestLayer)),
 );
 

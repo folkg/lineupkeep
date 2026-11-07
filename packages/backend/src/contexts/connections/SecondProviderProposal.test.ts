@@ -197,9 +197,6 @@ it.effect("sends an atlas item with the provider's declared two adds and two dro
     });
     const item = Array.getUnsafe(proposed.items, 0);
     assert.strictEqual(item.outcome, "accepted");
-    if (item.outcome !== "accepted") {
-      return;
-    }
     const checked = yield* proposals.revalidate(owner, { set: proposed.set.id });
     const checkedItem = Array.getUnsafe(Array.getUnsafe(checked.teams, 0).items, 0);
     assert.strictEqual(checkedItem.staleness.status, "current");

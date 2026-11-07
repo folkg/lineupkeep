@@ -9,6 +9,7 @@ import {
   ProposeTransactionsInput,
   ProposeTransactionsResult,
   TransactionProposals,
+  WithdrawProposalItemsInput,
 } from "@lineupkeep/backend/connections/TransactionProposals";
 import type { ProposalError } from "@lineupkeep/backend/connections/TransactionProposals";
 import { Effect, Schema } from "effect";
@@ -21,8 +22,10 @@ const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String 
 
 const ProposedTransactions = Schema.Struct({
   set: ProposeTransactionsResult.fields.set,
-  created: Schema.Boolean,
+  created: ProposeTransactionsResult.fields.created,
+  extended: ProposeTransactionsResult.fields.extended,
   items: ProposeTransactionsResult.fields.items,
+  refused: ProposeTransactionsResult.fields.refused,
   reviewUrl: Schema.NonEmptyString,
   detail: Schema.NonEmptyString,
 });
@@ -38,7 +41,7 @@ type ProposalReview = typeof ProposalReview.Type;
 export const proposalTools = Toolkit.make(
   Tool.make("propose_transactions", {
     description:
-      "Propose one set of player operations across any of this account's teams for a person to review, and return the set id and one review link. Proposing writes nothing to the provider: it stores the set and no transaction is submitted. Before returning, the tool reads current roster, league, and player state for every team, so each accepted item carries `current`, `stale`, or `illegal` with the reasons. A stale item is not executable: it names what changed, including an added player who is no longer available, a moved or dropped player no longer on the roster, a destination slot the league does not declare, a set with no operation that frees a roster place (its reason names the drop or slot move the set is missing), a closed period, or a bid above the budget. A roster is illegal when a rostered player sits in a slot that accepts none of their published positions, and that can block a transaction even when the move itself is fine. When a slot the set opens accepts that player, the server places a roster move in the team's order before the transaction; a client may instead declare that move itself as a `slot_move`. The slot can be opened by a drop in the same set, including the drop in the same item. If no slot in the set is open, the item names the choice only the person can make and the drop or slot move that would resolve it. Fix the reason and propose again, or add the missing operation to the same set. Each item names one team, a kind, the players to add and drop or the `slotMove` of a `slot_move`, an optional FAAB bid, and a required reason. The kinds a client can declare are `free_agent_add` (players added, no bid), `waiver_claim` (players added with a bid of 0 or more), `drop` (players dropped only), `slot_move` (one rostered player moved to one slot the league declares, whether starting, bench, or reserve, into a reserve slot or back out of one), and `trade` (players going out and coming back with one counterparty). A drop item cannot add or bid, and a free-agent add cannot bid. The client declares intent per team; the server owns the order of each team's moves, the effective date, and the timing. A `slot_move` names `slotMove.player` (a player reference from a roster read) and `slotMove.toSlot` (a slot the league declares). It adds and drops nobody, carries no bid, and names no counterparty. Declare one when a later add or drop needs a specific slot freed or a player on a reserve list should be activated, and never state which operation comes first. The server validates the set as a set: it chooses every move's order from the league's slot rules and published roster-change timing, then walks the team's items against the roster projected through the earlier ones, so a drop or declared slot move in the same set can make a later add legal. The review and the set read show that order with a position for every move before submission. A player the provider reports as locked cannot be moved on that date. When no order keeps the team legal, the whole set for that team is refused at this check: every move in it is marked illegal, the review names the operations that conflict in plain words, and nothing is sent. An item that no operation in the set can make legal is named on its own and does not refuse the rest of the team's plan. A `slot_move` is a same-roster move, not a lineup write: use `set_lineup` to assign the lineup. A `trade` item names `counterparty` (a team reference from the league's teams read), the players going out in `drops`, and the players coming back in `adds`; it carries players only, no bid, and no draft pick. A league's own rules may allow draft picks to be traded, and `get_league` publishes that as `trades.draftPicks`, but the provider publishes pick trades only on its website and offers no element for a pick in the transaction API Lineupgrade writes through, so this tool cannot propose one. A trade item that carries `picks` is refused with that reason, never silently ignored. A trade is refused when the counterparty is not another team in the same league, a player is not on the roster they would leave, or the league's trade window has closed, and the refusal names the item. Teams with nothing proposed still appear on the review, so the set covers every team this account has. Player references must come from a read of that team's league; a reference from another account or league, a team this account does not have, a player named in both adds and drops, or the same move repeated is refused and named by its position. Repeating the identical set returns the existing set instead of creating a duplicate. A set expires 24 hours after it is created. Use `revalidate_transaction_proposal_set` to check again later, and `get_transaction_proposal_set` to read the set back. No tool submits, executes, or spends anything: only a signed-in person can submit the included moves from the review page, and the server sends them in the order it chose. A submitted trade is a real offer to another manager, who alone decides whether to accept it.",
+      "Propose one set of player operations across any of this account's teams for a person to review, and return the set id and one review link. Proposing writes nothing to the provider: it stores the set and no transaction is submitted. Before it stores anything, the tool reads current roster, league, and player state for every team the request touches and validates every declared item against the set's end state, the roster projected through the order this set would run. An item that cannot run is never stored. It is returned in `refused` with its 1-based position in the request, a plain reason, and what would make it valid; the valid items in the same call are stored as usual, so a client does not resend the good ones. When no item can run, the call refuses and stores nothing. A reason includes an added player who is no longer available, a dropped or moved player no longer on the roster, a destination slot the league does not declare, a set with no operation that frees a roster place, a closed period, a bid above the budget, an illegal roster position, or no order that keeps the team legal. A roster is illegal when a rostered player sits in a slot that accepts none of their published positions, and that can block a transaction even when the move itself is fine. When a slot the set opens accepts that player, the server places a roster move in the team's order before the transaction; a client may instead declare that move itself as a `slot_move`. The slot can be opened by a drop in the same set, including the drop in the same item. If no slot in the set is open, the item is refused and the reason names the choice only the person can make and the drop or slot move that would resolve it. Fix the reason and propose again, or add the missing operation to the same set. Pass `set` with the id of an existing set that has not been submitted to append these items after its existing ones. Every team that receives an item is validated again with its existing items as one set against the league's slots, and that team's stored order is recomputed. A submitted or expired set refuses new items; submitting settles the set. If an added item makes an existing item impossible, nothing is stored: the refusal names the existing item to withdraw, and `withdraw_transaction_proposal_items` removes it. Each item names one team, a kind, the players to add and drop or the `slotMove` of a `slot_move`, an optional FAAB bid, and a required reason. The kinds a client can declare are `free_agent_add` (players added, no bid), `waiver_claim` (players added with a bid of 0 or more), `drop` (players dropped only), `slot_move` (one rostered player moved to one slot the league declares, whether starting, bench, or reserve, into a reserve slot or back out of one), and `trade` (players going out and coming back with one counterparty). A drop item cannot add or bid, and a free-agent add cannot bid. The client declares intent per team; the server owns the order of each team's moves, the effective date, and the timing. A `slot_move` names `slotMove.player` (a player reference from a roster read) and `slotMove.toSlot` (a slot the league declares). It adds and drops nobody, carries no bid, and names no counterparty. Declare one when a later add or drop needs a specific slot freed or a player on a reserve list should be activated, and never state which operation comes first. The review and the set read show the order the server chose with a position for every move before submission. A player the provider reports as locked cannot be moved on that date. An item that no operation in the set can make legal is refused on its own and does not refuse the rest of the team's plan. A `slot_move` is a same-roster move, not a lineup write: use `set_lineup` to assign the lineup. A `trade` item names `counterparty` (a team reference from the league's teams read), the players going out in `drops`, and the players coming back in `adds`; it carries players only, no bid, and no draft pick. A league's own rules may allow draft picks to be traded, and `get_league` publishes that as `trades.draftPicks`, but the provider publishes pick trades only on its website and offers no element for a pick in the transaction API Lineupgrade writes through, so this tool cannot propose one. A trade item that carries `picks` is refused with that reason, never silently ignored. A trade is refused when the counterparty is not another team in the same league, a player is not on the roster they would leave, or the league's trade window has closed, and the refusal names the item. Teams with nothing proposed still appear on the review, so the set covers every team this account has. Player references must come from a read of that team's league; a reference from another account or league, a team this account does not have, a player named in both adds and drops, or the same move repeated is refused and named by its position. Repeating the identical set returns the existing set instead of creating a duplicate. A set that has been extended or had a move withdrawn no longer matches its original request, so proposing the original items again creates a new set. A set expires 24 hours after it is created. Use `revalidate_transaction_proposal_set` to check again later, `get_transaction_proposal_set` to read the set back, and `withdraw_transaction_proposal_items` to remove moves before submission. No tool submits, executes, or spends anything: only a signed-in person can submit the included moves from the review page, and the server sends them in the order it chose. A submitted trade is a real offer to another manager, who alone decides whether to accept it.",
     parameters: ProposeTransactionsInput,
     success: Schema.toCodecJson(ProposedTransactions),
     failure: ToolFailure,
@@ -51,7 +54,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_transaction_proposal_set", {
     description:
-      "Read one transaction proposal set owned by this account: the set, every item grouped by its team, teams that had nothing proposed, and each item's state (proposed, executed, pending on waivers, failed, skipped, or unknown) with its last check and reasons, including an illegal roster position. Each team with roster moves carries its planned `order`, with a position for every move, saved by the last check, so the sequence is visible before submission. A `slot_move` item carries `slotMove` with its player and destination slot, and an item that also needs a server roster move carries `reserveMove`. A rejected or unsent write carries the provider's exact wording when it gave one. A submitted set also carries who submitted it, when, each move's position in its team's order, and the outcome of every step, and cannot be submitted again. The review link is returned beside it. This reads stored proposals only and contacts no provider; use `revalidate_transaction_proposal_set` to re-read current roster, pool, period, and budget state before anyone decides. Another account's set is reported as not found.",
+      "Read one transaction proposal set owned by this account: the set, every item grouped by its team, teams that had nothing proposed, and each item's state (proposed, executed, pending on waivers, failed, skipped, or unknown) with its last check and reasons, including an illegal roster position. A set stores only moves that passed the check when they were proposed; a move refused at proposal time was returned to the client and is absent here. Each team with roster moves carries its planned `order`, with a position for every move, saved by the last check, so the sequence is visible before submission. A `slot_move` item carries `slotMove` with its player and destination slot, and an item that also needs a server roster move carries `reserveMove`. A rejected or unsent write carries the provider's exact wording when it gave one. A submitted set also carries who submitted it, when, each move's position in its team's order, and the outcome of every step, and cannot be submitted again. The review link is returned beside it. This reads stored proposals only and contacts no provider; use `revalidate_transaction_proposal_set` to re-read current roster, pool, period, and budget state before anyone decides. Another account's set is reported as not found.",
     parameters: ProposalSetInput,
     success: Schema.toCodecJson(ProposalReview),
     failure: ToolFailure,
@@ -64,7 +67,7 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("revalidate_transaction_proposal_set", {
     description:
-      "Re-read current provider state for one proposal set and mark each open item current, stale, or illegal with its reasons. It reads each team once for its roster, league rules, and the pool state of the players it adds, so a stale item names what changed: a player is no longer available in the pool, the drop or moved player is no longer on the roster, a destination slot the league does not declare, a set with no operation that frees a roster place, the league's period has closed, the bid exceeds the team's remaining FAAB budget, or the league does not use a FAAB budget at all. It validates the team's set as a set: it chooses an order, then walks the items against the roster projected through the earlier ones, so a drop or declared slot move in the same set can make a later add legal. An add that no operation in the set frees a place for stays stale with `roster_full`, and its reason names the missing drop or slot move. An illegal item names a rostered player in a slot that accepts none of their published positions; when a slot the set opens accepts them the server's order carries a roster move before the transaction, and when no slot is open it names the choice only the person can make and the drop or slot move that would resolve it in this set. A client may declare that move itself as a `slot_move`. Each team with roster moves also carries its `order` with a position for every move: the sequence the server chose so every step stays legal under the league's slots and published roster-change timing. It is shown before submission and read back by `get_transaction_proposal_set`. A `slot_move` is checked against the league's declared slots and the player's eligibility; a locked player cannot move on the effective date. When no order exists, the whole set for that team is refused: every move in it is illegal with a reason naming both operations and the date, and an order the server could not decide within its search bound is reported as unresolved rather than refused. A trade item follows the team's roster moves in the published sequence: it changes no roster until the other manager accepts, so it is never interleaved as if it had settled. A team whose state cannot be read marks its own items stale and never hides the other teams. Staleness and illegality are not failures: an item keeps its proposed state and carries the reason. An expired set refuses rather than re-validating, so nothing stale or illegal can be silently executed.",
+      "Re-read current provider state for one proposal set and mark each open item current, stale, or illegal with its reasons. It reads each team once for its roster, league rules, and the pool state of the players it adds, so a stale item names what changed: a player is no longer available in the pool, the drop or moved player is no longer on the roster, a destination slot the league does not declare, a set with no operation that frees a roster place, the league's period has closed, the bid exceeds the team's remaining FAAB budget, or the league does not use a FAAB budget at all. It validates the team's set as a set: it chooses an order, then walks the items against the roster projected through the earlier ones, so a drop or declared slot move in the same set can make a later add legal. An add that no operation in the set frees a place for stays stale with `roster_full`, and its reason names the missing drop or slot move. An illegal item names a rostered player in a slot that accepts none of their published positions; when a slot the set opens accepts them the server's order carries a roster move before the transaction, and when no slot is open it names the choice only the person can make and the drop or slot move that would resolve it in this set. A client may declare that move itself as a `slot_move`. Each team with roster moves also carries its `order` with a position for every move: the sequence the server chose so every step stays legal under the league's slots and published roster-change timing. It is shown before submission and read back by `get_transaction_proposal_set`. A `slot_move` is checked against the league's declared slots and the player's eligibility; a locked player cannot move on the effective date. When no order exists, the whole set for that team is refused: every move in it is illegal with a reason naming both operations and the date, and an order the server could not decide within its search bound is reported as unresolved rather than refused. A trade item follows the team's roster moves in the published sequence: it changes no roster until the other manager accepts, so it is never interleaved as if it had settled. A team whose state cannot be read marks its own items stale and never hides the other teams. Staleness and illegality are not failures: an item keeps its proposed state and carries the reason. Use `withdraw_transaction_proposal_items` to remove a move that went stale or cannot be made. An expired set refuses rather than re-validating, so nothing stale or illegal can be silently executed.",
     parameters: ProposalSetInput,
     success: Schema.toCodecJson(ProposalReview),
     failure: ToolFailure,
@@ -74,6 +77,19 @@ export const proposalTools = Toolkit.make(
     .annotate(Tool.Readonly, false)
     .annotate(Tool.Destructive, false)
     .annotate(Tool.Idempotent, true)
+    .annotate(Tool.OpenWorld, false),
+  Tool.make("withdraw_transaction_proposal_items", {
+    description:
+      "Withdraw one or more moves from a proposal set that has not been submitted, by move reference, and return the set with its recomputed order and review link. The remaining moves are checked again as a set against current roster, league, and player state, so a removal can make another move possible or leave it stale, and each team's order is recomputed from scratch. Removing the last move for a team is allowed; that team then appears with nothing proposed. A move that already ran, is pending, was skipped, failed, or is otherwise settled cannot be withdrawn: the refusal names the move and its state, and nothing is removed. A submitted set is an audit record and cannot change. This reads current state and writes only the stored set; it sends no provider write. Use propose_transactions with this set's id to add moves again.",
+    parameters: WithdrawProposalItemsInput,
+    success: Schema.toCodecJson(ProposalReview),
+    failure: ToolFailure,
+  })
+    .annotate(RequiredScope, fantasyQueryScopes.reviewTransactions)
+    .annotate(Tool.Title, "Withdraw transaction proposal moves")
+    .annotate(Tool.Readonly, false)
+    .annotate(Tool.Destructive, false)
+    .annotate(Tool.Idempotent, false)
     .annotate(Tool.OpenWorld, false),
   Tool.make("get_pending_trade_offers", {
     description:
@@ -103,102 +119,37 @@ export function proposalToolHandlers(
       const auth = yield* AuthService;
       const proposer = { kind: "agent", reference: "mcp", surface: "mcp" } as const;
       const reviewUrl = (path: string): string => new URL(path, auth.oauthResource).href;
+      const toReview = (review: ProposalSetReview): ProposalReview => ({
+        set: review.set,
+        teams: review.teams,
+        reviewUrl: reviewUrl(review.set.reviewPath),
+      });
 
       return proposalTools.of({
         propose_transactions: (input) =>
           proposals.propose(agent.userId, proposer, input).pipe(
-            Effect.flatMap((result) =>
-              proposals
-                .revalidate(agent.userId, { set: result.set.id })
-                .pipe(Effect.map((review) => revalidatedProposal(result, review))),
-            ),
             Effect.map((result): ProposedTransactions => ({
               set: result.set,
               created: result.created,
+              extended: result.extended,
               items: result.items,
+              refused: result.refused,
               reviewUrl: reviewUrl(result.set.reviewPath),
               detail: result.detail,
             })),
             mapFailure,
           ),
         get_transaction_proposal_set: (input) =>
-          proposals.read(agent.userId, input).pipe(
-            Effect.map((review): ProposalReview => ({
-              set: review.set,
-              teams: review.teams,
-              reviewUrl: reviewUrl(review.set.reviewPath),
-            })),
-            mapFailure,
-          ),
+          proposals.read(agent.userId, input).pipe(Effect.map(toReview), mapFailure),
         revalidate_transaction_proposal_set: (input) =>
-          proposals.revalidate(agent.userId, input).pipe(
-            Effect.map((review): ProposalReview => ({
-              set: review.set,
-              teams: review.teams,
-              reviewUrl: reviewUrl(review.set.reviewPath),
-            })),
-            mapFailure,
-          ),
+          proposals.revalidate(agent.userId, input).pipe(Effect.map(toReview), mapFailure),
+        withdraw_transaction_proposal_items: (input) =>
+          proposals.withdrawItems(agent.userId, input).pipe(Effect.map(toReview), mapFailure),
         get_pending_trade_offers: (input) =>
           proposals.readPendingOffers(agent.userId, input).pipe(mapFailure),
       });
     }),
   );
-}
-
-function revalidatedProposal(
-  result: ProposeTransactionsResult,
-  review: ProposalSetReview,
-): ProposeTransactionsResult {
-  const byId = new Map(
-    review.teams.flatMap((team) => team.items).map((item) => [item.id, item] as const),
-  );
-  const items = result.items.map((entry) =>
-    entry.outcome === "accepted"
-      ? { ...entry, item: byId.get(entry.item.id) ?? entry.item }
-      : entry,
-  );
-  let stale = 0;
-  let illegal = 0;
-  for (const entry of items) {
-    if (entry.outcome !== "accepted") {
-      continue;
-    }
-    if (entry.item.staleness.status === "stale") {
-      stale += 1;
-    }
-    if (entry.item.staleness.status === "illegal") {
-      illegal += 1;
-    }
-  }
-  const notes = [
-    ...(stale === 0
-      ? []
-      : [
-          `${String(stale)} accepted ${stale === 1 ? "item is" : "items are"} stale and names why.`,
-        ]),
-    ...(illegal === 0
-      ? []
-      : [
-          `${String(illegal)} accepted ${illegal === 1 ? "item is" : "items are"} illegal and names the player, the slot, and the choice that resolves it.`,
-        ]),
-  ];
-  const conflicts = review.teams.flatMap((team) =>
-    team.order?.status === "conflict" ? team.order.conflicts.map((entry) => entry.detail) : [],
-  );
-  const refused =
-    conflicts.length === 0
-      ? []
-      : [
-          `No order keeps one team's moves legal, so that team's whole set is refused at this check: ${conflicts.join(" ")}`,
-        ];
-  return {
-    ...result,
-    items,
-    detail: `${result.detail} ${
-      notes.length === 0 ? "Every accepted item is current." : notes.join(" ")
-    }${refused.length === 0 ? "" : ` ${refused.join(" ")}`}`,
-  };
 }
 
 function mapFailure<A>(
@@ -214,14 +165,31 @@ function mapFailure<A>(
         case "proposal.already_submitted":
           return reject(
             "already_submitted",
-            "This proposal set was already submitted. It is an audit record now and cannot be submitted again; propose a fresh set for a new move.",
+            "This proposal set was already submitted. Its moves are an audit record and cannot change or be submitted again; propose a fresh set for a new move.",
           );
         case "proposal.nothing_accepted":
           return reject(
             "nothing_accepted",
-            `${error.detail} ${error.refusals
-              .map((refusal) => `Item ${String(refusal.index + 1)}: ${refusal.detail}`)
-              .join(" ")}`.trim(),
+            [
+              error.detail,
+              ...error.refusals.map(
+                (refusal) => `Item ${String(refusal.position)}: ${refusal.reason} ${refusal.fix}`,
+              ),
+              ...error.withdraw.map(
+                (entry) => `Withdraw move ${entry.item} (${entry.label}): ${entry.detail}`,
+              ),
+            ].join(" "),
+          );
+        case "proposal.items_not_withdrawable":
+          return reject(
+            "items_not_withdrawable",
+            [
+              error.detail,
+              ...error.items.map(
+                (entry) =>
+                  `Move ${entry.item}${entry.state === undefined ? "" : ` (${entry.state})`}: ${entry.detail}`,
+              ),
+            ].join(" "),
           );
         case "proposal.set_not_found":
           return reject(
