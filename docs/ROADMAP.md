@@ -979,10 +979,14 @@ owner's read is that the transaction API asks clients to do our job.
       roster" or "stash this player on a reserve list". The server decides the slot with the lineup solver, which
       already knows every slot's eligibility and the reserve rules.
 - [ ] Publish the roster's own arithmetic: active count against the maximum, reserve occupants excluded from it,
-      and per-move effect on that count, so a client never has to infer capacity.
-- [ ] Correct the slot model to what the provider actually enforces: a total roster count, generic bench capacity,
-      starter slots that may sit empty, and reserve eligibility by published positions. A drop frees a roster
-      spot, not a slot of one kind.
+      and per-move effect on that count, so a client never has to infer capacity. Not keeper cost: a player's
+      keeper price is league-specific and never published, so it is not ours to compute. What a league chooses to
+      publish about its own keeper rules is the league's, and the owner's note stays where that intent lives.
+- [ ] Correct the roster model to what a provider enforces, described as declared capabilities rather than
+      assumptions: the total roster maximum, whether the bench is generic or per-slot, whether a starting slot
+      may stand empty, and how reserve eligibility is established (for us, published positions only). Each
+      provider declares its own values and the rule reads them, so a second provider needs no branch in the
+      backend. A drop frees a roster place, not a place in a kind of slot.
 - [ ] After a submission executes, run the lineup for each affected team once, so placement settles without a
       second client call.
 
