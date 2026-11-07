@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
-import { LineupRunId, LineupUuid } from "#contexts/connections/LineupRun.ts";
+import { LineupRunId, LineupId } from "#contexts/connections/LineupRun.ts";
 import { LineupDelivery } from "#contexts/connections/LineupWork.ts";
 
 import { LineupDeliveryCloudTasks } from "./LineupDeliveryCloudTasks.ts";
@@ -11,9 +11,7 @@ it.effect("enqueues deterministic Cloud Tasks deliveries with no credentials", (
   Effect.gen(function* () {
     const delivery = yield* LineupDelivery;
     const runId = yield* Schema.decodeEffect(LineupRunId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2");
-    const deliveryId = yield* Schema.decodeEffect(LineupUuid)(
-      "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",
-    );
+    const deliveryId = yield* Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a3");
 
     yield* delivery.enqueueMany([{ delivery: deliveryId, runs: [runId] }]);
     yield* delivery.enqueueMany([{ delivery: deliveryId, runs: [runId] }]);

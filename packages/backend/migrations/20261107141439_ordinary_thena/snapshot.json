@@ -1,0 +1,647 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "41a2f8ee-9db7-4ba4-bc91-dbb04e9f0538",
+  "prevIds": ["70073b36-7cf9-4c20-8cef-4baa2cc52e0b"],
+  "footprints": [
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "provider_teams", "id"],
+      "writes": [
+        "s|colprop|public.provider_teams.id.default",
+        "s|colprop|public.provider_teams.id.type"
+      ],
+      "reads": ["n|tbl|public.provider_teams", "n|sch|public", "n|col|public.provider_teams.id"],
+      "sqlHash": "cd1bbe8f1725e30b"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_deliveries", "id"],
+      "writes": [
+        "s|colprop|public.lineup_deliveries.id.type",
+        "s|colprop|public.lineup_deliveries.id.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_deliveries",
+        "n|sch|public",
+        "n|col|public.lineup_deliveries.id"
+      ],
+      "sqlHash": "c08493434fc77ea3"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_run_attempts", "run_id"],
+      "writes": [
+        "s|colprop|public.lineup_run_attempts.run_id.type",
+        "s|colprop|public.lineup_run_attempts.run_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_run_attempts",
+        "n|sch|public",
+        "n|col|public.lineup_run_attempts.run_id"
+      ],
+      "sqlHash": "55f2c134216a782d"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_run_attempts", "lease_token"],
+      "writes": [
+        "s|colprop|public.lineup_run_attempts.lease_token.type",
+        "s|colprop|public.lineup_run_attempts.lease_token.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_run_attempts",
+        "n|sch|public",
+        "n|col|public.lineup_run_attempts.lease_token"
+      ],
+      "sqlHash": "41fa85d906d06cfe"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_runs", "id"],
+      "writes": ["s|colprop|public.lineup_runs.id.default", "s|colprop|public.lineup_runs.id.type"],
+      "reads": ["n|tbl|public.lineup_runs", "n|sch|public", "n|col|public.lineup_runs.id"],
+      "sqlHash": "8b72b31b2ff888a5"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_runs", "team_id"],
+      "writes": [
+        "s|colprop|public.lineup_runs.team_id.type",
+        "s|colprop|public.lineup_runs.team_id.default"
+      ],
+      "reads": ["n|tbl|public.lineup_runs", "n|sch|public", "n|col|public.lineup_runs.team_id"],
+      "sqlHash": "78419aab47c375bb"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_team_leases", "team_id"],
+      "writes": [
+        "s|colprop|public.lineup_team_leases.team_id.type",
+        "s|colprop|public.lineup_team_leases.team_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_team_leases",
+        "n|sch|public",
+        "n|col|public.lineup_team_leases.team_id"
+      ],
+      "sqlHash": "f1624f1f0a108a81"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_team_leases", "run_id"],
+      "writes": [
+        "s|colprop|public.lineup_team_leases.run_id.type",
+        "s|colprop|public.lineup_team_leases.run_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_team_leases",
+        "n|sch|public",
+        "n|col|public.lineup_team_leases.run_id"
+      ],
+      "sqlHash": "ce0b9eca6bc6a6ee"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_team_leases", "token"],
+      "writes": [
+        "s|colprop|public.lineup_team_leases.token.type",
+        "s|colprop|public.lineup_team_leases.token.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_team_leases",
+        "n|sch|public",
+        "n|col|public.lineup_team_leases.token"
+      ],
+      "sqlHash": "c5b0204001f7647c"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_write_intents", "id"],
+      "writes": [
+        "s|colprop|public.lineup_write_intents.id.default",
+        "s|colprop|public.lineup_write_intents.id.type"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_write_intents",
+        "n|sch|public",
+        "n|col|public.lineup_write_intents.id"
+      ],
+      "sqlHash": "2a2e542ae2c186ba"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_write_intents", "run_id"],
+      "writes": [
+        "s|colprop|public.lineup_write_intents.run_id.type",
+        "s|colprop|public.lineup_write_intents.run_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_write_intents",
+        "n|sch|public",
+        "n|col|public.lineup_write_intents.run_id"
+      ],
+      "sqlHash": "9b4946e3ab0799c4"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_write_intents", "team_id"],
+      "writes": [
+        "s|colprop|public.lineup_write_intents.team_id.type",
+        "s|colprop|public.lineup_write_intents.team_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_write_intents",
+        "n|sch|public",
+        "n|col|public.lineup_write_intents.team_id"
+      ],
+      "sqlHash": "0d2d3c7caa61a91b"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_write_intents", "lease_token"],
+      "writes": [
+        "s|colprop|public.lineup_write_intents.lease_token.type",
+        "s|colprop|public.lineup_write_intents.lease_token.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_write_intents",
+        "n|sch|public",
+        "n|col|public.lineup_write_intents.lease_token"
+      ],
+      "sqlHash": "9d0d1e7c93d40b66"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_run_diagnostics", "id"],
+      "writes": [
+        "s|colprop|public.lineup_run_diagnostics.id.default",
+        "s|colprop|public.lineup_run_diagnostics.id.type"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_run_diagnostics",
+        "n|sch|public",
+        "n|col|public.lineup_run_diagnostics.id"
+      ],
+      "sqlHash": "056f982d26f89f92"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_run_diagnostics", "run_id"],
+      "writes": [
+        "s|colprop|public.lineup_run_diagnostics.run_id.type",
+        "s|colprop|public.lineup_run_diagnostics.run_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_run_diagnostics",
+        "n|sch|public",
+        "n|col|public.lineup_run_diagnostics.run_id"
+      ],
+      "sqlHash": "30b004914a4380a5"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "lineup_run_diagnostics", "team_id"],
+      "writes": [
+        "s|colprop|public.lineup_run_diagnostics.team_id.type",
+        "s|colprop|public.lineup_run_diagnostics.team_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.lineup_run_diagnostics",
+        "n|sch|public",
+        "n|col|public.lineup_run_diagnostics.team_id"
+      ],
+      "sqlHash": "30e8260c5ca4b82c"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "connection_incidents", "id"],
+      "writes": [
+        "s|colprop|public.connection_incidents.id.default",
+        "s|colprop|public.connection_incidents.id.type"
+      ],
+      "reads": [
+        "n|tbl|public.connection_incidents",
+        "n|sch|public",
+        "n|col|public.connection_incidents.id"
+      ],
+      "sqlHash": "7da48998ca4b13e3"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "notifications", "id"],
+      "writes": [
+        "s|colprop|public.notifications.id.type",
+        "s|colprop|public.notifications.id.default"
+      ],
+      "reads": ["n|tbl|public.notifications", "n|sch|public", "n|col|public.notifications.id"],
+      "sqlHash": "b9e39e12adc898cd"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "notifications", "incident_id"],
+      "writes": [
+        "s|colprop|public.notifications.incident_id.type",
+        "s|colprop|public.notifications.incident_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.notifications",
+        "n|sch|public",
+        "n|col|public.notifications.incident_id"
+      ],
+      "sqlHash": "47aef2d5881fb7ee"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "feedback", "id"],
+      "writes": ["s|colprop|public.feedback.id.default", "s|colprop|public.feedback.id.type"],
+      "reads": ["n|tbl|public.feedback", "n|sch|public", "n|col|public.feedback.id"],
+      "sqlHash": "51e23ac9e2a4b9d4"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "id"],
+      "writes": [
+        "s|colprop|public.transaction_proposal_items.id.default",
+        "s|colprop|public.transaction_proposal_items.id.type"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_items",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_items.id"
+      ],
+      "sqlHash": "5d1dc3c0bd4c000c"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "set_id"],
+      "writes": [
+        "s|colprop|public.transaction_proposal_items.set_id.type",
+        "s|colprop|public.transaction_proposal_items.set_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_items",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_items.set_id"
+      ],
+      "sqlHash": "31cb1dc6e38a24f7"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "team_id"],
+      "writes": [
+        "s|colprop|public.transaction_proposal_items.team_id.type",
+        "s|colprop|public.transaction_proposal_items.team_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_items",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_items.team_id"
+      ],
+      "sqlHash": "9d16accd752476be"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "transaction_proposal_sets", "id"],
+      "writes": [
+        "s|colprop|public.transaction_proposal_sets.id.default",
+        "s|colprop|public.transaction_proposal_sets.id.type"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_sets",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_sets.id"
+      ],
+      "sqlHash": "75970cbefb31fe67"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "transaction_proposal_steps", "id"],
+      "writes": [
+        "s|colprop|public.transaction_proposal_steps.id.default",
+        "s|colprop|public.transaction_proposal_steps.id.type"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_steps",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_steps.id"
+      ],
+      "sqlHash": "7dcfa5482e0b6907"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "transaction_proposal_steps", "set_id"],
+      "writes": [
+        "s|colprop|public.transaction_proposal_steps.set_id.type",
+        "s|colprop|public.transaction_proposal_steps.set_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_steps",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_steps.set_id"
+      ],
+      "sqlHash": "e2f8d77e593a1f6d"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "transaction_proposal_steps", "item_id"],
+      "writes": [
+        "s|colprop|public.transaction_proposal_steps.item_id.type",
+        "s|colprop|public.transaction_proposal_steps.item_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_steps",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_steps.item_id"
+      ],
+      "sqlHash": "3cf1ec7b0c306dbd"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "provider_team_agent_notes", "id"],
+      "writes": [
+        "s|colprop|public.provider_team_agent_notes.id.default",
+        "s|colprop|public.provider_team_agent_notes.id.type"
+      ],
+      "reads": [
+        "n|tbl|public.provider_team_agent_notes",
+        "n|sch|public",
+        "n|col|public.provider_team_agent_notes.id"
+      ],
+      "sqlHash": "9fdf57ae10470bd9"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "provider_team_agent_notes", "team_id"],
+      "writes": [
+        "s|colprop|public.provider_team_agent_notes.team_id.type",
+        "s|colprop|public.provider_team_agent_notes.team_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.provider_team_agent_notes",
+        "n|sch|public",
+        "n|col|public.provider_team_agent_notes.team_id"
+      ],
+      "sqlHash": "8548539c27040a31"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "transaction_proposal_submissions", "id"],
+      "writes": [
+        "s|colprop|public.transaction_proposal_submissions.id.default",
+        "s|colprop|public.transaction_proposal_submissions.id.type"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_submissions",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_submissions.id"
+      ],
+      "sqlHash": "2ad714289f1fa63a"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "transaction_proposal_submissions", "set_id"],
+      "writes": [
+        "s|colprop|public.transaction_proposal_submissions.set_id.type",
+        "s|colprop|public.transaction_proposal_submissions.set_id.default"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_submissions",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_submissions.set_id"
+      ],
+      "sqlHash": "5b6d889621cbfb63"
+    }
+  ],
+  "deltas": [
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"provider_teams\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_deliveries\",\"id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_run_attempts\",\"run_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_run_attempts\",\"lease_token\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_runs\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_runs\",\"team_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_team_leases\",\"team_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_team_leases\",\"run_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_team_leases\",\"token\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_write_intents\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_write_intents\",\"run_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_write_intents\",\"team_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_write_intents\",\"lease_token\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_run_diagnostics\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_run_diagnostics\",\"run_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"lineup_run_diagnostics\",\"team_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"connection_incidents\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"notifications\",\"id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"notifications\",\"incident_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"feedback\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"set_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_items\",\"team_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"set_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_steps\",\"item_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"provider_team_agent_notes\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"provider_team_agent_notes\",\"team_id\"]",
+      "set": {
+        "type": "text"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_submissions\",\"id\"]",
+      "set": {
+        "type": "text",
+        "default": null
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_submissions\",\"set_id\"]",
+      "set": {
+        "type": "text"
+      }
+    }
+  ]
+}

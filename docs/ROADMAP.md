@@ -32,7 +32,7 @@ restructuring is summarised in the [appendix](#appendix--closed-work).
 | Restore              | Drill passed 2026-10-29; retention, RPO/RTO and recovery owner undecided                       |
 | Dependencies         | Fresh audit and disposition in [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md)                      |
 | Security             | Audit and disposition in [SECURITY-AUDIT.md](SECURITY-AUDIT.md); deferred work is group J      |
-| Checks               | 1680 node, 191 browser, 10 chromium; container end to end 59 passed, one known skip            |
+| Checks               | 1695 node, 189 browser, 10 chromium; container end to end 60 passed, one known skip            |
 
 ---
 
@@ -880,15 +880,27 @@ to explore, `L` to apply.
 The owner prefers ULIDs to UUIDv7 for anything a person ever sees, mainly in URLs: a ULID is shorter,
 sortable, and does not look like a hex accident.
 
-- [ ] Replace UUID generation at every new-identifier site with ULID, keeping sortability and the same
-      storage width decisions.
-- [ ] Decide the migration for rows already stored: converting identifiers in place means rewriting every
-      foreign key and every reference an outside client may already hold. If that is not practical, new
-      identifiers are ULIDs and stored ones keep their values, with the boundary saying which is which.
-- [ ] Keep provider identifiers untouched: a provider key is the provider's, never ours.
+- [x] Every identifier Lineupgrade creates is a ULID. Effect's `Crypto.randomULID` builds the 26
+      Crockford characters from its clock and crypto service. Connections, hosted linking sessions,
+      teams, lineup runs, proposals, feedback, incidents and notifications all create their identifiers
+      this way.
+- [x] A table whose identifier the application always supplies no longer has a `gen_random_uuid()`
+      database default. Nothing outside the application inserts those rows, so no default remains on a
+      Lineupgrade identifier column.
+- [x] Stored identifiers keep their values. Every Lineupgrade identifier column is `text`, holding an
+      old UUID string or a new ULID, with foreign keys converted by the cast rather than regenerated.
+      The authentication library's tables (`user`, `session`, `account`, `verification`, `jwks`,
+      `oauth_*`) and `rate_limit` keep the shapes it defines. Provider keys are the provider's, never
+      ours, and are untouched.
+- [x] Validation accepts one of the two stored shapes, a UUID or a ULID, under the existing per-entity
+      brands, and refuses arbitrary text.
 
-**Verify**: a freshly created team, proposal set and run read back with a ULID, the old rows still resolve,
-and no join assumes one format. `S`
+Nothing remains in this group.
+
+**Verified**: a freshly created team, connection, run, proposal set and feedback report read back with
+a ULID; tests seeded with UUID identifiers still read through the affected repositories; the migration
+test keeps an old UUID row and accepts a ULID beside it; and the identifier check refuses arbitrary
+text. `S`
 
 ## S. A Yahoo API SDK outside the app
 

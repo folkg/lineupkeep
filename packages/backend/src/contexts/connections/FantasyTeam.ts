@@ -2,7 +2,12 @@ import { Schema } from "effect";
 
 import { ConnectionId, ProviderKey } from "./Connection.ts";
 
-export const TeamId = Schema.String.pipe(Schema.check(Schema.isUUID()), Schema.brand("TeamId"));
+const LineupgradeId = Schema.Union([
+  Schema.String.pipe(Schema.check(Schema.isUUID())),
+  Schema.String.pipe(Schema.check(Schema.isULID())),
+]);
+
+export const TeamId = LineupgradeId.pipe(Schema.brand("TeamId"));
 export type TeamId = typeof TeamId.Type;
 export const decodeTeamId = Schema.decodeUnknownSync(TeamId);
 

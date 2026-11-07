@@ -113,7 +113,10 @@ it.effect(
         .values([attemptOf(removedRun, removedAt), attemptOf(keptRun, keptAt)]);
       yield* database
         .insert(lineupWriteIntents)
-        .values([writeIntentOf(removedRun, removedAt), writeIntentOf(keptRun, keptAt)]);
+        .values([
+          writeIntentOf("018f79ea-7d86-7c18-9b4a-8b4d0c916020", removedRun, removedAt),
+          writeIntentOf("018f79ea-7d86-7c18-9b4a-8b4d0c916021", keptRun, keptAt),
+        ]);
 
       const summary = yield* retention.run(10, at);
       const runs = yield* database.select({ id: lineupRuns.id }).from(lineupRuns);
@@ -212,7 +215,9 @@ it.effect("keeps an in-flight run and its write intent at the retention boundary
     yield* database
       .insert(lineupRuns)
       .values([{ ...terminalRun(inFlightRun, boundary), status: "applying" }]);
-    yield* database.insert(lineupWriteIntents).values([writeIntentOf(inFlightRun, boundary)]);
+    yield* database
+      .insert(lineupWriteIntents)
+      .values([writeIntentOf("018f79ea-7d86-7c18-9b4a-8b4d0c916022", inFlightRun, boundary)]);
 
     const summary = yield* retention.run(10, at);
     const runs = yield* database.select({ id: lineupRuns.id }).from(lineupRuns);
@@ -266,8 +271,13 @@ function attemptOf(runId: string, at: DateTime.Utc): typeof lineupRunAttempts.$i
   };
 }
 
-function writeIntentOf(runId: string, at: DateTime.Utc): typeof lineupWriteIntents.$inferInsert {
+function writeIntentOf(
+  id: string,
+  runId: string,
+  at: DateTime.Utc,
+): typeof lineupWriteIntents.$inferInsert {
   return {
+    id,
     runId,
     attempt: 1,
     userId: owner,

@@ -35,7 +35,7 @@ it.effect(
       );
       assert.match(
         Array.getUnsafe(requests, 0).headers.get("idempotency-key") ?? "",
-        /^[0-9a-f-]{36}$/u,
+        /^[0-9A-HJKMNP-TV-Z]{26}$/u,
       );
       assert.deepStrictEqual(Array.getUnsafe(requests, 0).body, {
         from: "Lineupgrade <sign-in@example.test>",
@@ -139,7 +139,7 @@ it.effect("retries transient failures with one stable key and succeeds", () =>
 
     assert.strictEqual(keys.length, 2);
     assert.strictEqual(new Set(keys).size, 1);
-    assert.match(keys[0] ?? "", /^[0-9a-f-]{36}$/u);
+    assert.match(keys[0] ?? "", /^[0-9A-HJKMNP-TV-Z]{26}$/u);
   }),
 );
 

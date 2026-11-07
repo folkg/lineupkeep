@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { PgliteClient } from "@effect/sql-pglite";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 
 const migrationsFolder = "packages/backend/migrations";
 const targetMigration = "20261028220000_hosted_linking_connection_on_success";
@@ -188,6 +188,146 @@ describe("proposal submission history migration", () => {
       );
       expect(columns.map((row) => row.column_name)).not.toContain("submitted_at");
       expect(columns.map((row) => row.column_name)).not.toContain("completed_at");
+    }).pipe(Effect.provide(PgliteClient.layer())),
+  );
+});
+
+describe("lineupgrade identifier storage migration", () => {
+  const identifierMigration = "20261107141439_ordinary_thena";
+  const oldConnection = "00000000-0000-7000-8000-000000000001";
+  const oldTeam = "018f79ea-7d86-7c18-9b4a-8b4d0c916001";
+  const oldNote = "018f79ea-7d86-7c18-9b4a-8b4d0c916002";
+  const oldFeedback = "018f79ea-7d86-7c18-9b4a-8b4d0c916003";
+  const newTeam = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+  const newNote = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
+
+  it.effect("keeps stored UUID values and accepts a ULID in the same columns", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < identifierMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into provider_connections (id, user_id, request_id, provider, status, created_at, updated_at)
+        values ('${oldConnection}', 'owner', 'request-1', 'yahoo', 'ready', now(), now())
+      `);
+      yield* sql.unsafe(`
+        insert into provider_teams (
+          id, connection_id, user_id, provider, provider_team_key, provider_league_key,
+          league, sport, season, name, automation_state, automation_status,
+          last_seen_at, created_at, updated_at
+        )
+        values (
+          '${oldTeam}', '${oldConnection}', 'owner', 'yahoo', 'nhl.l.1.t.1', 'nhl.l.1',
+          'nhl', 'hockey', 2026, 'Red Line', '{}'::jsonb, 'disabled', now(), now(), now()
+        )
+      `);
+      yield* sql.unsafe(`
+        insert into provider_team_agent_notes (
+          id, team_id, connection_id, user_id, body, author_client_id, written_at
+        )
+        values ('${oldNote}', '${oldTeam}', '${oldConnection}', 'owner', 'old note', 'client', now())
+      `);
+      yield* sql.unsafe(`
+        insert into feedback (
+          id, user_id, submitter_kind, submitter_reference, kind, status, title, body,
+          created_at, updated_at
+        )
+        values ('${oldFeedback}', 'owner', 'user', 'web', 'bug', 'open', 'Old', 'Body', now(), now())
+      `);
+
+      for (const statement of migrationStatements((name) => name === identifierMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      expect(
+        yield* sql.unsafe<{ readonly id: string }>("select id from provider_teams order by id"),
+      ).toEqual([{ id: oldTeam }]);
+      expect(
+        yield* sql.unsafe<{ readonly id: string; readonly team_id: string }>(
+          "select id, team_id from provider_team_agent_notes order by id",
+        ),
+      ).toEqual([{ id: oldNote, team_id: oldTeam }]);
+      expect(
+        yield* sql.unsafe<{ readonly id: string }>("select id from feedback order by id"),
+      ).toEqual([{ id: oldFeedback }]);
+
+      const converted = yield* sql.unsafe<{
+        readonly table_name: string;
+        readonly column_name: string;
+      }>(`
+        select table_name, column_name
+        from information_schema.columns
+        where data_type <> 'text' and (table_name, column_name) in (
+          ('provider_teams', 'id'),
+          ('provider_team_agent_notes', 'id'),
+          ('provider_team_agent_notes', 'team_id'),
+          ('feedback', 'id'),
+          ('connection_incidents', 'id'),
+          ('notifications', 'id'),
+          ('notifications', 'incident_id'),
+          ('lineup_runs', 'id'),
+          ('lineup_runs', 'team_id'),
+          ('lineup_deliveries', 'id'),
+          ('lineup_team_leases', 'team_id'),
+          ('lineup_team_leases', 'run_id'),
+          ('lineup_team_leases', 'token'),
+          ('lineup_run_attempts', 'run_id'),
+          ('lineup_run_attempts', 'lease_token'),
+          ('lineup_run_diagnostics', 'id'),
+          ('lineup_run_diagnostics', 'run_id'),
+          ('lineup_run_diagnostics', 'team_id'),
+          ('lineup_write_intents', 'id'),
+          ('lineup_write_intents', 'run_id'),
+          ('lineup_write_intents', 'team_id'),
+          ('lineup_write_intents', 'lease_token'),
+          ('transaction_proposal_sets', 'id'),
+          ('transaction_proposal_submissions', 'id'),
+          ('transaction_proposal_submissions', 'set_id'),
+          ('transaction_proposal_items', 'id'),
+          ('transaction_proposal_items', 'set_id'),
+          ('transaction_proposal_items', 'team_id'),
+          ('transaction_proposal_steps', 'id'),
+          ('transaction_proposal_steps', 'set_id'),
+          ('transaction_proposal_steps', 'item_id')
+        )
+        order by table_name, column_name
+      `);
+      expect(converted).toEqual([]);
+
+      const missingTeam = yield* Effect.exit(
+        sql.unsafe(`
+          insert into provider_team_agent_notes (
+            id, team_id, connection_id, user_id, body, author_client_id, written_at
+          )
+          values ('${newNote}', 'missing-team', '${oldConnection}', 'owner', 'note', 'client', now())
+        `),
+      );
+      expect(Exit.isFailure(missingTeam)).toBe(true);
+
+      yield* sql.unsafe(`
+        insert into provider_teams (
+          id, connection_id, user_id, provider, provider_team_key, provider_league_key,
+          league, sport, season, name, automation_state, automation_status,
+          last_seen_at, created_at, updated_at
+        )
+        values (
+          '${newTeam}', '${oldConnection}', 'owner', 'yahoo', 'nhl.l.1.t.2', 'nhl.l.1',
+          'nhl', 'hockey', 2026, 'New Line', '{}'::jsonb, 'disabled', now(), now(), now()
+        )
+      `);
+      yield* sql.unsafe(`
+        insert into provider_team_agent_notes (
+          id, team_id, connection_id, user_id, body, author_client_id, written_at
+        )
+        values ('${newNote}', '${newTeam}', '${oldConnection}', 'owner', 'new note', 'client', now())
+      `);
+
+      expect(
+        yield* sql.unsafe<{ readonly id: string }>("select id from provider_teams order by id"),
+      ).toEqual([{ id: oldTeam }, { id: newTeam }]);
     }).pipe(Effect.provide(PgliteClient.layer())),
   );
 });

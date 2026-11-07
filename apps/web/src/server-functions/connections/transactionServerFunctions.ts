@@ -52,7 +52,7 @@ export const submitTransactionReviewServerFn = createServerFn({ method: "POST" }
     Schema.decodeResult(
       Schema.Struct({
         set: ProposalSetId,
-        include: Schema.Array(Schema.String.pipe(Schema.check(Schema.isUUID()))),
+        include: Schema.Array(ProposalItemId),
       }),
     )(raw),
   )
@@ -69,7 +69,7 @@ export const submitTransactionReviewServerFn = createServerFn({ method: "POST" }
           const proposals = yield* TransactionProposals;
           const review = yield* proposals.submit(userId, {
             set: input.set,
-            include: input.include.map((id) => Schema.decodeSync(ProposalItemId)(id)),
+            include: input.include,
           });
           return { review: toTransactionReviewView(review) } satisfies TransactionReviewData;
         }),
@@ -85,7 +85,7 @@ export const withdrawTradeServerFn = createServerFn({ method: "POST" })
     Schema.decodeResult(
       Schema.Struct({
         team: TeamId,
-        item: Schema.optional(Schema.String.pipe(Schema.check(Schema.isUUID()))),
+        item: Schema.optional(ProposalItemId),
         offer: Schema.optional(Schema.String),
       }),
     )(raw),
@@ -101,12 +101,6 @@ export const withdrawTradeServerFn = createServerFn({ method: "POST" })
             Effect.mapError(() => TransactionInputInvalid.make({})),
           );
           const proposals = yield* TransactionProposals;
-          const item =
-            input.item === undefined
-              ? undefined
-              : yield* Schema.decodeEffect(ProposalItemId)(input.item).pipe(
-                  Effect.mapError(() => TransactionInputInvalid.make({})),
-                );
           const offer =
             input.offer === undefined
               ? undefined
@@ -115,7 +109,7 @@ export const withdrawTradeServerFn = createServerFn({ method: "POST" })
                 );
           const result = yield* proposals.withdrawTrade(userId, {
             team: input.team,
-            ...(item === undefined ? {} : { item }),
+            ...(input.item === undefined ? {} : { item: input.item }),
             ...(offer === undefined ? {} : { offer }),
           });
           return {

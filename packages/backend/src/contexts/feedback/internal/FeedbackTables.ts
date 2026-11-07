@@ -1,5 +1,5 @@
 import { createSelectSchema } from "drizzle-orm/effect-schema";
-import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { Effect, Schema, SchemaTransformation } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
@@ -17,7 +17,7 @@ import { FeedbackRecord } from "./FeedbackRecord.ts";
 export const feedback = pgTable(
   "feedback",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     submitterKind: text("submitter_kind", { enum: ["user", "agent"] }).notNull(),
     submitterReference: text("submitter_reference").notNull(),

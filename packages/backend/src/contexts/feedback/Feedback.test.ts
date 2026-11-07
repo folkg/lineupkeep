@@ -15,6 +15,8 @@ import { FeedbackDatabaseTest } from "./internal/FeedbackDatabaseTest.ts";
 import { FeedbackLive } from "./internal/FeedbackLive.ts";
 import { FeedbackRepository } from "./internal/FeedbackRepository.ts";
 
+const lineupgradeUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
+
 it.effect("records an owner's submission with normalized text and an open status", () =>
   Effect.gen(function* () {
     const feedback = yield* Feedback;
@@ -30,6 +32,7 @@ it.effect("records an owner's submission with normalized text and an open status
       0,
     );
 
+    assert.isTrue(lineupgradeUlid.test(report.id));
     assert.strictEqual(report.status, "open");
     assert.deepStrictEqual(report.submitter, { kind: "user", reference: "web" });
     assert.strictEqual(report.title, "Lineup shows the wrong week");

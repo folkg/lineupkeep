@@ -85,13 +85,13 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
     make: Effect.gen(function* () {
       const database = yield* ConnectionsDatabase;
       const crypto = yield* Crypto.Crypto;
-      const generateConnectionId = crypto.randomUUIDv7().pipe(
+      const generateConnectionId = crypto.randomULID.pipe(
         Effect.map(decodeConnectionId),
         Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
       );
-      const newNotificationId = crypto
-        .randomUUIDv7()
-        .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+      const newNotificationId = crypto.randomULID.pipe(
+        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+      );
 
       const listConnections = Effect.fn("ConnectionRepository.listConnections")(function* (
         userId: UserId,
@@ -617,26 +617,35 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                         state: snapshot.state.value,
                       })),
                     ];
-                    const candidates: Array<typeof connectionIncidents.$inferInsert> = next.flatMap(
-                      (record) =>
-                        record.state._tag === "ReconnectRequired"
-                          ? [
-                              {
-                                userId: record.userId,
-                                connectionId: record.id,
-                                credentialGeneration: record.state.credentialGeneration,
-                                status: "open" as const,
-                                openedAt: DateTime.toDateUtc(at),
-                                resolvedAt: null,
-                                resolution: null,
-                              },
-                            ]
-                          : [],
+                    const candidates = next.flatMap((record) =>
+                      record.state._tag === "ReconnectRequired"
+                        ? [
+                            {
+                              userId: record.userId,
+                              connectionId: record.id,
+                              credentialGeneration: record.state.credentialGeneration,
+                              status: "open" as const,
+                              openedAt: DateTime.toDateUtc(at),
+                              resolvedAt: null,
+                              resolution: null,
+                            },
+                          ]
+                        : [],
                     );
                     if (candidates.length > 0) {
+                      const incidentIds = yield* Effect.replicateEffect(candidates.length)(
+                        crypto.randomULID,
+                      ).pipe(
+                        Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
+                      );
                       yield* transaction
                         .insert(connectionIncidents)
-                        .values(candidates)
+                        .values(
+                          Array.zipWith(candidates, incidentIds, (candidate, id) => ({
+                            id,
+                            ...candidate,
+                          })),
+                        )
                         .onConflictDoNothing({
                           target: [
                             connectionIncidents.connectionId,
@@ -766,7 +775,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
             Effect.forEach(
               teams,
               (team) =>
-                crypto.randomUUIDv7().pipe(
+                crypto.randomULID.pipe(
                   Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
                   Effect.map((id) => ({
                     id: decodeTeamId(id),

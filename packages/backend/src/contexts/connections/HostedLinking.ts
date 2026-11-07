@@ -6,10 +6,12 @@ import { ConnectionId } from "./Connection.ts";
 import type { ConnectionError, ProviderConnection } from "./Connection.ts";
 import { ProviderKey } from "./ProviderKey.ts";
 
-export const HostedLinkingSessionId = Schema.String.pipe(
-  Schema.check(Schema.isUUID()),
-  Schema.brand("HostedLinkingSessionId"),
-);
+const LineupgradeId = Schema.Union([
+  Schema.String.pipe(Schema.check(Schema.isUUID())),
+  Schema.String.pipe(Schema.check(Schema.isULID())),
+]);
+
+export const HostedLinkingSessionId = LineupgradeId.pipe(Schema.brand("HostedLinkingSessionId"));
 export type HostedLinkingSessionId = typeof HostedLinkingSessionId.Type;
 
 export const HostedLinkingSessionStatus = Schema.Literals([

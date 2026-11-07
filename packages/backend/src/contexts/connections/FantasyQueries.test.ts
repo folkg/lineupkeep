@@ -3101,6 +3101,7 @@ it.effect("returns recent agent notes newest first and bounds them beside the ow
     }
     yield* database.insert(providerTeamAgentNotes).values(
       Array.makeBy(25, (index) => ({
+        id: noteId(index),
         teamId,
         connectionId,
         userId: owner,
@@ -6149,3 +6150,10 @@ const queriesTestLayerWithGames = (
 };
 
 const QueriesTestLayer = queriesTestLayer(EmptyGameSourceTest);
+
+function noteId(index: number): string {
+  const crockfordBase32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  return `01ARZ3NDEKTSV4RRFFQ69G5${crockfordBase32.charAt(
+    Math.floor(index / 32),
+  )}${crockfordBase32.charAt(index % 32)}`;
+}

@@ -2,13 +2,18 @@ import { Schema } from "effect";
 
 import { TeamId } from "./FantasyTeam.ts";
 
-export const LineupUuid = Schema.String.pipe(Schema.check(Schema.isUUID()));
-export type LineupUuid = typeof LineupUuid.Type;
+const LineupgradeId = Schema.Union([
+  Schema.String.pipe(Schema.check(Schema.isUUID())),
+  Schema.String.pipe(Schema.check(Schema.isULID())),
+]);
 
-export const LineupRunId = LineupUuid.pipe(Schema.brand("LineupRunId"));
+export const LineupId = LineupgradeId;
+export type LineupId = typeof LineupId.Type;
+
+export const LineupRunId = LineupId.pipe(Schema.brand("LineupRunId"));
 export type LineupRunId = typeof LineupRunId.Type;
 
-export const LineupRequestId = Schema.String.pipe(Schema.check(Schema.isUUID()));
+export const LineupRequestId = LineupgradeId;
 export type LineupRequestId = typeof LineupRequestId.Type;
 
 export const LineupRunStatus = Schema.Literals([

@@ -5,10 +5,12 @@ import { ProviderKey } from "./ProviderKey.ts";
 
 export { ProviderKey };
 
-export const ConnectionId = Schema.String.pipe(
-  Schema.check(Schema.isUUID()),
-  Schema.brand("ConnectionId"),
-);
+const LineupgradeId = Schema.Union([
+  Schema.String.pipe(Schema.check(Schema.isUUID())),
+  Schema.String.pipe(Schema.check(Schema.isULID())),
+]);
+
+export const ConnectionId = LineupgradeId.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
 export const decodeConnectionId = Schema.decodeUnknownSync(ConnectionId);
 
@@ -43,10 +45,7 @@ export const ProviderConnection = Schema.Struct({
 });
 export type ProviderConnection = typeof ProviderConnection.Type;
 
-const ConnectionRequestId = Schema.String.pipe(
-  Schema.check(Schema.isUUID()),
-  Schema.brand("ConnectionRequestId"),
-);
+const ConnectionRequestId = LineupgradeId.pipe(Schema.brand("ConnectionRequestId"));
 
 const ProviderSessionValue = Schema.RedactedFromValue(
   Schema.String.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(8_192))),

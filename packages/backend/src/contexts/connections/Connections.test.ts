@@ -26,7 +26,17 @@ import { providerConnections, providerCredentials } from "./internal/ConnectionT
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { ProviderRegistry } from "./ProviderRegistry.ts";
 
-it("rejects malformed connection identifiers and empty provider sessions", () => {
+const lineupgradeUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
+
+it("accepts stored UUIDs and new ULIDs and rejects malformed connection identifiers", () => {
+  assert.strictEqual(
+    Schema.decodeSync(ConnectionId)("018f79ea-7d86-7c18-9b4a-8b4d0c916001"),
+    "018f79ea-7d86-7c18-9b4a-8b4d0c916001",
+  );
+  assert.strictEqual(
+    Schema.decodeSync(ConnectionId)("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+    "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  );
   assert.throws(() => Schema.decodeSync(ConnectionId)("not-a-uuid"));
   assert.throws(() => Schema.decodeSync(ConnectionIdInput)({ id: "not-a-uuid" }));
   assert.throws(() =>
@@ -41,6 +51,7 @@ it.effect("links a captured session into one ready connection", () =>
     const linked = yield* connections.link(owner, [linkInput]);
     const connection = Array.getUnsafe(linked, 0);
 
+    assert.isTrue(lineupgradeUlid.test(connection.id));
     assert.strictEqual(connection.status, "ready");
     assert.strictEqual(connection.credentialGeneration, 1);
     assert.isDefined(connection.approvedAt);

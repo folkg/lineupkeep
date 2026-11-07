@@ -52,6 +52,8 @@ import type {
 } from "./Provider.ts";
 import { ScheduleGate } from "./ScheduleGate.ts";
 
+const lineupgradeUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
+
 it.effect(
   "creates one durable run per team, falls back to the native action, and verifies it",
   () =>
@@ -65,6 +67,7 @@ it.effect(
 
       assert.strictEqual(submitted.delivery, "queued");
       assert.strictEqual(submitted.runs.length, 1);
+      assert.isTrue(lineupgradeUlid.test(Array.getUnsafe(submitted.runs, 0).run));
       assert.strictEqual(submitted.runs[0]?.status, "completed");
       assert.strictEqual(submitted.runs[0]?.implementation, "custom_policy");
       assert.strictEqual(submitted.runs[0]?.implementationVersion, "custom-policy/2");

@@ -9,7 +9,6 @@ import {
   timestamp,
   unique,
   uniqueIndex,
-  uuid,
 } from "drizzle-orm/pg-core";
 import { Effect, Schema, SchemaParser, SchemaTransformation, Struct } from "effect";
 
@@ -74,7 +73,7 @@ export const providerCredentials = pgTable(
 export const providerTeams = pgTable(
   "provider_teams",
   {
-    id: uuid("id").notNull().defaultRandom(),
+    id: text("id").notNull(),
     connectionId: text("connection_id").notNull(),
     userId: text("user_id").notNull(),
     provider: text("provider").notNull(),
@@ -114,8 +113,8 @@ export const providerTeams = pgTable(
 export const providerTeamAgentNotes = pgTable(
   "provider_team_agent_notes",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    teamId: uuid("team_id")
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
       .notNull()
       .references(() => providerTeams.id, { onDelete: "cascade" }),
     connectionId: text("connection_id")

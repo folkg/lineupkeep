@@ -50,6 +50,8 @@ import {
   proposalSetLifetimeMillis,
 } from "./TransactionProposals.ts";
 
+const lineupgradeUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
+
 it.effect("stores an owner-scoped proposal set after checking it against current state", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
@@ -82,6 +84,7 @@ it.effect("stores an owner-scoped proposal set after checking it against current
     assert.strictEqual(result.set.expired, false);
     assert.strictEqual(result.set.proposedBy.kind, "agent");
     assert.strictEqual(result.set.proposedBy.surface, "mcp");
+    assert.isTrue(lineupgradeUlid.test(result.set.id));
     assert.strictEqual(result.set.reviewPath, `/transactions/${result.set.id}`);
     assert.deepStrictEqual(result.refused, []);
     assert.strictEqual(result.items.length, 1);
@@ -842,6 +845,7 @@ it.effect("reads pending trade offers as a read-only, owner-scoped view", () =>
       .where(eq(providerTeams.id, redLine.id));
     const noteWrittenAt = DateTime.makeUnsafe("2026-10-31T09:00:00.000Z");
     yield* database.insert(providerTeamAgentNotes).values({
+      id: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
       teamId: redLine.id,
       connectionId: redLine.connectionId,
       userId: owner,

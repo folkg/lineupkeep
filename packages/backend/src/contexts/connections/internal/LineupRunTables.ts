@@ -8,7 +8,6 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid,
 } from "drizzle-orm/pg-core";
 import { Effect, Equal, Schema, SchemaParser, SchemaTransformation } from "effect";
 
@@ -19,7 +18,7 @@ import {
   LineupRequestId,
   LineupRunId,
   LineupRunStatus,
-  LineupUuid,
+  LineupId,
   LineupTargetPeriod,
   LineupTrigger,
   LineupImplementation,
@@ -48,10 +47,10 @@ export const lineupRequests = pgTable(
 export const lineupRuns = pgTable(
   "lineup_runs",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     requestId: text("request_id").notNull(),
-    teamId: uuid("team_id").notNull(),
+    teamId: text("team_id").notNull(),
     connectionId: text("connection_id").notNull(),
     trigger: text("trigger", { enum: ["manual", "scheduled"] }).notNull(),
     scheduleKey: text("schedule_key"),
@@ -104,7 +103,7 @@ export const lineupRuns = pgTable(
 export const lineupDeliveries = pgTable(
   "lineup_deliveries",
   {
-    id: uuid("id").primaryKey(),
+    id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     requestId: text("request_id").notNull(),
     status: text("status", { enum: ["pending", "dispatching", "dispatched"] }).notNull(),
@@ -124,10 +123,10 @@ export const lineupDeliveries = pgTable(
 export const lineupTeamLeases = pgTable(
   "lineup_team_leases",
   {
-    teamId: uuid("team_id").primaryKey(),
+    teamId: text("team_id").primaryKey(),
     userId: text("user_id").notNull(),
-    runId: uuid("run_id").notNull(),
-    token: uuid("token").notNull(),
+    runId: text("run_id").notNull(),
+    token: text("token").notNull(),
     generation: integer("generation").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -138,9 +137,9 @@ export const lineupTeamLeases = pgTable(
 export const lineupRunAttempts = pgTable(
   "lineup_run_attempts",
   {
-    runId: uuid("run_id").notNull(),
+    runId: text("run_id").notNull(),
     attempt: integer("attempt").notNull(),
-    leaseToken: uuid("lease_token").notNull(),
+    leaseToken: text("lease_token").notNull(),
     leaseGeneration: integer("lease_generation").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -152,11 +151,11 @@ export const lineupRunAttempts = pgTable(
 export const lineupRunDiagnostics = pgTable(
   "lineup_run_diagnostics",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    runId: uuid("run_id").notNull(),
+    id: text("id").primaryKey(),
+    runId: text("run_id").notNull(),
     attempt: integer("attempt").notNull(),
     userId: text("user_id").notNull(),
-    teamId: uuid("team_id").notNull(),
+    teamId: text("team_id").notNull(),
     kind: text("kind", { enum: ["observation", "verification"] }).notNull(),
     data: jsonb("data").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
@@ -171,14 +170,14 @@ export const lineupRunDiagnostics = pgTable(
 export const lineupWriteIntents = pgTable(
   "lineup_write_intents",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    runId: uuid("run_id").notNull(),
+    id: text("id").primaryKey(),
+    runId: text("run_id").notNull(),
     attempt: integer("attempt").notNull(),
     userId: text("user_id").notNull(),
-    teamId: uuid("team_id").notNull(),
+    teamId: text("team_id").notNull(),
     connectionId: text("connection_id").notNull(),
     connectionGeneration: integer("connection_generation").notNull(),
-    leaseToken: uuid("lease_token").notNull(),
+    leaseToken: text("lease_token").notNull(),
     leaseGeneration: integer("lease_generation").notNull(),
     action: text("action", { enum: ["native_action", "explicit_assignments"] }).notNull(),
     target: jsonb("target").notNull(),
@@ -304,7 +303,7 @@ export const LineupRunRow = LineupRunSelect.pipe(
 );
 
 const LineupDeliveryRecordSchema = Schema.Struct({
-  id: LineupUuid,
+  id: LineupId,
   userId: UserId,
   requestId: LineupRequestId,
   status: Schema.Literals(["pending", "dispatching", "dispatched"]),
@@ -318,7 +317,7 @@ const LineupDeliveryRecordSchema = Schema.Struct({
 export type LineupDeliveryRecord = typeof LineupDeliveryRecordSchema.Type;
 
 const LineupDeliverySelect = createSelectSchema(lineupDeliveries, {
-  id: LineupUuid,
+  id: LineupId,
   userId: UserId,
   requestId: LineupRequestId,
   status: Schema.Literals(["pending", "dispatching", "dispatched"]),
@@ -354,14 +353,14 @@ export const LineupDeliveryRow = LineupDeliverySelect.pipe(
 );
 
 const LineupWriteIntentRecordSchema = Schema.Struct({
-  id: LineupUuid,
+  id: LineupId,
   runId: LineupRunId,
   attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   userId: UserId,
   teamId: TeamId,
   connectionId: ConnectionId,
   connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  leaseToken: LineupUuid,
+  leaseToken: LineupId,
   leaseGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   action: Schema.Literals(["native_action", "explicit_assignments"]),
   target: LineupTargetPeriod,
@@ -384,14 +383,14 @@ const LineupWriteIntentRecordSchema = Schema.Struct({
 export type LineupWriteIntentRecord = typeof LineupWriteIntentRecordSchema.Type;
 
 const LineupWriteIntentSelect = createSelectSchema(lineupWriteIntents, {
-  id: LineupUuid,
+  id: LineupId,
   runId: LineupRunId,
   attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   userId: UserId,
   teamId: TeamId,
   connectionId: ConnectionId,
   connectionGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  leaseToken: LineupUuid,
+  leaseToken: LineupId,
   leaseGeneration: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   action: Schema.Literals(["native_action", "explicit_assignments"]),
   target: Schema.Unknown,

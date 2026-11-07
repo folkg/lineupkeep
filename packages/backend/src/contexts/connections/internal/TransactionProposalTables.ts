@@ -8,7 +8,6 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid,
 } from "drizzle-orm/pg-core";
 import { Effect, Schema, SchemaParser, SchemaTransformation } from "effect";
 
@@ -40,7 +39,7 @@ import {
 export const transactionProposalSets = pgTable(
   "transaction_proposal_sets",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     proposerKind: text("proposer_kind", { enum: ["user", "agent"] }).notNull(),
     proposerReference: text("proposer_reference").notNull(),
@@ -65,8 +64,8 @@ export const transactionProposalSets = pgTable(
 export const transactionProposalSubmissions = pgTable(
   "transaction_proposal_submissions",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    setId: uuid("set_id").notNull(),
+    id: text("id").primaryKey(),
+    setId: text("set_id").notNull(),
     userId: text("user_id").notNull(),
     ordinal: integer("ordinal").notNull(),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
@@ -84,11 +83,11 @@ export const transactionProposalSubmissions = pgTable(
 export const transactionProposalItems = pgTable(
   "transaction_proposal_items",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    setId: uuid("set_id").notNull(),
+    id: text("id").primaryKey(),
+    setId: text("set_id").notNull(),
     position: integer("position").notNull(),
     userId: text("user_id").notNull(),
-    teamId: uuid("team_id").notNull(),
+    teamId: text("team_id").notNull(),
     connectionId: text("connection_id").notNull(),
     kind: text("kind", {
       enum: ["free_agent_add", "waiver_claim", "drop", "trade", "slot_move"],
@@ -148,9 +147,9 @@ export const transactionProposalItems = pgTable(
 export const transactionProposalSteps = pgTable(
   "transaction_proposal_steps",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    setId: uuid("set_id").notNull(),
-    itemId: uuid("item_id").notNull(),
+    id: text("id").primaryKey(),
+    setId: text("set_id").notNull(),
+    itemId: text("item_id").notNull(),
     userId: text("user_id").notNull(),
     position: integer("position").notNull(),
     kind: text("kind", { enum: ["reserve_move", "slot_move", "add", "drop"] }).notNull(),
@@ -464,8 +463,13 @@ export const ProposalSubmissionRow = ProposalSubmissionSelect.pipe(
   ),
 );
 
+const ProposalStepId = Schema.Union([
+  Schema.String.pipe(Schema.check(Schema.isUUID())),
+  Schema.String.pipe(Schema.check(Schema.isULID())),
+]);
+
 const ProposalStepSelect = createSelectSchema(transactionProposalSteps, {
-  id: Schema.String.pipe(Schema.check(Schema.isUUID())),
+  id: ProposalStepId,
   setId: ProposalSetId,
   itemId: ProposalItemId,
   userId: UserId,

@@ -1,6 +1,6 @@
 import { Machine } from "@typeonce/effect-machine";
 import { and, asc, eq } from "drizzle-orm";
-import { Array, Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import { UserId as UserIdSchema } from "#contexts/auth/User.ts";
@@ -74,6 +74,7 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
     make: Effect.gen(function* () {
       const database = yield* ConnectionsDatabase;
       const registry = yield* ProviderRegistry;
+      const crypto = yield* Crypto.Crypto;
 
       const fantasyDayOf = (team: FantasyTeam): ProviderFantasyDay => {
         const provider = registry.get(team.provider);
@@ -323,9 +324,13 @@ export class TeamRepository extends Context.Service<TeamRepository>()(
           return yield* TeamNotFound.make({ team: input.team });
         }
         const writtenAt = yield* DateTime.now;
+        const noteId = yield* crypto.randomULID.pipe(
+          Effect.mapError((cause) => TeamPersistenceFailed.make({ cause })),
+        );
         const rows = yield* database
           .insert(providerTeamAgentNotes)
           .values({
+            id: noteId,
             teamId: input.team,
             connectionId: team.connectionId,
             userId,

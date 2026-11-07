@@ -151,7 +151,7 @@ export const ConnectionsLive = Layer.effect(
           return [];
         }
         const starts = yield* Effect.forEach(inputs, (input) =>
-          crypto.randomUUIDv7().pipe(
+          crypto.randomULID.pipe(
             Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })),
             Effect.flatMap((requestId) =>
               Schema.decodeEffect(StartLinkingInputSchema)({

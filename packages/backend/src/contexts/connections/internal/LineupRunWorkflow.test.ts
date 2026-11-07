@@ -3,7 +3,7 @@ import { MachineTest } from "@typeonce/effect-machine/testing";
 import { Arbitrary, DateTime, Effect, Schema } from "effect";
 
 import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
-import { LineupUuid } from "#contexts/connections/LineupRun.ts";
+import { LineupId } from "#contexts/connections/LineupRun.ts";
 
 import { LineupRunWorkflow } from "./LineupRunWorkflow.ts";
 import type { LineupRunEvent } from "./LineupRunWorkflow.ts";
@@ -194,11 +194,11 @@ const target = { coverage: "week" as const, week: 3 };
 const at = DateTime.makeUnsafe("2026-10-25T12:00:00Z");
 const retryAt = DateTime.makeUnsafe("2026-10-25T12:00:30Z");
 const lease = {
-  token: Schema.decodeSync(LineupUuid)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b1"),
+  token: Schema.decodeSync(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b1"),
   generation: 1,
 };
 const writeIntent = {
-  id: Schema.decodeSync(LineupUuid)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b2"),
+  id: Schema.decodeSync(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b2"),
   attempt: 1,
 };
 const observation = {

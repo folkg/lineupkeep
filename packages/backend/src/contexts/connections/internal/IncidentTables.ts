@@ -1,9 +1,9 @@
-import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const connectionIncidents = pgTable(
   "connection_incidents",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
     connectionId: text("connection_id").notNull(),
     credentialGeneration: integer("credential_generation").notNull(),
@@ -25,9 +25,9 @@ export const connectionIncidents = pgTable(
 export const notifications = pgTable(
   "notifications",
   {
-    id: uuid("id").primaryKey(),
+    id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
-    incidentId: uuid("incident_id").notNull(),
+    incidentId: text("incident_id").notNull(),
     kind: text("kind", { enum: ["connection_reconnect_required"] }).notNull(),
     status: text("status", {
       enum: ["pending", "sending", "sent", "cancelled", "failed"],

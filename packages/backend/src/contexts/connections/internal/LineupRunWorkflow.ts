@@ -11,13 +11,13 @@ import {
   LineupRunStatus,
   LineupTargetPeriod,
   LineupTrigger,
-  LineupUuid,
+  LineupId,
 } from "#contexts/connections/LineupRun.ts";
 import { ProviderStartingLineup } from "#contexts/connections/Provider.ts";
 import { RosterSlot } from "#contexts/connections/QueryValues.ts";
 
 export const LineupLeaseRef = Schema.Struct({
-  token: LineupUuid,
+  token: LineupId,
   generation: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
 });
 export type LineupLeaseRef = typeof LineupLeaseRef.Type;
@@ -78,7 +78,7 @@ export const LineupPlan = Schema.TaggedUnion({
 export type LineupPlan = typeof LineupPlan.Type;
 
 export const LineupWriteIntentRef = Schema.Struct({
-  id: LineupUuid,
+  id: LineupId,
   attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
 });
 export type LineupWriteIntentRef = typeof LineupWriteIntentRef.Type;

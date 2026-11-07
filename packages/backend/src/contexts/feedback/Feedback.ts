@@ -2,10 +2,12 @@ import type { UserId } from "@lineupkeep/backend/auth/User";
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
-export const FeedbackId = Schema.String.pipe(
-  Schema.check(Schema.isUUID()),
-  Schema.brand("FeedbackId"),
-);
+const LineupgradeId = Schema.Union([
+  Schema.String.pipe(Schema.check(Schema.isUUID())),
+  Schema.String.pipe(Schema.check(Schema.isULID())),
+]);
+
+export const FeedbackId = LineupgradeId.pipe(Schema.brand("FeedbackId"));
 export type FeedbackId = typeof FeedbackId.Type;
 
 export const FeedbackKind = Schema.Literals(["bug", "data-issue", "friction", "wishlist", "other"]);
@@ -45,10 +47,7 @@ type FeedbackBody = typeof FeedbackBody.Type;
 const FeedbackLabel = Schema.Trim.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(60)));
 type FeedbackLabel = typeof FeedbackLabel.Type;
 
-export const TeamReference = Schema.String.pipe(
-  Schema.check(Schema.isUUID()),
-  Schema.brand("TeamReference"),
-);
+export const TeamReference = LineupgradeId.pipe(Schema.brand("TeamReference"));
 export type TeamReference = typeof TeamReference.Type;
 
 export const FeedbackContext = Schema.Struct({

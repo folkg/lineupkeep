@@ -118,9 +118,9 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
     make: Effect.gen(function* () {
       const database = yield* ConnectionsDatabase;
       const crypto = yield* Crypto.Crypto;
-      const newId = crypto
-        .randomUUIDv7()
-        .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+      const newId = crypto.randomULID.pipe(
+        Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+      );
       const newItemId = newId.pipe(Effect.map((id) => Schema.decodeSync(ProposalItemId)(id)));
       const newSetId = newId.pipe(Effect.map((id) => Schema.decodeSync(ProposalSetId)(id)));
 
@@ -605,9 +605,11 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                     ),
                   );
                 const ordinal = ordinals.reduce((next, row) => Math.max(next, row.ordinal), 0) + 1;
+                const submissionId = yield* newId;
                 const inserted = yield* tx
                   .insert(transactionProposalSubmissions)
                   .values({
+                    id: submissionId,
                     setId: input.setId,
                     userId: input.userId,
                     ordinal,

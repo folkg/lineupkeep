@@ -4,7 +4,7 @@ import { DateTime, Effect, Schema } from "effect";
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
 import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
-import { LineupRequestId, LineupRunId, LineupUuid } from "#contexts/connections/LineupRun.ts";
+import { LineupRequestId, LineupRunId, LineupId } from "#contexts/connections/LineupRun.ts";
 
 import { LineupDeliveryRow, LineupRunRow, LineupWriteIntentRow } from "./LineupRunTables.ts";
 import type {
@@ -59,7 +59,7 @@ it.effect("round-trips delivery and write-intent rows", () =>
   Effect.gen(function* () {
     const runId = yield* Schema.decodeEffect(LineupRunId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a2");
     const delivery: LineupDeliveryRecord = {
-      id: yield* Schema.decodeEffect(LineupUuid)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a6"),
+      id: yield* Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a6"),
       userId: decodeUserId("owner"),
       requestId: yield* Schema.decodeEffect(LineupRequestId)(
         "018f79ea-7d86-7c18-9b4a-8b4d0c9164a3",
@@ -77,14 +77,14 @@ it.effect("round-trips delivery and write-intent rows", () =>
     assert.isTrue(Schema.toEquivalence(LineupDeliveryRow)(deliveryDecoded, delivery));
 
     const intent: LineupWriteIntentRecord = {
-      id: yield* Schema.decodeEffect(LineupUuid)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a7"),
+      id: yield* Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a7"),
       runId,
       attempt: 1,
       userId: decodeUserId("owner"),
       teamId: decodeTeamId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a4"),
       connectionId: decodeConnectionId("018f79ea-7d86-7c18-9b4a-8b4d0c9164a5"),
       connectionGeneration: 2,
-      leaseToken: yield* Schema.decodeEffect(LineupUuid)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a8"),
+      leaseToken: yield* Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a8"),
       leaseGeneration: 4,
       action: "native_action",
       target: { coverage: "week", week: 3 },
@@ -109,7 +109,7 @@ it.effect("round-trips delivery and write-intent rows", () =>
 
     const explicit: LineupWriteIntentRecord = {
       ...intent,
-      id: yield* Schema.decodeEffect(LineupUuid)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a9"),
+      id: yield* Schema.decodeEffect(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164a9"),
       action: "explicit_assignments",
       status: "verified_mismatch",
       plan: {

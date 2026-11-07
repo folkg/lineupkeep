@@ -32,9 +32,9 @@ export class FeedbackRepository extends Context.Service<FeedbackRepository>()(
     make: Effect.gen(function* () {
       const database = yield* FeedbackDatabase;
       const crypto = yield* Crypto.Crypto;
-      const newId = crypto
-        .randomUUIDv7()
-        .pipe(Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })));
+      const newId = crypto.randomULID.pipe(
+        Effect.mapError((cause) => FeedbackPersistenceFailed.make({ cause })),
+      );
 
       const reserve = Effect.fn("FeedbackRepository.reserve")(function* (
         entries: ReadonlyArray<QuotaReservation>,

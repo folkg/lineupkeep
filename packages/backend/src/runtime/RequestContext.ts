@@ -18,14 +18,14 @@ export function correlateRequestEffect(request: Request): Effect.Effect<
     request: Request;
     requestId: string;
   },
-  Effect.Error<ReturnType<Crypto.Crypto["randomUUIDv4"]>>,
+  Effect.Error<Crypto.Crypto["randomULID"]>,
   never
 > {
   const upstream = request.headers.get("x-request-id");
   if (upstream !== null && isValidRequestId(upstream)) {
     return Effect.succeed({ request, requestId: upstream });
   }
-  return Crypto.Crypto.use((crypto) => crypto.randomUUIDv4()).pipe(
+  return Crypto.Crypto.use((crypto) => crypto.randomULID).pipe(
     Effect.map((requestId) => ({
       request: withRequestHeaders(request, { "x-request-id": requestId }),
       requestId,

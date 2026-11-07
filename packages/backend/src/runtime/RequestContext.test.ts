@@ -18,10 +18,7 @@ it.effect(
       const nested = yield* correlateRequestEffect(entry.request);
       const context = yield* makeRequestContext(nested.request);
 
-      assert.match(
-        entry.requestId,
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
-      );
+      assert.match(entry.requestId, /^[0-9A-HJKMNP-TV-Z]{26}$/u);
       assert.strictEqual(context.requestId, entry.requestId);
       assert.strictEqual(nested.requestId, entry.requestId);
       assert.strictEqual(entry.request.headers.get("x-request-id"), entry.requestId);

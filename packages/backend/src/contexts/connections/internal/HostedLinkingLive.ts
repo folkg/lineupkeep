@@ -58,9 +58,9 @@ export const HostedLinkingLive = Layer.effect(
         return yield* HostedLinkingRateLimited.make({});
       }
 
-      const idValue = yield* crypto
-        .randomUUIDv7()
-        .pipe(Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })));
+      const idValue = yield* crypto.randomULID.pipe(
+        Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })),
+      );
       const id = yield* Schema.decodeEffect(HostedLinkingSessionId)(idValue).pipe(
         Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })),
       );

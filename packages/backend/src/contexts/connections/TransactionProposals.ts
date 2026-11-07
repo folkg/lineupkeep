@@ -16,16 +16,15 @@ import {
 
 export const proposalSetLifetimeMillis = 24 * 60 * 60 * 1000;
 
-export const ProposalSetId = Schema.String.pipe(
-  Schema.check(Schema.isUUID()),
-  Schema.brand("ProposalSetId"),
-);
+const LineupgradeId = Schema.Union([
+  Schema.String.pipe(Schema.check(Schema.isUUID())),
+  Schema.String.pipe(Schema.check(Schema.isULID())),
+]);
+
+export const ProposalSetId = LineupgradeId.pipe(Schema.brand("ProposalSetId"));
 export type ProposalSetId = typeof ProposalSetId.Type;
 
-export const ProposalItemId = Schema.String.pipe(
-  Schema.check(Schema.isUUID()),
-  Schema.brand("ProposalItemId"),
-);
+export const ProposalItemId = LineupgradeId.pipe(Schema.brand("ProposalItemId"));
 export type ProposalItemId = typeof ProposalItemId.Type;
 
 export const ProposalItemKind = Schema.Literals([

@@ -60,9 +60,9 @@ export class EmailDelivery extends Context.Service<EmailDelivery, EmailDeliveryS
           });
           const idempotencyKey =
             message.idempotencyKey ??
-            (yield* crypto
-              .randomUUIDv4()
-              .pipe(Effect.mapError(() => EmailDeliveryFailed.make({ reason: "unavailable" }))));
+            (yield* crypto.randomULID.pipe(
+              Effect.mapError(() => EmailDeliveryFailed.make({ reason: "unavailable" })),
+            ));
           const response = yield* HttpClientRequest.post("/emails").pipe(
             HttpClientRequest.setHeader("idempotency-key", idempotencyKey),
             HttpClientRequest.bodyJsonUnsafe({

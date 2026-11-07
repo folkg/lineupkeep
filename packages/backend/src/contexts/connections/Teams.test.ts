@@ -31,6 +31,8 @@ import type { ProviderTeam } from "./Provider.ts";
 import { ProviderRegistry } from "./ProviderRegistry.ts";
 import { Teams } from "./Teams.ts";
 
+const lineupgradeUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
+
 it.effect("discovers multiple teams in one league and persists them disabled", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
@@ -46,7 +48,7 @@ it.effect("discovers multiple teams in one league and persists them disabled", (
       discovered.map((row) => row.providerTeamKey),
       ["nhl.l.1.t.1", "nhl.l.1.t.2"],
     );
-    assert.isTrue(discovered.every((row) => row.id.length > 0));
+    assert.isTrue(discovered.every((row) => lineupgradeUlid.test(row.id)));
     assert.strictEqual(new Set(discovered.map((row) => row.id)).size, 2);
     assert.isTrue(discovered.every((row) => row.league === "nhl"));
     assert.isTrue(discovered.every((row) => row.providerLeagueKey === "nhl"));

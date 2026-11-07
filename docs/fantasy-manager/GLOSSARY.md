@@ -2,6 +2,12 @@
 
 Language for managing fantasy teams across fantasy sports providers.
 
+## Identifiers
+
+**Lineupgrade identifier**:
+An identifier Lineupgrade creates for its own records: a ULID, so it sorts by creation time and reads as 26 Crockford base32 characters in a link. Some stored identifiers are older UUIDs, so one column may hold either; nothing rewrites or renumbers a stored identifier. The authentication library's own identifiers and every provider key are not Lineupgrade identifiers.
+_Avoid_: UUID when a new identifier is meant, provider key
+
 ## Teams and providers
 
 **User**:

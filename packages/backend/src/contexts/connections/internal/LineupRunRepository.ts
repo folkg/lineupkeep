@@ -14,7 +14,7 @@ import {
   LineupRequestConflict,
   LineupRequestId,
   LineupRunId,
-  LineupUuid,
+  LineupId,
   providerNativeImplementationVersion,
 } from "#contexts/connections/LineupRun.ts";
 import type {
@@ -129,7 +129,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
       const database = yield* ConnectionsDatabase;
       const crypto = yield* Crypto.Crypto;
 
-      const newId = crypto.randomUUIDv7();
+      const newId = crypto.randomULID;
 
       const createRequest = Effect.fn("LineupRunRepository.createRequest")(function* (input: {
         readonly userId: UserId;
@@ -542,7 +542,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
 
               const attempt = record.attempts + 1;
               const lease: LineupLeaseRef = {
-                token: yield* Schema.decodeEffect(LineupUuid)(yield* newId),
+                token: yield* Schema.decodeEffect(LineupId)(yield* newId),
                 generation: (leaseRow?.generation ?? 0) + 1,
               };
               const expiresAt = DateTime.addDuration(now, lineupLeaseDurationMillis);
@@ -729,7 +729,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
                 return { status: "blocked" as const, reason: "unresolved_prior_write" as const };
               }
 
-              const intentId = yield* Schema.decodeEffect(LineupUuid)(yield* newId);
+              const intentId = yield* Schema.decodeEffect(LineupId)(yield* newId);
               const plan = yield* Schema.encodeEffect(Schema.toCodecJson(LineupPlan))(
                 input.plan,
               ).pipe(Effect.mapError(mapPersistenceFailure));
