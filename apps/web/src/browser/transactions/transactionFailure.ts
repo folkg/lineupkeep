@@ -67,6 +67,7 @@ export function describeTradeWithdrawalFailure(error: unknown): TransactionFailu
           message: "This trade is not available to the current account, so nothing was withdrawn.",
         };
       case "transactions.already_submitted":
+      case "transactions.submission_in_progress":
       case "transactions.set_expired":
       case "transactions.nothing_included":
       case "transactions.persistence_failed":
@@ -99,7 +100,13 @@ export function describeTransactionSubmissionFailure(
         return {
           kind: "conflict",
           message:
-            "This proposal was already submitted, so nothing else was sent. Reload the review to see what happened.",
+            "Every move in this proposal has settled, so it is an audit record and nothing else was sent. Propose a fresh set for another move.",
+        };
+      case "transactions.submission_in_progress":
+        return {
+          kind: "conflict",
+          message:
+            "This proposal is already being submitted, so nothing else was sent. Reload the review in a moment to see the outcome.",
         };
       case "transactions.set_expired":
         return {
@@ -110,7 +117,8 @@ export function describeTransactionSubmissionFailure(
       case "transactions.nothing_included":
         return {
           kind: "failure",
-          message: "No move was included. Select at least one current move and submit again.",
+          message:
+            "No move that has not run was included. Select a move that has not been sent, or add a replacement to this set.",
         };
       case "transactions.trade_not_found":
         return {

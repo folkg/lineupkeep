@@ -65,6 +65,7 @@ it.effect(
         "Team run locks",
         "Transaction proposal sets",
         "Transaction proposal steps",
+        "Transaction proposal submissions",
         "Transaction proposals",
       ]);
 

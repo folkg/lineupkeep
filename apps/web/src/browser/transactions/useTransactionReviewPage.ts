@@ -124,17 +124,14 @@ export function useTransactionReviewPage(
     void withdraw.mutate({ team, offer });
   };
 
-  const isSubmitted = (): boolean => review.data.set.submission !== undefined;
-
   const isItemIncluded = (item: TransactionReviewItemView): boolean =>
-    !isSubmitted() &&
     item.state === "proposed" &&
     item.staleness.status !== "stale" &&
     item.staleness.status !== "illegal" &&
     !excluded().has(item.id);
 
   const toggleItem = (item: string, included: boolean): void => {
-    if (isSubmitted() || submit.isPending) {
+    if (submit.isPending) {
       return;
     }
     setExcluded((current) => {
@@ -159,11 +156,13 @@ export function useTransactionReviewPage(
       item.staleness.checkedAt === undefined ? [] : [item.staleness.checkedAt],
     );
     const outcomes = items.map((item) => item.execution?.outcome).filter(isOutcome);
+    const latestSubmission = data.set.submissions[data.set.submissions.length - 1];
     return {
       review: data,
       teamsWithItems: data.teams.filter((team) => team.items.length > 0),
       quietTeams: data.teams.filter((team) => team.items.length === 0),
       total: items.length,
+      proposedCount: items.filter((item) => item.state === "proposed").length,
       staleCount: items.filter((item) => item.staleness.status === "stale").length,
       illegalCount: items.filter((item) => item.staleness.status === "illegal").length,
       checkedAt: checkedTimes.sort((left, right) => right.localeCompare(left))[0],
@@ -175,8 +174,11 @@ export function useTransactionReviewPage(
         (total, item) => total + (item.kind === "waiver_claim" ? (item.bid ?? 0) : 0),
         0,
       ),
-      submitted: isSubmitted(),
-      finished: data.set.submission?.completedAt !== undefined,
+      submitted: data.set.submissions.length > 0,
+      settled: data.set.settled,
+      submissions: data.set.submissions,
+      ...(latestSubmission === undefined ? {} : { latestSubmission }),
+      finished: latestSubmission?.completedAt !== undefined,
       counts: {
         executed: outcomes.filter((outcome) => outcome === "executed").length,
         pending: outcomes.filter((outcome) => outcome === "pending").length,
@@ -261,6 +263,7 @@ export type TransactionReviewModel = {
   readonly teamsWithItems: ReadonlyArray<TransactionReviewTeamView>;
   readonly quietTeams: ReadonlyArray<TransactionReviewTeamView>;
   readonly total: number;
+  readonly proposedCount: number;
   readonly staleCount: number;
   readonly illegalCount: number;
   readonly checkedAt: string | undefined;
@@ -270,6 +273,9 @@ export type TransactionReviewModel = {
   readonly includedWaivers: number;
   readonly includedFaab: number;
   readonly submitted: boolean;
+  readonly settled: boolean;
+  readonly submissions: TransactionReviewView["set"]["submissions"];
+  readonly latestSubmission?: TransactionReviewView["set"]["submissions"][number];
   readonly finished: boolean;
   readonly counts: {
     readonly executed: number;

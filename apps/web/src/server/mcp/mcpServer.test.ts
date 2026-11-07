@@ -843,6 +843,8 @@ it("proposes a transaction set under the review scope and returns the review lin
     createdAt: at,
     expiresAt: DateTime.addDuration(at, 86_400_000),
     expired: false,
+    submissions: [],
+    settled: false,
     reviewPath: "/transactions/018f79ea-7d86-7c18-9b4a-8b4d0c9164d0",
   };
   const providerRefusal =
@@ -857,6 +859,7 @@ it("proposes a transaction set under the review scope and returns the review lin
     drops: [],
     reason: "A stated reason.",
     state: "failed",
+    settled: false,
     staleness: { status: "current", checkedAt: at, reasons: [] },
     execution: {
       outcome: "failed",
@@ -875,6 +878,7 @@ it("proposes a transaction set under the review scope and returns the review lin
     drops: [],
     reason: "A stated reason.",
     state: "proposed",
+    settled: false,
     staleness: {
       status: "illegal",
       checkedAt: at,

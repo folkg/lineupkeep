@@ -175,10 +175,11 @@ export type TransactionReviewView = {
     readonly createdAt: string;
     readonly expiresAt: string;
     readonly expired: boolean;
-    readonly submission?: {
+    readonly submissions: ReadonlyArray<{
       readonly submittedAt: string;
       readonly completedAt?: string;
-    };
+    }>;
+    readonly settled: boolean;
   };
   readonly teams: ReadonlyArray<TransactionReviewTeamView>;
 };
@@ -205,6 +206,7 @@ export type TransactionReviewError = {
     | "transactions.input_invalid"
     | "transactions.set_expired"
     | "transactions.already_submitted"
+    | "transactions.submission_in_progress"
     | "transactions.nothing_included"
     | "transactions.trade_not_found"
     | "transactions.trade_not_pending";

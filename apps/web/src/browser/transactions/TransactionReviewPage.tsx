@@ -138,6 +138,9 @@ function isNotFoundFailure(error: unknown): boolean {
 
 function Review(props: ReviewProps): JSX.Element {
   const submitted = (): boolean => props.model.submitted;
+  const settled = (): boolean => props.model.settled;
+  const canSubmit = (): boolean =>
+    !props.model.review.set.expired && !settled() && props.model.proposedCount > 0;
   const providerOffers = (): ReadonlyArray<{
     readonly team: TransactionReviewTeamView;
     readonly offer: TransactionReviewPendingOfferView;
@@ -161,13 +164,15 @@ function Review(props: ReviewProps): JSX.Element {
               teamCount={props.model.teamsWithItems.length}
             />
           }
-          when={props.model.review.set.submission}
+          when={props.model.latestSubmission}
         >
           {(submission) => (
             <SubmittedSummary
               counts={props.model.counts}
               finished={props.model.finished}
               review={props.model.review}
+              settled={settled()}
+              submissionCount={props.model.submissions.length}
               submittedAt={submission().submittedAt}
             />
           )}
@@ -186,13 +191,14 @@ function Review(props: ReviewProps): JSX.Element {
         }
         when={props.model.total > 0}
       >
-        <DockSpacer active={!submitted()}>
+        <DockSpacer active={canSubmit()}>
           <Stack gap="xl">
             <For each={props.model.teamsWithItems}>
               {(team) => (
                 <TeamProposal
                   expired={props.model.review.set.expired}
                   submitted={submitted()}
+                  settled={settled()}
                   submitting={props.submitting}
                   isItemIncluded={props.isItemIncluded}
                   team={team}
@@ -214,14 +220,14 @@ function Review(props: ReviewProps): JSX.Element {
             </Show>
           </Stack>
         </DockSpacer>
-        <Show when={!props.model.review.set.expired && !submitted()}>
+        <Show when={canSubmit()}>
           <SubmissionPanel
             faab={props.model.includedFaab}
             included={props.model.includedCount}
             staleCount={props.model.staleCount}
             illegalCount={props.model.illegalCount}
             submitting={props.submitting}
-            total={props.model.total}
+            total={props.model.proposedCount}
             waivers={props.model.includedWaivers}
             onSubmit={props.onSubmit}
           />
@@ -287,7 +293,10 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
     <FocusRegion id={resultSummaryId} labelledBy="submitted-title">
       <Box rule="bottom" space="lg">
         <Stack gap="sm">
-          <SectionTitle id="submitted-title" action={<Badge tone="accent">Audit record</Badge>}>
+          <SectionTitle
+            id="submitted-title"
+            action={props.settled ? <Badge tone="accent">Audit record</Badge> : undefined}
+          >
             Submitted
           </SectionTitle>
           <Text size="body" weight="semibold" live="polite">
@@ -295,6 +304,9 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
           </Text>
           <Text size="caption" tone="muted">
             Submitted by you{" "}
+            {props.submissionCount === 1
+              ? ""
+              : `${String(props.submissionCount)} times, most recently `}
             <Time datetime={props.submittedAt}>{formatReaderTime(props.submittedAt)}</Time>.{" "}
             <Show
               fallback={
@@ -305,7 +317,7 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
               }
               when={props.finished}
             >
-              Every included move has a recorded outcome below.
+              Every move in the latest submission has a recorded outcome below.
             </Show>
           </Text>
           <Show when={props.counts.failed + props.counts.unknown > 0}>
@@ -320,7 +332,9 @@ function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
             </Notice>
           </Show>
           <Text size="caption" tone="faint">
-            This set cannot be submitted again. Propose a new set for another move.
+            {props.settled
+              ? "Every move in this set has settled. This set is an audit record; propose a new set for another move."
+              : "This set stays open while a move has not settled. A failed or skipped move keeps its outcome here; ask the agent to add a replacement to this set to try again."}
           </Text>
         </Stack>
       </Box>
@@ -396,7 +410,7 @@ function ExecutedOrder(props: ExecutedOrderProps): JSX.Element {
       .sort((left, right) => (left.execution?.position ?? 0) - (right.execution?.position ?? 0));
   return (
     <Show when={sent().length > 0}>
-      <Notice tone="neutral" title="The order it was sent in">
+      <Notice tone="neutral" title="The order each move was sent in">
         <Stack gap="2xs">
           <For each={sent()}>
             {(item) => {
@@ -408,6 +422,9 @@ function ExecutedOrder(props: ExecutedOrderProps): JSX.Element {
               );
             }}
           </For>
+          <Text size="caption" tone="faint">
+            Positions restart with each submission.
+          </Text>
         </Stack>
       </Notice>
     </Show>
@@ -480,7 +497,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
             </Text>
           )}
         </Show>
-        <Show when={!props.submitted && props.team.order}>
+        <Show when={!props.expired && !props.settled && props.team.order}>
           {(order) => <ServerOrder order={order()} items={props.team.items} />}
         </Show>
         <Show when={props.submitted}>
@@ -492,7 +509,6 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
           {(item) => (
             <ProposalItem
               expired={props.expired}
-              submitted={props.submitted}
               submitting={props.submitting}
               included={props.isItemIncluded(item)}
               item={item}
@@ -554,8 +570,8 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           : "Stale, not included"
       : "Include";
   return (
-    <RuleListItem layout={props.submitted || blocked() ? "stack" : "leading"}>
-      <Show when={!props.submitted && !props.expired}>
+    <RuleListItem layout={result() !== undefined || blocked() ? "stack" : "leading"}>
+      <Show when={!props.expired && props.item.state === "proposed"}>
         <CheckboxField
           checked={props.included}
           disabled={blocked() || props.submitting}
@@ -792,7 +808,7 @@ function ExecutionResult(props: {
     <Stack gap="sm">
       <Show when={props.execution.position !== undefined}>
         <Text size="caption" tone="faint">
-          {`Sent ${String((props.execution.position ?? 0) + 1)}${ordinalSuffix((props.execution.position ?? 0) + 1)} in this team's order.`}
+          {`Sent ${String((props.execution.position ?? 0) + 1)}${ordinalSuffix((props.execution.position ?? 0) + 1)} in its submission's order.`}
         </Text>
       </Show>
       <Show when={props.execution.steps.length > 0}>
@@ -1367,6 +1383,8 @@ type ProposalSummaryProps = {
 type SubmittedSummaryProps = {
   readonly review: TransactionReviewView;
   readonly submittedAt: string;
+  readonly submissionCount: number;
+  readonly settled: boolean;
   readonly finished: boolean;
   readonly counts: TransactionReviewModel["counts"];
 };
@@ -1379,6 +1397,7 @@ type TeamProposalProps = {
   readonly team: TransactionReviewTeamView;
   readonly expired: boolean;
   readonly submitted: boolean;
+  readonly settled: boolean;
   readonly submitting: boolean;
   readonly isItemIncluded: (item: TransactionReviewItemView) => boolean;
   readonly withdrawing: string | undefined;
@@ -1404,7 +1423,6 @@ type ProposalItemProps = {
   readonly item: TransactionReviewItemView;
   readonly tradeRules: TransactionReviewTradeRulesView | undefined;
   readonly expired: boolean;
-  readonly submitted: boolean;
   readonly submitting: boolean;
   readonly included: boolean;
   readonly withdrawing: boolean;

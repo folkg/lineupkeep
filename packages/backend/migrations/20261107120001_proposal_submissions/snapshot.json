@@ -1,0 +1,312 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "70073b36-7cf9-4c20-8cef-4baa2cc52e0b",
+  "prevIds": ["16080f53-0e4d-4ad5-8ded-b10ced1feb84"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "transaction_proposal_submissions"],
+      "writes": [
+        "s|tbl|public.transaction_proposal_submissions",
+        "n|tbl|public.transaction_proposal_submissions",
+        "e|tbl|public.transaction_proposal_submissions",
+        "n|rel|public.transaction_proposal_submissions",
+        "n|type|public.transaction_proposal_submissions",
+        "n|rel|public.transaction_proposal_submissions_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "settled"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.settled",
+        "n|col|public.transaction_proposal_items.settled",
+        "e|col|public.transaction_proposal_items.settled"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": ["column", "public", "transaction_proposal_sets", "submitted_by_user_id"],
+      "writes": [
+        "s|col|public.transaction_proposal_sets.submitted_by_user_id",
+        "n|col|public.transaction_proposal_sets.submitted_by_user_id",
+        "e|col|public.transaction_proposal_sets.submitted_by_user_id"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_sets", "n|sch|public"]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": ["column", "public", "transaction_proposal_sets", "submitted_at"],
+      "writes": [
+        "s|col|public.transaction_proposal_sets.submitted_at",
+        "n|col|public.transaction_proposal_sets.submitted_at",
+        "e|col|public.transaction_proposal_sets.submitted_at"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_sets", "n|sch|public"]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": ["column", "public", "transaction_proposal_sets", "completed_at"],
+      "writes": [
+        "s|col|public.transaction_proposal_sets.completed_at",
+        "n|col|public.transaction_proposal_sets.completed_at",
+        "e|col|public.transaction_proposal_sets.completed_at"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_sets", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "transaction_proposal_submissions",
+        "transaction_proposal_submissions_set_id_ordinal_idx"
+      ],
+      "writes": [
+        "s|idx|public.transaction_proposal_submissions_set_id_ordinal_idx",
+        "n|idx|public.transaction_proposal_submissions_set_id_ordinal_idx",
+        "e|idx|public.transaction_proposal_submissions_set_id_ordinal_idx",
+        "n|rel|public.transaction_proposal_submissions_set_id_ordinal_idx"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_submissions",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_submissions.set_id",
+        "n|col|public.transaction_proposal_submissions.ordinal"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "transaction_proposal_submissions",
+        "transaction_proposal_submissions_user_id_set_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.transaction_proposal_submissions_user_id_set_id_idx",
+        "n|idx|public.transaction_proposal_submissions_user_id_set_id_idx",
+        "e|idx|public.transaction_proposal_submissions_user_id_set_id_idx",
+        "n|rel|public.transaction_proposal_submissions_user_id_set_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.transaction_proposal_submissions",
+        "n|sch|public",
+        "n|col|public.transaction_proposal_submissions.user_id",
+        "n|col|public.transaction_proposal_submissions.set_id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "transaction_proposal_submissions",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "settled",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_submissions",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_submissions",
+        "name": "set_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_submissions",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_submissions",
+        "name": "ordinal",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_submissions",
+        "name": "submitted_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_submissions",
+        "name": "completed_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_submissions",
+        "name": "transaction_proposal_submissions_set_id_ordinal_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "set_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "ordinal",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_submissions",
+        "name": "transaction_proposal_submissions_user_id_set_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "set_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_submissions",
+        "name": "transaction_proposal_submissions_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"submitted_by_user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"submitted_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"transaction_proposal_sets\",\"completed_at\"]"
+    }
+  ]
+}

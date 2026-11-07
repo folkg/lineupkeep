@@ -92,7 +92,7 @@ test("reviews and submits a proposed transaction set across the owner's teams", 
   await expect(page.getByText("Drop Riverside Receiver", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Submit/u })).toHaveCount(0);
   await expect(page.getByRole("checkbox")).toHaveCount(0);
-  await expect(page.getByText(/cannot be submitted again/u)).toBeVisible();
+  await expect(page.getByText(/Every move in this set has settled/u)).toBeVisible();
 
   const content = await page.content();
   expect(content).not.toContain("461.p.90001");

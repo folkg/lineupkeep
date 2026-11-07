@@ -1,5 +1,6 @@
 import { createSelectSchema } from "drizzle-orm/effect-schema";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -29,6 +30,7 @@ import {
   ProposalSetRecord,
   ProposalStepRecord,
   StoredProposalOrder,
+  StoredProposalSubmission,
   StoredReserveMove,
   StoredSlotMove,
   StoredProposalPlayer,
@@ -47,9 +49,6 @@ export const transactionProposalSets = pgTable(
     fingerprint: text("fingerprint").notNull(),
     teams: jsonb("teams").notNull(),
     orders: jsonb("orders"),
-    submittedByUserId: text("submitted_by_user_id"),
-    submittedAt: timestamp("submitted_at", { withTimezone: true }),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -60,6 +59,25 @@ export const transactionProposalSets = pgTable(
       table.fingerprint,
     ),
     index("transaction_proposal_sets_user_id_created_at_idx").on(table.userId, table.createdAt),
+  ],
+);
+
+export const transactionProposalSubmissions = pgTable(
+  "transaction_proposal_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    setId: uuid("set_id").notNull(),
+    userId: text("user_id").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("transaction_proposal_submissions_set_id_ordinal_idx").on(
+      table.setId,
+      table.ordinal,
+    ),
+    index("transaction_proposal_submissions_user_id_set_id_idx").on(table.userId, table.setId),
   ],
 );
 
@@ -96,6 +114,7 @@ export const transactionProposalItems = pgTable(
         "expired",
       ],
     }).notNull(),
+    settled: boolean("settled").notNull().default(false),
     staleness: text("staleness", { enum: ["current", "stale", "illegal"] }).notNull(),
     staleReasons: jsonb("stale_reasons").notNull(),
     checkedAt: timestamp("checked_at", { withTimezone: true }),
@@ -161,9 +180,6 @@ const ProposalSetSelect = createSelectSchema(transactionProposalSets, {
   fingerprint: Schema.NonEmptyString,
   teams: Schema.Unknown,
   orders: Schema.Unknown,
-  submittedByUserId: Schema.NullOr(UserId),
-  submittedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
-  completedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
   createdAt: Schema.DateTimeUtcFromDate,
   expiresAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
@@ -194,9 +210,6 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             fingerprint: row.fingerprint,
             teams,
             orders,
-            ...(row.submittedByUserId === null ? {} : { submittedBy: row.submittedByUserId }),
-            ...(row.submittedAt === null ? {} : { submittedAt: row.submittedAt }),
-            ...(row.completedAt === null ? {} : { completedAt: row.completedAt }),
             createdAt: row.createdAt,
             expiresAt: row.expiresAt,
             updatedAt: row.updatedAt,
@@ -215,9 +228,6 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             fingerprint: record.fingerprint,
             teams,
             orders: record.orders.length === 0 ? null : record.orders,
-            submittedByUserId: record.submittedBy ?? null,
-            submittedAt: record.submittedAt ?? null,
-            completedAt: record.completedAt ?? null,
             createdAt: record.createdAt,
             expiresAt: record.expiresAt,
             updatedAt: record.updatedAt,
@@ -244,6 +254,7 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   bid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
+  settled: Schema.Boolean,
   staleness: ProposalStalenessStatus,
   staleReasons: Schema.Unknown,
   checkedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
@@ -344,6 +355,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             ...(row.bid === null ? {} : { bid: row.bid }),
             reason: row.reason,
             state: row.state,
+            settled: row.settled,
             staleness: {
               status: row.staleness,
               checkedAt: row.checkedAt,
@@ -397,6 +409,7 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             bid: record.bid ?? null,
             reason: record.reason,
             state: record.state,
+            settled: record.settled,
             staleness: record.staleness.status,
             staleReasons: reasons,
             checkedAt: record.staleness.checkedAt ?? null,
@@ -414,6 +427,39 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             updatedAt: record.updatedAt,
           };
         }),
+    }),
+  ),
+);
+
+const ProposalSubmissionSelect = createSelectSchema(transactionProposalSubmissions, {
+  id: Schema.String,
+  setId: ProposalSetId,
+  userId: UserId,
+  ordinal: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  submittedAt: Schema.DateTimeUtcFromDate,
+  completedAt: Schema.NullOr(Schema.DateTimeUtcFromDate),
+});
+
+export const ProposalSubmissionRow = ProposalSubmissionSelect.pipe(
+  Schema.decodeTo(
+    StoredProposalSubmission,
+    SchemaTransformation.transform<StoredProposalSubmission, typeof ProposalSubmissionSelect.Type>({
+      decode: (row) => ({
+        id: row.id,
+        setId: row.setId,
+        userId: row.userId,
+        ordinal: row.ordinal,
+        submittedAt: row.submittedAt,
+        ...(row.completedAt === null ? {} : { completedAt: row.completedAt }),
+      }),
+      encode: (record) => ({
+        id: record.id,
+        setId: record.setId,
+        userId: record.userId,
+        ordinal: record.ordinal,
+        submittedAt: record.submittedAt,
+        completedAt: record.completedAt ?? null,
+      }),
     }),
   ),
 );

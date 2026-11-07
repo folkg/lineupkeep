@@ -32,6 +32,7 @@ import type {
   ProposalExecutionStep,
   ProposalItem,
   ProposalItemDraft,
+  ProposalItemId,
   ProposalItemRefusal,
   ProposalItemRefused,
   ProposalItemState,
@@ -59,6 +60,7 @@ import {
   ProposalSetExpired,
   ProposalSetNotFound,
   ProposalSetReview as ProposalSetReviewSchema,
+  ProposalSubmissionInProgress,
   ProposalTeam as ProposalTeamSchema,
   ProposalTeamNotFound,
   ProposalTradeNotFound,
@@ -78,6 +80,8 @@ import type { TeamContext } from "./QueryContext.ts";
 import { QueryRepository } from "./QueryRepository.ts";
 import { QueryTokens } from "./QueryTokens.ts";
 import {
+  isSettledItem,
+  isSettledSet,
   StoredProposalOrderPlan,
   type ProposalItemRecord,
   type ProposalSetRecord,
@@ -87,6 +91,7 @@ import {
   type StoredProposalPlayer,
   type StoredProposalStaleReason,
   type StoredProposalStaleness,
+  type StoredProposalSubmission,
   type StoredProposalTrade,
   type StoredReserveMove,
 } from "./TransactionProposalRecord.ts";
@@ -105,7 +110,6 @@ const submitInvalidDetail =
   "A submission names one proposal set and one to twenty of its move ids. Reload the review and submit again.";
 const withdrawInvalidDetail =
   "A withdrawal names one proposal set and one to twenty of its move ids. Reload the set and withdraw again.";
-const excludedDetail = "Left out of this submission.";
 const skippedMovementDetail =
   "Not attempted because the reserve move did not complete, so the transaction was not sent.";
 const unknownReserveDetail =
@@ -193,6 +197,7 @@ type ItemExecution = {
   readonly outcome: ProposalOutcome;
   readonly detail?: string;
   readonly steps: ReadonlyArray<ProposalStepCommand>;
+  readonly settled: boolean;
   readonly trade?: StoredProposalTrade;
 };
 
@@ -220,11 +225,14 @@ export const TransactionProposalsLive = Layer.effect(
         return yield* ProposalSetNotFound.make({ set: target });
       }
       if (existing !== undefined) {
-        if (existing.set.submittedAt !== undefined) {
+        if (isSettledSet(existing.submissions, existing.items)) {
           return yield* ProposalSetAlreadySubmitted.make({
             set: existing.set.id,
-            submittedAt: existing.set.submittedAt,
+            submittedAt: lastSubmittedAt(existing),
           });
+        }
+        if (existing.submissions.some((submission) => submission.completedAt === undefined)) {
+          return yield* ProposalSubmissionInProgress.make({ set: existing.set.id });
         }
         if (isExpired(existing.set, now)) {
           return yield* ProposalSetExpired.make({
@@ -238,9 +246,10 @@ export const TransactionProposalsLive = Layer.effect(
       const accepted: Array<AcceptedDraft> = [];
       const firstIndexByKey = new Map<string, number>();
       const existingByMove = new Map(
-        (existing?.items ?? []).map(
-          (item, position) =>
-            [recordMoveKey(item), { position: position + 1, label: moveLabel(item) }] as const,
+        (existing?.items ?? []).flatMap((item, position) =>
+          blocksReplacement(item)
+            ? [[recordMoveKey(item), { position: position + 1, label: moveLabel(item) }] as const]
+            : [],
         ),
       );
       const pickProviderKeys = [
@@ -564,8 +573,9 @@ export const TransactionProposalsLive = Layer.effect(
       }));
 
       const existingItems = existing?.items ?? [];
+      const unrunItems = existingItems.filter((item) => item.state === "proposed");
       const combinedByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
-      for (const item of [...existingItems, ...candidateRecords.map((entry) => entry.record)]) {
+      for (const item of [...unrunItems, ...candidateRecords.map((entry) => entry.record)]) {
         const current = combinedByTeam.get(item.team) ?? [];
         current.push(item);
         combinedByTeam.set(item.team, current);
@@ -582,7 +592,7 @@ export const TransactionProposalsLive = Layer.effect(
             evaluateTeam(
               teamId,
               data,
-              existingItems.filter((item) => item.team === teamId),
+              unrunItems.filter((item) => item.team === teamId),
               now,
             ),
           );
@@ -614,7 +624,7 @@ export const TransactionProposalsLive = Layer.effect(
 
       const withdraw: Array<ProposalItemToWithdraw> = [];
       if (existing !== undefined) {
-        for (const item of existingItems) {
+        for (const item of unrunItems) {
           const before = existingChecks
             .get(item.team)
             ?.changes.find((change) => change.id === item.id);
@@ -678,6 +688,8 @@ export const TransactionProposalsLive = Layer.effect(
       }));
 
       let currentSet: ProposalSetRecord;
+      let currentSubmissions: ReadonlyArray<StoredProposalSubmission>;
+      let currentItems: ReadonlyArray<ProposalItemRecord>;
       let created = false;
       let extended = false;
       let stored: ReadonlyArray<ProposalItemRecord>;
@@ -699,6 +711,8 @@ export const TransactionProposalsLive = Layer.effect(
           at: now,
         });
         currentSet = createdResult.set;
+        currentSubmissions = createdResult.submissions;
+        currentItems = createdResult.items;
         created = createdResult.created;
         stored = createdResult.items;
       } else {
@@ -711,22 +725,27 @@ export const TransactionProposalsLive = Layer.effect(
           orders,
           at: now,
         });
-        if (appended === undefined) {
+        if (appended.status !== "appended") {
           const latest = yield* repository.load(userId, existing.set.id);
-          if (latest?.set.submittedAt !== undefined) {
+          if (latest === undefined) {
+            return yield* ProposalSetNotFound.make({ set: existing.set.id });
+          }
+          if (appended.status === "in_flight") {
+            return yield* ProposalSubmissionInProgress.make({ set: latest.set.id });
+          }
+          if (appended.status === "closed") {
             return yield* ProposalSetAlreadySubmitted.make({
               set: latest.set.id,
-              submittedAt: latest.set.submittedAt,
+              submittedAt: lastSubmittedAt(latest),
             });
           }
-          return yield* ProposalSetExpired.make({
-            set: existing.set.id,
-            expiresAt: existing.set.expiresAt,
-          });
+          return yield* ProposalSetNotFound.make({ set: existing.set.id });
         }
         currentSet = existing.set;
+        currentSubmissions = existing.submissions;
+        currentItems = [...existingItems, ...appended.items];
         extended = true;
-        stored = appended;
+        stored = appended.items;
       }
 
       const storedById = new Map(stored.map((item) => [item.id, item] as const));
@@ -772,7 +791,7 @@ export const TransactionProposalsLive = Layer.effect(
         "proposal.items_refused": refusals.length,
       });
       return yield* Schema.decodeEffect(ProposeTransactionsResultSchema)({
-        set: toSet(currentSet, now),
+        set: toSet(currentSet, currentSubmissions, currentItems, now),
         created,
         extended,
         items,
@@ -794,6 +813,7 @@ export const TransactionProposalsLive = Layer.effect(
           userId,
           teams,
           loaded.set,
+          loaded.submissions,
           loaded.items,
           loaded.steps,
           now,
@@ -809,7 +829,7 @@ export const TransactionProposalsLive = Layer.effect(
       if (loaded === undefined) {
         return yield* ProposalSetNotFound.make({ set: input.set });
       }
-      const submitted = loaded.set.submittedAt !== undefined;
+      const submitted = loaded.submissions.length > 0;
       if (!submitted && isExpired(loaded.set, now)) {
         return yield* ProposalSetExpired.make({
           set: loaded.set.id,
@@ -818,7 +838,7 @@ export const TransactionProposalsLive = Layer.effect(
       }
       const teams = yield* repository.loadTeams(userId, loaded.set.teams);
       const teamsById = new Map(teams.map((team) => [team.id, team] as const));
-      const openItems = submitted ? [] : loaded.items.filter((item) => isOpen(item.state));
+      const openItems = loaded.items.filter((item) => isOpen(item.state));
       const tradeItems = loaded.items.filter((item) => item.kind === "trade");
       const checkedItems = [
         ...new Map([...openItems, ...tradeItems].map((item) => [item.id, item] as const)).values(),
@@ -858,6 +878,7 @@ export const TransactionProposalsLive = Layer.effect(
         userId,
         teams,
         loaded.set,
+        loaded.submissions,
         items,
         loaded.steps,
         now,
@@ -877,11 +898,8 @@ export const TransactionProposalsLive = Layer.effect(
       if (loaded === undefined) {
         return yield* ProposalSetNotFound.make({ set: decoded.set });
       }
-      if (loaded.set.submittedAt !== undefined) {
-        return yield* ProposalSetAlreadySubmitted.make({
-          set: loaded.set.id,
-          submittedAt: loaded.set.submittedAt,
-        });
+      if (loaded.submissions.some((submission) => submission.completedAt === undefined)) {
+        return yield* ProposalSubmissionInProgress.make({ set: loaded.set.id });
       }
       if (isExpired(loaded.set, now)) {
         return yield* ProposalSetExpired.make({
@@ -891,28 +909,13 @@ export const TransactionProposalsLive = Layer.effect(
       }
       const requested = [...new Set(decoded.items)];
       const byId = new Map(loaded.items.map((item) => [item.id, item] as const));
-      const refusals: Array<ProposalItemWithdrawalRefusal> = [];
-      for (const itemId of requested) {
-        const item = byId.get(itemId);
-        if (item === undefined) {
-          refusals.push({
-            item: itemId,
-            detail:
-              "This move does not belong to the set. Read the set again and name a move it contains.",
-          });
-          continue;
-        }
-        if (item.state !== "proposed") {
-          refusals.push({
-            item: itemId,
-            state: item.state,
-            detail: `This move is ${item.state} and can no longer be withdrawn. ${withdrawalStateDetail(item.state)}`,
-          });
-        }
-      }
-      if (refusals.length > 0) {
+      const refused = requested.flatMap((itemId) => {
+        const state = byId.get(itemId)?.state;
+        return state === "proposed" ? [] : [withdrawalRefusal(itemId, state)];
+      });
+      if (refused.length > 0) {
         return yield* ProposalItemsNotWithdrawable.make({
-          items: refusals,
+          items: refused,
           detail: "Nothing was withdrawn. Fix the refused moves and withdraw again.",
         });
       }
@@ -921,27 +924,24 @@ export const TransactionProposalsLive = Layer.effect(
       const remaining = loaded.items.filter((item) => !remove.has(item.id));
       const teams = yield* repository.loadTeams(userId, loaded.set.teams);
       const teamsById = new Map(teams.map((team) => [team.id, team] as const));
-      const remainingByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
-      for (const item of remaining) {
-        const current = remainingByTeam.get(item.team) ?? [];
+      const unrunByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
+      for (const item of remaining.filter((entry) => entry.state === "proposed")) {
+        const current = unrunByTeam.get(item.team) ?? [];
         current.push(item);
-        remainingByTeam.set(item.team, current);
+        unrunByTeam.set(item.team, current);
       }
       const affectedTeams = [...new Set(requested.map((itemId) => byId.get(itemId)?.team))].flatMap(
-        (team) =>
-          team === undefined || (remainingByTeam.get(team)?.length ?? 0) === 0 ? [] : [team],
+        (team) => (team === undefined || (unrunByTeam.get(team)?.length ?? 0) === 0 ? [] : [team]),
       );
       const checks = yield* Effect.forEach(
         affectedTeams,
         (teamId) =>
-          checkTeam(userId, teamId, teamsById.get(teamId), remainingByTeam.get(teamId) ?? [], now),
+          checkTeam(userId, teamId, teamsById.get(teamId), unrunByTeam.get(teamId) ?? [], now),
         { concurrency: 3 },
       );
       const changes = checks.flatMap((check) => check.changes);
       const orders = yield* storedOrders(loaded.set.orders, checks);
-      const keptOrders = orders.filter(
-        (entry) => (remainingByTeam.get(entry.team)?.length ?? 0) > 0,
-      );
+      const keptOrders = orders.filter((entry) => (unrunByTeam.get(entry.team)?.length ?? 0) > 0);
       const saved = yield* repository.withdraw({
         userId,
         setId: loaded.set.id,
@@ -950,20 +950,21 @@ export const TransactionProposalsLive = Layer.effect(
         orders: keptOrders,
         at: now,
       });
-      if (saved === undefined) {
-        const latest = yield* repository.load(userId, loaded.set.id);
-        if (latest?.set.submittedAt !== undefined) {
-          return yield* ProposalSetAlreadySubmitted.make({
-            set: latest.set.id,
-            submittedAt: latest.set.submittedAt,
-          });
+      if (saved.status !== "withdrawn") {
+        switch (saved.status) {
+          case "missing":
+            return yield* ProposalSetNotFound.make({ set: loaded.set.id });
+          case "in_flight":
+            return yield* ProposalSubmissionInProgress.make({ set: loaded.set.id });
+          case "not_withdrawable":
+            return yield* ProposalItemsNotWithdrawable.make({
+              items: saved.items.map((entry) => withdrawalRefusal(entry.item, entry.state)),
+              detail:
+                "Nothing was withdrawn. A move changed while this set was read, so reload the set and withdraw again.",
+            });
         }
-        return yield* ProposalSetExpired.make({
-          set: loaded.set.id,
-          expiresAt: loaded.set.expiresAt,
-        });
       }
-      const savedById = new Map(saved.map((item) => [item.id, item] as const));
+      const savedById = new Map(saved.items.map((item) => [item.id, item] as const));
       const items = remaining.map((item) => savedById.get(item.id) ?? item);
       const checkedByTeam = new Map(checks.map((check) => [check.team, check] as const));
       yield* Effect.annotateCurrentSpan({
@@ -976,6 +977,7 @@ export const TransactionProposalsLive = Layer.effect(
         userId,
         teams,
         { ...loaded.set, orders: keptOrders },
+        loaded.submissions,
         items,
         loaded.steps,
         now,
@@ -994,11 +996,14 @@ export const TransactionProposalsLive = Layer.effect(
       if (loaded === undefined) {
         return yield* ProposalSetNotFound.make({ set: decoded.set });
       }
-      if (loaded.set.submittedAt !== undefined) {
+      if (isSettledSet(loaded.submissions, loaded.items)) {
         return yield* ProposalSetAlreadySubmitted.make({
           set: loaded.set.id,
-          submittedAt: loaded.set.submittedAt,
+          submittedAt: lastSubmittedAt(loaded),
         });
+      }
+      if (loaded.submissions.some((submission) => submission.completedAt === undefined)) {
+        return yield* ProposalSubmissionInProgress.make({ set: loaded.set.id });
       }
       if (isExpired(loaded.set, now)) {
         return yield* ProposalSetExpired.make({
@@ -1010,24 +1015,29 @@ export const TransactionProposalsLive = Layer.effect(
       if (include.size !== decoded.include.length) {
         return yield* ProposalContentInvalid.make({ detail: submitInvalidDetail });
       }
-      const included = loaded.items.filter((item) => include.has(item.id));
-      if (included.length === 0) {
-        return yield* ProposalNothingIncluded.make({
-          detail:
-            "No move is selected for submission. Include at least one current move, or propose a fresh set.",
-        });
-      }
-      if (included.length !== include.size) {
+      const selected = loaded.items.filter((item) => include.has(item.id));
+      if (selected.length !== include.size) {
         return yield* ProposalContentInvalid.make({
           detail:
             "A selected move does not belong to this proposal set. Reload the review and submit again.",
         });
       }
+      const sendable = selected.filter((item) => isOpen(item.state));
+      if (sendable.length === 0) {
+        return yield* ProposalNothingIncluded.make({
+          detail:
+            selected.length === 0
+              ? "No move is selected for submission. Include at least one move that has not run, or propose a fresh set."
+              : "Every selected move has already been attempted or has an outcome. A move that ran, failed, or was skipped keeps its outcome; add a replacement move to this set and submit that.",
+        });
+      }
       const teams = yield* repository.loadTeams(userId, loaded.set.teams);
       const teamsById = new Map(teams.map((team) => [team.id, team] as const));
-      const openIncluded = included.filter((item) => isOpen(item.state));
+      const sendableTeams = new Set(sendable.map((item) => item.team));
       const itemsByTeam = new Map<TeamId, Array<ProposalItemRecord>>();
-      for (const item of openIncluded) {
+      for (const item of loaded.items.filter(
+        (entry) => entry.state === "proposed" && sendableTeams.has(entry.team),
+      )) {
         const current = itemsByTeam.get(item.team) ?? [];
         current.push(item);
         itemsByTeam.set(item.team, current);
@@ -1042,23 +1052,18 @@ export const TransactionProposalsLive = Layer.effect(
         setId: loaded.set.id,
         at: now,
       });
-      if (!claimed) {
-        const latest = yield* repository.load(userId, decoded.set);
-        if (latest?.set.submittedAt !== undefined) {
-          return yield* ProposalSetAlreadySubmitted.make({
-            set: latest.set.id,
-            submittedAt: latest.set.submittedAt,
-          });
+      if (claimed.status !== "claimed") {
+        switch (claimed.status) {
+          case "missing":
+            return yield* ProposalSetNotFound.make({ set: loaded.set.id });
+          case "in_flight":
+            return yield* ProposalSubmissionInProgress.make({ set: loaded.set.id });
+          case "expired":
+            return yield* ProposalSetExpired.make({
+              set: loaded.set.id,
+              expiresAt: loaded.set.expiresAt,
+            });
         }
-        if (latest !== undefined && isExpired(latest.set, now)) {
-          return yield* ProposalSetExpired.make({
-            set: latest.set.id,
-            expiresAt: latest.set.expiresAt,
-          });
-        }
-        return yield* ProposalPersistenceFailed.make({
-          cause: new Error("The proposal set could not be claimed for submission"),
-        });
       }
 
       const changes = checks.flatMap((check) => check.changes);
@@ -1081,7 +1086,7 @@ export const TransactionProposalsLive = Layer.effect(
       const positionByItem = new Map<string, number>();
       for (const teamId of loaded.set.teams) {
         const sequence = executionSequence(
-          openIncluded.filter((item) => item.team === teamId),
+          sendable.filter((item) => item.team === teamId),
           checkByTeam.get(teamId)?.order,
           changeById,
         );
@@ -1093,23 +1098,9 @@ export const TransactionProposalsLive = Layer.effect(
 
       const outcomes: Array<ProposalOutcomeCommand> = [];
 
-      for (const item of loaded.items) {
+      for (const item of sendable) {
         const current = itemById.get(item.id) ?? item;
-        if (!include.has(item.id)) {
-          outcomes.push(skippedOutcome(current, excludedDetail, now));
-          continue;
-        }
-        if (!isOpen(current.state)) {
-          outcomes.push(
-            skippedOutcome(
-              current,
-              `This move is already ${current.state} and was not attempted.`,
-              now,
-            ),
-          );
-          continue;
-        }
-        const change = changeById.get(item.id);
+        const change = changeById.get(current.id);
         if (change === undefined || change.staleness.status !== "current") {
           outcomes.push(
             skippedOutcome(
@@ -1117,6 +1108,7 @@ export const TransactionProposalsLive = Layer.effect(
               checkOutcomeDetail(change?.staleness),
               now,
               positionByItem.get(current.id),
+              false,
             ),
           );
         }
@@ -1136,7 +1128,7 @@ export const TransactionProposalsLive = Layer.effect(
           const position = positionByItem.get(current.id);
           const stoppedDetail = stopped.get(teamId);
           if (stoppedDetail !== undefined) {
-            outcomes.push(skippedOutcome(current, stoppedDetail, decidedAt, position));
+            outcomes.push(skippedOutcome(current, stoppedDetail, decidedAt, position, false));
             continue;
           }
           if (check?.facts === undefined || check.context === undefined) {
@@ -1146,6 +1138,7 @@ export const TransactionProposalsLive = Layer.effect(
                 "Current state could not be read, so this move was not attempted.",
                 decidedAt,
                 position,
+                false,
               ),
             );
             continue;
@@ -1155,7 +1148,7 @@ export const TransactionProposalsLive = Layer.effect(
             check.context.provider.capabilities.transactionRequest,
           );
           if (refusal !== undefined) {
-            outcomes.push(skippedOutcome(current, refusal, decidedAt, position));
+            outcomes.push(skippedOutcome(current, refusal, decidedAt, position, true));
             stopped.set(
               teamId,
               `Not attempted because ${moveLabel(current)} could not be sent. ${refusal} Later moves on this team were not checked against the resulting roster.`,
@@ -1176,6 +1169,7 @@ export const TransactionProposalsLive = Layer.effect(
             at: yield* DateTime.now,
             position,
             steps: execution.steps,
+            settled: execution.settled,
             ...(execution.trade === undefined ? {} : { trade: execution.trade }),
           });
           if (execution.outcome !== "executed") {
@@ -1196,6 +1190,7 @@ export const TransactionProposalsLive = Layer.effect(
       yield* repository.completeSubmission({
         userId,
         setId: loaded.set.id,
+        submissionId: claimed.submissionId,
         at: completedAt,
       });
       const final = yield* repository.load(userId, loaded.set.id);
@@ -1205,7 +1200,7 @@ export const TransactionProposalsLive = Layer.effect(
         });
       }
       yield* Effect.annotateCurrentSpan({
-        "proposal.items_submitted": included.length,
+        "proposal.items_submitted": sendable.length,
         "proposal.items_skipped": final.items.filter((item) => item.outcome === "skipped").length,
         "proposal.items_executed": final.items.filter((item) => item.outcome === "executed").length,
         "proposal.items_pending": final.items.filter((item) => item.outcome === "pending").length,
@@ -1218,6 +1213,7 @@ export const TransactionProposalsLive = Layer.effect(
         userId,
         teams,
         final.set,
+        final.submissions,
         final.items,
         final.steps,
         completedAt,
@@ -1238,6 +1234,7 @@ export const TransactionProposalsLive = Layer.effect(
             detail:
               "This team now belongs to a different provider connection than the one the move was staged against, so nothing was sent with another connection's session.",
             steps: [],
+            settled: true,
           };
         }
         if (input.item.kind === "trade") {
@@ -1284,7 +1281,7 @@ export const TransactionProposalsLive = Layer.effect(
               decidedAt: stepAt,
             });
             appendSteps(steps, movementSteps("skipped", skippedMovementDetail, stepAt));
-            return { outcome: "failed", detail, steps };
+            return { outcome: "failed", detail, steps, settled: false };
           }
           const reserve = yield* Effect.result(
             input.context.provider.applyReserveMove({
@@ -1312,7 +1309,7 @@ export const TransactionProposalsLive = Layer.effect(
               decidedAt: stepAt,
             });
             appendSteps(steps, movementSteps("skipped", skippedMovementDetail, stepAt));
-            return { outcome: "failed", detail, steps };
+            return { outcome: "failed", detail, steps, settled: false };
           }
           const outcome = writeOutcome(reserve.success);
           const detail = writeDetail(reserve.success, "reserve move");
@@ -1335,7 +1332,12 @@ export const TransactionProposalsLive = Layer.effect(
                 stepAt,
               ),
             );
-            return { outcome, ...(detail === undefined ? {} : { detail }), steps };
+            return {
+              outcome,
+              ...(detail === undefined ? {} : { detail }),
+              steps,
+              settled: false,
+            };
           }
         }
 
@@ -1360,7 +1362,7 @@ export const TransactionProposalsLive = Layer.effect(
           }
           const detail = sessionFailureDetail(transaction.failure._tag, "transaction");
           appendSteps(steps, movementSteps("failed", detail, stepAt));
-          return { outcome: "failed", detail, steps };
+          return { outcome: "failed", detail, steps, settled: false };
         }
         const outcome = writeOutcome(transaction.success);
         if (outcome === "executed") {
@@ -1372,11 +1374,21 @@ export const TransactionProposalsLive = Layer.effect(
           const movementOutcome = pending ? "pending" : "executed";
           const detail = pending ? waiverPendingDetail : undefined;
           appendSteps(steps, movementSteps(movementOutcome, detail, stepAt));
-          return { outcome: movementOutcome, ...(detail === undefined ? {} : { detail }), steps };
+          return {
+            outcome: movementOutcome,
+            ...(detail === undefined ? {} : { detail }),
+            steps,
+            settled: movementOutcome === "executed",
+          };
         }
         const detail = writeDetail(transaction.success, "transaction");
         appendSteps(steps, movementSteps(outcome, detail, stepAt));
-        return { outcome, ...(detail === undefined ? {} : { detail }), steps };
+        return {
+          outcome,
+          ...(detail === undefined ? {} : { detail }),
+          steps,
+          settled: false,
+        };
       });
     }
 
@@ -1397,6 +1409,7 @@ export const TransactionProposalsLive = Layer.effect(
             outcome: "skipped",
             detail: "This slot move names no player and destination slot, so nothing was sent.",
             steps,
+            settled: true,
           };
         }
         const rostered = input.facts.roster.players.find(
@@ -1425,6 +1438,7 @@ export const TransactionProposalsLive = Layer.effect(
             outcome: "failed",
             detail,
             steps: [...steps, step("failed", detail, stepAt)],
+            settled: false,
           };
         }
         const applied = yield* Effect.result(
@@ -1446,6 +1460,7 @@ export const TransactionProposalsLive = Layer.effect(
             outcome: "failed",
             detail,
             steps: [...steps, step("failed", detail, stepAt)],
+            settled: false,
           };
         }
         const outcome = writeOutcome(applied.success);
@@ -1454,6 +1469,7 @@ export const TransactionProposalsLive = Layer.effect(
           outcome,
           ...(detail === undefined ? {} : { detail }),
           steps: [...steps, step(outcome, detail, stepAt)],
+          settled: outcome === "executed",
         };
       });
     }
@@ -1472,6 +1488,7 @@ export const TransactionProposalsLive = Layer.effect(
             outcome: "failed",
             detail: "This trade names no counterparty, so no offer was sent.",
             steps: [],
+            settled: false,
           };
         }
         const send = input.change.drops.map((drop) => drop.key);
@@ -1482,6 +1499,7 @@ export const TransactionProposalsLive = Layer.effect(
             detail:
               "A trade needs at least one player going out and one coming back, so no offer was sent.",
             steps: [],
+            settled: false,
           };
         }
         const requestedAt = yield* DateTime.now;
@@ -1505,6 +1523,7 @@ export const TransactionProposalsLive = Layer.effect(
             outcome: "failed",
             detail: sessionFailureDetail(sent.failure._tag, "transaction"),
             steps: [],
+            settled: false,
           };
         }
         switch (sent.success.status) {
@@ -1513,6 +1532,7 @@ export const TransactionProposalsLive = Layer.effect(
               outcome: "pending",
               detail: `Offer sent to ${input.item.counterpartyName ?? "the counterparty"}. The other manager decides; we cannot accept on their behalf.`,
               steps: [],
+              settled: false,
               trade: {
                 providerKey: sent.success.transactionKey,
                 state: "pending",
@@ -1526,6 +1546,7 @@ export const TransactionProposalsLive = Layer.effect(
               detail:
                 "The provider did not confirm the trade offer, so it may or may not exist. It was not retried. Check the provider's trade page before proposing again.",
               steps: [],
+              settled: false,
             };
           case "rejected":
             return {
@@ -1534,12 +1555,14 @@ export const TransactionProposalsLive = Layer.effect(
                 writeDetail(sent.success, "trade offer") ??
                 "The provider rejected the trade offer. Nothing was retried.",
               steps: [],
+              settled: false,
             };
           case "not_sent":
             return {
               outcome: "failed",
               detail: notSentDetail("request", sent.success),
               steps: [],
+              settled: false,
             };
         }
       });
@@ -2707,6 +2730,7 @@ function buildReview(
   userId: UserId,
   teams: ReadonlyArray<ProposalTeamRecord>,
   set: ProposalSetRecord,
+  submissions: ReadonlyArray<StoredProposalSubmission>,
   items: ReadonlyArray<ProposalItemRecord>,
   steps: ReadonlyArray<ProposalStepRecord>,
   now: DateTime.Utc,
@@ -2776,7 +2800,7 @@ function buildReview(
       );
     }
     return yield* Schema.decodeEffect(ProposalSetReviewSchema)({
-      set: toSet(set, now),
+      set: toSet(set, submissions, items, now),
       teams: reviewed,
     }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
   });
@@ -3580,27 +3604,30 @@ function commandRecord(input: {
     ...(command.bid === undefined ? {} : { bid: command.bid }),
     reason: command.reason,
     state: "proposed",
+    settled: false,
     staleness: currentCheck(input.at),
     createdAt: input.at,
     updatedAt: input.at,
   };
 }
 
-function toSet(set: ProposalSetRecord, now: DateTime.Utc): ProposalSet {
+function toSet(
+  set: ProposalSetRecord,
+  submissions: ReadonlyArray<StoredProposalSubmission>,
+  items: ReadonlyArray<ProposalItemRecord>,
+  now: DateTime.Utc,
+): ProposalSet {
   return {
     id: set.id,
     proposedBy: set.proposedBy,
     createdAt: set.createdAt,
     expiresAt: set.expiresAt,
     expired: isExpired(set, now),
-    ...(set.submittedAt === undefined
-      ? {}
-      : {
-          submission: {
-            submittedAt: set.submittedAt,
-            ...(set.completedAt === undefined ? {} : { completedAt: set.completedAt }),
-          } satisfies ProposalSubmission,
-        }),
+    submissions: submissions.map((submission): ProposalSubmission => ({
+      submittedAt: submission.submittedAt,
+      ...(submission.completedAt === undefined ? {} : { completedAt: submission.completedAt }),
+    })),
+    settled: isSettledSet(submissions, items),
     reviewPath: reviewPath(set.id),
   };
 }
@@ -3790,6 +3817,7 @@ function toItem(
       ...(record.bid === undefined ? {} : { bid: record.bid }),
       reason: record.reason,
       state: record.state,
+      settled: isSettledItem(record),
       staleness: {
         status: record.staleness.status,
         ...(record.staleness.checkedAt === undefined
@@ -3955,6 +3983,43 @@ function stoppedDetailFor(
   }
 }
 
+function withdrawalRefusal(
+  item: ProposalItemId,
+  state: ProposalItemState | undefined,
+): ProposalItemWithdrawalRefusal {
+  return state === undefined
+    ? {
+        item,
+        detail:
+          "This move does not belong to the set. Read the set again and name a move it contains.",
+      }
+    : {
+        item,
+        state,
+        detail: `This move is ${state} and can no longer be withdrawn. ${withdrawalStateDetail(state)}`,
+      };
+}
+
+function lastSubmittedAt(loaded: {
+  readonly submissions: ReadonlyArray<StoredProposalSubmission>;
+}): DateTime.Utc {
+  const last = loaded.submissions[loaded.submissions.length - 1];
+  if (last === undefined) {
+    throw new Error("A settled proposal set requires a submission");
+  }
+  return last.submittedAt;
+}
+
+function blocksReplacement(item: ProposalItemRecord): boolean {
+  return (
+    item.state === "proposed" ||
+    item.state === "executed" ||
+    item.state === "pending" ||
+    item.state === "unknown" ||
+    item.state === "accepted"
+  );
+}
+
 function withdrawalStateDetail(state: ProposalItemState): string {
   switch (state) {
     case "proposed":
@@ -4020,7 +4085,8 @@ function skippedOutcome(
   item: ProposalItemRecord,
   detail: string,
   at: DateTime.Utc,
-  position?: number,
+  position: number | undefined,
+  settled: boolean,
 ): ProposalOutcomeCommand {
   return {
     itemId: item.id,
@@ -4029,6 +4095,7 @@ function skippedOutcome(
     at,
     position,
     steps: [],
+    settled,
   };
 }
 

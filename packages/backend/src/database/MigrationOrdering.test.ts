@@ -115,6 +115,83 @@ describe("local linking helper removal migration", () => {
   );
 });
 
+describe("proposal submission history migration", () => {
+  const submissionMigration = "20261107120001_proposal_submissions";
+
+  it.effect("keeps each submitted set as one submission and marks ended moves settled", () =>
+    Effect.gen(function* () {
+      const sql = yield* PgliteClient.PgliteClient;
+
+      for (const statement of migrationStatements((name) => name < submissionMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      yield* sql.unsafe(`
+        insert into transaction_proposal_sets
+          (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams,
+            submitted_by_user_id, submitted_at, completed_at, expires_at)
+        values
+          ('11111111-1111-4111-8111-111111111111', 'owner', 'agent', 'mcp', 'mcp', 'submitted',
+            '[]'::jsonb, 'owner', '2026-11-01T10:00:00Z', '2026-11-01T11:00:00Z',
+            '2026-11-02T10:00:00Z'),
+          ('11111111-1111-4111-8111-222222222222', 'owner', 'agent', 'mcp', 'mcp', 'open',
+            '[]'::jsonb, null, null, null, '2026-11-02T10:00:00Z')
+      `);
+      yield* sql.unsafe(`
+        insert into transaction_proposal_items
+          (id, set_id, position, user_id, team_id, connection_id, kind, add_players,
+            drop_players, reason, state, staleness, stale_reasons)
+        values
+          ('22222222-2222-4222-8222-111111111111', '11111111-1111-4111-8111-111111111111', 0,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Executed move', 'executed', 'current', '[]'::jsonb),
+          ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 1,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Failed move', 'failed', 'current', '[]'::jsonb),
+          ('22222222-2222-4222-8222-333333333333', '11111111-1111-4111-8111-111111111111', 2,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Skipped move', 'skipped', 'current', '[]'::jsonb),
+          ('22222222-2222-4222-8222-444444444444', '11111111-1111-4111-8111-222222222222', 0,
+            'owner', '33333333-3333-4333-8333-111111111111', 'connection', 'drop',
+            '[]'::jsonb, '[]'::jsonb, 'Open move', 'proposed', 'current', '[]'::jsonb)
+      `);
+
+      for (const statement of migrationStatements((name) => name === submissionMigration)) {
+        yield* sql.unsafe(statement);
+      }
+
+      const submissions = yield* sql.unsafe<{
+        readonly set_id: string;
+        readonly user_id: string;
+        readonly ordinal: number;
+      }>("select set_id, user_id, ordinal from transaction_proposal_submissions");
+      expect(submissions).toEqual([
+        {
+          set_id: "11111111-1111-4111-8111-111111111111",
+          user_id: "owner",
+          ordinal: 1,
+        },
+      ]);
+
+      const settled = yield* sql.unsafe<{ readonly state: string; readonly settled: boolean }>(
+        "select state, settled from transaction_proposal_items order by set_id, position, id",
+      );
+      expect(settled).toEqual([
+        { state: "executed", settled: true },
+        { state: "failed", settled: false },
+        { state: "skipped", settled: false },
+        { state: "proposed", settled: false },
+      ]);
+
+      const columns = yield* sql.unsafe<{ readonly column_name: string }>(
+        "select column_name from information_schema.columns where table_name = 'transaction_proposal_sets'",
+      );
+      expect(columns.map((row) => row.column_name)).not.toContain("submitted_at");
+      expect(columns.map((row) => row.column_name)).not.toContain("completed_at");
+    }).pipe(Effect.provide(PgliteClient.layer())),
+  );
+});
+
 function migrationStatements(select: (name: string) => boolean): ReadonlyArray<string> {
   const statements: string[] = [];
   for (const name of readdirSync(migrationsFolder).filter(select).sort()) {

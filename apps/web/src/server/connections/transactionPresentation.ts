@@ -32,16 +32,13 @@ export function toTransactionReviewView(review: ProposalSetReview): TransactionR
       createdAt: DateTime.formatIso(review.set.createdAt),
       expiresAt: DateTime.formatIso(review.set.expiresAt),
       expired: review.set.expired,
-      ...(review.set.submission === undefined
-        ? {}
-        : {
-            submission: {
-              submittedAt: DateTime.formatIso(review.set.submission.submittedAt),
-              ...(review.set.submission.completedAt === undefined
-                ? {}
-                : { completedAt: DateTime.formatIso(review.set.submission.completedAt) }),
-            },
-          }),
+      submissions: review.set.submissions.map((submission) => ({
+        submittedAt: DateTime.formatIso(submission.submittedAt),
+        ...(submission.completedAt === undefined
+          ? {}
+          : { completedAt: DateTime.formatIso(submission.completedAt) }),
+      })),
+      settled: review.set.settled,
     },
     teams: review.teams.map(toTeamView),
   };
@@ -308,6 +305,7 @@ export function mapTransactionReviewError(
   | "transactions.input_invalid"
   | "transactions.set_expired"
   | "transactions.already_submitted"
+  | "transactions.submission_in_progress"
   | "transactions.nothing_included"
   | "transactions.trade_not_found"
   | "transactions.trade_not_pending"
@@ -329,6 +327,8 @@ export function mapTransactionReviewError(
       return { type: "transactions.set_expired", outcome: "rejected" };
     case "proposal.already_submitted":
       return { type: "transactions.already_submitted", outcome: "conflict" };
+    case "proposal.submission_in_progress":
+      return { type: "transactions.submission_in_progress", outcome: "conflict" };
     case "proposal.team_not_found":
     case "proposal.connection_not_ready":
     case "proposal.provider_unavailable":

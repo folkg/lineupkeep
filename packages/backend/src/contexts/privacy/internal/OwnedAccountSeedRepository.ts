@@ -26,6 +26,7 @@ export const owner = {
   diagnosticId: "22222222-2222-4222-8222-444444444444",
   writeIntentId: "22222222-2222-4222-8222-555555555555",
   proposalSetId: "33333333-3333-4333-8333-333333333333",
+  proposalSubmissionId: "33333333-3333-4333-8333-444444444444",
   proposalItemId: "44444444-4444-4444-8444-444444444444",
   proposalStepId: "44444444-4444-4444-8444-555555555555",
   incidentId: "55555555-5555-4555-8555-555555555555",
@@ -170,10 +171,15 @@ export const seedOwnedAccount = Effect.gen(function* () {
   );
   yield* run(
     sql`insert into ${sql.identifier("transaction_proposal_sets")}
-      (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams,
-        submitted_by_user_id, expires_at) values
+      (id, user_id, proposer_kind, proposer_reference, surface, fingerprint, teams, expires_at)
+      values
       (${owner.proposalSetId}, ${owner.id}, ${"user"}, ${"web"}, ${"app"}, ${"fingerprint-owner"},
-        ${`["${owner.teamId}"]`}::jsonb, ${owner.id}, ${instant})`,
+        ${`["${owner.teamId}"]`}::jsonb, ${instant})`,
+  );
+  yield* run(
+    sql`insert into ${sql.identifier("transaction_proposal_submissions")}
+      (id, set_id, user_id, ordinal, submitted_at, completed_at) values
+      (${owner.proposalSubmissionId}, ${owner.proposalSetId}, ${owner.id}, 1, ${instant}, ${instant})`,
   );
   yield* run(
     sql`insert into ${sql.identifier("transaction_proposal_items")}

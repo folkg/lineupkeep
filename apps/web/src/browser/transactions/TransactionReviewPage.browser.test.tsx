@@ -276,7 +276,11 @@ function tradeReviewFixture(): TransactionReviewView {
 function pendingTradeReviewFixture(): TransactionReviewView {
   return {
     ...reviewFixture(),
-    set: { ...reviewFixture().set, submission: { submittedAt: now, completedAt: now } },
+    set: {
+      ...reviewFixture().set,
+      submissions: [{ submittedAt: now, completedAt: now }],
+      settled: false,
+    },
     teams: [tradeTeam(tradeItem("pending"))],
   };
 }
@@ -284,7 +288,11 @@ function pendingTradeReviewFixture(): TransactionReviewView {
 function withdrawnTradeReviewFixture(): TransactionReviewView {
   return {
     ...reviewFixture(),
-    set: { ...reviewFixture().set, submission: { submittedAt: now, completedAt: now } },
+    set: {
+      ...reviewFixture().set,
+      submissions: [{ submittedAt: now, completedAt: now }],
+      settled: true,
+    },
     teams: [tradeTeam(tradeItem("withdrawn"))],
   };
 }
@@ -329,6 +337,8 @@ function reviewFixture(): TransactionReviewView {
       createdAt: oneHourAgo,
       expiresAt: twentyThreeHours,
       expired: false,
+      submissions: [],
+      settled: false,
     },
     teams: [
       teamFixture(alphaId, "Alpha", "nfl", "football", [
@@ -543,7 +553,11 @@ it("shows the order it was sent in and why a later move stopped", async () => {
   const stopped = `${rejection} Later moves on this team were not checked against the resulting roster.`;
   using _app = setupReviewPage({
     ...base,
-    set: { ...base.set, submission: { submittedAt: now, completedAt: now } },
+    set: {
+      ...base.set,
+      submissions: [{ submittedAt: now, completedAt: now }],
+      settled: false,
+    },
     teams: [
       teamFixture(alphaId, "Alpha", "nhl", "hockey", [
         {
@@ -581,7 +595,9 @@ it("shows the order it was sent in and why a later move stopped", async () => {
     ],
   });
 
-  await expect.element(page.getByText("The order it was sent in", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("The order each move was sent in", { exact: true }))
+    .toBeVisible();
   await expect
     .element(page.getByText("1. Drop Riley Chen — Failed", { exact: true }))
     .toBeVisible();
@@ -589,7 +605,7 @@ it("shows the order it was sent in and why a later move stopped", async () => {
     .element(page.getByText("2. Move Casey Moss to BN — Skipped", { exact: true }))
     .toBeVisible();
   await expect
-    .element(page.getByText("Sent 2nd in this team's order.", { exact: true }))
+    .element(page.getByText("Sent 2nd in its submission's order.", { exact: true }))
     .toBeVisible();
   await expect
     .element(page.getByText(/Not attempted because Dropping Riley Chen failed/u))
@@ -694,7 +710,7 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
     await expect.element(page.getByText("Executed", { exact: true }).first()).toBeVisible();
     expect(page.getByRole("button", { name: /Submit/u }).elements()).toHaveLength(0);
     expect(page.getByRole("checkbox").elements()).toHaveLength(0);
-    await expect.element(page.getByText(/cannot be submitted again/u)).toBeVisible();
+    await expect.element(page.getByText(/This set stays open while a move/u)).toBeVisible();
     expect(document.activeElement).toBe(document.getElementById("submission-result"));
 
     await captureViewport("result-390-light");
@@ -705,6 +721,47 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
     document.documentElement.classList.remove("dark");
     await page.viewport(1280, 720);
   }
+});
+
+it("offers another submission for a move that has not run while an earlier outcome stays", async () => {
+  const base = reviewFixture();
+  const replacement: TransactionReviewItemView = {
+    ...freeAgentItem(),
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9165c9",
+    adds: [player("Owen Park", "D", "TOR", "Free agent")],
+    reason: "Try the add again.",
+  };
+  const includes: Array<ReadonlyArray<string>> = [];
+  using _app = setupReviewPage(
+    {
+      ...base,
+      set: {
+        ...base.set,
+        submissions: [{ submittedAt: now, completedAt: now }],
+        settled: false,
+      },
+      teams: [teamFixture(alphaId, "Alpha", "nfl", "football", [failedAddItem(), replacement])],
+    },
+    {
+      submit: (input) => {
+        includes.push(input.include);
+        return Promise.resolve(base);
+      },
+    },
+  );
+
+  await expect.element(page.getByRole("heading", { name: "Submitted" })).toBeVisible();
+  await expect.element(page.getByText(/This set stays open while a move/u)).toBeVisible();
+  await expect.element(page.getByText("That player is no longer available.")).toBeVisible();
+  await expect
+    .element(page.getByRole("checkbox", { name: /Include: Add Owen Park/u }))
+    .toBeChecked();
+  expect(page.getByRole("checkbox", { name: /Include: Add Mika Olsen/u }).elements()).toHaveLength(
+    0,
+  );
+
+  await page.getByRole("button", { name: "Submit 1 move" }).click();
+  expect(includes).toStrictEqual([[replacement.id]]);
 });
 
 it("tells the person what to check when the provider gives no rejection reason", async () => {
@@ -945,7 +1002,8 @@ function resultFixture(): TransactionReviewView {
     ...reviewFixture(),
     set: {
       ...reviewFixture().set,
-      submission: { submittedAt: now, completedAt: now },
+      submissions: [{ submittedAt: now, completedAt: now }],
+      settled: false,
     },
     teams: [
       teamFixture(alphaId, "Alpha", "nfl", "football", [

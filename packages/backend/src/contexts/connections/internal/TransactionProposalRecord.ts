@@ -90,14 +90,21 @@ export const ProposalSetRecord = Schema.Struct({
   fingerprint: Schema.NonEmptyString,
   teams: Schema.Array(TeamId),
   orders: Schema.Array(StoredProposalOrder),
-  submittedBy: Schema.optional(UserId),
-  submittedAt: Schema.optional(Schema.DateTimeUtc),
-  completedAt: Schema.optional(Schema.DateTimeUtc),
   createdAt: Schema.DateTimeUtc,
   expiresAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
 }).pipe(Schema.toType);
 export type ProposalSetRecord = typeof ProposalSetRecord.Type;
+
+export const StoredProposalSubmission = Schema.Struct({
+  id: Schema.String,
+  setId: ProposalSetId,
+  userId: UserId,
+  ordinal: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  submittedAt: Schema.DateTimeUtc,
+  completedAt: Schema.optional(Schema.DateTimeUtc),
+}).pipe(Schema.toType);
+export type StoredProposalSubmission = typeof StoredProposalSubmission.Type;
 
 export const StoredProposalTrade = Schema.Struct({
   providerKey: Schema.NonEmptyString,
@@ -141,6 +148,7 @@ export const ProposalItemRecord = Schema.Struct({
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
+  settled: Schema.Boolean,
   staleness: StoredProposalStaleness,
   outcome: Schema.optional(ProposalOutcome),
   outcomeDetail: Schema.optional(Schema.NonEmptyString),
@@ -179,3 +187,23 @@ export type ProposalTeamRecord = {
   readonly sport: FantasySport;
   readonly season: number;
 };
+
+export function isSettledItem(item: {
+  readonly state: ProposalItemState;
+  readonly settled: boolean;
+}): boolean {
+  return (
+    item.state === "executed" ||
+    item.state === "accepted" ||
+    item.state === "withdrawn" ||
+    item.state === "expired" ||
+    item.settled
+  );
+}
+
+export function isSettledSet(
+  submissions: ReadonlyArray<StoredProposalSubmission>,
+  items: ReadonlyArray<ProposalItemRecord>,
+): boolean {
+  return submissions.length > 0 && items.every(isSettledItem);
+}

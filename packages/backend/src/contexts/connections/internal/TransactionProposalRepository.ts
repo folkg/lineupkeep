@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
@@ -26,19 +26,23 @@ import type {
   ProposalStepRecord,
   ProposalTeamRecord,
   StoredProposalOrder,
+  StoredProposalSubmission,
   StoredSlotMove,
   StoredProposalPlayer,
   StoredProposalStaleness,
   StoredProposalTrade,
   StoredReserveMove,
 } from "./TransactionProposalRecord.ts";
+import { isSettledItem } from "./TransactionProposalRecord.ts";
 import {
   ProposalItemRow,
   ProposalSetRow,
   ProposalStepRow,
+  ProposalSubmissionRow,
   transactionProposalItems,
   transactionProposalSets,
   transactionProposalSteps,
+  transactionProposalSubmissions,
 } from "./TransactionProposalTables.ts";
 
 export type ProposalItemCommand = {
@@ -63,6 +67,7 @@ type ProposalItemStore = {
 
 type LoadedProposalSet = {
   readonly set: ProposalSetRecord;
+  readonly submissions: ReadonlyArray<StoredProposalSubmission>;
   readonly items: ReadonlyArray<ProposalItemRecord>;
   readonly steps: ReadonlyArray<ProposalStepRecord>;
   readonly created: boolean;
@@ -103,6 +108,7 @@ export type ProposalOutcomeCommand = {
   readonly at: DateTime.Utc;
   readonly position: number | undefined;
   readonly steps: ReadonlyArray<ProposalStepCommand>;
+  readonly settled: boolean;
   readonly trade?: StoredProposalTrade;
 };
 
@@ -175,6 +181,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                 const byId = new Map(items.map((item) => [item.id, item] as const));
                 return {
                   set,
+                  submissions: [],
                   items: input.items.map((item) => {
                     const stored = byId.get(item.id);
                     if (stored === undefined) {
@@ -216,11 +223,29 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                   )
                   .for("update");
                 const setRow = setRows[0];
-                if (setRow === undefined || setRow.submittedAt !== null) {
-                  return undefined;
+                if (setRow === undefined) {
+                  return { status: "missing" as const };
+                }
+                const submissionRows = yield* tx
+                  .select({
+                    completedAt: transactionProposalSubmissions.completedAt,
+                  })
+                  .from(transactionProposalSubmissions)
+                  .where(
+                    and(
+                      eq(transactionProposalSubmissions.userId, input.userId),
+                      eq(transactionProposalSubmissions.setId, input.setId),
+                    ),
+                  );
+                if (submissionRows.some((row) => row.completedAt === null)) {
+                  return { status: "in_flight" as const };
                 }
                 const positionRows = yield* tx
-                  .select({ position: transactionProposalItems.position })
+                  .select({
+                    position: transactionProposalItems.position,
+                    state: transactionProposalItems.state,
+                    settled: transactionProposalItems.settled,
+                  })
                   .from(transactionProposalItems)
                   .where(
                     and(
@@ -228,6 +253,9 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                       eq(transactionProposalItems.setId, input.setId),
                     ),
                   );
+                if (submissionRows.length > 0 && positionRows.every(isSettledItem)) {
+                  return { status: "closed" as const };
+                }
                 const nextPosition = positionRows.reduce(
                   (next, row) => Math.max(next, row.position + 1),
                   0,
@@ -260,7 +288,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                       eq(transactionProposalSets.id, input.setId),
                     ),
                   );
-                return items;
+                return { status: "appended" as const, items };
               }),
             );
           }).pipe(Effect.mapError(persistenceFailure)),
@@ -289,14 +317,47 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                 )
                 .for("update");
               const setRow = setRows[0];
-              if (setRow === undefined || setRow.submittedAt !== null) {
-                return undefined;
+              if (setRow === undefined) {
+                return { status: "missing" as const };
+              }
+              const submissions = yield* tx
+                .select({ completedAt: transactionProposalSubmissions.completedAt })
+                .from(transactionProposalSubmissions)
+                .where(
+                  and(
+                    eq(transactionProposalSubmissions.userId, input.userId),
+                    eq(transactionProposalSubmissions.setId, input.setId),
+                  ),
+                );
+              if (submissions.some((row) => row.completedAt === null)) {
+                return { status: "in_flight" as const };
               }
               const ids = [...input.remove];
               if (!Array.isArrayNonEmpty(ids)) {
                 return yield* ProposalPersistenceFailed.make({
                   cause: new Error("A withdrawal names no items"),
                 });
+              }
+              const locked = yield* tx
+                .select({ id: transactionProposalItems.id, state: transactionProposalItems.state })
+                .from(transactionProposalItems)
+                .where(
+                  and(
+                    eq(transactionProposalItems.userId, input.userId),
+                    eq(transactionProposalItems.setId, input.setId),
+                    anyOf(transactionProposalItems.id, ids),
+                  ),
+                )
+                .for("update");
+              const lockedById = new Map(locked.map((row) => [row.id, row.state] as const));
+              if (locked.length !== ids.length || locked.some((row) => row.state !== "proposed")) {
+                return {
+                  status: "not_withdrawable" as const,
+                  items: ids.map((id) => {
+                    const state = lockedById.get(id);
+                    return { item: id, ...(state === undefined ? {} : { state }) };
+                  }),
+                };
               }
               yield* tx
                 .delete(transactionProposalSteps)
@@ -330,7 +391,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                     eq(transactionProposalSets.id, input.setId),
                   ),
                 );
-              return planned;
+              return { status: "withdrawn" as const, items: planned };
             }),
           )
           .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
@@ -353,6 +414,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
           return undefined;
         }
         const set = yield* decodeSet(setRow);
+        const submissions = yield* loadSubmissions(userId, setId);
         const itemRows = yield* database
           .select()
           .from(transactionProposalItems)
@@ -369,7 +431,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
           userId,
           items.map((item) => item.id),
         );
-        return { set, items, steps };
+        return { set, submissions, items, steps };
       });
 
       const loadItem = Effect.fn("TransactionProposalRepository.loadItem")(function* (
@@ -499,20 +561,69 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
           readonly at: DateTime.Utc;
         }) {
           const at = DateTime.toDateUtc(input.at);
-          const claimed = yield* database
-            .update(transactionProposalSets)
-            .set({ submittedByUserId: input.userId, submittedAt: at, updatedAt: at })
-            .where(
-              and(
-                eq(transactionProposalSets.userId, input.userId),
-                eq(transactionProposalSets.id, input.setId),
-                isNull(transactionProposalSets.submittedAt),
-                gt(transactionProposalSets.expiresAt, at),
-              ),
+          return yield* database
+            .transaction((tx) =>
+              Effect.gen(function* () {
+                const setRows = yield* tx
+                  .select({ expiresAt: transactionProposalSets.expiresAt })
+                  .from(transactionProposalSets)
+                  .where(
+                    and(
+                      eq(transactionProposalSets.userId, input.userId),
+                      eq(transactionProposalSets.id, input.setId),
+                    ),
+                  )
+                  .for("update");
+                const setRow = setRows[0];
+                if (setRow === undefined) {
+                  return { status: "missing" as const };
+                }
+                if (DateTime.toEpochMillis(input.at) >= setRow.expiresAt.getTime()) {
+                  return { status: "expired" as const };
+                }
+                const inFlight = yield* tx
+                  .select({ id: transactionProposalSubmissions.id })
+                  .from(transactionProposalSubmissions)
+                  .where(
+                    and(
+                      eq(transactionProposalSubmissions.userId, input.userId),
+                      eq(transactionProposalSubmissions.setId, input.setId),
+                      isNull(transactionProposalSubmissions.completedAt),
+                    ),
+                  )
+                  .limit(1);
+                if (inFlight.length > 0) {
+                  return { status: "in_flight" as const };
+                }
+                const ordinals = yield* tx
+                  .select({ ordinal: transactionProposalSubmissions.ordinal })
+                  .from(transactionProposalSubmissions)
+                  .where(
+                    and(
+                      eq(transactionProposalSubmissions.userId, input.userId),
+                      eq(transactionProposalSubmissions.setId, input.setId),
+                    ),
+                  );
+                const ordinal = ordinals.reduce((next, row) => Math.max(next, row.ordinal), 0) + 1;
+                const inserted = yield* tx
+                  .insert(transactionProposalSubmissions)
+                  .values({
+                    setId: input.setId,
+                    userId: input.userId,
+                    ordinal,
+                    submittedAt: at,
+                  })
+                  .returning({ id: transactionProposalSubmissions.id });
+                const submission = inserted[0];
+                if (submission === undefined) {
+                  return yield* ProposalPersistenceFailed.make({
+                    cause: new Error("A claimed submission was not returned"),
+                  });
+                }
+                return { status: "claimed" as const, submissionId: submission.id };
+              }),
             )
-            .returning({ id: transactionProposalSets.id })
             .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
-          return claimed.length === 1;
         },
       );
 
@@ -560,6 +671,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                           outcome: outcome.outcome,
                           outcomeDetail: outcome.detail,
                           outcomeAt: outcome.at,
+                          settled: outcome.settled,
                           ...(outcome.position === undefined
                             ? {}
                             : { executionPosition: outcome.position }),
@@ -610,22 +722,43 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         function* (input: {
           readonly userId: UserId;
           readonly setId: ProposalSetId;
+          readonly submissionId: string;
           readonly at: DateTime.Utc;
         }) {
-          const at = DateTime.toDateUtc(input.at);
           yield* database
-            .update(transactionProposalSets)
-            .set({ completedAt: at, updatedAt: at })
+            .update(transactionProposalSubmissions)
+            .set({ completedAt: DateTime.toDateUtc(input.at) })
             .where(
               and(
-                eq(transactionProposalSets.userId, input.userId),
-                eq(transactionProposalSets.id, input.setId),
-                isNull(transactionProposalSets.completedAt),
+                eq(transactionProposalSubmissions.userId, input.userId),
+                eq(transactionProposalSubmissions.setId, input.setId),
+                eq(transactionProposalSubmissions.id, input.submissionId),
+                isNull(transactionProposalSubmissions.completedAt),
               ),
             )
             .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
         },
       );
+
+      function loadSubmissions(
+        userId: UserId,
+        setId: ProposalSetId,
+      ): Effect.Effect<ReadonlyArray<StoredProposalSubmission>, ProposalPersistenceFailed> {
+        return database
+          .select()
+          .from(transactionProposalSubmissions)
+          .where(
+            and(
+              eq(transactionProposalSubmissions.userId, userId),
+              eq(transactionProposalSubmissions.setId, setId),
+            ),
+          )
+          .orderBy(asc(transactionProposalSubmissions.ordinal))
+          .pipe(
+            Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+            Effect.flatMap((rows) => Effect.forEach(rows, decodeSubmission)),
+          );
+      }
 
       function loadSteps(
         userId: UserId,
@@ -752,7 +885,8 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
             userId,
             items.map((item) => item.id),
           );
-          return { set, items, steps, created: false };
+          const submissions = yield* loadSubmissions(userId, set.id);
+          return { set, submissions, items, steps, created: false };
         });
       }
     }),
@@ -791,6 +925,7 @@ function storeRow(
     bid: command.bid ?? null,
     reason: command.reason,
     state: "proposed" as const,
+    settled: false,
     staleness: item.check.status,
     staleReasons: item.check.reasons,
     checkedAt: item.check.checkedAt === undefined ? null : DateTime.toDateUtc(item.check.checkedAt),
@@ -865,6 +1000,14 @@ function decodeStep(
   row: typeof transactionProposalSteps.$inferSelect,
 ): Effect.Effect<ProposalStepRecord, ProposalPersistenceFailed> {
   return Schema.decodeEffect(ProposalStepRow)(row).pipe(
+    Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
+  );
+}
+
+function decodeSubmission(
+  row: typeof transactionProposalSubmissions.$inferSelect,
+): Effect.Effect<StoredProposalSubmission, ProposalPersistenceFailed> {
+  return Schema.decodeEffect(ProposalSubmissionRow)(row).pipe(
     Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })),
   );
 }

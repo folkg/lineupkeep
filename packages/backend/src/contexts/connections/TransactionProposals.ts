@@ -117,7 +117,12 @@ const ProposalExecutionStep = Schema.Struct({
 export type ProposalExecutionStep = typeof ProposalExecutionStep.Type;
 
 const ProposalItemExecution = Schema.Struct({
-  position: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  position: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+      description:
+        "The move's position in the team order of the submission that sent it, counted from zero. Positions restart with each submission.",
+    }),
+  ),
   outcome: ProposalOutcome,
   detail: Schema.optional(Schema.NonEmptyString),
   decidedAt: Schema.DateTimeUtc,
@@ -178,6 +183,10 @@ export const ProposalItem = Schema.Struct({
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   reason: Schema.NonEmptyString,
   state: ProposalItemState,
+  settled: Schema.Boolean.annotate({
+    description:
+      "Whether this move will never run again: it executed, its trade offer ended, or it was skipped for a reason that cannot change. A failed move is not settled, so it can be replaced in the same set.",
+  }),
   staleness: ProposalStaleness,
   execution: Schema.optional(ProposalItemExecution),
   reserveMove: Schema.optional(ProposalReserveMove),
@@ -311,6 +320,9 @@ export type ProposalSetProvenance = typeof ProposalSetProvenance.Type;
 export const ProposalSubmission = Schema.Struct({
   submittedAt: Schema.DateTimeUtc,
   completedAt: Schema.optional(Schema.DateTimeUtc),
+}).annotate({
+  description:
+    "One submission of this set, with when the signed-in person submitted it and, once every outcome was recorded, when that submission completed.",
 });
 export type ProposalSubmission = typeof ProposalSubmission.Type;
 
@@ -320,7 +332,14 @@ export const ProposalSet = Schema.Struct({
   createdAt: Schema.DateTimeUtc,
   expiresAt: Schema.DateTimeUtc,
   expired: Schema.Boolean,
-  submission: Schema.optional(ProposalSubmission),
+  submissions: Schema.Array(ProposalSubmission).annotate({
+    description:
+      "Every submission of this set, oldest first. A set has more than one when a failed or skipped move left it open and more moves were sent later.",
+  }),
+  settled: Schema.Boolean.annotate({
+    description:
+      "Whether the set is an audit record: it has been submitted and every move in it has settled. An open set accepts new items and another submission of the moves that are still proposed; a settled set refuses both.",
+  }),
   reviewPath: Schema.NonEmptyString,
 });
 export type ProposalSet = typeof ProposalSet.Type;
@@ -371,7 +390,7 @@ export type ProposalItemDraft = typeof ProposalItemDraft.Type;
 
 const ProposeSetTarget = Schema.optional(Schema.NullOr(ProposalSetId)).annotate({
   description:
-    "The id of an existing set that has not been submitted, to append these items after its existing ones. The whole set is validated again as one set and its stored order is recomputed. Omit it to create a new set. A submitted or expired set refuses new items.",
+    "The id of an open set, to append these items after its existing ones. A set is open until it is submitted and every move in it has settled; a set whose submission left a move failed, or that was never submitted, is open. The whole set is validated again against the current roster together with the moves that are still proposed, and its stored order is recomputed. Omit it to create a new set. A settled or expired set refuses new items.",
 });
 
 export const ProposeTransactionsInput = Schema.Struct({
@@ -563,6 +582,7 @@ export type ProposalError =
   | ProposalSetNotFound
   | ProposalSetExpired
   | ProposalSetAlreadySubmitted
+  | ProposalSubmissionInProgress
   | ProposalTeamNotFound
   | ProposalTradeNotFound
   | ProposalTradeNotPending
@@ -600,6 +620,13 @@ export class ProposalSetAlreadySubmitted extends Schema.TaggedError<
 >()("proposal.already_submitted", {
   set: ProposalSetId,
   submittedAt: Schema.DateTimeUtc,
+}) {}
+
+export class ProposalSubmissionInProgress extends Schema.TaggedError<
+  ProposalSubmissionInProgress,
+  { readonly brand: unique symbol }
+>()("proposal.submission_in_progress", {
+  set: ProposalSetId,
 }) {}
 
 export class ProposalTeamNotFound extends Schema.TaggedError<

@@ -99,11 +99,17 @@ export const ownedDataInventory: ReadonlyArray<OwnedDataClass> = [
     withheld: [],
   },
   {
+    table: "transaction_proposal_submissions",
+    label: "Transaction proposal submissions",
+    needsAccountIdentity: false,
+    where: ownerRows("user_id"),
+    withheld: [],
+  },
+  {
     table: "transaction_proposal_sets",
     label: "Transaction proposal sets",
     needsAccountIdentity: false,
-    where: (account) =>
-      sql`(user_id = ${account.userId} or submitted_by_user_id = ${account.userId})`,
+    where: ownerRows("user_id"),
     withheld: [],
   },
   {
@@ -342,7 +348,7 @@ export function catalogOwnerColumnsQuery(): SQL {
     select table_name, column_name
     from information_schema.columns
     where table_schema = 'public'
-      and column_name in ('user_id', 'owner_id', 'submitted_by_user_id')
+      and column_name in ('user_id', 'owner_id')
     order by table_name, column_name
   `;
 }

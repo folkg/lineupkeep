@@ -729,14 +729,21 @@ refused and named. Repeating the identical set returns the existing set with `cr
 rather than stacking a duplicate. Once a set is extended or a stored move is withdrawn, its contents
 no longer match the original request, so proposing the original items again creates a new set.
 
-Passing `set` appends the items after an existing set that has not been submitted. Every team that
-receives an item is validated again with its existing items as one set against the league's slots,
-and that team's stored order is recomputed. If an added item makes an existing item impossible, nothing is stored; the refusal names
-the existing item to withdraw. `withdraw_transaction_proposal_items` takes a set and one to twenty
-item ids, removes them, revalidates the remaining moves as a set, and returns the set with its new
-order and review link. Removing the last move for a team is allowed. A move that already ran or is
-otherwise settled cannot be withdrawn, and a submitted set is an audit record and refuses both new
-moves and withdrawals.
+Passing `set` appends the items after an existing set that is still open. A set is open until it has
+been submitted and every move in it has settled: a move settles when it executed, its trade offer
+is no longer available, or it was skipped for a reason that cannot change. A set whose submission
+left a move failed, or that was never submitted, is open. Every team that receives an item is
+validated again against the current roster together with the moves in the set that are still proposed,
+and that team's stored order is recomputed. A move whose attempt failed or that was skipped is replaced
+by a new item, so proposing that move again in the same set is accepted; the earlier item stays as a
+record. If an added item makes an existing unrun item impossible, nothing is stored; the refusal
+names the existing item to withdraw. `withdraw_transaction_proposal_items` takes a set and one to
+twenty item ids, removes the moves that are still proposed, revalidates the remaining moves as a set, and
+returns the set with its new order and review link. Removing the last move for a team is allowed. A
+move that already ran, is pending, failed, or was skipped cannot be withdrawn: it keeps its outcome
+and is replaced by a new item. A set that stayed open after a submission still accepts a withdrawal
+of a move that is still proposed; a set whose moves have all settled is an audit record and refuses both
+new moves and withdrawals.
 
 A set expires 24 hours after creation. `revalidate_transaction_proposal_set` re-reads current state
 once per team (its roster, its league rules, the pool state of the players it adds, and its FAAB
@@ -761,9 +768,9 @@ that move as its own step. The slot can be opened by a drop in the same item or 
 When no slot in the set is open, the item refuses and names the choice only the person can make,
 which is who to drop, and the drop or slot move that would resolve it in this set. Every team with
 roster moves also carries its `order`: the sequence the server chose so each move leaves the roster
-legal under the league's slots and published roster-change timing, with a `position` for every move.
-Every surface shows that sequence before submission, and the set read returns the sequence saved by
-its last check. When no order exists, that team's whole set is refused at the check: every move in it is
+legal under the league's slots and published roster-change timing, with a `position` for every move
+that is still proposed. Every surface shows that sequence before submission, and the set read returns the
+sequence saved by its last check. When no order exists, that team's whole set is refused at the check: every move in it is
 illegal, the reason names the operations that conflict in plain words, and nothing in that team's
 set can be submitted. An item that no operation in the set can make legal is named on its own and
 does not make the rest of the team's plan illegal. A trade follows the roster moves in the
@@ -771,35 +778,42 @@ published sequence, because it changes no roster until the other manager accepts
 re-checked against both
 rosters, the counterparty's continuing place in the league, and the trade window, and carries its
 current state back to the review. Staleness and illegality are recorded beside the item's state and
-are never failures; an item stays `proposed`. A set stores only moves that passed the check when they
+are never failures; a move that is still proposed stays `proposed`. A set stores only moves that passed the check when they
 were proposed, so a fresh set is current; a later check can still make a stored move stale. A team
 whose state cannot be read marks only its own items, and the review reports the failure beside that
 team. An expired set refuses re-validation
 instead of re-checking or executing, so a set that sat overnight cannot be executed from facts nobody
 re-checked. `get_transaction_proposal_set` reads the set back with every team, including the teams
-that had nothing proposed, each item's state, last check, each team's planned `order` with its
-positions, an item's server roster move as `reserveMove`, and any recorded submission and step
-outcomes, and the same review link. It contacts no provider: the order is the one the last check
-planned and saved. A rejected write carries the provider's exact wording, and that wording reaches
+that had nothing proposed, each item's state and `settled` flag, last check, each team's planned
+`order` with its positions, an item's server roster move as `reserveMove`, every submission in
+order, and each move's position and step outcomes, and the same review link. It contacts no
+provider: the order is the one the last check planned and saved. A rejected write carries the provider's exact wording, and that wording reaches
 both the review page and this tool result. Another account's set is reported as not
 found.
 
 The item state vocabulary is `proposed`, `executed`, `pending`, `failed`, `skipped`, and `unknown`.
 No MCP tool submits, accepts, or spends anything. Execution happens only when a signed-in owner
-submits the included items from the review page. Submission claims the set once in the database,
-re-runs the same revalidation immediately before writing, and skips an item that went stale with its
-reason rather than attempting it. The included moves for each team then run in the order the server
-computed, never in the order the client sent, and in the same positions the review published. Each
-executed item records its position in that order and its steps, so the review shows afterwards that
-the drop ran before the reserve move. Each item is
+submits the moves that are still proposed from the review page. Each submission claims the set in the
+database, re-runs the same revalidation immediately before writing, and skips an item that went stale
+with its reason rather than attempting it. It sends only the included moves that are still
+`proposed`; a move that already ran, failed, or was skipped keeps its outcome. The included moves for
+each team then run in the order the server computed for that submission, never in the order the
+client sent, and in the same positions the review published. Each executed item records its position
+in that order and its steps, so the review shows afterwards that the drop ran before the reserve
+move. Each item is
 one provider transaction carrying its add and drop together, sent once with no retry; an optional
 reserve move is its own recorded step before the add, and a declared slot move is one recorded step on
 its own. A waiver claim is `pending` until the provider processes it, and `unknown` means a request
-may or may not have applied and is never retried automatically. The set records who submitted, when,
-the position and outcome of every item, and the outcome of every step; after submission it is an
-audit record and cannot be submitted again. A failed, unknown, or pending item, or one refused
-before anything was sent, stops the later steps for that team only, because their checks no longer
-describe the roster; other teams continue. A
+may or may not have applied and is never retried automatically. The set records each submission in
+order, with who submitted it and when, the position and outcome of every move it sent, and the
+outcome of every step. A move carries `settled`: true when it will not run again because it
+executed, its trade offer ended, or it was skipped for a reason that cannot change. A set whose
+submission left a move failed stays open for a replacement, and a later submission sends only the
+moves that are still proposed; the failed move keeps its own state, outcome, and the provider's
+wording beside the retry. A set whose moves have all settled is an audit record and refuses new moves and
+another submission. A failed, unknown, or pending item, or one refused before anything was sent,
+stops the later steps for that team only, because their checks no longer describe the roster; other
+teams continue. A
 skipped step keeps the failed step's own wording and says it followed it. A submitted trade stays
 `pending` as an offer and is never sent as though the roster had already changed. A trade is sent
 once with no retry: an `unknown` propose is recorded as unknown and the person is told to check the

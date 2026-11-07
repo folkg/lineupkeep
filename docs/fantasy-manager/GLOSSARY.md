@@ -334,7 +334,7 @@ _Avoid_: Roster submission when referring only to slot assignments
 Choosing roster-slot assignments according to an objective while respecting the applicable roster and eligibility constraints.
 
 **Transaction proposal set**:
-One agent or person's proposed player transactions across any of their own teams, created by one call, grouped by team, and reviewed together. It covers every team the account has at creation, including teams with nothing proposed, records who proposed it, the surface and optional client label, and when, and expires 24 hours after creation.
+One agent or person's proposed player transactions across any of their own teams, created by one call, grouped by team, and reviewed together. It covers every team the account has at creation, including teams with nothing proposed, records who proposed it, the surface and optional client label, and when, and expires 24 hours after creation. A set stays open while a move in it has not settled; a set that has been submitted and holds only settled moves is an audit record.
 _Avoid_: Proposal when the whole set is meant, batch, review queue
 
 **Proposal item**:
@@ -354,7 +354,7 @@ The sequence the server chooses for one team's current proposal items so every s
 _Avoid_: Client order, priority, queue, greedy plan
 
 **Proposal item state**:
-Where a proposal item sits in its lifecycle: proposed (its initial state), executed (the provider accepted the whole move), pending (a waiver claim the provider has not processed, or a trade offer awaiting the other manager), failed (an attempt was made and did not succeed), skipped (a person left it out, it was stale or illegal at submit, an earlier move stopped its team, or a team's connection changed), unknown (a request that may or may not have applied), or, for a trade, accepted (the counterparty accepted it), withdrawn (we withdrew it before acceptance), or expired (the provider no longer lists it and did not complete it). Staleness and illegality are not states: a stale or illegal item keeps its state and carries the reason it cannot be submitted.
+Where a proposal item sits in its lifecycle: proposed (its initial state, and still the state of a move left out of a submission), executed (the provider accepted the whole move), pending (a waiver claim the provider has not processed, or a trade offer awaiting the other manager), failed (an attempt was made and did not succeed), skipped (it was stale or illegal at submit, an earlier move stopped its team, a team's connection changed, or the provider's request cannot carry it), unknown (a request that may or may not have applied), or, for a trade, accepted (the counterparty accepted it), withdrawn (we withdrew it before acceptance), or expired (the provider no longer lists it and did not complete it). A skipped item carries a `settled` flag: true when its reason cannot change, false when the facts could change. Staleness and illegality are not states: a stale or illegal item keeps its state and carries the reason it cannot be submitted.
 _Avoid_: Stale as a state, rejected when no attempt was made, done when a waiver is still pending
 
 **Proposal staleness**:
@@ -374,7 +374,7 @@ The 24-hour window after a proposal set is created within which it may be re-val
 _Avoid_: Timeout, TTL, stale set when the window is meant
 
 **Proposal submission**:
-One person's once-only decision to execute the included items of a proposal set. It records who submitted and when, re-checks current state immediately before writing, writes one provider transaction per item, and records the position and outcome of every item and the outcome of every step. A team's items run in the proposal order the server computed, never in the order the client sent. The database claims the submission atomically, so a set cannot be submitted twice; afterwards the set is an audit record.
+One person's decision to execute the moves of a proposal set that are still proposed. Each submission records who submitted and when, re-checks current state immediately before writing, writes one provider transaction per included move, and records the position and outcome of every move it sent and the outcome of every step. A team's moves run in the proposal order the server computed for that submission, never in the order the client sent. The database claims a submission atomically, so two submissions of one set never run at once. A set whose moves have all settled is an audit record and refuses another submission; a set whose submission left a move failed, or that still holds a proposed move, stays open, and a later submission sends only the moves that are still proposed.
 _Avoid_: Approval, retry, batch, execution queue
 
 **Proposal outcome**:
@@ -386,7 +386,7 @@ One recorded action inside a proposal item: a reserve move added by the server t
 _Avoid_: Sub-transaction, retry, hidden precondition
 
 **Proposal review**:
-The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and check, the order the server chose in plain words, and a quiet section for a team with nothing proposed. A refusal names the conflicting operations in the person's terms rather than by a code. A signed-in person decides there, selects the current items, and submits them once; after submission it shows the order that was sent, each item's and step's outcome, and why a later move stopped.
+The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and check, the order the server chose in plain words, and a quiet section for a team with nothing proposed. A refusal names the conflicting operations in the person's terms rather than by a code. A signed-in person decides there, selects the moves that are still proposed, and submits them; after submission it shows the submission history, the order that was sent, each move's and step's outcome, and why a later move stopped. It offers another submission when the set stays open and holds a move that is still proposed.
 _Avoid_: Approvals, cart, confirmation screen
 
 **Pending trade offer**:

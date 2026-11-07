@@ -17,7 +17,11 @@ import {
   lineupWriteIntents,
 } from "./LineupRunTables.ts";
 import { scheduleObservations } from "./ScheduleObservationTables.ts";
-import { transactionProposalItems, transactionProposalSets } from "./TransactionProposalTables.ts";
+import {
+  transactionProposalItems,
+  transactionProposalSets,
+  transactionProposalSubmissions,
+} from "./TransactionProposalTables.ts";
 
 export const connectionsRelations = defineRelations({
   providerConnections,
@@ -31,6 +35,7 @@ export const connectionsRelations = defineRelations({
   lineupRunDiagnostics,
   lineupWriteIntents,
   transactionProposalSets,
+  transactionProposalSubmissions,
   transactionProposalItems,
   scheduleObservations,
 });
