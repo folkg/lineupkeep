@@ -922,22 +922,73 @@ browser tab is available for checking shapes the recordings do not cover.
 **Verify**: the package answers the same reads and writes as the current adapter against the same recorded
 payloads, and the cutover is one wiring change. `L`
 
-## T. Motion that earns its place
+## U. Copy that speaks in the league's terms
 
-The owner asked for a pass over small animations, with the guidance from Emil Kowalski's work: most things
-need no animation, frequent interactions should not be animated, and motion exists to delight on the rarer
-moments.
+Visitors do not care about the server. The transaction review explains itself with sentences like "The order the
+server chose" and "The server could not decide an order", which describe our machinery rather than the game.
 
-- [ ] Read the skills before deciding anything, and record the handful of principles this product will keep,
-      in the same voice as `DESIGN.md`.
-- [ ] Pick a small number of infrequent moments where motion would genuinely help (a first sign-in, a set
-      settling, an empty state becoming a first team), not a sweep of the interface.
-- [ ] Keep every duration and easing in the theme tokens that already exist, and keep the reduced-motion rule
-      authoritative.
+- [ ] Sweep the product's copy for words that name our parts: server, backend, provider, endpoint, payload,
+      pipeline. Replace each with the thing the person is actually dealing with: the order the moves will run in,
+      the league's rules, the player, the team.
+- [ ] Keep it short. One sentence where the current copy uses two, and no sentence that restates its own heading.
+- [ ] Leave provider names in the places the guidance already allows: a connection row, a connection message, a
+      provider link. Nowhere else.
+
+**Verify**: a grep for the named words over product copy returns only the allowed places, and a walkthrough of
+the transaction review reads as English about a fantasy team. `S`
+
+## V. Motion that earns its place
+
+The owner asked for a pass over small animations, with the guidance from Emil Kowalski's work: most things need no
+animation, frequent interactions should not be animated, and motion exists to delight on the rarer moments.
+
+- [ ] Read the skills before deciding anything, and record the handful of principles this product will keep, in
+      the same voice as `DESIGN.md`.
+- [ ] Pick a small number of infrequent moments where motion would genuinely help, not a sweep of the interface.
+- [ ] Fix the submit progress bar on the transaction review: the owner saw it stutter. Measure it before and
+      after rather than judging by eye, keep the work off the layout thread, and keep the indeterminate behaviour
+      that rule already requires.
+- [ ] Keep every duration and easing in the theme tokens, and keep the reduced-motion rule authoritative.
 - [ ] Do not animate the action states: their timing is already decided and written down.
 
-**Verify**: each added motion names the moment it serves, its duration comes from a token, and a
-reduced-motion capture shows the same content without it. `S`
+**Verify**: each added motion names the moment it serves, its duration comes from a token, a reduced-motion
+capture shows the same content without it, and the submit bar's frame timing is recorded. `S`
+
+## W. Statecharts on XState
+
+The owner prefers the de facto statechart library to the one we adopted. `@typeonce/effect-machine` drives the
+lineup-run workflow and the connection lifecycle.
+
+- [ ] Evaluate XState with its Effect integration on the new v6 beta against the two machines we have: the lineup
+      run workflow and the connection lifecycle. State the migration shape before writing it.
+- [ ] Keep the domain events and states identical; the machine's vocabulary is product language and must not
+      change because the library did.
+- [ ] Migrate one machine behind its existing tests, then the other, and delete the old package and its adapter.
+- [ ] Do not migrate while the transaction work is mid-change; take it when the proposal surface is quiet.
+
+**Verify**: both machines' tests pass unchanged in intent, the persistence format is either migrated or read with
+a compatibility test, and the old dependency is gone from the lockfile. `M`
+
+## X. Transactions by intent, placement by the solver
+
+The Muse keeps producing failures of the same shape: an agent declares a move it believes is legal and the server
+refuses it for a reason the agent cannot see, or demands a chain of slot moves the provider then rejects. The
+owner's read is that the transaction API asks clients to do our job.
+
+- [ ] Replace declared slot destinations with intent: an add, a drop, a trade, and "put this player on my active
+      roster" or "stash this player on a reserve list". The server decides the slot with the lineup solver, which
+      already knows every slot's eligibility and the reserve rules.
+- [ ] Publish the roster's own arithmetic: active count against the maximum, reserve occupants excluded from it,
+      and per-move effect on that count, so a client never has to infer capacity.
+- [ ] Correct the slot model to what the provider actually enforces: a total roster count, generic bench capacity,
+      starter slots that may sit empty, and reserve eligibility by published positions. A drop frees a roster
+      spot, not a slot of one kind.
+- [ ] After a submission executes, run the lineup for each affected team once, so placement settles without a
+      second client call.
+
+**Verify**: the Muse's recorded failure cases (the two illegal reserve placements plus an add, the two-item
+legalization, and the post-drop activation) propose, submit and settle with no client-declared slot destination;
+the accounting block matches the provider; and an executed set leaves each affected team's lineup placed. `L`
 
 ## Q. Standing loops
 
