@@ -355,7 +355,40 @@ it("plans the roster move an add needs to fit", () => {
       playerName: "Roster Two",
       fromSlot: "BN",
       toSlot: "IR",
+      order: "before",
     });
+  }
+});
+
+it("sends a roster move after the drop that frees its destination", () => {
+  const decision = plan({
+    slots: [starting("C", 1), bench("BN", 1), reserve("IR", 1)],
+    players: [
+      player("p1", "Roster One", "C", ["C"]),
+      player("p2", "Roster Two", "BN", ["C", "IR"]),
+      player("p3", "Roster Three", "IR", ["C", "IR"]),
+    ],
+    timing: skate,
+    items: [addWithDrop("swap-three", skater("p9", "Pool One", ["C"]), ref("p3", "Roster Three"))],
+  });
+
+  assert.strictEqual(decision.status, "ordered");
+  if (decision.status === "ordered") {
+    assert.deepStrictEqual(
+      decision.steps.map((step) => [step.item, step.reserveMove]),
+      [
+        [
+          "swap-three",
+          {
+            playerKey: "p2",
+            playerName: "Roster Two",
+            fromSlot: "BN",
+            toSlot: "IR",
+            order: "after",
+          },
+        ],
+      ],
+    );
   }
 });
 
@@ -400,6 +433,7 @@ it("holds one player on a bench slot while two players swap slots", () => {
             playerName: "Roster One",
             fromSlot: "C",
             toSlot: "HOLD",
+            order: "before",
           },
         ],
         ["move-one-to-bench", undefined],

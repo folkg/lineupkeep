@@ -81,8 +81,10 @@ type Scheduling =
 type OrderedStep = {
   readonly item: ProposalOrderItem;
   readonly rosterPlace?: ProposalOrderRosterPlace;
-  reserveMove?: ProposalOrderRepair;
+  reserveMove?: OrderedRepair;
 };
+
+type OrderedRepair = ProposalOrderRepair & { readonly order: "before" | "after" };
 
 type DeclaredItem = {
   readonly item: ProposalOrderItem;
@@ -155,14 +157,19 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
       break;
     }
     if (chosen !== undefined) {
+      const before = state;
       state = chosen.state;
-      let reserveMove = hold;
+      let reserveMove: OrderedRepair | undefined =
+        hold === undefined ? undefined : { ...hold, order: "before" };
       hold = undefined;
       if (chosen.entry.item.mayRepair && reserveMove === undefined && !isLegal(state, league)) {
         const repaired = planRepair(state, league, blocked, declaredMoveKeys);
         if (repaired !== undefined) {
           state = repaired.state;
-          reserveMove = repaired.repair;
+          reserveMove = {
+            ...repaired.repair,
+            order: repairSendsBefore(before, repaired.repair, league) ? "before" : "after",
+          };
         }
       }
       const rosterPlace = rosterPlaceOf(chosen.entry.item, initial, league);
@@ -691,6 +698,16 @@ function repairOf(player: RosterMember, fromSlot: string, toSlot: string): Propo
     fromSlot,
     toSlot,
   };
+}
+
+function repairSendsBefore(
+  state: RosterState,
+  repair: ProposalOrderRepair,
+  league: League,
+): boolean {
+  const slot = league.byPosition.get(repair.toSlot);
+  const player = state.get(repair.playerKey);
+  return slot !== undefined && player !== undefined && openSlot(state, league, slot, player);
 }
 
 function placementFailure(
@@ -1260,7 +1277,7 @@ export type ProposalOrderPlan =
         readonly item: string;
         readonly position: number;
         readonly rosterPlace?: ProposalOrderRosterPlace;
-        readonly reserveMove?: ProposalOrderRepair;
+        readonly reserveMove?: OrderedRepair;
       }>;
     }
   | {

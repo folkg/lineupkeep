@@ -43,6 +43,7 @@ type TransactionReviewReserveMoveView = {
   readonly playerName?: string;
   readonly fromSlot?: string;
   readonly toSlot: string;
+  readonly order: "before" | "after";
 };
 
 type TransactionReviewSlotMoveView = {

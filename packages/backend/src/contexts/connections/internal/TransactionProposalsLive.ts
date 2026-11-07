@@ -1249,110 +1249,116 @@ export const TransactionProposalsLive = Layer.effect(
           return yield* executeTradeItem(input);
         }
         const steps: Array<ProposalStepCommand> = [];
-        const movementSteps = (
-          outcome: ProposalOutcome,
-          detail: string | undefined,
-          decidedAt: DateTime.Utc,
-        ): ReadonlyArray<ProposalStepCommand> => [
-          ...input.change.adds.map((add) => ({
-            kind: "add" as const,
-            playerKey: add.key,
-            ...(add.name === undefined ? {} : { playerName: add.name }),
-            outcome,
-            ...(detail === undefined ? {} : { detail }),
-            decidedAt,
-          })),
-          ...input.change.drops.map((drop) => ({
-            kind: "drop" as const,
-            playerKey: drop.key,
-            ...(drop.name === undefined ? {} : { playerName: drop.name }),
-            outcome,
-            ...(detail === undefined ? {} : { detail }),
-            decidedAt,
-          })),
-        ];
-        if (input.change.reserveMove !== undefined) {
-          const move = input.change.reserveMove;
-          const coverage = proposalCoverage(input.facts.league);
-          if (coverage === undefined) {
-            const stepAt = yield* DateTime.now;
-            const detail =
-              "The league publishes no current date or scoring week, so the reserve move could not be targeted. Nothing was sent for this move.";
-            steps.push({
-              kind: "reserve_move",
-              playerKey: move.playerKey,
-              ...(move.playerName === undefined ? {} : { playerName: move.playerName }),
-              fromSlot: move.fromSlot,
-              toSlot: move.toSlot,
-              outcome: "failed",
-              detail,
-              decidedAt: stepAt,
-            });
-            appendSteps(steps, movementSteps("skipped", skippedMovementDetail, stepAt));
-            return { outcome: "failed", detail, steps, settled: false };
-          }
-          const reserve = yield* Effect.result(
-            input.context.provider.applyReserveMove({
-              ...providerIdentity(input.context),
-              providerTeamKey: input.facts.providerTeamKey,
-              coverage,
-              providerPlayerKey: move.playerKey,
-              slot: move.toSlot,
-            }),
-          );
-          const stepAt = yield* DateTime.now;
-          if (reserve._tag === "Failure") {
-            if (reserve.failure._tag === "provider.session_rejected") {
-              yield* queries.recordSessionRejected(input.userId, input.context.owned);
-            }
-            const detail = sessionFailureDetail(reserve.failure._tag, "reserve move");
-            steps.push({
-              kind: "reserve_move",
-              playerKey: move.playerKey,
-              ...(move.playerName === undefined ? {} : { playerName: move.playerName }),
-              fromSlot: move.fromSlot,
-              toSlot: move.toSlot,
-              outcome: "failed",
-              detail,
-              decidedAt: stepAt,
-            });
-            appendSteps(steps, movementSteps("skipped", skippedMovementDetail, stepAt));
-            return { outcome: "failed", detail, steps, settled: false };
-          }
-          const outcome = writeOutcome(reserve.success);
-          const detail = writeDetail(reserve.success, "reserve move");
-          steps.push({
-            kind: "reserve_move",
-            playerKey: move.playerKey,
-            ...(move.playerName === undefined ? {} : { playerName: move.playerName }),
-            fromSlot: move.fromSlot,
-            toSlot: move.toSlot,
-            outcome,
-            ...(detail === undefined ? {} : { detail }),
-            decidedAt: stepAt,
-          });
-          if (outcome !== "executed") {
-            appendSteps(
-              steps,
-              movementSteps(
-                "skipped",
-                outcome === "unknown" ? unknownReserveDetail : skippedMovementDetail,
-                stepAt,
-              ),
-            );
+        const repair = input.change.reserveMove;
+        const repairFirst = repair !== undefined && repair.order !== "after";
+        if (repairFirst) {
+          const run = yield* executeReserveMove(input, repair);
+          steps.push(run.step);
+          if (run.outcome !== "executed") {
             return {
-              outcome,
-              ...(detail === undefined ? {} : { detail }),
-              steps,
+              outcome: run.outcome,
+              ...(run.detail === undefined ? {} : { detail: run.detail }),
+              steps: [
+                ...steps,
+                ...movementStepsOf(
+                  input.change,
+                  "skipped",
+                  run.outcome === "unknown" ? unknownReserveDetail : skippedMovementDetail,
+                  run.step.decidedAt,
+                ),
+              ],
               settled: false,
             };
           }
         }
-
-        if (input.item.kind === "slot_move") {
-          return yield* executeSlotMove(input, steps);
+        const moved =
+          input.item.kind === "slot_move"
+            ? yield* executeSlotMove(input, steps)
+            : yield* executeTransaction(input, steps);
+        if (repair === undefined || repairFirst || moved.outcome !== "executed") {
+          return moved;
         }
+        const run = yield* executeReserveMove(input, repair);
+        const after = [...moved.steps, run.step];
+        return run.outcome === "executed"
+          ? { ...moved, steps: after }
+          : {
+              outcome: run.outcome,
+              ...(run.detail === undefined ? {} : { detail: run.detail }),
+              steps: after,
+              settled: false,
+            };
+      });
+    }
 
+    function executeReserveMove(
+      input: {
+        readonly userId: UserId;
+        readonly facts: TeamFacts;
+        readonly context: TeamContext;
+      },
+      move: StoredReserveMove,
+    ): Effect.Effect<ReserveMoveRun> {
+      return Effect.gen(function* () {
+        const step = (
+          outcome: ProposalOutcome,
+          detail: string | undefined,
+          decidedAt: DateTime.Utc,
+        ): ProposalStepCommand => ({
+          kind: "reserve_move",
+          playerKey: move.playerKey,
+          ...(move.playerName === undefined ? {} : { playerName: move.playerName }),
+          fromSlot: move.fromSlot,
+          toSlot: move.toSlot,
+          outcome,
+          ...(detail === undefined ? {} : { detail }),
+          decidedAt,
+        });
+        const coverage = proposalCoverage(input.facts.league);
+        if (coverage === undefined) {
+          const decidedAt = yield* DateTime.now;
+          const detail =
+            "The league publishes no current date or scoring week, so the reserve move could not be targeted. Nothing was sent for this move.";
+          return { step: step("failed", detail, decidedAt), outcome: "failed" as const, detail };
+        }
+        const reserve = yield* Effect.result(
+          input.context.provider.applyReserveMove({
+            ...providerIdentity(input.context),
+            providerTeamKey: input.facts.providerTeamKey,
+            coverage,
+            providerPlayerKey: move.playerKey,
+            slot: move.toSlot,
+          }),
+        );
+        const decidedAt = yield* DateTime.now;
+        if (reserve._tag === "Failure") {
+          if (reserve.failure._tag === "provider.session_rejected") {
+            yield* queries.recordSessionRejected(input.userId, input.context.owned);
+          }
+          const detail = sessionFailureDetail(reserve.failure._tag, "reserve move");
+          return { step: step("failed", detail, decidedAt), outcome: "failed" as const, detail };
+        }
+        const outcome = writeOutcome(reserve.success);
+        const detail = writeDetail(reserve.success, "reserve move");
+        return {
+          step: step(outcome, detail, decidedAt),
+          outcome,
+          ...(detail === undefined ? {} : { detail }),
+        };
+      });
+    }
+
+    function executeTransaction(
+      input: {
+        readonly userId: UserId;
+        readonly item: ProposalItemRecord;
+        readonly change: ProposalItemChange;
+        readonly facts: TeamFacts;
+        readonly context: TeamContext;
+      },
+      steps: ReadonlyArray<ProposalStepCommand>,
+    ): Effect.Effect<ItemExecution> {
+      return Effect.gen(function* () {
         const transaction = yield* Effect.result(
           input.context.provider.applyTransaction({
             ...providerIdentity(input.context),
@@ -1369,8 +1375,12 @@ export const TransactionProposalsLive = Layer.effect(
             yield* queries.recordSessionRejected(input.userId, input.context.owned);
           }
           const detail = sessionFailureDetail(transaction.failure._tag, "transaction");
-          appendSteps(steps, movementSteps("failed", detail, stepAt));
-          return { outcome: "failed", detail, steps, settled: false };
+          return {
+            outcome: "failed",
+            detail,
+            steps: [...steps, ...movementStepsOf(input.change, "failed", detail, stepAt)],
+            settled: false,
+          };
         }
         const outcome = writeOutcome(transaction.success);
         if (outcome === "executed") {
@@ -1381,20 +1391,18 @@ export const TransactionProposalsLive = Layer.effect(
             );
           const movementOutcome = pending ? "pending" : "executed";
           const detail = pending ? waiverPendingDetail : undefined;
-          appendSteps(steps, movementSteps(movementOutcome, detail, stepAt));
           return {
             outcome: movementOutcome,
             ...(detail === undefined ? {} : { detail }),
-            steps,
+            steps: [...steps, ...movementStepsOf(input.change, movementOutcome, detail, stepAt)],
             settled: movementOutcome === "executed",
           };
         }
         const detail = writeDetail(transaction.success, "transaction");
-        appendSteps(steps, movementSteps(outcome, detail, stepAt));
         return {
           outcome,
           ...(detail === undefined ? {} : { detail }),
-          steps,
+          steps: [...steps, ...movementStepsOf(input.change, outcome, detail, stepAt)],
           settled: false,
         };
       });
@@ -3837,7 +3845,10 @@ function toItem(
     const reserve =
       repair === undefined
         ? undefined
-        : moveView(repair, stepRefs, executionSteps.length + (slotMove === undefined ? 0 : 1));
+        : {
+            ...moveView(repair, stepRefs, executionSteps.length + (slotMove === undefined ? 0 : 1)),
+            order: repair.order,
+          };
     return yield* Schema.decodeEffect(ProposalItemSchema)({
       id: record.id,
       team: record.team,
@@ -3942,7 +3953,7 @@ function moveView(
   move: MoveViewSource,
   refs: ReadonlyArray<PlayerRef>,
   index: number,
-): ProposalItem["slotMove"] {
+): NonNullable<ProposalItem["slotMove"]> {
   const ref = Array.getUnsafe(refs, index);
   return {
     player: {
@@ -4141,13 +4152,33 @@ function proposalCoverage(league: ProviderLeagueSettings): ProviderRosterCoverag
   return date === undefined ? undefined : { type: "date", date };
 }
 
-function appendSteps(
-  steps: Array<ProposalStepCommand>,
-  more: ReadonlyArray<ProposalStepCommand>,
-): void {
-  for (const step of more) {
-    steps.push(step);
-  }
+type ReserveMoveRun = {
+  readonly step: ProposalStepCommand;
+  readonly outcome: ProposalOutcome;
+  readonly detail?: string;
+};
+
+function movementStepsOf(
+  change: ProposalItemChange,
+  outcome: ProposalOutcome,
+  detail: string | undefined,
+  decidedAt: DateTime.Utc,
+): ReadonlyArray<ProposalStepCommand> {
+  const step = (
+    kind: "add" | "drop",
+    player: { readonly key: string; readonly name?: string },
+  ): ProposalStepCommand => ({
+    kind,
+    playerKey: player.key,
+    ...(player.name === undefined ? {} : { playerName: player.name }),
+    outcome,
+    ...(detail === undefined ? {} : { detail }),
+    decidedAt,
+  });
+  return [
+    ...change.adds.map((add) => step("add", add)),
+    ...change.drops.map((drop) => step("drop", drop)),
+  ];
 }
 
 function skippedOutcome(

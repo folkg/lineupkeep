@@ -134,6 +134,7 @@ export const StoredReserveMove = Schema.Struct({
   playerName: Schema.optional(Schema.NonEmptyString),
   fromSlot: Schema.NonEmptyString,
   toSlot: Schema.NonEmptyString,
+  order: Schema.Literals(["before", "after"]),
 });
 export type StoredReserveMove = typeof StoredReserveMove.Type;
 

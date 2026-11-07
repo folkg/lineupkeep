@@ -693,10 +693,16 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
 
         <Show when={!blocked() && result() === undefined && props.item.reserveMove}>
           {(move) => (
-            <Notice tone="neutral" title="Roster move first">
+            <Notice
+              tone="neutral"
+              title={move().order === "after" ? "Roster move after" : "Roster move first"}
+            >
               <Text size="caption" tone="muted">
                 Move {move().playerName ?? "this player"} from{" "}
-                {move().fromSlot ?? "its reported slot"} to {move().toSlot} before the transaction.
+                {move().fromSlot ?? "its reported slot"} to {move().toSlot}{" "}
+                {move().order === "after"
+                  ? "after the transaction, because only the transaction frees that slot."
+                  : "before the transaction."}{" "}
                 That move is reported as its own step.
               </Text>
             </Notice>

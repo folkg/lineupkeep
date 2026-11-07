@@ -133,6 +133,10 @@ const ProposalReserveMove = Schema.Struct({
   player: ProposalStepPlayer,
   fromSlot: Schema.optional(Schema.NonEmptyString),
   toSlot: Schema.NonEmptyString,
+  order: Schema.Literals(["before", "after"]).annotate({
+    description:
+      "Whether this roster move is sent before the item's own moves or after them, because only the item's moves free its destination.",
+  }),
 });
 type ProposalReserveMove = typeof ProposalReserveMove.Type;
 

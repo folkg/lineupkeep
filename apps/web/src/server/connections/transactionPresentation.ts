@@ -162,6 +162,7 @@ function toItemView(
               ? {}
               : { fromSlot: item.reserveMove.fromSlot }),
             toSlot: item.reserveMove.toSlot,
+            order: item.reserveMove.order,
           },
         }),
     ...(item.slotMove === undefined

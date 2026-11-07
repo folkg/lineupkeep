@@ -647,7 +647,7 @@ it("shows a roster move before the transaction", async () => {
   const base = reviewFixture();
   const reservation: TransactionReviewItemView = {
     ...waiverItem(),
-    reserveMove: { playerName: "Casey Moss", fromSlot: "BN", toSlot: "IR" },
+    reserveMove: { playerName: "Casey Moss", fromSlot: "BN", toSlot: "IR", order: "before" },
   };
   using _app = setupReviewPage({
     ...base,
@@ -659,6 +659,31 @@ it("shows a roster move before the transaction", async () => {
 
   await expect.element(page.getByText("Roster move first")).toBeVisible();
   await expect.element(page.getByText(/Move Casey Moss from BN to IR/u)).toBeVisible();
+});
+
+it("shows a roster move after the transaction that frees its destination", async () => {
+  const base = reviewFixture();
+  const reservation: TransactionReviewItemView = {
+    ...waiverItem(),
+    reserveMove: { playerName: "Casey Moss", fromSlot: "BN", toSlot: "IR", order: "after" },
+  };
+  using _app = setupReviewPage({
+    ...base,
+    teams: [
+      teamFixture(alphaId, "Alpha", "nfl", "football", [reservation]),
+      ...base.teams.slice(1),
+    ],
+  });
+
+  await expect.element(page.getByText("Roster move after")).toBeVisible();
+  await expect
+    .element(
+      page.getByText(
+        "Move Casey Moss from BN to IR after the transaction, because only the transaction frees that slot. That move is reported as its own step.",
+        { exact: true },
+      ),
+    )
+    .toBeVisible();
 });
 
 it("submits the included moves once, keeps the action visible on a phone, and shows every result in place", async () => {
