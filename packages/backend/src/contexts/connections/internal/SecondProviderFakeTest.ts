@@ -67,6 +67,12 @@ export const secondProviderLeague: ProviderLeagueSettings = {
     { position: "BENCH", positionType: "BN", kind: "bench", count: 2, eligibility: [] },
     { position: "RESERVE", positionType: "R", kind: "reserve", count: 1, eligibility: ["PG"] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 5,
+    benchCapacity: "per_slot",
+    startingSlotsMayStandEmpty: false,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [],
   statModifiers: [],
 };
@@ -128,10 +134,10 @@ export const secondProvider: ProviderShape = {
   validateSession: () => Effect.void,
   discoverTeams: () => Effect.succeed([secondProviderTeam]),
   readLeague: () => Effect.succeed(secondProviderLeague),
-  readRoster: () =>
+  readRoster: ({ period }) =>
     Effect.map(DateTime.now, (now) => ({
       ...secondProviderRoster,
-      coverage: {
+      coverage: period ?? {
         type: "date" as const,
         date: fantasyDayLabel(now, secondProviderCapabilities.fantasyDay),
       },

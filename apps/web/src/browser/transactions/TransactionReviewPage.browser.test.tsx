@@ -492,6 +492,7 @@ it("shows the order the server chose before the moves", async () => {
           status: "ordered",
           timing: "same_day",
           effectiveDate: "2026-11-04",
+          rosterPlaces: { maximum: 9, occupied: 6, net: 0 },
           steps: [
             { item: waiverItem().id, position: 0 },
             { item: freeAgentItem().id, position: 1 },
@@ -511,6 +512,13 @@ it("shows the order the server chose before the moves", async () => {
     .toBeVisible();
   await expect
     .element(page.getByText("The league applies these moves on 2026-11-04.", { exact: true }))
+    .toBeVisible();
+  await expect
+    .element(
+      page.getByText("This team holds 6 of 9 roster places; the set leaves the count unchanged.", {
+        exact: true,
+      }),
+    )
     .toBeVisible();
 });
 

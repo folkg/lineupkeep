@@ -124,12 +124,23 @@ export type TransactionReviewTradeRulesView = {
   readonly objectionDays?: number;
 };
 
+type TransactionReviewRosterPlacesView = {
+  readonly maximum: number;
+  readonly occupied: number;
+  readonly net: number;
+};
+
 export type TransactionReviewOrderView =
   | {
       readonly status: "ordered";
       readonly timing: "same_day" | "next_day" | "weekly_lock" | "not_published";
       readonly effectiveDate?: string;
-      readonly steps: ReadonlyArray<{ readonly item: string; readonly position: number }>;
+      readonly rosterPlaces: TransactionReviewRosterPlacesView;
+      readonly steps: ReadonlyArray<{
+        readonly item: string;
+        readonly position: number;
+        readonly rosterPlace?: "frees" | "consumes";
+      }>;
     }
   | {
       readonly status: "conflict";

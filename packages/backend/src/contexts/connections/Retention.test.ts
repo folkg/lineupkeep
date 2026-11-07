@@ -405,6 +405,12 @@ const league: ProviderLeagueSettings = {
     { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
     { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 2,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [],
   statModifiers: [],
 };

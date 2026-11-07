@@ -919,6 +919,16 @@ provider code.
 This can proceed in parallel with product work because nothing cuts over until it is complete. A signed-in
 browser tab is available for checking shapes the recordings do not cover.
 
+The SDK is reviewed against AutoCoach's provider calls before it is called finished: that repository is reference
+material for verified knowledge only, never code or architecture, and every call shape it used that we do not is
+recorded with the endpoint, the payload, and what our own evidence says about it. Moves are combined into one
+provider call wherever the provider supports it: an add with its drop, and several lineup moves in one payload if
+the endpoint accepts them.
+
+Once the package is complete, a separate refactor integrates it into the application and enriches the product with
+whatever it proved useful: draft picks in trades and richer statistics are the owner's examples, not a mandate to
+take everything.
+
 **Verify**: the package answers the same reads and writes as the current adapter against the same recorded
 payloads, and the cutover is one wiring change. `L`
 
@@ -987,8 +997,10 @@ owner's read is that the transaction API asks clients to do our job.
       may stand empty, and how reserve eligibility is established (for us, published positions only). Each
       provider declares its own values and the rule reads them, so a second provider needs no branch in the
       backend. A drop frees a roster place, not a place in a kind of slot.
+- [ ] Judge a set against the roster on the date its moves apply, read from the league's declared timing, not
+      against today's roster.
 - [ ] After a submission executes, run the lineup for each affected team once, so placement settles without a
-      second client call.
+      second client call, and batch the provider writes the provider accepts in one call.
 
 **Verify**: the Muse's recorded failure cases (the two illegal reserve placements plus an add, the two-item
 legalization, and the post-drop activation) propose, submit and settle with no client-declared slot destination;

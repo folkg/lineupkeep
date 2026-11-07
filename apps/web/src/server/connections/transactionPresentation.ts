@@ -87,7 +87,12 @@ function toOrderView(
         status: "ordered",
         timing: order.timing,
         ...(order.effectiveDate === undefined ? {} : { effectiveDate: order.effectiveDate }),
-        steps: order.steps.map((step) => ({ item: step.item, position: step.position })),
+        rosterPlaces: order.rosterPlaces,
+        steps: order.steps.map((step) => ({
+          item: step.item,
+          position: step.position,
+          ...(step.rosterPlace === undefined ? {} : { rosterPlace: step.rosterPlace }),
+        })),
       };
     case "conflict":
       return {

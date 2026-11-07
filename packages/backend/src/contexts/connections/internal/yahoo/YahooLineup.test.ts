@@ -9,6 +9,7 @@ import type {
   RankType,
 } from "#contexts/connections/internal/provider-scoring/types.ts";
 import { assessAvailability } from "#contexts/connections/internal/provider-scoring/Valuation.ts";
+import { declaredRosterConstraints } from "#contexts/connections/internal/RosterConstraintsTest.ts";
 import { LineupTargetPeriod } from "#contexts/connections/LineupRun.ts";
 import type {
   ProviderLeagueSettings,
@@ -715,17 +716,19 @@ function ownedFacts(
 }
 
 function centerLeague(): ProviderLeagueSettings {
-  return {
-    ...hockeyLeague(),
-    rosterPositions: [position("C", 1), position("BN", 2), position("IR", 1)],
-  };
+  return withRosterPositions(hockeyLeague(), [
+    position("C", 1),
+    position("BN", 2),
+    position("IR", 1),
+  ]);
 }
 
 function goalieLeague(goalieSlots = 2): ProviderLeagueSettings {
-  return {
-    ...hockeyLeague(),
-    rosterPositions: [position("G", goalieSlots), position("BN", 2), position("IR", 1)],
-  };
+  return withRosterPositions(hockeyLeague(), [
+    position("G", goalieSlots),
+    position("BN", 2),
+    position("IR", 1),
+  ]);
 }
 
 function centerRoster(
@@ -876,17 +879,15 @@ function planFlex(
 }
 
 function flexLeague(): ProviderLeagueSettings {
-  return {
-    ...recordedLeague(),
-    rosterPositions: [position("WR", 1), position("W/R/T", 1), position("BN", 2)],
-  };
+  return withRosterPositions(recordedLeague(), [
+    position("WR", 1),
+    position("W/R/T", 1),
+    position("BN", 2),
+  ]);
 }
 
 function twoManLeague(): ProviderLeagueSettings {
-  return {
-    ...recordedLeague(),
-    rosterPositions: [position("WR", 1), position("BN", 2)],
-  };
+  return withRosterPositions(recordedLeague(), [position("WR", 1), position("BN", 2)]);
 }
 
 function twoManRoster(historyBye: number): ProviderRoster {
@@ -1013,6 +1014,7 @@ function recordedLeague(): ProviderLeagueSettings {
     maxGamesPlayed: undefined,
     maxInningsPitched: undefined,
     rosterPositions: recordedRosterPositions,
+    rosterConstraints: declaredRosterConstraints(recordedRosterPositions),
     statCategories: recordedCategories,
     statModifiers: recordedStatModifiers,
   };
@@ -1084,16 +1086,8 @@ function hockeyLeague(): ProviderLeagueSettings {
     rosterCoverage: "date",
     maxGamesPlayed: undefined,
     maxInningsPitched: undefined,
-    rosterPositions: [
-      position("C", 2),
-      position("LW", 2),
-      position("RW", 2),
-      position("D", 4),
-      position("G", 2),
-      position("BN", 7),
-      position("IR", 2),
-      position("IR+", 1),
-    ],
+    rosterPositions: hockeyRosterPositions,
+    rosterConstraints: declaredRosterConstraints(hockeyRosterPositions),
     statCategories: [
       category(1, "Goals", "G"),
       category(2, "Assists", "A"),
@@ -1136,6 +1130,28 @@ function hockeyRosterPlayer(providerPlayerKey: string, slot: string): ProviderRo
       status: "not_published",
       reason: "Synthetic absence.",
     },
+  };
+}
+
+const hockeyRosterPositions: ReadonlyArray<ProviderLeagueSettings["rosterPositions"][number]> = [
+  position("C", 2),
+  position("LW", 2),
+  position("RW", 2),
+  position("D", 4),
+  position("G", 2),
+  position("BN", 7),
+  position("IR", 2),
+  position("IR+", 1),
+];
+
+function withRosterPositions(
+  league: ProviderLeagueSettings,
+  positions: ReadonlyArray<ProviderLeagueSettings["rosterPositions"][number]>,
+): ProviderLeagueSettings {
+  return {
+    ...league,
+    rosterPositions: positions,
+    rosterConstraints: declaredRosterConstraints(positions),
   };
 }
 

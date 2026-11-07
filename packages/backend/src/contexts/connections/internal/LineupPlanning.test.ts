@@ -10,6 +10,7 @@ import type {
 
 import { planAssignments } from "./LineupPlanning.ts";
 import type { PlanAssignmentsResult } from "./LineupPlanning.ts";
+import { declaredRosterConstraints } from "./RosterConstraintsTest.ts";
 
 describe("provider-neutral lineup placement", () => {
   it("moves the highest scoring eligible player into a starting slot", () => {
@@ -691,6 +692,9 @@ function league(
     maxGamesPlayed: undefined,
     maxInningsPitched: undefined,
     rosterPositions: positions.map((position) => ({ ...position, positionType: undefined })),
+    rosterConstraints: declaredRosterConstraints(
+      positions.map((position) => ({ ...position, positionType: undefined })),
+    ),
     statCategories: [],
     statModifiers: [],
   };

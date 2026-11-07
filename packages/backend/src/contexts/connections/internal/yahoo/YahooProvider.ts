@@ -55,8 +55,10 @@ import type {
   ProviderRemainingGames,
   ProviderRoster,
   ProviderRosterChange,
+  ProviderRosterConstraints,
   ProviderRosterCoverage,
   ProviderRosterPlayer,
+  ProviderRosterPosition,
   ProviderRosterSlot,
   ProviderSchedulePeriod,
   ProviderSchedulePlayer,
@@ -302,7 +304,9 @@ export const yahooProvider = Effect.gen(function* () {
     const cookie = yield* sessionCookie(input, "read_roster");
     const teamKey = yield* ValidTeamKey(input.providerTeamKey, "read_roster");
     const week = input.period?.type === "week" ? yield* ValidWeek(input.period.week) : undefined;
-    const periodSuffix = week === undefined ? "" : `;week=${String(week)}`;
+    const date = input.period?.type === "date" ? input.period.date : undefined;
+    const periodSuffix =
+      week === undefined ? (date === undefined ? "" : `;date=${date}`) : `;week=${String(week)}`;
     const payload = yield* readJson(internet, {
       operation: "read_roster",
       origin: readOrigin,
@@ -313,10 +317,10 @@ export const yahooProvider = Effect.gen(function* () {
     }).pipe(
       Effect.catchTag("provider.request_failed", (error) =>
         Effect.fail(
-          error.status === 400 && week !== undefined
+          error.status === 400 && input.period !== undefined
             ? ProviderPeriodMismatch.make({
                 operation: "read_roster",
-                requested: { type: "week", week },
+                requested: input.period,
                 covered: null,
               })
             : error,
@@ -1861,6 +1865,16 @@ function leagueSettings(
     }
     const periodWindow = yield* weekWindow(attributes);
     const rosterCoverage = yield* declaredRosterCoverage(attributes);
+    const rosterPositions = settings.roster_positions.map(({ roster_position }) => {
+      const kind = rosterSlotKind(roster_position.position, roster_position.is_starting_position);
+      return {
+        position: roster_position.position,
+        positionType: optionalNonEmpty(roster_position.position_type),
+        kind,
+        count: roster_position.count,
+        eligibility: kind === "bench" ? [] : [roster_position.position],
+      };
+    });
     const webUrl = yield* Effect.try({
       try: () => reviewBase(attributes.url, sport, leagueIdFromKey(attributes.league_key)).href,
       catch: () => ProviderResponseInvalid.make({ operation: "read_league", field: "league.url" }),
@@ -1894,16 +1908,8 @@ function leagueSettings(
       rosterCoverage,
       maxGamesPlayed: declaredLimit(settings.max_games_played),
       maxInningsPitched: declaredLimit(settings.max_innings_pitched),
-      rosterPositions: settings.roster_positions.map(({ roster_position }) => {
-        const kind = rosterSlotKind(roster_position.position, roster_position.is_starting_position);
-        return {
-          position: roster_position.position,
-          positionType: optionalNonEmpty(roster_position.position_type),
-          kind,
-          count: roster_position.count,
-          eligibility: kind === "bench" ? [] : [roster_position.position],
-        };
-      }),
+      rosterConstraints: yahooRosterConstraints(rosterPositions),
+      rosterPositions,
       statCategories: settings.stat_categories.stats.map(({ stat }) => ({
         statId: stat.stat_id,
         name: stat.name,
@@ -2081,6 +2087,19 @@ function rosterSlotKind(position: string, isStarting: boolean): "starting" | "be
     return "starting";
   }
   return position === "BN" ? "bench" : "reserve";
+}
+
+function yahooRosterConstraints(
+  positions: ReadonlyArray<ProviderRosterPosition>,
+): ProviderRosterConstraints {
+  return {
+    rosterMaximum: positions
+      .filter((position) => position.kind !== "reserve")
+      .reduce((total, position) => total + position.count, 0),
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  };
 }
 
 function weekWindow(

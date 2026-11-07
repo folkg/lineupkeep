@@ -4,7 +4,6 @@ import {
   makePlayerId,
   makeSelectionBasis,
   makeSlotId,
-  playerMayOccupySlot,
   solveLineup,
 } from "@lineupkeep/lineup-solver";
 import type {
@@ -15,7 +14,16 @@ import type {
 } from "@lineupkeep/lineup-solver";
 import { DateTime } from "effect";
 
-import { slotMismatchDetail } from "./RosterSlots.ts";
+import type { ProviderRosterConstraints } from "./Provider.ts";
+import {
+  rosterOccupancy,
+  rosterPlaceChange,
+  rosterPlaceCount,
+  rosterRuleOf,
+  slotCapacity,
+  slotPlacement,
+} from "./RosterSlots.ts";
+import type { RosterRule } from "./RosterSlots.ts";
 
 const conflictLimit = 3;
 const neutralBasis = makeSelectionBasis("proposal-order");
@@ -23,7 +31,7 @@ const neutralTier = makeAvailabilityTier("proposal-order");
 
 export function planProposalOrder(input: ProposalOrderInput): ProposalOrderPlan {
   const timing = timingOf(input.timing);
-  const league = leagueOf(input.slots);
+  const league = leagueOf(input.slots, input.constraints);
   const locked = input.items.flatMap((item) => lockedReasons(item, input.players, timing));
   if (locked.length > 0) {
     return conflictPlan(timing, [refusalConflict(locked)]);
@@ -36,12 +44,18 @@ export function planProposalOrder(input: ProposalOrderInput): ProposalOrderPlan 
     status: "ordered",
     timing: timing.rule,
     ...(timing.effectiveDate === undefined ? {} : { effectiveDate: timing.effectiveDate }),
+    rosterPlaces: ordered.rosterPlaces,
     steps: ordered.steps.map((step, position) => ({
       item: step.item.id,
       position,
+      ...(step.rosterPlace === undefined ? {} : { rosterPlace: step.rosterPlace }),
       ...(step.reserveMove === undefined ? {} : { reserveMove: step.reserveMove }),
     })),
   };
+}
+
+export function rosterChangeDate(timing: ProposalOrderTiming): string | undefined {
+  return timingOf(timing).effectiveDate ?? timing.currentDate;
 }
 
 function conflictPlan(
@@ -57,11 +71,16 @@ function conflictPlan(
 }
 
 type Scheduling =
-  | { readonly status: "ordered"; readonly steps: ReadonlyArray<OrderedStep> }
+  | {
+      readonly status: "ordered";
+      readonly steps: ReadonlyArray<OrderedStep>;
+      readonly rosterPlaces: ProposalOrderRosterPlaces;
+    }
   | { readonly status: "conflict"; readonly conflicts: ReadonlyArray<ProposalOrderPlanConflict> };
 
 type OrderedStep = {
   readonly item: ProposalOrderItem;
+  readonly rosterPlace?: ProposalOrderRosterPlace;
   reserveMove?: ProposalOrderRepair;
 };
 
@@ -146,8 +165,10 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
           reserveMove = repaired.repair;
         }
       }
+      const rosterPlace = rosterPlaceOf(chosen.entry.item, initial, league);
       steps.push({
         item: chosen.entry.item,
+        ...(rosterPlace === undefined ? {} : { rosterPlace }),
         ...(reserveMove === undefined ? {} : { reserveMove }),
       });
       pending.splice(pending.indexOf(chosen.entry), 1);
@@ -169,7 +190,7 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
     if (refused.length > 0) {
       return {
         status: "conflict",
-        conflicts: [itemRefusalConflict(refused, input.items, initial)],
+        conflicts: [itemRefusalConflict(refused)],
       };
     }
     return { status: "conflict", conflicts: waitingConflicts(waiting, timing) };
@@ -206,7 +227,15 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
       ],
     };
   }
-  return { status: "ordered", steps };
+  return {
+    status: "ordered",
+    steps,
+    rosterPlaces: {
+      maximum: league.rule.rosterMaximum,
+      occupied: rosterOccupancy({ rule: league.rule, players: [...initial.values()] }).occupied,
+      net: netPlaceChange(input.items, initial, league),
+    },
+  };
 }
 
 type Readiness =
@@ -309,7 +338,8 @@ function freesDestination(
     return false;
   }
   const destination = league.byPosition.get(item.move.toSlot);
-  if (destination === undefined) {
+  const capacity = destination === undefined ? undefined : slotCapacity(league.rule, destination);
+  if (destination === undefined || capacity === undefined) {
     return false;
   }
   const occupants = [...state.values()].filter((player) => player.slot === destination.position);
@@ -326,19 +356,21 @@ function freesPlace(state: RosterState, item: ProposalOrderItem, league: League)
   if (
     item.drops.some((drop) => {
       const dropped = state.get(drop.key);
-      return dropped !== undefined && !inReserve(dropped, league);
+      return dropped !== undefined && rosterPlaceCount(league.rule, dropped.slot) > 0;
     })
   ) {
     return true;
   }
   const mover = item.move === undefined ? undefined : state.get(item.move.player.key);
-  const destination = item.move === undefined ? undefined : league.byPosition.get(item.move.toSlot);
-  return destination?.kind === "reserve" && mover?.slot !== undefined && !inReserve(mover, league);
+  return (
+    item.move !== undefined &&
+    mover?.slot !== undefined &&
+    rosterPlaceChange(league.rule, mover.slot, item.move.toSlot).frees > 0
+  );
 }
 
 function inReserve(player: RosterMember | undefined, league: League): boolean {
-  const slot = player?.slot === undefined ? undefined : league.byPosition.get(player.slot);
-  return slot?.kind === "reserve";
+  return player?.slot !== undefined && rosterPlaceCount(league.rule, player.slot) === 0;
 }
 
 function rankOf(
@@ -363,10 +395,11 @@ function findCycle(
   for (const item of pending) {
     const destination = item.move?.toSlot;
     const slot = destination === undefined ? undefined : league.byPosition.get(destination);
-    if (destination === undefined || slot === undefined) {
+    const capacity = slot === undefined ? undefined : slotCapacity(league.rule, slot);
+    if (destination === undefined || capacity === undefined) {
       continue;
     }
-    if (occupancyOf(state, destination) < slot.count) {
+    if (occupancyOf(state, destination) < capacity) {
       continue;
     }
     const occupants = [...state.values()].filter((player) => player.slot === destination);
@@ -438,8 +471,7 @@ function planHold(
         slot.kind === "bench" &&
         slot.position !== player.slot &&
         slot.position !== move.toSlot &&
-        occupancyOf(state, slot.position) < slot.count &&
-        playerMayOccupySlot(solverPlayer(player, league, false), slot.solver),
+        openSlot(state, league, slot, player),
     );
     if (destination !== undefined) {
       return repairOf(player, player.slot, destination.position);
@@ -484,18 +516,22 @@ function applyDeclared(state: RosterState, item: ProposalOrderItem, league: Leag
         `The league does not declare a ${item.move.toSlot} slot, so ${moving.name} cannot move there.`,
       );
     }
-    if (!playerMayOccupySlot(solverPlayer(moving, league, false), slot.solver)) {
+    const placement = slotPlacement(league.rule, slot.position, moving.positions);
+    if (placement.legal === "unknown") {
       return refused(
-        "slot_illegal",
-        `${moving.name} is not eligible for the ${slot.position} slot: it does not accept their positions (${moving.positions.join(", ")}).`,
+        "state_unavailable",
+        `The league does not publish how reserve eligibility is established, so ${moving.name} cannot be moved to the ${slot.position} reserve list.`,
       );
     }
-    const occupants = occupancyOf(next, slot.position);
-    if (occupants >= slot.count) {
+    if (!placement.legal) {
       return refused(
-        "move_slot_full",
-        `Moving ${moving.name} to ${slot.position} needs a free ${slot.position} slot, and ${slot.count === 1 ? "it is full" : `${String(occupants)} of ${String(slot.count)} are occupied`}.`,
+        "slot_illegal",
+        `${moving.name} cannot move to the ${slotLabel(slot)}: it does not accept their positions (${moving.positions.join(", ")}).`,
       );
+    }
+    const capacity = slotCapacity(league.rule, slot);
+    if (capacity !== undefined && occupancyOf(next, slot.position) >= capacity) {
+      return refused("move_slot_full", slotFullDetail(moving, slot, next));
     }
     next.set(moving.key, { ...moving, slot: slot.position });
   }
@@ -540,7 +576,7 @@ function planRepair(
     const slot = league.byPosition.get(player.slot);
     if (
       slot === undefined ||
-      playerMayOccupySlot(solverPlayer(player, league, false), slot.solver)
+      slotPlacement(league.rule, slot.position, player.positions).legal !== false
     ) {
       continue;
     }
@@ -589,13 +625,54 @@ function openSlots(
 ): ReadonlyArray<LeagueSlot> {
   const kindOrder = { bench: 0, starting: 1, reserve: 2 } as const;
   return league.slots
-    .filter(
-      (slot) =>
-        slot.position !== player.slot &&
-        occupancyOf(state, slot.position) < slot.count &&
-        playerMayOccupySlot(solverPlayer(player, league, false), slot.solver),
-    )
+    .filter((slot) => slot.position !== player.slot && openSlot(state, league, slot, player))
     .sort((left, right) => kindOrder[left.kind] - kindOrder[right.kind]);
+}
+
+function openSlot(
+  state: RosterState,
+  league: League,
+  slot: ProposalOrderSlot,
+  player: RosterMember,
+): boolean {
+  const capacity = slotCapacity(league.rule, slot);
+  if (capacity !== undefined && occupancyOf(state, slot.position) >= capacity) {
+    return false;
+  }
+  return slotPlacement(league.rule, slot.position, player.positions).legal === true;
+}
+
+function slotLabel(slot: ProposalOrderSlot): string {
+  switch (slot.kind) {
+    case "starting":
+      return `${slot.position} starting slot`;
+    case "bench":
+      return `${slot.position} bench slot`;
+    case "reserve":
+      return `${slot.position} reserve list`;
+  }
+}
+
+function slotFullDetail(moving: RosterMember, slot: ProposalOrderSlot, state: RosterState): string {
+  const occupants = [...state.values()]
+    .filter((player) => player.slot === slot.position)
+    .map((player) => player.name);
+  const names = nameList(occupants);
+  const label = slotLabel(slot);
+  return occupants.length === 1
+    ? `Moving ${moving.name} to the ${label} is refused because ${names} already holds it. Move or drop ${names} first.`
+    : `Moving ${moving.name} to the ${label} is refused because it already holds ${names} and allows ${String(slot.count)}. Move one of them first.`;
+}
+
+function nameList(names: ReadonlyArray<string>): string {
+  const first = names[0];
+  if (first === undefined) {
+    return "no one";
+  }
+  if (names.length === 1) {
+    return first;
+  }
+  return `${names.slice(0, -1).join(", ")} and ${String(names[names.length - 1])}`;
 }
 
 function relocate(state: RosterState, playerKey: string, slot: string): RosterState {
@@ -621,44 +698,23 @@ function placementFailure(
   league: League,
   context?: RefusalContext,
 ): CompositionRefusal | undefined {
-  const occupancy = new Map<string, number>();
-  let nonReserve = 0;
-  let illegal: RosterMember | undefined;
-  for (const player of state.values()) {
-    if (player.slot === undefined) {
-      nonReserve += 1;
-      continue;
+  const occupancy = rosterOccupancy({ rule: league.rule, players: [...state.values()] });
+  if (occupancy.occupied > occupancy.maximum) {
+    const message = `The team would hold ${String(occupancy.occupied)} players on its roster, but the league allows ${String(occupancy.maximum)}.`;
+    if (context === undefined) {
+      return {
+        code: "roster_full",
+        detail: `${message} Free a place by dropping a player on the roster or moving a reserve-eligible player to a reserve list.`,
+      };
     }
-    const slot = league.byPosition.get(player.slot);
-    if (slot === undefined) {
-      nonReserve += 1;
-      continue;
-    }
-    if (
-      illegal === undefined &&
-      !playerMayOccupySlot(solverPlayer(player, league, false), slot.solver)
-    ) {
-      illegal = player;
-    }
-    occupancy.set(slot.position, (occupancy.get(slot.position) ?? 0) + 1);
-    if (slot.kind !== "reserve") {
-      nonReserve += 1;
-    }
-  }
-  if (nonReserve > league.capacity) {
-    const already =
-      context !== undefined &&
-      context.items.some((item) => freesPlace(context.initial, item, league));
+    const accounting = setPlaceAccounting(context.items, context.initial, league);
     return {
       code: "roster_full",
-      detail: `The team would hold ${String(nonReserve)} players outside its reserve slots, but the league allows ${String(league.capacity)}. ${
-        already
-          ? "This set already contains roster changes, and they do not free another place."
-          : "Add a drop item for a player outside a reserve slot, or a slot move into a reserve slot, to this set."
-      }`,
+      detail: `${message} This set frees ${placeCount(accounting.frees)} and consumes ${placeCount(accounting.consumes)}; free ${placeCount(occupancy.occupied - occupancy.maximum)} more by dropping a player or moving a reserve-eligible player to a reserve list.`,
     };
   }
-  if (illegal?.slot !== undefined) {
+  const illegal = occupancy.illegal[0];
+  if (illegal !== undefined) {
     const already =
       context !== undefined &&
       context.items.some(
@@ -666,32 +722,84 @@ function placementFailure(
           item.drops.some((drop) => drop.key === illegal.key) ||
           item.move?.player.key === illegal.key,
       );
+    const resolution =
+      occupancy.occupied >= occupancy.maximum
+        ? `The team already holds all ${String(occupancy.maximum)} roster places, so free one by dropping a player or moving a reserve-eligible player to a reserve list.`
+        : already
+          ? "This set already names their drop or a slot move for them."
+          : "Add a slot move that gives them a legal slot, or a drop for them, to this set.";
     return {
       code: "slot_illegal",
-      detail: `${slotMismatchDetail({ name: illegal.name, slot: illegal.slot, positions: illegal.positions })} No open slot accepts them, and choosing which player to drop is yours. ${
-        already
-          ? "This set already names their drop or a slot move for them."
-          : "Add that drop to this set, or add a slot move that gives them a legal slot."
-      }`,
+      detail: `${illegal.detail} ${resolution} Choosing which player to drop is yours.`,
     };
   }
-  for (const [position, count] of occupancy) {
-    const slot = league.byPosition.get(position);
-    if (slot !== undefined && count > slot.count) {
-      const already =
-        context !== undefined &&
-        context.items.some((item) => item.drops.length > 0 || item.move !== undefined);
-      return {
-        code: "slot_illegal",
-        detail: `The ${position} slot holds ${String(count)} players, but the league allows ${String(slot.count)}. ${
-          already
-            ? "This set already contains roster changes, and none resolves it."
-            : "Add a move that resolves it to this set."
-        }`,
-      };
-    }
+  const overflow = occupancy.overflow[0];
+  if (overflow !== undefined) {
+    return {
+      code: "slot_illegal",
+      detail: `The ${slotLabel(overflow.slot)} holds ${String(overflow.occupants)} players, but the league allows ${String(overflow.slot.count)}. Move one out of it.`,
+    };
   }
   return undefined;
+}
+
+function placeCount(count: number): string {
+  return `${String(count)} ${count === 1 ? "place" : "places"}`;
+}
+
+function setPlaceAccounting(
+  items: ReadonlyArray<ProposalOrderItem>,
+  initial: RosterState,
+  league: League,
+): { readonly frees: number; readonly consumes: number } {
+  let frees = 0;
+  let consumes = 0;
+  for (const item of items) {
+    const change = itemPlaceAccounting(item, initial, league);
+    frees += change.frees;
+    consumes += change.consumes;
+  }
+  return { frees, consumes };
+}
+
+function netPlaceChange(
+  items: ReadonlyArray<ProposalOrderItem>,
+  initial: RosterState,
+  league: League,
+): number {
+  const change = setPlaceAccounting(items, initial, league);
+  return change.frees - change.consumes;
+}
+
+function rosterPlaceOf(
+  item: ProposalOrderItem,
+  initial: RosterState,
+  league: League,
+): ProposalOrderRosterPlace | undefined {
+  const change = itemPlaceAccounting(item, initial, league);
+  if (change.frees > change.consumes) {
+    return "frees";
+  }
+  return change.consumes > change.frees ? "consumes" : undefined;
+}
+
+function itemPlaceAccounting(
+  item: ProposalOrderItem,
+  initial: RosterState,
+  league: League,
+): { readonly frees: number; readonly consumes: number } {
+  if (item.move !== undefined) {
+    return rosterPlaceChange(
+      league.rule,
+      initial.get(item.move.player.key)?.slot,
+      item.move.toSlot,
+    );
+  }
+  let frees = 0;
+  for (const drop of item.drops) {
+    frees += rosterPlaceChange(league.rule, initial.get(drop.key)?.slot, undefined).frees;
+  }
+  return { frees, consumes: item.adds.length };
 }
 
 function isLegal(state: RosterState, league: League): boolean {
@@ -716,7 +824,7 @@ function solverPlayer(player: RosterMember, league: League, pin: boolean): Roste
     eligiblePositions: player.positions,
     availabilityTier: neutralTier,
     selection: knownSelection(neutralBasis, 0),
-    reserveEligible: !pin || slot !== undefined ? reserveEligible(player, league) : false,
+    reserveEligible: reserveEligible(player, league),
     lockedSlotId: pin && slot !== undefined ? makeSlotId(slot.position) : undefined,
     currentSlotId: slot === undefined ? undefined : makeSlotId(slot.position),
     mayBeLeftInPlace: false,
@@ -724,21 +832,39 @@ function solverPlayer(player: RosterMember, league: League, pin: boolean): Roste
 }
 
 function reserveEligible(player: RosterMember, league: League): boolean {
-  return (
-    league.reserveAcceptsAny ||
-    league.reserveMarkers.some((marker) => player.positions.includes(marker))
+  return league.slots.some(
+    (slot) =>
+      slot.kind === "reserve" &&
+      slotPlacement(league.rule, slot.position, player.positions).legal === true,
   );
 }
 
-function solverSlot(slot: ProposalOrderSlot): RosterSlot {
+function solverSlot(slot: ProposalOrderSlot, rule: RosterRule): RosterSlot {
   const id = makeSlotId(slot.position);
   const eligibility =
     slot.eligibility.length === 0
       ? ({ kind: "any" } as const)
       : ({ kind: "positions", positions: [...slot.eligibility] } as const);
-  return slot.kind === "starting"
-    ? { kind: "starting", id, capacity: slot.count, requirement: "optional", eligibility }
-    : { kind: slot.kind, id, capacity: slot.count, eligibility };
+  switch (slot.kind) {
+    case "starting":
+      return {
+        kind: "starting",
+        id,
+        capacity: slot.count,
+        requirement: rule.startingSlotsMayStandEmpty ? "optional" : "required",
+        eligibility,
+      };
+    case "bench":
+      return {
+        kind: "bench",
+        id,
+        capacity:
+          rule.benchCapacity === "generic" ? Math.max(rule.rosterMaximum, slot.count) : slot.count,
+        eligibility: { kind: "any" },
+      };
+    case "reserve":
+      return { kind: "reserve", id, capacity: slot.count, eligibility };
+  }
 }
 
 function initialState(players: ReadonlyArray<ProposalOrderPlayer>): RosterState {
@@ -759,11 +885,10 @@ function initialState(players: ReadonlyArray<ProposalOrderPlayer>): RosterState 
 
 function illegalOccupant(state: RosterState, playerKey: string, league: League): boolean {
   const player = state.get(playerKey);
-  const slot = player?.slot === undefined ? undefined : league.byPosition.get(player.slot);
   return (
     player !== undefined &&
-    slot !== undefined &&
-    !playerMayOccupySlot(solverPlayer(player, league, false), slot.solver)
+    player.slot !== undefined &&
+    slotPlacement(league.rule, player.slot, player.positions).legal === false
   );
 }
 
@@ -857,40 +982,14 @@ function conflictWithReasons(
   };
 }
 
-function itemRefusalConflict(
-  refused: ReadonlyArray<BlockedItem>,
-  items: ReadonlyArray<ProposalOrderItem>,
-  initial: RosterState,
-): ProposalOrderPlanConflict {
-  const reasons = refused.map((item) => {
-    const note =
-      item.refusal.code === "move_slot_full"
-        ? freedDestinationNote(item.entry.item, items, initial)
-        : undefined;
-    return {
+function itemRefusalConflict(refused: ReadonlyArray<BlockedItem>): ProposalOrderPlanConflict {
+  return refusalConflict(
+    refused.map((item) => ({
       item: item.entry.item.id,
       code: item.refusal.code,
-      detail: `${item.entry.item.label}: ${item.refusal.detail}${note === undefined ? "" : ` ${note}`}`,
-    };
-  });
-  return refusalConflict(reasons);
-}
-
-function freedDestinationNote(
-  moveItem: ProposalOrderItem,
-  items: ReadonlyArray<ProposalOrderItem>,
-  initial: RosterState,
-): string | undefined {
-  for (const item of items) {
-    if (item === moveItem) {
-      continue;
-    }
-    const note = freedSlotNote(moveItem, item, initial);
-    if (note !== undefined) {
-      return note;
-    }
-  }
-  return undefined;
+      detail: `${item.entry.item.label}: ${item.refusal.detail}`,
+    })),
+  );
 }
 
 function refusalConflict(reasons: ReadonlyArray<ConflictReason>): ProposalOrderPlanConflict {
@@ -929,46 +1028,27 @@ function strandedDetail(
       : undefined;
   const player = key === undefined ? undefined : state.get(key);
   const failure = placementFailure(state, league);
+  if (refusal.reason === "required-starting-position-unfillable") {
+    const slot = league.slots.find((entry) => entry.solver.id === refusal.slotId);
+    const label = slot === undefined ? "A starting slot" : `The ${slotLabel(slot)}`;
+    return `${label} is empty, and this league requires every starting slot to be filled. Add a player eligible for it, or move one there.`;
+  }
   if (player === undefined) {
     return failure?.detail ?? "The roster cannot be made legal.";
   }
   const already =
     context !== undefined &&
     context.items.some((item) => freesPlace(context.initial, item, league));
-  return `${player.name} cannot be placed in any open slot in this league: no open slot accepts their positions (${player.positions.join(", ")}). ${
+  const occupancy = rosterOccupancy({ rule: league.rule, players: [...state.values()] });
+  return `${player.name} cannot be placed on the roster: no open slot accepts their positions (${player.positions.join(", ")}). The team holds ${String(occupancy.occupied)} of ${String(occupancy.maximum)} roster places. ${
     already
       ? "This set's drops and slot moves do not leave a slot that accepts them."
-      : "Add a drop item for a player in a slot that accepts them, or a slot move that gives them a legal slot, to this set."
+      : "Add a drop for a player in a slot that accepts them, or a slot move that gives them a legal slot, to this set."
   }`;
 }
 
 function declaredMovers(items: ReadonlyArray<ProposalOrderItem>): ReadonlySet<string> {
   return new Set(items.flatMap((item) => (item.move === undefined ? [] : [item.move.player.key])));
-}
-
-function freedSlotNote(
-  moveItem: ProposalOrderItem,
-  dropItem: ProposalOrderItem,
-  initial: RosterState,
-): string | undefined {
-  if (moveItem.move === undefined || dropItem.drops.length === 0) {
-    return undefined;
-  }
-  const destination = moveItem.move.toSlot;
-  const freed = dropItem.drops.flatMap((drop) => {
-    const player = initial.get(drop.key);
-    return player?.slot === undefined || player.slot === destination ? [] : [player.slot];
-  });
-  const slots = [...new Set(freed)];
-  if (slots.length === 0) {
-    return undefined;
-  }
-  const names = dropItem.drops.map((drop) => drop.name).join(", ");
-  const slotPhrase =
-    slots.length === 1
-      ? `the ${String(slots[0])} slot`
-      : `the ${slots.slice(0, -1).join(", ")} and ${String(slots[slots.length - 1])} slots`;
-  return `Dropping ${names} frees ${slotPhrase}, not ${destination}.`;
 }
 
 function pairSentence(timing: Timing): string {
@@ -979,19 +1059,16 @@ function generalSentence(timing: Timing): string {
   return `No order of these operations keeps the lineup legal ${timing.phrase}.`;
 }
 
-function leagueOf(slots: ReadonlyArray<ProposalOrderSlot>): League {
-  const leagueSlots = slots.map((slot) => ({ ...slot, solver: solverSlot(slot) }));
+function leagueOf(
+  slots: ReadonlyArray<ProposalOrderSlot>,
+  constraints: ProviderRosterConstraints,
+): League {
+  const rule = rosterRuleOf(constraints, slots);
+  const leagueSlots = slots.map((slot) => ({ ...slot, solver: solverSlot(slot, rule) }));
   return {
+    rule,
     slots: leagueSlots,
-    byPosition: new Map(leagueSlots.map((slot) => [slot.position, slot])),
-    reserveMarkers: slots.flatMap((slot) => (slot.kind === "reserve" ? [...slot.eligibility] : [])),
-    reserveAcceptsAny: slots.some(
-      (slot) => slot.kind === "reserve" && slot.eligibility.length === 0,
-    ),
-    capacity: slots.reduce(
-      (total, slot) => (slot.kind === "reserve" ? total : total + slot.count),
-      0,
-    ),
+    byPosition: new Map(leagueSlots.map((slot) => [slot.position, slot] as const)),
   };
 }
 
@@ -1080,11 +1157,9 @@ type RosterState = ReadonlyMap<string, RosterMember>;
 type LeagueSlot = ProposalOrderSlot & { readonly solver: RosterSlot };
 
 type League = {
+  readonly rule: RosterRule;
   readonly slots: ReadonlyArray<LeagueSlot>;
   readonly byPosition: ReadonlyMap<string, LeagueSlot>;
-  readonly reserveMarkers: ReadonlyArray<string>;
-  readonly reserveAcceptsAny: boolean;
-  readonly capacity: number;
 };
 
 type ProposalOrderSlot = {
@@ -1125,12 +1200,13 @@ export type ProposalOrderItem = {
 
 type ProposalOrderTimingRule = "same_day" | "next_day" | "weekly_lock" | "not_published";
 
-type ProposalOrderTiming = {
+export type ProposalOrderTiming = {
   readonly rule: "same_day" | "next_day" | "weekly_lock" | undefined;
   readonly currentDate: string | undefined;
 };
 
 export type ProposalOrderInput = {
+  readonly constraints: ProviderRosterConstraints;
   readonly slots: ReadonlyArray<ProposalOrderSlot>;
   readonly players: ReadonlyArray<ProposalOrderPlayer>;
   readonly timing: ProposalOrderTiming;
@@ -1158,11 +1234,20 @@ export type ProposalOrderRefusalCode =
   | "move_slot_unknown"
   | "move_slot_full"
   | "drop_not_rostered"
-  | "add_already_rostered";
+  | "add_already_rostered"
+  | "state_unavailable";
 
 type CompositionRefusal = {
   readonly code: "roster_full" | "slot_illegal";
   readonly detail: string;
+};
+
+type ProposalOrderRosterPlace = "frees" | "consumes";
+
+type ProposalOrderRosterPlaces = {
+  readonly maximum: number;
+  readonly occupied: number;
+  readonly net: number;
 };
 
 export type ProposalOrderPlan =
@@ -1170,9 +1255,11 @@ export type ProposalOrderPlan =
       readonly status: "ordered";
       readonly timing: ProposalOrderTimingRule;
       readonly effectiveDate?: string;
+      readonly rosterPlaces: ProposalOrderRosterPlaces;
       readonly steps: ReadonlyArray<{
         readonly item: string;
         readonly position: number;
+        readonly rosterPlace?: ProposalOrderRosterPlace;
         readonly reserveMove?: ProposalOrderRepair;
       }>;
     }

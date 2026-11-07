@@ -1742,6 +1742,14 @@ const SummaryIllegalSlot = Schema.Struct({
 });
 export type SummaryIllegalSlot = typeof SummaryIllegalSlot.Type;
 
+const SummaryRosterPlaces = Schema.Struct({
+  maximum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  occupied: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  reserved: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  remaining: Schema.Int,
+});
+type SummaryRosterPlaces = typeof SummaryRosterPlaces.Type;
+
 export const TeamSummaryData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
@@ -1778,6 +1786,12 @@ export const TeamSummaryData = Schema.Struct({
     Schema.annotate({
       description:
         "Rostered players whose eligible positions do not include the slot the league declares for them, so the provider may refuse a transaction until they move. Present only when the roster was read; absent means it was not checked, which is not the same as none. It is the league's own slot rules against the provider's own eligible positions, and nothing else: no injury check, no statistics, and no lineup decision.",
+    }),
+  ),
+  rosterPlaces: Schema.optional(SummaryRosterPlaces).pipe(
+    Schema.annotate({
+      description:
+        "How many roster places this team may fill, how many it fills now, how many of its players sit on a reserve list outside that count, and how many places remain. It is the same place arithmetic a proposal's order reports, so a client can check a move against the league's limit without deriving it. Present only when the roster was read.",
     }),
   ),
   roster: Schema.optional(Schema.Array(SummaryRosterPlayer)).pipe(

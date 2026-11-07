@@ -2,7 +2,7 @@ import { Array, DateTime, Effect, Layer, Result, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
-import { planProposalOrder } from "#contexts/connections/ProposalOrder.ts";
+import { planProposalOrder, rosterChangeDate } from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProposalOrderItem,
   ProposalOrderPlan,
@@ -13,11 +13,11 @@ import type {
   ProviderCapabilities,
   ProviderLeagueSettings,
   ProviderLeagueTeam,
-  ProviderNativeTarget,
   ProviderPendingTrade,
   ProviderPlayerDetail,
   ProviderReadFailure,
   ProviderRoster,
+  ProviderRosterCoverage,
   ProviderTransaction,
   ProviderTransactionTeam,
   ProviderWriteResult,
@@ -25,7 +25,12 @@ import type {
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import type { QueryError, QueryTeam } from "#contexts/connections/QueryValues.ts";
 import type { CounterpartyRef, PlayerRef } from "#contexts/connections/QueryValues.ts";
-import { slotAcceptsPositions, slotMismatchDetail } from "#contexts/connections/RosterSlots.ts";
+import {
+  rosterOccupancy,
+  rosterRuleOf,
+  slotMismatchDetail,
+  slotPlacement,
+} from "#contexts/connections/RosterSlots.ts";
 import type {
   PendingTradeOffer,
   ProposalBudget,
@@ -678,11 +683,14 @@ export const TransactionProposalsLive = Layer.effect(
       ];
       const storeItems = acceptedCandidates.map((candidate) => ({
         id: candidate.record.id,
-        command: {
-          ...candidate.entry.command,
-          adds: candidate.change.adds,
-          drops: candidate.change.drops,
-        },
+        command: namedCommand(
+          {
+            ...candidate.entry.command,
+            adds: candidate.change.adds,
+            drops: candidate.change.drops,
+          },
+          checks.get(candidate.entry.team.id)?.facts,
+        ),
         check: candidate.change.staleness,
         reserveMove: candidate.change.reserveMove,
       }));
@@ -1265,7 +1273,7 @@ export const TransactionProposalsLive = Layer.effect(
         ];
         if (input.change.reserveMove !== undefined) {
           const move = input.change.reserveMove;
-          const coverage = reserveCoverage(input.facts.league);
+          const coverage = proposalCoverage(input.facts.league);
           if (coverage === undefined) {
             const stepAt = yield* DateTime.now;
             const detail =
@@ -1429,7 +1437,7 @@ export const TransactionProposalsLive = Layer.effect(
           ...(detail === undefined ? {} : { detail }),
           decidedAt,
         });
-        const coverage = reserveCoverage(input.facts.league);
+        const coverage = proposalCoverage(input.facts.league);
         if (coverage === undefined) {
           const stepAt = yield* DateTime.now;
           const detail =
@@ -1650,6 +1658,7 @@ export const TransactionProposalsLive = Layer.effect(
         tokens,
         userId,
         context.owned.team.providerLeagueKey,
+        context.owned.team.providerTeamKey,
         outcome.trades,
       );
       return yield* Schema.decodeEffect(PendingTradeOffersResultSchema)({
@@ -1688,13 +1697,13 @@ export const TransactionProposalsLive = Layer.effect(
             Effect.gen(function* () {
               const team = teamsById.get(teamId);
               if (team === undefined) {
-                return { teamId, leagueKey: undefined, trades: [] } as const;
+                return { teamId, leagueKey: undefined, teamKey: undefined, trades: [] } as const;
               }
               const loaded = yield* Effect.result(
                 loadTeamContext(queries, encryption, registry, userId, teamId),
               );
               if (loaded._tag === "Failure") {
-                return { teamId, leagueKey: undefined, trades: [] } as const;
+                return { teamId, leagueKey: undefined, teamKey: undefined, trades: [] } as const;
               }
               const context = loaded.success;
               const offers = yield* Effect.result(
@@ -1708,11 +1717,12 @@ export const TransactionProposalsLive = Layer.effect(
                 if (offers.failure._tag === "provider.session_rejected") {
                   rejected.push(context.owned);
                 }
-                return { teamId, leagueKey: undefined, trades: [] } as const;
+                return { teamId, leagueKey: undefined, teamKey: undefined, trades: [] } as const;
               }
               return {
                 teamId,
                 leagueKey: team.providerLeagueKey,
+                teamKey: context.owned.team.providerTeamKey,
                 trades: offers.success,
               } as const;
             }),
@@ -1725,13 +1735,18 @@ export const TransactionProposalsLive = Layer.effect(
           ): feed is {
             readonly teamId: TeamId;
             readonly leagueKey: string;
+            readonly teamKey: string;
             readonly trades: ReadonlyArray<ProviderPendingTrade>;
           } => feed.leagueKey !== undefined && feed.trades.length > 0,
         );
         const mappedGroups = yield* toPendingTradeOffersGroups(
           tokens,
           userId,
-          withTrades.map((feed) => ({ leagueKey: feed.leagueKey, trades: feed.trades })),
+          withTrades.map((feed) => ({
+            leagueKey: feed.leagueKey,
+            teamKey: feed.teamKey,
+            trades: feed.trades,
+          })),
         );
         const mappedByTeam = new Map<TeamId, ReadonlyArray<PendingTradeOffer>>();
         for (const [feedIndex, feed] of withTrades.entries()) {
@@ -2224,6 +2239,14 @@ export const TransactionProposalsLive = Layer.effect(
           } satisfies TeamData;
         }
         const settings = league.success;
+        const coverage = proposalCoverage(settings);
+        if (coverage === undefined) {
+          return {
+            status: "failed",
+            detail:
+              "Current state could not be read: the league publishes no current date or scoring week, so the roster the moves would apply to cannot be read.",
+          } satisfies TeamData;
+        }
         const addKeys = [
           ...new Set(
             items
@@ -2247,7 +2270,7 @@ export const TransactionProposalsLive = Layer.effect(
             context.provider.readRoster({
               ...providerIdentity(context),
               providerTeamKey: context.owned.team.providerTeamKey,
-              period: undefined,
+              period: coverage,
             }),
           );
         const leagueTeams: Effect.Effect<
@@ -2290,7 +2313,7 @@ export const TransactionProposalsLive = Layer.effect(
                     context.provider.readRoster({
                       ...providerIdentity(context),
                       providerTeamKey: key,
-                      period: undefined,
+                      period: coverage,
                     }),
                   ).pipe(Effect.map((result) => [key, result] as const)),
                 { concurrency: 3 },
@@ -2474,7 +2497,13 @@ function orderFor(
     { readonly code: ProposalOrderRefusalCode; readonly detail: string }
   >();
   for (;;) {
-    const plan = planProposalOrder({ slots, players, timing, items: remaining });
+    const plan = planProposalOrder({
+      constraints: facts.league.rosterConstraints,
+      slots,
+      players,
+      timing,
+      items: remaining,
+    });
     if (plan.status !== "conflict") {
       return { plan, refused };
     }
@@ -2570,6 +2599,8 @@ function proposalStaleCode(code: ProposalOrderRefusalCode): ProposalStaleCode {
     case "move_slot_full":
     case "slot_illegal":
       return "slot_illegal";
+    case "state_unavailable":
+      return "state_unavailable";
   }
 }
 
@@ -2703,7 +2734,12 @@ function orderJson(order: ProposalOrderPlan): unknown {
         status: "ordered",
         timing: order.timing,
         ...(order.effectiveDate === undefined ? {} : { effectiveDate: order.effectiveDate }),
-        steps: order.steps.map((step) => ({ item: step.item, position: step.position })),
+        rosterPlaces: order.rosterPlaces,
+        steps: order.steps.map((step) => ({
+          item: step.item,
+          position: step.position,
+          ...(step.rosterPlace === undefined ? {} : { rosterPlace: step.rosterPlace }),
+        })),
       };
     case "conflict":
       return {
@@ -2971,12 +3007,27 @@ function evaluateSlotMoveItem(
       playerKey: player.providerPlayerKey,
       detail: `The league does not declare a ${move.toSlot} slot, so ${player.name} cannot move there.`,
     });
-  } else if (!slotAcceptsPositions(slot.eligibility, player.eligiblePositions)) {
-    illegal.push({
-      code: "slot_illegal",
-      playerKey: player.providerPlayerKey,
-      detail: `${player.name} is not eligible for the ${slot.position} slot: it does not accept their positions (${player.eligiblePositions.join(", ")}).`,
-    });
+  } else {
+    const rule = rosterRuleOf(facts.league.rosterConstraints, facts.league.rosterPositions);
+    const placement = slotPlacement(rule, slot.position, player.eligiblePositions);
+    if (placement.legal === "unknown") {
+      illegal.push({
+        code: "state_unavailable",
+        playerKey: player.providerPlayerKey,
+        detail: `The league does not publish how reserve eligibility is established, so ${player.name} cannot be moved to the ${slot.position} reserve list.`,
+      });
+    } else if (!placement.legal) {
+      illegal.push({
+        code: "slot_illegal",
+        playerKey: player.providerPlayerKey,
+        detail: slotMismatchDetail({
+          name: player.name,
+          slot: slot.position,
+          kind: slot.kind,
+          positions: player.eligiblePositions,
+        }),
+      });
+    }
   }
   return { id: item.id, adds: [], drops: [], staleness: checked([], illegal, at) };
 }
@@ -3577,6 +3628,20 @@ function staleFix(code: ProposalStaleCode): string {
   }
 }
 
+function namedCommand(
+  command: ProposalItemCommand,
+  facts: TeamFacts | undefined,
+): ProposalItemCommand {
+  const move = command.slotMove;
+  if (move === undefined) {
+    return command;
+  }
+  const name = facts?.roster.players.find(
+    (player) => player.providerPlayerKey === move.playerKey,
+  )?.name;
+  return name === undefined ? command : { ...command, slotMove: { ...move, playerName: name } };
+}
+
 function commandRecord(input: {
   readonly command: ProposalItemCommand;
   readonly id: ProposalItemRecord["id"];
@@ -4064,12 +4129,16 @@ function moveLabel(item: ProposalItemRecord): string {
   return "This move";
 }
 
-function reserveCoverage(league: ProviderLeagueSettings): ProviderNativeTarget | undefined {
+function proposalCoverage(league: ProviderLeagueSettings): ProviderRosterCoverage | undefined {
   if (league.rosterCoverage === "week") {
     const week = league.periodWindow?.current;
     return week === undefined ? undefined : { type: "week", week };
   }
-  return league.currentDate === undefined ? undefined : { type: "date", date: league.currentDate };
+  const date = rosterChangeDate({
+    rule: league.rosterChange?.rule,
+    currentDate: league.currentDate,
+  });
+  return date === undefined ? undefined : { type: "date", date };
 }
 
 function appendSteps(
@@ -4166,39 +4235,50 @@ function illegalSlots(
   facts: TeamFacts,
   droppedKeys: ReadonlySet<string>,
 ): ReadonlyArray<StoredProposalStaleReason> {
-  const slotsByName = new Map(
-    facts.league.rosterPositions.map((position) => [position.position, position] as const),
+  const rule = rosterRuleOf(facts.league.rosterConstraints, facts.league.rosterPositions);
+  const byKey = new Map(
+    facts.roster.players.map((player) => [player.providerPlayerKey, player] as const),
   );
-  const reasons: Array<StoredProposalStaleReason> = [];
-  for (const player of facts.roster.players) {
-    if (player.slot.status !== "verified" || droppedKeys.has(player.providerPlayerKey)) {
-      continue;
+  return rosterOccupancy({
+    rule,
+    players: facts.roster.players.map((player) => ({
+      key: player.providerPlayerKey,
+      name: player.name,
+      slot: player.slot.status === "verified" ? player.slot.slot : undefined,
+      positions: player.eligiblePositions,
+    })),
+  }).illegal.flatMap((occupant) => {
+    if (droppedKeys.has(occupant.key)) {
+      return [];
     }
-    const slot = slotsByName.get(player.slot.slot);
-    if (slot === undefined) {
-      continue;
-    }
-    if (slotAcceptsPositions(slot.eligibility, player.eligiblePositions)) {
-      continue;
-    }
+    const player = byKey.get(occupant.key);
     const providerNote =
-      player.injuryDetail === undefined ? "" : ` The provider reports "${player.injuryDetail}".`;
-    reasons.push({
-      code: "slot_illegal",
-      playerKey: player.providerPlayerKey,
-      detail: `${slotMismatchDetail({ name: player.name, slot: slot.position, positions: player.eligiblePositions })}${providerNote} Move them to a legal slot at the provider, then revalidate this set.`,
-    });
-  }
-  return reasons;
+      player?.injuryDetail === undefined ? "" : ` The provider reports "${player.injuryDetail}".`;
+    return [
+      {
+        code: "slot_illegal" as const,
+        playerKey: occupant.key,
+        detail: `${occupant.detail}${providerNote} Move them to a legal slot at the provider, then revalidate this set.`,
+      },
+    ];
+  });
+}
+
+function tradePartiesTeam(trade: ProviderPendingTrade, providerTeamKey: string): boolean {
+  return (
+    trade.proposer?.providerTeamKey === providerTeamKey ||
+    trade.receiver?.providerTeamKey === providerTeamKey
+  );
 }
 
 function toPendingTradeOffers(
   tokens: QueryTokens["Service"],
   userId: UserId,
   leagueKey: string,
+  teamKey: string,
   trades: ReadonlyArray<ProviderPendingTrade>,
 ): Effect.Effect<ReadonlyArray<PendingTradeOffer>, ProposalPersistenceFailed> {
-  return toPendingTradeOffersGroups(tokens, userId, [{ leagueKey, trades }]).pipe(
+  return toPendingTradeOffersGroups(tokens, userId, [{ leagueKey, teamKey, trades }]).pipe(
     Effect.map((groups) => Array.getUnsafe(groups, 0)),
   );
 }
@@ -4208,14 +4288,19 @@ function toPendingTradeOffersGroups(
   userId: UserId,
   groups: ReadonlyArray<{
     readonly leagueKey: string;
+    readonly teamKey: string;
     readonly trades: ReadonlyArray<ProviderPendingTrade>;
   }>,
 ): Effect.Effect<ReadonlyArray<ReadonlyArray<PendingTradeOffer>>, ProposalPersistenceFailed> {
   return Effect.gen(function* () {
-    const playerKeysByGroup = groups.map((group) =>
+    const ownGroups = groups.map((group) => ({
+      ...group,
+      trades: group.trades.filter((trade) => tradePartiesTeam(trade, group.teamKey)),
+    }));
+    const playerKeysByGroup = ownGroups.map((group) =>
       group.trades.flatMap((trade) => trade.players.map((player) => player.providerPlayerKey)),
     );
-    const teamKeysByGroup = groups.map((group) => {
+    const teamKeysByGroup = ownGroups.map((group) => {
       const keys = new Set<string>();
       for (const trade of group.trades) {
         const remember = (team: ProviderTransactionTeam | undefined): void => {
@@ -4239,27 +4324,27 @@ function toPendingTradeOffersGroups(
     });
     const playerRefsByGroup = yield* tokens.sealPlayerRefGroups({
       userId,
-      groups: groups.map((group, index) => ({
+      groups: ownGroups.map((group, index) => ({
         leagueKey: group.leagueKey,
         playerKeys: Array.getUnsafe(playerKeysByGroup, index),
       })),
     });
     const teamRefsByGroup = yield* tokens.sealCounterpartyRefGroups({
       userId,
-      groups: groups.map((group, index) => ({
+      groups: ownGroups.map((group, index) => ({
         leagueKey: group.leagueKey,
         teamKeys: Array.getUnsafe(teamKeysByGroup, index),
       })),
     });
     const offerRefsByGroup = yield* tokens.sealTradeOfferRefGroups({
       userId,
-      groups: groups.map((group) => ({
+      groups: ownGroups.map((group) => ({
         leagueKey: group.leagueKey,
         transactionKeys: group.trades.map((trade) => trade.transactionKey),
       })),
     });
     const result: Array<ReadonlyArray<PendingTradeOffer>> = [];
-    for (const [groupIndex, group] of groups.entries()) {
+    for (const [groupIndex, group] of ownGroups.entries()) {
       const playerRefs = Array.getUnsafe(playerRefsByGroup, groupIndex);
       const teamRefs = Array.getUnsafe(teamRefsByGroup, groupIndex);
       const offerRefs = Array.getUnsafe(offerRefsByGroup, groupIndex);

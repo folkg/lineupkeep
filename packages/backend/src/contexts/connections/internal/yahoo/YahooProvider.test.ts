@@ -1788,6 +1788,49 @@ it.effect("refuses to relabel a date-scoped roster as a week", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("sends the requested date to a date-scoped roster read", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const roster = yield* provider.readRoster({
+      ...sessionInput,
+      providerTeamKey: "466.l.4002.t.3",
+      period: { type: "date", date: "2026-10-25" },
+    });
+
+    assert.deepStrictEqual(roster.coverage, { type: "date", date: "2026-10-25" });
+    assert.strictEqual(
+      internet.calls[0]?.url.pathname,
+      "/fantasy/v2/team/466.l.4002.t.3/roster;date=2026-10-25/players;out=opponent,starting_status,transactions",
+    );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("treats a rejected date selector as uncovered period coverage", () => {
+  const internet = recordingInternet((request) =>
+    request.url.pathname.includes("/roster;date=2026-10-26/players")
+      ? jsonResponse({ error: { description: "Synthetic provider rejection" } }, 400)
+      : jsonResponse(yahooNhlRoster),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readRoster({
+        ...sessionInput,
+        providerTeamKey: "466.l.4002.t.3",
+        period: { type: "date", date: "2026-10-26" },
+      }),
+    );
+
+    assert.instanceOf(error, ProviderPeriodMismatch);
+    assert.deepStrictEqual(error.requested, { type: "date", date: "2026-10-26" });
+    assert.strictEqual(error.covered, null);
+    assert.strictEqual(internet.calls.length, 1);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("treats a rejected week selector as uncovered period coverage", () => {
   const internet = recordingInternet((request) =>
     request.url.pathname.includes("/roster;week=6/players")
@@ -1834,25 +1877,6 @@ it.effect("reads a date-scoped roster from a captured payload", () => {
         ["Synthetic Skater", "C", ["C", "LW"]],
         ["Synthetic Goalie", "BN", ["G"]],
       ],
-    );
-  }).pipe(Effect.provide(yahooLayer(internet)));
-});
-
-it.effect("reads a date target without sending a period selector", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNhlRoster));
-  return Effect.gen(function* () {
-    const provider = yield* testProvider;
-
-    const roster = yield* provider.readRoster({
-      ...sessionInput,
-      providerTeamKey: "466.l.4002.t.3",
-      period: { type: "date", date: "2026-10-25" },
-    });
-
-    assert.deepStrictEqual(roster.coverage, { type: "date", date: "2026-10-25" });
-    assert.strictEqual(
-      internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/466.l.4002.t.3/roster/players;out=opponent,starting_status,transactions?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -4367,6 +4391,12 @@ function planLeague(input: {
         eligibility: [],
       },
     ],
+    rosterConstraints: {
+      rosterMaximum: 3,
+      benchCapacity: "generic",
+      startingSlotsMayStandEmpty: true,
+      reserveEligibility: { kind: "published_positions" },
+    },
     statCategories: [],
     statModifiers: [],
   };

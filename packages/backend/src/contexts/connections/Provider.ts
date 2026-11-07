@@ -395,6 +395,17 @@ export type ProviderRosterPosition = {
   readonly eligibility: ReadonlyArray<string>;
 };
 
+type ProviderReserveEligibility =
+  | { readonly kind: "published_positions" }
+  | { readonly kind: "not_published"; readonly detail: string };
+
+export type ProviderRosterConstraints = {
+  readonly rosterMaximum: number;
+  readonly benchCapacity: "generic" | "per_slot";
+  readonly startingSlotsMayStandEmpty: boolean;
+  readonly reserveEligibility: ProviderReserveEligibility;
+};
+
 type ProviderStatCategory = {
   readonly statId: number;
   readonly name: string;
@@ -450,6 +461,7 @@ export type ProviderLeagueSettings = {
   readonly rosterCoverage: ProviderCoverageKind;
   readonly maxGamesPlayed: number | undefined;
   readonly maxInningsPitched: number | undefined;
+  readonly rosterConstraints: ProviderRosterConstraints;
   readonly rosterPositions: ReadonlyArray<ProviderRosterPosition>;
   readonly statCategories: ReadonlyArray<ProviderStatCategory>;
   readonly statModifiers: ReadonlyArray<ProviderStatModifier>;

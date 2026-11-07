@@ -273,6 +273,12 @@ const footballLeague: ProviderLeagueSettings = {
   tradeObjectionDays: undefined,
   draftStatus: "postdraft",
   rosterPositions: [],
+  rosterConstraints: {
+    rosterMaximum: 0,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [],
   statModifiers: [],
 };

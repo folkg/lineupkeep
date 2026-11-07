@@ -1391,6 +1391,12 @@ const customLeague: ProviderLeagueSettings = {
     { position: "RB", positionType: "O", count: 1, kind: "starting", eligibility: ["RB"] },
     { position: "BN", positionType: "B", count: 2, kind: "bench", eligibility: [] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 4,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [
     {
       statId: 4,
@@ -1438,6 +1444,12 @@ const reserveLeague: ProviderLeagueSettings = {
     { position: "IR", positionType: "I", count: 1, kind: "reserve", eligibility: ["IR"] },
     { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 2,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
 };
 
 const reserveRoster: ProviderRoster = {
@@ -1470,6 +1482,12 @@ const parkedLeague: ProviderLeagueSettings = {
     { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
     { position: "IR", positionType: "I", count: 1, kind: "reserve", eligibility: ["IR"] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 3,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
 };
 
 const parkedRoster: ProviderRoster = {
@@ -1495,6 +1513,12 @@ const capacityLeague: ProviderLeagueSettings = {
     { position: "QB", positionType: "O", count: 2, kind: "starting", eligibility: ["QB"] },
     { position: "BN", positionType: "B", count: 3, kind: "bench", eligibility: [] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 5,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
 };
 
 const capacityRoster: ProviderRoster = {
@@ -1713,6 +1737,12 @@ const league: ProviderLeagueSettings = {
     { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
     { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 2,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [],
   statModifiers: [],
 };

@@ -50,6 +50,7 @@ const atlasOrderPlayers: ReadonlyArray<ProposalOrderPlayer> = [
 
 it("orders an atlas drop before the move that needs the bench place", () => {
   const decision = planProposalOrder({
+    constraints: secondProviderLeague.rosterConstraints,
     slots: secondProviderLeague.rosterPositions,
     players: atlasOrderPlayers,
     timing: atlasTiming,
@@ -72,6 +73,7 @@ it("orders an atlas drop before the move that needs the bench place", () => {
 
 it("refuses only the atlas move whose drop frees another slot", () => {
   const decision = planProposalOrder({
+    constraints: secondProviderLeague.rosterConstraints,
     slots: secondProviderLeague.rosterPositions,
     players: atlasOrderPlayers,
     timing: atlasTiming,
@@ -90,9 +92,8 @@ it("refuses only the atlas move whose drop frees another slot", () => {
     );
     const detail = decision.conflicts[0]?.detail ?? "";
     assert.include(detail, "Fay Reserve");
-    assert.include(detail, "Dee Bench");
-    assert.include(detail, "PG");
-    assert.include(detail, "BENCH");
+    assert.include(detail, "Ada Guard already holds it");
+    assert.include(detail, "PG starting slot");
     assert.notInclude(detail, "Yahoo");
     assert.notInclude(detail, "yahoo");
     assert.notInclude(detail, "atlas");
@@ -246,11 +247,11 @@ const atlasPoolDetails: ReadonlyArray<ProviderPlayerDetail> = [
   {
     providerPlayerKey: "atlas.p.102",
     name: "Hal Guard",
-    primaryPosition: "PG",
-    displayPosition: "PG",
+    primaryPosition: "SG",
+    displayPosition: "SG",
     proTeam: "ATL",
     availabilityDetail: undefined,
-    eligiblePositions: ["PG"],
+    eligiblePositions: ["SG"],
     rosterStatus: "free_agent",
     actual: undefined,
     projected: undefined,

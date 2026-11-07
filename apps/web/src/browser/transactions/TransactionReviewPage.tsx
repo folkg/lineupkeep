@@ -440,7 +440,7 @@ function OrderedNotice(props: OrderedNoticeProps): JSX.Element {
             const item = props.items.find((entry) => entry.id === step.item);
             return (
               <Text size="caption" tone="muted">
-                {`${String(step.position + 1)}. ${item === undefined ? "This move" : moveSummary(item)}`}
+                {`${String(step.position + 1)}. ${item === undefined ? "This move" : moveSummary(item)}${rosterPlaceLine(step.rosterPlace)}`}
               </Text>
             );
           }}
@@ -448,9 +448,40 @@ function OrderedNotice(props: OrderedNoticeProps): JSX.Element {
         <Text size="caption" tone="faint">
           {orderEffectiveLine(props.order)}
         </Text>
+        <Text size="caption" tone="faint">
+          {rosterPlacesLine(props.order)}
+        </Text>
       </Stack>
     </Notice>
   );
+}
+
+function rosterPlaceLine(rosterPlace: "frees" | "consumes" | undefined): string {
+  switch (rosterPlace) {
+    case "frees":
+      return " — frees a roster place";
+    case "consumes":
+      return " — uses a roster place";
+    case undefined:
+      return "";
+  }
+}
+
+function rosterPlacesLine(
+  order: Extract<TransactionReviewOrderView, { status: "ordered" }>,
+): string {
+  const { maximum, occupied, net } = order.rosterPlaces;
+  const change =
+    net === 0
+      ? "leaves the count unchanged"
+      : net > 0
+        ? `frees ${placeCount(net)}`
+        : `uses ${placeCount(-net)}`;
+  return `This team holds ${String(occupied)} of ${String(maximum)} roster places; the set ${change}.`;
+}
+
+function placeCount(count: number): string {
+  return `${String(count)} ${count === 1 ? "place" : "places"}`;
 }
 
 function orderEffectiveLine(

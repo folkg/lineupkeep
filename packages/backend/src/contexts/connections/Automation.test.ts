@@ -429,6 +429,12 @@ const league: ProviderLeagueSettings = {
     { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
     { position: "BN", positionType: "B", count: 1, kind: "bench", eligibility: [] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 2,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [],
   statModifiers: [],
 };
@@ -533,6 +539,12 @@ const hockeyLeague: ProviderLeagueSettings = {
     { position: "C", positionType: "P", count: 2, kind: "starting", eligibility: ["C"] },
     { position: "BN", positionType: "B", count: 2, kind: "bench", eligibility: [] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 4,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [],
   statModifiers: [],
 };

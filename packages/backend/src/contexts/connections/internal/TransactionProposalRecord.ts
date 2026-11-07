@@ -41,6 +41,7 @@ export type StoredProposalStaleness = typeof StoredProposalStaleness.Type;
 const StoredProposalOrderStep = Schema.Struct({
   item: ProposalItemId,
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  rosterPlace: Schema.optional(Schema.Literals(["frees", "consumes"])),
 });
 
 const StoredProposalOrderConflict = Schema.Struct({
@@ -60,6 +61,11 @@ export const StoredProposalOrderPlan = Schema.Union([
     status: Schema.Literal("ordered"),
     timing: StoredProposalOrderTiming,
     effectiveDate: Schema.optional(Schema.NonEmptyString),
+    rosterPlaces: Schema.Struct({
+      maximum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      occupied: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      net: Schema.Int,
+    }),
     steps: Schema.Array(StoredProposalOrderStep),
   }),
   Schema.Struct({

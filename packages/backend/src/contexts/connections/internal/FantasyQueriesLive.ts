@@ -103,7 +103,7 @@ import {
   type StatRef,
   type TeamOwnerNote,
 } from "#contexts/connections/QueryValues.ts";
-import { ineligibleSlotOccupants } from "#contexts/connections/RosterSlots.ts";
+import { rosterOccupancy, rosterRuleOf } from "#contexts/connections/RosterSlots.ts";
 
 import { ConnectionCredentialEncryption } from "./ConnectionCredentialEncryption.ts";
 import { countGamesForTeam, isLeagueOffNight, leagueGamesByDate } from "./LeagueSchedule.ts";
@@ -2856,34 +2856,34 @@ export const FantasyQueriesLive = Layer.effect(
       );
       const now = yield* DateTime.now;
       const offset = yield* openOffset(userId, fingerprintValue, input.cursor, now);
-      const illegalSlots: ReadonlyArray<SummaryIllegalSlot> =
+      const rosterSummary =
         !includes("roster") || rosterOutcome?._tag !== "ok" || league === undefined
-          ? []
-          : ineligibleSlotOccupants({
-              slots: league.rosterPositions.map((position) => ({
-                position: position.position,
-                eligibility: position.eligibility,
-              })),
+          ? undefined
+          : rosterOccupancy({
+              rule: rosterRuleOf(league.rosterConstraints, league.rosterPositions),
               players: rosterPlayers.map((player) => ({
                 key: player.providerPlayerKey,
                 name: player.name,
-                slot: player.slot.status === "verified" ? player.slot.slot : player.slot.rawValue,
+                slot: player.slot.status === "verified" ? player.slot.slot : undefined,
                 positions: player.eligiblePositions,
               })),
-            }).flatMap((occupant) => {
-              const row = rosterRowByKey.get(occupant.key);
-              return row === undefined
-                ? []
-                : [
-                    {
-                      player: row.player,
-                      name: occupant.name,
-                      slot: occupant.slot,
-                      eligiblePositions: occupant.positions,
-                      detail: occupant.detail,
-                    },
-                  ];
             });
+      const illegalSlots: ReadonlyArray<SummaryIllegalSlot> = (
+        rosterSummary?.illegal ?? []
+      ).flatMap((occupant) => {
+        const row = rosterRowByKey.get(occupant.key);
+        return row === undefined
+          ? []
+          : [
+              {
+                player: row.player,
+                name: occupant.name,
+                slot: occupant.slot,
+                eligiblePositions: occupant.positions,
+                detail: occupant.detail,
+              },
+            ];
+      });
       const base: Omit<TeamSummaryData, "roster" | "page" | "schedule"> = {
         status,
         team,
@@ -2908,6 +2908,16 @@ export const FantasyQueriesLive = Layer.effect(
                 detail: limitation(context.provider, "probable_starters"),
               },
               illegalSlots,
+              ...(rosterSummary === undefined
+                ? {}
+                : {
+                    rosterPlaces: {
+                      maximum: rosterSummary.maximum,
+                      occupied: rosterSummary.occupied,
+                      reserved: rosterSummary.reserved,
+                      remaining: rosterSummary.maximum - rosterSummary.occupied,
+                    },
+                  }),
             }
           : {}),
         ownerNote: ownerNoteOf(context.owned.team),

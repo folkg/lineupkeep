@@ -28,6 +28,7 @@ import { FakeProviderWorld } from "./internal/ProviderFakeTest.ts";
 import { ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
+import { declaredRosterConstraints } from "./internal/RosterConstraintsTest.ts";
 import { ScheduleObservationRepository } from "./internal/ScheduleObservationRepository.ts";
 import { ProfessionalCalendar } from "./ProfessionalCalendar.ts";
 import type {
@@ -42,6 +43,7 @@ import type {
   ProviderPlayerDetail,
   ProviderPlayerSearchResult,
   ProviderRoster,
+  ProviderRosterPosition,
   ProviderStandings,
   ProviderTeam,
 } from "./Provider.ts";
@@ -1038,12 +1040,14 @@ it.effect(
     Effect.gen(function* () {
       const queries = yield* FantasyQueries;
       const fake = yield* FakeProviderWorld;
+      const positions = [
+        ...leagueFixture.rosterPositions,
+        { position: "IR", positionType: "R", count: 1, kind: "reserve", eligibility: ["IR"] },
+      ] satisfies ReadonlyArray<ProviderRosterPosition>;
       const league: ProviderLeagueSettings = {
         ...leagueFixture,
-        rosterPositions: [
-          ...leagueFixture.rosterPositions,
-          { position: "IR", positionType: "R", count: 1, kind: "reserve", eligibility: ["IR"] },
-        ],
+        rosterPositions: positions,
+        rosterConstraints: declaredRosterConstraints(positions),
       };
       const base = rosterFixture({ count: 2 });
       const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
@@ -1079,7 +1083,8 @@ it.effect(
             name: "Synthetic 0",
             slot: "IR",
             eligiblePositions: ["QB"],
-            detail: "Synthetic 0 is in the IR slot, but it does not accept their positions (QB).",
+            detail:
+              "Synthetic 0 is on the IR reserve list, but it does not accept their positions (QB).",
           },
         ],
       );
@@ -5709,6 +5714,12 @@ const hockeyLeagueFixture: ProviderLeagueSettings = {
     { position: "C", positionType: "P", count: 2, kind: "starting", eligibility: ["C"] },
     { position: "BN", positionType: "B", count: 4, kind: "bench", eligibility: [] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 6,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [
     {
       statId: 1,
@@ -5769,6 +5780,12 @@ const rotoLeagueFixture: ProviderLeagueSettings = {
       eligibility: [],
     },
   ],
+  rosterConstraints: {
+    rosterMaximum: 6,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [
     { statId: 1, name: "Goals", displayName: "Goals", abbreviation: "G" },
     { statId: 2, name: "Assists", displayName: "Assists", abbreviation: "A" },
@@ -5873,6 +5890,12 @@ const leagueFixture: ProviderLeagueSettings = {
     { position: "QB", positionType: "O", count: 1, kind: "starting", eligibility: ["QB"] },
     { position: "BN", positionType: "B", count: 6, kind: "bench", eligibility: [] },
   ],
+  rosterConstraints: {
+    rosterMaximum: 7,
+    benchCapacity: "generic",
+    startingSlotsMayStandEmpty: true,
+    reserveEligibility: { kind: "published_positions" },
+  },
   statCategories: [
     {
       statId: 4,

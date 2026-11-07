@@ -262,6 +262,26 @@ const ProposalOrderTiming = Schema.Literals([
 const ProposalOrderStep = Schema.Struct({
   item: ProposalItemId,
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  rosterPlace: Schema.optional(
+    Schema.Literals(["frees", "consumes"]).annotate({
+      description:
+        "Whether this move frees or consumes a roster place. Absent when it leaves the count unchanged: a move between two places, an add with a drop, and a trade change nothing until it settles.",
+    }),
+  ),
+});
+
+const ProposalOrderRosterPlaces = Schema.Struct({
+  maximum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: "The roster places this league allows, as the league declares them.",
+  }),
+  occupied: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description:
+      "The roster places this team holds now; players on a reserve list are outside this count.",
+  }),
+  net: Schema.Int.annotate({
+    description:
+      "The places this team's ordered moves free minus the places they consume, so occupied plus net is the count after every move runs.",
+  }),
 });
 
 const ProposalOrderConflict = Schema.Struct({
@@ -274,6 +294,7 @@ const ProposalOrderDecision = Schema.Union([
     status: Schema.Literal("ordered"),
     timing: ProposalOrderTiming,
     effectiveDate: Schema.optional(Schema.NonEmptyString),
+    rosterPlaces: ProposalOrderRosterPlaces,
     steps: Schema.Array(ProposalOrderStep),
   }),
   Schema.Struct({
