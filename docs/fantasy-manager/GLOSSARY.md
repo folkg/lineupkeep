@@ -161,6 +161,10 @@ _Avoid_: Estimated usage, transaction count as usage, zero when the provider pub
 The picks a league's draft actually made: round, pick number, the team that made the pick, and the player taken. It is not current or future pick ownership, and a traded pick appears on the trade transaction that moved it rather than in this history.
 _Avoid_: Draft board, pick ownership when the read is history
 
+**Draft provenance**:
+One player's place in the league's completed draft: `draftRound`, `overallPick`, the drafting team (`draftedBy`), and `draftSeason`. `undrafted` means the league drafted and did not take him; `not_published` means the league published no draft history to read. It is a fact, not a keeper price: the league's keeper arithmetic is the owner's house rule, so the client applies its own formula.
+_Avoid_: Keeper cost, draft value, undrafted as "no data"
+
 **Traded draft pick**:
 A draft pick moved in a trade, carrying its round and the teams that sent it, received it, and originally owned it. It is part of the trade transaction, not a proposal, and the provider publishes no draft year or overall pick number for it.
 _Avoid_: Pick ownership when referring to a traded pick

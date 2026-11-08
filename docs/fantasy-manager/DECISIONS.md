@@ -275,3 +275,26 @@ coming up.
    rows; an unknown abbreviation stays unresolved rather than matched by guesswork. A non-null
    opponent already establishes that the player's team plays, which is what work gating needs, and a
    skipped run must fail open because a wrong skip is worse than a wasted read.
+
+## Round 14 — Draft provenance is published; keeper price is not
+
+Status: implemented. Motivated by a keeper-cost question that cost 13 calls through a 190-pick draft
+history, and by the owner's ruling that a league's keeper arithmetic is a house rule.
+
+1. **Accepted: publish provenance, not a price.** Each player row that carries identity publishes
+   `draftRound`, `overallPick`, `draftedBy`, and `draftSeason`, or `undrafted` when the league's
+   completed draft did not take him, or `not_published` when no draft history could be read. The
+   client applies its own keeper formula; the server computes no keeper cost.
+2. **Accepted: the provider's `pick` is the overall pick.** A live 13-team, 20-round draft numbered
+   its rounds 1–13, 14–26, 27–39, so `overallPick` is that number and `draftRound` is its round.
+3. **Accepted: the drafting team carries its name.** A sealed team reference cannot be compared
+   across responses, so a bare reference could not answer "did I draft him". `draftedBy` carries the
+   private reference and the published team name, which costs one batched league-teams read.
+4. **Accepted: the draft season is the league season.** The provider's draft read publishes no
+   season; the linked team's season is the draft's season and is verified against the league read.
+5. **Accepted: one read per response, not one per player.** The draft history is read once and
+   indexed by player key for every row in the response. The coverage entry states the two reads and
+   their source, and the response pages when the larger rows no longer fit.
+6. **Accepted: `undrafted` and `not_published` are different answers.** A league that published no
+   picks, a provider that cannot read draft history, and a failed read are all `not_published` with
+   the reason in coverage; only a successful history without the player is `undrafted`.

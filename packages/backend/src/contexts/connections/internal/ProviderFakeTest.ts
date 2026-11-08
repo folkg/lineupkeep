@@ -134,6 +134,7 @@ type FakeProviderState = {
   readonly planRefusal: FakePlanRefusal | undefined;
   readonly providerCalls: number;
   readonly providerReads: number;
+  readonly readCounts: Readonly<Record<string, number>>;
 };
 
 export type FakeProviderWorldShape = {
@@ -189,6 +190,7 @@ export type FakeProviderWorldShape = {
   readonly nativeCallCount: Effect.Effect<number>;
   readonly providerCalls: Effect.Effect<number>;
   readonly providerReads: Effect.Effect<number>;
+  readonly readCount: (operation: ProviderOperation) => Effect.Effect<number>;
   readonly setExplicitAction: (action: FakeWriteAction, detail?: string) => Effect.Effect<void>;
   readonly setExplicitAfter: (roster: ProviderRoster | undefined) => Effect.Effect<void>;
   readonly explicitRequests: Effect.Effect<ReadonlyArray<ReadonlyArray<ProviderLineupAssignment>>>;
@@ -292,6 +294,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         planRefusal: undefined,
         providerCalls: 0,
         providerReads: 0,
+        readCounts: {},
       });
       const modify = (
         update: (current: FakeProviderState) => FakeProviderState,
@@ -368,6 +371,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         nativeCallCount: Effect.map(Ref.get(state), (current) => current.nativeCalls),
         providerCalls: Effect.map(Ref.get(state), (current) => current.providerCalls),
         providerReads: Effect.map(Ref.get(state), (current) => current.providerReads),
+        readCount: (operation) =>
+          Effect.map(Ref.get(state), (current) => current.readCounts[operation] ?? 0),
         setExplicitAction: (explicitAction, explicitDetail) =>
           modify((current) => ({ ...current, explicitAction, explicitDetail })),
         setExplicitAfter: (explicitAfter) => modify((current) => ({ ...current, explicitAfter })),
@@ -429,6 +434,12 @@ const providerFake = Effect.gen(function* () {
         ...current,
         providerCalls: current.providerCalls + 1,
         providerReads: current.providerReads + (readOperations.has(operation) ? 1 : 0),
+        readCounts: readOperations.has(operation)
+          ? {
+              ...current.readCounts,
+              [operation]: (current.readCounts[operation] ?? 0) + 1,
+            }
+          : current.readCounts,
       }));
       const current = yield* Ref.get(world.state);
       if (current.sessionRejected || current.rejectedSessions.has(Redacted.value(input.session))) {

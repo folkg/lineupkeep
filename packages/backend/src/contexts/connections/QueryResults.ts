@@ -743,6 +743,27 @@ const PlayerWeek = Schema.Struct({
 );
 export type PlayerWeek = typeof PlayerWeek.Type;
 
+export const PlayerDraft = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("drafted"),
+    draftRound: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    overallPick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    draftedBy: Schema.Struct({
+      team: CounterpartyRef,
+      name: Schema.optional(Schema.NonEmptyString),
+    }),
+    draftSeason: Schema.Int.check(Schema.isGreaterThan(1900)),
+  }),
+  Schema.Struct({ status: Schema.Literal("undrafted") }),
+  Schema.Struct({ status: Schema.Literal("not_published") }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "`undrafted` means the league drafted and passed; `not_published` means no draft history was readable.",
+  }),
+);
+export type PlayerDraft = typeof PlayerDraft.Type;
+
 export const RosterPlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
@@ -935,6 +956,7 @@ const SchedulePlayerGamesRemaining = Schema.Union([
 const SearchPlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
+  draft: PlayerDraft,
   primaryPosition: Schema.NonEmptyString,
   displayPosition: Schema.NonEmptyString,
   proTeam: Schema.NullOr(Schema.NonEmptyString).pipe(
@@ -1192,6 +1214,7 @@ const PlayerIdentity = Schema.Struct({
   name: Schema.NonEmptyString,
   primaryPosition: Schema.optional(Schema.NonEmptyString),
   displayPosition: Schema.NonEmptyString,
+  draft: PlayerDraft,
 });
 
 const PlayerEligibility = Schema.Struct({
@@ -1823,6 +1846,7 @@ const SummarySchedule = Schema.Union([
 const SummaryRosterPlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
+  draft: PlayerDraft,
   slot: RosterSlot,
   primaryPosition: Schema.NonEmptyString,
   eligiblePositions: Schema.Array(Schema.NonEmptyString).pipe(

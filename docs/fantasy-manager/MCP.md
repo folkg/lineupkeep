@@ -21,11 +21,11 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 | `get_calendar`        | Valid current/historical periods and relevant fantasy-day/lock context; no guessed week equivalence                                                                                   |
 | `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages            |
 | `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation on every entry; full detail carries the owner note |
-| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts, and optional professional games remaining                                                 |
-| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability and the week's projection where the provider publishes one                        |
+| `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts, draft provenance, and optional professional games remaining                               |
+| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability, draft provenance, and the week's projection where published                      |
 | `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                            |
 | `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution              |
-| `get_team_summary`    | One bounded per-team snapshot: league, standing and record, standings, current matchup, and compact roster                                                                            |
+| `get_team_summary`    | One bounded per-team snapshot: league, standing and record, standings, current matchup, and a compact roster carrying draft provenance                                                |
 | `set_lineup`          | The sole roster mutation operation; creates durable team runs and returns verified or pending outcomes                                                                                |
 | `set_team_automation` | Enable, disable, pause for the rest of the fantasy day, or resume owned team automation; reports resulting state                                                                      |
 | `get_lineup_runs`     | Owned run status, safe concise explanations, observed changes, and unresolved conditions                                                                                              |
@@ -378,6 +378,22 @@ the group does not pretend to know who owns an upcoming pick. A traded pick appe
 pick history. Team names come from one batched league-teams read and are omitted when that
 read fails while the picks remain. The group pages picks inside the result budget, and the section's
 detail note repeats that this is completed draft history rather than pick ownership.
+
+Every player row that carries identity also carries `draft`: `drafted` with `draftRound`,
+`overallPick`, `draftedBy`, and `draftSeason`; `undrafted` when the league's completed draft did not
+take him; or `not_published` when the league published no draft history that could be read. It
+appears on `get_team_summary`'s roster rows, inside `get_players` `identity`, and on every
+`search_players` row, so a keeper decision reads one response instead of paging the draft history.
+The provider's `pick` number is the overall number, not a within-round number: a live 13-team read
+numbered its rounds 1–13, 14–26, 27–39 across a 20-round, 260-pick draft. `draftSeason` is the
+league's season, because the provider's draft read publishes no season of its own. A sealed team
+reference cannot be compared across responses, so `draftedBy` carries both the private reference and
+the published team name; the name is absent only when the league-teams read that supplies it fails.
+The draft history is read once per response, never once per player; the league-teams read is batched
+beside it, and the coverage entry states both. On that live league the draft read took about 1.2–1.3
+s and the team names 0.2–0.6 s, and a drafted row grew by about 210 bytes (against 22 bytes for
+`undrafted`). Keeper cost is not computed: a league's keeper arithmetic is a house rule, so the
+client applies its own formula to these facts.
 
 `get_league`'s `overview` carries `transactionRules`, the league's transaction rules in our
 vocabulary rather than the provider's field names. It groups the waiver rules (type, rule, and FAAB

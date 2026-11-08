@@ -55,6 +55,7 @@ import type {
   ListTeamsInput,
   MatchupsData,
   PlayersData,
+  PlayerDraft,
   PlayerGroup,
   RosterData,
   RosterPlayer as RosterPlayerView,
@@ -434,6 +435,109 @@ export const FantasyQueriesLive = Layer.effect(
           }
         }
         return { _tag: "unknown" as const };
+      });
+
+    const draftProvenance = (
+      context: TeamContext,
+      fetchedAt: DateTime.Utc,
+      playerKeys: ReadonlyArray<string>,
+      resource: string,
+    ): Effect.Effect<DraftProvenanceRead, QueryPersistenceFailed> =>
+      Effect.gen(function* () {
+        if (playerKeys.length === 0) {
+          return { lookup: () => notPublishedDraft };
+        }
+        const outcome = yield* readOutcome(
+          context,
+          "draft_results",
+          context.provider.readDraftResults({
+            ...providerIdentity(context),
+            providerLeagueKey: context.owned.team.providerLeagueKey,
+          }),
+        );
+        if (outcome._tag === "unsupported") {
+          return {
+            lookup: () => notPublishedDraft,
+            coverage: unsupportedCoverage(resource, "draft_results", fetchedAt, outcome.detail),
+          };
+        }
+        if (outcome._tag === "failed") {
+          return {
+            lookup: () => notPublishedDraft,
+            coverage: degradedCoverage(
+              resource,
+              "draft_results",
+              fetchedAt,
+              outcome.failure.message,
+            ),
+            failures: [outcome.failure],
+          };
+        }
+        if (outcome.value.length === 0) {
+          return {
+            lookup: () => notPublishedDraft,
+            coverage: unsupportedCoverage(
+              resource,
+              "draft_results",
+              fetchedAt,
+              "Your league published no draft picks, so no player's draft provenance is known.",
+            ),
+          };
+        }
+        const teamsOutcome = yield* readOutcome(
+          context,
+          "league_teams",
+          context.provider.readLeagueTeams({
+            ...providerIdentity(context),
+            providerLeagueKey: context.owned.team.providerLeagueKey,
+          }),
+        );
+        const teamNameByKey = new Map(
+          teamsOutcome._tag === "ok"
+            ? teamsOutcome.value.map((team) => [team.providerTeamKey, team.name] as const)
+            : [],
+        );
+        const teamKeys = [...new Set(outcome.value.map((pick) => pick.providerTeamKey))];
+        const teamRefs = yield* tokens.sealCounterpartyRefs({
+          userId: context.userId,
+          leagueKey: context.owned.team.providerLeagueKey,
+          teamKeys,
+        });
+        const teamRefByKey = new Map(
+          teamKeys.map((key, index) => [key, EffectArray.getUnsafe(teamRefs, index)] as const),
+        );
+        const picks = new Map(outcome.value.map((pick) => [pick.providerPlayerKey, pick] as const));
+        const draftSeason = context.owned.team.season;
+        return {
+          lookup: (providerPlayerKey: string) => {
+            const pick = picks.get(providerPlayerKey);
+            if (pick === undefined) {
+              return { status: "undrafted" as const };
+            }
+            const team = teamRefByKey.get(pick.providerTeamKey);
+            if (team === undefined) {
+              throw new Error("Every draft pick team key must seal a counterparty reference.");
+            }
+            const name = teamNameByKey.get(pick.providerTeamKey);
+            return {
+              status: "drafted" as const,
+              draftRound: pick.round,
+              overallPick: pick.pick,
+              draftedBy: { team, ...(name === undefined ? {} : { name }) },
+              draftSeason,
+            };
+          },
+          coverage: coverage(
+            resource,
+            "draft_results",
+            fetchedAt,
+            undefined,
+            teamsOutcome._tag === "ok"
+              ? "Draft provenance comes from one draft-history read and one league-teams read for the whole response, not one read per player."
+              : "Draft provenance comes from one draft-history read for the whole response, not one read per player; the league's team names could not be read.",
+          ),
+          ...(teamsOutcome._tag === "failed" ? { failures: [teamsOutcome.failure] } : {}),
+        };
       });
 
     const transactionIdentityIndex = (
@@ -1355,6 +1459,15 @@ export const FantasyQueriesLive = Layer.effect(
         ? filtered
         : filtered.toSorted((left, right) => comparePlayers(left, right, sort));
       const failures: QueryFailure[] = [];
+      const draft = yield* draftProvenance(
+        context,
+        fetchedAt,
+        ordered.map((player) => player.providerPlayerKey),
+        "players",
+      );
+      for (const failure of draft.failures ?? []) {
+        failures.push(failure);
+      }
       const currentWeek =
         league?.rosterCoverage === "week" ? currentPeriod(league.periodWindow) : undefined;
       const weekFacts = new Map<string, ProviderPlayerWeekFact>();
@@ -1405,6 +1518,7 @@ export const FantasyQueriesLive = Layer.effect(
         return {
           player: playerRef,
           name: player.name,
+          draft: draft.lookup(player.providerPlayerKey),
           primaryPosition: player.primaryPosition,
           displayPosition: player.displayPosition,
           proTeam: player.proTeam ?? null,
@@ -1458,6 +1572,7 @@ export const FantasyQueriesLive = Layer.effect(
         team,
         coverage: [
           coverage("players", "player_search", fetchedAt),
+          ...(draft.coverage === undefined ? [] : [draft.coverage]),
           ...(poolGames?.status === "available"
             ? [
                 coverage(
@@ -1542,6 +1657,18 @@ export const FantasyQueriesLive = Layer.effect(
           : [],
       );
       const coverageEntries: QueryCoverage[] = [];
+      const draft = yield* draftProvenance(
+        context,
+        fetchedAt,
+        groups.includes("identity") ? valid.map((row) => row.providerPlayerKey) : [],
+        "players",
+      );
+      if (draft.coverage !== undefined) {
+        coverageEntries.push(draft.coverage);
+      }
+      for (const failure of draft.failures ?? []) {
+        failures.push(failure);
+      }
       let league: ProviderLeagueSettings | undefined;
       if (
         groups.includes("scoring_context") ||
@@ -1877,7 +2004,9 @@ export const FantasyQueriesLive = Layer.effect(
             }
             return {
               player: row.ref,
-              ...(identity === undefined ? {} : { identity }),
+              ...(identity === undefined
+                ? {}
+                : { identity: { ...identity, draft: draft.lookup(row.providerPlayerKey) } }),
               ...(eligibility === undefined ? {} : { eligibility }),
               ...(availability === undefined ? {} : { availability }),
               ...(actualStats === undefined ? {} : { actualStats }),
@@ -2625,6 +2754,18 @@ export const FantasyQueriesLive = Layer.effect(
         }
       }
       const rosterPlayers = rosterOutcome?._tag === "ok" ? rosterOutcome.value.players : [];
+      const draft = yield* draftProvenance(
+        context,
+        fetchedAt,
+        rosterPlayers.map((player) => player.providerPlayerKey),
+        "roster",
+      );
+      if (draft.coverage !== undefined) {
+        coverageEntries.push(draft.coverage);
+      }
+      for (const failure of draft.failures ?? []) {
+        failures.push(failure);
+      }
       const rosterRefs = yield* tokens.sealPlayerRefs({
         userId,
         leagueKey: context.owned.team.providerLeagueKey,
@@ -2673,6 +2814,7 @@ export const FantasyQueriesLive = Layer.effect(
         rosterRowByKey.set(player.providerPlayerKey, {
           player: ref,
           name: player.name,
+          draft: draft.lookup(player.providerPlayerKey),
           slot: player.slot,
           primaryPosition: player.primaryPosition,
           eligiblePositions: player.eligiblePositions,
@@ -4707,6 +4849,14 @@ type PlayerIdentityView = {
   readonly displayPosition: string;
   readonly primaryPosition?: string;
 };
+
+type DraftProvenanceRead = {
+  readonly lookup: (providerPlayerKey: string) => PlayerDraft;
+  readonly coverage?: QueryCoverage;
+  readonly failures?: ReadonlyArray<QueryFailure>;
+};
+
+const notPublishedDraft: PlayerDraft = { status: "not_published" };
 
 type TransactionIdentity = {
   readonly identity: PlayerIdentityView;

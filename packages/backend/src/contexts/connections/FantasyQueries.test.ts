@@ -50,7 +50,12 @@ import type {
 } from "./Provider.ts";
 import { ProviderPeriodMismatch, ProviderResponseInvalid } from "./Provider.ts";
 import { ProviderRegistry } from "./ProviderRegistry.ts";
-import { RosterResult, TeamSummaryData, TeamSummaryResult } from "./QueryResults.ts";
+import {
+  type PlayerDraft,
+  RosterResult,
+  TeamSummaryData,
+  TeamSummaryResult,
+} from "./QueryResults.ts";
 import { StatRef } from "./QueryValues.ts";
 import { QueryTeamNotFound } from "./QueryValues.ts";
 
@@ -1300,6 +1305,7 @@ it.effect("resolves a dropped player's identity from transaction history", () =>
     assert.deepStrictEqual(Array.getUnsafe(hydrated.players, 0).identity, {
       name: "Dropped Veteran",
       displayPosition: "WR",
+      draft: { status: "not_published" },
     });
     assert.deepStrictEqual(hydrated.failures, []);
     assert.isTrue(
@@ -1835,7 +1841,7 @@ it.effect("counts a pool player's games from its professional team key without a
       return;
     }
     assert.isUndefined(plain.gamesRemaining);
-    assert.strictEqual((yield* fake.providerReads) - before, 2);
+    assert.strictEqual((yield* fake.providerReads) - before, 3);
 
     const search = yield* queries.searchPlayers(owner, { team: teamId, includeGames: true });
     assert.strictEqual(search.status, "ok");
@@ -2731,11 +2737,240 @@ it.effect("returns draft history with round, pick, team, and player for the leag
     if (hydrated.status !== "ok") {
       return;
     }
-    assert.deepStrictEqual(Array.getUnsafe(hydrated.players, 0).identity, {
-      name: "Synthetic 0",
-      displayPosition: "QB",
-      primaryPosition: "QB",
+    const draftedIdentity = Array.getUnsafe(hydrated.players, 0).identity;
+    assert.strictEqual(draftedIdentity?.name, "Synthetic 0");
+    assert.strictEqual(draftedIdentity?.draft.status, "drafted");
+    if (draftedIdentity?.draft.status === "drafted") {
+      assert.strictEqual(draftedIdentity.draft.draftRound, 1);
+      assert.strictEqual(draftedIdentity.draft.overallPick, 1);
+      assert.strictEqual(draftedIdentity.draft.draftSeason, 2026);
+      assert.match(draftedIdentity.draft.draftedBy.team, /^r1\./u);
+    }
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect(
+  "publishes each drafted player's round, overall pick, team, and season wherever his identity appears",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+      const teamId = Array.getUnsafe(seeded, 0).id;
+      yield* fake.setDraftResults([
+        {
+          round: 3,
+          pick: 32,
+          providerTeamKey: "461.l.1000.t.2",
+          providerPlayerKey: "461.p.10002",
+          name: "Synthetic 1",
+        },
+      ]);
+      yield* fake.setSearchPlayers([
+        searchFixture({
+          providerPlayerKey: "461.p.10002",
+          name: "Synthetic 1",
+          availability: "rostered",
+          actualRank: 3,
+          overallRank: 3,
+          statValue: null,
+          percentOwned: 50,
+          percentOwnedDelta: 1,
+          percentStarted: 40,
+          percentStartedChange: 1,
+        }),
+        searchFixture({
+          providerPlayerKey: "461.p.20001",
+          name: "Undrafted",
+          availability: "free_agent",
+          actualRank: 9,
+          overallRank: 9,
+          statValue: null,
+          percentOwned: 1,
+          percentOwnedDelta: 0,
+          percentStarted: 0,
+          percentStartedChange: 0,
+        }),
+      ]);
+
+      yield* fake.setLeagueTeams([
+        {
+          providerTeamKey: "461.l.1000.t.1",
+          providerLeagueKey: "461.l.1000",
+          name: "Alpha",
+          acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+        },
+        {
+          providerTeamKey: "461.l.1000.t.2",
+          providerLeagueKey: "461.l.1000",
+          name: "Beta",
+          acquisitionUsage: { seasonMoves: undefined, weeklyAdds: undefined },
+        },
+      ]);
+
+      const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
+      assert.strictEqual(summary.status, "ok");
+      if (summary.status !== "ok") {
+        return;
+      }
+      const rosterRow = summary.roster?.find((row) => row.name === "Synthetic 1");
+      assertDrafted(rosterRow?.draft);
+
+      assert.isDefined(rosterRow);
+      const hydrated = yield* queries.getPlayers(owner, {
+        team: teamId,
+        players: [rosterRow.player],
+        groups: ["identity"],
+      });
+      assert.strictEqual(hydrated.status, "ok");
+      if (hydrated.status !== "ok") {
+        return;
+      }
+      assertDrafted(Array.getUnsafe(hydrated.players, 0).identity?.draft);
+
+      const search = yield* queries.searchPlayers(owner, { team: teamId });
+      assert.strictEqual(search.status, "ok");
+      if (search.status !== "ok") {
+        return;
+      }
+      assertDrafted(search.players.find((row) => row.name === "Synthetic 1")?.draft);
+      assert.deepStrictEqual(search.players.find((row) => row.name === "Undrafted")?.draft, {
+        status: "undrafted",
+      });
+    }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect(
+  "states that a league published no draft picks instead of calling every player undrafted",
+  () =>
+    Effect.gen(function* () {
+      const queries = yield* FantasyQueries;
+      const fake = yield* FakeProviderWorld;
+      const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+
+      const summary = yield* queries.getTeamSummary(owner, {
+        team: Array.getUnsafe(seeded, 0).id,
+        groups: ["roster"],
+      });
+      assert.strictEqual(summary.status, "ok");
+      if (summary.status !== "ok") {
+        return;
+      }
+      assert.isTrue(summary.roster?.every((row) => row.draft.status === "not_published"));
+      const coverage = summary.coverage.find(
+        (entry) => entry.resource === "roster" && entry.source === "draft_results",
+      );
+      assert.strictEqual(coverage?.status, "unsupported");
+      assert.include(coverage?.detail ?? "", "published no draft picks");
+    }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("states that draft history was unreadable instead of calling players undrafted", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+    yield* fake.unsupportedOperations(["read_draft_results"]);
+
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["roster"],
     });
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.isTrue(summary.roster?.every((row) => row.draft.status === "not_published"));
+    const coverage = summary.coverage.find(
+      (entry) => entry.resource === "roster" && entry.source === "draft_results",
+    );
+    assert.strictEqual(coverage?.status, "unsupported");
+    assert.include(coverage?.detail ?? "", "does not support read_draft_results");
+    assert.deepStrictEqual(summary.failures, []);
+
+    const roster = yield* queries.getRosters(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      period: { week: 3 },
+    });
+    assert.strictEqual(roster.status, "ok");
+    if (roster.status !== "ok" || roster.scope !== "team") {
+      return;
+    }
+    const players = yield* queries.getPlayers(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      players: [Array.getUnsafe(roster.players, 0).player],
+      groups: ["identity"],
+    });
+    assert.strictEqual(players.status, "ok");
+    if (players.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(Array.getUnsafe(players.players, 0).identity?.draft, {
+      status: "not_published",
+    });
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("reads one draft history for the whole response, not one read per player", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      roster: rosterFixture({ count: 5 }),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setDraftResults([
+      {
+        round: 1,
+        pick: 1,
+        providerTeamKey: "461.l.1000.t.1",
+        providerPlayerKey: "461.p.10001",
+      },
+    ]);
+
+    const beforeSummary = yield* fake.readCount("read_draft_results");
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.strictEqual(summary.roster?.length, 5);
+    assert.strictEqual((yield* fake.readCount("read_draft_results")) - beforeSummary, 1);
+    const rosterCoverage = summary.coverage.find(
+      (entry) => entry.resource === "roster" && entry.source === "draft_results",
+    );
+    assert.include(rosterCoverage?.detail ?? "", "not one read per player");
+
+    const refs = (summary.roster ?? []).map((row) => row.player);
+    const beforePlayers = yield* fake.readCount("read_draft_results");
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players: refs,
+      groups: ["identity"],
+    });
+    assert.strictEqual(hydrated.status, "ok");
+    assert.strictEqual((yield* fake.readCount("read_draft_results")) - beforePlayers, 1);
+
+    yield* fake.setSearchPlayers(
+      refs.map((_, index) =>
+        searchFixture({
+          providerPlayerKey: `461.p.${String(10001 + index)}`,
+          name: `Pool ${String(index)}`,
+          availability: "free_agent",
+          actualRank: index + 1,
+          overallRank: index + 1,
+          statValue: null,
+          percentOwned: 0,
+          percentOwnedDelta: 0,
+          percentStarted: 0,
+          percentStartedChange: 0,
+        }),
+      ),
+    );
+    const beforeSearch = yield* fake.readCount("read_draft_results");
+    const search = yield* queries.searchPlayers(owner, { team: teamId });
+    assert.strictEqual(search.status, "ok");
+    assert.strictEqual((yield* fake.readCount("read_draft_results")) - beforeSearch, 1);
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -6205,6 +6440,18 @@ const leagueFixture: ProviderLeagueSettings = {
   ],
   statModifiers: [{ statId: 4, points: "0.04" }],
 };
+
+function assertDrafted(draft: PlayerDraft | undefined): void {
+  assert.strictEqual(draft?.status, "drafted");
+  if (draft?.status !== "drafted") {
+    return;
+  }
+  assert.strictEqual(draft.draftRound, 3);
+  assert.strictEqual(draft.overallPick, 32);
+  assert.strictEqual(draft.draftSeason, 2026);
+  assert.match(draft.draftedBy.team, /^r1\./u);
+  assert.strictEqual(draft.draftedBy.name, "Beta");
+}
 
 function standingWithUsage(
   providerTeamKey: string,

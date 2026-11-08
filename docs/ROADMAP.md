@@ -474,17 +474,17 @@ Android. One capture session is worth more than one question, so the list below 
 of things we cannot read today and would act on. Every entry is a question to answer from observed
 traffic, never a promise; an entry that turns out not to exist is deleted rather than guessed at.
 
-| Question                                                                   | What it would change                                                           | Where it probably lives                           |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------- |
-| How does a pick enter a trade request?                                     | Draft pick trades become proposable, which is the seed of this section         | The trade submission call behind the website form |
-| What are the real bid amounts on resolved waiver claims, and who else bid? | Waiver advice can say what a claim needs rather than only what is allowed      | The claim history or transaction detail call      |
-| Why is a player unavailable, in words?                                     | The app explains a status instead of only showing it, which is what people ask | A player notes or injury feed                     |
-| What is a player's role this week: line, pair, depth?                      | Streaming and start/sit advice stops treating every player as interchangeable  | Depth chart or projection detail                  |
-| Who is on the trade block, and what is being shopped?                      | Trade proposals can start from real interest instead of a cold offer           | A trade block or team activity call               |
-| What does a keeper cost, and in what round?                                | Keeper decisions become possible in keeper leagues                             | Keeper or draft detail calls                      |
-| What is the draft order for next season?                                   | Pick trade value becomes computable, which is the point of trading picks       | Draft settings or draft results with order        |
-| When does each player lock, per game?                                      | A late scratch or a bench swap before a specific game start becomes correct    | Schedule detail or lineup lock metadata           |
-| How are live points attributed per player during a matchup?                | Activity can explain a swing in a matchup, not just a lineup change            | Matchup or live scoring detail                    |
+| Question                                                                                              | What it would change                                                           | Where it probably lives                           |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------- |
+| How does a pick enter a trade request?                                                                | Draft pick trades become proposable, which is the seed of this section         | The trade submission call behind the website form |
+| What are the real bid amounts on resolved waiver claims, and who else bid?                            | Waiver advice can say what a claim needs rather than only what is allowed      | The claim history or transaction detail call      |
+| Why is a player unavailable, in words?                                                                | The app explains a status instead of only showing it, which is what people ask | A player notes or injury feed                     |
+| What is a player's role this week: line, pair, depth?                                                 | Streaming and start/sit advice stops treating every player as interchangeable  | Depth chart or projection detail                  |
+| Who is on the trade block, and what is being shopped?                                                 | Trade proposals can start from real interest instead of a cold offer           | A trade block or team activity call               |
+| What does a keeper cost? The round, pick, team, and season are already published as draft provenance. | A keeper cost the provider states, instead of the owner's own formula          | A keeper or draft-detail call, if one exists      |
+| What is the draft order for next season?                                                              | Pick trade value becomes computable, which is the point of trading picks       | Draft settings or draft results with order        |
+| When does each player lock, per game?                                                                 | A late scratch or a bench swap before a specific game start becomes correct    | Schedule detail or lineup lock metadata           |
+| How are live points attributed per player during a matchup?                                           | Activity can explain a swing in a matchup, not just a lineup change            | Matchup or live scoring detail                    |
 
 Reads to try on our existing channel first, before assuming a capture is needed: the transaction detail
 shape behind a completed trade, the waiver claim history for a league, and any player endpoint that
