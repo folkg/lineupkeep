@@ -1,4 +1,3 @@
-import { Machine } from "@typeonce/effect-machine";
 import { and, asc, desc, eq, gte, isNull, lte, ne, or } from "drizzle-orm";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
 
@@ -25,7 +24,7 @@ import type {
 import { anyOf, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
 import { retentionPolicy } from "#retention/RetentionPolicy.ts";
 import { chunked } from "#utilities/collections.ts";
-import { snapshotOf } from "#utilities/machine.ts";
+import { plan, snapshotOf } from "#utilities/machine.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import { providerConnections, providerCredentials, providerTeams } from "./ConnectionTables.ts";
@@ -1426,17 +1425,14 @@ function planState(
     const snapshot = yield* snapshotOf(LineupRunWorkflow, state).pipe(
       Effect.mapError(mapPersistenceFailure),
     );
-    const planned = yield* Machine.plan(LineupRunWorkflow, snapshot, event).pipe(
-      Effect.mapError(mapPersistenceFailure),
-    );
-    const handled = planned.microsteps.some((step) => step.transitions.length > 0);
-    if (!handled) {
-      return yield* LineupPersistenceFailed.make({
-        cause: new Error(`Lineup run rejected ${event._tag} from ${state._tag}`),
-      });
-    }
-    return yield* Schema.decodeEffect(LineupRunState)(planned.next.state.value).pipe(
-      Effect.mapError(mapPersistenceFailure),
+    return yield* plan(LineupRunWorkflow, snapshot, event).pipe(
+      Effect.mapError((cause) =>
+        cause._tag === "TransitionRejected"
+          ? LineupPersistenceFailed.make({
+              cause: new Error(`Lineup run rejected ${event._tag} from ${state._tag}`),
+            })
+          : mapPersistenceFailure(cause),
+      ),
     );
   });
 }

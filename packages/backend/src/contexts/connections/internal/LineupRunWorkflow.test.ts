@@ -1,11 +1,12 @@
 import { assert, it } from "@effect/vitest";
-import { MachineTest } from "@typeonce/effect-machine/testing";
-import { Arbitrary, DateTime, Effect, Schema } from "effect";
+import { Arbitrary, DateTime, Effect, Schema, SchemaParser } from "effect";
 
 import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
 import { LineupId } from "#contexts/connections/LineupRun.ts";
+import { plan as planTransition, snapshotOf } from "#utilities/machine.ts";
+import * as MachineTest from "#utilities/machineTest.ts";
 
-import { LineupRunWorkflow } from "./LineupRunWorkflow.ts";
+import { LineupRunState, LineupRunWorkflow } from "./LineupRunWorkflow.ts";
 import type { LineupRunEvent } from "./LineupRunWorkflow.ts";
 
 const define = MachineTest.invariants(LineupRunWorkflow);
@@ -43,6 +44,25 @@ it.effect("explores every lineup run transition and branch", () =>
     assert.strictEqual(explored.completeness._tag, "Complete");
     assert.strictEqual(explored.transitionCoverage.definitions.missing, 0);
     assert.strictEqual(explored.transitionCoverage.branches.missing, 0);
+  }),
+);
+
+it.effect("resumes a retry wait stored before the machine changed library", () =>
+  Effect.gen(function* () {
+    const state = yield* SchemaParser.decodeEffect(Schema.toCodecJson(LineupRunState))(
+      storedRetryWait,
+    );
+    const snapshot = yield* snapshotOf(LineupRunWorkflow, state);
+    const next = yield* planTransition(LineupRunWorkflow, snapshot, retryClaimed);
+
+    assert.strictEqual(next._tag, "Reading");
+    if (next._tag !== "Reading") {
+      return;
+    }
+    assert.strictEqual(next.attempt, 3);
+    assert.deepStrictEqual(next.lease, retryLease);
+    assert.isTrue(DateTime.Equivalence(next.startedAt, retryClaimed.at));
+    assert.isTrue(DateTime.Equivalence(next.updatedAt, retryClaimed.at));
   }),
 );
 
@@ -267,6 +287,33 @@ const outcome = {
   editablePlayers: 1,
 };
 const verified = { _tag: "Verified" as const, at, outcome };
+const retryLease = {
+  token: Schema.decodeSync(LineupId)("018f79ea-7d86-7c18-9b4a-8b4d0c9164b3"),
+  generation: 2,
+};
+const retryClaimed = {
+  _tag: "RetryClaimed" as const,
+  at: DateTime.makeUnsafe("2026-10-25T12:01:00Z"),
+  lease: retryLease,
+  attempt: 3,
+};
+const storedRetryWait = {
+  _tag: "RetryWait",
+  team: "018f79ea-7d86-7c18-9b4a-8b4d0c9164a2",
+  target: { coverage: "week", week: 3 },
+  trigger: "manual",
+  implementation: "provider_native",
+  implementationVersion: "provider-native/1",
+  updatedAt: "2026-10-25T12:00:00.000Z",
+  attempt: 2,
+  reason: "provider_unavailable",
+  detail: "The provider was unavailable.",
+  retryAt: "2026-10-25T12:00:30.000Z",
+  writeIntent: {
+    id: "018f79ea-7d86-7c18-9b4a-8b4d0c9164b2",
+    attempt: 1,
+  },
+};
 const retry = {
   _tag: "RetryScheduled" as const,
   at,

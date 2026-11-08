@@ -1,4 +1,3 @@
-import { Machine } from "@typeonce/effect-machine";
 import { Schema, SchemaTransformation } from "effect";
 
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
@@ -15,6 +14,7 @@ import {
 } from "#contexts/connections/LineupRun.ts";
 import { ProviderStartingLineup } from "#contexts/connections/Provider.ts";
 import { RosterSlot } from "#contexts/connections/QueryValues.ts";
+import { defineMachine, final } from "#utilities/machine.ts";
 
 export const LineupLeaseRef = Schema.Struct({
   token: LineupId,
@@ -157,23 +157,21 @@ export const LineupRunState = Schema.TaggedUnion({
 });
 export type LineupRunState = typeof LineupRunState.Type;
 
-const LineupRunStates = Machine.state({
-  states: {
-    Queued: LineupRunState.cases.Queued,
-    Reading: LineupRunState.cases.Reading,
-    Planning: LineupRunState.cases.Planning,
-    Validating: LineupRunState.cases.Validating,
-    Applying: LineupRunState.cases.Applying,
-    Verifying: LineupRunState.cases.Verifying,
-    Completed: { type: "final", schema: LineupRunState.cases.Completed },
-    Skipped: { type: "final", schema: LineupRunState.cases.Skipped },
-    Blocked: { type: "final", schema: LineupRunState.cases.Blocked },
-    RetryWait: LineupRunState.cases.RetryWait,
-    Failed: { type: "final", schema: LineupRunState.cases.Failed },
-    Uncertain: LineupRunState.cases.Uncertain,
-    Superseded: { type: "final", schema: LineupRunState.cases.Superseded },
-  },
-});
+const LineupRunStates = {
+  Queued: LineupRunState.cases.Queued,
+  Reading: LineupRunState.cases.Reading,
+  Planning: LineupRunState.cases.Planning,
+  Validating: LineupRunState.cases.Validating,
+  Applying: LineupRunState.cases.Applying,
+  Verifying: LineupRunState.cases.Verifying,
+  Completed: final(LineupRunState.cases.Completed),
+  Skipped: final(LineupRunState.cases.Skipped),
+  Blocked: final(LineupRunState.cases.Blocked),
+  RetryWait: LineupRunState.cases.RetryWait,
+  Failed: final(LineupRunState.cases.Failed),
+  Uncertain: LineupRunState.cases.Uncertain,
+  Superseded: final(LineupRunState.cases.Superseded),
+};
 
 const LineupRunEvents = Schema.TaggedUnion({
   Claimed: { at: Schema.DateTimeUtc, ...LeaseContent },
@@ -232,11 +230,9 @@ const retryWait = {
   }),
 };
 
-export const LineupRunWorkflow = Machine.make({
+export const LineupRunWorkflow = defineMachine<LineupRunState, LineupRunEvent>({
   root: LineupRunStates,
-  input: LineupRunState.cases.Queued,
-  events: Machine.eventsFromSchemas(LineupRunEvents),
-}).handle({
+  events: LineupRunEvents,
   initial: { target: "Queued", data: ({ input }) => input },
   states: {
     Queued: {
