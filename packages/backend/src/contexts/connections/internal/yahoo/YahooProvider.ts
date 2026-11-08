@@ -872,24 +872,30 @@ export const yahooProvider = Effect.gen(function* () {
     const cookie = yield* sessionCookie(input, "read_player_weeks");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_weeks");
     const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys);
-    const payload = yield* readJson(internet, {
-      operation: "read_player_weeks",
-      origin: readOrigin,
-      path:
-        `/fantasy/v2/league/${leagueKey}/players;player_keys=${playerKeys.join(",")}` +
-        ";out=ranks,opponent;ranks=projected_week",
-      query: { format: "json" },
-      cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(PlayerDetailsPayload, payload, "read_player_weeks");
-    if (decoded.league.league_key !== leagueKey) {
-      return yield* responseMismatch({
+    const weeks: Array<ProviderPlayerWeekFact> = [];
+    for (let index = 0; index < playerKeys.length; index += maximumSelectedPlayers) {
+      const chunk = playerKeys.slice(index, index + maximumSelectedPlayers);
+      const payload = yield* readJson(internet, {
         operation: "read_player_weeks",
-        field: "league.league_key",
+        origin: readOrigin,
+        path:
+          `/fantasy/v2/league/${leagueKey}/players;player_keys=${chunk.join(",")}` +
+          ";out=ranks,opponent;ranks=projected_week",
+        query: { format: "json" },
+        cookie,
+        normalize: true,
       });
+      const decoded = yield* decodePayload(PlayerDetailsPayload, payload, "read_player_weeks");
+      if (decoded.league.league_key !== leagueKey) {
+        return yield* responseMismatch({
+          operation: "read_player_weeks",
+          field: "league.league_key",
+        });
+      }
+      for (const player of decoded.league.players) {
+        weeks.push(playerWeekOf(player, input.week.week));
+      }
     }
-    const weeks = decoded.league.players.map((player) => playerWeekOf(player, input.week.week));
     yield* Effect.annotateCurrentSpan("provider.player_week_count", weeks.length);
     return weeks;
   });

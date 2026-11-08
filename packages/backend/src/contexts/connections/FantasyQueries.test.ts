@@ -129,8 +129,8 @@ it.effect("resolves calendar periods from league settings without guessing locks
       end: 17,
     });
     assert.isUndefined(calendar.games);
-    assert.strictEqual(calendar.lockContext?.status, "unverified");
-    assert.strictEqual(calendar.historical.status, "unsupported");
+    assert.notInclude(encodedKeys(calendar), "lockContext");
+    assert.notInclude(encodedKeys(calendar), "historical");
     assert.deepStrictEqual(calendar.dates, { start: "2026-09-03", end: "2026-12-28" });
 
     const other = yield* Effect.flip(
@@ -784,7 +784,7 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
     assert.strictEqual(compact.scope, "team");
     assert.strictEqual(compact.players.length, 2);
     assert.strictEqual(compact.period?.week, 3);
-    assert.strictEqual(compact.playerSchedule.status, "unsupported");
+    assert.notInclude(encodedKeys(compact), "playerSchedule");
     const week = {
       period: { week: 3 },
       playsThisWeek: true,
@@ -826,10 +826,25 @@ it.effect("reads every team's roster in the linked league with team identity on 
       team("461.l.1000.t.1", "Alpha"),
       team("461.l.1000.t.3", "Gamma"),
     ]);
+    const betaRoster = leagueRosterFixture("461.l.1000.t.2", "Beta", 3, 20001);
     yield* fake.setLeagueRosters([
       leagueRosterFixture("461.l.1000.t.1", "Alpha", 2, 10001),
-      leagueRosterFixture("461.l.1000.t.2", "Beta", 3, 20001),
+      {
+        ...betaRoster,
+        players: betaRoster.players.map((player, index) =>
+          index === 0 ? { ...player, scheduled: false, opponent: undefined, byeWeek: 3 } : player,
+        ),
+      },
       leagueRosterFixture("461.l.1000.t.3", "Gamma", 1, 30001),
+    ]);
+    yield* fake.setPlayerWeeks([
+      {
+        providerPlayerKey: "461.p.20001",
+        week: 3,
+        plays: false,
+        opponent: undefined,
+        projectedRank: 4,
+      },
     ]);
 
     const before = yield* fake.providerReads;
@@ -838,7 +853,7 @@ it.effect("reads every team's roster in the linked league with team identity on 
       scope: "league",
     });
 
-    assert.strictEqual((yield* fake.providerReads) - before, 1);
+    assert.strictEqual((yield* fake.providerReads) - before, 2);
     assert.strictEqual(read.status, "ok");
     if (read.status !== "ok" || read.scope !== "league") {
       return;
@@ -878,6 +893,18 @@ it.effect("reads every team's roster in the linked league with team identity on 
         .join(","),
       "Beta Player 0,Beta Player 1,Beta Player 2",
     );
+    assert.deepStrictEqual(Array.getUnsafe(Array.getUnsafe(read.teams, 1).players, 0).week, {
+      period: { week: 3 },
+      playsThisWeek: false,
+      opponent: null,
+      home: null,
+      byeWeek: 3,
+      projectedRank: 4,
+    });
+    assert.strictEqual(
+      Array.getUnsafe(Array.getUnsafe(read.teams, 0).players, 0).week?.projectedRank,
+      null,
+    );
     assert.strictEqual(
       Array.getUnsafe(Array.getUnsafe(read.teams, 1).players, 1).injury.reported,
       true,
@@ -902,7 +929,7 @@ it.effect("pages league rosters by whole teams with a cursor", () =>
     const before = yield* fake.providerReads;
     const first = yield* queries.getRosters(owner, { team: teamId, scope: "league", limit: 2 });
 
-    assert.strictEqual((yield* fake.providerReads) - before, 1);
+    assert.strictEqual((yield* fake.providerReads) - before, 2);
     assert.strictEqual(first.status, "ok");
     if (first.status !== "ok" || first.scope !== "league") {
       return;
@@ -934,7 +961,7 @@ it.effect("pages league rosters by whole teams with a cursor", () =>
       limit: 2,
       cursor: first.page.next,
     });
-    assert.strictEqual((yield* fake.providerReads) - moreReads, 1);
+    assert.strictEqual((yield* fake.providerReads) - moreReads, 2);
     assert.strictEqual(second.status, "ok");
     if (second.status !== "ok" || second.scope !== "league") {
       return;
@@ -3277,7 +3304,7 @@ it.effect("degrades one team summary section without failing the snapshot", () =
     if (summary.remainingPlayerGames?.status === "unsupported") {
       assert.include(summary.remainingPlayerGames.detail, "bye week");
     }
-    assert.strictEqual(summary.probableStarters?.status, "unsupported");
+    assert.notInclude(encodedKeys(summary), "probableStarters");
     assert.deepStrictEqual(summary.ownerNote, { status: "not_set" });
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
@@ -5183,7 +5210,7 @@ it.effect("fits a multi-section team summary inside the result budget", () =>
     assert.isDefined(summary.standing);
     assert.isDefined(summary.record);
     assert.isDefined(summary.matchup);
-    assert.isDefined(summary.probableStarters);
+    assert.notInclude(encodedKeys(summary), "probableStarters");
     assert.isUndefined(summary.categoryTotals);
     assert.isUndefined(summary.categoryPoints);
     assert.isFalse(summary.page.complete);
@@ -5435,7 +5462,7 @@ it.effect("omits the roster page from a summary that did not request the roster 
     }
     assert.isUndefined(summary.roster);
     assert.deepStrictEqual(summary.page, { returned: 0, complete: true, remaining: 0 });
-    assert.isUndefined(summary.probableStarters);
+    assert.notInclude(encodedKeys(summary), "probableStarters");
     const encodedSummary = yield* Schema.encodeEffect(Schema.toCodecJson(TeamSummaryData))(summary);
     assert.notInclude(encodedKeys(encodedSummary), "roster");
 

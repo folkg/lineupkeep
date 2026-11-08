@@ -106,16 +106,6 @@ export const yahooCapabilities: ProviderCapabilities = {
   transactionRequest: { maximumAdds: 1, maximumDrops: 1 },
   limitations: [
     {
-      subject: "player_schedule",
-      detail:
-        "Yahoo publishes one opponent per player through its roster read: the opponent for the league's declared coverage (a date, or a whole scoring week when the league's cadence is weekly), a leading @ meaning the game is away, and no opponent when the player's team does not play. It publishes no start time, no season-long schedule, and no per-player games-remaining count, so only the current scoring period is covered. A roster entry also carries the professional-team abbreviation and, where the league publishes one, the bye week; remaining player-games are available per fantasy team from get_matchups.",
-    },
-    {
-      subject: "probable_starters",
-      detail:
-        "Yahoo publishes a real-world starting status for goalies and pitchers only, and only once that game's starter is announced. Every other position carries no starting signal and stays unconfirmed, so participation for them is reported only through your league's injury status.",
-    },
-    {
       subject: "team_remaining_games",
       detail:
         "Yahoo publishes no remaining-game count for football: a player plays at most one game per scoring week, and each roster entry carries the bye week instead.",
@@ -124,15 +114,6 @@ export const yahooCapabilities: ProviderCapabilities = {
       subject: "per_team_games_played",
       detail:
         "Yahoo publishes no per-team games-played count: its teams games-played output returns an empty per-team node, and its roster, standings, and players reads refuse that output, so only the league's games-played cap is known.",
-    },
-    {
-      subject: "lock_timing",
-      detail:
-        "Yahoo's exact fantasy-day rollover and per-player lock timing are not verified. This reports the league's declared period range only.",
-    },
-    {
-      subject: "historical_seasons",
-      detail: "Only the linked team's current season is validated for your league's site.",
     },
   ],
 };

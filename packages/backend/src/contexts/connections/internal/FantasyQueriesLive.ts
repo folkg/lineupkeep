@@ -612,15 +612,15 @@ export const FantasyQueriesLive = Layer.effect(
       const fetchedAt = yield* DateTime.now;
       const outcome = yield* readLeague(context);
       if (outcome._tag !== "ok") {
-        return calendarWithoutWeekWindow(context.provider, team, fetchedAt, outcome);
+        return calendarWithoutWeekWindow(team, fetchedAt, outcome);
       }
       const league = outcome.value;
       const window = league.periodWindow;
       if (window === undefined) {
-        return calendarWithoutWeekWindow(context.provider, team, fetchedAt, outcome);
+        return calendarWithoutWeekWindow(team, fetchedAt, outcome);
       }
       if (window.end < window.start) {
-        return calendarWithoutWeekWindow(context.provider, team, fetchedAt, {
+        return calendarWithoutWeekWindow(team, fetchedAt, {
           _tag: "failed",
           failure: {
             code: "provider_invalid_response",
@@ -663,15 +663,6 @@ export const FantasyQueriesLive = Layer.effect(
           ...(league.endDate === undefined ? {} : { end: league.endDate }),
         },
         ...(games === undefined ? {} : { games }),
-        lockContext: {
-          status: "unverified" as const,
-          ...(league.weeklyDeadline === undefined ? {} : { weeklyDeadline: league.weeklyDeadline }),
-          detail: limitation(context.provider, "lock_timing"),
-        },
-        historical: {
-          status: "unsupported" as const,
-          detail: limitation(context.provider, "historical_seasons"),
-        },
         coverage: [coverage("league", "league_settings", fetchedAt)],
         failures,
         budget: queryBudget,
@@ -999,6 +990,36 @@ export const FantasyQueriesLive = Layer.effect(
           ),
         });
         const owned = new Set(ownedKeys);
+        const batchCoverage = rosters[0]?.coverage;
+        if (batchCoverage === undefined) {
+          throw new Error("A league roster read returns at least one team roster.");
+        }
+        const projectedRanks = new Map<string, number | null>();
+        const weekFailures: QueryFailure[] = [];
+        if (
+          batchCoverage.type === "week" &&
+          context.provider.capabilities.projections.sports.includes(context.owned.team.sport)
+        ) {
+          const weekOutcome = yield* readOutcome(
+            context,
+            "player_weeks",
+            context.provider.readPlayerWeeks({
+              ...providerIdentity(context),
+              providerLeagueKey: leagueKey,
+              providerPlayerKeys: rosters.flatMap((roster) =>
+                roster.players.map((player) => player.providerPlayerKey),
+              ),
+              week: { week: batchCoverage.week },
+            }),
+          );
+          if (weekOutcome._tag === "ok") {
+            for (const fact of weekOutcome.value) {
+              projectedRanks.set(fact.providerPlayerKey, fact.projectedRank ?? null);
+            }
+          } else if (weekOutcome._tag === "failed") {
+            weekFailures.push(weekOutcome.failure);
+          }
+        }
         let playerIndex = 0;
         const teams = rosters.map((roster, index) => ({
           team: EffectArray.getUnsafe(teamRefs, index),
@@ -1007,13 +1028,14 @@ export const FantasyQueriesLive = Layer.effect(
           players: roster.players.map((player) => {
             const ref = EffectArray.getUnsafe(playerRefs, playerIndex);
             playerIndex += 1;
-            return rosterRow(player, ref, detail, rosterWeek(player, roster.coverage, undefined));
+            return rosterRow(
+              player,
+              ref,
+              detail,
+              rosterWeek(player, roster.coverage, projectedRanks.get(player.providerPlayerKey)),
+            );
           }),
         }));
-        const batchCoverage = rosters[0]?.coverage;
-        if (batchCoverage === undefined) {
-          throw new Error("A league roster read returns at least one team roster.");
-        }
         const rosterCoverage =
           batchCoverage.type === "week"
             ? coverage("roster", "league_rosters", fetchedAt, { week: batchCoverage.week })
@@ -1106,7 +1128,6 @@ export const FantasyQueriesLive = Layer.effect(
       }
       if (rosterOutcome._tag !== "ok") {
         return rosterWithoutData(
-          context.provider,
           team,
           period,
           fetchedAt,
@@ -1179,10 +1200,6 @@ export const FantasyQueriesLive = Layer.effect(
         team,
         ...(roster.coverage.type === "week" ? { period: { week: roster.coverage.week } } : {}),
         coverage: [leagueCoverage(leagueOutcome, fetchedAt), rosterCoverage],
-        playerSchedule: {
-          status: "unsupported",
-          detail: limitation(context.provider, "player_schedule"),
-        },
         ...(detail === "full" ? { ownerNote: ownerNoteOf(context.owned.team) } : {}),
         failures: [...leagueFailure(leagueOutcome), ...weekFailures],
         budget: queryBudget,
@@ -3130,10 +3147,6 @@ export const FantasyQueriesLive = Layer.effect(
           : { remainingPlayerGames: remainingGamesSection }),
         ...(includes("roster")
           ? {
-              probableStarters: {
-                status: "unsupported" as const,
-                detail: limitation(context.provider, "probable_starters"),
-              },
               illegalSlots,
               ...(rosterSummary === undefined
                 ? {}
@@ -3653,7 +3666,6 @@ function emptyPage(): QueryPage {
 }
 
 function calendarWithoutWeekWindow(
-  provider: TeamContext["provider"],
   team: QueryTeam,
   fetchedAt: DateTime.Utc,
   outcome: ReadOutcome<ProviderLeagueSettings>,
@@ -3672,10 +3684,6 @@ function calendarWithoutWeekWindow(
           },
         }
       : {}),
-    historical: {
-      status: "unsupported",
-      detail: limitation(provider, "historical_seasons"),
-    },
     coverage: [
       leagueCoverage(outcome, fetchedAt),
       ...(outcome._tag === "ok"
@@ -3766,7 +3774,6 @@ function leagueRostersWithoutData(
 }
 
 function rosterWithoutData(
-  provider: TeamContext["provider"],
   team: QueryTeam,
   period: QueryPeriod | undefined,
   fetchedAt: DateTime.Utc,
@@ -3779,10 +3786,6 @@ function rosterWithoutData(
     scope: "team",
     team,
     ...(period === undefined ? {} : { period }),
-    playerSchedule: {
-      status: "unsupported",
-      detail: limitation(provider, "player_schedule"),
-    },
     players: [],
     ...(ownerNote === undefined ? {} : { ownerNote }),
     coverage: [

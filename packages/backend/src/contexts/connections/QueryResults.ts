@@ -172,17 +172,6 @@ export const CalendarData = Schema.Struct({
     }),
   ),
   games: Schema.optional(CalendarGames),
-  lockContext: Schema.optional(
-    Schema.Struct({
-      status: Schema.Literal("unverified"),
-      weeklyDeadline: Schema.optional(Schema.String),
-      detail: Schema.String,
-    }),
-  ),
-  historical: Schema.Struct({
-    status: Schema.Literal("unsupported"),
-    detail: Schema.String,
-  }),
   coverage: Schema.Array(QueryCoverage),
   failures: Schema.Array(QueryFailure),
   page: QueryPage,
@@ -805,18 +794,12 @@ export const RosterPlayer = Schema.Struct({
 });
 export type RosterPlayer = typeof RosterPlayer.Type;
 
-const PlayerSchedule = Schema.Struct({
-  status: Schema.Literal("unsupported"),
-  detail: Schema.String,
-});
-
 export const RosterData = Schema.Struct({
   status: QueryStatus,
   scope: Schema.Literal("team"),
   team: QueryTeam,
   period: Schema.optional(QueryPeriod),
   coverage: Schema.Array(QueryCoverage),
-  playerSchedule: PlayerSchedule,
   players: Schema.Array(RosterPlayer),
   ownerNote: Schema.optional(TeamOwnerNote).pipe(
     Schema.annotate({
@@ -1121,7 +1104,7 @@ export const GetPlayersInput = Schema.Struct({
     Schema.Array(PlayerGroup).pipe(
       Schema.annotate({
         description:
-          "Groups to hydrate. `actual_stats` states the basis the league's site declares: a completed week, season totals, or a daily-summed window with its covered dates. `projections` is available only where the site publishes them; otherwise the group returns an unsupported status naming that limitation. `availability` reads the selected-player status from the league's site for references that are not on the current roster, such as a free agent, waiver player, or dropped player; that is one read from the site for those references and it does not require `actual_stats`. A player the site publishes no status for carries no `availability` and is named in `failures`.",
+          "Groups to hydrate. `actual_stats` states the basis the league's site declares: a completed week, season totals, or a daily-summed window with its covered dates. `projections` returns the league-scoped projected week rank, or `unsupported` with reason `not_published` where the site publishes no projection for the sport. `availability` reads the selected-player status from the league's site for references that are not on the current roster, such as a free agent, waiver player, or dropped player; that is one read from the site for those references and it does not require `actual_stats`. A player the site publishes no status for carries no `availability` and is named in `failures`.",
       }),
     ),
   ),
@@ -1940,12 +1923,6 @@ export const TeamSummaryData = Schema.Struct({
     Schema.annotate({
       description:
         "Each rostered player's scheduled games for the window stated in this section, present when the `schedule` group is requested. A league whose site publishes no scoring period reads a requested `window` or the rest of the week; when neither is available the section says so and names the argument to pass.",
-    }),
-  ),
-  probableStarters: Schema.optional(
-    Schema.Struct({
-      status: Schema.Literal("unsupported"),
-      detail: Schema.String,
     }),
   ),
   ownerNote: TeamOwnerNote,

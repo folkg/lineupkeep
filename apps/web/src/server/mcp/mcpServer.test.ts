@@ -1586,7 +1586,7 @@ it("publishes the accepted player-statistics periods and the compact standings f
   }
   expect(tool("get_players").description).toContain("periodSupport");
   expect(tool("get_players").description).toContain("aggregated");
-  expect(tool("get_players").description).toContain("25-reference");
+  expect(tool("get_players").description).toContain("25 private player references");
   expect(tool("get_players").description).toContain("another team");
   expect(players).toContain("25-reference");
   expect(players).toContain("league named by");
@@ -1600,6 +1600,26 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(rosterOutput).toContain('"teams"');
   expect(rosterOutput).toContain('"owned"');
   expect(rosterOutput).toContain('"total"');
+  expect(rosterOutput).toContain("playsThisWeek");
+  expect(rosterOutput).toContain("projectedRank");
+  expect(rosterOutput).not.toContain("playerSchedule");
+
+  const calendarOutput = JSON.stringify(tool("get_calendar").outputSchema);
+  expect(calendarOutput).toContain('"week"');
+  expect(calendarOutput).toContain('"games"');
+  expect(calendarOutput).toContain("notCovered");
+  expect(calendarOutput).not.toContain("lockContext");
+  expect(calendarOutput).not.toContain("historical");
+
+  const summaryOutput = JSON.stringify(tool("get_team_summary").outputSchema);
+  expect(summaryOutput).toContain("playsThisWeek");
+  expect(summaryOutput).not.toContain("probableStarters");
+
+  const playersOutput = JSON.stringify(tool("get_players").outputSchema);
+  expect(playersOutput).toContain("not_published");
+  expect(playersOutput).toContain("basis");
+  expect(playersOutput).toContain("period");
+  expect(JSON.stringify(tool("search_players").outputSchema)).toContain("playsThisWeek");
   expect(tool("get_league").description).toContain("inline player name");
   expect(tool("get_pending_trade_offers").description).toContain("ownerNote");
   expect(tool("add_team_agent_note").description).toContain("client memory");

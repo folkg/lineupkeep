@@ -1053,16 +1053,6 @@ const fakeCapabilities: ProviderCapabilities = {
   transactionRequest: { maximumAdds: 1, maximumDrops: 1 },
   limitations: [
     {
-      subject: "player_schedule",
-      detail:
-        "This provider publishes one opponent per player for the league's declared coverage (a date, or a whole scoring week when the league's cadence is weekly). It publishes no start time, no season-long schedule, and no per-player games-remaining count. A roster entry carries the professional-team abbreviation and, where the league publishes one, the bye week; remaining player-games are available per fantasy team from get_matchups.",
-    },
-    {
-      subject: "probable_starters",
-      detail:
-        "This provider publishes no probable-starter field on its fantasy read surface, so participation is reported only through the provider's injury status.",
-    },
-    {
       subject: "team_remaining_games",
       detail:
         "This provider publishes no remaining-game count for football: a player plays at most one game per scoring week, and each roster entry carries the bye week instead.",
@@ -1071,15 +1061,6 @@ const fakeCapabilities: ProviderCapabilities = {
       subject: "per_team_games_played",
       detail:
         "This provider publishes no per-team games-played count: its league settings carry only the league's games-played cap.",
-    },
-    {
-      subject: "lock_timing",
-      detail:
-        "This provider's exact fantasy-day rollover and per-player lock timing are not verified. This reports the league's declared period range only.",
-    },
-    {
-      subject: "historical_seasons",
-      detail: "Only the linked team's current season is validated for this provider.",
     },
   ],
 };

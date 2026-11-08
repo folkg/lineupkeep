@@ -60,12 +60,8 @@ export const ProviderFantasyDay = Schema.Struct({
 export type ProviderFantasyDay = typeof ProviderFantasyDay.Type;
 
 const ProviderLimitationSubject = Schema.Literals([
-  "player_schedule",
-  "probable_starters",
   "team_remaining_games",
   "per_team_games_played",
-  "lock_timing",
-  "historical_seasons",
 ]);
 export type ProviderLimitationSubject = typeof ProviderLimitationSubject.Type;
 

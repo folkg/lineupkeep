@@ -120,12 +120,7 @@ export const secondProviderCapabilities: ProviderCapabilities = {
     detail: "Atlas publishes no trade proposal write and no element for a draft pick.",
   },
   transactionRequest: { maximumAdds: 2, maximumDrops: 2 },
-  limitations: [
-    {
-      subject: "probable_starters",
-      detail: "Atlas publishes no real-world starting status for any position.",
-    },
-  ],
+  limitations: [],
 };
 
 export const secondProvider: ProviderShape = {
