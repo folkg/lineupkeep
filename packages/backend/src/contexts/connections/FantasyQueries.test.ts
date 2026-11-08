@@ -5346,39 +5346,6 @@ function thirteenTeamRotoLeague(): {
   };
 }
 
-it.effect("fits a thirteen-team roto hockey league's ordinary groups in one result", () =>
-  Effect.gen(function* () {
-    const queries = yield* FantasyQueries;
-    const fake = yield* FakeProviderWorld;
-    const fixture = thirteenTeamRotoLeague();
-    const seeded = yield* seed(fake, [team("477.l.31027.t.1", "Roto", "nhl")], {
-      league: fixture.league,
-      roster: rosterFixture({
-        count: 21,
-        providerTeamKey: "477.l.31027.t.1",
-        providerLeagueKey: "477.l.31027",
-        coverage: { type: "date", date: "2026-10-30" },
-      }),
-    });
-    yield* fake.setStandings(fixture.standings);
-
-    const summary = yield* queries.getTeamSummary(owner, {
-      team: Array.getUnsafe(seeded, 0).id,
-      groups: ["league", "standings", "matchup", "roster"],
-    });
-    assert.strictEqual(summary.status, "ok");
-    if (summary.status !== "ok") {
-      return;
-    }
-    assert.strictEqual(summary.standings?.status, "available");
-    if (summary.standings?.status === "available") {
-      assert.strictEqual(summary.standings.teams.length, 13);
-    }
-    assert.isAtLeast(summary.roster?.length ?? 0, 1);
-    assert.isAtMost(summarySectionBytes(summary), summary.budget.hardLimitBytes);
-  }).pipe(Effect.provide(QueriesTestLayer)),
-);
-
 it.effect("names the sections that consume the budget for the client's exact group set", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -5484,6 +5451,11 @@ it.effect("fits the ordinary six-group summary for a thirteen-team league", () =
     }
     assert.strictEqual(summary.budget.hardLimitBytes, 28 * 1024);
     assert.isAtLeast(summary.page.returned, 1);
+    assert.strictEqual(summary.standings?.status, "available");
+    if (summary.standings?.status === "available") {
+      assert.strictEqual(summary.standings.teams.length, 13);
+    }
+    assert.isAtLeast(summary.roster?.length ?? 0, 1);
     assert.strictEqual(summary.schedule?.status, "available");
     assert.isDefined(summary.matchup);
     assert.notProperty(summary.matchup ?? {}, "opponentCategories");

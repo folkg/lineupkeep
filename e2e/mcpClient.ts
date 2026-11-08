@@ -177,10 +177,6 @@ export async function exchangeCode(
   )(await response.json());
 }
 
-export async function registerPublicClient(origin: string, clientName: string): Promise<string> {
-  return (await registerPublicClientDetails(origin, clientName)).clientId;
-}
-
 export async function registerPublicClientDetails(
   origin: string,
   clientName: string,

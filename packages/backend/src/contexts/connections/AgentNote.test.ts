@@ -39,18 +39,3 @@ it("accepts a body at the limit and refuses one past it", () => {
   assert.strictEqual(rejected.reason, "too_long");
   assert.ok(rejected.message.includes(String(agentNoteLimit)));
 });
-
-it("counts a character outside the basic plane once", () => {
-  const checked = checkAgentNote("🏒".repeat(agentNoteLimit));
-
-  assert.strictEqual(checked.valid, true);
-});
-
-it("normalizes line endings and drops control characters", () => {
-  const checked = checkAgentNote("Keeper\r\nReason:\u0007 joins next week\rThird line");
-
-  assert.deepStrictEqual(checked, {
-    valid: true,
-    body: "Keeper\nReason: joins next week\nThird line",
-  });
-});

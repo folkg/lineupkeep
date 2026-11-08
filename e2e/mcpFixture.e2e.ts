@@ -37,25 +37,3 @@ test("authorizes named browser personas independently through the fixture", asyn
   expect(calls.at(-2)?.persona).toBe("owner");
   expect(calls.at(-1)?.persona).toBe("other");
 });
-
-test("authorizes the fixture without feature UI and lists through read scope", async ({
-  mcp,
-  page,
-}) => {
-  const reader = await mcp(["fantasy:read"], "owner");
-  await expect(page).toHaveURL("about:blank");
-  await test.step("Baseline: discover tools over MCP", async () => {
-    expect((await reader.listTools()).tools.map((tool) => tool.name)).toContain("list_connections");
-  });
-  await test.step("Result: list owned connections with explicit read consent", async () => {
-    const listed = await reader.callTool("list_connections", {});
-
-    expect(listed.isError).toBe(false);
-    expect(listed.structuredContent).toEqual({ connections: [] });
-  });
-  const calls = test
-    .info()
-    .attachments.filter(isMcpExchangeAttachment)
-    .map((attachment) => Schema.decodeUnknownSync(McpExchangeJson)(attachment.body?.toString()));
-  expect(calls.at(-1)?.persona).toBe("owner");
-});

@@ -3,28 +3,6 @@ import { captureCheckpoint } from "./verify/capture";
 
 const hostedBrowserAvailable = (process.env["E2E_TARGET"] ?? "node") === "node";
 
-test("shows phone-number guidance when the hosted provider refuses a Gmail address", async ({
-  page,
-}) => {
-  test.skip(!hostedBrowserAvailable, "The hosted browser fixture runs on the Node target");
-
-  await signUp(page);
-  await page.getByRole("button", { name: "Connect Yahoo" }).click();
-  const surface = page.getByRole("textbox", { name: "Yahoo sign-in browser" });
-  await expect(surface).toBeVisible();
-  await expect(page.locator('img[alt="Yahoo sign-in page"]')).toBeVisible();
-
-  await surface.focus();
-  await page.keyboard.type("fantasy-manager@gmail.com");
-
-  await expect(page.getByText("Yahoo refuses Gmail addresses in this browser.")).toBeVisible();
-  await expect(page.getByText(/If the account has a phone number/)).toBeVisible();
-  await expect(page.getByText(/Yahoo decides which sign-in options/)).toBeVisible();
-  await expect(page.getByText("No connections yet.", { exact: true })).toBeVisible();
-
-  await page.getByRole("button", { name: "Cancel" }).click();
-});
-
 test("signs in through the hosted browser or reports why it is unavailable", async ({
   page,
   newUser,

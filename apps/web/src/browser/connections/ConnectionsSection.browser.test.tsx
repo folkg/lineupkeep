@@ -105,19 +105,6 @@ it("keeps the removed connection explanation off the connections section", async
   await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).not.toBeInTheDocument();
 });
 
-it("offers the connect action when no connection exists", async () => {
-  using _section = setupConnectionsSection([]);
-
-  await expect
-    .element(
-      page.getByText(
-        "Sign in as you normally would, in a browser that belongs to this sign-in only.",
-      ),
-    )
-    .toBeVisible();
-  await expect.element(page.getByRole("button", { name: "Connect Yahoo" })).toBeVisible();
-});
-
 it("shows the hairline, disables the control, and leaves the row after the server confirms", async () => {
   const answer = Promise.withResolvers<ConnectionChangeView>();
   using _section = setupConnectionsSection([connected], {

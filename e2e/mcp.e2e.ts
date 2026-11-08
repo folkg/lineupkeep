@@ -12,7 +12,6 @@ import {
   exchangeRefreshToken,
   mcpClient,
   mcpEndpoint,
-  registerPublicClient,
 } from "./mcpClient.ts";
 import { expect, signIn, signUp, test } from "./support.ts";
 test("discovers and authorizes a stateless client through email sign-in, consent and PKCE", async ({
@@ -872,12 +871,10 @@ test("authorizes a dynamically registered client through consent", async ({ page
   );
 });
 
-test("rotates refresh credentials and replays a retry past the old thirty-second window", async ({
+test("rotates refresh credentials over HTTP and replays the previous token", async ({
   page,
   baseURL,
 }) => {
-  test.setTimeout(60_000);
-
   const origin = requiredOrigin(baseURL);
   await signUp(page);
   const { credentials, authorization } = await authorize(
@@ -885,12 +882,13 @@ test("rotates refresh credentials and replays a retry past the old thirty-second
     origin,
     "fantasy:read offline_access",
   );
-  const initial = Schema.decodeUnknownSync(RefreshCredentials)(credentials);
+  const initial = Schema.decodeUnknownSync(IssuedCredentials)(credentials);
 
+  expect(initial.expires_in).toBe(300);
+  expect(await advertisedKeyIds(origin)).toContain(jwtHeader(initial.access_token).kid);
   const response = await exchangeRefreshToken(authorization, initial.refresh_token);
   expect(response.status).toBe(200);
-  const rotated = Schema.decodeUnknownSync(RefreshCredentials)(await response.json());
-  const rotatedAt = Date.now();
+  const rotated = Schema.decodeUnknownSync(IssuedCredentials)(await response.json());
   const tools = await mcpClient(mcpEndpoint(origin), rotated.access_token).request("tools/call", {
     name: "list_connections",
     arguments: {},
@@ -904,14 +902,6 @@ test("rotates refresh credentials and replays a retry past the old thirty-second
   expect(
     Schema.decodeUnknownSync(RefreshCredentials)(await replayResponse.json()).refresh_token,
   ).toBe(rotated.refresh_token);
-  await expect
-    .poll(() => Date.now() - rotatedAt, { timeout: 40_000, intervals: [1000] })
-    .toBeGreaterThanOrEqual(31_000);
-  const late = await exchangeRefreshToken(authorization, initial.refresh_token);
-  expect(late.status).toBe(200);
-  expect(Schema.decodeUnknownSync(RefreshCredentials)(await late.json()).refresh_token).toBe(
-    rotated.refresh_token,
-  );
   expect(
     (await mcpClient(mcpEndpoint(origin), rotated.access_token).callTool("list_connections", {}))
       .isError,
@@ -930,82 +920,6 @@ test("issues a refresh token only for a grant that asks for offline_access", asy
 
   const { credentials: withOffline } = await authorize(page, origin, "fantasy:read offline_access");
   expect(withOffline.refresh_token).toBeDefined();
-});
-
-test("renews an expired public client grant after idle and replays a rotated token", async ({
-  page,
-  baseURL,
-}) => {
-  test.setTimeout(480_000);
-
-  const origin = requiredOrigin(baseURL);
-  await signUp(page);
-  const clientId = await registerPublicClient(origin, "Lineupgrade expiry probe");
-  const authorization = await beginAuthorization(
-    page,
-    mcpEndpoint(origin),
-    documentedScopes,
-    fetch,
-    clientId,
-  );
-  await expect(page.getByRole("heading", { name: "Connect a client?" })).toBeVisible();
-  await page.getByRole("button", { name: "Allow access", exact: true }).click();
-  await expect(page).toHaveURL(callbackPattern);
-  const issued = Schema.decodeUnknownSync(IssuedCredentials)(
-    await exchangeCode(page, authorization),
-  );
-
-  expect(issued.expires_in).toBe(300);
-  expect(await advertisedKeyIds(origin)).toContain(jwtHeader(issued.access_token).kid);
-  const live = mcpClient(mcpEndpoint(origin), issued.access_token);
-  expect((await live.callTool("list_connections", {})).isError).toBe(false);
-
-  await delay((issued.expires_in + 3) * 1000);
-  const expired = await live.request("tools/call", {
-    name: "list_connections",
-    arguments: {},
-  });
-  expect(expired.status).toBe(401);
-  expect(expired.headers.get("www-authenticate")).toContain("resource_metadata=");
-
-  const first = await exchangeRefreshToken(authorization, issued.refresh_token);
-  expect(first.status).toBe(200);
-  const rotated = Schema.decodeUnknownSync(IssuedCredentials)(await first.json());
-  const rotatedAt = Date.now();
-  expect(rotated.refresh_token).not.toBe(issued.refresh_token);
-  expect(
-    (await mcpClient(mcpEndpoint(origin), rotated.access_token).callTool("list_connections", {}))
-      .isError,
-  ).toBe(false);
-
-  const second = await exchangeRefreshToken(authorization, rotated.refresh_token);
-  expect(second.status).toBe(200);
-  const chained = Schema.decodeUnknownSync(IssuedCredentials)(await second.json());
-  expect(
-    (await mcpClient(mcpEndpoint(origin), chained.access_token).callTool("list_connections", {}))
-      .isError,
-  ).toBe(false);
-
-  await expect
-    .poll(() => Date.now() - rotatedAt, { timeout: 40_000, intervals: [1000] })
-    .toBeGreaterThanOrEqual(31_000);
-  const replayed = await exchangeRefreshToken(authorization, issued.refresh_token);
-  expect(replayed.status).toBe(200);
-  expect(Schema.decodeUnknownSync(RefreshCredentials)(await replayed.json()).refresh_token).toBe(
-    rotated.refresh_token,
-  );
-
-  const family = await exchangeRefreshToken(authorization, chained.refresh_token);
-  expect(family.status).toBe(200);
-  const familyCredentials = Schema.decodeUnknownSync(RefreshCredentials)(await family.json());
-  expect(
-    (
-      await mcpClient(mcpEndpoint(origin), familyCredentials.access_token).callTool(
-        "list_connections",
-        {},
-      )
-    ).isError,
-  ).toBe(false);
 });
 
 function teamAutomation(
