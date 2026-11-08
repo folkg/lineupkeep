@@ -303,6 +303,10 @@ looks nice, it stays still.
   a navigation never animates.
 - Only `transform` and `opacity` move. Nothing animates a width, a height, a margin, a padding, or an
   offset.
+- The working hairline travels in container units — a length, never a percentage of its own box — and
+  asks for its own layer with `will-change: transform`. Its travel is then a value the compositor can
+  take, so the line keeps its speed and its one-third width without resolving against layout every
+  frame.
 - Durations and easings come from the tokens beside them. A component never invents one, and the UI
   stays under 300ms. Constant motion — the working hairline — is `linear`.
 - Motion is CSS: a transition where a state can change back, keyframes for a one-shot entrance. There

@@ -202,6 +202,56 @@ it("adds no words beside a working control", async () => {
   expect(mounted.host.childElementCount).toBe(children);
 });
 
+it("runs the working hairline on a transform the compositor can take", async () => {
+  const [state, setState] = createSignal<ActionState>("idle");
+  const [label, setLabel] = createSignal("Save note");
+  using mounted = mount(() => <Button state={state()}>{label()}</Button>);
+  const starts: Array<string> = [];
+  const record = (event: AnimationEvent): void => {
+    starts.push(event.animationName);
+  };
+  document.addEventListener("animationstart", record);
+  try {
+    setState("working");
+    const button = page.getByRole("button", { name: "Save note" });
+    await expect.element(button).toHaveAttribute("aria-busy", "true");
+    const mark = requiredMark(mounted.host);
+    const animation = mark.getAnimations().at(0);
+    expect(animation, "the hairline animates").toBeDefined();
+
+    const frames = keyframeBlocks("action-work");
+    expect(frames.length, "the working hairline keeps its keyframes").toBeGreaterThan(0);
+    for (const frame of frames) {
+      expect(
+        animatedProperties(frame),
+        "a layout property would take the hairline off the compositor",
+      ).toEqual(["transform"]);
+      for (const value of animatedTransformValues(frame)) {
+        expect(value, "a percentage resolves against layout every frame").not.toContain("%");
+      }
+    }
+    expect(getComputedStyle(mark).willChange, "the hairline asks for its own layer").toBe(
+      "transform",
+    );
+
+    const runs = (): ReadonlyArray<string> => starts.filter((name) => name === "action-work");
+    await expect.poll(runs).toHaveLength(1);
+
+    setLabel("Save note now");
+    await expect
+      .element(page.getByRole("button", { name: "Save note now" }))
+      .toHaveAttribute("aria-busy", "true");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(requiredMark(mounted.host), "a re-render keeps the element").toBe(mark);
+    expect(requiredMark(mounted.host).getAnimations().at(0), "the run is not restarted").toBe(
+      animation,
+    );
+    expect(runs(), "one hairline run per working state").toHaveLength(1);
+  } finally {
+    document.removeEventListener("animationstart", record);
+  }
+});
+
 it("collapses action-state motion to instant when the reader asks for less", async () => {
   const session = cdp();
   if (!hasSend(session)) {
@@ -223,6 +273,12 @@ it("collapses action-state motion to instant when the reader asks for less", asy
     expect(mark).not.toBeNull();
     expect(getComputedStyle(button ?? document.body).transitionDuration).toBe("0s");
     expect(getComputedStyle(mark ?? document.body).animationName).toBe("none");
+    const markBox = mark?.getBoundingClientRect();
+    const trackBox = mark?.parentElement?.getBoundingClientRect();
+    expect(
+      (markBox?.left ?? 0) - (trackBox?.left ?? 0),
+      "the still hairline stays a third of the way in",
+    ).toBeCloseTo((trackBox?.width ?? 0) * 0.34, 0);
   } finally {
     await session.send("Emulation.setEmulatedMedia", { features: [] });
   }
@@ -311,6 +367,35 @@ function requiredGlyph(button: Element): Element {
     throw new Error("The icon button has no glyph.");
   }
   return glyph;
+}
+
+function requiredMark(host: HTMLElement): HTMLElement {
+  const mark = host.querySelector<HTMLElement>('[data-action-mark="work"]');
+  if (mark === null) {
+    throw new Error("The working control has no hairline.");
+  }
+  return mark;
+}
+
+function keyframeBlocks(name: string): ReadonlyArray<CSSKeyframeRule> {
+  return [...document.styleSheets].flatMap((sheet) =>
+    [...sheet.cssRules].flatMap((rule) => {
+      if (!(rule instanceof CSSKeyframesRule) || rule.name !== name) {
+        return [];
+      }
+      return [...rule.cssRules].filter(
+        (frame): frame is CSSKeyframeRule => frame instanceof CSSKeyframeRule,
+      );
+    }),
+  );
+}
+
+function animatedProperties(frame: CSSKeyframeRule): ReadonlyArray<string> {
+  return [...frame.style].toSorted();
+}
+
+function animatedTransformValues(frame: CSSKeyframeRule): ReadonlyArray<string> {
+  return [...frame.style].map((property) => frame.style.getPropertyValue(property));
 }
 
 function opacity(element: Element | null): number {

@@ -143,11 +143,11 @@
 
   @keyframes action-work {
     from {
-      transform: translateX(-100%);
+      transform: translateX(-34cqw);
     }
 
     to {
-      transform: translateX(300%);
+      transform: translateX(102cqw);
     }
   }
 
@@ -224,8 +224,13 @@
   transition-duration: var(--theme-duration-reveal);
 }
 
+[data-action-track] {
+  container-type: inline-size;
+}
+
 [data-action-mark="work"] {
   animation: action-work var(--theme-duration-work) linear infinite;
+  will-change: transform;
 }
 
 [data-state="working"]:is(:disabled, [aria-disabled="true"]) {
@@ -272,7 +277,7 @@
 
   [data-action-mark="work"] {
     animation: none;
-    transform: translateX(100%);
+    transform: translateX(34cqw);
   }
 
   [data-motion="settle"] {

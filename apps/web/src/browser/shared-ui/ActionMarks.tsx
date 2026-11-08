@@ -4,11 +4,9 @@ import { cx } from "./cx";
 
 export function WorkMark(props: { readonly class?: string }): JSX.Element {
   return (
-    <span
-      aria-hidden="true"
-      class={cx("pointer-events-none absolute h-px bg-current", props.class)}
-      data-action-mark="work"
-    />
+    <span aria-hidden="true" class="pointer-events-none absolute inset-0" data-action-track>
+      <span class={cx("absolute h-px bg-current", props.class)} data-action-mark="work" />
+    </span>
   );
 }
 
