@@ -75,7 +75,7 @@ export function localStack(name: string, lockDirectory: string): OwnedInfrastruc
         await delay(100, undefined, { signal });
       }
     },
-    remove: async (signal) => {
+    remove: async (signal, creationConfirmed) => {
       const run = await journaledRun(lockDirectory);
       if (run.databaseName !== name) {
         throw new Error("Journaled resource name does not match recovery");
@@ -118,8 +118,14 @@ export function localStack(name: string, lockDirectory: string): OwnedInfrastruc
         await log.close();
       }
 
-      await removeOwnedContainer(`${name}-web`, lockDirectory, "test-web", signal, false);
-      await postgresContainer(name, lockDirectory).remove(signal, false);
+      await removeOwnedContainer(
+        `${name}-web`,
+        lockDirectory,
+        "test-web",
+        signal,
+        creationConfirmed,
+      );
+      await postgresContainer(name, lockDirectory).remove(signal, creationConfirmed);
       if (failure !== undefined) {
         throw failure;
       }

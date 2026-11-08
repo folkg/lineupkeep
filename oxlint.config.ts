@@ -597,6 +597,7 @@ const hostedBrowserShellTests = [
   "apps/web/src/server/hostedLinking/remoteHostedBrowser.test.ts",
 ];
 const migrationTests = ["packages/backend/src/database/MigrationOrdering.test.ts"];
+const databaseFixtures = ["packages/backend/src/database/internal/DatabaseTest.ts"];
 const fixtureReadingTests = [
   "packages/backend/src/contexts/connections/internal/ProfessionalCalendar.test.ts",
   "packages/backend/src/contexts/connections/internal/ProfessionalTeamMap.test.ts",
@@ -825,7 +826,7 @@ export default defineConfig({
       rules: { "repository/no-per-item-service-calls": "error" },
     },
     {
-      files: [...migrationTests, ...fixtureReadingTests],
+      files: [...migrationTests, ...fixtureReadingTests, ...databaseFixtures],
       rules: {
         "effecttsgo/node-builtin-import": "off",
       },

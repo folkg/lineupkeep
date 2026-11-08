@@ -589,7 +589,11 @@ it("shows an empty state before any teams are discovered", async () => {
 });
 
 it("shows a recoverable failure instead of an empty team list", async () => {
-  using _app = setupTeamsPage([], { list: () => Promise.reject(new Error("Network")) });
+  using _app = setupTeamsPage(
+    [],
+    { list: () => Promise.reject(new Error("Network")) },
+    { retryDelay: 0 },
+  );
   await expect.element(page.getByText("We could not load your teams.")).toBeVisible();
 });
 
@@ -657,8 +661,12 @@ function refusal(reason: TeamMutationError): Error {
 function setupTeamsPage(
   teams: ReadonlyArray<TeamSummaryView>,
   overrides: Partial<Pick<TeamRemote, "list" | "refresh" | "control">> = {},
+  queryOptions: { readonly retryDelay?: number } = {},
 ): { [Symbol.dispose](): void } {
   const queryClient = createQueryClient();
+  if (queryOptions.retryDelay !== undefined) {
+    queryClient.setDefaultOptions({ queries: { retryDelay: queryOptions.retryDelay } });
+  }
   const remote: TeamRemote = {
     list: overrides.list ?? (() => Promise.resolve(teams)),
     refresh: overrides.refresh ?? (() => Promise.resolve({ teams })),
