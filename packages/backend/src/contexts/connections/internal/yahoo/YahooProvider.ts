@@ -51,6 +51,7 @@ import type {
   ProviderPlayerSearchResult,
   ProviderPlayerSearchSort,
   ProviderPlayerStatus,
+  ProviderPlayerWeekFact,
   ProviderReadFailure,
   ProviderRemainingGames,
   ProviderRoster,
@@ -860,6 +861,39 @@ export const yahooProvider = Effect.gen(function* () {
     return details;
   });
 
+  const readPlayerWeeks = Effect.fn("YahooProvider.readPlayerWeeks")(function* (input: {
+    readonly provider: ProviderKey;
+    readonly session: Redacted.Redacted<string>;
+    readonly providerLeagueKey: string;
+    readonly providerPlayerKeys: ReadonlyArray<string>;
+    readonly week: ProviderScoringWeek;
+  }) {
+    yield* Effect.annotateCurrentSpan("provider.operation", "read_player_weeks");
+    const cookie = yield* sessionCookie(input, "read_player_weeks");
+    const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_player_weeks");
+    const playerKeys = yield* ValidBatchPlayerKeys(input.providerPlayerKeys);
+    const payload = yield* readJson(internet, {
+      operation: "read_player_weeks",
+      origin: readOrigin,
+      path:
+        `/fantasy/v2/league/${leagueKey}/players;player_keys=${playerKeys.join(",")}` +
+        ";out=ranks,opponent;ranks=projected_week",
+      query: { format: "json" },
+      cookie,
+      normalize: true,
+    });
+    const decoded = yield* decodePayload(PlayerDetailsPayload, payload, "read_player_weeks");
+    if (decoded.league.league_key !== leagueKey) {
+      return yield* responseMismatch({
+        operation: "read_player_weeks",
+        field: "league.league_key",
+      });
+    }
+    const weeks = decoded.league.players.map((player) => playerWeekOf(player, input.week.week));
+    yield* Effect.annotateCurrentSpan("provider.player_week_count", weeks.length);
+    return weeks;
+  });
+
   const readPlayerHistory = Effect.fn("YahooProvider.readPlayerHistory")(function* (
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
@@ -1226,6 +1260,7 @@ export const yahooProvider = Effect.gen(function* () {
     applyReserveMove,
     readPlayerDetails,
     readPlayerHistory,
+    readPlayerWeeks,
     searchPlayers,
     readMatchups,
     readTransactions,
@@ -2478,6 +2513,7 @@ function toRosterPlayer(player: typeof LeagueRosterPlayerPayload.Type): Provider
     status: yahooPlayerStatus(optionalNonEmpty(player.status)),
     byeWeek: player.bye_weeks?.week ?? null,
     scheduled: scheduledIn(player.opponent),
+    opponent: scheduledOpponent(player.opponent),
     startingLineup: startingLineupIn(player.starting_status),
     undroppable: player.is_undroppable ?? null,
     transactionTrend: transactionTrendOf(player.transactions),
@@ -2577,8 +2613,9 @@ function playerRanksOf(
   for (const entry of payload ?? []) {
     const type = rankTypeMap[entry.player_rank.rank_type];
     const rank = Number(entry.player_rank.rank_value);
+    const week = entry.player_rank.rank_week;
     if (type !== undefined && Number.isInteger(rank) && rank > 0) {
-      ranks.push({ type, rank });
+      ranks.push({ type, rank, ...(week === undefined ? {} : { week }) });
     }
   }
   return ranks;
@@ -2930,6 +2967,7 @@ function playerFactsFromPayload(
             `league.players.${player.player_key}.percent_owned.delta`,
           ),
           ranks: playerRanksOf(player.player_ranks),
+          opponent: scheduledOpponent(player.opponent),
         });
       }
     }
@@ -2941,6 +2979,24 @@ function playerFactsFromPayload(
     }
     return rates;
   });
+}
+
+function playerWeekOf(
+  player: typeof PlayerDetailPayload.Type,
+  week: number,
+): ProviderPlayerWeekFact {
+  const opponent = scheduledOpponent(player.opponent);
+  const projected = playerRanksOf(player.player_ranks).find((entry) => entry.type === "PW");
+  return {
+    providerPlayerKey: player.player_key,
+    week,
+    plays: opponent !== undefined,
+    opponent,
+    projectedRank:
+      projected !== undefined && (projected.week === undefined || projected.week === week)
+        ? projected.rank
+        : undefined,
+  };
 }
 
 function communityStartRateOf(
@@ -4315,6 +4371,7 @@ const PlayerRankPayload = Schema.Struct({
     rank_type: Schema.NonEmptyString,
     rank_value: Schema.Union([Schema.String, Schema.Finite]),
     rank_season: Schema.optional(IntFromStringOrNumber),
+    rank_week: Schema.optional(IntFromStringOrNumber),
   }),
 });
 
@@ -4333,6 +4390,7 @@ const PlayerDetailPayload = Schema.Struct({
   status: Schema.optional(Schema.Union([Schema.String, Schema.Boolean])),
   status_full: Schema.optional(Schema.String),
   injury_note: Schema.optional(Schema.String),
+  opponent: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 const PlayerDetailsPayload = Schema.Struct({

@@ -45,8 +45,106 @@ export type ListTeamsData = typeof ListTeamsData.Type;
 export const ListTeamsResult = Schema.Union([ListTeamsData, NarrowingResult]);
 export type ListTeamsResult = typeof ListTeamsResult.Type;
 
+const LeagueWeek = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    current: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+      Schema.annotate({
+        description: "The scoring week the league is in, as its own settings declare it.",
+      }),
+    ),
+    start: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    end: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unsupported"),
+    reason: Schema.Literal("not_published"),
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "The league's current scoring week and the season's week range. `unsupported` with reason `not_published` means the league's site declares no scoring-week window, as a rotisserie league does; it is not week zero.",
+  }),
+);
+type LeagueWeek = typeof LeagueWeek.Type;
+
+const CalendarGame = Schema.Struct({
+  date: Schema.optional(Schema.NonEmptyString).pipe(
+    Schema.annotate({
+      description:
+        "The date this game is played. Omitted when the league's coverage is a scoring week, where the opponent covers the week rather than one date.",
+    }),
+  ),
+  opponent: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description: "The opponent's professional-team abbreviation from the league's site.",
+    }),
+  ),
+  home: Schema.Boolean,
+});
+type CalendarGame = typeof CalendarGame.Type;
+
+export const CalendarTeamGames = Schema.Struct({
+  proTeam: Schema.NonEmptyString.pipe(
+    Schema.annotate({
+      description: "The professional-team abbreviation the league's site publishes for the team.",
+    }),
+  ),
+  plays: Schema.Boolean.pipe(
+    Schema.annotate({
+      description:
+        "Whether this professional team plays at least once in the requested period. False is the bye-week answer.",
+    }),
+  ),
+  games: Schema.Array(CalendarGame),
+});
+export type CalendarTeamGames = typeof CalendarTeamGames.Type;
+
+const CalendarGames = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    period: QueryPeriod,
+    observedAt: Schema.DateTimeUtc,
+    teams: Schema.Array(CalendarTeamGames),
+    notCovered: Schema.optional(Schema.Array(Schema.NonEmptyString)).pipe(
+      Schema.annotate({
+        description:
+          "Requested professional teams the league's roster-scoped schedule does not reach, because no rostered player belongs to them. Absent when every requested team is covered, or when no `proTeams` filter was given.",
+      }),
+    ),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unsupported"),
+    reason: Schema.Literals(["not_published", "unavailable"]),
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "Each professional team's games in the requested period, from the league's site schedule for the linked team's roster. `not_published` means the period's dates could not be established; `unavailable` means the schedule read failed.",
+  }),
+);
+
 export const GetCalendarInput = Schema.Struct({
   team: TeamId,
+  period: Schema.optional(
+    QueryPeriod.pipe(
+      Schema.annotate({
+        description:
+          "The league week whose professional-team games to read into `games`. Omit it to read only the week range and periods. A week outside the league's declared range is refused.",
+      }),
+    ),
+  ),
+  proTeams: Schema.optional(
+    Schema.Array(
+      Schema.String.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(8))),
+    ).pipe(
+      Schema.check(Schema.isMaxLength(32)),
+      Schema.annotate({
+        description:
+          "Professional-team abbreviations to keep in `games`, taken from pool or roster rows. Omit it for every professional team the linked team's roster reaches.",
+      }),
+    ),
+  ),
   cursor: Schema.optional(Cursor),
   limit: Schema.optional(PageLimit),
 });
@@ -60,20 +158,20 @@ const CalendarPeriod = Schema.Struct({
 export const CalendarData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
-  periods: Schema.Array(CalendarPeriod),
-  window: Schema.optional(
-    Schema.Struct({
-      currentWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-      startWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-      endWeek: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  week: Schema.optional(LeagueWeek).pipe(
+    Schema.annotate({
+      description:
+        "The league's current scoring week, published without a matchup read. Absent only when the league settings could not be read.",
     }),
   ),
+  periods: Schema.Array(CalendarPeriod),
   dates: Schema.optional(
     Schema.Struct({
       start: Schema.optional(Schema.String),
       end: Schema.optional(Schema.String),
     }),
   ),
+  games: Schema.optional(CalendarGames),
   lockContext: Schema.optional(
     Schema.Struct({
       status: Schema.Literal("unverified"),
@@ -359,9 +457,6 @@ const LeagueOverview = Schema.Struct({
   teamCount: Schema.Int.check(Schema.isGreaterThan(0)),
   scoringType: Schema.NonEmptyString,
   scoringLabel: Schema.optional(Schema.String),
-  currentWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  startWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
-  endWeek: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   startDate: Schema.optional(Schema.String),
   endDate: Schema.optional(Schema.String),
 });
@@ -547,6 +642,12 @@ const DraftHistory = Schema.Union([
 export const LeagueData = Schema.Struct({
   status: QueryStatus,
   team: QueryTeam,
+  week: Schema.optional(LeagueWeek).pipe(
+    Schema.annotate({
+      description:
+        "The league's current scoring week and week range, independent of the `overview` group. Absent only when the league settings could not be read.",
+    }),
+  ),
   overview: Schema.optional(LeagueSettingsOverview),
   rosterRules: Schema.optional(RosterRules),
   scoring: Schema.optional(Schema.Array(ScoringCategory)).pipe(
@@ -641,6 +742,49 @@ const PlayerTransactionTrend = Schema.Union([
   }),
 );
 
+const PlayerWeek = Schema.Struct({
+  period: QueryPeriod.pipe(
+    Schema.annotate({
+      description: "The scoring week these facts cover: the league's current week for a pool row.",
+    }),
+  ),
+  playsThisWeek: Schema.Boolean.pipe(
+    Schema.annotate({
+      description:
+        "Whether this player's professional team plays in this scoring week. False is the bye-week answer.",
+    }),
+  ),
+  opponent: Schema.NullOr(Schema.NonEmptyString).pipe(
+    Schema.annotate({
+      description:
+        "The opponent's professional-team abbreviation for the week, or null when the team does not play or the league's site published no opponent.",
+    }),
+  ),
+  home: Schema.NullOr(Schema.Boolean),
+  byeWeek: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(99)),
+  ).pipe(
+    Schema.annotate({
+      description:
+        "The week this professional team does not play, where the league's site publishes one. Absent when it publishes none, never guessed from the schedule.",
+    }),
+  ),
+  projectedRank: Schema.optional(
+    Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  ).pipe(
+    Schema.annotate({
+      description:
+        "The league-scoped projected rank for this scoring week, where the league's site publishes one for this sport; null when it publishes ranks for the sport but none for this player. Absent when this read did not request it.",
+    }),
+  ),
+}).pipe(
+  Schema.annotate({
+    description:
+      "This player's current scoring week. Present only for a league whose declared roster coverage is a scoring week; a date-scored league has no weekly block.",
+  }),
+);
+export type PlayerWeek = typeof PlayerWeek.Type;
+
 export const RosterPlayer = Schema.Struct({
   player: PlayerRef,
   name: Schema.NonEmptyString,
@@ -655,7 +799,7 @@ export const RosterPlayer = Schema.Struct({
     code: Schema.optional(Schema.String),
     detail: Schema.optional(Schema.String),
   }),
-  byeWeek: Schema.optional(Schema.NullOr(Schema.Int)),
+  week: Schema.optional(PlayerWeek),
   undroppable: Schema.optional(Schema.NullOr(Schema.Boolean)),
   transactionTrend: PlayerTransactionTrend,
 });
@@ -915,6 +1059,7 @@ const SearchPlayer = Schema.Struct({
     }),
   ),
   gamesRemaining: Schema.optional(SchedulePlayerGamesRemaining),
+  week: Schema.optional(PlayerWeek),
   transactionTrend: PlayerTransactionTrend,
 });
 
@@ -1024,6 +1169,31 @@ const StatGroup = Schema.Union([
   }),
 ]);
 
+const ProjectionGroup = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("available"),
+    basis: Schema.Literal("week"),
+    period: QueryPeriod.pipe(
+      Schema.annotate({ description: "The scoring week this projected rank covers." }),
+    ),
+    rank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).pipe(
+      Schema.annotate({
+        description:
+          "The league-scoped projected rank for the player in this week; null when the league's site published no rank for this player.",
+      }),
+    ),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unsupported"),
+    reason: Schema.Literal("not_published"),
+  }),
+]).pipe(
+  Schema.annotate({
+    description:
+      "The projected week rank the league's site publishes for the player. `unsupported` with reason `not_published` means the site publishes no projection for this sport or league.",
+  }),
+);
+
 const StatPeriodSupport = Schema.Struct({
   sport: FantasySport,
   kinds: Schema.Struct({
@@ -1083,7 +1253,7 @@ const PlayerDetail = Schema.Struct({
   availability: Schema.optional(PlayerAvailability),
   eligibility: Schema.optional(PlayerEligibility),
   actualStats: Schema.optional(StatGroup),
-  projections: Schema.optional(StatGroup),
+  projections: Schema.optional(ProjectionGroup),
   scoringContext: Schema.optional(ScoringContext),
 });
 
@@ -1728,6 +1898,7 @@ const SummaryRosterPlayer = Schema.Struct({
     }),
   ),
   proTeam: Schema.NullOr(Schema.NonEmptyString),
+  week: Schema.optional(PlayerWeek),
   injury: Schema.Struct({
     reported: Schema.Boolean,
     code: Schema.optional(Schema.String),

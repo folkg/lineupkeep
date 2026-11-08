@@ -114,7 +114,7 @@ export const secondProviderCapabilities: ProviderCapabilities = {
     hockey: unsupportedPeriods("Atlas does not serve hockey."),
   },
   scheduleRead: { maximumDates: 10 },
-  publishesProjections: true,
+  projections: { basis: "week", sports: [] },
   tradeProposal: {
     assets: ["player"],
     detail: "Atlas publishes no trade proposal write and no element for a draft pick.",
@@ -148,6 +148,7 @@ export const secondProvider: ProviderShape = {
   scoreRoster: ({ roster }) => Effect.succeed(scores(roster)),
   readPlayerDetails: () => unsupported("read_player_details"),
   readPlayerHistory: () => unsupported("read_player_history"),
+  readPlayerWeeks: () => unsupported("read_player_weeks"),
   readMatchups: () => unsupported("read_matchups"),
   readTransactions: () => unsupported("read_transactions"),
   readCompletedTrades: () => unsupported("read_completed_trades"),

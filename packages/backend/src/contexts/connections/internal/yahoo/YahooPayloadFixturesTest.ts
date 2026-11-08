@@ -3348,6 +3348,83 @@ export const yahooNflPlayerDetailsWithPopulatedCut = playerDetailsPayload({
   ],
 });
 
+export const yahooNflPlayerWeeks = {
+  fantasy_content: {
+    league: [
+      {
+        league_key: "466.l.4000",
+        league_id: "4000",
+        name: "Synthetic NFL League",
+      },
+      {
+        players: {
+          "0": {
+            player: [
+              [
+                { player_key: "466.p.20001" },
+                { opponent: "@SEA" },
+                {
+                  player_ranks: {
+                    "0": {
+                      player_rank: {
+                        rank_type: "PW",
+                        rank_value: "3",
+                        rank_week: "6",
+                      },
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            ],
+          },
+          "1": {
+            player: [
+              [
+                { player_key: "466.p.20002" },
+                { opponent: null },
+                {
+                  player_ranks: {
+                    "0": {
+                      player_rank: {
+                        rank_type: "PW",
+                        rank_value: "8",
+                        rank_week: "6",
+                      },
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            ],
+          },
+          "2": {
+            player: [
+              [
+                { player_key: "466.p.20003" },
+                { opponent: "BUF" },
+                {
+                  player_ranks: {
+                    "0": {
+                      player_rank: {
+                        rank_type: "PW",
+                        rank_value: "14",
+                        rank_week: "5",
+                      },
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            ],
+          },
+          count: 3,
+        },
+      },
+    ],
+  },
+};
+
 export const yahooNflPlayerDetailsWithProjectedWeekRanks = playerDetailsPayload({
   leagueKey: "466.l.4000",
   leagueName: "Synthetic NFL League",

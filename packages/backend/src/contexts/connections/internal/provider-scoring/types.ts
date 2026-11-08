@@ -52,6 +52,7 @@ export type PlayerOwnership = {
 export type PlayerRank = {
   readonly type: RankType;
   readonly rank: number;
+  readonly week?: number;
 };
 
 export type RankType = "L30" | "L14" | "PS7" | "PSR" | "L4W" | "PW" | "PN4W";

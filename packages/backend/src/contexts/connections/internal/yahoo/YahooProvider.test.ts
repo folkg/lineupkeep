@@ -46,6 +46,7 @@ import {
   yahooNflPlayerDetailsWithDefaultRanks,
   yahooNflPlayerDetailsWithPopulatedCut,
   yahooNflPlayerDetailsWithProjectedWeekRanks,
+  yahooNflPlayerWeeks,
   yahooNflPlayerDetailsWithUnpopulatedCut,
   yahooNflLeagueTeamsForAnotherLeague,
   yahooNflMatchups,
@@ -1608,6 +1609,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         status: "healthy",
         byeWeek: 7,
         scheduled: true,
+        opponent: { opponent: "SEA", home: true },
         startingLineup: "confirmed-starting",
         undroppable: false,
         transactionTrend: {
@@ -1632,6 +1634,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         status: "out",
         byeWeek: null,
         scheduled: false,
+        opponent: undefined,
         startingLineup: "unconfirmed",
         undroppable: true,
         transactionTrend: {
@@ -3008,6 +3011,48 @@ it.effect("prices a games-limited league from the ownership composite, not the c
       factsRequest?.url.pathname,
       ";ranks=last30days,last14days,projected_next7days,projected_season_remaining,last4weeks,projected_week,projected_next4weeks",
     );
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("reads each selected player's week, opponent, and projected week rank", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPlayerWeeks));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const weeks = yield* provider.readPlayerWeeks({
+      ...sessionInput,
+      providerLeagueKey: "466.l.4000",
+      providerPlayerKeys: ["466.p.20001", "466.p.20002", "466.p.20003"],
+      week: { week: 6 },
+    });
+
+    assert.strictEqual(
+      internet.calls[0]?.url.href,
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;player_keys=466.p.20001,466.p.20002,466.p.20003;out=ranks,opponent;ranks=projected_week?format=json",
+    );
+    assert.deepStrictEqual(weeks, [
+      {
+        providerPlayerKey: "466.p.20001",
+        week: 6,
+        plays: true,
+        opponent: { opponent: "SEA", home: false },
+        projectedRank: 3,
+      },
+      {
+        providerPlayerKey: "466.p.20002",
+        week: 6,
+        plays: false,
+        opponent: undefined,
+        projectedRank: 8,
+      },
+      {
+        providerPlayerKey: "466.p.20003",
+        week: 6,
+        plays: true,
+        opponent: { opponent: "BUF", home: true },
+        projectedRank: undefined,
+      },
+    ]);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

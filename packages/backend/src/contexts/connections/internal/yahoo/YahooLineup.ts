@@ -16,6 +16,7 @@ import type {
   ValueSource,
 } from "#contexts/connections/internal/provider-scoring/types.ts";
 import type {
+  PlayerWeekOpponent,
   ProviderCapabilities,
   ProviderGamesPlayed,
   ProviderLeagueSettings,
@@ -95,7 +96,7 @@ export const yahooCapabilities: ProviderCapabilities = {
     baseball: unsupportedSportPeriods("Your league does not serve baseball."),
     basketball: unsupportedSportPeriods("Your league does not serve basketball."),
   },
-  publishesProjections: false,
+  projections: { basis: "week", sports: ["football"] },
   scheduleRead: { maximumDates: 21 },
   tradeProposal: {
     assets: ["player"],
@@ -113,11 +114,6 @@ export const yahooCapabilities: ProviderCapabilities = {
       subject: "probable_starters",
       detail:
         "Yahoo publishes a real-world starting status for goalies and pitchers only, and only once that game's starter is announced. Every other position carries no starting signal and stays unconfirmed, so participation for them is reported only through your league's injury status.",
-    },
-    {
-      subject: "projections",
-      detail:
-        "Yahoo publishes no projected player statistics for either sport. It publishes a league-scoped projected week rank for football only, which the lineup policy reads as the period's projection; a hockey date carries no projected rank.",
     },
     {
       subject: "team_remaining_games",
@@ -428,6 +424,7 @@ export type YahooPlayerFacts = YahooStartRateSummary & {
   readonly percentOwned: number | null;
   readonly percentOwnedDelta: number | null;
   readonly ranks: ReadonlyArray<PlayerRank>;
+  readonly opponent?: PlayerWeekOpponent;
 };
 
 export type YahooStartRateSummary = {

@@ -791,6 +791,64 @@ it.effect("refuses a closed period, a missing budget, and an unreadable team per
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("refuses an add whose professional team does not play in the week it would land", () =>
+  Effect.gen(function* () {
+    const proposals = yield* TransactionProposals;
+    const fake = yield* FakeProviderWorld;
+    const tokens = yield* QueryTokens;
+    const seeded = yield* seed(fake, [team("nhl.l.1.t.1", "Gridiron", "nfl")], {
+      league: leagueFixture({
+        rosterCoverage: "week",
+        periodWindow: { current: 7, start: 1, end: 18 },
+        currentDate: undefined,
+        weeklyDeadline: "",
+        rosterChange: {
+          rule: "weekly_lock",
+          source: ["weekly_deadline", "edit_key"],
+          detail: "This league applies roster changes at its weekly lock.",
+        },
+      }),
+      playerDetails: [detail("nfl.p.70001", "Synthetic Receiver", "free_agent")],
+      roster: {
+        ...rosterFixture(["nhl.p.90001", "nhl.p.90002"]),
+        coverage: { type: "week", week: 7 },
+      },
+    });
+    yield* fake.setPlayerWeeks([
+      {
+        providerPlayerKey: "nfl.p.70001",
+        week: 7,
+        plays: false,
+        opponent: undefined,
+        projectedRank: undefined,
+      },
+    ]);
+
+    const refused = yield* Effect.flip(
+      proposals.propose(owner, proposer, {
+        items: [
+          {
+            team: teamId(seeded, "nhl.l.1.t.1"),
+            kind: "free_agent_add",
+            adds: yield* refs(tokens, "nhl.l.1", ["nfl.p.70001"]),
+            drops: [],
+            reason: "Add the bye-week receiver.",
+          },
+        ],
+      }),
+    );
+
+    assert.strictEqual(refused._tag, "proposal.nothing_accepted");
+    if (refused._tag === "proposal.nothing_accepted") {
+      const item = Array.getUnsafe(refused.refusals, 0);
+      assert.strictEqual(item.refusal, "player_team_on_bye");
+      assert.include(item.reason, "does not play in scoring week 7");
+      assert.include(item.fix, "plays in that scoring week");
+    }
+    assert.deepStrictEqual(yield* fake.transactionRequests, []);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("refuses to revalidate an expired set and keeps it readable", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;

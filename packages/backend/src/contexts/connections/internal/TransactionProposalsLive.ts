@@ -15,6 +15,7 @@ import type {
   ProviderLeagueTeam,
   ProviderPendingTrade,
   ProviderPlayerDetail,
+  ProviderPlayerWeekFact,
   ProviderReadFailure,
   ProviderRoster,
   ProviderRosterCoverage,
@@ -169,6 +170,7 @@ type TeamFacts = {
   readonly leagueTeams: ReadonlyArray<ProviderLeagueTeam>;
   readonly providerTeamKey: string;
   readonly players: ReadonlyMap<string, ProviderPlayerDetail>;
+  readonly weeks: ReadonlyMap<string, ProviderPlayerWeekFact>;
   readonly tradeRosters: ReadonlyMap<string, ProviderRoster>;
 };
 
@@ -2309,6 +2311,29 @@ export const TransactionProposalsLive = Layer.effect(
                   seasonEnd: settings.endDate,
                 }),
               );
+        const timingRule = settings.rosterChange?.rule;
+        const currentWeek =
+          settings.rosterCoverage === "week" ? settings.periodWindow?.current : undefined;
+        const needsWeeks =
+          timingRule === "weekly_lock" &&
+          currentWeek !== undefined &&
+          items.some(
+            (item) =>
+              (item.kind === "free_agent_add" || item.kind === "waiver_claim") &&
+              item.adds.length > 0,
+          );
+        const weeks: Effect.Effect<
+          Result.Result<ReadonlyArray<ProviderPlayerWeekFact>, ProviderReadFailure>
+        > = needsWeeks
+          ? Effect.result(
+              context.provider.readPlayerWeeks({
+                ...providerIdentity(context),
+                providerLeagueKey: context.owned.team.providerLeagueKey,
+                providerPlayerKeys: addKeys,
+                week: { week: currentWeek },
+              }),
+            )
+          : Effect.succeed(Result.succeed<ReadonlyArray<ProviderPlayerWeekFact>>([]));
         const tradeRosters: Effect.Effect<
           ReadonlyMap<string, Result.Result<ProviderRoster, ProviderReadFailure>>
         > =
@@ -2361,10 +2386,13 @@ export const TransactionProposalsLive = Layer.effect(
                 completedUnavailable: completed._tag === "Failure",
               } satisfies TradeFeed;
             });
-        const [rosterResult, teamsResult, detailsResult, tradeRostersResult, feed] =
-          yield* Effect.all([roster, leagueTeams, details, tradeRosters, tradeFeed] as const, {
-            concurrency: "unbounded",
-          });
+        const [rosterResult, teamsResult, detailsResult, weeksResult, tradeRostersResult, feed] =
+          yield* Effect.all(
+            [roster, leagueTeams, details, weeks, tradeRosters, tradeFeed] as const,
+            {
+              concurrency: "unbounded",
+            },
+          );
         if (rosterResult._tag === "Failure") {
           return {
             status: "failed",
@@ -2390,6 +2418,12 @@ export const TransactionProposalsLive = Layer.effect(
           providerTeamKey: context.owned.team.providerTeamKey,
           players: new Map(
             detailsResult.success.map((detail) => [detail.providerPlayerKey, detail] as const),
+          ),
+          weeks: new Map(
+            (weeksResult._tag === "Success" ? weeksResult.success : []).map((week) => [
+              week.providerPlayerKey,
+              week,
+            ]),
           ),
           tradeRosters: new Map(
             [...tradeRostersResult.entries()].flatMap(([key, result]) =>
@@ -2903,6 +2937,15 @@ function evaluateItem(
         code: "player_unavailable",
         playerKey: add.key,
         detail: `Your league does not publish whether ${name ?? "an added player"} is available, so the add cannot be checked.`,
+      });
+      continue;
+    }
+    const week = facts.weeks.get(add.key);
+    if (week !== undefined && !week.plays) {
+      reasons.push({
+        code: "player_team_on_bye",
+        playerKey: add.key,
+        detail: `${name ?? "The added player"} does not play in scoring week ${String(week.week)}, and this league applies a roster change to that week.`,
       });
     }
   }
@@ -3621,6 +3664,8 @@ function staleFix(code: ProposalStaleCode): string {
       return "Split this team's moves into smaller sets and propose them separately.";
     case "period_closed":
       return "Wait for the league's next period and propose again.";
+    case "player_team_on_bye":
+      return "Choose a player whose professional team plays in that scoring week, then propose again.";
     case "bid_exceeds_budget":
       return "Lower the bid to the team's remaining FAAB balance or less, then propose again.";
     case "bid_not_available":

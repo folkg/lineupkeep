@@ -29,6 +29,7 @@ import type {
   ProviderPlayerScore,
   ProviderPendingTrade,
   ProviderPlayerSearchResult,
+  ProviderPlayerWeekFact,
   ProviderRoster,
   ProviderRosterCoverage,
   ProviderRosterSchedule,
@@ -86,6 +87,7 @@ type FakeProviderState = {
   readonly scheduleFailure: FakeRequestFailure | undefined;
   readonly schedulePeriods: ReadonlyArray<ProviderSchedulePeriod>;
   readonly playerDetails: ReadonlyArray<ProviderPlayerDetail>;
+  readonly playerWeeks: ReadonlyArray<ProviderPlayerWeekFact>;
   readonly searchPlayers: ReadonlyArray<ProviderPlayerSearchResult["players"][number]> | undefined;
   readonly playerScores: ReadonlyArray<FakePlayerScore>;
   readonly gamesPlayed: ReadonlyArray<ProviderGamesPlayed>;
@@ -152,6 +154,7 @@ export type FakeProviderWorldShape = {
   readonly failSchedule: (failure: FakeRequestFailure | undefined) => Effect.Effect<void>;
   readonly schedulePeriods: Effect.Effect<ReadonlyArray<ProviderSchedulePeriod>>;
   readonly setPlayerDetails: (details: ReadonlyArray<ProviderPlayerDetail>) => Effect.Effect<void>;
+  readonly setPlayerWeeks: (weeks: ReadonlyArray<ProviderPlayerWeekFact>) => Effect.Effect<void>;
   readonly setSearchPlayers: (
     players: ReadonlyArray<ProviderPlayerSearchResult["players"][number]>,
   ) => Effect.Effect<void>;
@@ -238,6 +241,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         scheduleFailure: undefined,
         schedulePeriods: [],
         playerDetails: [],
+        playerWeeks: [],
         searchPlayers: undefined,
         playerScores: [],
         gamesPlayed: [],
@@ -328,6 +332,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         failSchedule: (scheduleFailure) => modify((current) => ({ ...current, scheduleFailure })),
         schedulePeriods: Effect.map(Ref.get(state), (current) => current.schedulePeriods),
         setPlayerDetails: (playerDetails) => modify((current) => ({ ...current, playerDetails })),
+        setPlayerWeeks: (playerWeeks) => modify((current) => ({ ...current, playerWeeks })),
         setSearchPlayers: (players) =>
           modify((current) => ({ ...current, searchPlayers: players })),
         setPlayerScores: (playerScores) => modify((current) => ({ ...current, playerScores })),
@@ -783,6 +788,30 @@ const providerFake = Effect.gen(function* () {
               : { basis, stats: player.actual.stats, notAggregated: [] },
         }));
     }),
+    readPlayerWeeks: Effect.fn("FakeProvider.readPlayerWeeks")(function* (input) {
+      const current = yield* prepare(input, "read_player_weeks");
+      const rostered = new Map(
+        (current.roster?.players ?? []).map(
+          (player) => [player.providerPlayerKey, player] as const,
+        ),
+      );
+      return input.providerPlayerKeys.map((providerPlayerKey) => {
+        const configured = current.playerWeeks.find(
+          (week) => week.providerPlayerKey === providerPlayerKey,
+        );
+        if (configured !== undefined) {
+          return configured;
+        }
+        const player = rostered.get(providerPlayerKey);
+        return {
+          providerPlayerKey,
+          week: input.week.week,
+          plays: player?.scheduled ?? true,
+          opponent: player?.opponent,
+          projectedRank: undefined,
+        };
+      });
+    }),
     readPlayerHistory: Effect.fn("FakeProvider.readPlayerHistory")(function* (input) {
       const current = yield* prepare(input, "read_player_history");
       if (current.playerDetailsFailure !== undefined) {
@@ -951,6 +980,7 @@ const readOperations: ReadonlySet<ProviderOperation> = new Set<ProviderOperation
   "read_roster_schedule",
   "read_player_details",
   "read_player_history",
+  "read_player_weeks",
   "read_matchups",
   "search_players",
   "read_transactions",
@@ -1013,7 +1043,7 @@ const fakeCapabilities: ProviderCapabilities = {
       detail: "The fake provider does not serve basketball.",
     },
   },
-  publishesProjections: false,
+  projections: { basis: "week", sports: ["football"] },
   scheduleRead: { maximumDates: 21 },
   tradeProposal: {
     assets: ["player"],
@@ -1031,10 +1061,6 @@ const fakeCapabilities: ProviderCapabilities = {
       subject: "probable_starters",
       detail:
         "This provider publishes no probable-starter field on its fantasy read surface, so participation is reported only through the provider's injury status.",
-    },
-    {
-      subject: "projections",
-      detail: "Your league does not expose projected player statistics.",
     },
     {
       subject: "team_remaining_games",

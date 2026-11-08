@@ -16,6 +16,7 @@ const ProviderOperation = Schema.Literals([
   "read_roster_schedule",
   "read_player_details",
   "read_player_history",
+  "read_player_weeks",
   "search_players",
   "read_matchups",
   "read_transactions",
@@ -61,7 +62,6 @@ export type ProviderFantasyDay = typeof ProviderFantasyDay.Type;
 const ProviderLimitationSubject = Schema.Literals([
   "player_schedule",
   "probable_starters",
-  "projections",
   "team_remaining_games",
   "per_team_games_played",
   "lock_timing",
@@ -100,8 +100,13 @@ export type ProviderCapabilities = {
   };
   readonly tradeProposal: ProviderTradeProposal;
   readonly transactionRequest: ProviderTransactionRequest;
-  readonly publishesProjections: boolean;
+  readonly projections: ProviderProjectionSupport;
   readonly limitations: ReadonlyArray<ProviderLimitation>;
+};
+
+type ProviderProjectionSupport = {
+  readonly basis: "week";
+  readonly sports: ReadonlyArray<FantasySport>;
 };
 
 type ProviderPeriodMode = "native" | "aggregated" | "unsupported";
@@ -305,6 +310,13 @@ export type ProviderShape = {
   readonly readPlayerDetails: (
     input: ProviderSessionMaterial & ProviderPlayerReadInput,
   ) => Effect.Effect<ReadonlyArray<ProviderPlayerDetail>, ProviderReadFailure>;
+  readonly readPlayerWeeks: (
+    input: ProviderSessionMaterial & {
+      readonly providerLeagueKey: string;
+      readonly providerPlayerKeys: ReadonlyArray<string>;
+      readonly week: ProviderScoringWeek;
+    },
+  ) => Effect.Effect<ReadonlyArray<ProviderPlayerWeekFact>, ProviderReadFailure>;
   readonly readPlayerHistory: (
     input: ProviderSessionMaterial & {
       readonly providerLeagueKey: string;
@@ -528,6 +540,19 @@ export type ProviderTransactionTrend =
     }
   | { readonly status: "not_published"; readonly reason: string };
 
+export type PlayerWeekOpponent = {
+  readonly opponent: string;
+  readonly home: boolean;
+};
+
+export type ProviderPlayerWeekFact = {
+  readonly providerPlayerKey: string;
+  readonly week: number;
+  readonly plays: boolean;
+  readonly opponent: PlayerWeekOpponent | undefined;
+  readonly projectedRank: number | undefined;
+};
+
 export type ProviderRosterPlayer = {
   readonly providerPlayerKey: string;
   readonly name: string;
@@ -543,6 +568,7 @@ export type ProviderRosterPlayer = {
   readonly status?: ProviderPlayerStatus;
   readonly byeWeek: number | null;
   readonly scheduled: boolean;
+  readonly opponent?: PlayerWeekOpponent;
   readonly startingLineup: ProviderStartingLineup;
   readonly undroppable: boolean | null;
   readonly transactionTrend: ProviderTransactionTrend;
