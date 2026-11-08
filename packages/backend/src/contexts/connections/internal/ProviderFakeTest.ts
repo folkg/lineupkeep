@@ -68,8 +68,14 @@ type FakeGate = {
 
 type FakeWrite = "reserve_move" | "transaction" | "propose_trade" | "withdraw_trade";
 
+type FakeSessionRejection = {
+  readonly status?: number;
+  readonly detail?: string;
+};
+
 type FakeProviderState = {
   readonly sessionRejected: boolean;
+  readonly sessionRejection: FakeSessionRejection;
   readonly rejectedSessions: ReadonlySet<string>;
   readonly teams: ReadonlyArray<ProviderTeam>;
   readonly requestFailure: FakeRequestFailure | undefined;
@@ -134,6 +140,7 @@ export type FakeProviderWorldShape = {
   readonly state: Ref.Ref<FakeProviderState>;
   readonly rejectSession: (rejected: boolean) => Effect.Effect<void>;
   readonly rejectSessionFor: (sessions: ReadonlyArray<string>) => Effect.Effect<void>;
+  readonly setSessionRejection: (rejection: FakeSessionRejection) => Effect.Effect<void>;
   readonly setTeams: (teams: ReadonlyArray<ProviderTeam>) => Effect.Effect<void>;
   readonly failRequests: (failure: FakeRequestFailure | undefined) => Effect.Effect<void>;
   readonly blockDiscovery: Effect.Effect<FakeGate>;
@@ -226,6 +233,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
     Effect.gen(function* () {
       const state = yield* Ref.make<FakeProviderState>({
         sessionRejected: false,
+        sessionRejection: {},
         rejectedSessions: new Set<string>(),
         teams: [],
         requestFailure: undefined,
@@ -294,6 +302,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
           modify((current) => ({ ...current, sessionRejected: rejected })),
         rejectSessionFor: (sessions) =>
           modify((current) => ({ ...current, rejectedSessions: new Set(sessions) })),
+        setSessionRejection: (sessionRejection) =>
+          modify((current) => ({ ...current, sessionRejection })),
         setTeams: (teams) => modify((current) => ({ ...current, teams })),
         failRequests: (requestFailure) => modify((current) => ({ ...current, requestFailure })),
         blockDiscovery: Effect.gen(function* () {
@@ -441,7 +451,10 @@ const providerFake = Effect.gen(function* () {
       yield* validate(input, "validate_session");
       const current = yield* Ref.get(world.state);
       if (current.sessionRejected || current.rejectedSessions.has(Redacted.value(input.session))) {
-        return yield* ProviderSessionRejected.make({ operation: "validate_session" });
+        return yield* ProviderSessionRejected.make({
+          operation: "validate_session",
+          ...current.sessionRejection,
+        });
       }
       yield* requestFailure(current, "validate_session");
     }),
@@ -449,7 +462,10 @@ const providerFake = Effect.gen(function* () {
       yield* validate(input, "discover_teams");
       const current = yield* Ref.get(world.state);
       if (current.sessionRejected || current.rejectedSessions.has(Redacted.value(input.session))) {
-        return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
+        return yield* ProviderSessionRejected.make({
+          operation: "discover_teams",
+          ...current.sessionRejection,
+        });
       }
       yield* requestFailure(current, "discover_teams");
       const gate = Option.getOrUndefined(current.discoveryGate);

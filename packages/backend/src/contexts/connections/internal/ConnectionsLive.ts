@@ -24,6 +24,7 @@ import type {
 import { Connections } from "#contexts/connections/Connections.ts";
 import type { FantasyTeam } from "#contexts/connections/FantasyTeam.ts";
 import type { ProviderFailure } from "#contexts/connections/Provider.ts";
+import { sessionEvidenceOf } from "#contexts/connections/Provider.ts";
 import type { ProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 
@@ -307,6 +308,7 @@ export const ConnectionsLive = Layer.effect(
                     {
                       id: credential.connectionId,
                       expectedGeneration: credential.generation,
+                      evidence: sessionEvidenceOf(error),
                     },
                   ]),
                 );

@@ -1,0 +1,89 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "ea94c0a5-11c6-489b-a766-4760a54775a3",
+  "prevIds": ["aa4a4df6-781d-4149-92a5-ed61fd809c4f"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "connection_incidents", "operation"],
+      "writes": [
+        "s|col|public.connection_incidents.operation",
+        "n|col|public.connection_incidents.operation",
+        "e|col|public.connection_incidents.operation"
+      ],
+      "reads": ["n|tbl|public.connection_incidents", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "connection_incidents", "provider_status"],
+      "writes": [
+        "s|col|public.connection_incidents.provider_status",
+        "n|col|public.connection_incidents.provider_status",
+        "e|col|public.connection_incidents.provider_status"
+      ],
+      "reads": ["n|tbl|public.connection_incidents", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "connection_incidents", "provider_detail"],
+      "writes": [
+        "s|col|public.connection_incidents.provider_detail",
+        "n|col|public.connection_incidents.provider_detail",
+        "e|col|public.connection_incidents.provider_detail"
+      ],
+      "reads": ["n|tbl|public.connection_incidents", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "connection_incidents",
+        "name": "operation",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "connection_incidents",
+        "name": "provider_status",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "connection_incidents",
+        "name": "provider_detail",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

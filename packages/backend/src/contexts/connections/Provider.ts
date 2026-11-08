@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import type { Effect } from "effect";
 
+import type { ProviderSessionEvidence } from "./Connection.ts";
 import { FantasyLeague, FantasySport } from "./FantasyTeam.ts";
 import type { LineupTargetPeriod } from "./LineupRun.ts";
 import { ProviderKey } from "./ProviderKey.ts";
@@ -138,7 +139,17 @@ export class ProviderSessionRejected extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("provider.session_rejected", {
   operation: ProviderOperation,
+  status: Schema.optional(Schema.Int),
+  detail: Schema.optional(Schema.String),
 }) {}
+
+export function sessionEvidenceOf(error: ProviderSessionRejected): ProviderSessionEvidence {
+  return {
+    operation: error.operation,
+    ...(error.status === undefined ? {} : { status: error.status }),
+    ...(error.detail === undefined ? {} : { detail: error.detail }),
+  };
+}
 
 export class ProviderRequestFailed extends Schema.TaggedError<
   ProviderRequestFailed,

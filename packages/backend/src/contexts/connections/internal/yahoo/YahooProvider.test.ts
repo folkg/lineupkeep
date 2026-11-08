@@ -946,7 +946,7 @@ it.effect("rejects rejected sessions without exposing the cookie or response bod
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("cancels a rejected response body inside the request scope", () => {
+it.effect("reads a rejected response body inside the request scope", () => {
   let cancelled = false;
   const internet = recordingInternet(
     () =>
@@ -954,6 +954,7 @@ it.effect("cancels a rejected response body inside the request scope", () => {
         new ReadableStream<Uint8Array>({
           start(controller) {
             controller.enqueue(new TextEncoder().encode("private-provider-body"));
+            controller.close();
           },
           cancel() {
             cancelled = true;
@@ -965,9 +966,34 @@ it.effect("cancels a rejected response body inside the request scope", () => {
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    yield* Effect.flip(provider.validateSession(sessionInput));
+    const failure = yield* Effect.flip(provider.validateSession(sessionInput));
 
-    assert.isTrue(cancelled);
+    assert.isFalse(cancelled);
+    if (failure._tag !== "provider.session_rejected") {
+      return assert.fail(`expected a session rejection, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 403);
+    assert.isUndefined(failure.detail);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("keeps the provider statement from a refused session", () => {
+  const internet = recordingInternet(
+    () =>
+      new Response(JSON.stringify({ error: { description: "Invalid cookie" } }), {
+        status: 401,
+      }),
+  );
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const failure = yield* Effect.flip(provider.validateSession(sessionInput));
+
+    if (failure._tag !== "provider.session_rejected") {
+      return assert.fail(`expected a session rejection, got ${failure._tag}`);
+    }
+    assert.strictEqual(failure.status, 401);
+    assert.strictEqual(failure.detail, "Invalid cookie");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

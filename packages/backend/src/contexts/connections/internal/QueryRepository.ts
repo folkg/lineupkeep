@@ -12,6 +12,7 @@ import {
   ProviderKey,
 } from "#contexts/connections/Connection.ts";
 import type { ConnectionError } from "#contexts/connections/Connection.ts";
+import type { ProviderSessionEvidence } from "#contexts/connections/Connection.ts";
 import { FantasyTeam, TeamId } from "#contexts/connections/FantasyTeam.ts";
 import {
   QueryConnectionNotReady,
@@ -309,16 +310,23 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
       );
 
       const recordSessionRejectedMany = Effect.fn("QueryRepository.recordSessionRejectedMany")(
-        function* (userId: UserId, teams: ReadonlyArray<OwnedTeam>) {
-          if (teams.length === 0) {
+        function* (
+          userId: UserId,
+          rejections: ReadonlyArray<{
+            readonly owned: OwnedTeam;
+            readonly evidence?: ProviderSessionEvidence;
+          }>,
+        ) {
+          if (rejections.length === 0) {
             return;
           }
           yield* connections
             .markReconnectRequired(
               userId,
-              teams.map((team) => ({
-                id: team.connection.id,
-                expectedGeneration: team.connection.generation,
+              rejections.map((rejection) => ({
+                id: rejection.owned.connection.id,
+                expectedGeneration: rejection.owned.connection.generation,
+                ...(rejection.evidence === undefined ? {} : { evidence: rejection.evidence }),
               })),
             )
             .pipe(
@@ -335,8 +343,11 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
       const recordSessionRejected = Effect.fn("QueryRepository.recordSessionRejected")(function* (
         userId: UserId,
         team: OwnedTeam,
+        evidence?: ProviderSessionEvidence,
       ) {
-        yield* recordSessionRejectedMany(userId, [team]);
+        yield* recordSessionRejectedMany(userId, [
+          { owned: team, ...(evidence === undefined ? {} : { evidence }) },
+        ]);
       });
 
       const recordSessionProven = Effect.fn("QueryRepository.recordSessionProven")(function* (

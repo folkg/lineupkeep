@@ -22,6 +22,7 @@ import {
   providerSessionOf,
   StartLinkingInput,
 } from "#contexts/connections/Connection.ts";
+import type { ProviderSessionEvidence } from "#contexts/connections/Connection.ts";
 import {
   connectionLinkingWindowMillis,
   connectionListLimit,
@@ -67,6 +68,7 @@ export type ReconnectCommand = CompleteLinkingCommand & {
 type ReconnectRequiredCommand = {
   readonly id: ConnectionId;
   readonly expectedGeneration: ConnectionCredentialGeneration;
+  readonly evidence?: ProviderSessionEvidence;
 };
 
 export type ReadyCredential = {
@@ -514,6 +516,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                 transaction.insert(providerCredentials).values(chunk).returning(),
               );
 
+              yield* resolveIncidents(transaction, ids, now, "reconnected");
               return orderConnections(rows, ids);
             }),
           )
@@ -691,6 +694,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                               credentialGeneration: record.state.credentialGeneration,
                               status: "open" as const,
                               openedAt: DateTime.toDateUtc(at),
+                              operation: byId.get(record.id)?.evidence?.operation ?? null,
+                              providerStatus: byId.get(record.id)?.evidence?.status ?? null,
+                              providerDetail: byId.get(record.id)?.evidence?.detail ?? null,
                               resolvedAt: null,
                               resolution: null,
                             },

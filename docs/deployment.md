@@ -848,6 +848,61 @@ The stateless adapter composes request-local identity and calls public use cases
 MCP access tokens last five minutes and refresh tokens last 30 days from issue or last rotation; every refresh rotates the token, and reusing a rotated token outside the 30-second retry window revokes the whole grant. These values are explicit in `BetterAuthAdapter.ts` rather than inherited from a plugin default. The `oauth_resource.refresh_token_ttl` column can cap that value when set; it is null in the seeded schema, so leave it null unless deliberately shortening the grant. JWT signing keys are rows in the `jwks` table, and refresh tokens are hashed rows in `oauth_refresh_token`; a Cloud Run revision change or scale-to-zero therefore does not invalidate a live token or grant. Only pointing the service at a different database or deleting those rows invalidates an existing grant; changing `BETTER_AUTH_SECRET` invalidates browser session cookies, so keep it stable for sign-in continuity. `bun checks` and the MCP E2E exercise this on migrated local storage; they do not prove a specific production revision change.
 Metadata retrieval must stay public-only, reject redirects, and resist DNS rebinding at connection time. Process routing can pin approved addresses; Workers need host-enforced protection. Test metadata routing is never a production exception, and local workerd cannot prove this guarantee.
 
+### Provider session refusals (2026-11-08)
+
+One connection's stored Yahoo session stopped being accepted between two reads, and every read after it
+failed until the owner reconnected that connection. The other connection on the same account stayed
+healthy. This is the third occurrence of this shape, so the investigation used only stored evidence: the
+incident row, credential generations, deployment revisions, hosted sessions, and the wide events the
+services wrote.
+
+| Time (UTC)          | Stored evidence                                                                                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 14:11:26.896–29.569 | `get_team_summary` for league `477.l.31027` succeeded; its schedule read wrote provider facts at 14:11:29.269                                                    |
+| 14:11:30.063–31.078 | The next summary issued `readLeague`, `readStandings`, and `readRoster`; all three were refused in about 130 ms each, and all three recorded a session rejection |
+| 14:11:30.455        | Incident `01M6XR002ANT5QJX1TAYBN1W0A` opened for connection `01a17360-1cb3-74eb-afe1-efb23ae91784` at credential generation 1                                    |
+| 14:11:37–39         | Later summaries were refused with `connection_not_ready`; no provider request was made                                                                           |
+| 14:27:02.918–58.054 | A hosted linking session replaced the credential; generation 2 was stored at 14:27:57.939 and the connection read `ready`                                        |
+| 14:29:45–57         | All five teams' summaries succeeded with the new session, including the team that had been refused                                                               |
+| Throughout          | Connection `01a184ac-ce08-7c1a-afb0-534449f45cb8` (generation 1, linked 2026-10-28) stayed `ready` and read successfully before and after the event              |
+
+What the evidence ruled out:
+
+| Hypothesis                                                    | Evidence                                                                                                                                                                                                              |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Our own rotation or refresh wrote a rejected credential       | Credentials are written only at link, reconnect, or a re-wrap that keeps the same plaintext. Generation stayed 1 until 14:27:57, and both the accepted and refused requests decrypted under envelope key version 1    |
+| A write in another session of the same account invalidated it | The only write intents on 2026-11-08 are `verified_no_op` rows at 13:55 and after 14:55; no provider write ran near 14:11                                                                                             |
+| The hosted browser's session ended                            | The only hosted linking session in the database started at 14:27:02, after the refusal; none existed at 14:11                                                                                                         |
+| A deploy or encryption-key change touched the session         | Web revision `…-00105-65c` was active from 10:45:44 to 16:00:49, and the credential key version was 1 on both sides of the refusal. A key failure surfaces as `connection.persistence_failed`, not a provider refusal |
+| The whole provider or transport was down                      | The same provider answered the successful read one second earlier, the refused reads returned in about 130 ms rather than timing out, and the second connection stayed healthy                                        |
+| Permanent league membership loss                              | The same account read the same team's league at 14:29 after reconnecting, so the provider was refusing the stored session, not the account's standing                                                                 |
+
+What the evidence did not settle: whether the provider answered `401` (the stored session is dead) or
+`403` (a refusal scoped to the requested league). Both map to `provider.session_rejected` today, and the
+HTTP status and the provider's own wording were discarded. The refusal now records `operation`,
+`provider_status`, and `provider_detail` on the incident row, and annotates the status on the span.
+That single observation decides the next occurrence: `401` means the provider invalidated the session;
+`403` carrying `You are not allowed to view this page because you are not in this league.` is an access
+refusal and must not ask for a reconnect. Reconnect was the correct remedy here because a new session
+read the same leagues, so a session-scoped refusal is the more likely reading, but it is not recorded.
+
+Inspecting the next occurrence:
+
+```sh
+psql "$DATABASE_URL" -c "select id, connection_id, credential_generation, opened_at, operation,
+  provider_status, provider_detail, status, resolved_at, resolution
+  from connection_incidents order by opened_at desc limit 5"
+```
+
+A reconnect resolves the open incident for the generation it replaces. Before this change the 14:27
+reconnect left incident `01M6XR002ANT5QJX1TAYBN1W0A` open even though the connection was `ready` at
+generation 2; only its notification was cancelled, by the generation comparison in `NotificationsLive`.
+
+A connection read now states the stored session's own layer: `session.usable`, `session.provenAt`,
+`session.rejectedAt`, and one action with its detail. Reconnecting the MCP connector in the client is a
+different sign-in from reconnecting the provider connection in Lineupgrade, and the refusal and the
+action detail say so in the same sentence.
+
 ### Browser sessions
 
 A signed cookie keeps a browser signed in. Every authenticated request reads its `session` row, because

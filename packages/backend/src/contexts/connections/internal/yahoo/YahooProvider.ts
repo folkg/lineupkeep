@@ -594,9 +594,15 @@ export const yahooProvider = Effect.gen(function* () {
           }
           yield* Effect.annotateCurrentSpan("http.response.status_code", response.status);
           if (response.status === 401 || response.status === 403) {
-            yield* discardBody(response);
-            yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
-            return yield* ProviderSessionRejected.make({ operation: "propose_trade" });
+            yield* Effect.annotateCurrentSpan({
+              "provider.outcome": "session_rejected",
+              "provider.refusal.status": response.status,
+            });
+            return yield* ProviderSessionRejected.make({
+              operation: "propose_trade",
+              status: response.status,
+              ...(yield* providerRefusalDetail(response)),
+            });
           }
           if (!response.ok) {
             const failure = yield* writeFailureOf(response);
@@ -718,9 +724,15 @@ export const yahooProvider = Effect.gen(function* () {
           }
           yield* Effect.annotateCurrentSpan("http.response.status_code", response.status);
           if (response.status === 401 || response.status === 403) {
-            yield* discardBody(response);
-            yield* Effect.annotateCurrentSpan("provider.outcome", "session_rejected");
-            return yield* ProviderSessionRejected.make({ operation });
+            yield* Effect.annotateCurrentSpan({
+              "provider.outcome": "session_rejected",
+              "provider.refusal.status": response.status,
+            });
+            return yield* ProviderSessionRejected.make({
+              operation,
+              status: response.status,
+              ...(yield* providerRefusalDetail(response)),
+            });
           }
           if (response.ok) {
             yield* discardBody(response);
@@ -1365,8 +1377,12 @@ function readJson(
         .pipe(Effect.mapError(() => ProviderRequestFailed.make({ operation: request.operation })));
 
       if (response.status === 401 || response.status === 403) {
-        yield* discardBody(response);
-        return yield* ProviderSessionRejected.make({ operation: request.operation });
+        yield* Effect.annotateCurrentSpan("provider.refusal.status", response.status);
+        return yield* ProviderSessionRejected.make({
+          operation: request.operation,
+          status: response.status,
+          ...(yield* providerRefusalDetail(response)),
+        });
       }
       if (!response.ok) {
         yield* discardBody(response);
@@ -1642,6 +1658,41 @@ function findPendingTradeKey(value: unknown): string | undefined {
 
 function reserveMoveBody(target: ProviderNativeTarget, playerKey: string, slot: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><fantasy_content><roster>${coverageBody(target)}<players><player><player_key>${playerKey}</player_key><position>${slot}</position></player></players></roster></fantasy_content>`;
+}
+
+const refusalBodyLimitCharacters = 4_096;
+
+function providerRefusalDetail(
+  response: Response,
+): Effect.Effect<{ readonly detail?: string }, never> {
+  const body = response.body;
+  if (body === null) {
+    return Effect.succeed({});
+  }
+  return Effect.gen(function* () {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    while (text.length < refusalBodyLimitCharacters) {
+      const next = yield* Effect.tryPromise({
+        try: () => reader.read(),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(() => undefined));
+      if (next === undefined || next.done) {
+        break;
+      }
+      text += decoder.decode(next.value, { stream: true });
+    }
+    yield* Effect.promise(() => reader.cancel().catch(() => undefined));
+    return refusalDetailOf(text);
+  });
+}
+
+function refusalDetailOf(text: string): { readonly detail?: string } {
+  const statement = providerStatement(withoutProviderSecrets(text))?.trim();
+  return statement === undefined || statement.length === 0
+    ? {}
+    : { detail: statement.slice(0, 300) };
 }
 
 function providerErrorDetail(

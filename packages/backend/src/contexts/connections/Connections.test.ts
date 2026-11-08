@@ -25,6 +25,7 @@ import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
 import { providerConnections, providerCredentials } from "./internal/ConnectionTables.ts";
+import { connectionIncidents } from "./internal/IncidentTables.ts";
 import { FakeProviderWorld, ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { ProviderRegistry } from "./ProviderRegistry.ts";
 
@@ -134,6 +135,7 @@ it.effect("reports whether the stored session is usable and names the layer to r
       action: "reconnect-provider-connection",
       actionDetail: providerSessionReconnectDetail,
     });
+    assert.include(refused.session.actionDetail, "not the MCP connector in your client");
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
@@ -153,6 +155,55 @@ it.effect("reconnects a ready connection to a new credential generation", () =>
     assert.strictEqual(reconnected.status, "ready");
     assert.strictEqual(reconnected.credentialGeneration, 2);
     assert.deepStrictEqual(yield* connections.list(owner), [reconnected]);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("records the provider's refusal status and wording on the incident", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    const detail = "You are not allowed to view this page because you are not in this league.";
+    yield* fake.setSessionRejection({ status: 403, detail });
+    yield* fake.rejectSession(true);
+
+    const failure = yield* Effect.flip(connections.discoverTeams(owner, [{ id: linked.id }]));
+    assert.instanceOf(failure, ConnectionProviderRejected);
+
+    const incidents = yield* database.select().from(connectionIncidents);
+    assert.strictEqual(incidents.length, 1);
+    assert.strictEqual(incidents[0]?.status, "open");
+    assert.strictEqual(incidents[0]?.credentialGeneration, 1);
+    assert.strictEqual(incidents[0]?.operation, "discover_teams");
+    assert.strictEqual(incidents[0]?.providerStatus, 403);
+    assert.strictEqual(incidents[0]?.providerDetail, detail);
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
+);
+
+it.effect("resolves the open incident when a reconnect replaces the session", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const database = yield* ConnectionsDatabase;
+    const fake = yield* FakeProviderWorld;
+    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    yield* fake.rejectSession(true);
+    yield* Effect.flip(connections.discoverTeams(owner, [{ id: linked.id }]));
+    yield* fake.rejectSession(false);
+
+    const reconnected = Array.getUnsafe(
+      yield* connections.completeReconnect(owner, [
+        { id: linked.id, provider: decodeProviderKey("yahoo"), session },
+      ]),
+      0,
+    );
+    assert.strictEqual(reconnected.credentialGeneration, 2);
+
+    const incidents = yield* database.select().from(connectionIncidents);
+    assert.strictEqual(incidents.length, 1);
+    assert.strictEqual(incidents[0]?.status, "resolved");
+    assert.strictEqual(incidents[0]?.resolution, "reconnected");
+    assert.isDefined(incidents[0]?.resolvedAt);
   }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 

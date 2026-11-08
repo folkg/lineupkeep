@@ -31,6 +31,7 @@ import type {
   ProviderTransactionTeam,
   ProviderWriteResult,
 } from "#contexts/connections/Provider.ts";
+import { sessionEvidenceOf } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import type { QueryError, QueryTeam } from "#contexts/connections/QueryValues.ts";
 import type { CounterpartyRef, PlayerRef } from "#contexts/connections/QueryValues.ts";
@@ -1536,7 +1537,11 @@ export const TransactionProposalsLive = Layer.effect(
         const decidedAt = yield* DateTime.now;
         if (reserve._tag === "Failure") {
           if (reserve.failure._tag === "provider.session_rejected") {
-            yield* queries.recordSessionRejected(input.userId, input.context.owned);
+            yield* queries.recordSessionRejected(
+              input.userId,
+              input.context.owned,
+              sessionEvidenceOf(reserve.failure),
+            );
           }
           const detail = sessionFailureDetail(reserve.failure._tag, "reserve move");
           return { step: step("failed", detail, decidedAt), outcome: "failed" as const, detail };
@@ -1575,7 +1580,11 @@ export const TransactionProposalsLive = Layer.effect(
         const stepAt = yield* DateTime.now;
         if (transaction._tag === "Failure") {
           if (transaction.failure._tag === "provider.session_rejected") {
-            yield* queries.recordSessionRejected(input.userId, input.context.owned);
+            yield* queries.recordSessionRejected(
+              input.userId,
+              input.context.owned,
+              sessionEvidenceOf(transaction.failure),
+            );
           }
           const detail = sessionFailureDetail(transaction.failure._tag, "transaction");
           return {
@@ -1678,7 +1687,11 @@ export const TransactionProposalsLive = Layer.effect(
         const stepAt = yield* DateTime.now;
         if (applied._tag === "Failure") {
           if (applied.failure._tag === "provider.session_rejected") {
-            yield* queries.recordSessionRejected(input.userId, input.context.owned);
+            yield* queries.recordSessionRejected(
+              input.userId,
+              input.context.owned,
+              sessionEvidenceOf(applied.failure),
+            );
           }
           const detail = sessionFailureDetail(applied.failure._tag, "slot move");
           return {
@@ -1742,7 +1755,11 @@ export const TransactionProposalsLive = Layer.effect(
         const decidedAt = yield* DateTime.now;
         if (sent._tag === "Failure") {
           if (sent.failure._tag === "provider.session_rejected") {
-            yield* queries.recordSessionRejected(input.userId, input.context.owned);
+            yield* queries.recordSessionRejected(
+              input.userId,
+              input.context.owned,
+              sessionEvidenceOf(sent.failure),
+            );
           }
           return {
             outcome: "failed",
@@ -1843,7 +1860,7 @@ export const TransactionProposalsLive = Layer.effect(
               });
               return error._tag === "provider.session_rejected"
                 ? queries
-                    .recordSessionRejected(userId, context.owned)
+                    .recordSessionRejected(userId, context.owned, sessionEvidenceOf(error))
                     .pipe(Effect.andThen(unavailable))
                 : unavailable;
             },
@@ -1907,7 +1924,10 @@ export const TransactionProposalsLive = Layer.effect(
       ProposalPersistenceFailed
     > {
       return Effect.gen(function* () {
-        const rejected: Array<Parameters<typeof queries.recordSessionRejected>[1]> = [];
+        const rejected: Array<{
+          readonly owned: Parameters<typeof queries.recordSessionRejected>[1];
+          readonly evidence: Parameters<typeof queries.recordSessionRejected>[2];
+        }> = [];
         const feeds = yield* Effect.forEach(
           [...new Set(teamIds)],
           (teamId) =>
@@ -1932,7 +1952,10 @@ export const TransactionProposalsLive = Layer.effect(
               );
               if (offers._tag === "Failure") {
                 if (offers.failure._tag === "provider.session_rejected") {
-                  rejected.push(context.owned);
+                  rejected.push({
+                    owned: context.owned,
+                    evidence: sessionEvidenceOf(offers.failure),
+                  });
                 }
                 return { teamId, leagueKey: undefined, teamKey: undefined, trades: [] } as const;
               }
@@ -2070,7 +2093,11 @@ export const TransactionProposalsLive = Layer.effect(
       );
       if (before._tag === "Failure") {
         if (before.failure._tag === "provider.session_rejected") {
-          yield* queries.recordSessionRejected(userId, context.owned);
+          yield* queries.recordSessionRejected(
+            userId,
+            context.owned,
+            sessionEvidenceOf(before.failure),
+          );
         }
         return yield* ProposalProviderUnavailable.make({
           detail:
@@ -2092,7 +2119,11 @@ export const TransactionProposalsLive = Layer.effect(
       );
       if (withdrawn._tag === "Failure") {
         if (withdrawn.failure._tag === "provider.session_rejected") {
-          yield* queries.recordSessionRejected(userId, context.owned);
+          yield* queries.recordSessionRejected(
+            userId,
+            context.owned,
+            sessionEvidenceOf(withdrawn.failure),
+          );
         }
         return yield* ProposalProviderUnavailable.make({
           detail:
@@ -2571,7 +2602,11 @@ export const TransactionProposalsLive = Layer.effect(
               );
               if (pending._tag === "Failure") {
                 if (pending.failure._tag === "provider.session_rejected") {
-                  yield* queries.recordSessionRejected(userId, context.owned);
+                  yield* queries.recordSessionRejected(
+                    userId,
+                    context.owned,
+                    sessionEvidenceOf(pending.failure),
+                  );
                 }
                 return {
                   pending: [],

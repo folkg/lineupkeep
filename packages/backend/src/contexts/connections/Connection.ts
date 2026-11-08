@@ -39,6 +39,12 @@ export type ConnectionCredentialGeneration = typeof ConnectionCredentialGenerati
 
 const ConnectionTimestamp = Schema.DateTimeUtc;
 
+export type ProviderSessionEvidence = {
+  readonly operation: string;
+  readonly status?: number;
+  readonly detail?: string;
+};
+
 export const ProviderSessionRead = Schema.Struct({
   usable: Schema.Boolean,
   provenAt: Schema.optional(ConnectionTimestamp),

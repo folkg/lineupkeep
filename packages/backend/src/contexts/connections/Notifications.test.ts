@@ -14,8 +14,10 @@ import { Connections } from "./Connections.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
 import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
+import { ConnectionsDatabase } from "./internal/ConnectionsDatabase.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
+import { connectionIncidents, notifications } from "./internal/IncidentTables.ts";
 import { NotificationsLive } from "./internal/NotificationsRepository.ts";
 import { ProviderFakeTest } from "./internal/ProviderFakeTest.ts";
 import { Notifications } from "./Notifications.ts";
@@ -89,8 +91,9 @@ it.effect("cancels the notification when the connection is reconnected", () =>
   Effect.gen(function* () {
     const connections = yield* Connections;
     const repository = yield* ConnectionRepository;
-    const notifications = yield* Notifications;
+    const notificationRunner = yield* Notifications;
     const outbox = yield* EmailOutbox;
+    const database = yield* ConnectionsDatabase;
     const ready = yield* connect(connections);
     yield* repository.markReconnectRequired(owner, [
       { id: ready.id, expectedGeneration: credentialGeneration(ready) },
@@ -99,12 +102,16 @@ it.effect("cancels the notification when the connection is reconnected", () =>
     yield* connections.completeReconnect(owner, [
       { id: ready.id, provider: decodeProviderKey("yahoo"), session },
     ]);
-    const summary = yield* notifications.run(10, yield* DateTime.now);
+    const summary = yield* notificationRunner.run(10, yield* DateTime.now);
     const messages = yield* outbox.messages;
 
     assert.strictEqual(summary.sent, 0);
-    assert.strictEqual(summary.cancelled, 1);
     assert.strictEqual(messages.length, 0);
+    const incidents = yield* database.select().from(connectionIncidents);
+    assert.strictEqual(incidents[0]?.status, "resolved");
+    assert.strictEqual(incidents[0]?.resolution, "reconnected");
+    const rows = yield* database.select().from(notifications);
+    assert.strictEqual(rows[0]?.status, "cancelled");
   }).pipe(Effect.provide(TestLayer)),
 );
 

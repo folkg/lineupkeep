@@ -25,6 +25,7 @@ import {
 } from "#contexts/connections/LineupRun.ts";
 import { LineupWorker } from "#contexts/connections/LineupWork.ts";
 import type { LineupDeliveryReport } from "#contexts/connections/LineupWork.ts";
+import { sessionEvidenceOf } from "#contexts/connections/Provider.ts";
 import type {
   Provider,
   ProviderLeagueSettings,
@@ -533,7 +534,7 @@ export const LineupWorkerLive = Layer.effect(
         switch (applied.failure._tag) {
           case "provider.session_rejected":
             yield* fail(run, intent, "provider_session_rejected", providerSessionReconnectDetail);
-            return yield* stopSession(run.record.userId, context);
+            return yield* stopSession(run.record.userId, context, applied.failure);
           case "provider.response_invalid":
             return yield* fail(
               run,
@@ -687,18 +688,17 @@ export const LineupWorkerLive = Layer.effect(
         }),
       );
       if (readback._tag === "Failure") {
-        const rejected = readback.failure._tag === "provider.session_rejected";
         yield* uncertain(
           run,
           intent.id,
           "readback_unavailable",
-          rejected
+          readback.failure._tag === "provider.session_rejected"
             ? `The response from your league could not be verified by reading the roster back. ${providerSessionReconnectDetail}`
             : "The response from your league could not be verified by reading the roster back.",
           planRecordOf(intent.plan),
         );
-        if (rejected) {
-          return yield* stopSession(run.record.userId, context);
+        if (readback.failure._tag === "provider.session_rejected") {
+          return yield* stopSession(run.record.userId, context, readback.failure);
         }
         return;
       }
@@ -991,7 +991,7 @@ export const LineupWorkerLive = Layer.effect(
           return;
         case "provider.session_rejected":
           yield* fail(run, undefined, "provider_session_rejected", providerSessionReconnectDetail);
-          return yield* stopSession(run.record.userId, owned);
+          return yield* stopSession(run.record.userId, owned, error);
         case "provider.request_failed":
           yield* retry(
             run,
@@ -1017,8 +1017,12 @@ export const LineupWorkerLive = Layer.effect(
       }
     });
 
-    const stopSession = Effect.fnUntraced(function* (userId: UserId, owned: OwnedTeam) {
-      yield* queries.recordSessionRejected(userId, owned);
+    const stopSession = Effect.fnUntraced(function* (
+      userId: UserId,
+      owned: OwnedTeam,
+      error: ProviderSessionRejected,
+    ) {
+      yield* queries.recordSessionRejected(userId, owned, sessionEvidenceOf(error));
       return yield* LineupSessionStopped.make({
         connectionId: owned.connection.id,
         detail: providerSessionReconnectDetail,

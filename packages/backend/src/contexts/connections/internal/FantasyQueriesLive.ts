@@ -36,6 +36,7 @@ import type {
   ProviderTransactionTeam,
 } from "#contexts/connections/Provider.ts";
 import type { ProviderLimitationSubject } from "#contexts/connections/Provider.ts";
+import { sessionEvidenceOf } from "#contexts/connections/Provider.ts";
 import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import type {
   AcquisitionLimits,
@@ -185,7 +186,13 @@ export const FantasyQueriesLive = Layer.effect(
           return Effect.succeed({ _tag: "unsupported", detail: error.reason });
         case "provider.session_rejected":
           return Ref.set(context.sessionRejected, true).pipe(
-            Effect.andThen(repository.recordSessionRejected(context.userId, context.owned)),
+            Effect.andThen(
+              repository.recordSessionRejected(
+                context.userId,
+                context.owned,
+                sessionEvidenceOf(error),
+              ),
+            ),
             Effect.as<FailureOutcome>({
               _tag: "failed",
               failure: {
