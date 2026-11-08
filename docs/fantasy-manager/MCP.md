@@ -225,8 +225,8 @@ that remaining-game count only as a fantasy-team total of player-games (National
 and a football player plays at most one game per scoring week. The provider publishes no
 per-professional-team remaining-game count and no probable-starter field; Lineupgrade counts the
 professional team's games from the league's own schedule instead. `get_rosters` reports `proTeam`,
-injury, and the bye week where published; its `playerSchedule` declaration states the per-player
-schedule boundary instead of an empty list, and `get_team_summary`'s `schedule` group publishes the
+injury, and the bye week where published, and a player row states whether his professional team plays
+in the current scoring week and against whom; `get_team_summary`'s `schedule` group publishes the
 games themselves and each player's games remaining. With `roster` selected, the summary also carries
 `illegalSlots`: rostered players whose eligible positions do not include the slot the league declares
 for them, each with the league's own slot name, the positions the player does hold, and one sentence.
@@ -270,9 +270,9 @@ bound to the league scope and its arguments. The league page uses the explicit-l
 so a twelve-team league fits in one page. League player rows carry the same identity, positions,
 `proTeam`, slot, injury/availability, bye week, and undroppable fields the provider publishes in
 that shape; the shape publishes no add/drop counts, so `transactionTrend` is `not_published` with a
-reason and never zero. `ownerNote` and the `playerSchedule` declaration belong to a linked team read and are not
-published for a league page; games are read through `get_team_summary`. If the provider refuses the league roster shape, the result is `unsupported` or `failed` with
-a coverage entry and no team rows, never a successful empty roster.
+reason and never zero. `ownerNote` belongs to a linked team read and is not published for a league page;
+games are read through `get_team_summary`. If the provider refuses the league roster shape, the result is
+`unsupported` or `failed` with a coverage entry and no team rows, never a successful empty roster.
 
 `search_players` and the `get_team_summary` roster publish `transactionTrend` where a player row
 carries it. A published trend is `{ status: "published", adds, drops, window: "provider_current_day" }`:
@@ -421,8 +421,7 @@ snapshot and fits a 13-team league inside the summary's 20 KiB target and 28 KiB
 roster and schedule rows page with the returned cursor. Each section states its own availability, so a
 failed standings read leaves the roster and matchup intact. `remainingPlayerGames` names its unit
 (`fantasy_team_player_games`), because that is the only granularity Yahoo publishes for a fantasy
-team; football declares it unsupported with the bye-week alternative, and probable starters are
-always declared unsupported because no read shape exposes them.
+team; football declares it unsupported with the bye-week alternative in its place.
 
 The `schedule` group answers what a client cannot otherwise compute: which games a candidate has in
 a stated window, how many games their professional team has left in it, and which nights are light.
@@ -626,8 +625,8 @@ session material were retained.
   the 13-team rotisserie hockey league (12 standing rows returned in this pass) returned `ok` with
   seven roster rows, a next cursor, and these sections: `standings` (2,469 bytes), `schedule`
   (2,863), `matchup` (1,440, with paired categories),
-  `categoryTotals` (1,009), `acquisitionUsage` (512), `probableStarters` (311), `coverage` (851),
-  and `roster` (1,531) inside a 28,672-byte hard ceiling. The measured result was 12,439 structured
+  `categoryTotals` (1,009), `acquisitionUsage` (512), `coverage` (851), and `roster` (1,531)
+  inside a 28,672-byte hard ceiling. The measured result was 12,439 structured
   bytes and 27,504 wire bytes, where wire counts the structured copy, its escaped text copy, and
   1,024 bytes of envelope. `categoryPoints` was unsupported because this league's provider
   published no rotisserie points for the current team in this pass.

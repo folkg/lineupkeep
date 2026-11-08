@@ -61,9 +61,9 @@ source won crosses the seam.
   daily reads, or not at all.
 - `scheduleRead.maximumDates`: how many dates one schedule read covers (_third pass_).
 - `publishesProjections`: whether the query surface can offer the projections group.
-- `limitations`: named, human-readable limitations by subject (`player_schedule`,
-  `probable_starters`, `projections`, `team_remaining_games`, `per_team_games_played` (_third pass_),
-  `lock_timing`, `historical_seasons`).
+- `limitations`: named, human-readable limitations by subject. Today the provider declares
+  `team_remaining_games` and `per_team_games_played`; a subject it can answer carries no limitation, so
+  the list shrinks as coverage grows rather than describing absent sections a client cannot request.
 
 Generic query code renders and enforces those facts. It never infers them from a provider name.
 
