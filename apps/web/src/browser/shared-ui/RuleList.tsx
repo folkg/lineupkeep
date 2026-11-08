@@ -3,8 +3,15 @@ import type { Element } from "solid-js";
 
 import { cx } from "./cx";
 
-export function RuleList(props: { readonly children: Element }): JSX.Element {
-  return <ol class="w-full">{props.children}</ol>;
+export function RuleList(props: {
+  readonly children: Element;
+  readonly settling?: boolean;
+}): JSX.Element {
+  return (
+    <ol class="w-full" data-motion={props.settling === true ? "settle" : undefined}>
+      {props.children}
+    </ol>
+  );
 }
 
 export function RuleListItem(props: {

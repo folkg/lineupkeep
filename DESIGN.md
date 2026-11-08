@@ -287,6 +287,33 @@ hosted browser viewport, or a dialog. Prose, lists, notices, and empty states us
 **The Rule, Not a Box Rule.** A section title owns one hairline. List rows own one hairline between
 them. Status and empty states use a leading rule or plain text, never a dashed or bordered card.
 
+## Motion
+
+Most of the interface does not move. Motion is spent on the few moments a person meets rarely: a
+list arriving where an empty state was, and a submitted set settling into its outcome. Nothing on the
+frequent path animates — no hover, focus, list row at rest, navigation, or control press. The one
+continuous motion in the product is the hairline a working control draws.
+
+**The Rare Moment Rule.** A moment earns motion when it is occasional or first-time and its purpose
+is to prevent a jarring change or to make a state legible. If it repeats many times a day, or it only
+looks nice, it stays still.
+
+- An arrival settles in once: `opacity` from 0 with a 4px rise, on `--theme-duration-reveal` with
+  `--theme-ease-out`. It plays when content becomes populated while the page is open; a page load or
+  a navigation never animates.
+- Only `transform` and `opacity` move. Nothing animates a width, a height, a margin, a padding, or an
+  offset.
+- Durations and easings come from the tokens beside them. A component never invents one, and the UI
+  stays under 300ms. Constant motion — the working hairline — is `linear`.
+- Motion is CSS: a transition where a state can change back, keyframes for a one-shot entrance. There
+  is no animation library.
+- `prefers-reduced-motion: reduce` is authoritative. Every duration collapses to zero, the working
+  hairline holds still, and entrances are removed rather than shortened. The content is the same
+  content.
+
+The [action states](#action-states) keep their own timing: the switch, the pause, the refresh tick,
+and note save are decided there and are not retimed by a motion pass.
+
 ## Components
 
 ### Actions
@@ -406,6 +433,8 @@ or connection health.
 - Do spend violet once per view on the primary action.
 - Do apply tabular numerals to comparable numbers only.
 - Do keep the wordmark lowercase and the mark gold.
+- Do keep motion to the rare moments named under [Motion](#motion), on the theme's duration and
+  easing tokens.
 - Do preserve keyboard access, visible focus, selection, zoom, and reduced motion.
 - Do keep the provider jump-out with the team name and the pause control in place.
 - Do let long names wrap and rows stack below 560px.
@@ -421,6 +450,7 @@ or connection health.
 - Don't remove a control or shift the cluster when it becomes unavailable; disable it in place.
 - Don't float controls to the right of a metadata line.
 - Don't use colour alone for connection, automation, or risk.
+- Don't animate the frequent path: hover, focus, a list row at rest, navigation, or a control press.
 - Don't expose credentials, cookies, provider GUIDs, raw payloads, or raw errors.
 
 [Brand notes](docs/brand/BRAND.md) owns naming, voice, and placement. The [specimen](docs/brand/preview.html) illustrates the foundation; it is not a product prototype. This design does not authorize launch, waive the dependency blocker, or establish trademark/domain ownership.

@@ -20,6 +20,7 @@ import { Page } from "#browser/shared-ui/Page.tsx";
 import { Quote } from "#browser/shared-ui/Quote.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
+import { createSettle } from "#browser/shared-ui/settle.ts";
 import { Split } from "#browser/shared-ui/Split.tsx";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
@@ -137,6 +138,7 @@ function isNotFoundFailure(error: unknown): boolean {
 }
 
 function Review(props: ReviewProps): JSX.Element {
+  const settling = createSettle(() => props.model.latestSubmission !== undefined);
   const submitted = (): boolean => props.model.submitted;
   const settled = (): boolean => props.model.settled;
   const canSubmit = (): boolean =>
@@ -169,6 +171,7 @@ function Review(props: ReviewProps): JSX.Element {
           {(submission) => (
             <SubmittedSummary
               counts={props.model.counts}
+              settling={settling()}
               finished={props.model.finished}
               review={props.model.review}
               settled={settled()}
@@ -290,7 +293,7 @@ function ProposalSummary(props: ProposalSummaryProps): JSX.Element {
 
 function SubmittedSummary(props: SubmittedSummaryProps): JSX.Element {
   return (
-    <FocusRegion id={resultSummaryId} labelledBy="submitted-title">
+    <FocusRegion id={resultSummaryId} labelledBy="submitted-title" settle={props.settling}>
       <Box rule="bottom" space="lg">
         <Stack gap="sm">
           <SectionTitle
@@ -1376,6 +1379,7 @@ type ProposalSummaryProps = {
 
 type SubmittedSummaryProps = {
   readonly review: TransactionReviewView;
+  readonly settling: boolean;
   readonly submittedAt: string;
   readonly submissionCount: number;
   readonly settled: boolean;

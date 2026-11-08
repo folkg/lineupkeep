@@ -151,6 +151,18 @@
     }
   }
 
+  @keyframes settle-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.25rem);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
   @keyframes action-tick-draw {
     from {
       stroke-dashoffset: 18;
@@ -216,6 +228,14 @@
   animation: action-work var(--theme-duration-work) linear infinite;
 }
 
+[data-state="working"]:is(:disabled, [aria-disabled="true"]) {
+  opacity: 1;
+}
+
+[data-motion="settle"] {
+  animation: settle-in var(--theme-duration-reveal) var(--theme-ease-out) both;
+}
+
 [data-action-mark="tick"] {
   animation: action-tick-hold var(--theme-duration-confirm) step-end forwards;
 }
@@ -253,6 +273,10 @@
   [data-action-mark="work"] {
     animation: none;
     transform: translateX(100%);
+  }
+
+  [data-motion="settle"] {
+    animation: none;
   }
 
   .animate-pulse {

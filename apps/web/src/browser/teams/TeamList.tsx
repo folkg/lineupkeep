@@ -11,6 +11,7 @@ import { Inline } from "#browser/shared-ui/Inline.tsx";
 import { Notice } from "#browser/shared-ui/Notice.tsx";
 import { RuleList, RuleListItem } from "#browser/shared-ui/RuleList.tsx";
 import { SectionTitle } from "#browser/shared-ui/SectionTitle.tsx";
+import { createSettle } from "#browser/shared-ui/settle.ts";
 import { Stack } from "#browser/shared-ui/Stack.tsx";
 import { Text } from "#browser/shared-ui/Text.tsx";
 import { TextLink } from "#browser/shared-ui/TextLink.tsx";
@@ -26,6 +27,7 @@ import { teamStatusLine } from "./teamStatus";
 
 export function TeamList(props: TeamListProps): JSX.Element {
   const clock = createMinuteClock(() => props.dataUpdatedAt());
+  const settling = createSettle(() => !props.isLoading() && props.teams().length > 0);
 
   return (
     <Stack as="section" gap="md" labelledBy="teams-list-title">
@@ -82,7 +84,7 @@ export function TeamList(props: TeamListProps): JSX.Element {
             }
             when={props.teams().length > 0}
           >
-            <RuleList>
+            <RuleList settling={settling()}>
               <For each={props.teams()}>
                 {(team) => <TeamRow now={clock.now} team={team} remote={props.remote} />}
               </For>
