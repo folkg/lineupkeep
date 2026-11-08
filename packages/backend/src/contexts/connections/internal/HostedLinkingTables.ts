@@ -105,7 +105,7 @@ type RowContent = {
 function stateFromRow(
   row: typeof HostedLinkingRowSelect.Type,
   content: RowContent,
-): typeof HostedLinkingState.Type {
+): HostedLinkingState {
   switch (row.status) {
     case "active":
       return { _tag: "Active", ...content, ...optionalConnectionId(row.connectionId) };
@@ -138,7 +138,7 @@ function stateFromRow(
 
 function rowFromState(
   record: typeof HostedLinkingRecord.Type,
-  state: typeof HostedLinkingState.Type,
+  state: HostedLinkingState,
 ): typeof HostedLinkingRowSelect.Encoded {
   return {
     id: record.id,
@@ -159,7 +159,7 @@ function rowFromState(
   };
 }
 
-function statusFromState(state: typeof HostedLinkingState.Type): HostedLinkingSessionStatus {
+function statusFromState(state: HostedLinkingState): HostedLinkingSessionStatus {
   switch (state._tag) {
     case "Active":
       return "active";
@@ -187,7 +187,7 @@ function optionalConnectionId(value: string | null): { connectionId?: Connection
   return value === null ? {} : { connectionId: Schema.decodeSync(ConnectionId)(value) };
 }
 
-function connectionIdOf(state: typeof HostedLinkingState.Type): ConnectionId | undefined {
+function connectionIdOf(state: HostedLinkingState): ConnectionId | undefined {
   switch (state._tag) {
     case "Active":
     case "Completing":

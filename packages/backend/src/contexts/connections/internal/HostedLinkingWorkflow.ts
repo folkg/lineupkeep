@@ -1,8 +1,8 @@
-import { Machine } from "@typeonce/effect-machine";
 import { Schema } from "effect";
 
 import { ConnectionId, ProviderKey } from "#contexts/connections/Connection.ts";
 import { HostedLinkingFailureReason } from "#contexts/connections/HostedLinking.ts";
+import { defineMachine, final } from "#utilities/machine.ts";
 
 const HostedLinkingContent = {
   provider: ProviderKey,
@@ -38,29 +38,16 @@ export const HostedLinkingState = Schema.TaggedUnion({
     reason: HostedLinkingFailureReason,
   },
 });
+export type HostedLinkingState = typeof HostedLinkingState.Type;
 
-const HostedLinkingStates = Machine.state({
-  states: {
-    Active: HostedLinkingState.cases.Active,
-    Completing: HostedLinkingState.cases.Completing,
-    Completed: {
-      type: "final",
-      schema: HostedLinkingState.cases.Completed,
-    },
-    Cancelled: {
-      type: "final",
-      schema: HostedLinkingState.cases.Cancelled,
-    },
-    Expired: {
-      type: "final",
-      schema: HostedLinkingState.cases.Expired,
-    },
-    Failed: {
-      type: "final",
-      schema: HostedLinkingState.cases.Failed,
-    },
-  },
-});
+const HostedLinkingStates = {
+  Active: HostedLinkingState.cases.Active,
+  Completing: HostedLinkingState.cases.Completing,
+  Completed: final(HostedLinkingState.cases.Completed),
+  Cancelled: final(HostedLinkingState.cases.Cancelled),
+  Expired: final(HostedLinkingState.cases.Expired),
+  Failed: final(HostedLinkingState.cases.Failed),
+};
 
 export const HostedLinkingEvents = Schema.TaggedUnion({
   CompletionStarted: { at: Schema.DateTimeUtc },
@@ -70,11 +57,9 @@ export const HostedLinkingEvents = Schema.TaggedUnion({
   Expired: { at: Schema.DateTimeUtc },
 });
 
-export const HostedLinkingWorkflow = Machine.make({
+export const HostedLinkingWorkflow = defineMachine<HostedLinkingState, HostedLinkingRequest>({
   root: HostedLinkingStates,
-  input: HostedLinkingState.cases.Active,
-  events: Machine.eventsFromSchemas(HostedLinkingEvents),
-}).handle({
+  events: HostedLinkingEvents,
   initial: { target: "Active", data: ({ input }) => input },
   states: {
     Active: {
@@ -165,7 +150,7 @@ export const HostedLinkingWorkflow = Machine.make({
   },
 });
 
-export type HostedLinkingRequest = Machine.Machine.InputEvent<typeof HostedLinkingWorkflow>;
+export type HostedLinkingRequest = typeof HostedLinkingEvents.Type;
 
 function reconnectTarget(connectionId: ConnectionId | undefined): { connectionId?: ConnectionId } {
   return connectionId === undefined ? {} : { connectionId };

@@ -79,7 +79,7 @@ export class HostedLinkingRepository extends Context.Service<
         command: CreateHostedLinkingCommand,
       ) {
         const now = yield* DateTime.now;
-        const state: typeof HostedLinkingState.Type = {
+        const state: HostedLinkingState = {
           _tag: "Active",
           provider: command.provider,
           startedAt: now,
@@ -376,7 +376,7 @@ export class HostedLinkingRepository extends Context.Service<
           if (change === undefined) {
             return record;
           }
-          return { ...record, state: change.snapshot.state.value };
+          return { ...record, state: change.snapshot.state };
         }).pipe(Effect.mapError((cause) => HostedLinkingPersistenceFailed.make({ cause })));
       }
 
@@ -494,7 +494,7 @@ function isExpired(state: { readonly expiresAt: DateTime.Utc }, at: DateTime.Utc
   return DateTime.toEpochMillis(state.expiresAt) <= DateTime.toEpochMillis(at);
 }
 
-function isTerminal(state: typeof HostedLinkingState.Type): boolean {
+function isTerminal(state: HostedLinkingState): boolean {
   return (
     state._tag === "Completed" ||
     state._tag === "Cancelled" ||
@@ -503,7 +503,7 @@ function isTerminal(state: typeof HostedLinkingState.Type): boolean {
   );
 }
 
-function statusOf(state: typeof HostedLinkingState.Type): HostedLinkingSessionStatus {
+function statusOf(state: HostedLinkingState): HostedLinkingSessionStatus {
   switch (state._tag) {
     case "Active":
       return "active";

@@ -1,5 +1,4 @@
 import { assert, it } from "@effect/vitest";
-import { MachineTest } from "@typeonce/effect-machine/testing";
 import { Arbitrary, DateTime, Effect, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
@@ -10,6 +9,7 @@ import {
 } from "#contexts/connections/HostedLinking.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { snapshotOf } from "#utilities/machine.ts";
+import * as MachineTest from "#utilities/machineTest.ts";
 
 import { HostedLinkingRow } from "./HostedLinkingTables.ts";
 import { HostedLinkingEvents, HostedLinkingWorkflow } from "./HostedLinkingWorkflow.ts";
@@ -36,7 +36,7 @@ it.effect("round-trips every hosted linking lifecycle state through its row code
       const decoded = yield* Schema.decodeEffect(HostedLinkingRow)(row);
       const restored = yield* snapshotOf(HostedLinkingWorkflow, decoded.state);
 
-      assert.deepStrictEqual(restored, snapshot);
+      assert.deepStrictEqual(restored.state, snapshot.state.value);
       assert.deepStrictEqual(yield* Schema.encodeEffect(HostedLinkingRow)(decoded), row);
       assert.strictEqual(decoded.id, record.id);
       assert.strictEqual(decoded.userId, record.userId);
