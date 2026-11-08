@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
-import { MachineTest } from "@typeonce/effect-machine/testing";
 import { Arbitrary, DateTime, Effect, Schema } from "effect";
+
+import * as MachineTest from "#utilities/machineTest.ts";
 
 import { TeamAutomationState, TeamAutomationWorkflow } from "./TeamAutomationWorkflow.ts";
 import type { TeamAutomationEvent } from "./TeamAutomationWorkflow.ts";
@@ -10,7 +11,8 @@ const invariants = [
   define.state(
     "only a paused team owns a resume boundary",
     ({ snapshot }) =>
-      "resumesAt" in snapshot.state.value === (snapshot.state.path === "PausedUntilFantasyDayEnd"),
+      "resumesAt" in snapshot.state.value ===
+      (snapshot.state.value._tag === "PausedUntilFantasyDayEnd"),
   ),
   define.state(
     "a paused team owns its fantasy-day context",
@@ -18,15 +20,15 @@ const invariants = [
       ["timeZone", "fantasyDay", "fantasyDayVersion"].every(
         (key) => key in snapshot.state.value,
       ) ===
-      (snapshot.state.path === "PausedUntilFantasyDayEnd"),
+      (snapshot.state.value._tag === "PausedUntilFantasyDayEnd"),
   ),
   define.step(
     "pause expiry is accepted only at or after the stored boundary",
     ({ before, after, event }) =>
-      before.state.path !== "PausedUntilFantasyDayEnd" ||
+      before.state.value._tag !== "PausedUntilFantasyDayEnd" ||
       event._tag !== "PauseExpired" ||
       DateTime.toEpochMillis(event.at) < DateTime.toEpochMillis(before.state.value.resumesAt) ||
-      (after.state.path === "Enabled" &&
+      (after.state.value._tag === "Enabled" &&
         DateTime.Equivalence(after.state.value.changedAt, event.at)),
   ),
 ];

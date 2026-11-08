@@ -1,5 +1,6 @@
-import { Machine } from "@typeonce/effect-machine";
 import { DateTime, Schema } from "effect";
+
+import { defineMachine } from "#utilities/machine.ts";
 
 export const TeamAutomationState = Schema.TaggedUnion({
   Disabled: {
@@ -34,17 +35,13 @@ export const TeamAutomationEvent = Schema.TaggedUnion({
   PauseExpired: { at: Schema.DateTimeUtc },
 });
 
-export const TeamAutomationWorkflow = Machine.make({
-  root: Machine.state({
-    states: {
-      Disabled: TeamAutomationState.cases.Disabled,
-      Enabled: TeamAutomationState.cases.Enabled,
-      PausedUntilFantasyDayEnd: TeamAutomationState.cases.PausedUntilFantasyDayEnd,
-    },
-  }),
-  input: TeamAutomationState.cases.Disabled,
-  events: Machine.eventsFromSchemas(TeamAutomationEvent),
-}).handle({
+export const TeamAutomationWorkflow = defineMachine<TeamAutomationState, TeamAutomationEvent>({
+  root: {
+    Disabled: TeamAutomationState.cases.Disabled,
+    Enabled: TeamAutomationState.cases.Enabled,
+    PausedUntilFantasyDayEnd: TeamAutomationState.cases.PausedUntilFantasyDayEnd,
+  },
+  events: TeamAutomationEvent,
   initial: { target: "Disabled", data: ({ input }) => input },
   states: {
     Disabled: {

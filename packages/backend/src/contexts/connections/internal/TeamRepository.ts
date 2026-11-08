@@ -1,4 +1,3 @@
-import { Machine } from "@typeonce/effect-machine";
 import { and, asc, eq } from "drizzle-orm";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
@@ -14,7 +13,7 @@ import { ProviderRegistry } from "#contexts/connections/ProviderRegistry.ts";
 import { TeamNotFound, TeamPersistenceFailed } from "#contexts/connections/Teams.ts";
 import type { TeamAutomationAction, TeamControlInput } from "#contexts/connections/Teams.ts";
 import { anyOf, excludedValues } from "#database/dbUtilities.ts";
-import { snapshotOf } from "#utilities/machine.ts";
+import { plan, snapshotOf } from "#utilities/machine.ts";
 
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import {
@@ -560,12 +559,11 @@ function planAutomation(
 ): Effect.Effect<TeamAutomationState> {
   return Effect.gen(function* () {
     const snapshot = yield* snapshotOf(TeamAutomationWorkflow, state);
-    const planned = yield* Machine.plan(TeamAutomationWorkflow, snapshot, event);
-    const handled = planned.microsteps.some((step) => step.transitions.length > 0);
-    if (!handled) {
-      return yield* Effect.die(new Error("Team automation rejected the requested transition"));
-    }
-    return yield* Schema.decodeEffect(TeamAutomationState)(planned.next.state.value);
+    return yield* plan(TeamAutomationWorkflow, snapshot, event).pipe(
+      Effect.catchTag("TransitionRejected", () =>
+        Effect.die(new Error("Team automation rejected the requested transition")),
+      ),
+    );
   }).pipe(Effect.orDie);
 }
 
