@@ -1,5 +1,5 @@
 import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
-import { agentNoteLimit, TeamAgentNoteSaved } from "@lineupkeep/backend/connections/AgentNote";
+import { TeamAgentNoteSaved } from "@lineupkeep/backend/connections/AgentNote";
 import type { TeamAgentNoteError } from "@lineupkeep/backend/connections/Teams";
 import {
   TeamAgentNoteInput,
@@ -39,7 +39,7 @@ type SetTeamAutomationResult = typeof SetTeamAutomationResult.Type;
 export const teamTools = Toolkit.make(
   Tool.make("set_team_automation", {
     description:
-      "Change scheduled lineup automation for one or more teams you own, using the private team ids from list_teams. Each requested team names one action: enable enrolls the team without changing its configuration; disable stops scheduled work but retains its configuration; pause-today suspends scheduled work until the fantasy day at the league's site ends and returns resumesAt; resume clears that pause. Repeating an action is a no-op with the resulting state. A team's availability is separate from enrollment: an unavailable team keeps the recorded setting but scheduled checks skip it. This changes only Lineupgrade automation state; it does not set a lineup or contact the league's site. set_lineup remains the manual way to run a lineup, bypassing enrollment but not ownership, connection readiness, availability, locks, or uncertain-write protection.",
+      "Change scheduled lineup automation for teams you own. It changes Lineupkeep settings only; it does not set a lineup or contact the league's site.",
     parameters: SetTeamAutomationInput,
     success: Schema.toCodecJson(SetTeamAutomationResult),
     failure: ToolFailure,
@@ -51,7 +51,8 @@ export const teamTools = Toolkit.make(
     .annotate(Tool.Idempotent, true)
     .annotate(Tool.OpenWorld, false),
   Tool.make("add_team_agent_note", {
-    description: `Append a durable note to one team this account owns, recording agent memory about it: a keeper choice, a manager's tendency, or a league quirk. The author is the authenticated client behind this call, recorded with its registered name and client id, never a name supplied in the request. Notes are append-only: a later note is a new entry, and no tool edits or deletes one. A note is client memory, not a league fact and not the owner's note: the owner's note stays the governing instruction and this tool never changes it. Returns the stored note with its author and time. Refuses an empty body, a body over ${String(agentNoteLimit)} characters, a team this account does not own, and a call whose client cannot be identified.`,
+    description:
+      "Append agent memory to one team you own and return the stored note with its author and time. Notes are append-only and are not the owner's note, which they never change.",
     parameters: TeamAgentNoteInput,
     success: Schema.toCodecJson(TeamAgentNoteSaved),
     failure: ToolFailure,

@@ -101,8 +101,7 @@ export const FeedbackFilter = Schema.Struct({
   since: Schema.optional(
     Schema.DateTimeUtcFromString.pipe(
       Schema.annotate({
-        description:
-          "Only reports created at or after this ISO 8601 instant, for example `2026-09-20T00:00:00Z`. An offset form such as `2026-09-20T00:00:00-04:00` is also accepted.",
+        description: "Only reports created at or after this ISO 8601 instant.",
       }),
     ),
   ),

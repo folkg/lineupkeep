@@ -3,6 +3,7 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 import type { TeamAgentNoteAuthor, TeamAgentNoteSaved } from "./AgentNote.ts";
+import { agentNoteLimit } from "./AgentNote.ts";
 import { ConnectionStatus } from "./Connection.ts";
 import {
   FantasyTeam,
@@ -35,7 +36,11 @@ const ControlledTeam = Schema.Struct({
   team: TeamId,
   action: TeamAutomationAction,
   enrolled: Schema.Boolean,
-  availability: TeamAvailability,
+  availability: TeamAvailability.pipe(
+    Schema.annotate({
+      description: "An unavailable team keeps this setting; scheduled checks skip it.",
+    }),
+  ),
   automation: TeamAutomation,
   detail: Schema.NonEmptyString,
 });
@@ -69,7 +74,9 @@ export type TeamNoteSaved = typeof TeamNoteSaved.Type;
 
 export const TeamAgentNoteInput = Schema.Struct({
   team: TeamId,
-  body: Schema.String,
+  body: Schema.String.annotate({
+    description: `Up to ${String(agentNoteLimit)} characters.`,
+  }),
 });
 export type TeamAgentNoteInput = typeof TeamAgentNoteInput.Type;
 

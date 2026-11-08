@@ -677,7 +677,7 @@ Actual statistics state their basis: `week` with the covered period when the pro
 `last_7_days`, `last_14_days`, or `last_30_days`, and `{kind: "range", start, end}` with inclusive
 `YYYY-MM-DD` dates. The provider declares, as data beside its other capabilities, how it serves each
 kind for each sport — `native`, `aggregated`, or `unsupported` — plus the preset windows and the range
-length cap. The published tool description lists the shapes and the result repeats the declaration in
+length cap. The published period schema lists the shapes and the result repeats the declaration in
 `periodSupport`, so a client can read the boundary instead of probing it.
 
 | Provider | Sport    | season | week                          | preset      | range       | Notes                                                                                            |

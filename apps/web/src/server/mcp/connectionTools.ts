@@ -22,7 +22,12 @@ const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String 
 const ConnectionView = Schema.Struct({
   id: ConnectionId,
   provider: ProviderKey,
-  status: ConnectionStatus,
+  status: ConnectionStatus.pipe(
+    Schema.annotate({
+      description:
+        "`linking` awaits sign-in and expires; `reconnect-required` needs a new sign-in; `disconnected` no longer grants access.",
+    }),
+  ),
   linkingExpiresAt: Schema.optional(Schema.DateTimeUtc),
   credentialGeneration: Schema.optional(ConnectionCredentialGeneration),
   reconnectRequiredAt: Schema.optional(Schema.DateTimeUtc),
@@ -34,7 +39,7 @@ const ConnectionView = Schema.Struct({
 export const connectionTools = Toolkit.make(
   Tool.make("list_connections", {
     description:
-      "List your connections in ID order with safe status metadata. A linking connection waits for sign-in at the league's site and expires; a reconnect-required connection needs a new sign-in; a disconnected connection no longer provides access. This never returns sign-in credentials, account identity, or connections owned by other people.",
+      "Your league-site connections with their status. Sign-in credentials, account identity, and other people's connections are never returned.",
     parameters: Tool.EmptyParams,
     success: Schema.Struct({ connections: Schema.Array(Schema.toCodecJson(ConnectionView)) }),
     failure: ToolFailure,

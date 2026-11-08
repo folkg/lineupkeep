@@ -180,8 +180,15 @@ export const LineupRun = Schema.Struct({
   request: LineupRequestId,
   team: TeamId,
   target: LineupTargetPeriod,
-  trigger: LineupTrigger,
-  implementation: LineupImplementation,
+  trigger: LineupTrigger.pipe(
+    Schema.annotate({ description: "`manual` runs regardless of the schedule gate." }),
+  ),
+  implementation: LineupImplementation.pipe(
+    Schema.annotate({
+      description:
+        "`provider_native` is the site's own lineup action; `custom_policy` is planned from published scores.",
+    }),
+  ),
   implementationVersion: Schema.NonEmptyString,
   status: LineupRunStatus,
   attempts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

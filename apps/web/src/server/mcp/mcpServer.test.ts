@@ -1548,23 +1548,53 @@ function request(
   });
 }
 
+it("keeps every published description inside its budget", async () => {
+  const response = await handle(request("tools/list", {}, "read"));
+  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
+  const budgets: Readonly<Record<string, number>> = {
+    add_team_agent_note: 220,
+    get_calendar: 220,
+    get_league: 220,
+    get_lineup_runs: 220,
+    get_matchups: 220,
+    get_pending_trade_offers: 220,
+    get_players: 220,
+    get_rosters: 220,
+    get_team_summary: 220,
+    get_transaction_proposal_set: 220,
+    get_transactions: 220,
+    list_connections: 220,
+    list_feedback: 220,
+    list_teams: 220,
+    propose_transactions: 400,
+    revalidate_transaction_proposal_set: 260,
+    search_players: 220,
+    set_lineup: 220,
+    set_team_automation: 220,
+    submit_feedback: 280,
+    withdraw_transaction_proposal_items: 220,
+  };
+
+  expect(listed.result.tools.map((tool) => tool.name).sort()).toEqual(Object.keys(budgets).sort());
+  const overBudget = listed.result.tools
+    .map((tool) => ({ name: tool.name, length: tool.description.length }))
+    .filter((tool) => tool.length > (budgets[tool.name] ?? 0));
+  expect(overBudget).toEqual([]);
+  expect(
+    listed.result.tools.reduce((total, tool) => total + tool.description.length, 0),
+  ).toBeLessThanOrEqual(3_600);
+
+  const fields = listed.result.tools.flatMap((tool) => [
+    ...schemaDescriptions(tool.inputSchema, `${tool.name}.input`),
+    ...schemaDescriptions(tool.outputSchema ?? {}, `${tool.name}.output`),
+  ]);
+  expect(fields.filter((field) => field.text.length > 200)).toEqual([]);
+  expect(fields.reduce((total, field) => total + field.text.length, 0)).toBeLessThanOrEqual(30_000);
+});
+
 it("publishes the accepted player-statistics periods and the compact standings form before a call", async () => {
   const response = await handle(request("tools/list", {}, "read"));
-  const body = await json(response);
-  const listed = Schema.decodeUnknownSync(
-    Schema.Struct({
-      result: Schema.Struct({
-        tools: Schema.Array(
-          Schema.Struct({
-            name: Schema.String,
-            description: Schema.String,
-            inputSchema: Schema.Record(Schema.String, Schema.Unknown),
-            outputSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-          }),
-        ),
-      }),
-    }),
-  )(body);
+  const listed = Schema.decodeUnknownSync(ToolListing)(await json(response));
   const tool = (name: string): (typeof listed.result.tools)[number] => {
     const found = listed.result.tools.find((entry) => entry.name === name);
     if (found === undefined) {
@@ -1573,7 +1603,7 @@ it("publishes the accepted player-statistics periods and the compact standings f
     return found;
   };
 
-  const players = JSON.stringify(tool("get_players").inputSchema);
+  const playersSchema = JSON.stringify(tool("get_players").inputSchema);
   for (const shape of [
     "season",
     "preset",
@@ -1582,18 +1612,17 @@ it("publishes the accepted player-statistics periods and the compact standings f
     "last_14_days",
     "last_30_days",
   ]) {
-    expect(players).toContain(shape);
+    expect(playersSchema).toContain(shape);
   }
-  expect(tool("get_players").description).toContain("periodSupport");
-  expect(tool("get_players").description).toContain("aggregated");
-  expect(tool("get_players").description).toContain("25 private player references");
-  expect(tool("get_players").description).toContain("another team");
-  expect(players).toContain("25-reference");
-  expect(players).toContain("league named by");
-  expect(tool("get_rosters").description).toContain("ownerNote");
-  expect(tool("get_rosters").description).toContain("detail: full");
-  expect(tool("get_rosters").description).toContain('scope: "league"');
+  expect(playersSchema).toContain("periodSupport");
+  expect(JSON.stringify(tool("get_players").outputSchema)).toContain("aggregated");
+  expect(playersSchema).toContain("1 to 25 private player references");
+  expect(playersSchema).toContain("another team");
+  expect(playersSchema).toContain('"maxItems":25');
+  expect(playersSchema).toContain("league named by");
   const rosterInput = JSON.stringify(tool("get_rosters").inputSchema);
+  expect(rosterInput).toContain("`full` adds `undroppable` and `ownerNote`");
+  expect(rosterInput).toContain("scope: league");
   expect(rosterInput).toContain("league");
   expect(rosterInput).toContain("whole teams");
   const rosterOutput = JSON.stringify(tool("get_rosters").outputSchema);
@@ -1620,24 +1649,27 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(playersOutput).toContain("basis");
   expect(playersOutput).toContain("period");
   expect(JSON.stringify(tool("search_players").outputSchema)).toContain("playsThisWeek");
-  expect(tool("get_league").description).toContain("inline player name");
-  expect(tool("get_pending_trade_offers").description).toContain("ownerNote");
-  expect(tool("add_team_agent_note").description).toContain("client memory");
-  expect(tool("add_team_agent_note").description).toContain("owner's note");
-  expect(tool("add_team_agent_note").description).toContain("append-only");
-  expect(JSON.stringify(tool("add_team_agent_note").outputSchema)).toContain("writtenAt");
+  expect(JSON.stringify(tool("get_league").outputSchema)).toContain("inline player name");
+  expect(JSON.stringify(tool("get_pending_trade_offers").outputSchema)).toContain("ownerNote");
+  const agentNote = tool("add_team_agent_note");
+  const summaryAgentNotes = JSON.stringify(tool("get_team_summary").outputSchema);
+  expect(summaryAgentNotes).toContain("client memory");
+  expect(summaryAgentNotes).toContain("owner's note");
+  expect(agentNote.description).toContain("append-only");
+  expect(agentNote.description).toContain("owner's note");
+  expect(JSON.stringify(agentNote.outputSchema)).toContain("writtenAt");
 
   const league = tool("get_league");
-  expect(JSON.stringify(league.inputSchema)).toContain("standingsDetail");
-  expect(JSON.stringify(league.inputSchema)).toContain("compact");
-  expect(league.description).toContain("13");
-  expect(league.description).toContain("transactionRules");
-  expect(league.description).toContain("acquisition limits");
-  expect(league.description).toContain("not_set");
-  expect(league.description).toContain("acquisitionUsage");
-  expect(league.description).toContain("remaining count");
+  const leagueInput = JSON.stringify(league.inputSchema);
+  const leagueOutput = JSON.stringify(league.outputSchema);
+  expect(leagueInput).toContain("standingsDetail");
+  expect(leagueInput).toContain("compact");
+  expect(leagueOutput).toContain("transactionRules");
+  expect(leagueOutput).toContain("acquisition limits");
+  expect(leagueOutput).toContain("not_set");
+  expect(leagueOutput).toContain("acquisitionUsage");
+  expect(leagueOutput).toContain("remaining counts");
   expect(league.description).not.toContain("13-team league fits in one result");
-  expect(league.description).toContain("not_set");
   expect(league.description).not.toContain("acquisition usage is not published");
 
   const transactionRules = JSON.stringify(league.outputSchema);
@@ -1666,4 +1698,33 @@ it("publishes the accepted player-statistics periods and the compact standings f
 
 function json(response: Response): Promise<unknown> {
   return response.json();
+}
+
+const ToolListing = Schema.Struct({
+  result: Schema.Struct({
+    tools: Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        description: Schema.String,
+        inputSchema: Schema.Record(Schema.String, Schema.Unknown),
+        outputSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+      }),
+    ),
+  }),
+});
+
+type SchemaDescription = { readonly path: string; readonly text: string };
+
+function schemaDescriptions(schema: unknown, path: string): ReadonlyArray<SchemaDescription> {
+  if (Array.isArray(schema)) {
+    return schema.flatMap((entry, index) => schemaDescriptions(entry, `${path}[${String(index)}]`));
+  }
+  if (typeof schema !== "object" || schema === null) {
+    return [];
+  }
+  return Object.entries(schema).flatMap(([key, value]) =>
+    key === "description" && typeof value === "string"
+      ? [{ path, text: value }]
+      : schemaDescriptions(value, `${path}.${key}`),
+  );
 }

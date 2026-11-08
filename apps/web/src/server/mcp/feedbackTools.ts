@@ -39,7 +39,7 @@ type ListFeedbackResult = typeof ListFeedbackResult.Type;
 export const feedbackTools = Toolkit.make(
   Tool.make("submit_feedback", {
     description:
-      "Report a bug, a data problem, friction, or a wishlist item for the account you act for. Include what you were doing, what happened, and what you expected; put the tool name, team reference, client name, and app surface in context when they help. `list_feedback` reads the report back with its status under the same scope, so the report is never a channel you can write to but not follow. This needs only fantasy:read, the scope every client holds, so a client that lacks a write scope can still report a problem and follow it. Never include passwords, sign-in cookies, account identifiers, or raw responses from the league's site: reports are stored as plain text and read back verbatim. Returns the report id and its status (open) so you can cite it later.",
+      "File a bug, data problem, friction, or wishlist item for this account; returns the report id and status. Never include passwords, cookies, account identifiers, or raw league-site responses: reports are stored as plain text and read back verbatim.",
     parameters: FeedbackSubmission,
     success: Schema.toCodecJson(SubmitFeedbackResult),
     failure: ToolFailure,
@@ -52,7 +52,7 @@ export const feedbackTools = Toolkit.make(
     .annotate(Tool.OpenWorld, false),
   Tool.make("list_feedback", {
     description:
-      "List the feedback reports owned by the account you act for, newest first, with each report's current status so a submitter can see what happened to what they filed. Filter by status, kind, or start time and bound the page with limit (1-50, default 20). Each returned record includes the full title and body, so narrow the filters rather than expecting an unbounded page. This needs only fantasy:read, the same scope as submission. Another person's reports are never visible, and a report id from another account is reported as not found.",
+      "Your account's feedback reports, newest first, with status. Each record carries its full title and body.",
     parameters: ListFeedbackInput,
     success: Schema.toCodecJson(ListFeedbackResult),
     failure: ToolFailure,

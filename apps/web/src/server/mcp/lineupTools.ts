@@ -21,7 +21,11 @@ const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String 
 
 const SetLineupResult = Schema.Struct({
   request: Schema.String,
-  delivery: Schema.Literals(["queued", "pending"]),
+  delivery: Schema.Literals(["queued", "pending"]).pipe(
+    Schema.annotate({
+      description: "`queued` is handed to the runner; `pending` waits for a later dispatch.",
+    }),
+  ),
   runs: LineupRunsData.fields.runs,
   wait: Schema.Struct({
     timeoutMs: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -33,7 +37,7 @@ type SetLineupResult = typeof SetLineupResult.Type;
 export const lineupTools = Toolkit.make(
   Tool.make("set_lineup", {
     description:
-      "Create durable lineup runs for one or more owned teams and validated target periods. Lineupgrade plans the lineup from the final per-player scores the league's site publishes, and a team whose league the league's site cannot value at all falls back to its own native lineup action. Returns a per-team durable reference, current status, implementation, and safe pending/verified explanation. A queued or accepted request is never reported as lineup success; use get_lineup_runs to retrieve later status. A manual run is not skipped by the scheduled-run schedule gate. This never submits transactions, buys premium actions, or changes another person's team.",
+      "Queue durable lineup runs for owned teams and target periods, returning each run's status. A manual run does not require automation; a queued run is not lineup success (`get_lineup_runs`).",
     parameters: SetLineupInput,
     success: Schema.toCodecJson(SetLineupResult),
     failure: ToolFailure,
@@ -46,7 +50,7 @@ export const lineupTools = Toolkit.make(
     .annotate(Tool.OpenWorld, true),
   Tool.make("get_lineup_runs", {
     description:
-      "Read durable lineup run status for your own teams, including safe verified change/no-op results, pending reasons, and unresolved uncertain outcomes. Runs can be selected by private run references, a request identity, or a team. This reads run state only and needs the same fantasy:read scope as every other owned-data read.",
+      "Read durable lineup run status for your teams, selected by run reference, request identity, or team.",
     parameters: GetLineupRunsInput,
     success: Schema.toCodecJson(LineupRunsData),
     failure: ToolFailure,

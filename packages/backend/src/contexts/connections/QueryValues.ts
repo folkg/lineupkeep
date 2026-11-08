@@ -30,10 +30,7 @@ const StatPeriodWeek = Schema.Int.check(
   Schema.isLessThanOrEqualTo(99),
 );
 
-const StatPeriodDate = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)),
-  Schema.annotate({ description: "Calendar date as `YYYY-MM-DD`." }),
-);
+const StatPeriodDate = Schema.String.pipe(Schema.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u)));
 
 export const StatPeriodPreset = Schema.Literals(["last_7_days", "last_14_days", "last_30_days"]);
 export type StatPeriodPreset = typeof StatPeriodPreset.Type;
@@ -43,7 +40,7 @@ export const StatPeriod = Schema.Union([
     kind: Schema.Literal("season"),
   }).pipe(
     Schema.annotate({
-      description: "Season-to-date totals. This is what an omitted `period` means.",
+      description: "Season-to-date totals; the default when `period` is omitted.",
     }),
   ),
   Schema.Struct({
@@ -52,7 +49,7 @@ export const StatPeriod = Schema.Union([
   }).pipe(
     Schema.annotate({
       description:
-        'One scoring week of the league. `week` alone is the short form of `kind: "week"`. Served only for a completed week in a sport whose site publishes a weekly player series.',
+        "One scoring week. `{week}` alone is the short form. Served only for a completed week in a sport with a weekly series.",
     }),
   ),
   Schema.Struct({
@@ -61,7 +58,7 @@ export const StatPeriod = Schema.Union([
   }).pipe(
     Schema.annotate({
       description:
-        "A fixed recent window ending on the current fantasy day at the league's site: `last_7_days`, `last_14_days`, or `last_30_days`.",
+        "A fixed recent window ending on the current fantasy day: `last_7_days`, `last_14_days`, or `last_30_days`.",
     }),
   ),
   Schema.Struct({
@@ -71,7 +68,7 @@ export const StatPeriod = Schema.Union([
   }).pipe(
     Schema.annotate({
       description:
-        "An explicit inclusive calendar range. The league's site bounds its length and reports the cap in `periodSupport` on the result.",
+        "An inclusive calendar range. The site bounds its length and reports the cap in `periodSupport`.",
     }),
   ),
 ]);
@@ -134,16 +131,14 @@ export const QueryPage = Schema.Struct({
   size: Schema.optional(
     Schema.Int.check(Schema.isGreaterThan(0)).pipe(
       Schema.annotate({
-        description:
-          "The row bound for this page after the remaining rows are considered: the effective `limit`, in rows of the paged resource. `returned` is the actual count after the result budget and can be smaller because the page keeps whole records intact.",
+        description: "The page's row bound: the effective `limit`.",
       }),
     ),
   ),
   total: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
       Schema.annotate({
-        description:
-          "The total number of rows in the paged resource, before paging. Present where the read knows it, such as the number of teams in a league roster read.",
+        description: "Rows in the paged resource before paging, where the read knows it.",
       }),
     ),
   ),
@@ -190,7 +185,7 @@ export const RosterSlot = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "Where this player sits in the lineup. `verified` carries the slot the league's site gives, which establishes the player's position eligibility. `unverified` means the site published a value that names no declared slot: `rawValue` is exactly what it published and `reason` says why the slot could not be verified. An unverified player is left where they are and is never moved by lineup planning or a lineup write, because an unknown slot cannot be treated as a known position or as a default.",
+      "Where the player sits. `verified` establishes position eligibility; `unverified` keeps the raw value and reason and is never moved.",
   }),
 );
 export type RosterSlot = typeof RosterSlot.Type;
@@ -215,7 +210,7 @@ export const TeamOwnerNote = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "The note the team's owner wrote in Lineupgrade. This is owner context, not a fact from the league's site: neither the site nor the league publishes it, so it is not a rule, a scoring setting, or a fact the league said. It can explain keepers, dynasty cost, salary, or why a player is held. The owner can change or clear it, and it is never a place for passwords, tokens, or sign-in material.",
+      "The team owner's note in Lineupgrade: owner context, not a league fact, and never a place for credentials.",
   }),
 );
 export type TeamOwnerNote = typeof TeamOwnerNote.Type;
@@ -224,7 +219,7 @@ export const Cursor = Schema.String.pipe(
   Schema.check(Schema.isMaxLength(2_048)),
   Schema.annotate({
     description:
-      "A continuation token copied from `page.next`. It is bound to the arguments of the call that issued it, so a cursor returned for one `groups`, `team`, or `period` selection is refused for another: repeat the original call instead of editing its arguments. It expires 15 minutes after issue.",
+      "A continuation token from `page.next`. It is bound to the arguments of the call that issued it and expires after 15 minutes.",
   }),
 );
 export const PageLimit = Schema.Int.check(

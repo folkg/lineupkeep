@@ -122,8 +122,7 @@ export type ProposalExecutionStep = typeof ProposalExecutionStep.Type;
 const ProposalItemExecution = Schema.Struct({
   position: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
-      description:
-        "The move's position in the team order of the submission that sent it, counted from zero. Positions restart with each submission.",
+      description: "The move's position in that submission's team order, counted from zero.",
     }),
   ),
   outcome: ProposalOutcome,
@@ -138,8 +137,7 @@ const ProposalReserveMove = Schema.Struct({
   fromSlot: Schema.optional(Schema.NonEmptyString),
   toSlot: Schema.NonEmptyString,
   order: Schema.Literals(["before", "after"]).annotate({
-    description:
-      "Whether this roster move is sent before the item's own moves or after them, because only the item's moves free its destination.",
+    description: "Whether this move is sent before the item's moves or after them.",
   }),
 });
 type ProposalReserveMove = typeof ProposalReserveMove.Type;
@@ -156,12 +154,10 @@ const ProposalItemPlacement = Schema.Struct({
   fromSlot: Schema.optional(Schema.NonEmptyString),
   toSlot: Schema.NonEmptyString,
   detail: Schema.NonEmptyString.annotate({
-    description:
-      "Why the server chose this place, in one sentence about the player and the league's places.",
+    description: "Why the place was chosen, in one sentence.",
   }),
 }).annotate({
-  description:
-    "The place the server chose for an item stated as intent, such as an add that asks for the active roster, or a player to activate or stash.",
+  description: "The place chosen for an item stated as intent, such as an add, activate, or stash.",
 });
 type ProposalItemPlacement = typeof ProposalItemPlacement.Type;
 
@@ -192,6 +188,9 @@ const ProposalTrade = Schema.Struct({
   proposedAt: Schema.optional(Schema.DateTimeUtc),
   settledAt: Schema.optional(Schema.DateTimeUtc),
   detail: Schema.optional(Schema.NonEmptyString),
+}).annotate({
+  description:
+    "A submitted trade is a real offer to another manager, who alone decides whether to accept it.",
 });
 type ProposalTrade = typeof ProposalTrade.Type;
 
@@ -206,7 +205,7 @@ export const ProposalItem = Schema.Struct({
   state: ProposalItemState,
   settled: Schema.Boolean.annotate({
     description:
-      "Whether this move will never run again: it executed, its trade offer ended, or it was skipped for a reason that cannot change. A failed move is not settled, so it can be replaced in the same set.",
+      "Whether the move will never run again: it executed, its offer ended, or it was skipped irreversibly. A failed move is not settled.",
   }),
   staleness: ProposalStaleness,
   execution: Schema.optional(ProposalItemExecution),
@@ -288,22 +287,19 @@ const ProposalOrderStep = Schema.Struct({
   rosterPlace: Schema.optional(
     Schema.Literals(["frees", "consumes"]).annotate({
       description:
-        "Whether this move frees or consumes a roster place. Absent when it leaves the count unchanged: a move between two places, an add with a drop, and a trade change nothing until it settles.",
+        "Whether this move frees or consumes a place. Absent when it leaves the count unchanged.",
     }),
   ),
 });
 
 const ProposalOrderRosterPlaces = Schema.Struct({
-  maximum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
-    description: "The roster places this league allows, as the league declares them.",
-  }),
+  maximum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   occupied: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
-    description:
-      "The roster places this team holds now; players on a reserve list are outside this count.",
+    description: "Places held now; reserve-list players are outside this count.",
   }),
   net: Schema.Int.annotate({
     description:
-      "The places this team's ordered moves free minus the places they consume, so occupied plus net is the count after every move runs.",
+      "Ordered moves' freed places minus consumed places, so `occupied` plus `net` is the count after them.",
   }),
 });
 
@@ -332,7 +328,10 @@ const ProposalOrderDecision = Schema.Union([
     effectiveDate: Schema.optional(Schema.NonEmptyString),
     detail: Schema.NonEmptyString,
   }),
-]);
+]).annotate({
+  description:
+    "The plan chosen for a team: an order, a conflict between moves, or a search that hit its bound. A trade follows the roster moves.",
+});
 
 export const ProposalTeamLineup = Schema.Struct({
   status: Schema.Literals([
@@ -350,7 +349,7 @@ export const ProposalTeamLineup = Schema.Struct({
   at: Schema.optional(Schema.NonEmptyString),
 }).annotate({
   description:
-    "The lineup run this team was given after its items ran, if any, and what became of it. A failed lineup run does not change any item's outcome.",
+    "The lineup run given after these items ran, if any, and its outcome. A failed run changes no item's outcome.",
 });
 export type ProposalTeamLineup = typeof ProposalTeamLineup.Type;
 
@@ -367,7 +366,10 @@ export const ProposalTeam = Schema.Struct({
   tradeRules: Schema.optional(ProposalTradeRules),
   order: Schema.optional(ProposalOrderDecision),
   lineup: Schema.optional(ProposalTeamLineup),
-  failure: Schema.optional(Schema.NonEmptyString),
+  failure: Schema.optional(Schema.NonEmptyString).annotate({
+    description:
+      "Why this team's state could not be read; its items are stale and other teams are unaffected.",
+  }),
   items: Schema.Array(ProposalItem),
   pendingOffers: Schema.Array(PendingTradeOffer),
 });
@@ -386,7 +388,7 @@ export const ProposalSubmission = Schema.Struct({
   completedAt: Schema.optional(Schema.DateTimeUtc),
 }).annotate({
   description:
-    "One submission of this set, with when the signed-in person submitted it and, once every outcome was recorded, when that submission completed.",
+    "One submission of this set and, once every outcome was recorded, when it completed.",
 });
 export type ProposalSubmission = typeof ProposalSubmission.Type;
 
@@ -394,15 +396,17 @@ export const ProposalSet = Schema.Struct({
   id: ProposalSetId,
   proposedBy: ProposalSetProvenance,
   createdAt: Schema.DateTimeUtc,
-  expiresAt: Schema.DateTimeUtc,
+  expiresAt: Schema.DateTimeUtc.annotate({
+    description: "24 hours after the set was created.",
+  }),
   expired: Schema.Boolean,
   submissions: Schema.Array(ProposalSubmission).annotate({
     description:
-      "Every submission of this set, oldest first. A set has more than one when a failed or skipped move left it open and more moves were sent later.",
+      "Every submission, oldest first. More than one when a failed or skipped move left the set open.",
   }),
   settled: Schema.Boolean.annotate({
     description:
-      "Whether the set is an audit record: it has been submitted and every move in it has settled. An open set accepts new items and another submission of the moves that are still proposed; a settled set refuses both.",
+      "Whether the set is an audit record: submitted, with every move settled. A settled set refuses new items and submissions.",
   }),
   reviewPath: Schema.NonEmptyString,
 });
@@ -410,7 +414,9 @@ export type ProposalSet = typeof ProposalSet.Type;
 
 export const ProposalSetReview = Schema.Struct({
   set: ProposalSet,
-  teams: Schema.Array(ProposalTeam),
+  teams: Schema.Array(ProposalTeam).annotate({
+    description: "Every owned team, including those with nothing proposed.",
+  }),
 });
 export type ProposalSetReview = typeof ProposalSetReview.Type;
 
@@ -439,12 +445,14 @@ const ProposalItemDraftPicks = Schema.optional(
   Schema.NullOr(Schema.Array(Schema.Unknown)),
 ).annotate({
   description:
-    "Refused when non-empty. A trade item carries players only. A league may allow draft pick trades, and the league read publishes that rule, but the league's site publishes picks only on its website and names no element for one in the transaction request Lineupgrade sends, so a pick here is refused with that reason and never silently ignored.",
+    "Refused when non-empty. A trade item carries players only: the site publishes picks on its website, not in the transaction request.",
 });
 
 export const ProposalItemDraft = Schema.Struct({
   team: TeamId,
-  kind: ProposalItemKind,
+  kind: ProposalItemKind.annotate({
+    description: "A `drop` adds nobody and cannot bid; a free-agent `add` cannot bid either.",
+  }),
   adds: Schema.Array(PlayerRef).pipe(
     Schema.check(Schema.isMaxLength(10)),
     Schema.withDecodingDefaultKey(Effect.succeed([])),
@@ -455,23 +463,28 @@ export const ProposalItemDraft = Schema.Struct({
   ),
   to: Schema.optional(Schema.NullOr(ProposalActiveOrReserve)).annotate({
     description:
-      "For an add, the part of the roster the added player should join: the active roster, which is the default, or a reserve list. Omit it for every other kind.",
+      "For an add, `active` (the default) or `reserve`; a reserve add carries one player. Omit it for other kinds.",
   }),
   player: Schema.optional(Schema.NullOr(PlayerRef)).annotate({
     description:
-      "For an activate or stash, the rostered player to move. An activate takes a reserve-list player onto the active roster; a stash puts an active player on a reserve list that accepts their positions.",
+      "For an activate or stash, the rostered player to move. An activate brings a reserve player onto the active roster; a stash does the reverse.",
   }),
-  slotMove: Schema.optional(Schema.NullOr(ProposalSlotMoveDraft)),
+  slotMove: Schema.optional(Schema.NullOr(ProposalSlotMoveDraft)).annotate({
+    description:
+      "Moves a player between slots on the same roster; it does not set the lineup (`set_lineup`).",
+  }),
   picks: ProposalItemDraftPicks,
   counterparty: Schema.optional(Schema.NullOr(CounterpartyRef)),
-  bid: Schema.optional(Schema.NullOr(ProposalBid)),
+  bid: Schema.optional(Schema.NullOr(ProposalBid)).annotate({
+    description: "A FAAB bid on a free-agent add.",
+  }),
   reason: ProposalReason,
 });
 export type ProposalItemDraft = typeof ProposalItemDraft.Type;
 
 const ProposeSetTarget = Schema.optional(Schema.NullOr(ProposalSetId)).annotate({
   description:
-    "The id of an open set, to append these items after its existing ones. A set is open until it is submitted and every move in it has settled; a set whose submission left a move failed, or that was never submitted, is open. The whole set is validated again against the current roster together with the moves that are still proposed, and its stored order is recomputed. Omit it to create a new set. A settled or expired set refuses new items.",
+    "An open set to append these items to. Omit to create a new set; a settled or expired set refuses new items.",
 });
 
 export const ProposeTransactionsInput = Schema.Struct({
@@ -515,25 +528,21 @@ export const ProposalItemRefusal = Schema.Literals([
 export type ProposalItemRefusal = typeof ProposalItemRefusal.Type;
 
 const ProposalItemAccepted = Schema.Struct({
-  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
-    description: "The item's 1-based position in the request that stored it.",
-  }),
+  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   outcome: Schema.Literal("accepted"),
   item: ProposalItem,
 });
 type ProposalItemAccepted = typeof ProposalItemAccepted.Type;
 
 export const ProposalItemRefused = Schema.Struct({
-  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
-    description: "The item's 1-based position in this request.",
-  }),
+  position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   outcome: Schema.Literal("refused"),
   refusal: ProposalItemRefusal,
   reason: Schema.NonEmptyString.annotate({
-    description: "Why the item cannot run against the set's end state, in plain words.",
+    description: "Why the item cannot run against the set's end state.",
   }),
   fix: Schema.NonEmptyString.annotate({
-    description: "What would make the item valid, so the client can try again.",
+    description: "What would make the item valid.",
   }),
 });
 export type ProposalItemRefused = typeof ProposalItemRefused.Type;
@@ -548,7 +557,10 @@ export type ProposalItemToWithdraw = typeof ProposalItemToWithdraw.Type;
 
 export const ProposeTransactionsResult = Schema.Struct({
   set: ProposalSet,
-  created: Schema.Boolean,
+  created: Schema.Boolean.annotate({
+    description:
+      "False when an identical set already existed; a changed set no longer matches its original items.",
+  }),
   extended: Schema.Boolean,
   items: Schema.Array(ProposalItemAccepted),
   refused: Schema.Array(ProposalItemRefused),
@@ -589,12 +601,14 @@ export const PendingTradeOffersResult = Schema.Struct({
   status: Schema.Literals(["available", "unsupported"]),
   team: QueryTeam,
   readOnly: Schema.Literal(true),
-  offers: Schema.Array(PendingTradeOffer),
+  offers: Schema.Array(PendingTradeOffer).annotate({
+    description: "Offers the site publishes for this account's managing team.",
+  }),
   ownerNote: TeamOwnerNote,
   agentNotes: Schema.Array(TeamAgentNote).pipe(
     Schema.annotate({
       description:
-        "The twenty most recent notes agent clients appended to this team, newest first, each with its author and time. Present as an empty array when the team has none, never absent. These are client memory, not a fact from the league's site or the league, and not the owner's instruction: `ownerNote` remains the owner's governing note.",
+        "The twenty most recent agent notes, newest first, empty when none. Client memory, not the owner's note.",
     }),
   ),
   coverage: Schema.Array(QueryCoverage),
