@@ -62,9 +62,7 @@ it("renders a two-team proposal, a quiet team, and one disabled action", async (
   await expect
     .element(page.getByText("3 of 4 moves included. 1 waiver claim spends 25 FAAB."))
     .toBeVisible();
-  await expect
-    .element(page.getByText(/One provider request per move, sent in this order, with no retries/u))
-    .toBeVisible();
+  await expect.element(page.getByText(/Each move is sent once, with no retries/u)).toBeVisible();
 });
 
 it("starts a stale move excluded, marks its reason, and does not let it be included", async () => {
@@ -477,7 +475,7 @@ function player(
   };
 }
 
-it("shows the order the server chose before the moves", async () => {
+it("says when the league applies the moves without listing them by order", async () => {
   const base = reviewFixture();
   const alpha = base.teams[0];
   if (alpha === undefined) {
@@ -503,16 +501,14 @@ it("shows the order the server chose before the moves", async () => {
     ],
   });
 
-  await expect.element(page.getByText("The order the server chose", { exact: true })).toBeVisible();
-  await expect
-    .element(page.getByText("1. Add Sam Rivers and drop Alex Vance", { exact: true }))
-    .toBeVisible();
-  await expect
-    .element(page.getByText("2. Add Mika Olsen and drop Tomas Berg", { exact: true }))
-    .toBeVisible();
+  await expect.element(page.getByText("When these moves run", { exact: true })).toBeVisible();
   await expect
     .element(page.getByText("The league applies these moves on 2026-11-04.", { exact: true }))
     .toBeVisible();
+  expect(
+    page.getByText(/^[0-9]+\. (Add|Move|Drop)/u).elements(),
+    "the plan does not number the moves",
+  ).toHaveLength(0);
   await expect
     .element(
       page.getByText("This team holds 6 of 9 roster places; the set leaves the count unchanged.", {
@@ -522,7 +518,7 @@ it("shows the order the server chose before the moves", async () => {
     .toBeVisible();
 });
 
-it("shows a refusal that names both operations when no order keeps the lineup legal", async () => {
+it("shows a refusal that names both operations when no legal order exists", async () => {
   const base = reviewFixture();
   const alpha = base.teams[0];
   if (alpha === undefined) {
@@ -549,12 +545,12 @@ it("shows a refusal that names both operations when no order keeps the lineup le
   });
 
   await expect
-    .element(page.getByText("No order keeps the lineup legal", { exact: true }))
+    .element(page.getByText("No legal order for these moves", { exact: true }))
     .toBeVisible();
   await expect.element(page.getByText(detail, { exact: true })).toBeVisible();
 });
 
-it("shows the order it was sent in and why a later move stopped", async () => {
+it("shows what was sent and why a later move stopped", async () => {
   const base = reviewFixture();
   const rejection =
     "The provider rejected the transaction with HTTP 400. It said: That player is not on your roster.";
@@ -603,17 +599,13 @@ it("shows the order it was sent in and why a later move stopped", async () => {
     ],
   });
 
+  await expect.element(page.getByText("What was sent", { exact: true })).toBeVisible();
+  await expect.element(page.getByText("Drop Riley Chen — Failed", { exact: true })).toBeVisible();
   await expect
-    .element(page.getByText("The order each move was sent in", { exact: true }))
+    .element(page.getByText("Move Casey Moss to BN — Skipped", { exact: true }))
     .toBeVisible();
   await expect
-    .element(page.getByText("1. Drop Riley Chen — Failed", { exact: true }))
-    .toBeVisible();
-  await expect
-    .element(page.getByText("2. Move Casey Moss to BN — Skipped", { exact: true }))
-    .toBeVisible();
-  await expect
-    .element(page.getByText("Sent 2nd in its submission's order.", { exact: true }))
+    .element(page.getByText("Sent in this submission.", { exact: true }).first())
     .toBeVisible();
   await expect
     .element(page.getByText(/Not attempted because Dropping Riley Chen failed/u))
@@ -632,10 +624,9 @@ it("shows a declared slot move as its own move", async () => {
 
   await expect
     .element(
-      page.getByText(
-        "Move Casey Moss to BN. The server places this move in the order where the roster stays legal.",
-        { exact: true },
-      ),
+      page.getByText("Move Casey Moss to BN. It runs where the roster stays legal.", {
+        exact: true,
+      }),
     )
     .toBeVisible();
   await expect
@@ -679,7 +670,7 @@ it("shows a roster move after the transaction that frees its destination", async
   await expect
     .element(
       page.getByText(
-        "Move Casey Moss from BN to IR after the transaction, because only the transaction frees that slot. That move is reported as its own step.",
+        "Move Casey Moss from BN to IR after the transaction, because only the transaction frees that slot. It is reported as its own step.",
         { exact: true },
       ),
     )
@@ -702,7 +693,7 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
     await expect
       .element(page.getByRole("button", { name: "Submit 3 moves" }))
       .toHaveAttribute("aria-busy", "true");
-    await expect.element(page.getByText(/Sending to the provider now/u)).toBeVisible();
+    await expect.element(page.getByText(/Sending now/u)).toBeVisible();
     await expect
       .element(page.getByText(/3 of 4 moves included. 1 waiver claim spends 25 FAAB./u))
       .toBeVisible();
@@ -729,11 +720,13 @@ it("submits the included moves once, keeps the action visible on a phone, and sh
       )
       .toBeVisible();
     await expect
-      .element(page.getByText(/The provider will process this claim later/u))
+      .element(
+        page.getByText(/Waivers run later, so this claim is pending rather than done or failed/u),
+      )
       .toBeVisible();
     await expect.element(page.getByText(/It was attempted once and not retried/u)).toBeVisible();
     await expect
-      .element(page.getByText(/This request may or may not have applied. It was not retried/u))
+      .element(page.getByText(/This move may or may not have applied. It was not retried/u))
       .toBeVisible();
     await expect.element(page.getByText("Left out of this submission.")).toBeVisible();
     await expect
@@ -814,9 +807,9 @@ it("tells the person what to check when the provider gives no rejection reason",
   };
   using _app = setupReviewPage({ ...review, teams: [{ ...alpha, items: [item] }] });
 
-  await expect.element(page.getByText(/The provider did not give a reason/u)).toBeVisible();
+  await expect.element(page.getByText(/No reason was given/u)).toBeVisible();
   await expect
-    .element(page.getByText(/Read the roster and the league's transaction rules/u))
+    .element(page.getByText(/Check the roster and the league's transaction rules/u))
     .toBeVisible();
 });
 
@@ -835,7 +828,7 @@ it("keeps the status and the provider's raw words when the refusal is unreadable
   using _app = setupReviewPage({ ...review, teams: [{ ...alpha, items: [item] }] });
 
   await expect.element(page.getByText(detail)).toBeVisible();
-  expect(page.getByText(/The provider did not give a reason/u).elements()).toHaveLength(0);
+  expect(page.getByText(/No reason was given/u).elements()).toHaveLength(0);
 });
 
 it("does not send a submission when every move is left out", async () => {
@@ -923,7 +916,7 @@ it("shows a withdrawn trade as ended and offers no second withdrawal", async () 
   expect(page.getByRole("button", { name: "Withdraw offer" }).elements()).toHaveLength(0);
 });
 
-it("withdraws an offer created elsewhere from the provider's pending feed", async () => {
+it("withdraws an offer the agent did not create", async () => {
   const requests: Array<{
     readonly team: string;
     readonly item?: string;
@@ -940,7 +933,7 @@ it("withdraws an offer created elsewhere from the provider's pending feed", asyn
   });
 
   await expect
-    .element(page.getByRole("heading", { name: "Offers pending at the provider" }))
+    .element(page.getByRole("heading", { name: "Offers pending in your league" }))
     .toBeVisible();
   await expect.element(page.getByText("Beta to Delta", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Withdraw offer" }).click();

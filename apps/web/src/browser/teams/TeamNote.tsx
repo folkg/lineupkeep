@@ -16,7 +16,7 @@ export function TeamNote(props: { readonly note: TeamNoteController }): JSX.Elem
     <Stack as="section" gap="sm" labelledBy="team-note-title">
       <SectionTitle id="team-note-title">Owner note</SectionTitle>
       <Text size="body" tone="muted">
-        Only this account sees this note, and it is not sent to the provider.
+        Only this account sees this note; it is never sent to your league.
       </Text>
       <Form gap="md" onSubmit={props.note.submit}>
         <TextArea

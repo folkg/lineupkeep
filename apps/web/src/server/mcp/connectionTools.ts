@@ -34,7 +34,7 @@ const ConnectionView = Schema.Struct({
 export const connectionTools = Toolkit.make(
   Tool.make("list_connections", {
     description:
-      "List your provider connections in ID order with safe status metadata. Linking connections await provider sign-in and expire; reconnect-required connections need a new provider session; disconnected connections no longer provide access. This never returns provider credentials, account identity, or connections owned by other people.",
+      "List your connections in ID order with safe status metadata. A linking connection waits for sign-in at the league's site and expires; a reconnect-required connection needs a new sign-in; a disconnected connection no longer provides access. This never returns sign-in credentials, account identity, or connections owned by other people.",
     parameters: Tool.EmptyParams,
     success: Schema.Struct({ connections: Schema.Array(Schema.toCodecJson(ConnectionView)) }),
     failure: ToolFailure,

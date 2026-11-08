@@ -164,7 +164,7 @@ export const LineupWorkerLive = Layer.effect(
         return;
       }
       if (roster.players.length === 0) {
-        return yield* block(run, "empty_roster", "The provider returned no roster members.");
+        return yield* block(run, "empty_roster", "Your league returned no roster members.");
       }
       const observation = observe(roster, target);
       yield* repository.recordObservation({
@@ -291,7 +291,7 @@ export const LineupWorkerLive = Layer.effect(
         yield* block(
           run,
           "stale_period",
-          "The provider's scoring period changed before the write, so no lineup change was made.",
+          "Your league's scoring period changed before the write, so no lineup change was made.",
           plannedRecordOf(planned),
         );
         return { kind: "blocked" as const };
@@ -410,7 +410,7 @@ export const LineupWorkerLive = Layer.effect(
           invalid:
             "The native action request was invalid before it was sent. No lineup change was made. Refresh the team and run again.",
           notSent: "The native action was not sent. The run will retry after a short delay.",
-          rejected: "The provider definitively rejected the native action.",
+          rejected: "Your league definitively rejected the native action.",
         },
       );
     });
@@ -451,7 +451,7 @@ export const LineupWorkerLive = Layer.effect(
           notSent:
             "The explicit assignment request was not sent. The run will retry after a short delay.",
           rejected:
-            "The provider rejected the explicit assignments and made no lineup change. Refresh the team and try again.",
+            "Your league rejected the explicit assignments and made no lineup change. Refresh the team and try again.",
         },
       );
     });
@@ -473,7 +473,7 @@ export const LineupWorkerLive = Layer.effect(
               run,
               intent,
               "provider_session_rejected",
-              "The provider rejected the stored session; reconnect the connection.",
+              "Your league rejected the stored sign-in; reconnect.",
             );
           case "provider.response_invalid":
             return yield* fail(
@@ -541,7 +541,7 @@ export const LineupWorkerLive = Layer.effect(
             intent.plan,
             changed
               ? "The roster changed before the write; the lineup already matched the recomputed plan, so no write was needed."
-              : "The lineup already matched the explicit plan; no provider write was needed.",
+              : "The lineup already matched the explicit plan; no write to your league was needed.",
           ),
           observedAt: at,
           changes: [],
@@ -582,7 +582,7 @@ export const LineupWorkerLive = Layer.effect(
           run,
           intent.id,
           "readback_unavailable",
-          "The provider response could not be verified because the team is no longer available.",
+          "The response from your league could not be verified because the team is no longer available.",
           planRecordOf(intent.plan),
         );
       }
@@ -611,7 +611,7 @@ export const LineupWorkerLive = Layer.effect(
           run,
           intent.id,
           "readback_unavailable",
-          "The provider response could not be verified because the team is no longer available.",
+          "The response from your league could not be verified because the team is no longer available.",
           planRecordOf(intent.plan),
         );
       }
@@ -633,7 +633,7 @@ export const LineupWorkerLive = Layer.effect(
           run,
           intent.id,
           "readback_unavailable",
-          "The provider response could not be verified by reading the roster back.",
+          "The response from your league could not be verified by reading the roster back.",
           planRecordOf(intent.plan),
         );
       }
@@ -643,7 +643,7 @@ export const LineupWorkerLive = Layer.effect(
           run,
           intent.id,
           "readback_coverage_changed",
-          "The provider returned a different roster period than the write target, so the outcome is unverified.",
+          "Your league returned a different roster period than the write target, so the outcome is unverified.",
           planRecordOf(intent.plan),
         );
       }
@@ -668,7 +668,7 @@ export const LineupWorkerLive = Layer.effect(
               run,
               intent,
               "provider_assignment_mismatch",
-              `${String(differences.length)} explicit assignment(s) did not match the plan after the provider accepted the request. No further write was attempted. Refresh the team and review the lineup before running again.`,
+              `${String(differences.length)} explicit assignment(s) did not match the plan after your league accepted the request. No further write was attempted. Refresh the team and review the lineup before running again.`,
               "verified_mismatch",
               {
                 verified: true,
@@ -723,7 +723,8 @@ export const LineupWorkerLive = Layer.effect(
                 plan,
                 (plan.sourceChanged
                   ? "The roster changed before the write, so the plan was recomputed. "
-                  : "") + "Reconciled a lost provider response with the planned explicit lineup.",
+                  : "") +
+                  "Reconciled a lost response from your league with the planned explicit lineup.",
               ),
               observedAt,
               changes: comparison.changes,
@@ -743,7 +744,7 @@ export const LineupWorkerLive = Layer.effect(
             run,
             intent,
             "provider_outcome_unknown",
-            "The provider response was lost and the lineup is unchanged, so the same explicit assignments will be retried.",
+            "The response from your league was lost and the lineup is unchanged, so the same explicit assignments will be retried.",
             false,
           );
         }
@@ -751,7 +752,7 @@ export const LineupWorkerLive = Layer.effect(
           run,
           intent.id,
           "provider_outcome_unknown",
-          "The provider response was lost and the lineup changed away from the plan, so no further write was attempted. Review the lineup on the provider before running again.",
+          "The response from your league was lost and the lineup changed away from the plan, so no further write was attempted. Review the lineup in your league before running again.",
           {
             ...provenance,
             differences,
@@ -788,7 +789,7 @@ export const LineupWorkerLive = Layer.effect(
           run,
           intent.id,
           "provider_outcome_unknown",
-          "The provider response was lost and the readback matches the pre-write roster, so the write outcome cannot be confirmed.",
+          "The response from your league was lost and the readback matches the pre-write roster, so the write outcome cannot be confirmed.",
           provenance,
         );
       }
@@ -800,7 +801,8 @@ export const LineupWorkerLive = Layer.effect(
           kind: "changed",
           verified: true,
           reconciled: true,
-          summary: "Reconciled a lost provider response with a verified native lineup change.",
+          summary:
+            "Reconciled a lost response from your league with a verified native lineup change.",
           observedAt,
           changes: comparison.changes,
           ...provenance,
@@ -830,7 +832,7 @@ export const LineupWorkerLive = Layer.effect(
         yield* block(
           run,
           "provider_unavailable",
-          "This team's provider is not configured for this deployment.",
+          "This team's league site is not configured for this deployment.",
         );
         return undefined;
       }
@@ -889,7 +891,7 @@ export const LineupWorkerLive = Layer.effect(
           yield* block(
             run,
             "period_unavailable",
-            "The provider returned a roster for a different period than requested.",
+            "Your league returned a roster for a different period than requested.",
           );
           return undefined;
         }
@@ -913,7 +915,7 @@ export const LineupWorkerLive = Layer.effect(
           yield* block(
             run,
             "period_unavailable",
-            `The provider returned ${describeCoverage(error.covered)} for the ${resource} instead of the requested ${describeCoverage(error.requested)}.`,
+            `Your league returned ${describeCoverage(error.covered)} for the ${resource} instead of the requested ${describeCoverage(error.requested)}.`,
           );
           return;
         case "provider.period_unsupported":
@@ -925,7 +927,7 @@ export const LineupWorkerLive = Layer.effect(
             run,
             undefined,
             "provider_session_rejected",
-            "The provider rejected the stored session; reconnect the connection.",
+            "Your league rejected the stored sign-in; reconnect.",
           );
           return;
         case "provider.request_failed":
@@ -933,7 +935,7 @@ export const LineupWorkerLive = Layer.effect(
             run,
             undefined,
             "provider_unavailable",
-            `The provider could not be reached while reading the ${resource}.`,
+            `Your league could not be reached while reading the ${resource}.`,
             false,
           );
           return;
@@ -942,7 +944,7 @@ export const LineupWorkerLive = Layer.effect(
             run,
             undefined,
             "provider_shape_changed",
-            `The provider returned ${resource} that did not match the shape the adapter decodes (${error.operation}${error.field === undefined ? "" : ` at ${error.field}`}). Retrying cannot fix this; the adapter needs updating. No lineup change was made.`,
+            `Your league returned ${resource} in a shape Lineupgrade could not read (${error.operation}${error.field === undefined ? "" : ` at ${error.field}`}). Retrying cannot fix this; the adapter needs updating. No lineup change was made.`,
           );
           yield* Effect.annotateCurrentSpan({
             "lineup.shape_change": true,
@@ -1266,7 +1268,7 @@ function covers(roster: ProviderRoster, target: LineupTargetPeriod): boolean {
 function providerTarget(target: LineupTargetPeriod): ProviderNativeTarget {
   switch (target.coverage) {
     case "current":
-      throw new Error("A provider write requires a resolved lineup period");
+      throw new Error("A write to your league requires a resolved lineup period");
     case "week":
       return { type: "week", week: target.week };
     case "date":
@@ -1374,7 +1376,7 @@ function explicitSummary(plan: LineupPlan | undefined, verified: string): string
 }
 
 function rejectionSummary(wording: string, detail: string | undefined): string {
-  return detail === undefined ? wording : clampSummary(`${wording} The provider said: ${detail}`);
+  return detail === undefined ? wording : clampSummary(`${wording} Your league said: ${detail}`);
 }
 
 function clampSummary(summary: string): string {
@@ -1475,8 +1477,8 @@ function blockDetail(
     case "unresolved_prior_write":
       return "A previous write for this team is unresolved. Reconcile it before setting the lineup again.";
     case "connection_changed":
-      return "The provider connection changed before the write started.";
+      return "The connection changed before the write started.";
     case "controls_changed":
-      return "The team is no longer enabled or is paused for the current provider day.";
+      return "The team is no longer enabled or is paused for the current day at your league.";
   }
 }

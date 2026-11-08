@@ -51,7 +51,7 @@ export function wakingShellDocument(requestUrl: string): string {
 <div class="panel">
 <p class="eyebrow" id="waking-state">Starting up</p>
 <h1 id="waking-heading">${productName} is waking.</h1>
-<p id="waking-message" role="status" aria-live="polite">The server is still starting, so nothing has been read yet.</p>
+<p id="waking-message" role="status" aria-live="polite">Nothing has been read yet.</p>
 <p class="retry"><a id="waking-retry" href="${escapeAttribute(url.pathname + url.search)}">Try again</a></p>
 </div>
 </main>
@@ -146,7 +146,7 @@ const shellScript = `
   var message = document.getElementById("waking-message");
   if (state === null || heading === null || message === null) { return; }
   if (retrying) {
-    message.textContent = "The server is still starting, so nothing has been read yet. Retrying now\\u2026";
+    message.textContent = "Nothing has been read yet. Retrying now\\u2026";
     window.setTimeout(function () { window.location.reload(); }, 1200);
     return;
   }

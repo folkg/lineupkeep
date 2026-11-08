@@ -156,7 +156,7 @@ const DeclaredFlag = Schema.Union([
 const TradeRatification = Schema.Literals(["vote", "commissioner", "none", "unknown"]).pipe(
   Schema.annotate({
     description:
-      "How a trade is ratified: `vote` by league managers, `commissioner` by the commissioner, `none` when no review follows acceptance, or `unknown` for a rule this server cannot name.",
+      "How a trade is ratified: `vote` by league managers, `commissioner` by the commissioner, `none` when no review follows acceptance, or `unknown` for a rule Lineupgrade cannot name.",
   }),
 );
 
@@ -180,7 +180,7 @@ const AddCoverage = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "The period the provider's adds count covers: the league's scoring week, or a date for a league the provider counts by day.",
+      "The period the league's site counts adds over: the league's scoring week, or a date for a league it counts by day.",
   }),
 );
 
@@ -190,13 +190,13 @@ export const AcquisitionUsage = Schema.Union([
     seasonMovesUsed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
       Schema.annotate({
         description:
-          "Season-long moves the provider reports this team has used. A published zero means the provider reported none; it is never a missing count.",
+          "Season-long moves the league's site reports this team has used. A published zero means it reported none; it is never a missing count.",
       }),
     ),
     weeklyAddsUsed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
       Schema.annotate({
         description:
-          "Adds the provider reports this team has used in `coverage`. A published zero means the provider reported none; it is never a missing count.",
+          "Adds the league's site reports this team has used in `coverage`. A published zero means it reported none; it is never a missing count.",
       }),
     ),
     coverage: AddCoverage,
@@ -218,7 +218,7 @@ export const AcquisitionUsage = Schema.Union([
     detail: Schema.NonEmptyString.pipe(
       Schema.annotate({
         description:
-          "Why this team's acquisition usage is unknown. The provider published no such counter, which is different from reporting zero used.",
+          "Why this team's acquisition usage is unknown. The league's site published no such counter, which is different from reporting zero used.",
       }),
     ),
   }),
@@ -230,7 +230,7 @@ const GamesPlayedUsage = Schema.Struct({
 }).pipe(
   Schema.annotate({
     description:
-      "Per-team games played is not published. `detail` carries the provider's own declared limitation, so only the league's games-played cap is known.",
+      "Per-team games played is not published. `detail` carries the limitation the league's site declares, so only the league's games-played cap is known.",
   }),
 );
 export type AcquisitionUsage = typeof AcquisitionUsage.Type;
@@ -250,7 +250,7 @@ const RosterChange = Schema.Union([
     source: Schema.Array(Schema.NonEmptyString).pipe(
       Schema.annotate({
         description:
-          "The published settings fields the rule is decoded from, in order, as the provider's own field names. A deadline field alone can establish an intraday, game-time, or weekday rule; an empty deadline is read together with the provider's current editable-period field.",
+          "The published settings fields the rule is decoded from, in order, as the league site's own field names. A deadline field alone can establish an intraday, game-time, or weekday rule; an empty deadline is read together with the current editable-period field at the league's site.",
       }),
     ),
     detail: Schema.NonEmptyString.pipe(
@@ -274,12 +274,14 @@ const RosterChange = Schema.Union([
 const TransactionRules = Schema.Struct({
   waiver: Schema.Struct({
     type: DeclaredText.pipe(
-      Schema.annotate({ description: "The provider's waiver-system type for this league." }),
+      Schema.annotate({
+        description: "The waiver-system type the league's site reports for this league.",
+      }),
     ),
     rule: DeclaredText.pipe(
       Schema.annotate({
         description:
-          "The provider's waiver-priority rule for this league, such as continuous or a weekly reset.",
+          "The waiver-priority rule the league's site reports for this league, such as continuous or a weekly reset.",
       }),
     ),
     usesFaab: DeclaredFlag.pipe(
@@ -292,13 +294,13 @@ const TransactionRules = Schema.Struct({
     weeklyDeadline: DeclaredRawText.pipe(
       Schema.annotate({
         description:
-          "The league's declared weekly deadline exactly as the provider states it, such as `intraday`, `game`, a weekday, or an empty string when the league publishes no weekly deadline. An empty string is published rather than reported as `not_set`.",
+          "The league's declared weekly deadline exactly as the league's site states it, such as `intraday`, `game`, a weekday, or an empty string when the league publishes no weekly deadline. An empty string is published rather than reported as `not_set`.",
       }),
     ),
     rosterChange: RosterChange.pipe(
       Schema.annotate({
         description:
-          "The provider-neutral rule decoded from the published deadline and, when the deadline is empty, the provider's current editable period. Every published rule names its source fields and repeats the raw values; when the published fields do not establish a rule, the entry is `not_published` and no rule is stated.",
+          "The rule decoded from the published deadline and, when the deadline is empty, the current editable period at the league's site. Every published rule names its source fields and repeats the raw values; when the published fields do not establish a rule, the entry is `not_published` and no rule is stated.",
       }),
     ),
     waiverDays: DeclaredNumber.pipe(
@@ -316,7 +318,7 @@ const TransactionRules = Schema.Struct({
   trades: Schema.Struct({
     endDate: DeclaredText.pipe(
       Schema.annotate({
-        description: "Last date on which a trade may be made, as the provider publishes it.",
+        description: "Last date on which a trade may be made, as the league's site publishes it.",
       }),
     ),
     ratification: DeclaredTradeRatification.pipe(
@@ -385,7 +387,7 @@ const RosterRules = Schema.Struct({
 const CategoryRole = Schema.Literals(["scoring", "informational"]).pipe(
   Schema.annotate({
     description:
-      "Whether this league scores the stat. `scoring` counts toward this league's result; `informational` is published by the provider for this league but does not count, such as a stat the provider marks display-only.",
+      "Whether this league scores the stat. `scoring` counts toward this league's result; `informational` is published by the league's site for this league but does not count, such as a stat it marks display-only.",
   }),
 );
 export type CategoryRole = typeof CategoryRole.Type;
@@ -406,7 +408,7 @@ const ScoringCategory = Schema.Struct({
   points: Schema.NullOr(Schema.String).pipe(
     Schema.annotate({
       description:
-        "Per-stat scoring points for a points league. Null means the provider publishes no per-stat points for this league, which is every categories and rotisserie league.",
+        "Per-stat scoring points for a points league. Null means the league's site publishes no per-stat points for this league, which is every categories and rotisserie league.",
     }),
   ),
 });
@@ -414,7 +416,7 @@ const ScoringCategory = Schema.Struct({
 const CategoryValueScoring = Schema.optional(Schema.Literal("informational")).pipe(
   Schema.annotate({
     description:
-      "Absent when the league scores this category. `informational` means the provider publishes the number but the league does not score it, so it is never treated as a scored value.",
+      "Absent when the league scores this category. `informational` means the league's site publishes the number but the league does not score it, so it is never treated as a scored value.",
   }),
 );
 
@@ -430,7 +432,7 @@ export const CategoryValue = Schema.Struct({
   value: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "The published number, or null when the provider published no value for this category. Null is never read as zero.",
+        "The published number, or null when the league's site published no value for this category. Null is never read as zero.",
     }),
   ),
   detail: Schema.optional(Schema.String).pipe(
@@ -480,7 +482,7 @@ export const StandingRow = Schema.Struct({
   acquisitionUsage: AcquisitionUsage.pipe(
     Schema.annotate({
       description:
-        "This team's acquisition usage, published even for a rival so a waiver decision compares against the league without another call. `not_published` is stated with the provider's missing counter, never as zero used.",
+        "This team's acquisition usage, published even for a rival so a waiver decision compares against the league without another call. `not_published` is stated with the missing counter from the league's site, never as zero used.",
     }),
   ),
   categories: Schema.optional(Schema.Array(CategoryValue)).pipe(
@@ -522,7 +524,7 @@ const DraftPick = Schema.Struct({
   name: Schema.optional(Schema.NonEmptyString).pipe(
     Schema.annotate({
       description:
-        "The provider's inline player name for this pick, present where its draft read publishes one. It sits beside the private player reference; the name is absent when the provider gives none.",
+        "The inline player name the league's site publishes for this pick, present where its draft read gives one. It sits beside the private player reference; the name is absent when the site gives none.",
     }),
   ),
   player: PlayerRef,
@@ -565,7 +567,7 @@ export const LeagueData = Schema.Struct({
   draftHistory: Schema.optional(DraftHistory).pipe(
     Schema.annotate({
       description:
-        "Completed draft picks for this league's draft, one row per pick. Present when the `draft_history` group is requested. This is history, not current or future pick ownership: the provider publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it.",
+        "Completed draft picks for this league's draft, one row per pick. Present when the `draft_history` group is requested. This is history, not current or future pick ownership: the league's site publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it.",
     }),
   ),
   coverage: Schema.Array(QueryCoverage),
@@ -599,7 +601,7 @@ export const GetRostersInput = Schema.Struct({
     QueryPeriod.pipe(
       Schema.annotate({
         description:
-          "The exact league week for a `team` read. The provider publishes its league-wide roster output only for its current coverage, so a `league` read refuses this argument instead of reading the teams one at a time; the result's `period` or coverage states the current week or date.",
+          "The exact league week for a `team` read. The league's site publishes its league-wide roster output only for its current coverage, so a `league` read refuses this argument instead of reading the teams one at a time; the result's `period` or coverage states the current week or date.",
       }),
     ),
   ),
@@ -624,7 +626,7 @@ const PlayerTransactionTrend = Schema.Union([
     window: Schema.Literal("provider_current_day").pipe(
       Schema.annotate({
         description:
-          "The day these counts cover. The provider publishes no window or date with the count, so this states the provider's current day; the enclosing result's `coverage` carries the instant the read was made.",
+          "The day these counts cover. The league's site publishes no window or date with the count, so this states the current day at the league's site; the enclosing result's `coverage` carries the instant the read was made.",
       }),
     ),
   }),
@@ -635,7 +637,7 @@ const PlayerTransactionTrend = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "The provider's own count of adds and drops of this player on its current day, across the provider's leagues. This is not percent owned and not a change in percent owned. `not_published` means the provider returned no count for this player; it is never reported as zero.",
+      "The count of adds and drops of this player on its current day that the league's site reports, across the site's leagues. This is not percent owned and not a change in percent owned. `not_published` means the site returned no count for this player; it is never reported as zero.",
   }),
 );
 
@@ -675,7 +677,7 @@ export const RosterData = Schema.Struct({
   ownerNote: Schema.optional(TeamOwnerNote).pipe(
     Schema.annotate({
       description:
-        "The owner's note for this team, present only when `detail` is `full`. It is owner context, not a provider or league fact, and the compact roster omits it.",
+        "The owner's note for this team, present only when `detail` is `full`. It is owner context, not a fact from the league's site or the league, and the compact roster omits it.",
     }),
   ),
   failures: Schema.Array(QueryFailure),
@@ -688,13 +690,13 @@ const LeagueRosterTeam = Schema.Struct({
   team: CounterpartyRef.pipe(
     Schema.annotate({
       description:
-        "The provider team's private reference, sealed for this owner and league. It opens in this league's counterparty reads and nowhere else, and is the same reference shape offers and transactions carry.",
+        "The private reference of the team at the league's site, sealed for this owner and league. It opens in this league's counterparty reads and nowhere else, and is the same reference shape offers and transactions carry.",
     }),
   ),
   name: Schema.NonEmptyString.pipe(
     Schema.annotate({
       description:
-        "The provider team name for display. Identity is the private reference, never the name.",
+        "The team name at the league's site for display. Identity is the private reference, never the name.",
     }),
   ),
   owned: Schema.Boolean.pipe(
@@ -767,7 +769,7 @@ export const SearchPlayersInput = Schema.Struct({
     PlayerSort.pipe(
       Schema.annotate({
         description:
-          "Provider-backed order, offered only when the linked provider declares it. `actual_rank` and `overall_rank` are the provider's actual and overall ranks; `stat` orders by the league scoring category in `stat`. `ownership` orders by percent owned descending. The provider's declared limitations explain any sort it refuses, such as a point-total sort for a sport that does not offer it.",
+          "An order the league's site backs, offered only when the linked site declares it. `actual_rank` and `overall_rank` are the actual and overall ranks from the site; `stat` orders by the league scoring category in `stat`. `ownership` orders by percent owned descending. The limitations the site declares explain any sort it refuses, such as a point-total sort for a sport that does not offer it.",
       }),
     ),
   ),
@@ -783,7 +785,7 @@ export const SearchPlayersInput = Schema.Struct({
     Schema.Literals(["season", "week"]).pipe(
       Schema.annotate({
         description:
-          "Period for a `stat` sort. `season` orders by the provider's season rank or stat value. `week` is available only where the provider declares that its search rows publish the weekly value they order by; otherwise it answers with the remedy instead of an unexplainable order.",
+          "Period for a `stat` sort. `season` orders by the season rank or stat value from the league's site. `week` is available only where the site declares that its search rows publish the weekly value they order by; otherwise it answers with the remedy instead of an unexplainable order.",
       }),
     ),
   ),
@@ -827,7 +829,7 @@ const SchedulePlayerGamesRemaining = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "Games this player's professional team plays in the window this section states. `professional_games` is counted from the professional-game source and `provider_opponent` from the provider's own opponent fact; the source is named because the two can disagree. `unavailable` states why neither produced a count; it is never a silent zero.",
+      "Games this player's professional team plays in the window this section states. `professional_games` is counted from the professional-game source and `provider_opponent` from the opponent fact at the league's site; the source is named because the two can disagree. `unavailable` states why neither produced a count; it is never a silent zero.",
   }),
 );
 
@@ -839,7 +841,7 @@ const SearchPlayer = Schema.Struct({
   proTeam: Schema.NullOr(Schema.NonEmptyString).pipe(
     Schema.annotate({
       description:
-        "The player's professional team abbreviation as the provider publishes it, the same value a roster entry carries under `proTeam`, so a pool player joins a schedule without another read. Null means the provider published no professional team for this row.",
+        "The player's professional team abbreviation as the league's site publishes it, the same value a roster entry carries under `proTeam`, so a pool player joins a schedule without another read. Null means the site published no professional team for this row.",
     }),
   ),
   eligiblePositions: Schema.Array(Schema.NonEmptyString),
@@ -848,68 +850,68 @@ const SearchPlayer = Schema.Struct({
     value: Schema.Literals(["healthy", "day_to_day", "out", "injured_reserve", "unknown"]).pipe(
       Schema.annotate({
         description:
-          "The provider's availability for this player: `healthy`, `day_to_day`, `out`, `injured_reserve`, or `unknown` for a code this adapter has not been taught. `unknown` never means healthy.",
+          "The availability the league's site reports for this player: `healthy`, `day_to_day`, `out`, `injured_reserve`, or `unknown` for a code this adapter has not been taught. `unknown` never means healthy.",
       }),
     ),
     code: Schema.optional(Schema.String).pipe(
       Schema.annotate({
         description:
-          "The provider's own status code, kept verbatim (for example `IR-LT`). Absent when the provider reports the player healthy.",
+          "The status code the league's site gives, kept verbatim (for example `IR-LT`). Absent when the site reports the player healthy.",
       }),
     ),
     detail: Schema.optional(Schema.String).pipe(
       Schema.annotate({
         description:
-          "The provider's own wording where it publishes one, such as an injury note. The provider publishes no separate expected-return field; any such text appears here.",
+          "The wording the league's site gives where it publishes one, such as an injury note. The site publishes no separate expected-return field; any such text appears here.",
       }),
     ),
     observedAt: Schema.DateTimeUtc.pipe(
       Schema.annotate({
         description:
-          "When this status was read from the provider. Compare it against now to judge staleness.",
+          "When this status was read from the league's site. Compare it against now to judge staleness.",
       }),
     ),
   }),
   percentOwned: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Provider-published percent owned. Null means the provider published no value for this row.",
+        "Percent owned as the league's site publishes it. Null means the site published no value for this row.",
     }),
   ),
   percentOwnedDelta: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Change in percent owned over the provider's own ownership-change window. The provider does not publish that window with the row, so do not read it as the fantasy day or as a scoring period. This is the only ownership-change field; null means the provider published no change for this row.",
+        "Change in percent owned over the ownership-change window at the league's site. The site does not publish that window with the row, so do not read it as the fantasy day or as a scoring period. This is the only ownership-change field; null means the site published no change for this row.",
     }),
   ),
   percentStarted: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Provider-published percent started. Null means the provider published no value for this row.",
+        "Percent started as the league's site publishes it. Null means the site published no value for this row.",
     }),
   ),
   percentStartedChange: Schema.NullOr(Schema.Finite).pipe(
     Schema.annotate({
       description:
-        "Change in percent started over the provider's own started-percentage window. The provider does not publish that window with the row, so do not read it as the fantasy day or as a scoring period. Null means the provider published no change for this row.",
+        "Change in percent started over the started-percentage window at the league's site. The site does not publish that window with the row, so do not read it as the fantasy day or as a scoring period. Null means the site published no change for this row.",
     }),
   ),
   actualRank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).pipe(
     Schema.annotate({
       description:
-        "The provider's current-season rank for this player, the value that orders sort `actual_rank`.",
+        "The current-season rank the league's site gives this player, the value that orders sort `actual_rank`.",
     }),
   ),
   overallRank: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).pipe(
     Schema.annotate({
       description:
-        "The provider's overall rank for this player, the value that orders sort `overall_rank`.",
+        "The overall rank the league's site gives this player, the value that orders sort `overall_rank`.",
     }),
   ),
   statValue: Schema.optional(Schema.NullOr(Schema.Finite)).pipe(
     Schema.annotate({
       description:
-        "The provider's season value for the requested `stat` category. Present only with sort `stat`; null means the provider published no value for this player.",
+        "The season value the league's site gives for the requested `stat` category. Present only with sort `stat`; null means the site published no value for this player.",
     }),
   ),
   gamesRemaining: Schema.optional(SchedulePlayerGamesRemaining),
@@ -966,7 +968,7 @@ export const GetPlayersInput = Schema.Struct({
     StatPeriod.pipe(
       Schema.annotate({
         description:
-          'Period the `actual_stats` group covers. Accepted shapes: `{kind: "season"}` (the default when omitted), `{kind: "week", week}` or its short form `{week}`, `{kind: "preset", preset}` with `last_7_days`, `last_14_days`, or `last_30_days`, and `{kind: "range", start, end}` with inclusive `YYYY-MM-DD` dates. Each provider declares which kinds it serves natively, by aggregating daily reads, or not at all, and the result repeats that declaration in `periodSupport`; an unsupported kind is refused naming the kind and the alternative instead of substituting season totals.',
+          'Period the `actual_stats` group covers. Accepted shapes: `{kind: "season"}` (the default when omitted), `{kind: "week", week}` or its short form `{week}`, `{kind: "preset", preset}` with `last_7_days`, `last_14_days`, or `last_30_days`, and `{kind: "range", start, end}` with inclusive `YYYY-MM-DD` dates. The league\'s site declares which kinds it serves natively, by aggregating daily reads, or not at all, and the result repeats that declaration in `periodSupport`; an unsupported kind is refused naming the kind and the alternative instead of substituting season totals.',
       }),
     ),
   ),
@@ -974,7 +976,7 @@ export const GetPlayersInput = Schema.Struct({
     Schema.Array(PlayerGroup).pipe(
       Schema.annotate({
         description:
-          "Groups to hydrate. `actual_stats` states the basis the provider declares: a completed week, season totals, or a daily-summed window with its covered dates. `projections` is available only where the provider publishes them; otherwise the group returns an unsupported status naming that limitation. `availability` reads the provider's selected-player status for references that are not on the current roster, such as a free agent, waiver player, or dropped player; that is one provider read for those references and it does not require `actual_stats`. A player the provider publishes no status for carries no `availability` and is named in `failures`.",
+          "Groups to hydrate. `actual_stats` states the basis the league's site declares: a completed week, season totals, or a daily-summed window with its covered dates. `projections` is available only where the site publishes them; otherwise the group returns an unsupported status naming that limitation. `availability` reads the selected-player status from the league's site for references that are not on the current roster, such as a free agent, waiver player, or dropped player; that is one read from the site for those references and it does not require `actual_stats`. A player the site publishes no status for carries no `availability` and is named in `failures`.",
       }),
     ),
   ),
@@ -1012,7 +1014,7 @@ const StatGroup = Schema.Union([
     ).pipe(
       Schema.annotate({
         description:
-          "Categories the provider publishes but that cannot be summed across days, such as averages and percentages. Empty for a provider-native week or season basis.",
+          "Categories the league's site publishes but that cannot be summed across days, such as averages and percentages. Empty for a week or season basis the site serves whole.",
       }),
     ),
   }),
@@ -1032,7 +1034,7 @@ const StatPeriodSupport = Schema.Struct({
   }).pipe(
     Schema.annotate({
       description:
-        "How this provider serves each period kind for this sport: `native` is one provider series, `aggregated` is a sum of provider reads, and `unsupported` is refused with a remedy.",
+        "How the league's site serves each period kind for this sport: `native` is one series from the site, `aggregated` is a sum of reads from the site, and `unsupported` is refused with a remedy.",
     }),
   ),
   presets: Schema.Array(
@@ -1183,7 +1185,7 @@ export const GetTransactionsInput = Schema.Struct({
     Schema.Literals(["league", "team"]).pipe(
       Schema.annotate({
         description:
-          "`league` returns the league's recent transactions; `team` restricts the provider read to the linked team's own moves. Both read newest first, and a date bound pages back through the provider's history.",
+          "`league` returns the league's recent transactions; `team` restricts the read from the league's site to the linked team's own moves. Both read newest first, and a date bound pages back through the site's history.",
       }),
     ),
   ),
@@ -1191,7 +1193,7 @@ export const GetTransactionsInput = Schema.Struct({
     Schema.DateTimeUtcFromString.pipe(
       Schema.annotate({
         description:
-          "Only transactions at or after this instant. Supply an ISO 8601 instant such as `2026-09-20T00:00:00Z`; an offset form such as `2026-09-20T00:00:00-04:00` is also accepted. The provider has no date filter, so the read pages back from its newest transaction until this bound is reached or a bounded event count is fetched; `window` states which happened.",
+          "Only transactions at or after this instant. Supply an ISO 8601 instant such as `2026-09-20T00:00:00Z`; an offset form such as `2026-09-20T00:00:00-04:00` is also accepted. The league's site has no date filter, so the read pages back from its newest transaction until this bound is reached or a bounded event count is fetched; `window` states which happened.",
       }),
     ),
   ),
@@ -1212,13 +1214,13 @@ export const TransactionWindow = Schema.Struct({
   fetched: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
     Schema.annotate({
       description:
-        "Number of provider events read. A date-bounded read may fetch several newest-first pages to reach the bound; an unbounded read fetches the most recent page only.",
+        "Number of events read from the league's site. A date-bounded read may fetch several newest-first pages to reach the bound; an unbounded read fetches the most recent page only.",
     }),
   ),
   truncated: Schema.Boolean.pipe(
     Schema.annotate({
       description:
-        "True only when the bounded read stopped at its event cap before reaching the requested `since`; false when the bound was reached or the provider's history ended. When `since` is older than the provider's oldest event, `failures` reports `transaction_history_starts_after_range`.",
+        "True only when the bounded read stopped at its event cap before reaching the requested `since`; false when the bound was reached or the site's history ended. When `since` is older than the oldest event at the site, `failures` reports `transaction_history_starts_after_range`.",
     }),
   ),
   earliest: Schema.optional(Schema.String),
@@ -1260,7 +1262,7 @@ const TransactionPick = Schema.Struct({
   round: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(
     Schema.annotate({
       description:
-        "Round of the traded draft pick. The provider publishes no draft year or overall pick number for a traded pick.",
+        "Round of the traded draft pick. The league's site publishes no draft year or overall pick number for a traded pick.",
     }),
   ),
   from: Schema.NullOr(TransactionTeam).pipe(
@@ -1350,7 +1352,7 @@ export const GetTeamSummaryInput = Schema.Struct({
     Schema.Struct({ start: SummaryWindowDate, end: SummaryWindowDate }).pipe(
       Schema.annotate({
         description:
-          "Inclusive date window for the `schedule` group. It is used instead of the league's scoring period and is the way to read a schedule for a league whose provider publishes no scoring period. The provider bounds one schedule read to the number of dates it declares, and the result's `schedule.detail` states that number; a wider window is refused with the provider's limit rather than truncated.",
+          "Inclusive date window for the `schedule` group. It is used instead of the league's scoring period and is the way to read a schedule for a league whose site publishes no scoring period. The site bounds one schedule read to the number of dates it declares, and the result's `schedule.detail` states that number; a wider window is refused with the limit the site declares rather than truncated.",
       }),
     ),
   ),
@@ -1358,7 +1360,7 @@ export const GetTeamSummaryInput = Schema.Struct({
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(366)).pipe(
       Schema.annotate({
         description:
-          "Length in days of the `schedule` window, counted from the provider's current date for the league. It is used only when `window` is absent, and takes precedence over the league's scoring period. The provider bounds one schedule read to the number of dates it declares, and the result's `schedule.detail` states that number; a longer window is refused with the provider's limit rather than truncated, so a longer `days` value is refused too. Omitting both `window` and `days` keeps the scoring period when the league has one and otherwise reads from the provider's current date through the end of that week.",
+          "Length in days of the `schedule` window, counted from the current date at the league's site. It is used only when `window` is absent, and takes precedence over the league's scoring period. The site bounds one schedule read to the number of dates it declares, and the result's `schedule.detail` states that number; a longer window is refused with the limit the site declares rather than truncated, so a longer `days` value is refused too. Omitting both `window` and `days` keeps the scoring period when the league has one and otherwise reads from the current date at the league's site through the end of that week.",
       }),
     ),
   ),
@@ -1536,7 +1538,7 @@ const SummaryScheduledGame = Schema.Struct({
   opponent: Schema.NonEmptyString.pipe(
     Schema.annotate({
       description:
-        "The opponent's professional-team abbreviation. The provider publishes no full name or start time.",
+        "The opponent's professional-team abbreviation. The league's site publishes no full name or start time.",
     }),
   ),
   home: Schema.Boolean.pipe(
@@ -1557,7 +1559,7 @@ export const SummarySchedulePlayer = Schema.Struct({
   status: Schema.Literals(["scheduled", "no_games"]).pipe(
     Schema.annotate({
       description:
-        "`scheduled` when the player's team plays in the window this section states, `no_games` when the provider publishes no game for them in it. `no_games` is an answer about the player, not a statement that the provider is unsupported.",
+        "`scheduled` when the player's team plays in the window this section states, `no_games` when the league's site publishes no game for them in it. `no_games` is an answer about the player, not a statement that the site is unsupported.",
     }),
   ),
   gameCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
@@ -1602,7 +1604,7 @@ const SummaryScheduleDate = Schema.Struct({
 export const SummaryScheduleWindow = ScheduleWindow.pipe(
   Schema.annotate({
     description:
-      "The inclusive dates this schedule covers and where they came from. `period` is the league's own scoring-period window; `requested` is a `window` or `days` argument on the call; `rest_of_week` is the default for a league with no scoring period, counted from the provider's current date through the end of that week. The dates covered are in `start` and `end`, never inferred by the client.",
+      "The inclusive dates this schedule covers and where they came from. `period` is the league's own scoring-period window; `requested` is a `window` or `days` argument on the call; `rest_of_week` is the default for a league with no scoring period, counted from the current date at the league's site through the end of that week. The dates covered are in `start` and `end`, never inferred by the client.",
   }),
 );
 export type SummaryScheduleWindow = typeof SummaryScheduleWindow.Type;
@@ -1645,14 +1647,14 @@ const SummaryGamesRemainingState = Schema.Union([
       SummaryScheduleWindow.pipe(
         Schema.annotate({
           description:
-            "The exact inclusive dates these counts cover, when the provider publishes them. Absent when the count follows the schedule section's `period` and the provider publishes no dated window.",
+            "The exact inclusive dates these counts cover, when the league's site publishes them. Absent when the count follows the schedule section's `period` and the site publishes no dated window.",
         }),
       ),
     ),
     observedAt: Schema.DateTimeUtc.pipe(
       Schema.annotate({
         description:
-          "The oldest instant among the sources used for these counts. The schedule section's `observedAt` is the provider's opponent observation; this is when the professional games behind a `professional_games` count were observed.",
+          "The oldest instant among the sources used for these counts. The schedule section's `observedAt` is the opponent observation from the league's site; this is when the professional games behind a `professional_games` count were observed.",
       }),
     ),
     detail: Schema.optional(Schema.String),
@@ -1664,7 +1666,7 @@ const SummaryGamesRemainingState = Schema.Union([
 ]).pipe(
   Schema.annotate({
     description:
-      "How the per-player `gamesRemaining` counts were produced. `window` states the exact dates they cover when the provider publishes them; otherwise the schedule section's `period` bounds them. A count is never zero because a source was missing: each player states its own source or an `unavailable` reason.",
+      "How the per-player `gamesRemaining` counts were produced. `window` states the exact dates they cover when the league's site publishes them; otherwise the schedule section's `period` bounds them. A count is never zero because a source was missing: each player states its own source or an `unavailable` reason.",
   }),
 );
 
@@ -1675,7 +1677,7 @@ const SummarySchedule = Schema.Union([
     period: Schema.optional(QueryPeriod).pipe(
       Schema.annotate({
         description:
-          "The scoring period that bounds this schedule. Absent for a league whose provider publishes no scoring period; `window` states the dates covered instead.",
+          "The scoring period that bounds this schedule. Absent for a league whose site publishes no scoring period; `window` states the dates covered instead.",
       }),
     ),
     window: Schema.optional(SummaryScheduleWindow).pipe(
@@ -1687,7 +1689,7 @@ const SummarySchedule = Schema.Union([
     observedAt: Schema.DateTimeUtc.pipe(
       Schema.annotate({
         description:
-          "The oldest instant these games were observed from the provider. Compare it against now to judge staleness.",
+          "The oldest instant these games were observed from the league's site. Compare it against now to judge staleness.",
       }),
     ),
     dates: Schema.optional(Schema.Array(SummaryScheduleDate)).pipe(
@@ -1707,7 +1709,7 @@ const SummarySchedule = Schema.Union([
     detail: Schema.String.pipe(
       Schema.annotate({
         description:
-          "What this schedule covers and what the provider does not publish: no start times, no season-long schedule, and for a scoring-week league no count of games inside the week.",
+          "What this schedule covers and what the league's site does not publish: no start times, no season-long schedule, and for a scoring-week league no count of games inside the week.",
       }),
     ),
   }),
@@ -1722,7 +1724,7 @@ const SummaryRosterPlayer = Schema.Struct({
   eligiblePositions: Schema.Array(Schema.NonEmptyString).pipe(
     Schema.annotate({
       description:
-        "Every position the provider says this player can fill, including a reserve marker while the player is eligible for that list. Read it against `slot` to see why a player is or is not legal where they sit; an empty list means the provider published none, not that the player can fill nothing.",
+        "Every position the league's site says this player can fill, including a reserve marker while the player is eligible for that list. Read it against `slot` to see why a player is or is not legal where they sit; an empty list means the site published none, not that the player can fill nothing.",
     }),
   ),
   proTeam: Schema.NullOr(Schema.NonEmptyString),
@@ -1766,7 +1768,7 @@ export const TeamSummaryData = Schema.Struct({
   schedule: Schema.optional(SummarySchedule).pipe(
     Schema.annotate({
       description:
-        "Each rostered player's scheduled games for the window stated in this section, present when the `schedule` group is requested. A league whose provider publishes no scoring period reads a requested `window` or the rest of the week; when neither is available the section says so and names the argument to pass.",
+        "Each rostered player's scheduled games for the window stated in this section, present when the `schedule` group is requested. A league whose site publishes no scoring period reads a requested `window` or the rest of the week; when neither is available the section says so and names the argument to pass.",
     }),
   ),
   probableStarters: Schema.optional(
@@ -1779,13 +1781,13 @@ export const TeamSummaryData = Schema.Struct({
   agentNotes: Schema.Array(TeamAgentNote).pipe(
     Schema.annotate({
       description:
-        "The twenty most recent notes agent clients appended to this team, newest first, each with its author and time. Present as an empty array when the team has none, never absent. These are client memory, not a provider or league fact, and not the owner's instruction: `ownerNote` remains the owner's governing note and a tool write never changes it.",
+        "The twenty most recent notes agent clients appended to this team, newest first, each with its author and time. Present as an empty array when the team has none, never absent. These are client memory, not a fact from the league's site or the league, and not the owner's instruction: `ownerNote` remains the owner's governing note and a tool write never changes it.",
     }),
   ),
   illegalSlots: Schema.optional(Schema.Array(SummaryIllegalSlot)).pipe(
     Schema.annotate({
       description:
-        "Rostered players whose eligible positions do not include the slot the league declares for them, so the provider may refuse a transaction until they move. Present only when the roster was read; absent means it was not checked, which is not the same as none. It is the league's own slot rules against the provider's own eligible positions, and nothing else: no injury check, no statistics, and no lineup decision.",
+        "Rostered players whose eligible positions do not include the slot the league declares for them, so the league's site may refuse a transaction until they move. Present only when the roster was read; absent means it was not checked, which is not the same as none. It is the league's own slot rules against the eligible positions the site lists, and nothing else: no injury check, no statistics, and no lineup decision.",
     }),
   ),
   rosterPlaces: Schema.optional(SummaryRosterPlaces).pipe(

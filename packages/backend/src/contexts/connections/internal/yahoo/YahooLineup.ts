@@ -90,10 +90,10 @@ export const yahooCapabilities: ProviderCapabilities = {
       ],
       maximumRangeDays: 31,
       detail:
-        "Hockey publishes season totals and one day of player statistics at a time, and no weekly player series. A preset window or an explicit range is the sum of the provider's daily reads for the days it covers; average and percentage categories are not summed and are listed as not aggregated.",
+        "Hockey publishes season totals and one day of player statistics at a time, and no weekly player series. A preset window or an explicit range is the sum of your league's daily reads for the days it covers; average and percentage categories are not summed and are listed as not aggregated.",
     },
-    baseball: unsupportedSportPeriods("This provider does not serve baseball."),
-    basketball: unsupportedSportPeriods("This provider does not serve basketball."),
+    baseball: unsupportedSportPeriods("Your league does not serve baseball."),
+    basketball: unsupportedSportPeriods("Your league does not serve basketball."),
   },
   publishesProjections: false,
   scheduleRead: { maximumDates: 21 },
@@ -112,7 +112,7 @@ export const yahooCapabilities: ProviderCapabilities = {
     {
       subject: "probable_starters",
       detail:
-        "Yahoo publishes a real-world starting status for goalies and pitchers only, and only once that game's starter is announced. Every other position carries no starting signal and stays unconfirmed, so participation for them is reported only through the provider's injury status.",
+        "Yahoo publishes a real-world starting status for goalies and pitchers only, and only once that game's starter is announced. Every other position carries no starting signal and stays unconfirmed, so participation for them is reported only through your league's injury status.",
     },
     {
       subject: "projections",
@@ -136,7 +136,7 @@ export const yahooCapabilities: ProviderCapabilities = {
     },
     {
       subject: "historical_seasons",
-      detail: "Only the linked team's current season is validated for this provider.",
+      detail: "Only the linked team's current season is validated for your league's site.",
     },
   ],
 };
@@ -151,7 +151,7 @@ export function scoreYahooRoster(
         kind: "refused",
         refusal: "structural",
         provenance: "yahoo/unsupported-sport",
-        detail: "This provider does not plan lineups for this sport.",
+        detail: "Your league does not plan lineups for this sport.",
       };
     }
     const period = targetPeriod(input.target);
@@ -419,7 +419,7 @@ function targetPeriod(target: ProviderScoreRequest["target"]): Period {
     case "date":
       return { kind: "date", date: target.date };
     case "current":
-      throw new Error("A provider lineup plan requires a resolved target period");
+      throw new Error("Your league lineup plan requires a resolved target period");
   }
 }
 

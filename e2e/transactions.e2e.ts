@@ -79,9 +79,7 @@ test("reviews and submits a proposed transaction set across the owner's teams", 
   await expect(page.getByRole("button", { name: "Submit 1 move" })).not.toHaveAttribute(
     "aria-disabled",
   );
-  await expect(
-    page.getByText(/One provider request per move, sent in this order, with no retries./u),
-  ).toBeVisible();
+  await expect(page.getByText(/Each move is sent once, with no retries./u)).toBeVisible();
 
   await page.getByRole("button", { name: "Submit 1 move" }).click();
 
@@ -116,7 +114,7 @@ test("reviews and submits a proposed transaction set across the owner's teams", 
   });
 });
 
-test("shows one provider refusal in the review page and in the MCP result", async ({
+test("shows one league refusal in the review page and in the MCP result", async ({
   page,
   services,
   mcp,
@@ -204,10 +202,10 @@ test("shows one provider refusal in the review page and in the MCP result", asyn
     .find((item) => item.execution?.outcome === "failed")?.execution?.detail;
 
   if (detail === undefined) {
-    throw new Error("the MCP result carries no provider refusal");
+    throw new Error("the MCP result carries no league refusal");
   }
   expect(detail).toBe(
-    "The provider rejected the transaction with HTTP 400. It said: Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.",
+    "Your league rejected the transaction with HTTP 400. It said: Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.",
   );
   await expect(page.getByText(detail, { exact: true }).first()).toBeVisible();
   expect(await page.content()).not.toContain("without giving a reason");

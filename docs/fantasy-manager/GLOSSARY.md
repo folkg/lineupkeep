@@ -392,7 +392,7 @@ One recorded action inside a proposal item: a reserve move added by the server t
 _Avoid_: Sub-transaction, retry, hidden precondition
 
 **Proposal review**:
-The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and check, the order the server chose in plain words, and a quiet section for a team with nothing proposed. A refusal names the conflicting operations in the person's terms rather than by a code. A signed-in person decides there, selects the moves that are still proposed, and submits them; after submission it shows the submission history, the order that was sent, each move's and step's outcome, and why a later move stopped. It offers another submission when the set stays open and holds a move that is still proposed.
+The grouped view of one proposal set that presents each team, the reason beside each item, the drop beside the add, the item's state and check, when the league applies the moves in plain words, and a quiet section for a team with nothing proposed. A refusal names the conflicting operations in the person's terms rather than by a code. A signed-in person decides there, selects the moves that are still proposed, and submits them; after submission it shows the submission history, the order that was sent, each move's and step's outcome, and why a later move stopped. It offers another submission when the set stays open and holds a move that is still proposed.
 _Avoid_: Approvals, cart, confirmation screen
 
 **Pending trade offer**:

@@ -43,7 +43,7 @@ function resolveWeekTarget(
       status: "blocked",
       reason: "no_period_window",
       detail:
-        "The provider publishes no scoring-week window for this league, so a scoring week cannot be resolved.",
+        "Your league publishes no scoring-week window for this league, so a scoring week cannot be resolved.",
     };
   }
   const week = requested.coverage === "current" ? window.current : requested.week;
@@ -58,7 +58,7 @@ function resolveWeekTarget(
     return {
       status: "blocked",
       reason: "stale_period",
-      detail: `Week ${String(week)} is not the provider's current scoring week (week ${String(window.current)}).`,
+      detail: `Week ${String(week)} is not the current scoring week at your league (week ${String(window.current)}).`,
     };
   }
   return { status: "resolved", target: { coverage: "week", week } };
@@ -77,14 +77,14 @@ function resolveDateTarget(
     return {
       status: "blocked",
       reason: "outside_season",
-      detail: `The provider's fantasy day ${date} is outside the league's declared season (${seasonRange(league)}).`,
+      detail: `The fantasy day at your league ${date} is outside the league's declared season (${seasonRange(league)}).`,
     };
   }
   if (date !== today) {
     return {
       status: "blocked",
       reason: "stale_period",
-      detail: `Date ${date} is not the provider's current fantasy day (${today}).`,
+      detail: `Date ${date} is not the current fantasy day at your league (${today}).`,
     };
   }
   return {

@@ -120,7 +120,7 @@ const skippedMovementDetail =
 const unknownReserveDetail =
   "We could not confirm whether the reserve move applied, so the add or drop was not attempted. Nothing was retried.";
 const waiverPendingDetail =
-  "The provider has not processed this waiver claim yet. It may still be awarded or lost, so this move is pending rather than done.";
+  "Your league has not processed this waiver claim yet. It may still be awarded or lost, so this move is pending rather than done.";
 
 type PendingParty = {
   readonly ref: CounterpartyRef;
@@ -295,7 +295,7 @@ export const TransactionProposalsLive = Layer.effect(
           }
           if (tradeProposal.assets.includes("draft_pick")) {
             throw new Error(
-              "A provider accepts draft picks in a trade proposal, but a proposal item cannot carry one",
+              "Your league accepts draft picks in a trade proposal, but a proposal item cannot carry one",
             );
           }
           refusals.push(
@@ -303,7 +303,7 @@ export const TransactionProposalsLive = Layer.effect(
               index,
               "draft_pick_included",
               tradeProposal.detail,
-              "Remove `picks`. A transaction item carries players only because the provider publishes pick trades only on its website.",
+              "Remove `picks`. A transaction item carries players only because your league publishes pick trades only on its website.",
             ),
           );
           continue;
@@ -789,9 +789,9 @@ export const TransactionProposalsLive = Layer.effect(
       const detail =
         existing === undefined
           ? created
-            ? `Created proposal set ${currentSet.id} with ${String(items.length)} item${items.length === 1 ? "" : "s"}.${refusedNote} It is ready for the review screen; nothing has been sent to the provider.`
-            : `This exact set was already proposed as ${currentSet.id}. The existing set is returned instead of a duplicate; nothing has been sent to the provider.${refusedNote}`
-          : `Appended ${String(items.length)} item${items.length === 1 ? "" : "s"} to proposal set ${currentSet.id}.${refusedNote} The whole set was validated again and its order recomputed; nothing has been sent to the provider.`;
+            ? `Created proposal set ${currentSet.id} with ${String(items.length)} item${items.length === 1 ? "" : "s"}.${refusedNote} It is ready for the review screen; nothing has been sent to your league.`
+            : `This exact set was already proposed as ${currentSet.id}. The existing set is returned instead of a duplicate; nothing has been sent to your league.${refusedNote}`
+          : `Appended ${String(items.length)} item${items.length === 1 ? "" : "s"} to proposal set ${currentSet.id}.${refusedNote} The whole set was validated again and its order recomputed; nothing has been sent to your league.`;
       yield* Effect.annotateCurrentSpan({
         "proposal.set_created": created,
         "proposal.set_extended": extended,
@@ -1240,7 +1240,7 @@ export const TransactionProposalsLive = Layer.effect(
           return {
             outcome: "skipped",
             detail:
-              "This team now belongs to a different provider connection than the one the move was staged against, so nothing was sent with another connection's session.",
+              "This team now belongs to a different connection than the one the move was staged against, so nothing was sent with another connection's sign-in.",
             steps: [],
             settled: true,
           };
@@ -1560,7 +1560,7 @@ export const TransactionProposalsLive = Layer.effect(
             return {
               outcome: "unknown",
               detail:
-                "The provider did not confirm the trade offer, so it may or may not exist. It was not retried. Check the provider's trade page before proposing again.",
+                "Your league did not confirm the trade offer, so it may or may not exist. It was not retried. Check the trade page before proposing again.",
               steps: [],
               settled: false,
             };
@@ -1569,7 +1569,7 @@ export const TransactionProposalsLive = Layer.effect(
               outcome: "failed",
               detail:
                 writeDetail(sent.success, "trade offer") ??
-                "The provider rejected the trade offer. Nothing was retried.",
+                "Your league rejected the trade offer. Nothing was retried.",
               steps: [],
               settled: false,
             };
@@ -1627,10 +1627,10 @@ export const TransactionProposalsLive = Layer.effect(
               const unavailable = ProposalProviderUnavailable.make({
                 detail:
                   error._tag === "provider.session_rejected"
-                    ? "The provider rejected the stored session. Reconnect the connection and read the offers again."
+                    ? "Your league rejected the stored sign-in. Reconnect and read the offers again."
                     : error._tag === "provider.request_failed"
-                      ? "The provider's pending trade offers could not be read."
-                      : "The provider's pending trade offers could not be verified.",
+                      ? "The pending trade offers at your league could not be read."
+                      : "The pending trade offers at your league could not be verified.",
               });
               return error._tag === "provider.session_rejected"
                 ? queries
@@ -1659,7 +1659,7 @@ export const TransactionProposalsLive = Layer.effect(
             },
           ],
           detail:
-            "This provider publishes no pending trade offers for this read, so none are shown rather than an empty success.",
+            "Your league publishes no pending trade offers for this read, so none are shown rather than an empty success.",
         }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
       }
       const offers = yield* toPendingTradeOffers(
@@ -1685,7 +1685,7 @@ export const TransactionProposalsLive = Layer.effect(
           },
         ],
         detail:
-          "Read-only. These are this team's pending trade offers as the provider publishes them to this account. Lineupgrade cannot accept, reject, or vote on an offer; a signed-in person can withdraw an offer this account made from the review page.",
+          "Read-only. These are this team's pending trade offers as your league publishes them to this account. Lineupgrade cannot accept, reject, or vote on an offer; a signed-in person can withdraw an offer this account made from the review page.",
       }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
     });
 
@@ -1773,14 +1773,14 @@ export const TransactionProposalsLive = Layer.effect(
         Effect.mapError(() =>
           ProposalContentInvalid.make({
             detail:
-              "A withdrawal names one owned team and exactly one pending offer, either a stored proposal item or a provider pending offer.",
+              "A withdrawal names one owned team and exactly one pending offer, either a stored proposal item or a pending offer at your league.",
           }),
         ),
       );
       if ((decoded.item === undefined) === (decoded.offer === undefined)) {
         return yield* ProposalContentInvalid.make({
           detail:
-            "A withdrawal names exactly one target: a proposal item id or a provider pending offer reference.",
+            "A withdrawal names exactly one target: a proposal item id or a pending offer reference at your league.",
         });
       }
       const loaded = yield* Effect.result(
@@ -1817,7 +1817,7 @@ export const TransactionProposalsLive = Layer.effect(
           return yield* ProposalTradeNotPending.make({
             state: item.trade?.state ?? "pending",
             detail:
-              "This team now belongs to a different provider connection, so the offer was not withdrawn with the stored session. Reload and read the provider's trade page.",
+              "This team now belongs to a different connection, so the offer was not withdrawn with the stored sign-in. Reload and check the trade page.",
           });
         }
         if (item.trade === undefined || item.trade.state !== "pending") {
@@ -1825,7 +1825,7 @@ export const TransactionProposalsLive = Layer.effect(
             state: item.trade?.state ?? "expired",
             detail:
               item.trade === undefined
-                ? "This trade was never proposed to the provider, so there is nothing to withdraw."
+                ? "This trade was never offered to your league, so there is nothing to withdraw."
                 : `This offer is ${item.trade.state}, so it is no longer pending.`,
           });
         }
@@ -1865,14 +1865,14 @@ export const TransactionProposalsLive = Layer.effect(
         }
         return yield* ProposalProviderUnavailable.make({
           detail:
-            "The provider's pending trade offers could not be read, so nothing was withdrawn. Check the provider's trade page before trying again.",
+            "The pending trade offers at your league could not be read, so nothing was withdrawn. Check the trade page before trying again.",
         });
       }
       if (!before.success.some((offer) => offer.transactionKey === transactionKey)) {
         return yield* ProposalTradeNotPending.make({
           state: item?.trade?.state ?? "expired",
           detail:
-            "The provider does not list this offer as pending, so nothing was withdrawn. Reload to read its current state.",
+            "Your league does not list this offer as pending, so nothing was withdrawn. Reload to check.",
         });
       }
       const withdrawn = yield* Effect.result(
@@ -1888,7 +1888,7 @@ export const TransactionProposalsLive = Layer.effect(
         return yield* ProposalProviderUnavailable.make({
           detail:
             withdrawn.failure._tag === "provider.session_rejected"
-              ? "The provider rejected the stored session, so the offer was not withdrawn. Reconnect the connection and check its trade page."
+              ? "Your league rejected the stored sign-in, so the offer was not withdrawn. Reconnect and check the trade page."
               : "The withdrawal request could not be prepared, so nothing was withdrawn.",
         });
       }
@@ -1907,7 +1907,7 @@ export const TransactionProposalsLive = Layer.effect(
           ) {
             return yield* ProposalProviderUnavailable.make({
               detail:
-                "The provider accepted the withdrawal but still lists the offer as pending. Nothing else was attempted; check the provider's trade page.",
+                "Your league accepted the withdrawal but still lists the offer as pending. Nothing else was attempted; check the trade page.",
             });
           }
           const at = yield* DateTime.now;
@@ -1922,7 +1922,7 @@ export const TransactionProposalsLive = Layer.effect(
                     ...item.trade,
                     state: "withdrawn",
                     settledAt: at,
-                    detail: "Withdrawn before acceptance. The provider deletes a withdrawn offer.",
+                    detail: "Withdrawn before acceptance. Your league deletes a withdrawn offer.",
                   },
                   at,
                 },
@@ -1933,13 +1933,13 @@ export const TransactionProposalsLive = Layer.effect(
             status: "withdrawn",
             tradeState: "withdrawn",
             detail:
-              "The provider confirmed the withdrawal and no longer lists the offer. Nothing was accepted on the other manager's behalf.",
+              "Your league confirmed the withdrawal and no longer lists the offer. Nothing was accepted on the other manager's behalf.",
           }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
         }
         case "unknown":
           return yield* ProposalProviderUnavailable.make({
             detail:
-              "The provider did not confirm the withdrawal, so it may or may not have applied. It was not retried. Check the provider's trade page.",
+              "Your league did not confirm the withdrawal, so it may or may not have applied. It was not retried. Check the trade page.",
           });
         case "not_sent":
         case "rejected":
@@ -2053,7 +2053,7 @@ export const TransactionProposalsLive = Layer.effect(
               refusal: tradeRefusal(
                 candidate.index,
                 "trade_state_unavailable",
-                `Item ${String(candidate.index + 1)} cannot be checked against the provider (${failure}).`,
+                `Item ${String(candidate.index + 1)} cannot be checked against your league (${failure}).`,
                 "Read the team, the league, and both rosters again, then propose the trade.",
               ),
             });
@@ -2125,7 +2125,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_state_unavailable",
                 `Item ${String(candidate.index + 1)} cannot be checked because the league publishes no trade end date or current date.`,
-                "Read the league again; a trade cannot be checked until the provider publishes both dates.",
+                "Read the league again; a trade cannot be checked until your league publishes both dates.",
               ),
             });
             continue;
@@ -2168,7 +2168,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_player_not_rostered",
                 `Item ${String(candidate.index + 1)} sends a player who is not on this team's roster.`,
-                "Read this team's roster again and name only a player the provider still lists on it.",
+                "Read this team's roster again and name only a player your league still lists on it.",
               ),
             });
             continue;
@@ -2181,7 +2181,7 @@ export const TransactionProposalsLive = Layer.effect(
                 candidate.index,
                 "trade_player_not_rostered",
                 `Item ${String(candidate.index + 1)} asks for a player who is not on ${counterparty.name}'s roster.`,
-                "Read both rosters again and name only players the provider still lists on the team they would leave.",
+                "Read both rosters again and name only players your league still lists on the team they would leave.",
               ),
             });
             continue;
@@ -2411,7 +2411,7 @@ export const TransactionProposalsLive = Layer.effect(
       context: TeamContext,
       failure: string,
     ): Effect.Effect<string> {
-      const detail = `Current state could not be read: a provider read failed (${failure}).`;
+      const detail = `Current state could not be read: a read from your league failed (${failure}).`;
       return failure === "provider.session_rejected"
         ? queries.recordSessionRejected(userId, context.owned).pipe(Effect.as(detail))
         : Effect.succeed(detail);
@@ -2902,7 +2902,7 @@ function evaluateItem(
       reasons.push({
         code: "player_unavailable",
         playerKey: add.key,
-        detail: `The provider does not publish whether ${name ?? "an added player"} is available, so the add cannot be checked.`,
+        detail: `Your league does not publish whether ${name ?? "an added player"} is available, so the add cannot be checked.`,
       });
     }
   }
@@ -2936,7 +2936,7 @@ function evaluateItem(
   ) {
     reasons.push({
       code: "period_closed",
-      detail: `The league's period ended on ${facts.league.endDate}, and the provider's current date is ${facts.league.currentDate}.`,
+      detail: `The league's period ended on ${facts.league.endDate}, and the current date at your league is ${facts.league.currentDate}.`,
     });
   }
   if (item.bid !== undefined) {
@@ -3005,7 +3005,7 @@ function evaluateSlotMoveItem(
     illegal.push({
       code: "slot_illegal",
       playerKey: player.providerPlayerKey,
-      detail: `The provider reports no verified slot for ${player.name}, so the move cannot be planned.`,
+      detail: `Your league reports no verified slot for ${player.name}, so the move cannot be planned.`,
     });
   }
   const slot = facts.league.rosterPositions.find((position) => position.position === move.toSlot);
@@ -3196,7 +3196,7 @@ function refreshedTrade(
       trade: {
         ...trade,
         detail:
-          "The provider no longer lists this offer, and its completed trades could not be read. Check the provider's trade page.",
+          "Your league no longer lists this offer, and its completed trades could not be read. Check the trade page.",
       },
       state: "pending",
     };
@@ -3221,7 +3221,7 @@ function refreshedTrade(
         ...trade,
         state: "expired",
         settledAt: at,
-        detail: `The provider no longer lists this offer and the league's trade window closed on ${facts.league.tradeEndDate ?? "an unpublished date"}.`,
+        detail: `Your league no longer lists this offer and the trade window closed on ${facts.league.tradeEndDate ?? "an unpublished date"}.`,
       },
       state: "expired",
     };
@@ -3232,7 +3232,7 @@ function refreshedTrade(
       state: "expired",
       settledAt: at,
       detail:
-        "The provider no longer lists this offer and it is not among its completed trades. The provider publishes no ended record, so it was withdrawn or expired elsewhere.",
+        "Your league no longer lists this offer and it is not among its completed trades. It publishes no ended record, so it was withdrawn or expired elsewhere.",
     },
     state: "expired",
   };
@@ -3285,7 +3285,7 @@ function budgetOf(
     return {
       status: "not_published",
       detail:
-        "The provider publishes no remaining FAAB balance for this team, so the bid cannot be checked against it.",
+        "Your league publishes no remaining FAAB balance for this team, so the bid cannot be checked against it.",
     };
   }
   return { status: "published", remaining: own.remainingBudget };
@@ -3326,13 +3326,13 @@ function proposalPlayerOf(player: ProviderRoster["players"][number]): StoredProp
 function withdrawalDetail(write: ProviderWriteResult): string {
   switch (write.status) {
     case "accepted":
-      return "The provider accepted the withdrawal.";
+      return "Your league accepted the withdrawal.";
     case "rejected":
       return clamped(rejectionDetail("withdrawal", write));
     case "not_sent":
       return notSentDetail("withdrawal", write);
     case "unknown":
-      return "The provider did not confirm the withdrawal, so it may or may not have applied. It was not retried. Check the provider's trade page.";
+      return "Your league did not confirm the withdrawal, so it may or may not have applied. It was not retried. Check the trade page.";
   }
 }
 
@@ -3604,17 +3604,17 @@ function refusalFromCheck(position: number, change: ProposalItemChange): Proposa
 function staleFix(code: ProposalStaleCode): string {
   switch (code) {
     case "player_unavailable":
-      return "Read the player pool again and name a player the provider still publishes as available; a player already rostered in this league cannot be added.";
+      return "Read the player pool again and name a player your league still publishes as available; a player already rostered in this league cannot be added.";
     case "drop_not_rostered":
-      return "Read this team's roster again and name only a player the provider still lists on it.";
+      return "Read this team's roster again and name only a player your league still lists on it.";
     case "move_not_rostered":
-      return "Read this team's roster again and name a player the provider still lists on it.";
+      return "Read this team's roster again and name a player your league still lists on it.";
     case "move_slot_unknown":
       return "Read the league again and name a slot it declares.";
     case "roster_full":
       return "Add the drop or slot move that frees a roster place to this set, then propose again.";
     case "slot_illegal":
-      return "Make the named player's slot legal: move them at the provider, or propose a slot move or drop that opens a slot accepting them.";
+      return "Make the named player's slot legal: move them in your league, or propose a slot move or drop that opens a slot accepting them.";
     case "order_conflict":
       return "Withdraw or change one of the named moves so the team has a legal order, then propose again.";
     case "order_unresolved":
@@ -3626,13 +3626,13 @@ function staleFix(code: ProposalStaleCode): string {
     case "bid_not_available":
       return "Remove the bid; this league does not use a FAAB budget.";
     case "state_unavailable":
-      return "Read the team, roster, and league again; the provider did not publish the state this move needs.";
+      return "Read the team, roster, and league again; your league did not publish the state this move needs.";
     case "trade_window_closed":
       return "Wait for the league's next trade window and propose the trade then.";
     case "trade_counterparty_missing":
       return "Read the league's teams again and name a counterparty that is still in the league.";
     case "trade_player_not_rostered":
-      return "Read both rosters again and name only players the provider still lists on the team they would leave.";
+      return "Read both rosters again and name only players your league still lists on the team they would leave.";
   }
 }
 
@@ -4031,7 +4031,7 @@ function executableRefusal(
     return undefined;
   }
   if (item.adds.length > transaction.maximumAdds || item.drops.length > transaction.maximumDrops) {
-    return `The provider's transaction request carries at most ${String(transaction.maximumAdds)} ${transaction.maximumAdds === 1 ? "add" : "adds"} and ${String(transaction.maximumDrops)} ${transaction.maximumDrops === 1 ? "drop" : "drops"}, and this move names ${String(item.adds.length)} to add and ${String(item.drops.length)} to drop. Split it into separate items and propose a fresh set.`;
+    return `A transaction request to your league carries at most ${String(transaction.maximumAdds)} ${transaction.maximumAdds === 1 ? "add" : "adds"} and ${String(transaction.maximumDrops)} ${transaction.maximumDrops === 1 ? "drop" : "drops"}, and this move names ${String(item.adds.length)} to add and ${String(item.drops.length)} to drop. Split it into separate items and propose a fresh set.`;
   }
   if (item.kind === "waiver_claim" && item.bid === undefined) {
     return "A waiver claim needs a FAAB bid before it can be sent.";
@@ -4103,7 +4103,7 @@ function withdrawalStateDetail(state: ProposalItemState): string {
     case "executed":
       return "It has already run.";
     case "pending":
-      return "It is waiting on the provider or the other manager.";
+      return "It is waiting on your league or the other manager.";
     case "failed":
       return "It was attempted and failed; its outcome is part of the record.";
     case "skipped":
@@ -4115,7 +4115,7 @@ function withdrawalStateDetail(state: ProposalItemState): string {
     case "withdrawn":
       return "It was already withdrawn.";
     case "expired":
-      return "The provider expired it, so it is no longer open.";
+      return "Your league expired it, so it is no longer open.";
   }
 }
 
@@ -4223,7 +4223,7 @@ function writeDetail(
     case "not_sent":
       return notSentDetail("request", write);
     case "unknown":
-      return `The provider did not confirm the ${subject}; it may or may not have applied. It was not retried.`;
+      return `Your league did not confirm the ${subject}; it may or may not have applied. It was not retried.`;
   }
 }
 
@@ -4233,8 +4233,8 @@ function rejectionDetail(
 ): string {
   const status = write.httpStatus === undefined ? "" : ` with HTTP ${String(write.httpStatus)}`;
   return write.detail === undefined
-    ? `The provider rejected the ${subject}${status} without giving a reason.`
-    : `The provider rejected the ${subject}${status}. It said: ${write.detail}`;
+    ? `Your league rejected the ${subject}${status} without giving a reason.`
+    : `Your league rejected the ${subject}${status}. It said: ${write.detail}`;
 }
 
 function notSentDetail(
@@ -4242,11 +4242,11 @@ function notSentDetail(
   write: Extract<ProviderWriteResult, { readonly status: "not_sent" }>,
 ): string {
   if (write.detail !== undefined) {
-    return clamped(`The provider did not send the ${subject}. It said: ${write.detail}`);
+    return clamped(`Your league did not send the ${subject}. It said: ${write.detail}`);
   }
   return write.reason === "session_incomplete"
-    ? `The ${subject} was not sent because the provider did not issue a write token.`
-    : `The ${subject} was not sent to the provider.`;
+    ? `The ${subject} was not sent because your league did not issue a write token.`
+    : `The ${subject} was not sent to your league.`;
 }
 
 function sessionFailureDetail(
@@ -4254,8 +4254,8 @@ function sessionFailureDetail(
   subject: "reserve move" | "slot move" | "transaction",
 ): string {
   return tag === "provider.session_rejected"
-    ? `The provider rejected the stored session, so this ${subject} was not sent. Reconnect the connection before proposing a fresh set.`
-    : `The provider request could not be prepared, so this ${subject} was not sent.`;
+    ? `Your league rejected the stored sign-in, so this ${subject} was not sent. Reconnect before proposing a fresh set.`
+    : `The request to your league could not be prepared, so this ${subject} was not sent.`;
 }
 
 function clamped(value: string): string {
@@ -4284,12 +4284,12 @@ function illegalSlots(
     }
     const player = byKey.get(occupant.key);
     const providerNote =
-      player?.injuryDetail === undefined ? "" : ` The provider reports "${player.injuryDetail}".`;
+      player?.injuryDetail === undefined ? "" : ` Your league reports "${player.injuryDetail}".`;
     return [
       {
         code: "slot_illegal" as const,
         playerKey: occupant.key,
-        detail: `${occupant.detail}${providerNote} Move them to a legal slot at the provider, then revalidate this set.`,
+        detail: `${occupant.detail}${providerNote} Move them to a legal slot in your league, then revalidate this set.`,
       },
     ];
   });

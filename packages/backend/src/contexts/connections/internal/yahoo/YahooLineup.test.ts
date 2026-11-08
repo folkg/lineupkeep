@@ -127,7 +127,7 @@ describe("Yahoo scoring translation", () => {
     ]);
   });
 
-  it("leaves a player unscored when the provider publishes no started percentage", () => {
+  it("leaves a player unscored when your league publishes no started percentage", () => {
     const outcome = runPlan(hockeyRequest(), {
       rates: [startRate("hockey-player-0", 43, [])],
     });
@@ -312,7 +312,7 @@ describe("Yahoo scoring translation", () => {
       kind: "refused",
       refusal: "structural",
       provenance: "yahoo/unsupported-sport",
-      detail: "This provider does not plan lineups for this sport.",
+      detail: "Your league does not plan lineups for this sport.",
     });
   });
 
@@ -513,7 +513,7 @@ describe("Yahoo scoring translation", () => {
     ]);
   });
 
-  it("falls back to the started percentage when the provider publishes no projected rank", () => {
+  it("falls back to the started percentage when your league publishes no projected rank", () => {
     const { outcome, decision } = planFlex(
       flexLeague(),
       flexRoster({ slots: { starter: "WR", history: "BN", projected: "W/R/T" } }),
@@ -543,7 +543,7 @@ describe("Yahoo scoring translation", () => {
       refusal: "transient",
       provenance: "yahoo/policy:no-start-rate",
       detail:
-        "The provider published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
+        "Your league published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
     });
     expect(decision).toBeUndefined();
   });

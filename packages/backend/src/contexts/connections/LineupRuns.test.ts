@@ -356,7 +356,7 @@ it.effect("leaves a reserve player in place and writes only the rest of the line
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-it.effect("reports the provider's own words when it refuses the lineup and never retries", () =>
+it.effect("reports your league's own words when it refuses the lineup and never retries", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;
     const worker = yield* LineupWorker;
@@ -518,7 +518,7 @@ it.effect("records each player's scheduled and starting-lineup facts in the run 
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-it.effect("fails loudly when a provider response stops matching the decoder", () =>
+it.effect("fails loudly when the response stops matching the decoder", () =>
   Effect.gen(function* () {
     const repository = yield* LineupRunRepository;
     const worker = yield* LineupWorker;
@@ -540,7 +540,7 @@ it.effect("fails loudly when a provider response stops matching the decoder", ()
     assert.strictEqual(run.state.outcome.kind, "failed");
     assert.match(
       run.state.outcome.summary,
-      /did not match the shape the adapter decodes \(read_league at league.stat_modifiers\)/u,
+      /in a shape Lineupgrade could not read \(read_league at league.stat_modifiers\)/u,
     );
     assert.strictEqual(yield* fake.nativeCallCount, 0);
     assert.strictEqual(yield* fake.explicitCallCount, 0);
@@ -808,7 +808,7 @@ it.effect("retries a lost explicit response only when the readback is unchanged"
   }).pipe(Effect.provide(LineupTestLayer)),
 );
 
-it.effect("plans a manual run from the provider's declared scores", () =>
+it.effect("plans a manual run from your league's declared scores", () =>
   Effect.gen(function* () {
     const runs = yield* LineupRuns;
     const fake = yield* FakeProviderWorld;
@@ -946,7 +946,7 @@ it.effect(
         updatedAt: DateTime.makeUnsafe("2026-10-25T12:00:00Z"),
         attempt: completed.attempts,
         reason: "provider_outcome_unknown",
-        detail: "The provider response was lost before the native action was verified.",
+        detail: "Your league response was lost before the native action was verified.",
         retryAt: DateTime.makeUnsafe("1969-12-31T23:59:00Z"),
         writeIntent: { id: intent.id, attempt: intent.attempt },
       });

@@ -93,7 +93,7 @@ function AccountContent(props: AccountPageProps): JSX.Element {
           <SectionTitle id="export-title">Your data</SectionTitle>
           <Text>
             The file includes your account, connections, teams, lineup runs, transaction proposals,
-            feedback, and sign-in records. Provider sessions, passwords, and agent tokens are left
+            feedback, and sign-in records. Sign-in sessions, passwords, and agent tokens are left
             out, because a copy should not let anyone sign in as you.
           </Text>
           <DownloadLink href={accountExportPath}>Export my data</DownloadLink>

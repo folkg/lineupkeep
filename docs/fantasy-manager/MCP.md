@@ -763,14 +763,15 @@ the set frees a place for stays stale with `roster_full`, and its reason names t
 a drop for a player outside a reserve slot, or a slot move into a reserve slot. An illegal item names
 the offending player, his slot, and what resolves it, and the check covers every rostered player
 because one illegal player blocks any transaction for that team. When a slot the set opens accepts
-the offending player, the item carries a roster move before the transaction, and the review reports
-that move as its own step. The slot can be opened by a drop in the same item or an earlier item.
+the offending player, the item carries a roster move, before the transaction when the slot is
+already open or after it when the transaction frees it, and the review reports that move as its own
+step. The slot can be opened by a drop in the same item or an earlier item.
 When no slot in the set is open, the item refuses and names the choice only the person can make,
 which is who to drop, and the drop or slot move that would resolve it in this set. Every team with
 roster moves also carries its `order`: the sequence the server chose so each move leaves the roster
 legal under the league's slots and published roster-change timing, with a `position` for every move
-that is still proposed. Every surface shows that sequence before submission, and the set read returns the
-sequence saved by its last check. When no order exists, that team's whole set is refused at the check: every move in it is
+that is still proposed. The set read returns that sequence before submission, with the position every move
+holds, and the review says when the league applies the moves. When no order exists, that team's whole set is refused at the check: every move in it is
 illegal, the reason names the operations that conflict in plain words, and nothing in that team's
 set can be submitted. An item that no operation in the set can make legal is named on its own and
 does not make the rest of the team's plan illegal. A trade follows the roster moves in the

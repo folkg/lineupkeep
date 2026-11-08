@@ -513,7 +513,7 @@ function applyDeclared(state: RosterState, item: ProposalOrderItem, league: Leag
     if (moving.slot === undefined) {
       return refused(
         "slot_illegal",
-        `The provider reports no verified slot for ${moving.name}, so the move cannot be planned.`,
+        `Your league reports no verified slot for ${moving.name}, so the move cannot be planned.`,
       );
     }
     const slot = league.byPosition.get(item.move.toSlot);

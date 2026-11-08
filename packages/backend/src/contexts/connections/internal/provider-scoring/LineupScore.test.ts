@@ -15,7 +15,7 @@ import type {
 const target: Period = { kind: "week", week: 7 };
 
 describe("the period's projection", () => {
-  it("values a player from the provider's projected rank for the target period", () => {
+  it("values a player from your league's projected rank for the target period", () => {
     const result = scored(
       scoreLineup(
         input({
@@ -244,7 +244,7 @@ describe("the value source ladder", () => {
       refusal: "transient",
       code: "policy:no-projection",
       detail:
-        "The provider published no projected rank for any player on this roster for this period, so the custom policy cannot value the lineup.",
+        "Your league published no projected rank for any player on this roster for this period, so the custom policy cannot value the lineup.",
     });
   });
 
@@ -264,11 +264,11 @@ describe("the value source ladder", () => {
       refusal: "transient",
       code: "policy:no-start-rate",
       detail:
-        "The provider published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
+        "Your league published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
     });
   });
 
-  it("refuses structurally when the provider contributes no source at all", () => {
+  it("refuses structurally when your league contributes no source at all", () => {
     const verdict = scoreLineup(input({ sources: [], players: [player("p1")] }));
 
     expect(verdict.kind).toBe("refused");

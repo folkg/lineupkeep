@@ -187,7 +187,7 @@ export const FantasyQueriesLive = Layer.effect(
                 code: "provider_session_rejected",
                 resource,
                 message:
-                  "The provider rejected the stored session. Reconnect the connection and start the query again.",
+                  "Your league rejected the stored session. Reconnect the connection and start the query again.",
               },
             }),
           );
@@ -197,7 +197,7 @@ export const FantasyQueriesLive = Layer.effect(
             failure: {
               code: "provider_unavailable",
               resource,
-              message: "The provider could not be reached.",
+              message: "Your league could not be reached.",
             },
           });
         case "provider.response_invalid":
@@ -208,8 +208,8 @@ export const FantasyQueriesLive = Layer.effect(
               resource,
               message:
                 error.field === undefined
-                  ? "The provider returned data that could not be verified for this request."
-                  : `The provider returned data that could not be verified (field \`${error.field}\`).`,
+                  ? "Your league returned data that could not be verified for this request."
+                  : `Your league returned data that could not be verified (field \`${error.field}\`).`,
             },
           });
         case "provider.period_mismatch":
@@ -253,7 +253,7 @@ export const FantasyQueriesLive = Layer.effect(
           failure: {
             code: "schedule_fact_stale",
             resource,
-            message: `The provider opponents for ${error.dates.join(", ")} are past their maximum age and were not served; ${previous}. The re-read failed: ${reason}`,
+            message: `Your league opponents for ${error.dates.join(", ")} are past their maximum age and were not served; ${previous}. The re-read failed: ${reason}`,
           },
         };
       });
@@ -300,7 +300,7 @@ export const FantasyQueriesLive = Layer.effect(
           failure: {
             code: "league_season_mismatch",
             resource: "league",
-            message: "The provider league season does not match the linked team.",
+            message: "Your league season does not match the linked team.",
           },
         };
       });
@@ -346,7 +346,7 @@ export const FantasyQueriesLive = Layer.effect(
           return {
             status: "unavailable" as const,
             detail:
-              "The provider publishes neither a scoring period nor a current date for this league, so no window bounds the pool's games.",
+              "Your league publishes neither a scoring period nor a current date for this league, so no window bounds the pool's games.",
           };
         }
         const professionalGames = yield* readProfessionalScheduleGames({
@@ -378,7 +378,7 @@ export const FantasyQueriesLive = Layer.effect(
             detail:
               outcome._tag === "failed"
                 ? outcome.failure.message
-                : "The provider reported no league scoring categories.",
+                : "Your league reported no league scoring categories.",
           };
         }
         const categoryCache = new Map<number, StatRef>();
@@ -551,7 +551,7 @@ export const FantasyQueriesLive = Layer.effect(
           failure: {
             code: "provider_invalid_response",
             resource: "league",
-            message: "The provider league period range is invalid.",
+            message: "Your league period range is invalid.",
           },
         });
       }
@@ -875,7 +875,7 @@ export const FantasyQueriesLive = Layer.effect(
         if (input.period !== undefined) {
           return yield* QuerySelectionInvalid.make({
             detail:
-              'A `scope: "league"` roster read returns the provider\'s current coverage for every team. The provider publishes no league-wide roster for a selected week, and this server will not read the teams one at a time, so omit `period` or use `scope: "team"` for one linked team\'s exact week.',
+              'A `scope: "league"` roster read returns your league\'s current coverage for every team. Your league publishes no league-wide roster for a selected week, and Lineupgrade will not read the teams one at a time, so omit `period` or use `scope: "team"` for one linked team\'s exact week.',
           });
         }
         const leagueKey = context.owned.team.providerLeagueKey;
@@ -1099,13 +1099,13 @@ export const FantasyQueriesLive = Layer.effect(
       const playerSearch = context.provider.capabilities.playerSearch;
       if (!playerSearch.sorts.includes(sort)) {
         return yield* QuerySelectionInvalid.make({
-          detail: `This provider does not accept the \`${sort}\` player sort. Choose one of: ${playerSearch.sorts.join(", ")}.`,
+          detail: `Your league does not accept the \`${sort}\` player sort. Choose one of: ${playerSearch.sorts.join(", ")}.`,
         });
       }
       if (statPeriod === "week" && !playerSearch.weeklyOrderingValues) {
         return yield* QuerySelectionInvalid.make({
           detail:
-            "This provider's player search publishes no weekly rank or stat value, so a weekly ordering cannot be shown in the rows. Use statPeriod `season`, or sort by name, position, or ownership.",
+            "Your league's player search publishes no weekly rank or stat value, so a weekly ordering cannot be shown in the rows. Use statPeriod `season`, or sort by name, position, or ownership.",
         });
       }
       if (sort === "stat" && input.stat === undefined) {
@@ -1137,7 +1137,7 @@ export const FantasyQueriesLive = Layer.effect(
         }
         if (resolved._tag === "informational") {
           return yield* QuerySelectionInvalid.make({
-            detail: `${resolved.name} is informational for this league: the provider publishes it but the league does not score it, so it cannot order a scored search. Sort by one of this league's scoring categories, or by name, position, ownership, or a provider rank.`,
+            detail: `${resolved.name} is informational for this league: your league publishes it but the league does not score it, so it cannot order a scored search. Sort by one of this league's scoring categories, or by name, position, ownership, or your league rank.`,
           });
         }
         if (resolved._tag === "unknown") {
@@ -1524,7 +1524,7 @@ export const FantasyQueriesLive = Layer.effect(
                   },
                   aggregation: {
                     method: "daily_sum" as const,
-                    detail: `Summed from ${String(group.basis.days)} provider daily reads; categories in \`notAggregated\` are not summed.`,
+                    detail: `Summed from ${String(group.basis.days)} daily reads; categories in \`notAggregated\` are not summed.`,
                   },
                 }
               : {}),
@@ -1591,7 +1591,7 @@ export const FantasyQueriesLive = Layer.effect(
                 code: "player_availability_unavailable",
                 resource: row.ref,
                 message:
-                  "The provider returned no roster or selected-player status for this player.",
+                  "Your league returned no roster or selected-player status for this player.",
               });
             }
             const actualStats = !groups.includes("actual_stats")
@@ -1601,7 +1601,7 @@ export const FantasyQueriesLive = Layer.effect(
                 : detail?.actual === undefined
                   ? {
                       status: "unsupported" as const,
-                      detail: "The provider reported no actual statistics for this player.",
+                      detail: "Your league reported no actual statistics for this player.",
                     }
                   : yield* statGroup(detail.actual);
             const projections = !groups.includes("projections")
@@ -1628,7 +1628,7 @@ export const FantasyQueriesLive = Layer.effect(
               failures.push({
                 code: "player_identity_unavailable",
                 resource: row.ref,
-                message: "The provider did not return identity data for this player.",
+                message: "Your league did not return identity data for this player.",
               });
             }
             return {
@@ -1948,7 +1948,7 @@ export const FantasyQueriesLive = Layer.effect(
                 "transactions",
                 "transactions",
                 fetchedAt,
-                `The provider publishes no transaction older than ${String(window.earliest)}, so the requested range is not complete.`,
+                `Your league publishes no transaction older than ${String(window.earliest)}, so the requested range is not complete.`,
               )
             : coverage("transactions", "transactions", fetchedAt),
         ...(pageFailure === undefined
@@ -1969,13 +1969,13 @@ export const FantasyQueriesLive = Layer.effect(
             code: "transaction_window_truncated",
             resource: "transactions",
             message:
-              "The provider has more transaction history than this bounded read fetches, so this date range may omit older moves.",
+              "Your league has more transaction history than this bounded read fetches, so this date range may omit older moves.",
           }
         : beforeHistory
           ? {
               code: "transaction_history_starts_after_range",
               resource: "transactions",
-              message: `The provider publishes no transaction older than ${String(window.earliest)}, so this range starts before the available history.`,
+              message: `Your league publishes no transaction older than ${String(window.earliest)}, so this range starts before the available history.`,
             }
           : undefined;
       const failures: QueryFailure[] = [
@@ -2219,7 +2219,7 @@ export const FantasyQueriesLive = Layer.effect(
         standingsOutcome === undefined
           ? "The standings group was not requested."
           : standingsOutcome._tag === "ok"
-            ? "The provider standings did not include this team."
+            ? "Your league standings did not include this team."
             : standingsOutcome._tag === "failed"
               ? standingsOutcome.failure.message
               : standingsOutcome.detail;
@@ -2261,7 +2261,7 @@ export const FantasyQueriesLive = Layer.effect(
                   ? standingsDetail
                   : league === undefined
                     ? unlabelledDetail
-                    : "The provider published no season category totals for this league format.",
+                    : "Your league published no season category totals for this league format.",
             }
           : {
               status: "available",
@@ -2280,7 +2280,7 @@ export const FantasyQueriesLive = Layer.effect(
                     ? unlabelledDetail
                     : league.format === "rotisserie"
                       ? rotisseriePointsMissing
-                      : "The provider publishes rotisserie category points only for rotisserie leagues.",
+                      : "Your league publishes rotisserie category points only for rotisserie leagues.",
             }
           : {
               status: "available",
@@ -2463,7 +2463,7 @@ export const FantasyQueriesLive = Layer.effect(
       } else if (currentMatchup === undefined) {
         matchupSection = {
           status: "unsupported",
-          detail: "The provider returned no matchup for this team in the current week.",
+          detail: "Your league returned no matchup for this team in the current week.",
         };
       } else {
         const own = ownSide(currentMatchup);
@@ -2563,7 +2563,7 @@ export const FantasyQueriesLive = Layer.effect(
           detail:
             scheduleWindowResolution.status === "unavailable"
               ? scheduleWindowResolution.detail
-              : "The provider did not return a schedule for this window.",
+              : "Your league did not return a schedule for this window.",
         };
       } else if (scheduleOutcome._tag !== "ok") {
         scheduleSection = {
@@ -2584,7 +2584,7 @@ export const FantasyQueriesLive = Layer.effect(
             ? {
                 status: "unavailable",
                 detail:
-                  "The provider publishes no date window for this schedule, so the league's games cannot be placed on its dates.",
+                  "Your league publishes no date window for this schedule, so the league's games cannot be placed on its dates.",
               }
             : yield* readProfessionalScheduleGames({
                 calendar,
@@ -2819,7 +2819,7 @@ export const FantasyQueriesLive = Layer.effect(
           ...(nextPeriod === undefined
             ? { detail: "This is the final scoring week of the season." }
             : nextWeek.length === 0
-              ? { detail: "The provider did not publish remaining games for the next week." }
+              ? { detail: "Your league did not publish remaining games for the next week." }
               : {}),
         };
       }
@@ -3032,10 +3032,9 @@ function statRefFor(
   });
 }
 
-const seasonTotalMissing = "The provider published no season total for this category.";
-const rotisseriePointsMissing = "The provider published no rotisserie points for this category.";
-const matchupValueMissing =
-  "The provider published no value for this category in the scoring week.";
+const seasonTotalMissing = "Your league published no season total for this category.";
+const rotisseriePointsMissing = "Your league published no rotisserie points for this category.";
+const matchupValueMissing = "Your league published no value for this category in the scoring week.";
 
 type LabelledStat = {
   readonly statId: number;
@@ -3143,8 +3142,8 @@ function omittedCategories(count: number): { readonly count: number; readonly de
     count,
     detail:
       count === 0
-        ? "Every category the provider published has a league scoring definition."
-        : `${String(count)} provider stat ids in the standings have no league scoring definition and are omitted because they cannot be named.`,
+        ? "Every category your league published has a league scoring definition."
+        : `${String(count)} stat ids in the standings have no league scoring definition and are omitted because they cannot be named.`,
   };
 }
 
@@ -3185,14 +3184,14 @@ function standingsData(
     categoryTotals: categoryAvailability(
       rows,
       (row) => row.categories ?? [],
-      "The provider published no season category totals for this league format.",
+      "Your league published no season category totals for this league format.",
     ),
     categoryPoints: categoryAvailability(
       rows,
       (row) => row.categoryPoints ?? [],
       format === "rotisserie"
         ? rotisseriePointsMissing
-        : "The provider publishes rotisserie category points only for rotisserie leagues.",
+        : "Your league publishes rotisserie category points only for rotisserie leagues.",
     ),
     omittedCategories: omittedCategories(omittedCategoryCount),
     teams: [...rows],
@@ -3346,7 +3345,7 @@ function draftHistoryData(
     status: "available",
     ...(draftStatus === undefined ? {} : { draftStatus }),
     detailNote:
-      "These are the picks the provider publishes for this league's draft. Each pick carries the provider's inline player name where it publishes one, beside the private player reference. This is draft history, not current or future pick ownership: the provider publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it.",
+      "These are the picks your league publishes for this league's draft. Each pick carries your league's inline player name where it publishes one, beside the private player reference. This is draft history, not current or future pick ownership: your league publishes no pick-ownership read, and a traded pick appears on the trade transaction that moved it.",
     picks: [...picks],
   };
 }
@@ -3459,7 +3458,7 @@ function calendarWithoutWeekWindow(
               source: "league_settings",
               fetchedAt,
               detail:
-                "The provider reported no scoring-week window for this league, so week-scoped periods are unsupported.",
+                "Your league reported no scoring-week window for this league, so week-scoped periods are unsupported.",
             },
           ]
         : []),
@@ -3487,7 +3486,7 @@ function leagueWithoutData(
             detail:
               outcome._tag === "failed"
                 ? outcome.failure.message
-                : "The provider did not publish league settings, so standings could not be read.",
+                : "Your league did not publish league settings, so standings could not be read.",
           },
         }
       : {}),
@@ -3498,7 +3497,7 @@ function leagueWithoutData(
             detail:
               outcome._tag === "failed"
                 ? outcome.failure.message
-                : "The provider did not publish league settings, so draft history could not be read.",
+                : "Your league did not publish league settings, so draft history could not be read.",
           },
         }
       : {}),
@@ -3633,7 +3632,7 @@ function resolveScheduleWindow(input: {
       return {
         status: "unavailable",
         detail:
-          "This league's coverage is a scoring week, so the provider publishes one opponent for the week and no per-date schedule. Omit `window` and `days` to read the week.",
+          "This league's coverage is a scoring week, so your league publishes one opponent for the week and no per-date schedule. Omit `window` and `days` to read the week.",
       };
     }
     return input.period === undefined
@@ -3659,7 +3658,7 @@ function resolveScheduleWindow(input: {
       return {
         status: "unavailable",
         detail:
-          "The provider publishes no current date for this league, so a `days` window has no start. Pass `window` with explicit `start` and `end` dates.",
+          "Your league publishes no current date for this league, so a `days` window has no start. Pass `window` with explicit `start` and `end` dates.",
       };
     }
     return dateWindowResolution(
@@ -3672,7 +3671,7 @@ function resolveScheduleWindow(input: {
       return {
         status: "unavailable",
         detail:
-          "The provider publishes no date window for this scoring period, so the dates each player plays are not established. Pass `window` or `days` to choose one; it publishes a dated window only for a league whose scoring period it reports as a matchup week.",
+          "Your league publishes no date window for this scoring period, so the dates each player plays are not established. Pass `window` or `days` to choose one; it publishes a dated window only for a league whose scoring period it reports as a matchup week.",
       };
     }
     const dates = scheduleWindowDates(input.weekDates.start, input.weekDates.end);
@@ -3680,7 +3679,7 @@ function resolveScheduleWindow(input: {
       ? {
           status: "unavailable",
           detail:
-            "The provider's scoring-period window is not a pair of calendar dates, so no dates bound the schedule. Pass `window` with explicit `start` and `end` dates.",
+            "Your league's scoring-period window is not a pair of calendar dates, so no dates bound the schedule. Pass `window` with explicit `start` and `end` dates.",
         }
       : dateWindowResolution(dates, "period");
   }
@@ -3690,7 +3689,7 @@ function resolveScheduleWindow(input: {
     return {
       status: "unavailable",
       detail:
-        "The provider publishes neither a scoring period nor a current date for this league, so no window bounds the schedule. Pass `window` with explicit `start` and `end` dates, or `days` for a day count.",
+        "Your league publishes neither a scoring period nor a current date for this league, so no window bounds the schedule. Pass `window` with explicit `start` and `end` dates, or `days` for a day count.",
     };
   }
   return dateWindowResolution(calendarDates(anchor, restOfWeekEnd(anchor)), "rest_of_week");
@@ -3777,19 +3776,19 @@ function schedulePeriodDetail(input: {
   readonly maximumDates: number;
 }): string {
   if (input.coverage === "week") {
-    return `Scoring week ${String(input.period?.week)} opponents only. The provider publishes no start time, no per-week game count, and no season-long schedule.`;
+    return `Scoring week ${String(input.period?.week)} opponents only. Your league publishes no start time, no per-week game count, and no season-long schedule.`;
   }
   const bound = ` One schedule read covers at most ${String(input.maximumDates)} dates; a wider window is refused rather than truncated.`;
   const range = input.window === undefined ? "" : ` (${input.window.start} to ${input.window.end})`;
   const count = String(input.dates.length);
   switch (input.window?.source) {
     case "requested":
-      return `Opponents on each of the ${count} dates of the requested window${range}. The provider publishes no start time or season-long schedule.${bound}`;
+      return `Opponents on each of the ${count} dates of the requested window${range}. Your league publishes no start time or season-long schedule.${bound}`;
     case "rest_of_week":
-      return `Opponents on each of the ${count} dates of the rest of the provider's current week${range}. The provider publishes no start time or season-long schedule; pass \`window\` or \`days\` for other dates.${bound}`;
+      return `Opponents on each of the ${count} dates of the rest of your league's current week${range}. Your league publishes no start time or season-long schedule; pass \`window\` or \`days\` for other dates.${bound}`;
     case "period":
     case undefined:
-      return `Opponents on each of the ${count} dates of scoring period ${String(input.period?.week)}${range}. The provider publishes no start time or season-long schedule.${bound}`;
+      return `Opponents on each of the ${count} dates of scoring period ${String(input.period?.week)}${range}. Your league publishes no start time or season-long schedule.${bound}`;
   }
 }
 
@@ -3841,7 +3840,7 @@ function poolGamesRemaining(
     return {
       status: "unavailable",
       detail:
-        "The league's professional games include a team with no provider key, so this player's team cannot be counted without guessing.",
+        "The league's professional games include a team with no key, so this player's team cannot be counted without guessing.",
     };
   }
   return { status: "available", count, source: "professional_games" };
@@ -3940,16 +3939,16 @@ function gamesRemainingState(input: {
   if (input.sources.size === 0) {
     return {
       status: "unsupported",
-      detail: "The provider returned no players whose games could be counted.",
+      detail: "Your league returned no players whose games could be counted.",
     };
   }
   const detail =
     input.professionalGames.status === "unavailable"
-      ? `The professional games are unavailable, so the counts come from the provider's own opponent fact: ${input.professionalGames.detail}`
+      ? `The professional games are unavailable, so the counts come from your league's own opponent fact: ${input.professionalGames.detail}`
       : input.providerFallbackForMissingGame > 0
-        ? "Some players' counts come from the provider's own opponent fact because the professional games did not contain the game the provider published."
+        ? "Some players' counts come from your league's own opponent fact because the professional games did not contain the game your league published."
         : input.sources.has("provider_opponent")
-          ? "Some players' professional team keys were not resolved, so those counts come from the provider's own opponent fact instead."
+          ? "Some players' professional team keys were not resolved, so those counts come from your league's own opponent fact instead."
           : undefined;
   const observedAt =
     input.professionalGames.status === "available" && input.sources.has("professional_games")
@@ -4029,7 +4028,7 @@ function matchupSchedule(
       status: "available",
       unit: "fantasy_team_player_games",
       detail:
-        "Remaining games are a provider-published fantasy-team total of player-games for the scoring week, not a per-player count.",
+        "Remaining games are a fantasy-team total your league publishes for the scoring week, not a per-player count.",
     };
   }
   return {
@@ -4077,7 +4076,7 @@ function matchupsWithoutData(
       detail:
         outcome._tag === "unsupported"
           ? outcome.detail
-          : "The provider did not return matchup data for the scoring week.",
+          : "Your league did not return matchup data for the scoring week.",
     },
     coverage: [
       outcome._tag === "ok"
@@ -4179,7 +4178,7 @@ function statBasisDetail(basis: ProviderStatBasis): string {
 }
 
 function periodKindRefusal(period: ProviderStatPeriod): string {
-  return `The provider cannot serve the requested \`period\` for kind \`${period.kind}\`.`;
+  return `Your league cannot serve the requested \`period\` for kind \`${period.kind}\`.`;
 }
 
 function leagueOverview(league: ProviderLeagueSettings): NonNullable<LeagueData["overview"]> {
@@ -4247,7 +4246,7 @@ function leagueTransactionRules(
       inningsPitched: declared(league.maxInningsPitched),
     },
     detailNote:
-      "Every rule is either published with the league's declared value or `not_set`. `not_set` means the league declares no such rule, never zero and never a per-team count; a cap that does not apply to the league's sport, such as innings in football, is also `not_set`. `timing.weeklyDeadline` keeps the provider's raw value, including an empty string, and `timing.rosterChange` decodes it into a provider-neutral rule with its source fields and raw values. Each team's acquisition usage is published with its standings row beside these limits.",
+      "Every rule is either published with the league's declared value or `not_set`. `not_set` means the league declares no such rule, never zero and never a per-team count; a cap that does not apply to the league's sport, such as innings in football, is also `not_set`. `timing.weeklyDeadline` keeps your league's raw value, including an empty string, and `timing.rosterChange` decodes it into a league rule with its source fields and raw values. Each team's acquisition usage is published with its standings row beside these limits.",
   };
 }
 
@@ -4307,11 +4306,11 @@ function missingAcquisitionUsage(
   weeklyAdds: ProviderAcquisitionUsage["weeklyAdds"],
 ): string {
   if (seasonMoves === undefined && weeklyAdds === undefined) {
-    return "The provider published neither a season move count nor a weekly adds count for this team.";
+    return "Your league published neither a season move count nor a weekly adds count for this team.";
   }
   return seasonMoves === undefined
-    ? "The provider published no season move count for this team."
-    : "The provider published no weekly adds count for this team.";
+    ? "Your league published no season move count for this team."
+    : "Your league published no weekly adds count for this team.";
 }
 
 function scoringCategories(
@@ -4356,10 +4355,10 @@ type ConfiguredCategory = {
 function configuredCategories(league: ProviderLeagueSettings): ReadonlyArray<ConfiguredCategory> {
   return league.statCategories.map((category): ConfiguredCategory => {
     const informational = category.displayOnly
-      ? "The provider marks this stat display-only for this league, so it appears for information and does not score."
+      ? "Your league marks this stat display-only for this league, so it appears for information and does not score."
       : category.enabled
         ? undefined
-        : "The provider marks this stat not enabled for this league, so it appears for information and does not score.";
+        : "Your league marks this stat not enabled for this league, so it appears for information and does not score.";
     return {
       statId: category.statId,
       name: category.name,
@@ -4502,7 +4501,7 @@ function providerOrdered(
 function limitation(provider: TeamContext["provider"], subject: ProviderLimitationSubject): string {
   return (
     provider.capabilities.limitations.find((entry) => entry.subject === subject)?.detail ??
-    "This provider does not publish data for this field."
+    "Your league does not publish data for this field."
   );
 }
 
@@ -4546,11 +4545,11 @@ function periodMismatchDetail(
   const wanted =
     requested.type === "week" ? `week ${String(requested.week)}` : `date ${requested.date}`;
   if (covered === null) {
-    return `The provider did not report the requested ${wanted} for this read.`;
+    return `Your league did not report the requested ${wanted} for this read.`;
   }
   const actual =
     covered.type === "week" ? `week ${String(covered.week)}` : `the roster for ${covered.date}`;
-  return `The provider returned ${actual} instead of the requested ${wanted}.`;
+  return `Your league returned ${actual} instead of the requested ${wanted}.`;
 }
 
 function dictionaryEntry(

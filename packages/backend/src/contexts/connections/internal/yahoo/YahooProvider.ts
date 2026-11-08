@@ -1732,7 +1732,7 @@ function reportSchemaMismatch(field: string | undefined): Effect.Effect<void> {
       "provider.schema_mismatch": true,
       "provider.schema_field": field ?? "unreported",
     });
-    yield* Effect.logWarning("A provider response did not match its decoder");
+    yield* Effect.logWarning("Your league response did not match its decoder");
   });
 }
 
@@ -1964,21 +1964,21 @@ function rosterChange(
     return {
       rule: "same_day",
       source: ["weekly_deadline"],
-      detail: `The provider's weekly_deadline is "intraday", which means a roster move takes effect the same day.`,
+      detail: `Your league's weekly_deadline is "intraday", which means a roster move takes effect the same day.`,
     };
   }
   if (deadline === "game") {
     return {
       rule: "same_day",
       source: ["weekly_deadline"],
-      detail: `The provider's weekly_deadline is "game", so a roster move takes effect at a player's game time that day.`,
+      detail: `Your league's weekly_deadline is "game", so a roster move takes effect at a player's game time that day.`,
     };
   }
   if (/^[1-7]$/u.test(deadline)) {
     return {
       rule: "weekly_lock",
       source: ["weekly_deadline"],
-      detail: `The provider's weekly_deadline is "${deadline}", which names the weekly deadline day, so the league locks roster changes once a week.`,
+      detail: `Your league's weekly_deadline is "${deadline}", which names the weekly deadline day, so the league locks roster changes once a week.`,
     };
   }
   if (deadline !== "") {
@@ -1992,7 +1992,7 @@ function rosterChange(
     return {
       rule: "weekly_lock",
       source: ["weekly_deadline", "edit_key"],
-      detail: `The provider's weekly_deadline is empty and its edit_key is ${JSON.stringify(editKey)}, a scoring week, so roster changes are locked to that week.`,
+      detail: `Your league's weekly_deadline is empty and its edit_key is ${JSON.stringify(editKey)}, a scoring week, so roster changes are locked to that week.`,
     };
   }
   const currentDate = attributes.current_date;
@@ -2003,14 +2003,14 @@ function rosterChange(
     return {
       rule: "same_day",
       source: ["weekly_deadline", "edit_key"],
-      detail: `The provider's weekly_deadline is empty and its edit_key is ${editKey}, the provider's current_date, so a roster move takes effect the same day.`,
+      detail: `Your league's weekly_deadline is empty and its edit_key is ${editKey}, your league's current_date, so a roster move takes effect the same day.`,
     };
   }
   if (nextCalendarDate(currentDate) === editKey) {
     return {
       rule: "next_day",
       source: ["weekly_deadline", "edit_key"],
-      detail: `The provider's weekly_deadline is empty and its edit_key is ${editKey}, the day after the provider's current_date ${currentDate}, so a roster move takes effect the next day.`,
+      detail: `Your league's weekly_deadline is empty and its edit_key is ${editKey}, the day after your league's current_date ${currentDate}, so a roster move takes effect the next day.`,
     };
   }
   return undefined;
@@ -2494,7 +2494,7 @@ function rosterSlotOf(rawValue: string): ProviderRosterSlot {
         status: "unverified",
         rawValue,
         reason:
-          "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
+          "Your league published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
       }
     : { status: "verified", slot: rawValue };
 }
@@ -2601,7 +2601,7 @@ const hockeyRateStatIds: ReadonlySet<number> = new Set([
   savePercentageStatId,
 ]);
 const rateStatNotAggregated =
-  "A rate or percentage is not summed across days; the provider publishes this category only as a season total or a single date.";
+  "A rate or percentage is not summed across days; your league publishes this category only as a season total or a single date.";
 
 const maximumDayReadConcurrency = 5;
 const maximumScheduleDates = 21;
@@ -2655,7 +2655,7 @@ function resolvePlayerPeriod(input: {
         if (input.currentPeriod === undefined || week >= input.currentPeriod) {
           return yield* unsupportedPeriod(
             input,
-            `The provider publishes weekly player statistics only for a completed scoring week, and week ${String(week)} is the current or upcoming week.`,
+            `Your league publishes weekly player statistics only for a completed scoring week, and week ${String(week)} is the current or upcoming week.`,
           );
         }
         return { kind: "single" as const, query: { type: "week" as const, week } };
@@ -2665,7 +2665,7 @@ function resolvePlayerPeriod(input: {
         if (window === undefined) {
           return yield* unsupportedPeriod(
             input,
-            `The provider does not declare the \`${period.preset}\` window.`,
+            `Your league does not declare the \`${period.preset}\` window.`,
           );
         }
         const end = fantasyDayLabel(input.now, input.fantasyDay);
@@ -2717,7 +2717,7 @@ function dailyResolution(
     if (days.length > input.support.maximumRangeDays) {
       return yield* unsupportedPeriod(
         input,
-        `The requested window covers ${String(days.length)} days, and this provider serves an explicit window of at most ${String(input.support.maximumRangeDays)} days.`,
+        `The requested window covers ${String(days.length)} days, and your league serves an explicit window of at most ${String(input.support.maximumRangeDays)} days.`,
       );
     }
     return { kind: "daily" as const, start, end, days };
@@ -2740,7 +2740,7 @@ function unsupportedPeriod(
     reason,
     remedy:
       alternatives.length === 0
-        ? "This provider serves no player-statistics period for this sport."
+        ? "Your league serves no player-statistics period for this sport."
         : `Ask for one of: ${alternatives.join(", ")}.`,
   });
 }
@@ -3139,7 +3139,7 @@ function transactionTrendOf(
   if (counts?.adds === undefined || counts.drops === undefined) {
     return {
       status: "not_published",
-      reason: "The provider published no add and drop counts for this player.",
+      reason: "Your league published no add and drop counts for this player.",
     };
   }
   return {
@@ -3491,14 +3491,14 @@ function incompletePendingTrade(
     return {
       code: "no_movements",
       detail:
-        "The provider published this offer with no player movements and no traded picks, so neither side can be shown.",
+        "Your league published this offer with no player movements and no traded picks, so neither side can be shown.",
     };
   }
   for (const player of players) {
     if (player.movement.from === undefined || player.movement.to === undefined) {
       return {
         code: "movement_missing_party",
-        detail: `The provider published an offer movement for ${playerLabel(player)} without both the team it left and the team it joined.`,
+        detail: `Your league published an offer movement for ${playerLabel(player)} without both the team it left and the team it joined.`,
       };
     }
   }
@@ -3506,7 +3506,7 @@ function incompletePendingTrade(
     if (pick.from === undefined || pick.to === undefined) {
       return {
         code: "movement_missing_party",
-        detail: `The provider published a round ${String(pick.round)} draft pick without both the team that sent it and the team that received it.`,
+        detail: `Your league published a round ${String(pick.round)} draft pick without both the team that sent it and the team that received it.`,
       };
     }
   }
@@ -3647,7 +3647,7 @@ function incompleteTransaction(
     return {
       code: "no_movements",
       detail:
-        "The provider published this transaction with no player movements and no traded picks, so neither side can be reconstructed. This is not evidence that no assets moved.",
+        "Your league published this transaction with no player movements and no traded picks, so neither side can be reconstructed. This is not evidence that no assets moved.",
     };
   }
   for (const player of players) {
@@ -3660,7 +3660,7 @@ function incompleteTransaction(
       ) {
         return {
           code: "movement_missing_party",
-          detail: `The provider published a trade movement for ${playerLabel(player)} without both the team it left and the team it joined, so neither side can be reconstructed.`,
+          detail: `Your league published a trade movement for ${playerLabel(player)} without both the team it left and the team it joined, so neither side can be reconstructed.`,
         };
       }
       continue;
@@ -3668,19 +3668,19 @@ function incompleteTransaction(
     if (movement.kind === "add" && movement.to === undefined) {
       return {
         code: "movement_missing_party",
-        detail: `The provider published an add for ${playerLabel(player)} without the team it joined, so the movement cannot be reconstructed.`,
+        detail: `Your league published an add for ${playerLabel(player)} without the team it joined, so the movement cannot be reconstructed.`,
       };
     }
     if (movement.kind === "drop" && movement.from === undefined) {
       return {
         code: "movement_missing_party",
-        detail: `The provider published a drop for ${playerLabel(player)} without the team it left, so the movement cannot be reconstructed.`,
+        detail: `Your league published a drop for ${playerLabel(player)} without the team it left, so the movement cannot be reconstructed.`,
       };
     }
     if (movement.kind === "other") {
       return {
         code: "unknown_movement",
-        detail: `The provider gave ${playerLabel(player)} a movement type this adapter cannot place on a team, so the movement cannot be reconstructed.`,
+        detail: `Your league gave ${playerLabel(player)} a movement type this adapter cannot place on a team, so the movement cannot be reconstructed.`,
       };
     }
   }
@@ -3688,7 +3688,7 @@ function incompleteTransaction(
     if (pick.from === undefined || pick.to === undefined) {
       return {
         code: "movement_missing_party",
-        detail: `The provider published a round ${String(pick.round)} draft pick without both the team that sent it and the team that received it, so the pick's movement cannot be reconstructed.`,
+        detail: `Your league published a round ${String(pick.round)} draft pick without both the team that sent it and the team that received it, so the pick's movement cannot be reconstructed.`,
       };
     }
   }
@@ -3702,7 +3702,7 @@ function incompleteTransaction(
     return {
       code: "trade_return_unpublished",
       detail:
-        "The provider published no returning player and no traded draft pick for this trade, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
+        "Your league published no returning player and no traded draft pick for this trade, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
     };
   }
   return undefined;

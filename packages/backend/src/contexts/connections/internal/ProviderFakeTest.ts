@@ -1034,7 +1034,7 @@ const fakeCapabilities: ProviderCapabilities = {
     },
     {
       subject: "projections",
-      detail: "This provider does not expose projected player statistics.",
+      detail: "Your league does not expose projected player statistics.",
     },
     {
       subject: "team_remaining_games",

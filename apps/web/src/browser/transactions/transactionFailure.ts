@@ -47,7 +47,7 @@ export function describeTradeWithdrawalFailure(error: unknown): TransactionFailu
         return {
           kind: "conflict",
           message:
-            "The provider no longer lists this offer as pending, so nothing was withdrawn. Reload to read its current state.",
+            "Your league no longer lists this offer as pending, so nothing was withdrawn. Reload to check.",
         };
       case "transactions.trade_not_found":
         return {
@@ -58,7 +58,7 @@ export function describeTradeWithdrawalFailure(error: unknown): TransactionFailu
         return {
           kind: "failure",
           message:
-            "The withdrawal could not be confirmed, so it may or may not have applied. Check the provider's trade page before trying again.",
+            "The withdrawal could not be confirmed, so it may or may not have applied. Check the trade page before trying again.",
         };
       case "transactions.set_not_found":
       case "transactions.input_invalid":
@@ -129,7 +129,7 @@ export function describeTransactionSubmissionFailure(
         return {
           kind: "conflict",
           message:
-            "The provider no longer lists this offer as pending, so nothing was withdrawn. Reload to read its current state.",
+            "Your league no longer lists this offer as pending, so nothing was withdrawn. Reload to check.",
         };
       case "transactions.set_not_found":
       case "transactions.input_invalid":

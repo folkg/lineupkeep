@@ -937,11 +937,11 @@ payloads, and the cutover is one wiring change. `L`
 Visitors do not care about the server. The transaction review explains itself with sentences like "The order the
 server chose" and "The server could not decide an order", which describe our machinery rather than the game.
 
-- [ ] Sweep the product's copy for words that name our parts: server, backend, provider, endpoint, payload,
+- [x] Sweep the product's copy for words that name our parts: server, backend, provider, endpoint, payload,
       pipeline. Replace each with the thing the person is actually dealing with: the order the moves will run in,
       the league's rules, the player, the team.
-- [ ] Keep it short. One sentence where the current copy uses two, and no sentence that restates its own heading.
-- [ ] Leave provider names in the places the guidance already allows: a connection row, a connection message, a
+- [x] Keep it short. One sentence where the current copy uses two, and no sentence that restates its own heading.
+- [x] Leave provider names in the places the guidance already allows: a connection row, a connection message, a
       provider link. Nowhere else.
 
 **Verify**: a grep for the named words over product copy returns only the allowed places, and a walkthrough of

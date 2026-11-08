@@ -106,7 +106,7 @@ it("offers an export and explains what erasure cannot undo", async () => {
   await expect.element(page.getByRole("heading", { name: "Sign out" })).toBeVisible();
   const copy = document.body.textContent.replace(/\s+/g, " ");
   expect(copy).toContain(
-    "The file includes your account, connections, teams, lineup runs, transaction proposals, feedback, and sign-in records. Provider sessions, passwords, and agent tokens are left out, because a copy should not let anyone sign in as you.",
+    "The file includes your account, connections, teams, lineup runs, transaction proposals, feedback, and sign-in records. Sign-in sessions, passwords, and agent tokens are left out, because a copy should not let anyone sign in as you.",
   );
   expect(copy).toContain(
     "This deletes everything listed above, plus every sign-in session and the grants agents hold. It happens as soon as you confirm, and it cannot be undone.",

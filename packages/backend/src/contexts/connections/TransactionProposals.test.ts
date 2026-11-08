@@ -694,7 +694,7 @@ it.effect("allows a drop that resolves an illegal reserve player", () =>
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("names the HTTP status beside the provider's exact refusal wording", () =>
+it.effect("names the HTTP status beside your league's exact refusal wording", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -722,7 +722,7 @@ it.effect("names the HTTP status beside the provider's exact refusal wording", (
     const item = Array.getUnsafe(itemsOf(review), 0);
     const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [item.id] });
     const submittedItem = Array.getUnsafe(itemsOf(submitted), 0);
-    const detail = `The provider rejected the transaction with HTTP 400. It said: ${providerRefusal}`;
+    const detail = `Your league rejected the transaction with HTTP 400. It said: ${providerRefusal}`;
     assert.strictEqual(submittedItem.execution?.outcome, "failed");
     assert.strictEqual(submittedItem.execution?.detail, detail);
     assert.strictEqual(submittedItem.execution?.steps[0]?.detail, detail);
@@ -783,7 +783,7 @@ it.effect("refuses a closed period, a missing budget, and an unreadable team per
       assert.include(closed.reason, "does not use a FAAB waiver budget");
       assert.include(closed.fix, "next period");
       const unreadable = Array.getUnsafe(refused.refusals, 1);
-      assert.include(unreadable.reason, "provider read failed");
+      assert.include(unreadable.reason, "read from your league failed");
       assert.isNotEmpty(unreadable.fix);
       assert.include(refused.detail, "no set was stored");
     }
@@ -1448,7 +1448,7 @@ it.effect("reports a reserve move and a failed add per step, then stops only tha
         [
           "add",
           "failed",
-          "The provider rejected the transaction. It said: That player can no longer be added.",
+          "Your league rejected the transaction. It said: That player can no longer be added.",
         ],
       ],
     );
@@ -1675,7 +1675,7 @@ it.effect("refuses a slot move that carries an add or names no destination", () 
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("refuses an item that names more adds than the provider's request allows", () =>
+it.effect("refuses an item that names more adds than your league's request allows", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -1727,7 +1727,7 @@ it.effect("refuses an item that names more adds than the provider's request allo
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("attributes the provider's own words when it does not send a write", () =>
+it.effect("attributes your league's own words when it does not send a write", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -1749,7 +1749,7 @@ it.effect("attributes the provider's own words when it does not send a write", (
     assert.strictEqual(accepted.outcome, "accepted");
     yield* fake.setTransactionAction(
       "unavailable",
-      "This write would exceed the provider's request allowance.",
+      "This write would exceed your league's request allowance.",
     );
     const review = yield* proposals.revalidate(owner, { set: result.set.id });
     assert.strictEqual(Array.getUnsafe(itemsOf(review), 0).staleness.status, "current");
@@ -1762,7 +1762,7 @@ it.effect("attributes the provider's own words when it does not send a write", (
     assert.strictEqual(item.state, "failed");
     assert.include(
       item.execution?.detail ?? "",
-      "The provider did not send the request. It said: This write would exceed the provider's request allowance.",
+      "Your league did not send the request. It said: This write would exceed your league's request allowance.",
     );
   }).pipe(Effect.provide(TestLayer)),
 );
@@ -2200,7 +2200,7 @@ it.effect("orders an add before a slot move that the add's drop makes room for",
         rosterChange: {
           rule: "same_day",
           source: ["weekly_deadline"],
-          detail: "The provider's weekly_deadline is intraday.",
+          detail: "Your league's weekly_deadline is intraday.",
         },
         rosterPositions: [
           { position: "C", positionType: "O", count: 2, kind: "starting", eligibility: ["C"] },
@@ -2377,7 +2377,7 @@ it.effect("accepts a move onto a bench that already holds its declared count", (
         rosterChange: {
           rule: "same_day",
           source: ["weekly_deadline"],
-          detail: "The provider's weekly_deadline is intraday.",
+          detail: "Your league's weekly_deadline is intraday.",
         },
         rosterPositions: [
           { position: "C", positionType: "O", count: 1, kind: "starting", eligibility: ["C"] },
@@ -3063,7 +3063,7 @@ it.effect("refuses the move that cannot reach its slot and keeps the others", ()
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("refuses a draft pick in a trade with the provider's own reason", () =>
+it.effect("refuses a draft pick in a trade with your league's own reason", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -3212,7 +3212,7 @@ it.effect("refuses a locked player's move on the league's effective date", () =>
         rosterChange: {
           rule: "same_day",
           source: ["weekly_deadline"],
-          detail: "The provider's weekly_deadline is intraday.",
+          detail: "Your league's weekly_deadline is intraday.",
         },
         rosterPositions: [
           { position: "C", positionType: "O", count: 1, kind: "starting", eligibility: ["C"] },
@@ -3336,7 +3336,7 @@ it.effect("holds one player on a bench slot before it executes two slot moves th
         rosterChange: {
           rule: "same_day",
           source: ["weekly_deadline"],
-          detail: "The provider's weekly_deadline is intraday.",
+          detail: "Your league's weekly_deadline is intraday.",
         },
         rosterPositions: [
           { position: "C", positionType: "O", count: 1, kind: "starting", eligibility: ["C"] },
@@ -3692,7 +3692,7 @@ it.effect("refuses a trade counterparty in another league and a player on the wr
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("proposes each trade once, records the provider key and time, and never retries", () =>
+it.effect("proposes each trade once, records the key and time, and never retries", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -3739,7 +3739,7 @@ it.effect("records an unknown trade outcome as unknown and never retries the pro
     const item = Array.getUnsafe(itemsOf(submitted), 0);
     assert.strictEqual(item.state, "unknown");
     assert.isUndefined(item.trade);
-    assert.include(item.execution?.detail ?? "", "Check the provider's trade page");
+    assert.include(item.execution?.detail ?? "", "Check the trade page");
     assert.strictEqual((yield* fake.tradeProposalRequests).length, 1);
 
     yield* fake.setTradeProposalAction("accept");
@@ -3749,7 +3749,7 @@ it.effect("records an unknown trade outcome as unknown and never retries the pro
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("withdraws a pending trade from our record and from the provider's feed", () =>
+it.effect("withdraws a pending trade from our record and from your league's feed", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -3777,7 +3777,7 @@ it.effect("withdraws a pending trade from our record and from the provider's fee
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("withdraws an offer created elsewhere from the provider's pending feed", () =>
+it.effect("withdraws an offer created elsewhere from your league's pending feed", () =>
   Effect.gen(function* () {
     const proposals = yield* TransactionProposals;
     const fake = yield* FakeProviderWorld;
@@ -3873,7 +3873,7 @@ it.effect("refuses a trade write when the team's connection changed after stagin
     const submitted = yield* proposals.submit(owner, { set: result.set.id, include: [id] });
     const item = Array.getUnsafe(itemsOf(submitted), 0);
     assert.strictEqual(item.state, "skipped");
-    assert.include(item.execution?.detail ?? "", "different provider connection");
+    assert.include(item.execution?.detail ?? "", "different connection");
     assert.strictEqual((yield* fake.tradeProposalRequests).length, 0);
   }).pipe(Effect.provide(TestLayer)),
 );
@@ -4567,7 +4567,7 @@ const fullReserveLeague = leagueFixture({
   rosterChange: {
     rule: "same_day",
     source: ["weekly_deadline"],
-    detail: "The provider's weekly_deadline is intraday.",
+    detail: "Your league's weekly_deadline is intraday.",
   },
   rosterPositions: [
     { position: "C", positionType: "O", count: 1, kind: "starting", eligibility: ["C"] },
@@ -4580,7 +4580,7 @@ const twoReserveLeague = leagueFixture({
   rosterChange: {
     rule: "same_day",
     source: ["weekly_deadline"],
-    detail: "The provider's weekly_deadline is intraday.",
+    detail: "Your league's weekly_deadline is intraday.",
   },
   rosterPositions: [
     { position: "C", positionType: "O", count: 1, kind: "starting", eligibility: ["C"] },

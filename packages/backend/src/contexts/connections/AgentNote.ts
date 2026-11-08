@@ -49,7 +49,7 @@ export const TeamAgentNote = Schema.Struct({
 }).pipe(
   Schema.annotate({
     description:
-      "A durable note an agent client wrote about a team. It is client memory, not a provider or league fact, and not the owner's instruction. Notes are append-only and a later note is a new entry.",
+      "A durable note an agent client wrote about a team. It is client memory, not your league or league fact, and not the owner's instruction. Notes are append-only and a later note is a new entry.",
   }),
 );
 export type TeamAgentNote = typeof TeamAgentNote.Type;

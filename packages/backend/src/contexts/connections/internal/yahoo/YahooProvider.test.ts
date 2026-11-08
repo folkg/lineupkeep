@@ -112,7 +112,7 @@ it.effect("validates a session with one exact read request", () => {
 
     const call = internet.calls[0];
     if (call === undefined) {
-      return yield* Effect.die("expected a provider request");
+      return yield* Effect.die("expected your league request");
     }
     assert.strictEqual(
       call.url.href,
@@ -253,7 +253,7 @@ it.effect("keeps discovering teams when a league name cannot be read", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("derives the provider team page url when the payload has none", () => {
+it.effect("derives your league team page url when the payload has none", () => {
   const nhlSettings = yahooNhlLeagueSettingsWith({
     league_key: "466.l.4002",
     league_id: "4002",
@@ -733,7 +733,7 @@ it.effect("moves a player to a reserve slot through the roster endpoint", () => 
   }).pipe(Effect.provide(yahooLayer(layer)));
 });
 
-it.effect("returns the provider's own wording for a rejected transaction", () => {
+it.effect("returns your league's own wording for a rejected transaction", () => {
   const layer = Layer.succeed(PublicInternet)({
     request: (request) =>
       Effect.succeed(
@@ -765,39 +765,36 @@ it.effect("returns the provider's own wording for a rejected transaction", () =>
   }).pipe(Effect.provide(yahooLayer(layer)));
 });
 
-it.effect(
-  "says a healthy player left in IR blocks the transaction, in the provider's words",
-  () => {
-    const internet = PublicInternet.fromTransport((request) =>
-      Promise.resolve(
-        request.url.includes("getCrumb")
-          ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
-          : new Response(capturedTransactionRefusal.response.body, {
-              status: capturedTransactionRefusal.response.status,
-            }),
-      ),
-    );
+it.effect("says a healthy player left in IR blocks the transaction, in your league's words", () => {
+  const internet = PublicInternet.fromTransport((request) =>
+    Promise.resolve(
+      request.url.includes("getCrumb")
+        ? jsonResponse({ service: { "xml:lang": "en-US", crumb: "canary-crumb-value" } })
+        : new Response(capturedTransactionRefusal.response.body, {
+            status: capturedTransactionRefusal.response.status,
+          }),
+    ),
+  );
 
-    return Effect.gen(function* () {
-      const provider = yield* testProvider;
-      const result = yield* provider.applyTransaction({
-        ...sessionInput,
-        providerLeagueKey: "477.l.5744",
-        providerTeamKey: "477.l.5744.t.6",
-        adds: ["477.p.7751"],
-        drops: ["477.p.4064"],
-        faabBid: undefined,
-      });
-      assert.deepStrictEqual(result, {
-        status: "rejected",
-        reason: "invalid_request",
-        httpStatus: 400,
-        detail:
-          "Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.",
-      });
-    }).pipe(Effect.provide(yahooLayer(internet)));
-  },
-);
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+    const result = yield* provider.applyTransaction({
+      ...sessionInput,
+      providerLeagueKey: "477.l.5744",
+      providerTeamKey: "477.l.5744.t.6",
+      adds: ["477.p.7751"],
+      drops: ["477.p.4064"],
+      faabBid: undefined,
+    });
+    assert.deepStrictEqual(result, {
+      status: "rejected",
+      reason: "invalid_request",
+      httpStatus: 400,
+      detail:
+        "Player Travis Konecny is in a IR position on your roster, but is no longer on the real-life IR. Please edit your lineup to activate this player from your IR and then attempt your transaction again.",
+    });
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
 
 it.effect("surfaces the status and the raw words when the refusal has no readable reason", () => {
   const refusal =
@@ -1002,7 +999,7 @@ it.effect.each([
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("rejects discovery when the provider returns no session user", () => {
+it.effect("rejects discovery when your league returns no session user", () => {
   const internet = recordingInternet(() =>
     jsonResponse({ fantasy_content: { users: { count: 0 } } }),
   );
@@ -1114,7 +1111,7 @@ it.effect("reads an NFL league whose settings publish extra and renamed fields",
       rule: "weekly_lock",
       source: ["weekly_deadline", "edit_key"],
       detail:
-        'The provider\'s weekly_deadline is empty and its edit_key is "42", a scoring week, so roster changes are locked to that week.',
+        'Your league\'s weekly_deadline is empty and its edit_key is "42", a scoring week, so roster changes are locked to that week.',
     });
     assert.strictEqual(league.waiverDays, 1);
     assert.strictEqual(league.maxWeeklyAcquisitions, undefined);
@@ -1223,7 +1220,7 @@ it.effect("reads an NHL head-to-head league with qualifying-days settings and no
       rule: "same_day",
       source: ["weekly_deadline"],
       detail:
-        "The provider's weekly_deadline is \"game\", so a roster move takes effect at a player's game time that day.",
+        "Your league's weekly_deadline is \"game\", so a roster move takes effect at a player's game time that day.",
     });
     assert.strictEqual(league.maxWeeklyAcquisitions, 2);
     assert.strictEqual(league.maxSeasonAcquisitions, 20);
@@ -1264,7 +1261,7 @@ it.effect("reads a rotisserie league that publishes no scoring-week window", () 
       rule: "same_day",
       source: ["weekly_deadline", "edit_key"],
       detail:
-        "The provider's weekly_deadline is empty and its edit_key is 2026-10-25, the provider's current_date, so a roster move takes effect the same day.",
+        "Your league's weekly_deadline is empty and its edit_key is 2026-10-25, your league's current_date, so a roster move takes effect the same day.",
     });
     assert.strictEqual(league.waiverType, "FR");
     assert.deepStrictEqual(
@@ -1314,7 +1311,7 @@ it.effect("derives a weekly cadence from the league's own declared deadline", ()
       rule: "weekly_lock",
       source: ["weekly_deadline"],
       detail:
-        'The provider\'s weekly_deadline is "3", which names the weekly deadline day, so the league locks roster changes once a week.',
+        'Your league\'s weekly_deadline is "3", which names the weekly deadline day, so the league locks roster changes once a week.',
     });
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
@@ -1639,7 +1636,7 @@ it.effect("reads an exact selected week roster with whole verified fields", () =
         undroppable: true,
         transactionTrend: {
           status: "not_published",
-          reason: "The provider published no add and drop counts for this player.",
+          reason: "Your league published no add and drop counts for this player.",
         },
       },
     ]);
@@ -1677,7 +1674,7 @@ it.effect(
         status: "unverified",
         rawValue: "",
         reason:
-          "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
+          "Your league published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
       });
       assert.deepStrictEqual(
         roster.players.slice(0, 15).map((player) => player.slot),
@@ -2181,7 +2178,7 @@ it.effect("searches free agents with one exact request and typed availability", 
         statValue: null,
         transactionTrend: {
           status: "not_published",
-          reason: "The provider published no add and drop counts for this player.",
+          reason: "Your league published no add and drop counts for this player.",
         },
       },
       {
@@ -2202,7 +2199,7 @@ it.effect("searches free agents with one exact request and typed availability", 
         statValue: null,
         transactionTrend: {
           status: "not_published",
-          reason: "The provider published no add and drop counts for this player.",
+          reason: "Your league published no add and drop counts for this player.",
         },
       },
     ]);
@@ -2476,7 +2473,7 @@ it.effect("reads completed-week football statistics on a weekly basis", () => {
 });
 
 it.effect(
-  "refuses a week the provider has not completed instead of substituting season totals",
+  "refuses a week your league has not completed instead of substituting season totals",
   () => {
     const internet = recordingInternet(() => jsonResponse(yahooNflSeasonPlayerDetails));
     return Effect.gen(function* () {
@@ -2590,7 +2587,7 @@ it.effect("reads season statistics for hockey instead of requesting a weekly ser
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("reports no actual statistics when the provider omits the series", () => {
+it.effect("reports no actual statistics when your league omits the series", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNhlWeekPlayerDetails));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
@@ -2702,12 +2699,12 @@ it.effect("serves a hockey preset window as the sum of batched daily reads", () 
         {
           statId: 23,
           detail:
-            "A rate or percentage is not summed across days; the provider publishes this category only as a season total or a single date.",
+            "A rate or percentage is not summed across days; your league publishes this category only as a season total or a single date.",
         },
         {
           statId: 26,
           detail:
-            "A rate or percentage is not summed across days; the provider publishes this category only as a season total or a single date.",
+            "A rate or percentage is not summed across days; your league publishes this category only as a season total or a single date.",
         },
       ],
     });
@@ -3014,7 +3011,7 @@ it.effect("prices a games-limited league from the ownership composite, not the c
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("prices a weekly league from the projected week rank the provider publishes", () => {
+it.effect("prices a weekly league from the projected week rank your league publishes", () => {
   const internet = recordingInternet((request) =>
     jsonResponse(
       request.url.search.includes("%2C")
@@ -3560,7 +3557,7 @@ it.effect("scopes a transaction read to one team in the same league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("reads older transaction history from a provider offset", () => {
+it.effect("reads older transaction history from your league offset", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
@@ -3949,7 +3946,7 @@ it.effect("marks a trade with no player movements incomplete instead of empty", 
         incomplete: {
           code: "no_movements",
           detail:
-            "The provider published this transaction with no player movements and no traded picks, so neither side can be reconstructed. This is not evidence that no assets moved.",
+            "Your league published this transaction with no player movements and no traded picks, so neither side can be reconstructed. This is not evidence that no assets moved.",
         },
       },
     ]);
@@ -4034,7 +4031,7 @@ it.effect("marks a trade whose published movements go one way incomplete", () =>
     assert.deepStrictEqual(trade.incomplete, {
       code: "trade_return_unpublished",
       detail:
-        "The provider published no returning player and no traded draft pick for this trade, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
+        "Your league published no returning player and no traded draft pick for this trade, so the return side cannot be reconstructed; do not treat this as a one-for-nothing trade.",
     });
     assert.deepStrictEqual(
       trade.parties?.entries.map((party) => party.role),
@@ -4160,7 +4157,7 @@ it.effect("reads every league roster in one request", () => {
     assert.strictEqual(starter?.undroppable, false);
     assert.deepStrictEqual(starter?.transactionTrend, {
       status: "not_published",
-      reason: "The provider published no add and drop counts for this player.",
+      reason: "Your league published no add and drop counts for this player.",
     });
     const reserve = rosters[0]?.players[1];
     assert.strictEqual(reserve?.injuryCode, "O");
@@ -4217,7 +4214,7 @@ it.effect("rejects league rosters that name another league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("publishes a team's remaining FAAB balance only when the provider sends one", () => {
+it.effect("publishes a team's remaining FAAB balance only when your league sends one", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflLeagueTeamsWithFaab));
   return Effect.gen(function* () {
     const provider = yield* testProvider;

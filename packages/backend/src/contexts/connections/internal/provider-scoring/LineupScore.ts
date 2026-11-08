@@ -21,17 +21,17 @@ const emptySourceRefusals: Readonly<
   projection: {
     code: "policy:no-projection",
     detail:
-      "The provider published no projected rank for any player on this roster for this period, so the custom policy cannot value the lineup.",
+      "Your league published no projected rank for any player on this roster for this period, so the custom policy cannot value the lineup.",
   },
   "community-start-rate": {
     code: "policy:no-start-rate",
     detail:
-      "The provider published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
+      "Your league published no started percentage for any player on this roster, so the custom policy cannot value the lineup.",
   },
   "ownership-composite": {
     code: "policy:no-ownership-facts",
     detail:
-      "The provider published no ownership facts for any player on this roster, so the custom policy cannot value the lineup.",
+      "Your league published no ownership facts for any player on this roster, so the custom policy cannot value the lineup.",
   },
 };
 

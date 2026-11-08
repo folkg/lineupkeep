@@ -232,7 +232,7 @@ it.effect("keeps the raw deadline and publishes its decoded roster-change rule",
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
     const detail =
-      "The provider's weekly_deadline is empty and its edit_key is 2026-10-26, the day after the provider's current_date 2026-10-25, so a roster move takes effect the next day.";
+      "Your league's weekly_deadline is empty and its edit_key is 2026-10-26, the day after your league's current_date 2026-10-25, so a roster move takes effect the next day.";
     const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
       league: {
         ...leagueFixture,
@@ -416,7 +416,7 @@ it.effect("reports a team with no published counters as not published rather tha
     assert.deepStrictEqual(Array.getUnsafe(league.standings.teams, 0).acquisitionUsage, {
       status: "not_published",
       detail:
-        "The provider published neither a season move count nor a weekly adds count for this team.",
+        "Your league published neither a season move count nor a weekly adds count for this team.",
     });
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
@@ -492,7 +492,7 @@ it.effect("publishes an innings cap only for a league that declares one", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("marks a provider category the league does not score as informational", () =>
+it.effect("marks your league category the league does not score as informational", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -546,7 +546,7 @@ it.effect("marks a provider category the league does not score as informational"
           abbreviation: "SV",
           scoring: "informational",
           detail:
-            "The provider marks this stat display-only for this league, so it appears for information and does not score.",
+            "Your league marks this stat display-only for this league, so it appears for information and does not score.",
         },
       ],
     );
@@ -1004,7 +1004,7 @@ it.effect(
         status: "unverified" as const,
         rawValue: "",
         reason:
-          "The provider published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
+          "Your league published an empty lineup slot for this player, so the slot and the position eligibility it would establish are unverified.",
       };
       const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
         roster: {
@@ -1287,7 +1287,7 @@ it.effect("names the input position of a player reference that does not open", (
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("reports a requested availability the provider does not publish", () =>
+it.effect("reports a requested availability your league does not publish", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -1362,7 +1362,7 @@ it.effect("searches bounded free agents and preserves zero versus missing stats"
     }
     assert.deepStrictEqual(hydratedPlayer.projections, {
       status: "unsupported",
-      detail: "This provider does not expose projected player statistics.",
+      detail: "Your league does not expose projected player statistics.",
     });
     assert.deepStrictEqual(hydrated.failures, []);
     assert.deepStrictEqual(hydrated.period, { kind: "season" });
@@ -1560,7 +1560,7 @@ it.effect("counts a pool player's games from its professional team key without a
           {
             status: "unavailable",
             detail:
-              "The league's professional games include a team with no provider key, so this player's team cannot be counted without guessing.",
+              "The league's professional games include a team with no key, so this player's team cannot be counted without guessing.",
           },
         ],
         ["Pair Skater", { status: "available", count: 2, source: "professional_games" }],
@@ -1808,7 +1808,7 @@ it.effect("publishes the professional team on search rows", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("carries the provider's day-window transaction counts on search rows", () =>
+it.effect("carries your league's day-window transaction counts on search rows", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -1908,7 +1908,7 @@ it.effect("carries the transaction counts on roster rows", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("refuses a period the provider cannot honour instead of ignoring it", () =>
+it.effect("refuses a period your league cannot honour instead of ignoring it", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -1981,7 +1981,7 @@ it.effect("refuses a period the provider cannot honour instead of ignoring it", 
 );
 
 it.effect(
-  "serves a hockey preset window through the provider and states its aggregation basis",
+  "serves a hockey preset window through your league and states its aggregation basis",
   () =>
     Effect.gen(function* () {
       const queries = yield* FantasyQueries;
@@ -2058,7 +2058,7 @@ it.effect(
         days: 7,
       });
       assert.strictEqual(stats.aggregation?.method, "daily_sum");
-      assert.include(stats.aggregation?.detail, "7 provider daily reads");
+      assert.include(stats.aggregation?.detail, "7 daily reads");
       assert.include(stats.aggregation?.detail, "notAggregated");
       assert.isTrue(
         hydrated.coverage.some(
@@ -2279,7 +2279,7 @@ it.effect("flags a transaction with no player movements incomplete instead of an
         players: [],
         incomplete: {
           code: "no_movements",
-          detail: "The provider published this transaction with no player movements.",
+          detail: "Your league published this transaction with no player movements.",
         },
       }),
     ]);
@@ -2298,7 +2298,7 @@ it.effect("flags a transaction with no player movements incomplete instead of an
     assert.deepStrictEqual(trade.completeness, {
       status: "incomplete",
       code: "no_movements",
-      detail: "The provider published this transaction with no player movements.",
+      detail: "Your league published this transaction with no player movements.",
     });
     assert.strictEqual(trade.completeness.status, "incomplete");
   }).pipe(Effect.provide(QueriesTestLayer)),
@@ -2946,7 +2946,7 @@ it.effect("reports rotisserie standings without inventing a record or weekly mat
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("states the rotisserie categories whose points the provider does not publish", () =>
+it.effect("states the rotisserie categories whose points your league does not publish", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -2999,7 +2999,7 @@ it.effect("states the rotisserie categories whose points the provider does not p
       stat: savePercentage,
       name: "Save Percentage",
       value: null,
-      detail: "The provider published no rotisserie points for this category.",
+      detail: "Your league published no rotisserie points for this category.",
     });
     assert.strictEqual(points.get(savePercentage)?.value, null);
     assert.isTrue(
@@ -3277,7 +3277,7 @@ it.effect("filters transactions by scope and date inside the bounded provider wi
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("reports a transaction range that starts before the provider's history", () =>
+it.effect("reports a transaction range that starts before your league's history", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -3550,12 +3550,12 @@ it.effect("surfaces the rank and stat values that each provider-ordered sort use
           !Object.hasOwn(player, "percentOwnedChange") &&
           Object.hasOwn(player, "percentOwnedDelta"),
       ),
-      "the ownership change is reported once, under the field that carries the provider delta",
+      "the ownership change is reported once, under the field that carries your league delta",
     );
     assert.deepStrictEqual(
       byActualRank.players.map((player) => player.percentStartedChange),
       [null, 1],
-      "a started change the provider did not publish stays null instead of being invented",
+      "a started change your league did not publish stays null instead of being invented",
     );
     assert.isTrue(byActualRank.players.every((player) => player.statValue === undefined));
 
@@ -3958,7 +3958,7 @@ it.effect(
     }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
 );
 
-it.effect("falls back to the provider's opponent fact when the professional games fail", () =>
+it.effect("falls back to your league's opponent fact when the professional games fail", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -4021,7 +4021,7 @@ it.effect("falls back to the provider's opponent fact when the professional game
       assert.deepStrictEqual(schedule.gamesRemaining.sources, ["provider_opponent"]);
       assert.strictEqual(
         schedule.gamesRemaining.detail,
-        "The professional games are unavailable, so the counts come from the provider's own opponent fact: The professional-game source could not be reached.",
+        "The professional games are unavailable, so the counts come from your league's own opponent fact: The professional-game source could not be reached.",
       );
       assert.isTrue(DateTime.isDateTime(schedule.gamesRemaining.observedAt));
     }
@@ -4040,7 +4040,7 @@ it.effect("falls back to the provider's opponent fact when the professional game
   }).pipe(Effect.provide(queriesTestLayerWithGames(6))),
 );
 
-it.effect("serve the provider's opponent fact with off nights absent for a football league", () =>
+it.effect("serve your league's opponent fact with off nights absent for a football league", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -4494,7 +4494,7 @@ it.effect("refuses a date window it cannot establish instead of inventing one", 
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("reads the rest of the provider's week for a league with no scoring period", () =>
+it.effect("reads the rest of your league's week for a league with no scoring period", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -4569,12 +4569,12 @@ it.effect("reads the rest of the provider's week for a league with no scoring pe
         ["Synthetic Resting", "no_games", 0],
       ],
     );
-    assert.include(schedule.detail, "rest of the provider's current week");
+    assert.include(schedule.detail, "rest of your league's current week");
     assert.include(schedule.detail, "2026-10-30 to 2026-11-01");
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("counts a requested day window from the provider's current date", () =>
+it.effect("counts a requested day window from your league's current date", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;
@@ -4714,7 +4714,7 @@ it.effect("refuses a date window for a league whose coverage is a scoring week",
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
-it.effect("reports a provider refusal for the schedule as unsupported with its reason", () =>
+it.effect("reports your league refusal for the schedule as unsupported with its reason", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
     const fake = yield* FakeProviderWorld;

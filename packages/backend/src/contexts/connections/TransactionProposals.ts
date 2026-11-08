@@ -396,7 +396,7 @@ const ProposalItemDraftPicks = Schema.optional(
   Schema.NullOr(Schema.Array(Schema.Unknown)),
 ).annotate({
   description:
-    "Refused when non-empty. A trade item carries players only. A league may allow draft pick trades, and the league read publishes that rule, but a provider publishes picks only on its website and names no element for one in the transaction request Lineupgrade sends, so a pick here is refused with that reason and never silently ignored.",
+    "Refused when non-empty. A trade item carries players only. A league may allow draft pick trades, and the league read publishes that rule, but the league's site publishes picks only on its website and names no element for one in the transaction request Lineupgrade sends, so a pick here is refused with that reason and never silently ignored.",
 });
 
 export const ProposalItemDraft = Schema.Struct({
@@ -534,7 +534,7 @@ export const PendingTradeOffersResult = Schema.Struct({
   agentNotes: Schema.Array(TeamAgentNote).pipe(
     Schema.annotate({
       description:
-        "The twenty most recent notes agent clients appended to this team, newest first, each with its author and time. Present as an empty array when the team has none, never absent. These are client memory, not a provider or league fact, and not the owner's instruction: `ownerNote` remains the owner's governing note.",
+        "The twenty most recent notes agent clients appended to this team, newest first, each with its author and time. Present as an empty array when the team has none, never absent. These are client memory, not a fact from the league's site or the league, and not the owner's instruction: `ownerNote` remains the owner's governing note.",
     }),
   ),
   coverage: Schema.Array(QueryCoverage),

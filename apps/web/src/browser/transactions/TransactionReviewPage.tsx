@@ -141,7 +141,7 @@ function Review(props: ReviewProps): JSX.Element {
   const settled = (): boolean => props.model.settled;
   const canSubmit = (): boolean =>
     !props.model.review.set.expired && !settled() && props.model.proposedCount > 0;
-  const providerOffers = (): ReadonlyArray<{
+  const pendingOffers = (): ReadonlyArray<{
     readonly team: TransactionReviewTeamView;
     readonly offer: TransactionReviewPendingOfferView;
   }> =>
@@ -186,7 +186,7 @@ function Review(props: ReviewProps): JSX.Element {
       <Show
         fallback={
           <EmptyState title="Nothing was proposed.">
-            This set has no moves for any team. Ask the agent to propose transactions again.
+            Ask the agent to propose transactions again.
           </EmptyState>
         }
         when={props.model.total > 0}
@@ -208,9 +208,9 @@ function Review(props: ReviewProps): JSX.Element {
                 />
               )}
             </For>
-            <Show when={providerOffers().length > 0}>
-              <ProviderOffers
-                offers={providerOffers()}
+            <Show when={pendingOffers().length > 0}>
+              <PendingOffers
+                offers={pendingOffers()}
                 withdrawing={props.withdrawing}
                 onWithdraw={props.withdrawOffer}
               />
@@ -359,7 +359,7 @@ function ExpiredNotice(props: ExpiredNoticeProps): JSX.Element {
   );
 }
 
-function ServerOrder(props: ServerOrderProps): JSX.Element {
+function TeamOrder(props: TeamOrderProps): JSX.Element {
   return (
     <Show
       when={props.order.status === "conflict" ? props.order : undefined}
@@ -368,12 +368,12 @@ function ServerOrder(props: ServerOrderProps): JSX.Element {
           when={props.order.status === "unresolved" ? props.order : undefined}
           fallback={
             <Show when={props.order.status === "ordered" ? props.order : undefined}>
-              {(order) => <OrderedNotice order={order()} items={props.items} />}
+              {(order) => <OrderedNotice order={order()} />}
             </Show>
           }
         >
           {(order) => (
-            <Notice tone="neutral" title="The order could not be decided">
+            <Notice tone="neutral" title="The order could not be confirmed">
               <Text size="caption" tone="muted">
                 {order().detail}
               </Text>
@@ -383,11 +383,10 @@ function ServerOrder(props: ServerOrderProps): JSX.Element {
       }
     >
       {(order) => (
-        <Notice tone="danger" title="No order keeps the lineup legal">
+        <Notice tone="danger" title="No legal order for these moves">
           <Stack gap="2xs">
             <Text size="caption" tone="danger">
-              This team's whole set is refused. Nothing from it can be submitted until the
-              operations below no longer conflict.
+              Nothing in this team's set can be submitted until these operations no longer conflict.
             </Text>
             <For each={order().conflicts}>
               {(conflict) => (
@@ -410,21 +409,18 @@ function ExecutedOrder(props: ExecutedOrderProps): JSX.Element {
       .sort((left, right) => (left.execution?.position ?? 0) - (right.execution?.position ?? 0));
   return (
     <Show when={sent().length > 0}>
-      <Notice tone="neutral" title="The order each move was sent in">
+      <Notice tone="neutral" title="What was sent">
         <Stack gap="2xs">
           <For each={sent()}>
             {(item) => {
               const outcome = item.execution?.outcome ?? "skipped";
               return (
                 <Text size="caption" tone={isAttention(outcome) ? "danger" : "muted"}>
-                  {`${String((item.execution?.position ?? 0) + 1)}. ${moveSummary(item)} — ${sentOutcomeLabel(item, outcome)}`}
+                  {`${moveSummary(item)} — ${sentOutcomeLabel(item, outcome)}`}
                 </Text>
               );
             }}
           </For>
-          <Text size="caption" tone="faint">
-            Positions restart with each submission.
-          </Text>
         </Stack>
       </Notice>
     </Show>
@@ -433,19 +429,9 @@ function ExecutedOrder(props: ExecutedOrderProps): JSX.Element {
 
 function OrderedNotice(props: OrderedNoticeProps): JSX.Element {
   return (
-    <Notice tone="neutral" title="The order the server chose">
+    <Notice tone="neutral" title="When these moves run">
       <Stack gap="2xs">
-        <For each={props.order.steps}>
-          {(step) => {
-            const item = props.items.find((entry) => entry.id === step.item);
-            return (
-              <Text size="caption" tone="muted">
-                {`${String(step.position + 1)}. ${item === undefined ? "This move" : moveSummary(item)}${rosterPlaceLine(step.rosterPlace)}`}
-              </Text>
-            );
-          }}
-        </For>
-        <Text size="caption" tone="faint">
+        <Text size="caption" tone="muted">
           {orderEffectiveLine(props.order)}
         </Text>
         <Text size="caption" tone="faint">
@@ -454,17 +440,6 @@ function OrderedNotice(props: OrderedNoticeProps): JSX.Element {
       </Stack>
     </Notice>
   );
-}
-
-function rosterPlaceLine(rosterPlace: "frees" | "consumes" | undefined): string {
-  switch (rosterPlace) {
-    case "frees":
-      return " — frees a roster place";
-    case "consumes":
-      return " — uses a roster place";
-    case undefined:
-      return "";
-  }
 }
 
 function rosterPlacesLine(
@@ -529,7 +504,7 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
           )}
         </Show>
         <Show when={!props.expired && !props.settled && props.team.order}>
-          {(order) => <ServerOrder order={order()} items={props.team.items} />}
+          {(order) => <TeamOrder order={order()} />}
         </Show>
         <Show when={props.submitted}>
           <ExecutedOrder items={props.team.items} />
@@ -575,7 +550,7 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
       .map((reason) => reason.detail);
   const orderIssueTitle = (): string =>
     props.item.staleness.reasons.some((reason) => reason.code === "order_unresolved")
-      ? "The server could not decide an order"
+      ? "The order could not be confirmed"
       : "No legal order for this team's moves";
   const factIssues = (): ReadonlyArray<string> =>
     props.item.staleness.reasons
@@ -684,8 +659,8 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
           {(move) => (
             <Notice tone="neutral" title="Slot move">
               <Text size="caption" tone="muted">
-                Move {move().playerName ?? "this player"} to {move().toSlot}. The server places this
-                move in the order where the roster stays legal.
+                Move {move().playerName ?? "this player"} to {move().toSlot}. It runs where the
+                roster stays legal.
               </Text>
             </Notice>
           )}
@@ -703,7 +678,7 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
                 {move().order === "after"
                   ? "after the transaction, because only the transaction frees that slot."
                   : "before the transaction."}{" "}
-                That move is reported as its own step.
+                It is reported as its own step.
               </Text>
             </Notice>
           )}
@@ -735,7 +710,7 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
                   fallback={
                     <>
                       {" "}
-                      · provider recorded{" "}
+                      · listed{" "}
                       <Time datetime={state().proposedAt ?? state().requestedAt}>
                         {formatReaderTime(state().proposedAt ?? state().requestedAt)}
                       </Time>
@@ -821,8 +796,8 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
               Withdraw offer
             </Button>
             <Text size="caption" tone="muted">
-              Withdrawing deletes the offer at the provider before it is accepted. It does not
-              cancel anything already accepted.
+              Withdrawing deletes the offer before it is accepted. It does not cancel anything
+              already accepted.
             </Text>
           </Inline>
         </Show>
@@ -845,7 +820,7 @@ function ExecutionResult(props: {
     <Stack gap="sm">
       <Show when={props.execution.position !== undefined}>
         <Text size="caption" tone="faint">
-          {`Sent ${String((props.execution.position ?? 0) + 1)}${ordinalSuffix((props.execution.position ?? 0) + 1)} in its submission's order.`}
+          {`Sent in this submission.`}
         </Text>
       </Show>
       <Show when={props.execution.steps.length > 0}>
@@ -887,8 +862,8 @@ function ExecutionResult(props: {
           </Text>
           <Show when={props.execution.detail?.toLowerCase().includes("without giving a reason")}>
             <Text size="caption" tone="danger">
-              The provider did not give a reason. Read the roster and the league's transaction rules
-              at the provider before proposing it again.
+              No reason was given. Check the roster and the league's transaction rules before trying
+              again.
             </Text>
           </Show>
         </Notice>
@@ -896,7 +871,7 @@ function ExecutionResult(props: {
       <Show when={props.execution.outcome === "unknown"}>
         <Notice tone="danger" title="Not confirmed">
           <Text size="caption" tone="danger">
-            This request may or may not have applied. It was not retried. Check the team before
+            This move may or may not have applied. It was not retried. Check the team before
             proposing another move.
           </Text>
         </Notice>
@@ -909,7 +884,7 @@ function ExecutionResult(props: {
           <Text size="caption" tone="muted">
             {props.isTrade
               ? "This is a real offer. The other manager alone can accept or reject it; Lineupgrade cannot answer for them."
-              : "The provider will process this claim later. It is not done, and it is not a failure."}
+              : "Waivers run later, so this claim is pending rather than done or failed."}
           </Text>
         </Notice>
       </Show>
@@ -950,14 +925,14 @@ function PlayerColumn(props: PlayerColumnProps): JSX.Element {
   );
 }
 
-function ProviderOffers(props: ProviderOffersProps): JSX.Element {
+function PendingOffers(props: PendingOffersProps): JSX.Element {
   return (
-    <Stack as="section" gap="sm" labelledBy="provider-offers-title">
+    <Stack as="section" gap="sm" labelledBy="pending-offers-title">
       <Stack gap="xs">
-        <SectionTitle id="provider-offers-title">Offers pending at the provider</SectionTitle>
+        <SectionTitle id="pending-offers-title">Offers pending in your league</SectionTitle>
         <Text size="caption" tone="muted">
-          These offers are on the provider now. An offer Lineupgrade did not create still appears
-          here, so you can withdraw it before it is accepted.
+          An offer Lineupgrade did not create still appears here, so you can withdraw it before it
+          is accepted.
         </Text>
       </Stack>
       <RuleList>
@@ -1030,15 +1005,15 @@ function ProviderOffers(props: ProviderOffersProps): JSX.Element {
                         Withdraw offer
                       </Button>
                       <Text size="caption" tone="muted">
-                        Withdrawing deletes this offer at the provider before it is accepted.
+                        Withdrawing deletes this offer before it is accepted.
                       </Text>
                     </Inline>
                   }
                   when={entry.offer.canRespond}
                 >
                   <Text size="caption" tone="muted">
-                    This offer is waiting for your answer on the provider. Accepting or rejecting it
-                    belongs to you there; Lineupgrade cannot answer it for you.
+                    This offer is waiting for your answer in your league. Accepting or rejecting it
+                    is yours; Lineupgrade cannot answer for you.
                   </Text>
                 </Show>
               </Stack>
@@ -1108,10 +1083,9 @@ function SubmissionPanel(props: SubmissionPanelProps): JSX.Element {
                   )}
                 </Text>
                 <Text id="submission-note" size="caption" tone="muted">
-                  One provider request per move, sent in this order, with no retries. A waiver claim
-                  stays pending until the provider processes it. A trade becomes a real offer to
-                  another manager: submitting again or reloading will not undo it, and only
-                  withdrawing removes it before it is accepted.
+                  Each move is sent once, with no retries. A waiver claim stays pending until
+                  waivers run. A trade becomes a real offer to another manager: submitting again or
+                  reloading will not undo it, and only withdrawing removes it before it is accepted.
                 </Text>
                 <Show when={props.staleCount > 0}>
                   <Text size="caption" tone="muted">
@@ -1216,7 +1190,7 @@ function consequenceLine(item: TransactionReviewItemView): string {
       case "withdrawn":
         return "Withdrawn before acceptance. The offer is gone, and submitting again does nothing.";
       case "expired":
-        return "No longer pending. The provider publishes no ended record, so it was declined or expired.";
+        return "It was declined or expired; your league keeps no record of which.";
       case "pending":
       case undefined:
         return "An offer, not a change. Only the other manager decides, and submitting again does not undo it.";
@@ -1253,15 +1227,15 @@ function tradeRatificationLine(
     case "none":
       return "League review: none. An accepted trade stands immediately.";
     case "unknown":
-      return "League review: the league's rule is not one we can name, so the provider's trade page is the authority.";
+      return "League review: the rule is not one Lineupgrade can name, so your league's trade page is the authority.";
     case undefined:
-      return "League review: the provider did not publish a review rule.";
+      return "League review: the league publishes no review rule.";
   }
 }
 
 function tradeDeadlineLine(endDate: string | undefined): string {
   return endDate === undefined
-    ? "The provider did not publish a trade deadline."
+    ? "The league publishes no trade deadline."
     : `Trading closes ${endDate}.`;
 }
 
@@ -1277,7 +1251,7 @@ function includedTally(
     waivers === 0
       ? "No FAAB is spent."
       : `${String(waivers)} waiver ${waivers === 1 ? "claim spends" : "claims spend"} ${String(faab)} FAAB.`;
-  return submitting ? `${base} ${spending} Sending to the provider now.` : `${base} ${spending}`;
+  return submitting ? `${base} ${spending} Sending now.` : `${base} ${spending}`;
 }
 
 function submitLabel(included: number): string {
@@ -1313,23 +1287,6 @@ function sentOutcomeLabel(
   return item.kind === "trade" && outcome === "pending"
     ? "Waiting for the other manager"
     : outcomeLabel(outcome);
-}
-
-function ordinalSuffix(value: number): string {
-  const lastTwo = value % 100;
-  if (lastTwo >= 11 && lastTwo <= 13) {
-    return "th";
-  }
-  switch (value % 10) {
-    case 1:
-      return "st";
-    case 2:
-      return "nd";
-    case 3:
-      return "rd";
-    default:
-      return "th";
-  }
 }
 
 function stepLabel(step: TransactionReviewStepView): string {
@@ -1442,14 +1399,12 @@ type TeamProposalProps = {
   readonly onWithdraw: (team: string, item: string) => void;
 };
 
-type ServerOrderProps = {
+type TeamOrderProps = {
   readonly order: TransactionReviewOrderView;
-  readonly items: ReadonlyArray<TransactionReviewItemView>;
 };
 
 type OrderedNoticeProps = {
   readonly order: Extract<TransactionReviewOrderView, { status: "ordered" }>;
-  readonly items: ReadonlyArray<TransactionReviewItemView>;
 };
 
 type ExecutedOrderProps = {
@@ -1476,7 +1431,7 @@ type QuietTeamsProps = {
   readonly teams: ReadonlyArray<TransactionReviewTeamView>;
 };
 
-type ProviderOffersProps = {
+type PendingOffersProps = {
   readonly offers: ReadonlyArray<{
     readonly team: TransactionReviewTeamView;
     readonly offer: TransactionReviewPendingOfferView;
