@@ -289,12 +289,6 @@ const correctnessRules = {
     },
   ],
   "repository/no-spread-push": "error",
-  "effect-machine/no-async-planning-callback": "error",
-  "effect-machine/no-browser-api-in-planning": "error",
-  "effect-machine/no-conflicting-invocation-identity": "error",
-  "effect-machine/no-nondeterministic-planning": "error",
-  "effect-machine/no-redundant-resolve": "error",
-  "effect-machine/prefer-inline-handle": "error",
   "for-direction": "error",
   "getter-return": "error",
   "no-async-promise-executor": "error",
@@ -620,11 +614,7 @@ const timerProperties = ["window", "globalThis", "self"].flatMap((object) =>
 export default defineConfig({
   options: { typeAware: true, typeCheck: true, maxWarnings: 0 },
   plugins: ["typescript", "unicorn", "oxc", "effecttsgo", "jsx-a11y"],
-  jsPlugins: [
-    "./scripts/lintPlugin.ts",
-    "@typeonce/oxlint-plugin-effect-machine",
-    "eslint-plugin-solid",
-  ],
+  jsPlugins: ["./scripts/lintPlugin.ts", "eslint-plugin-solid"],
   env: { builtin: true, browser: false, node: true },
   ignorePatterns: [
     "node_modules/**/*",
@@ -914,6 +904,10 @@ export default defineConfig({
         "effecttsgo/strict-effect-provide": "off",
         "effecttsgo/async-function": "off",
       },
+    },
+    {
+      files: ["packages/backend/src/utilities/machine.ts"],
+      rules: { "typescript/no-unsafe-type-assertion": "off" },
     },
     {
       files: [

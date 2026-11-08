@@ -33,11 +33,12 @@
     "@electric-sql/pglite": "catalog:",
     "@lineupkeep/brand": "workspace:*",
     "@lineupkeep/lineup-solver": "workspace:*",
-    "@typeonce/effect-machine": "catalog:",
+    "@xstate/effect": "catalog:",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "pg": "8.23.1",
-    "postgres": "catalog:"
+    "postgres": "catalog:",
+    "xstate": "catalog:"
   }
 }
