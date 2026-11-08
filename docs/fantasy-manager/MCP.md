@@ -22,7 +22,7 @@ Status: proposed surface and acceptance criteria. Names other than the agreed ge
 | `get_league`          | Selected league settings, scoring definitions, roster rules, standings with records, season points, and category totals, and completed draft history; bounded groups/pages            |
 | `get_rosters`         | Exact selected team/period rosters, or every team's roster in a linked league paged by whole teams; professional-team abbreviation on every entry; full detail carries the owner note |
 | `search_players`      | Bounded league/sport-context player search with ownership/started signals, validated sorts, and optional professional games remaining                                                 |
-| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; generic stats/projections/availability groups                                                         |
+| `get_players`         | Explicit-list hydration of up to 25 selected-player references, returned whole; stats, availability and the week's projection where the provider publishes one                        |
 | `get_matchups`        | Selected matchup/scoreboard data with explicit period, category values/winners, and remaining player-games                                                                            |
 | `get_transactions`    | Bounded transaction history with team scope and date filtering, two-sided player movements, trade parties, traded draft picks, and explicit incompleteness; no execution              |
 | `get_team_summary`    | One bounded per-team snapshot: league, standing and record, standings, current matchup, and compact roster                                                                            |
@@ -661,7 +661,13 @@ A period reference must be resolved against the provider calendar, sport, season
 
 Do not advertise multi-week aggregation, advanced-stat availability, diamond data, all legacy sorts, or NHL projection completeness without proof. Rates, percentages, ratios, and time-on-ice averages are not summed like counts. Missing games/stats are not automatically zero.
 
-Separate roster membership reads from bounded player hydration. `get_players` takes an explicit list of at most 25 references and returns the whole list in one response; its `team` is league context, not the subject, so a reference to a player on another team in the same league resolves normally and a reference sealed for another owner or league is refused in `failures`. Live verification found no projected-statistics series in the provider's read surface: completed weeks report actual values, while the current and future weeks report zero rather than projections. Projections therefore stay typed unsupported unless a future verified read proves otherwise. See [live read endpoints](RESEARCH.md#live-yahoo-read-endpoints-2026-10-25).
+Separate roster membership reads from bounded player hydration. `get_players` takes an explicit list of at most 25 references and returns the whole list in one response; its `team` is league context, not the subject, so a reference to a player on another team in the same league resolves normally and a reference sealed for another owner or league is refused in `failures`. The provider publishes no projected-statistics series: completed weeks report actual values, while the
+current and future weeks report zero. It does publish a league-scoped projected week rank for football, which the
+lineup policy reads as the period's projection, so the `projections` group publishes that rank with its basis and
+the week it covers for football and reports the absence compactly for a sport the provider serves no projection
+for. Pool and roster rows also carry whether the player's pro team plays in the current scoring week, against
+whom, and its bye week where published, so a client never has to infer a bye from ownership movement. See
+[live read endpoints](RESEARCH.md#live-yahoo-read-endpoints-2026-10-25).
 
 Actual statistics state their basis: `week` with the covered period when the provider declares a weekly player series for the sport, `date_range` with the covered dates when the provider served a window by aggregation, otherwise `season`. A client must not compare a season total against a weekly or window value, and the read reports the basis it used rather than relabelling one as the other. Player identity resolves from the roster, then selected-player hydration, then transaction history, so a player who is no longer rostered anywhere is still named by the drop side of an add/drop; a transaction player row carries its inline identity beside the reference, and its primary position is omitted where the provider does not publish one.
 
