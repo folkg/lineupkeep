@@ -343,7 +343,7 @@ export const ConnectionsLive = Layer.effect(
 
 type OwnedConnection = {
   readonly id: ConnectionId;
-  readonly state: typeof ConnectionLifecycleState.Type;
+  readonly state: ConnectionLifecycleState;
 };
 
 function completionRejection(

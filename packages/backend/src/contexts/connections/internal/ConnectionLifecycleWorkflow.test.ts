@@ -1,10 +1,10 @@
 import { assert, it } from "@effect/vitest";
-import { Machine } from "@typeonce/effect-machine";
-import { MachineTest } from "@typeonce/effect-machine/testing";
-import { Arbitrary, DateTime, Effect, Schema } from "effect";
+import { Arbitrary, DateTime, Effect, Exit, Schema, SchemaParser } from "effect";
 
 import { ConnectionCredentialGeneration } from "#contexts/connections/Connection.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
+import { plan, snapshotOf } from "#utilities/machine.ts";
+import * as MachineTest from "#utilities/machineTest.ts";
 
 import {
   ConnectionLifecycleState,
@@ -42,7 +42,7 @@ const invariants = [
   define.step(
     "an accepted completion timestamps the event and generation",
     ({ before, after, event }) =>
-      before.state.path !== "Linking" ||
+      before.state.value._tag !== "Linking" ||
       event._tag !== "LinkCompleted" ||
       (after.state.value._tag === "Ready" &&
         DateTime.Equivalence(after.state.value.approvedAt, event.at) &&
@@ -52,7 +52,7 @@ const invariants = [
   define.step(
     "an accepted reconnect-required transition preserves the generation",
     ({ before, after, event }) =>
-      before.state.path !== "Ready" ||
+      before.state.value._tag !== "Ready" ||
       event._tag !== "ReconnectRequired" ||
       (after.state.value._tag === "ReconnectRequired" &&
         after.state.value.credentialGeneration === before.state.value.credentialGeneration &&
@@ -61,7 +61,7 @@ const invariants = [
   define.step(
     "an accepted reconnect timestamps the event and replaces the generation",
     ({ before, after, event }) =>
-      (before.state.path !== "Ready" && before.state.path !== "ReconnectRequired") ||
+      (before.state.value._tag !== "Ready" && before.state.value._tag !== "ReconnectRequired") ||
       event._tag !== "Reconnected" ||
       (after.state.value._tag === "Ready" &&
         after.state.value.credentialGeneration === event.credentialGeneration &&
@@ -70,7 +70,7 @@ const invariants = [
   define.step(
     "an accepted disconnection timestamps the event",
     ({ before, after, event }) =>
-      before.state.path === "Disconnected" ||
+      before.state.value._tag === "Disconnected" ||
       event._tag !== "Disconnected" ||
       (after.state.value._tag === "Disconnected" &&
         DateTime.Equivalence(after.state.value.disconnectedAt, event.at)),
@@ -79,16 +79,13 @@ const invariants = [
     if (snapshot.state.path !== "Disconnected") {
       return true;
     }
-    return events.every((event) => {
-      const planned = Effect.runSync(Machine.plan(ConnectionLifecycleWorkflow, snapshot, event));
-      return (
-        planned.microsteps.every((step) => step.transitions.length === 0) &&
-        Schema.toEquivalence(ConnectionLifecycleState)(
-          planned.next.state.value,
-          snapshot.state.value,
-        )
-      );
-    });
+    return events.every((event) =>
+      Exit.isFailure(
+        Effect.runSync(
+          Effect.exit(plan(ConnectionLifecycleWorkflow, { state: snapshot.state.value }, event)),
+        ),
+      ),
+    );
   }),
 ];
 
@@ -104,6 +101,27 @@ it.effect("explores every connection transition without retaining startup data",
     assert.strictEqual(explored.completeness._tag, "Complete");
     assert.strictEqual(explored.transitionCoverage.definitions.missing, 0);
     assert.strictEqual(explored.transitionCoverage.branches.missing, 0);
+  }),
+);
+
+it.effect("resumes a ready connection stored before the machine changed library", () =>
+  Effect.gen(function* () {
+    const state = yield* SchemaParser.decodeEffect(Schema.toCodecJson(ConnectionLifecycleState))(
+      storedReady,
+    );
+    const snapshot = yield* snapshotOf(ConnectionLifecycleWorkflow, state);
+    const next = yield* plan(ConnectionLifecycleWorkflow, snapshot, {
+      _tag: "ReconnectRequired",
+      at: storedReconnectAt,
+    });
+
+    assert.strictEqual(next._tag, "ReconnectRequired");
+    if (next._tag !== "ReconnectRequired") {
+      return;
+    }
+    assert.strictEqual(next.credentialGeneration, makeGeneration(3));
+    assert.isTrue(DateTime.Equivalence(next.reconnectRequiredAt, storedReconnectAt));
+    assert.isTrue(DateTime.Equivalence(next.updatedAt, storedReconnectAt));
   }),
 );
 
@@ -178,6 +196,14 @@ function makeGeneration(value: number): ConnectionCredentialGeneration {
   return Schema.decodeSync(ConnectionCredentialGeneration)(value);
 }
 
+const storedReconnectAt = DateTime.makeUnsafe("2026-01-02T00:00:00Z");
+const storedReady = {
+  _tag: "Ready",
+  provider: "yahoo",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  approvedAt: "2026-01-01T00:00:00.000Z",
+  credentialGeneration: 3,
+};
 const at = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
 const input = {
   _tag: "Linking" as const,

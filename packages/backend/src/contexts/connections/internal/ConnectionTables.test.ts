@@ -1,5 +1,4 @@
 import { assert, it } from "@effect/vitest";
-import { MachineTest } from "@typeonce/effect-machine/testing";
 import { Arbitrary, DateTime, Effect, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
@@ -9,6 +8,7 @@ import {
 } from "#contexts/connections/Connection.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 import { snapshotOf } from "#utilities/machine.ts";
+import * as MachineTest from "#utilities/machineTest.ts";
 
 import { ConnectionLifecycleWorkflow } from "./ConnectionLifecycleWorkflow.ts";
 import { ConnectionRow, FantasyTeamRow } from "./ConnectionTables.ts";
@@ -37,7 +37,7 @@ it.effect("round-trips every explored lifecycle state through its row codec", ()
 
       assert.strictEqual(row.provider, record.state.provider);
       assert.deepStrictEqual(row.updatedAt, DateTime.toDateUtc(record.state.updatedAt));
-      assert.deepStrictEqual(restored, snapshot);
+      assert.deepStrictEqual(restored.state, snapshot.state.value);
       assert.deepStrictEqual(yield* Schema.encodeEffect(ConnectionRow)(decoded), row);
       assert.strictEqual(decoded.id, record.id);
       assert.strictEqual(decoded.userId, record.userId);

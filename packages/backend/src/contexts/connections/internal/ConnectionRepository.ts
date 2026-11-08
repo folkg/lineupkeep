@@ -1,4 +1,3 @@
-import { Machine } from "@typeonce/effect-machine";
 import { and, asc, eq, notInArray } from "drizzle-orm";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
@@ -31,14 +30,16 @@ import { decodeTeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { ProviderTeam } from "#contexts/connections/Provider.ts";
 import { anyOf, excludedValues, maxInsertRows, mutateRows } from "#database/dbUtilities.ts";
 import { chunked } from "#utilities/collections.ts";
-import { planBatch, snapshotOf } from "#utilities/machine.ts";
+import { planBatch, type Snapshot, snapshotOf } from "#utilities/machine.ts";
 
 import {
   ConnectionLifecycleEvents,
-  ConnectionLifecycleStates,
   ConnectionLifecycleWorkflow,
 } from "./ConnectionLifecycleWorkflow.ts";
-import type { ConnectionLifecycleRequest } from "./ConnectionLifecycleWorkflow.ts";
+import type {
+  ConnectionLifecycleRequest,
+  ConnectionLifecycleState,
+} from "./ConnectionLifecycleWorkflow.ts";
 import { ConnectionsDatabase } from "./ConnectionsDatabase.ts";
 import {
   ConnectionRow,
@@ -329,7 +330,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
                     return planned.map(({ row, snapshot }) => ({
                       ...row.record,
-                      state: snapshot.state.value,
+                      state: snapshot.state,
                     }));
                   }),
               });
@@ -432,7 +433,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                     ).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
                     return planned.map(({ row, snapshot }) => ({
                       ...row.record,
-                      state: snapshot.state.value,
+                      state: snapshot.state,
                     }));
                   }),
               });
@@ -512,7 +513,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                       ...unchanged,
                       ...planned.map(({ row, snapshot }) => ({
                         ...row.record,
-                        state: snapshot.state.value,
+                        state: snapshot.state,
                       })),
                     ];
                   }),
@@ -614,7 +615,7 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                       ...unchanged,
                       ...planned.map(({ row, snapshot }) => ({
                         ...row.record,
-                        state: snapshot.state.value,
+                        state: snapshot.state,
                       })),
                     ];
                     const candidates = next.flatMap((record) =>
@@ -1095,7 +1096,7 @@ function recordToConnection(
 type LockedTarget = {
   readonly id: ConnectionId;
   readonly record: typeof ConnectionRow.Type;
-  readonly snapshot: Machine.Snapshot<typeof ConnectionLifecycleStates>;
+  readonly snapshot: Snapshot<ConnectionLifecycleState>;
 };
 
 const ReadyCredentialRow = Schema.Struct({

@@ -1,7 +1,7 @@
-import { Machine } from "@typeonce/effect-machine";
 import { Schema } from "effect";
 
 import { ConnectionCredentialGeneration, ProviderKey } from "#contexts/connections/Connection.ts";
+import { defineMachine, final } from "#utilities/machine.ts";
 
 const ConnectionContent = {
   provider: ProviderKey,
@@ -28,18 +28,14 @@ export const ConnectionLifecycleState = Schema.TaggedUnion({
     disconnectedAt: Schema.DateTimeUtc,
   },
 });
+export type ConnectionLifecycleState = typeof ConnectionLifecycleState.Type;
 
-export const ConnectionLifecycleStates = Machine.state({
-  states: {
-    Linking: ConnectionLifecycleState.cases.Linking,
-    Ready: ConnectionLifecycleState.cases.Ready,
-    ReconnectRequired: ConnectionLifecycleState.cases.ReconnectRequired,
-    Disconnected: {
-      type: "final",
-      schema: ConnectionLifecycleState.cases.Disconnected,
-    },
-  },
-});
+const ConnectionLifecycleStates = {
+  Linking: ConnectionLifecycleState.cases.Linking,
+  Ready: ConnectionLifecycleState.cases.Ready,
+  ReconnectRequired: ConnectionLifecycleState.cases.ReconnectRequired,
+  Disconnected: final(ConnectionLifecycleState.cases.Disconnected),
+};
 
 export const ConnectionLifecycleEvents = Schema.TaggedUnion({
   LinkCompleted: { at: Schema.DateTimeUtc, credentialGeneration: ConnectionCredentialGeneration },
@@ -48,11 +44,12 @@ export const ConnectionLifecycleEvents = Schema.TaggedUnion({
   Disconnected: { at: Schema.DateTimeUtc },
 });
 
-export const ConnectionLifecycleWorkflow = Machine.make({
+export const ConnectionLifecycleWorkflow = defineMachine<
+  ConnectionLifecycleState,
+  ConnectionLifecycleRequest
+>({
   root: ConnectionLifecycleStates,
-  input: ConnectionLifecycleState.cases.Linking,
-  events: Machine.eventsFromSchemas(ConnectionLifecycleEvents),
-}).handle({
+  events: ConnectionLifecycleEvents,
   initial: { target: "Linking", data: ({ input }) => input },
   states: {
     Linking: {
@@ -131,6 +128,4 @@ export const ConnectionLifecycleWorkflow = Machine.make({
   },
 });
 
-export type ConnectionLifecycleRequest = Machine.Machine.InputEvent<
-  typeof ConnectionLifecycleWorkflow
->;
+export type ConnectionLifecycleRequest = typeof ConnectionLifecycleEvents.Type;
