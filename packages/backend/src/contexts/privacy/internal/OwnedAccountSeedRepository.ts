@@ -95,9 +95,9 @@ export const seedOwnedAccount = Effect.gen(function* () {
   );
   yield* run(
     sql`insert into ${sql.identifier("provider_credentials")}
-      (connection_id, user_id, provider, generation, envelope) values
-      (${owner.connectionId}, ${owner.id}, ${"fixture"}, 1, ${owner.providerEnvelope}),
-      (${otherOwner.connectionId}, ${otherOwner.id}, ${"fixture"}, 1, ${otherOwner.providerEnvelope})`,
+      (connection_id, user_id, provider, generation, envelope, proven_at) values
+      (${owner.connectionId}, ${owner.id}, ${"fixture"}, 1, ${owner.providerEnvelope}, ${instant}),
+      (${otherOwner.connectionId}, ${otherOwner.id}, ${"fixture"}, 1, ${otherOwner.providerEnvelope}, ${instant})`,
   );
   yield* run(
     sql`insert into ${sql.identifier("provider_teams")}

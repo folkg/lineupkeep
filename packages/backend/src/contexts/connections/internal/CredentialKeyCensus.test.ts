@@ -1,6 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { Context, Effect, Layer, Redacted } from "effect";
+import { Context, DateTime, Effect, Layer, Redacted } from "effect";
 
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
@@ -80,6 +80,7 @@ function credential(
   provider: ReturnType<typeof decodeProviderKey>;
   generation: number;
   envelope: string;
+  provenAt: Date;
 }> {
   return Effect.gen(function* () {
     const envelope = yield* seal(keyVersion);
@@ -89,6 +90,7 @@ function credential(
       provider: decodeProviderKey("yahoo"),
       generation: 1,
       envelope,
+      provenAt: yield* DateTime.nowAsDate,
     };
   });
 }

@@ -11,6 +11,7 @@ import { PostgresLive } from "#database/internal/PostgresLive.ts";
 import { makeTelemetryTest } from "#runtime/internal/TelemetryTest.ts";
 
 import type { ConnectionId } from "./Connection.ts";
+import { providerSessionReconnectDetail } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
 import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
@@ -1602,6 +1603,105 @@ it.effect("records a skipped outcome and its reason for a scheduled run", () =>
   }).pipe(Effect.provide(SkippingLayer)),
 );
 
+it.effect("refuses a delivery on a known-dead connection before its first provider read", () =>
+  Effect.gen(function* () {
+    const fake = yield* FakeProviderWorld;
+    const worker = yield* LineupWorker;
+    const repository = yield* LineupRunRepository;
+    const connections = yield* Connections;
+    const team = yield* seedOne(fake, teamFixture("461.l.1000.t.1", "Alpha"));
+    const runId = yield* createQueuedRun(repository, team);
+
+    yield* fake.rejectSession(true);
+    yield* Effect.flip(connections.discoverTeams(owner, [{ id: team.connectionId }]));
+    yield* fake.rejectSession(false);
+
+    const before = yield* fake.providerReads;
+    const report = yield* worker.deliver([runId]);
+
+    assert.strictEqual((yield* fake.providerReads) - before, 0);
+    assert.deepStrictEqual(report.stopped, []);
+    const run = yield* loadRun(repository, runId);
+    assert.strictEqual(run.status, "blocked");
+    assert.strictEqual(run.state._tag, "Blocked");
+    if (run.state._tag !== "Blocked") {
+      return;
+    }
+    assert.strictEqual(run.state.outcome.summary, `Not started: ${providerSessionReconnectDetail}`);
+  }).pipe(Effect.provide(LineupTestLayer)),
+);
+
+it.effect(
+  "stops a connection at its first session rejection and leaves another connection alone",
+  () =>
+    Effect.gen(function* () {
+      const fake = yield* FakeProviderWorld;
+      const worker = yield* LineupWorker;
+      const repository = yield* LineupRunRepository;
+      const connections = yield* Connections;
+      yield* refuseCustomPlanning(fake);
+      yield* fake.setTeamRoster("461.l.1000.t.2", {
+        ...roster,
+        providerTeamKey: "461.l.1000.t.2",
+      });
+
+      const deadSession = "A1=dead-session-cookie";
+      const first = yield* seedConnection(
+        fake,
+        [teamFixture("461.l.1000.t.1", "Alpha"), teamFixture("461.l.1000.t.2", "Beta")],
+        deadSession,
+      );
+      const second = yield* seedConnection(
+        fake,
+        [teamFixture("461.l.1000.t.1", "Alpha")],
+        "A1=healthy-session-cookie",
+      );
+      const firstTeam = first.teams[0];
+      const secondTeamOnSameConnection = first.teams[1];
+      const healthyTeam = second.teams[0];
+      if (
+        firstTeam === undefined ||
+        secondTeamOnSameConnection === undefined ||
+        healthyTeam === undefined
+      ) {
+        assert.fail("the seeded connections did not discover their teams");
+        return;
+      }
+      const failingRun = yield* createQueuedRun(repository, firstTeam);
+      const refusedRun = yield* createQueuedRun(repository, secondTeamOnSameConnection);
+      const healthyRun = yield* createQueuedRun(repository, healthyTeam);
+
+      yield* fake.rejectSessionFor([deadSession]);
+      const report = yield* worker.deliver([failingRun, refusedRun, healthyRun]);
+
+      assert.deepStrictEqual(report.stopped, [
+        { connectionId: first.connectionId, detail: providerSessionReconnectDetail },
+      ]);
+      const failed = yield* loadRun(repository, failingRun);
+      assert.strictEqual(failed.status, "failed");
+      const refused = yield* loadRun(repository, refusedRun);
+      assert.strictEqual(refused.status, "blocked");
+      if (refused.state._tag !== "Blocked") {
+        return;
+      }
+      assert.strictEqual(
+        refused.state.outcome.summary,
+        `Not started: ${providerSessionReconnectDetail}`,
+      );
+      const healthy = yield* loadRun(repository, healthyRun);
+      assert.strictEqual(healthy.status, "completed");
+
+      const listed = yield* connections.list(owner);
+      const dead = listed.find((row) => row.id === first.connectionId);
+      const alive = listed.find((row) => row.id === second.connectionId);
+      assert.strictEqual(dead?.status, "reconnect-required");
+      assert.strictEqual(dead?.session.usable, false);
+      assert.strictEqual(dead?.session.action, "reconnect-provider-connection");
+      assert.strictEqual(alive?.status, "ready");
+      assert.strictEqual(alive?.session.usable, true);
+    }).pipe(Effect.provide(LineupTestLayer)),
+);
+
 it.effect("counts the four provider reads one ordinary check makes", () =>
   Effect.gen(function* () {
     const fake = yield* FakeProviderWorld;
@@ -1654,6 +1754,41 @@ function seedOne(
         : Effect.succeed(first);
     }),
   );
+}
+
+function seedConnection(
+  fake: FakeProviderWorld["Service"],
+  teams: ReadonlyArray<ProviderTeam>,
+  sessionValue: string,
+): Effect.Effect<
+  {
+    readonly connectionId: ConnectionId;
+    readonly teams: ReadonlyArray<{
+      readonly id: import("./FantasyTeam.ts").TeamId;
+      readonly connectionId: ConnectionId;
+    }>;
+  },
+  never,
+  Connections
+> {
+  return Effect.gen(function* () {
+    const connections = yield* Connections;
+    yield* fake.setTeams(teams);
+    yield* fake.setLeague(league);
+    yield* fake.setRoster(roster);
+    yield* fake.setNativeAfter(nativeAfter);
+    const linked = Array.getUnsafe(
+      yield* connections.link(owner, [
+        { provider: decodeProviderKey("yahoo"), session: Redacted.make(sessionValue) },
+      ]),
+      0,
+    );
+    const discovered = yield* connections.discoverTeams(owner, [{ id: linked.id }]);
+    return {
+      connectionId: linked.id,
+      teams: discovered.map((row) => ({ id: row.id, connectionId: row.connectionId })),
+    };
+  }).pipe(Effect.orDie);
 }
 
 function seed(

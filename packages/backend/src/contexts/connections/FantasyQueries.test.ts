@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { Array, Cause, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
+import { providerSessionReconnectDetail } from "#contexts/connections/Connection.ts";
 import { GameSourceRegistry, gameSourceRegistryOf } from "#contexts/connections/GameSource.ts";
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
@@ -1563,6 +1564,59 @@ it.effect("states each pool row's week, opponent, and projected rank", () =>
           },
         ],
       ],
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("stops a summary at its first refused read and names the layer to reconnect", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")]);
+
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-08T14:11:29.000Z")),
+    );
+    const healthy = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+      groups: ["league"],
+    });
+    assert.strictEqual(healthy.status, "ok");
+    const proven = Array.getUnsafe(yield* connections.list(owner), 0);
+    assert.deepStrictEqual(
+      proven.session.provenAt,
+      DateTime.makeUnsafe("2026-11-08T14:11:29.000Z"),
+    );
+
+    yield* fake.rejectSession(true);
+
+    const before = yield* fake.providerReads;
+    const summary = yield* queries.getTeamSummary(owner, {
+      team: Array.getUnsafe(seeded, 0).id,
+    });
+
+    assert.strictEqual((yield* fake.providerReads) - before, 1);
+    assert.strictEqual(summary.status, "failed");
+    if (!("failures" in summary)) {
+      assert.fail("expected the summary to report its failures");
+      return;
+    }
+    assert.deepStrictEqual(
+      [...new Set(summary.failures.map((failure) => failure.code))],
+      ["provider_session_rejected"],
+    );
+    assert.deepStrictEqual(
+      [...new Set(summary.failures.map((failure) => failure.message))],
+      [providerSessionReconnectDetail],
+    );
+
+    const connection = Array.getUnsafe(yield* connections.list(owner), 0);
+    assert.strictEqual(connection.status, "reconnect-required");
+    assert.strictEqual(connection.session.action, "reconnect-provider-connection");
+    assert.deepStrictEqual(
+      connection.session.provenAt,
+      DateTime.makeUnsafe("2026-11-08T14:11:29.000Z"),
     );
   }).pipe(Effect.provide(QueriesTestLayer)),
 );

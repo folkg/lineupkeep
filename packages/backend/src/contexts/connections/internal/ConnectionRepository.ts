@@ -1,4 +1,4 @@
-import { and, asc, eq, notInArray } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, notInArray, or } from "drizzle-orm";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
@@ -19,6 +19,7 @@ import {
   ConnectionIdInput,
   ConnectionStatus,
   ProviderConnection,
+  providerSessionOf,
   StartLinkingInput,
 } from "#contexts/connections/Connection.ts";
 import {
@@ -98,13 +99,74 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
         userId: UserId,
       ) {
         const rows = yield* database
-          .select()
+          .select({
+            ...getTableColumns(providerConnections),
+            provenAt: providerCredentials.provenAt,
+          })
           .from(providerConnections)
+          .leftJoin(
+            providerCredentials,
+            eq(providerCredentials.connectionId, providerConnections.id),
+          )
           .where(eq(providerConnections.userId, userId))
           .orderBy(asc(providerConnections.id))
           .limit(connectionListLimit)
           .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
-        return yield* Effect.forEach(rows, toConnection);
+        return yield* Effect.forEach(rows, (row) =>
+          toConnection({ connection: row, provenAt: row.provenAt }),
+        );
+      });
+
+      const loadSessionHealth = Effect.fn("ConnectionRepository.loadSessionHealth")(function* (
+        inputs: ReadonlyArray<{
+          readonly userId: UserId;
+          readonly ids: ReadonlyArray<ConnectionId>;
+        }>,
+      ) {
+        const filters = inputs.flatMap((input) => {
+          const ids = [...new Set(input.ids)];
+          return Array.isArrayNonEmpty(ids)
+            ? [
+                and(
+                  eq(providerConnections.userId, input.userId),
+                  anyOf(providerConnections.id, ids),
+                ),
+              ]
+            : [];
+        });
+        if (!Array.isArrayNonEmpty(filters)) {
+          return [];
+        }
+        const rows = yield* database
+          .select({ id: providerConnections.id, status: providerConnections.status })
+          .from(providerConnections)
+          .where(or(...filters))
+          .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
+        return yield* Effect.forEach(rows, (row) =>
+          Effect.map(Schema.decodeEffect(ConnectionStatus)(row.status), (status) => ({
+            id: decodeConnectionId(row.id),
+            status,
+          })).pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
+        );
+      });
+
+      const recordSessionProven = Effect.fn("ConnectionRepository.recordSessionProven")(function* (
+        userId: UserId,
+        connectionId: ConnectionId,
+        generation: ConnectionCredentialGeneration,
+        at: DateTime.Utc,
+      ) {
+        yield* database
+          .update(providerCredentials)
+          .set({ provenAt: DateTime.toDateUtc(at) })
+          .where(
+            and(
+              eq(providerCredentials.userId, userId),
+              eq(providerCredentials.connectionId, connectionId),
+              eq(providerCredentials.generation, generation),
+            ),
+          )
+          .pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause })));
       });
 
       const loadOwned = Effect.fn("ConnectionRepository.loadOwned")(function* (
@@ -243,7 +305,9 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
                 "connections.created_count": inserted.length,
                 "connections.replayed_count": inputs.length - inserted.length,
               });
-              return yield* Effect.forEach(ordered, toConnection);
+              return yield* Effect.forEach(ordered, (row) =>
+                toConnection({ connection: row, provenAt: null }),
+              );
             }),
           )
           .pipe(mapTransactionError);
@@ -897,6 +961,8 @@ export class ConnectionRepository extends Context.Service<ConnectionRepository>(
 
       return {
         listConnections,
+        loadSessionHealth,
+        recordSessionProven,
         loadOwned,
         loadCredential,
         startLinking,
@@ -974,6 +1040,7 @@ function credentialRows(
   readonly provider: ProviderKey;
   readonly generation: ConnectionCredentialGeneration;
   readonly envelope: string;
+  readonly provenAt: Date;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }> {
@@ -989,6 +1056,7 @@ function credentialRows(
       provider: row.state.provider,
       generation: row.state.credentialGeneration,
       envelope: command.envelope,
+      provenAt: at,
       createdAt: at,
       updatedAt: at,
     };
@@ -1046,12 +1114,15 @@ const toFantasyTeam: (row: unknown) => Effect.Effect<FantasyTeam, ConnectionPers
       effect.pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
   );
 
-const toConnection: (
-  row: unknown,
-) => Effect.Effect<ProviderConnection, ConnectionPersistenceFailed> = Effect.fnUntraced(
-  function* (row: unknown) {
-    const decoded = yield* Schema.decodeUnknownEffect(ConnectionRow)(row);
-    return recordToConnection(decoded, decoded.state);
+const toConnection: (row: {
+  readonly connection: unknown;
+  readonly provenAt: Date | null;
+}) => Effect.Effect<ProviderConnection, ConnectionPersistenceFailed> = Effect.fnUntraced(
+  function* (row) {
+    const decoded = yield* Schema.decodeUnknownEffect(ConnectionRow)(row.connection);
+    const provenAt =
+      row.provenAt === null ? undefined : DateTime.makeUnsafe(row.provenAt.getTime());
+    return recordToConnection(decoded, decoded.state, provenAt);
   },
   (effect) => effect.pipe(Effect.mapError((cause) => ConnectionPersistenceFailed.make({ cause }))),
 );
@@ -1059,6 +1130,7 @@ const toConnection: (
 function recordToConnection(
   { id, userId, createdAt }: Pick<typeof ConnectionRow.Type, "id" | "userId" | "createdAt">,
   state: typeof ConnectionRow.Type.state,
+  provenAt?: DateTime.Utc,
 ): ProviderConnection {
   const content = {
     id,
@@ -1072,12 +1144,17 @@ function recordToConnection(
       return {
         ...content,
         status: "linking",
+        session: providerSessionOf({ status: "linking" }),
         linkingExpiresAt: state.expiresAt,
       };
     case "Ready":
       return {
         ...content,
         status: "ready",
+        session: providerSessionOf({
+          status: "ready",
+          provenAt: provenAt ?? state.approvedAt,
+        }),
         approvedAt: state.approvedAt,
         credentialGeneration: state.credentialGeneration,
       };
@@ -1085,11 +1162,21 @@ function recordToConnection(
       return {
         ...content,
         status: "reconnect-required",
+        session: providerSessionOf({
+          status: "reconnect-required",
+          ...(provenAt === undefined ? {} : { provenAt }),
+          rejectedAt: state.reconnectRequiredAt,
+        }),
         credentialGeneration: state.credentialGeneration,
         reconnectRequiredAt: state.reconnectRequiredAt,
       };
     case "Disconnected":
-      return { ...content, status: "disconnected", disconnectedAt: state.disconnectedAt };
+      return {
+        ...content,
+        status: "disconnected",
+        session: providerSessionOf({ status: "disconnected" }),
+        disconnectedAt: state.disconnectedAt,
+      };
   }
 }
 

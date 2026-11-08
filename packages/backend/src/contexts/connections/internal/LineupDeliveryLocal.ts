@@ -12,9 +12,10 @@ export const LineupDeliveryLocal = Layer.effect(
     const worker = yield* LineupWorker;
     return LineupDelivery.of({
       enqueueMany: (inputs) =>
-        worker
-          .deliver(inputs.flatMap((input) => input.runs))
-          .pipe(Effect.mapError(() => LineupDeliveryFailed.make({ reason: "unavailable" }))),
+        worker.deliver(inputs.flatMap((input) => input.runs)).pipe(
+          Effect.asVoid,
+          Effect.mapError(() => LineupDeliveryFailed.make({ reason: "unavailable" })),
+        ),
     });
   }),
 );

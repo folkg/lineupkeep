@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { decodeUserId } from "@lineupkeep/backend/auth/User";
 import { eq } from "drizzle-orm";
 import { Array, Crypto, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { TestClock } from "effect/testing";
 
 import { decodeProviderKey } from "#contexts/connections/ProviderKey.ts";
 
@@ -14,6 +15,7 @@ import {
   ConnectionProviderRejected,
   LinkInput,
   decodeConnectionId,
+  providerSessionReconnectDetail,
 } from "./Connection.ts";
 import { Connections } from "./Connections.ts";
 import { ConnectionCredentialEncryption } from "./internal/ConnectionCredentialEncryption.ts";
@@ -92,6 +94,47 @@ it.effect("rejects malformed stored connections through the public service", () 
 
     assert.instanceOf(error, ConnectionPersistenceFailed);
   }).pipe(Effect.provide(ConnectionsLayerFor(NodeCrypto.layer))),
+);
+
+it.effect("reports whether the stored session is usable and names the layer to reconnect", () =>
+  Effect.gen(function* () {
+    const connections = yield* Connections;
+    const fake = yield* FakeProviderWorld;
+
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-08T14:11:27.000Z")),
+    );
+    const linked = Array.getUnsafe(yield* connections.link(owner, [linkInput]), 0);
+    assert.deepStrictEqual(linked.session, {
+      usable: true,
+      provenAt: DateTime.makeUnsafe("2026-11-08T14:11:27.000Z"),
+      action: "none",
+      actionDetail: "No action is needed; the stored provider sign-in is working.",
+    });
+
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-08T14:11:29.000Z")),
+    );
+    yield* connections.discoverTeams(owner, [{ id: linked.id }]);
+
+    yield* fake.rejectSession(true);
+    yield* TestClock.setTime(
+      DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-08T14:11:30.455Z")),
+    );
+    const failure = yield* Effect.flip(connections.discoverTeams(owner, [{ id: linked.id }]));
+    assert.instanceOf(failure, ConnectionProviderRejected);
+    yield* fake.rejectSession(false);
+
+    const refused = Array.getUnsafe(yield* connections.list(owner), 0);
+    assert.strictEqual(refused.status, "reconnect-required");
+    assert.deepStrictEqual(refused.session, {
+      usable: false,
+      provenAt: DateTime.makeUnsafe("2026-11-08T14:11:29.000Z"),
+      rejectedAt: DateTime.makeUnsafe("2026-11-08T14:11:30.455Z"),
+      action: "reconnect-provider-connection",
+      actionDetail: providerSessionReconnectDetail,
+    });
+  }).pipe(Effect.provide(ConnectionsTestLayer)),
 );
 
 it.effect("reconnects a ready connection to a new credential generation", () =>

@@ -327,6 +327,12 @@ export const ConnectionsLive = Layer.effect(
               });
             }),
           );
+        yield* repository.recordSessionProven(
+          userId,
+          credential.connectionId,
+          credential.generation,
+          at,
+        );
         return { connectionId: credential.connectionId, teams };
       });
 

@@ -4,6 +4,8 @@ import {
   ConnectionId,
   ConnectionStatus,
   ProviderKey,
+  ProviderSessionAction,
+  ProviderSessionRead,
 } from "@lineupkeep/backend/connections/Connection";
 import type {
   ConnectionError,
@@ -19,6 +21,30 @@ import { RequiredScope } from "./toolAuthorization";
 
 const ToolFailure = Schema.Struct({ code: Schema.String, message: Schema.String });
 
+const ProviderSessionView = Schema.Struct({
+  usable: Schema.Boolean.pipe(
+    Schema.annotate({
+      description:
+        "Whether the stored provider sign-in is usable now. False means a person must act in Lineupgrade.",
+    }),
+  ),
+  provenAt: Schema.optional(Schema.DateTimeUtc).pipe(
+    Schema.annotate({ description: "When the provider last accepted this stored sign-in." }),
+  ),
+  rejectedAt: Schema.optional(Schema.DateTimeUtc).pipe(
+    Schema.annotate({ description: "When the provider last refused this stored sign-in." }),
+  ),
+  action: ProviderSessionAction.pipe(
+    Schema.annotate({
+      description:
+        "`reconnect-provider-connection` is an action in Lineupgrade's own connection settings, not in this client.",
+    }),
+  ),
+  actionDetail: Schema.NonEmptyString.pipe(
+    Schema.annotate({ description: "One sentence naming the action and the layer it belongs to." }),
+  ),
+});
+
 const ConnectionView = Schema.Struct({
   id: ConnectionId,
   provider: ProviderKey,
@@ -26,6 +52,12 @@ const ConnectionView = Schema.Struct({
     Schema.annotate({
       description:
         "`linking` awaits sign-in and expires; `reconnect-required` needs a new sign-in; `disconnected` no longer grants access.",
+    }),
+  ),
+  session: ProviderSessionView.pipe(
+    Schema.annotate({
+      description:
+        "The provider session's health. Its action is separate from reconnecting the MCP connector in this client.",
     }),
   ),
   linkingExpiresAt: Schema.optional(Schema.DateTimeUtc),
@@ -74,6 +106,7 @@ function toConnectionView(connection: ProviderConnection): typeof ConnectionView
     id: connection.id,
     provider: connection.provider,
     status: connection.status,
+    session: toProviderSessionView(connection.session),
     ...(connection.linkingExpiresAt === undefined
       ? {}
       : { linkingExpiresAt: connection.linkingExpiresAt }),
@@ -88,6 +121,16 @@ function toConnectionView(connection: ProviderConnection): typeof ConnectionView
       : { disconnectedAt: connection.disconnectedAt }),
     createdAt: connection.createdAt,
     updatedAt: connection.updatedAt,
+  };
+}
+
+function toProviderSessionView(session: ProviderSessionRead): typeof ProviderSessionView.Type {
+  return {
+    usable: session.usable,
+    action: session.action,
+    actionDetail: session.actionDetail,
+    ...(session.provenAt === undefined ? {} : { provenAt: session.provenAt }),
+    ...(session.rejectedAt === undefined ? {} : { rejectedAt: session.rejectedAt }),
   };
 }
 

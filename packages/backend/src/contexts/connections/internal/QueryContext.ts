@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Ref } from "effect";
 import type { Redacted } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
@@ -16,6 +16,8 @@ export type TeamContext = {
   readonly owned: OwnedTeam;
   readonly session: Redacted.Redacted<string>;
   readonly provider: Provider;
+  readonly sessionProven: Ref.Ref<boolean>;
+  readonly sessionRejected: Ref.Ref<boolean>;
 };
 
 export function loadTeamContext(
@@ -52,7 +54,18 @@ export function loadTeamContext(
                   QueryPersistenceFailed.make({ cause: new Error(error.message) }),
                 ),
               ),
-          ]).pipe(Effect.map(([session, provider]) => ({ userId, owned, session, provider }))),
+            Ref.make(false),
+            Ref.make(false),
+          ]).pipe(
+            Effect.map(([session, provider, sessionProven, sessionRejected]) => ({
+              userId,
+              owned,
+              session,
+              provider,
+              sessionProven,
+              sessionRejected,
+            })),
+          ),
     ),
   );
 }

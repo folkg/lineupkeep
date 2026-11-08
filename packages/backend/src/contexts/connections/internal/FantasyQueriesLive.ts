@@ -1,6 +1,7 @@
-import { Array as EffectArray, DateTime, Effect, Layer, Option } from "effect";
+import { Array as EffectArray, DateTime, Effect, Layer, Option, Ref } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import { providerSessionReconnectDetail } from "#contexts/connections/Connection.ts";
 import { Connections } from "#contexts/connections/Connections.ts";
 import { FantasyQueries } from "#contexts/connections/FantasyQueries.ts";
 import type { FantasySport } from "#contexts/connections/FantasyTeam.ts";
@@ -183,14 +184,14 @@ export const FantasyQueriesLive = Layer.effect(
         case "provider.operation_unsupported":
           return Effect.succeed({ _tag: "unsupported", detail: error.reason });
         case "provider.session_rejected":
-          return repository.recordSessionRejected(context.userId, context.owned).pipe(
+          return Ref.set(context.sessionRejected, true).pipe(
+            Effect.andThen(repository.recordSessionRejected(context.userId, context.owned)),
             Effect.as<FailureOutcome>({
               _tag: "failed",
               failure: {
                 code: "provider_session_rejected",
                 resource,
-                message:
-                  "Your league rejected the stored session. Reconnect the connection and start the query again.",
+                message: providerSessionReconnectDetail,
               },
             }),
           );
@@ -269,17 +270,44 @@ export const FantasyQueriesLive = Layer.effect(
         ProviderReadFailure | ProviderOpponentFactStale | QueryPersistenceFailed
       >,
     ): Effect.Effect<ReadOutcome<A>, QueryPersistenceFailed> =>
-      Effect.matchEffect(program, {
-        onSuccess: (value) => Effect.succeed<ReadOutcome<A>>({ _tag: "ok", value }),
-        onFailure: (error) => {
-          if (error._tag === "query.persistence_failed") {
-            return Effect.fail(error);
-          }
-          if (error._tag === "provider_opponent.fact_stale") {
-            return staleOutcome(context, resource, error);
-          }
-          return failureOutcome(context, resource, error);
-        },
+      Effect.gen(function* () {
+        if (yield* Ref.get(context.sessionRejected)) {
+          return {
+            _tag: "failed",
+            failure: {
+              code: "provider_session_rejected",
+              resource,
+              message: providerSessionReconnectDetail,
+            },
+          };
+        }
+        return yield* Effect.matchEffect(program, {
+          onSuccess: (value) =>
+            proveSession(context).pipe(Effect.as<ReadOutcome<A>>({ _tag: "ok", value })),
+          onFailure: (error) => {
+            if (error._tag === "query.persistence_failed") {
+              return Effect.fail(error);
+            }
+            if (error._tag === "provider_opponent.fact_stale") {
+              return staleOutcome(context, resource, error);
+            }
+            return failureOutcome(context, resource, error);
+          },
+        });
+      });
+
+    const proveSession = (context: TeamContext): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (yield* Ref.getAndSet(context.sessionProven, true)) {
+          return;
+        }
+        yield* repository
+          .recordSessionProven(context.userId, context.owned)
+          .pipe(
+            Effect.catch((error: QueryPersistenceFailed) =>
+              Effect.annotateCurrentSpan("query.session_proven_write_failed", error._tag),
+            ),
+          );
       });
 
     const readLeague = (

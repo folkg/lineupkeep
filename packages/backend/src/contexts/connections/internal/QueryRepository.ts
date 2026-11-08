@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Schema } from "effect";
 import { Array as EffectArray } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
@@ -339,6 +339,27 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         yield* recordSessionRejectedMany(userId, [team]);
       });
 
+      const recordSessionProven = Effect.fn("QueryRepository.recordSessionProven")(function* (
+        userId: UserId,
+        team: OwnedTeam,
+      ) {
+        const at = yield* DateTime.now;
+        yield* connections
+          .recordSessionProven(userId, team.connection.id, team.connection.generation, at)
+          .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
+      });
+
+      const loadConnectionHealth = Effect.fn("QueryRepository.loadConnectionHealth")(function* (
+        inputs: ReadonlyArray<{
+          readonly userId: UserId;
+          readonly ids: ReadonlyArray<ConnectionId>;
+        }>,
+      ) {
+        return yield* connections
+          .loadSessionHealth(inputs)
+          .pipe(Effect.mapError((cause) => QueryPersistenceFailed.make({ cause })));
+      });
+
       return {
         loadOwnedTeam,
         loadOwnedTeams,
@@ -346,6 +367,8 @@ export class QueryRepository extends Context.Service<QueryRepository>()(
         readLeagueOwnedTeamKeys,
         recordSessionRejected,
         recordSessionRejectedMany,
+        recordSessionProven,
+        loadConnectionHealth,
       };
     }),
   },

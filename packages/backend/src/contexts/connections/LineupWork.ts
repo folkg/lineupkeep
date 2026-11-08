@@ -2,6 +2,7 @@ import type { UserId } from "@lineupkeep/backend/auth/User";
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
+import type { ConnectionId } from "./Connection.ts";
 import type { LineupPersistenceFailed, LineupRequestId, LineupRunId } from "./LineupRun.ts";
 
 export class LineupDispatcher extends Context.Service<LineupDispatcher, LineupDispatcherShape>()(
@@ -63,5 +64,12 @@ export class LineupWorker extends Context.Service<LineupWorker, LineupWorkerShap
 export type LineupWorkerShape = {
   readonly deliver: (
     runs: ReadonlyArray<LineupRunId>,
-  ) => Effect.Effect<void, LineupPersistenceFailed>;
+  ) => Effect.Effect<LineupDeliveryReport, LineupPersistenceFailed>;
+};
+
+export type LineupDeliveryReport = {
+  readonly stopped: ReadonlyArray<{
+    readonly connectionId: ConnectionId;
+    readonly detail: string;
+  }>;
 };

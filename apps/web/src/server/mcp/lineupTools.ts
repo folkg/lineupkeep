@@ -1,5 +1,6 @@
 import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
 import type { UserId } from "@lineupkeep/backend/auth/User";
+import { providerSessionRefusal } from "@lineupkeep/backend/connections/Connection";
 import {
   GetLineupRunsInput,
   LineupRunsData,
@@ -152,10 +153,7 @@ function mapOutcome<A>(
             "The selected team is not available to this account. List your teams again.",
           );
         case "lineup.connection_not_ready":
-          return reject(
-            "connection_not_ready",
-            "The selected team's connection is not ready. Reconnect it and try again.",
-          );
+          return reject("connection_not_ready", providerSessionRefusal(error.status));
         case "lineup.selection_invalid":
           return reject("selection_invalid", error.detail);
         case "lineup.run_not_found":

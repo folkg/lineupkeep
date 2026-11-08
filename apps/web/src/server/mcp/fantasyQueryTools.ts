@@ -1,4 +1,5 @@
 import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
+import { providerSessionRefusal } from "@lineupkeep/backend/connections/Connection";
 import { FantasyQueries } from "@lineupkeep/backend/connections/FantasyQueries";
 import {
   CalendarResult,
@@ -183,10 +184,7 @@ function mapOutcome<A>(
             "The selected team is not available to this account. List your teams again.",
           );
         case "query.connection_not_ready":
-          return reject(
-            "connection_not_ready",
-            "The selected team's connection is not ready. Reconnect it and list your teams again.",
-          );
+          return reject("connection_not_ready", providerSessionRefusal(error.status));
         case "query.cursor_invalid":
           return reject("cursor_invalid", cursorInvalidMessage(error.reason));
         case "query.reference_invalid":

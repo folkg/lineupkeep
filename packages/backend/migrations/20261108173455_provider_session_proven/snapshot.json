@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "aa4a4df6-781d-4149-92a5-ed61fd809c4f",
+  "prevIds": ["55576222-26fb-4c6c-9e2e-ada7b4463fc8"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "provider_credentials", "proven_at"],
+      "writes": [
+        "s|col|public.provider_credentials.proven_at",
+        "n|col|public.provider_credentials.proven_at",
+        "e|col|public.provider_credentials.proven_at"
+      ],
+      "reads": ["n|tbl|public.provider_credentials", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "provider_credentials",
+        "name": "proven_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

@@ -78,8 +78,13 @@ function execute(
     switch (request.action) {
       case "deliver": {
         const worker = yield* LineupWorker;
-        yield* worker.deliver(request.runs);
-        return json({ status: "ok", action: request.action, processed: request.runs.length });
+        const report = yield* worker.deliver(request.runs);
+        return json({
+          status: report.stopped.length === 0 ? "ok" : "incomplete",
+          action: request.action,
+          processed: request.runs.length,
+          ...(report.stopped.length === 0 ? {} : { stopped: report.stopped }),
+        });
       }
       case "repair": {
         const dispatcher = yield* LineupDispatcher;

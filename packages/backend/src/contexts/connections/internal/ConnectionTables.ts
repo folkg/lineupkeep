@@ -62,6 +62,7 @@ export const providerCredentials = pgTable(
     provider: text("provider").notNull(),
     generation: integer("generation").notNull(),
     envelope: text("envelope").notNull(),
+    provenAt: timestamp("proven_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

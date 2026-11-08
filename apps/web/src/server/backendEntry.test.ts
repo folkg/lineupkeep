@@ -6,6 +6,7 @@ import {
   ConnectionPersistenceFailed,
   ProviderConnection,
   decodeConnectionId,
+  providerSessionOf,
   type ConnectionError,
 } from "@lineupkeep/backend/connections/Connection";
 import { decodeProviderKey } from "@lineupkeep/backend/connections/ProviderKey";
@@ -49,6 +50,7 @@ it.effect("returns ownership-free ISO dates through the authenticated result", (
       userId: "signed-in-user",
       provider: decodeProviderKey("yahoo"),
       status: "linking",
+      session: providerSessionOf({ status: "linking" }),
       linkingExpiresAt: timestamp,
       createdAt: timestamp,
       updatedAt: timestamp,

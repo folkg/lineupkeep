@@ -70,6 +70,7 @@ type FakeWrite = "reserve_move" | "transaction" | "propose_trade" | "withdraw_tr
 
 type FakeProviderState = {
   readonly sessionRejected: boolean;
+  readonly rejectedSessions: ReadonlySet<string>;
   readonly teams: ReadonlyArray<ProviderTeam>;
   readonly requestFailure: FakeRequestFailure | undefined;
   readonly discoveryGate: Option.Option<FakeGate>;
@@ -132,6 +133,7 @@ type FakeProviderState = {
 export type FakeProviderWorldShape = {
   readonly state: Ref.Ref<FakeProviderState>;
   readonly rejectSession: (rejected: boolean) => Effect.Effect<void>;
+  readonly rejectSessionFor: (sessions: ReadonlyArray<string>) => Effect.Effect<void>;
   readonly setTeams: (teams: ReadonlyArray<ProviderTeam>) => Effect.Effect<void>;
   readonly failRequests: (failure: FakeRequestFailure | undefined) => Effect.Effect<void>;
   readonly blockDiscovery: Effect.Effect<FakeGate>;
@@ -224,6 +226,7 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
     Effect.gen(function* () {
       const state = yield* Ref.make<FakeProviderState>({
         sessionRejected: false,
+        rejectedSessions: new Set<string>(),
         teams: [],
         requestFailure: undefined,
         discoveryGate: Option.none(),
@@ -289,6 +292,8 @@ export class FakeProviderWorld extends Context.Service<FakeProviderWorld, FakePr
         state,
         rejectSession: (rejected) =>
           modify((current) => ({ ...current, sessionRejected: rejected })),
+        rejectSessionFor: (sessions) =>
+          modify((current) => ({ ...current, rejectedSessions: new Set(sessions) })),
         setTeams: (teams) => modify((current) => ({ ...current, teams })),
         failRequests: (requestFailure) => modify((current) => ({ ...current, requestFailure })),
         blockDiscovery: Effect.gen(function* () {
@@ -416,7 +421,7 @@ const providerFake = Effect.gen(function* () {
         providerReads: current.providerReads + (readOperations.has(operation) ? 1 : 0),
       }));
       const current = yield* Ref.get(world.state);
-      if (current.sessionRejected) {
+      if (current.sessionRejected || current.rejectedSessions.has(Redacted.value(input.session))) {
         return yield* ProviderSessionRejected.make({ operation });
       }
       if (current.unsupported.has(operation)) {
@@ -435,7 +440,7 @@ const providerFake = Effect.gen(function* () {
     validateSession: Effect.fn("FakeProvider.validateSession")(function* (input) {
       yield* validate(input, "validate_session");
       const current = yield* Ref.get(world.state);
-      if (current.sessionRejected) {
+      if (current.sessionRejected || current.rejectedSessions.has(Redacted.value(input.session))) {
         return yield* ProviderSessionRejected.make({ operation: "validate_session" });
       }
       yield* requestFailure(current, "validate_session");
@@ -443,7 +448,7 @@ const providerFake = Effect.gen(function* () {
     discoverTeams: Effect.fn("FakeProvider.discoverTeams")(function* (input) {
       yield* validate(input, "discover_teams");
       const current = yield* Ref.get(world.state);
-      if (current.sessionRejected) {
+      if (current.sessionRejected || current.rejectedSessions.has(Redacted.value(input.session))) {
         return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
       }
       yield* requestFailure(current, "discover_teams");

@@ -1,7 +1,13 @@
-import { DateTime, Effect, Layer, Option } from "effect";
+import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { Redacted } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
+import {
+  ConnectionId,
+  providerSessionReconnectDetail,
+  providerSessionRefusal,
+} from "#contexts/connections/Connection.ts";
+import type { ConnectionStatus } from "#contexts/connections/Connection.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type {
   LineupImplementation,
@@ -18,6 +24,7 @@ import {
   nativeLineupImplementation,
 } from "#contexts/connections/LineupRun.ts";
 import { LineupWorker } from "#contexts/connections/LineupWork.ts";
+import type { LineupDeliveryReport } from "#contexts/connections/LineupWork.ts";
 import type {
   Provider,
   ProviderLeagueSettings,
@@ -52,6 +59,14 @@ import { QueryRepository } from "./QueryRepository.ts";
 
 const retryDelayMillis = 30_000;
 
+class LineupSessionStopped extends Schema.TaggedError<
+  LineupSessionStopped,
+  { readonly brand: unique symbol }
+>()("lineup.session_stopped", {
+  connectionId: ConnectionId,
+  detail: Schema.NonEmptyString,
+}) {}
+
 export const LineupWorkerLive = Layer.effect(
   LineupWorker,
   Effect.gen(function* () {
@@ -63,11 +78,44 @@ export const LineupWorkerLive = Layer.effect(
 
     const deliver = Effect.fn("LineupWorker.deliver")(function* (
       runIds: ReadonlyArray<LineupRunId>,
-    ) {
+    ): Effect.fn.Return<LineupDeliveryReport, LineupPersistenceFailed> {
+      const starts = yield* repository.loadRunConnections(runIds);
+      const byRun = new Map(starts.map((start) => [start.run, start]));
+      const statuses = new Map<ConnectionId, ConnectionStatus>();
+      const health = yield* queries
+        .loadConnectionHealth(
+          groupByUser(starts).map((group) => ({
+            userId: group.userId,
+            ids: group.connectionIds,
+          })),
+        )
+        .pipe(Effect.mapError((cause) => LineupPersistenceFailed.make({ cause })));
+      for (const row of health) {
+        statuses.set(row.id, row.status);
+      }
+
+      const stopped = new Map<ConnectionId, string>();
       let failure: LineupPersistenceFailed | undefined;
       for (const runId of runIds) {
+        const start = byRun.get(runId);
+        const stopDetail = start === undefined ? undefined : stopped.get(start.connectionId);
+        const status = start === undefined ? undefined : statuses.get(start.connectionId);
+        if (stopDetail !== undefined || (start !== undefined && status !== "ready")) {
+          yield* refuseRun(runId, stopDetail ?? providerSessionRefusal(status ?? "missing"));
+          continue;
+        }
         const result = yield* Effect.result(processRun(runId));
         if (result._tag === "Failure") {
+          if (result.failure._tag === "lineup.session_stopped") {
+            const connectionId = result.failure.connectionId;
+            stopped.set(connectionId, result.failure.detail);
+            yield* Effect.annotateCurrentSpan({
+              "lineup.run": runId,
+              "app.outcome": "failure",
+              "lineup.session_stopped_connection": connectionId,
+            });
+            continue;
+          }
           failure = result.failure;
           yield* Effect.annotateCurrentSpan({
             "lineup.run": runId,
@@ -80,6 +128,18 @@ export const LineupWorkerLive = Layer.effect(
       if (failure !== undefined) {
         return yield* failure;
       }
+      return {
+        stopped: [...stopped].map(([connectionId, detail]) => ({ connectionId, detail })),
+      };
+    });
+
+    const refuseRun = Effect.fnUntraced(function* (runId: LineupRunId, detail: string) {
+      const now = yield* DateTime.now;
+      const claimed = yield* repository.claim(runId, now);
+      if (Option.isNone(claimed)) {
+        return;
+      }
+      yield* block(claimed.value, "connection_not_ready", `Not started: ${detail}`);
     });
 
     const processRun = Effect.fn("LineupWorker.run")(function* (runId: LineupRunId) {
@@ -107,14 +167,18 @@ export const LineupWorkerLive = Layer.effect(
     });
 
     const execute = Effect.fnUntraced(function* (run: ClaimedLineupRun) {
-      const context = yield* loadContext(run.record.userId, run.record.teamId);
-      if (context === undefined) {
+      const loaded = yield* loadContext(run.record.userId, run.record.teamId);
+      if (loaded._tag === "missing") {
         return yield* block(
           run,
           "team_unavailable",
-          "The selected team or its connection is not available for this run.",
+          "The selected team is no longer available for this run.",
         );
       }
+      if (loaded._tag === "not-ready") {
+        return yield* block(run, "connection_not_ready", providerSessionRefusal(loaded.status));
+      }
+      const context = loaded.owned;
       const provider = yield* providerOf(run, context);
       if (provider === undefined) {
         return;
@@ -468,13 +532,8 @@ export const LineupWorkerLive = Layer.effect(
       if (applied._tag === "Failure") {
         switch (applied.failure._tag) {
           case "provider.session_rejected":
-            yield* rejectSession(run.record.userId, context);
-            return yield* fail(
-              run,
-              intent,
-              "provider_session_rejected",
-              "Your league rejected the stored sign-in; reconnect.",
-            );
+            yield* fail(run, intent, "provider_session_rejected", providerSessionReconnectDetail);
+            return yield* stopSession(run.record.userId, context);
           case "provider.response_invalid":
             return yield* fail(
               run,
@@ -576,16 +635,17 @@ export const LineupWorkerLive = Layer.effect(
           "The run expected a durable write intent but none was found.",
         );
       }
-      const context = yield* loadContext(run.record.userId, run.record.teamId);
-      if (context === undefined) {
+      const loaded = yield* loadContext(run.record.userId, run.record.teamId);
+      if (loaded._tag !== "ready") {
         return yield* uncertain(
           run,
           intent.id,
           "readback_unavailable",
-          "The response from your league could not be verified because the team is no longer available.",
+          "The response from your league could not be verified because the team or its connection is no longer available.",
           planRecordOf(intent.plan),
         );
       }
+      const context = loaded.owned;
       const provider = yield* providerOf(run, context);
       if (provider === undefined) {
         return;
@@ -605,16 +665,17 @@ export const LineupWorkerLive = Layer.effect(
       providerResponse: "accepted" | "unknown",
     ) {
       const now = yield* DateTime.now;
-      const context = yield* loadContext(run.record.userId, run.record.teamId);
-      if (context === undefined) {
+      const loaded = yield* loadContext(run.record.userId, run.record.teamId);
+      if (loaded._tag !== "ready") {
         return yield* uncertain(
           run,
           intent.id,
           "readback_unavailable",
-          "The response from your league could not be verified because the team is no longer available.",
+          "The response from your league could not be verified because the team or its connection is no longer available.",
           planRecordOf(intent.plan),
         );
       }
+      const context = loaded.owned;
       const session = yield* decryptContext(run.record.userId, context);
       const target = intent.target;
       const readback = yield* Effect.result(
@@ -626,16 +687,20 @@ export const LineupWorkerLive = Layer.effect(
         }),
       );
       if (readback._tag === "Failure") {
-        if (readback.failure._tag === "provider.session_rejected") {
-          yield* rejectSession(run.record.userId, context);
-        }
-        return yield* uncertain(
+        const rejected = readback.failure._tag === "provider.session_rejected";
+        yield* uncertain(
           run,
           intent.id,
           "readback_unavailable",
-          "The response from your league could not be verified by reading the roster back.",
+          rejected
+            ? `The response from your league could not be verified by reading the roster back. ${providerSessionReconnectDetail}`
+            : "The response from your league could not be verified by reading the roster back.",
           planRecordOf(intent.plan),
         );
+        if (rejected) {
+          return yield* stopSession(run.record.userId, context);
+        }
+        return;
       }
       const roster = readback.success;
       if (!covers(roster, target)) {
@@ -817,9 +882,11 @@ export const LineupWorkerLive = Layer.effect(
 
     const loadContext = Effect.fnUntraced(function* (userId: UserId, teamId: TeamId) {
       return yield* queries.loadOwnedTeam(userId, teamId).pipe(
+        Effect.map((owned) => ({ _tag: "ready" as const, owned })),
         Effect.catchTags({
-          "query.team_not_found": () => Effect.void,
-          "query.connection_not_ready": () => Effect.void,
+          "query.team_not_found": () => Effect.succeed({ _tag: "missing" as const }),
+          "query.connection_not_ready": (error) =>
+            Effect.succeed({ _tag: "not-ready" as const, status: error.status }),
           "query.persistence_failed": (error) =>
             Effect.fail(LineupPersistenceFailed.make({ cause: error.cause })),
         }),
@@ -865,6 +932,7 @@ export const LineupWorkerLive = Layer.effect(
         }),
       );
       if (result._tag === "Success") {
+        yield* proveSession(run.record.userId, owned);
         return result.success;
       }
       yield* handleReadFailure(run, owned, result.failure, "league");
@@ -922,14 +990,8 @@ export const LineupWorkerLive = Layer.effect(
           yield* fail(run, undefined, "provider_unsupported", `${error.reason} ${error.remedy}`);
           return;
         case "provider.session_rejected":
-          yield* rejectSession(run.record.userId, owned);
-          yield* fail(
-            run,
-            undefined,
-            "provider_session_rejected",
-            "Your league rejected the stored sign-in; reconnect.",
-          );
-          return;
+          yield* fail(run, undefined, "provider_session_rejected", providerSessionReconnectDetail);
+          return yield* stopSession(run.record.userId, owned);
         case "provider.request_failed":
           yield* retry(
             run,
@@ -955,8 +1017,22 @@ export const LineupWorkerLive = Layer.effect(
       }
     });
 
-    const rejectSession = Effect.fnUntraced(function* (userId: UserId, owned: OwnedTeam) {
+    const stopSession = Effect.fnUntraced(function* (userId: UserId, owned: OwnedTeam) {
       yield* queries.recordSessionRejected(userId, owned);
+      return yield* LineupSessionStopped.make({
+        connectionId: owned.connection.id,
+        detail: providerSessionReconnectDetail,
+      });
+    });
+
+    const proveSession = Effect.fnUntraced(function* (userId: UserId, owned: OwnedTeam) {
+      yield* queries
+        .recordSessionProven(userId, owned)
+        .pipe(
+          Effect.catchTag("query.persistence_failed", (error) =>
+            Effect.annotateCurrentSpan("lineup.session_proven_write_failed", error._tag),
+          ),
+        );
     });
 
     const skip = Effect.fnUntraced(function* (
@@ -1481,4 +1557,22 @@ function blockDetail(
     case "controls_changed":
       return "The team is no longer enabled or is paused for the current day at your league.";
   }
+}
+
+function groupByUser(
+  starts: ReadonlyArray<{
+    readonly userId: UserId;
+    readonly connectionId: ConnectionId;
+  }>,
+): ReadonlyArray<{ readonly userId: UserId; readonly connectionIds: ReadonlyArray<ConnectionId> }> {
+  const grouped = new Map<UserId, Set<ConnectionId>>();
+  for (const start of starts) {
+    const ids = grouped.get(start.userId) ?? new Set<ConnectionId>();
+    ids.add(start.connectionId);
+    grouped.set(start.userId, ids);
+  }
+  return [...grouped].map(([userId, connectionIds]) => ({
+    userId,
+    connectionIds: [...connectionIds],
+  }));
 }

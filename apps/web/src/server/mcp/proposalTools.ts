@@ -1,5 +1,6 @@
 import { AuthService } from "@lineupkeep/backend/auth/Auth";
 import type { AuthenticatedAgent } from "@lineupkeep/backend/auth/Auth";
+import { providerSessionRefusal } from "@lineupkeep/backend/connections/Connection";
 import { fantasyQueryScopes } from "@lineupkeep/backend/connections/QueryScopes";
 import {
   PendingTradeOffersInput,
@@ -219,10 +220,7 @@ function mapFailure<A>(
             "The selected team is not available to this account. List your teams and try again.",
           );
         case "proposal.connection_not_ready":
-          return reject(
-            "connection_not_ready",
-            "The selected team's connection is not ready. Reconnect it and read the offers again.",
-          );
+          return reject("connection_not_ready", providerSessionRefusal(error.status));
         case "proposal.provider_unavailable":
           return reject("provider_unavailable", error.detail);
         case "proposal.persistence_failed":

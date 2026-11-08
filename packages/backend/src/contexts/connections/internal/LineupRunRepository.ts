@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, isNull, lte, ne, or } from "drizzle-orm";
 import { Array, Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
 
 import { UserId } from "#contexts/auth/User.ts";
-import type { ConnectionId } from "#contexts/connections/Connection.ts";
+import { ConnectionId } from "#contexts/connections/Connection.ts";
 import { TeamId } from "#contexts/connections/FantasyTeam.ts";
 import type { LineupRunOutcome } from "#contexts/connections/LineupRun.ts";
 import {
@@ -490,6 +490,34 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
           return records.map(toLineupRun);
         },
       );
+
+      const loadRunConnections = Effect.fn("LineupRunRepository.loadRunConnections")(function* (
+        runIds: ReadonlyArray<LineupRunId>,
+      ) {
+        const ids = [...new Set(runIds)];
+        if (!Array.isArrayNonEmpty(ids)) {
+          return [];
+        }
+        const rows = yield* database
+          .select({
+            run: lineupRuns.id,
+            userId: lineupRuns.userId,
+            connectionId: lineupRuns.connectionId,
+          })
+          .from(lineupRuns)
+          .where(anyOf(lineupRuns.id, ids))
+          .pipe(Effect.mapError(mapPersistenceFailure));
+        return yield* Effect.forEach(rows, (row) =>
+          Effect.all([
+            Schema.decodeEffect(LineupRunId)(row.run),
+            Schema.decodeEffect(UserId)(row.userId),
+            Schema.decodeEffect(ConnectionId)(row.connectionId),
+          ]).pipe(
+            Effect.map(([run, userId, connectionId]) => ({ run, userId, connectionId })),
+            Effect.mapError(mapPersistenceFailure),
+          ),
+        );
+      });
 
       const claim = Effect.fn("LineupRunRepository.claim")(function* (
         runId: LineupRunId,
@@ -1288,6 +1316,7 @@ export class LineupRunRepository extends Context.Service<LineupRunRepository>()(
         createScheduledRunsForOwners,
         scheduledTeamIds,
         loadRuns,
+        loadRunConnections,
         loadTeamActivity,
         loadTeamRunsSince,
         claim,

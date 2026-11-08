@@ -2,7 +2,7 @@ import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { eq } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
-import { ConfigProvider, Context, Effect, Layer, Redacted, Schema } from "effect";
+import { ConfigProvider, Context, DateTime, Effect, Layer, Redacted, Schema } from "effect";
 
 import { decodeUserId } from "#contexts/auth/User.ts";
 import { decodeConnectionId } from "#contexts/connections/Connection.ts";
@@ -25,6 +25,7 @@ it.effect("reseals a retained envelope under the current key when it is opened",
       provider: decodeProviderKey("yahoo"),
       generation: 1,
       envelope: sealed,
+      provenAt: yield* DateTime.nowAsDate,
     });
 
     const opened = yield* encryption.open({
@@ -59,6 +60,7 @@ it.effect("keeps the resealed envelope when it is opened again", () =>
       provider: decodeProviderKey("yahoo"),
       generation: 1,
       envelope: sealed,
+      provenAt: yield* DateTime.nowAsDate,
     });
 
     yield* encryption.open({
@@ -92,6 +94,7 @@ it.effect("leaves a newer envelope in place when the opened envelope has been re
       provider: decodeProviderKey("yahoo"),
       generation: 1,
       envelope: sealed,
+      provenAt: yield* DateTime.nowAsDate,
     });
     const newer = yield* encryption.encrypt({
       userId: owner,
