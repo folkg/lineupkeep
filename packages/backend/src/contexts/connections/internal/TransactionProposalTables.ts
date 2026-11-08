@@ -28,7 +28,10 @@ import {
   ProposalItemRecord,
   ProposalSetRecord,
   ProposalStepRecord,
+  StoredProposalIntent,
+  StoredProposalLineup,
   StoredProposalOrder,
+  StoredProposalPlacement,
   StoredProposalSubmission,
   StoredReserveMove,
   StoredSlotMove,
@@ -48,6 +51,7 @@ export const transactionProposalSets = pgTable(
     fingerprint: text("fingerprint").notNull(),
     teams: jsonb("teams").notNull(),
     orders: jsonb("orders"),
+    lineups: jsonb("lineups"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -90,12 +94,14 @@ export const transactionProposalItems = pgTable(
     teamId: text("team_id").notNull(),
     connectionId: text("connection_id").notNull(),
     kind: text("kind", {
-      enum: ["free_agent_add", "waiver_claim", "drop", "trade", "slot_move"],
+      enum: ["free_agent_add", "waiver_claim", "drop", "trade", "activate", "stash", "slot_move"],
     }).notNull(),
     addPlayers: jsonb("add_players").notNull(),
     dropPlayers: jsonb("drop_players").notNull(),
     slotMove: jsonb("slot_move"),
     reserveMove: jsonb("reserve_move"),
+    intent: jsonb("intent"),
+    placement: jsonb("placement"),
     counterpartyTeamKey: text("counterparty_team_key"),
     counterpartyName: text("counterparty_name"),
     bid: integer("bid"),
@@ -179,6 +185,7 @@ const ProposalSetSelect = createSelectSchema(transactionProposalSets, {
   fingerprint: Schema.NonEmptyString,
   teams: Schema.Unknown,
   orders: Schema.Unknown,
+  lineups: Schema.Unknown,
   createdAt: Schema.DateTimeUtcFromDate,
   expiresAt: Schema.DateTimeUtcFromDate,
   updatedAt: Schema.DateTimeUtcFromDate,
@@ -197,6 +204,12 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
               : yield* SchemaParser.decodeUnknownEffect(Schema.Array(StoredProposalOrder))(
                   row.orders,
                 );
+          const lineups =
+            row.lineups === null
+              ? []
+              : yield* SchemaParser.decodeUnknownEffect(Schema.Array(StoredProposalLineup))(
+                  row.lineups,
+                );
           return {
             id: row.id,
             userId: row.userId,
@@ -209,6 +222,7 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             fingerprint: row.fingerprint,
             teams,
             orders,
+            lineups,
             createdAt: row.createdAt,
             expiresAt: row.expiresAt,
             updatedAt: row.updatedAt,
@@ -227,6 +241,7 @@ export const ProposalSetRow = ProposalSetSelect.pipe(
             fingerprint: record.fingerprint,
             teams,
             orders: record.orders.length === 0 ? null : record.orders,
+            lineups: record.lineups.length === 0 ? null : record.lineups,
             createdAt: record.createdAt,
             expiresAt: record.expiresAt,
             updatedAt: record.updatedAt,
@@ -248,6 +263,8 @@ const ProposalItemSelect = createSelectSchema(transactionProposalItems, {
   dropPlayers: Schema.Unknown,
   slotMove: Schema.Unknown,
   reserveMove: Schema.Unknown,
+  intent: Schema.Unknown,
+  placement: Schema.Unknown,
   counterpartyTeamKey: Schema.NullOr(Schema.NonEmptyString),
   counterpartyName: Schema.NullOr(Schema.NonEmptyString),
   bid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
@@ -292,6 +309,12 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
           const reserveMove = yield* SchemaParser.decodeUnknownEffect(
             Schema.NullOr(StoredReserveMove),
           )(row.reserveMove);
+          const intent = yield* SchemaParser.decodeUnknownEffect(
+            Schema.NullOr(StoredProposalIntent),
+          )(row.intent);
+          const placement = yield* SchemaParser.decodeUnknownEffect(
+            Schema.NullOr(StoredProposalPlacement),
+          )(row.placement);
           if (row.checkedAt === null) {
             return yield* Effect.die(
               new Error("A stored proposal item requires the time of its check"),
@@ -347,6 +370,8 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             drops,
             ...(slotMove === null ? {} : { slotMove }),
             ...(reserveMove === null ? {} : { reserveMove }),
+            ...(intent === null ? {} : { intent }),
+            ...(placement === null ? {} : { placement }),
             ...(row.counterpartyTeamKey === null
               ? {}
               : { counterpartyKey: row.counterpartyTeamKey }),
@@ -403,6 +428,8 @@ export const ProposalItemRow = ProposalItemSelect.pipe(
             dropPlayers: drops,
             slotMove: record.slotMove ?? null,
             reserveMove: record.reserveMove ?? null,
+            intent: record.intent ?? null,
+            placement: record.placement ?? null,
             counterpartyTeamKey: record.counterpartyKey ?? null,
             counterpartyName: record.counterpartyName ?? null,
             bid: record.bid ?? null,

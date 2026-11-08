@@ -10,8 +10,14 @@ import { ConnectionEncryptionKey } from "./internal/ConnectionEncryptionKey.ts";
 import { ConnectionRepository } from "./internal/ConnectionRepository.ts";
 import { ConnectionsDatabaseTest } from "./internal/ConnectionsDatabaseTest.ts";
 import { ConnectionsLive } from "./internal/ConnectionsLive.ts";
+import { LineupDeliveryLocal } from "./internal/LineupDeliveryLocal.ts";
+import { LineupDispatcherLive } from "./internal/LineupDispatcherLive.ts";
+import { LineupRunRepository } from "./internal/LineupRunRepository.ts";
+import { LineupRunsLive } from "./internal/LineupRunsLive.ts";
+import { LineupWorkerLive } from "./internal/LineupWorkerLive.ts";
 import { QueryRepository } from "./internal/QueryRepository.ts";
 import { QueryTokens } from "./internal/QueryTokens.ts";
+import { ScheduleGateTest } from "./internal/ScheduleGateTest.ts";
 import {
   secondProvider,
   secondProviderKey,
@@ -284,18 +290,38 @@ function testLayer(
     Layer.provideMerge(ConnectionsDatabaseTest),
   );
   const QueryRepositoryTest = QueryRepository.layer.pipe(Layer.provide(ConnectionRepositoryTest));
+  const RegistryTest = Layer.effect(ProviderRegistry)(
+    Effect.succeed(ProviderRegistry.of(providerRegistryOf([provider]))),
+  );
+  const LineupRepositoryTest = LineupRunRepository.layer.pipe(
+    Layer.provide(ConnectionsDatabaseTest),
+  );
+  const WorkerTest = LineupWorkerLive.pipe(
+    Layer.provide(LineupRepositoryTest),
+    Layer.provide(QueryRepositoryTest),
+    Layer.provide(EncryptionTestLayer),
+    Layer.provide(ScheduleGateTest),
+    Layer.provide(RegistryTest),
+  );
+  const DeliveryTest = LineupDeliveryLocal.pipe(Layer.provide(WorkerTest));
+  const DispatcherTest = LineupDispatcherLive.pipe(
+    Layer.provide(LineupRepositoryTest),
+    Layer.provide(DeliveryTest),
+  );
+  const LineupRunsTest = LineupRunsLive.pipe(
+    Layer.provide(LineupRepositoryTest),
+    Layer.provide(QueryRepositoryTest),
+    Layer.provide(DispatcherTest),
+  );
 
   return TransactionProposalsLive.pipe(
     Layer.provide(TransactionProposalRepository.layer),
     Layer.provideMerge(ConnectionsLive),
+    Layer.provideMerge(LineupRunsTest),
     Layer.provideMerge(QueryRepositoryTest),
     Layer.provideMerge(ConnectionRepositoryTest),
     Layer.provideMerge(ConnectionsDatabaseTest),
-    Layer.provideMerge(
-      Layer.effect(ProviderRegistry)(
-        Effect.succeed(ProviderRegistry.of(providerRegistryOf([provider]))),
-      ),
-    ),
+    Layer.provideMerge(RegistryTest),
     Layer.provide(EncryptionTestLayer),
     Layer.provideMerge(QueryTokens.fromSecret("test-query-token-secret-at-least-32-chars")),
     Layer.provide(NodeCrypto.layer),

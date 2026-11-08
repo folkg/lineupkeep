@@ -1,5 +1,4 @@
-import { Context, Schema } from "effect";
-import type { Effect } from "effect";
+import { Context, Effect, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 
@@ -32,6 +31,8 @@ export const ProposalItemKind = Schema.Literals([
   "waiver_claim",
   "drop",
   "trade",
+  "activate",
+  "stash",
   "slot_move",
 ]);
 export type ProposalItemKind = typeof ProposalItemKind.Type;
@@ -78,6 +79,8 @@ export const ProposalStaleCode = Schema.Literals([
   "bid_exceeds_budget",
   "bid_not_available",
   "state_unavailable",
+  "reserve_unavailable",
+  "intent_invalid",
   "trade_window_closed",
   "trade_counterparty_missing",
   "trade_player_not_rostered",
@@ -148,6 +151,20 @@ const ProposalSlotMove = Schema.Struct({
 });
 type ProposalSlotMove = typeof ProposalSlotMove.Type;
 
+const ProposalItemPlacement = Schema.Struct({
+  player: ProposalStepPlayer,
+  fromSlot: Schema.optional(Schema.NonEmptyString),
+  toSlot: Schema.NonEmptyString,
+  detail: Schema.NonEmptyString.annotate({
+    description:
+      "Why the server chose this place, in one sentence about the player and the league's places.",
+  }),
+}).annotate({
+  description:
+    "The place the server chose for an item stated as intent, such as an add that asks for the active roster, or a player to activate or stash.",
+});
+type ProposalItemPlacement = typeof ProposalItemPlacement.Type;
+
 const ProposalStaleReason = Schema.Struct({
   code: ProposalStaleCode,
   player: Schema.optional(PlayerRef),
@@ -195,6 +212,7 @@ export const ProposalItem = Schema.Struct({
   execution: Schema.optional(ProposalItemExecution),
   reserveMove: Schema.optional(ProposalReserveMove),
   slotMove: Schema.optional(ProposalSlotMove),
+  placement: Schema.optional(ProposalItemPlacement),
   counterparty: Schema.optional(ProposalCounterparty),
   trade: Schema.optional(ProposalTrade),
   createdAt: Schema.DateTimeUtc,
@@ -316,6 +334,26 @@ const ProposalOrderDecision = Schema.Union([
   }),
 ]);
 
+export const ProposalTeamLineup = Schema.Struct({
+  status: Schema.Literals([
+    "settled",
+    "pending",
+    "blocked",
+    "failed",
+    "uncertain",
+    "not_started",
+    "not_needed",
+    "superseded",
+  ]),
+  detail: Schema.NonEmptyString,
+  run: Schema.optional(Schema.NonEmptyString),
+  at: Schema.optional(Schema.NonEmptyString),
+}).annotate({
+  description:
+    "The lineup run this team was given after its items ran, if any, and what became of it. A failed lineup run does not change any item's outcome.",
+});
+export type ProposalTeamLineup = typeof ProposalTeamLineup.Type;
+
 const ProposalTradeRules = Schema.Struct({
   endDate: Schema.optional(Schema.NonEmptyString),
   ratification: Schema.optional(Schema.Literals(["vote", "commissioner", "none", "unknown"])),
@@ -328,6 +366,7 @@ export const ProposalTeam = Schema.Struct({
   budget: Schema.optional(ProposalBudget),
   tradeRules: Schema.optional(ProposalTradeRules),
   order: Schema.optional(ProposalOrderDecision),
+  lineup: Schema.optional(ProposalTeamLineup),
   failure: Schema.optional(Schema.NonEmptyString),
   items: Schema.Array(ProposalItem),
   pendingOffers: Schema.Array(PendingTradeOffer),
@@ -393,6 +432,9 @@ const ProposalSlotMoveDraft = Schema.Struct({
   toSlot: Schema.NonEmptyString,
 });
 
+const ProposalActiveOrReserve = Schema.Literals(["active", "reserve"]);
+type ProposalActiveOrReserve = typeof ProposalActiveOrReserve.Type;
+
 const ProposalItemDraftPicks = Schema.optional(
   Schema.NullOr(Schema.Array(Schema.Unknown)),
 ).annotate({
@@ -403,8 +445,22 @@ const ProposalItemDraftPicks = Schema.optional(
 export const ProposalItemDraft = Schema.Struct({
   team: TeamId,
   kind: ProposalItemKind,
-  adds: Schema.Array(PlayerRef).pipe(Schema.check(Schema.isMaxLength(10))),
-  drops: Schema.Array(PlayerRef).pipe(Schema.check(Schema.isMaxLength(10))),
+  adds: Schema.Array(PlayerRef).pipe(
+    Schema.check(Schema.isMaxLength(10)),
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+  ),
+  drops: Schema.Array(PlayerRef).pipe(
+    Schema.check(Schema.isMaxLength(10)),
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+  ),
+  to: Schema.optional(Schema.NullOr(ProposalActiveOrReserve)).annotate({
+    description:
+      "For an add, the part of the roster the added player should join: the active roster, which is the default, or a reserve list. Omit it for every other kind.",
+  }),
+  player: Schema.optional(Schema.NullOr(PlayerRef)).annotate({
+    description:
+      "For an activate or stash, the rostered player to move. An activate takes a reserve-list player onto the active roster; a stash puts an active player on a reserve list that accepts their positions.",
+  }),
   slotMove: Schema.optional(Schema.NullOr(ProposalSlotMoveDraft)),
   picks: ProposalItemDraftPicks,
   counterparty: Schema.optional(Schema.NullOr(CounterpartyRef)),
@@ -452,6 +508,8 @@ export const ProposalItemRefusal = Schema.Literals([
   "bid_exceeds_budget",
   "bid_not_available",
   "state_unavailable",
+  "reserve_unavailable",
+  "intent_invalid",
   "trade_counterparty_missing",
 ]);
 export type ProposalItemRefusal = typeof ProposalItemRefusal.Type;

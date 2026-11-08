@@ -140,13 +140,6 @@ const QueriesLayer = FantasyQueriesLive.pipe(
 const ProposalRepositoryLayer = TransactionProposalRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
 );
-const ProposalsLayer = TransactionProposalsLive.pipe(
-  Layer.provide(ProposalRepositoryLayer),
-  Layer.provide(QueryRepositoryLayer),
-  Layer.provide(ProviderLayer),
-  Layer.provide(CredentialEncryptionLayer),
-  Layer.provide(QueryTokens.layer),
-);
 const LineupRepositoryLayer = LineupRunRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),
 );
@@ -181,6 +174,14 @@ const LineupRunsLayer = LineupRunsLive.pipe(
   Layer.provide(LineupRepositoryLayer),
   Layer.provide(QueryRepositoryLayer),
   Layer.provide(LineupDispatcherLayer),
+);
+const ProposalsLayer = TransactionProposalsLive.pipe(
+  Layer.provide(ProposalRepositoryLayer),
+  Layer.provide(QueryRepositoryLayer),
+  Layer.provide(ProviderLayer),
+  Layer.provide(CredentialEncryptionLayer),
+  Layer.provide(QueryTokens.layer),
+  Layer.provide(LineupRunsLayer),
 );
 const TeamRepositoryLayer = TeamRepository.layer.pipe(
   Layer.provide(ConnectionsDatabase.layer),

@@ -580,12 +580,13 @@ const providerFake = Effect.gen(function* () {
             : ProviderResponseInvalid.make({ operation: "apply_native_action" }),
         ),
       );
-      if (current.roster === undefined) {
+      const configured = current.teamRosters[input.providerTeamKey] ?? current.roster;
+      if (configured === undefined) {
         return yield* ProviderResponseInvalid.make({
           operation: "apply_native_action",
         });
       }
-      if (current.roster.providerTeamKey !== input.providerTeamKey) {
+      if (configured.providerTeamKey !== input.providerTeamKey) {
         return { status: "rejected" as const, reason: "not_found" as const };
       }
       yield* Ref.update(world.state, (state) => ({
@@ -595,8 +596,15 @@ const providerFake = Effect.gen(function* () {
       }));
       const result: ProviderWriteResult = writeResult(current.nativeAction);
       if (current.nativeAction === "accept" || current.nativeAction === "lost_response") {
-        const after = current.nativeAfter ?? current.roster;
-        yield* Ref.update(world.state, (state) => ({ ...state, roster: after }));
+        const after = current.nativeAfter ?? configured;
+        yield* Ref.update(world.state, (state) =>
+          current.teamRosters[input.providerTeamKey] === undefined
+            ? { ...state, roster: after }
+            : {
+                ...state,
+                teamRosters: { ...state.teamRosters, [input.providerTeamKey]: after },
+              },
+        );
       }
       return result;
     }),

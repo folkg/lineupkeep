@@ -5,6 +5,7 @@ import {
   makeSelectionBasis,
   makeSlotId,
   solveLineup,
+  unusableSelection,
 } from "@lineupkeep/lineup-solver";
 import type {
   LineupProblem,
@@ -56,6 +57,384 @@ export function planProposalOrder(input: ProposalOrderInput): ProposalOrderPlan 
 
 export function rosterChangeDate(timing: ProposalOrderTiming): string | undefined {
   return timingOf(timing).effectiveDate ?? timing.currentDate;
+}
+
+export function placeIntentItems(input: ProposalPlacementInput): ProposalPlacementResult {
+  const league = leagueOf(input.slots, input.constraints);
+  const state = new Map(initialState(input.players));
+  for (const item of input.items) {
+    for (const drop of item.drops) {
+      state.delete(drop.key);
+    }
+  }
+  for (const item of input.items) {
+    if (item.move === undefined) {
+      continue;
+    }
+    const moving = state.get(item.move.player.key);
+    if (moving !== undefined) {
+      state.set(moving.key, { ...moving, slot: item.move.toSlot });
+    }
+  }
+  for (const item of input.items) {
+    for (const add of item.adds) {
+      if (state.has(add.key)) {
+        continue;
+      }
+      state.set(add.key, {
+        key: add.key,
+        name: add.name,
+        positions: add.positions ?? [],
+        slot: undefined,
+        editable: true,
+        injured: false,
+      });
+    }
+  }
+
+  const refused: Array<ProposalPlacementRefusal> = [];
+  const activeIntents: Array<{
+    readonly item: string;
+    readonly player: RosterMember;
+    readonly added: boolean;
+  }> = [];
+  const reserveIntents: Array<{
+    readonly item: string;
+    readonly player: RosterMember;
+    readonly added: boolean;
+  }> = [];
+  const leavingReserve = new Set<string>();
+
+  for (const item of input.items) {
+    const intent = item.intent;
+    if (intent === undefined) {
+      continue;
+    }
+    if (intent.kind === "add") {
+      for (const add of item.adds) {
+        const player = state.get(add.key);
+        if (player === undefined) {
+          continue;
+        }
+        if (intent.to === "reserve") {
+          reserveIntents.push({ item: item.id, player, added: true });
+        } else {
+          activeIntents.push({ item: item.id, player, added: true });
+        }
+      }
+      continue;
+    }
+    const player = state.get(intent.player.key);
+    if (player === undefined) {
+      continue;
+    }
+    const slot = player.slot === undefined ? undefined : league.byPosition.get(player.slot);
+    if (intent.kind === "activate") {
+      if (slot === undefined) {
+        refused.push({
+          item: item.id,
+          code: "state_unavailable",
+          detail: `Your league reports no place for ${player.name}, so there is nothing to activate.`,
+        });
+        continue;
+      }
+      if (slot.kind !== "reserve") {
+        refused.push({
+          item: item.id,
+          code: "intent_invalid",
+          detail: `${player.name} is already on the active roster, so there is nothing to activate.`,
+        });
+        continue;
+      }
+      leavingReserve.add(player.key);
+      activeIntents.push({ item: item.id, player, added: false });
+      continue;
+    }
+    if (slot === undefined) {
+      refused.push({
+        item: item.id,
+        code: "state_unavailable",
+        detail: `Your league reports no place for ${player.name}, so there is nothing to stash.`,
+      });
+      continue;
+    }
+    if (slot.kind === "reserve") {
+      refused.push({
+        item: item.id,
+        code: "intent_invalid",
+        detail: `${player.name} is already on a reserve list, so there is nothing to stash.`,
+      });
+      continue;
+    }
+    reserveIntents.push({ item: item.id, player, added: false });
+  }
+
+  const placements: Array<ProposalPlacement> = [];
+  const moves: Array<ProposalPlacementMove> = [];
+  const after: Array<ProposalPlacementAfter> = [];
+
+  for (const intent of reserveIntents) {
+    const destination = reserveDestination(state, league, intent.player, leavingReserve);
+    if (destination.status !== "open") {
+      refused.push({
+        item: intent.item,
+        code: destination.status === "unknown" ? "state_unavailable" : "reserve_unavailable",
+        detail: reserveRefusalDetail(intent.player.name, destination),
+      });
+      continue;
+    }
+    const slot = destination.slot;
+    state.set(intent.player.key, { ...intent.player, slot: slot.position });
+    const detail = intent.added
+      ? `${intent.player.name} goes to the ${slot.position} reserve list after the add, which accepts their positions and has a free place.`
+      : `${intent.player.name} moves to the ${slot.position} reserve list, which accepts their positions and has a free place.`;
+    placements.push({
+      item: intent.item,
+      playerKey: intent.player.key,
+      playerName: intent.player.name,
+      ...(intent.player.slot === undefined ? {} : { fromSlot: intent.player.slot }),
+      toSlot: slot.position,
+      detail,
+    });
+    if (intent.added) {
+      after.push({
+        item: intent.item,
+        repair: {
+          playerKey: intent.player.key,
+          playerName: intent.player.name,
+          toSlot: slot.position,
+        },
+      });
+    } else {
+      moves.push({
+        item: intent.item,
+        player: { key: intent.player.key, name: intent.player.name },
+        toSlot: slot.position,
+      });
+    }
+  }
+
+  const active = activeDestinations(state, league, activeIntents, input.constraints);
+  for (const intent of activeIntents) {
+    const destination = active.destinations.get(intent.player.key);
+    const detail = active.refused.get(intent.player.key);
+    if (destination === undefined) {
+      refused.push({
+        item: intent.item,
+        code: "slot_illegal",
+        detail:
+          detail ??
+          `${intent.player.name} has no place on the active roster: every place that would accept them is taken.`,
+      });
+      continue;
+    }
+    const slot = league.byPosition.get(destination);
+    placements.push({
+      item: intent.item,
+      playerKey: intent.player.key,
+      playerName: intent.player.name,
+      ...(intent.player.slot === undefined ? {} : { fromSlot: intent.player.slot }),
+      toSlot: destination,
+      detail: intent.added
+        ? activePlaceDetail(intent.player.name, destination, slot?.kind)
+        : activePlaceDetailFrom(intent.player.name, intent.player.slot, destination, slot?.kind),
+    });
+    if (!intent.added) {
+      moves.push({
+        item: intent.item,
+        player: { key: intent.player.key, name: intent.player.name },
+        toSlot: destination,
+      });
+    }
+  }
+
+  return { placements, moves, after, refused };
+}
+
+function activeDestinations(
+  state: RosterState,
+  league: League,
+  intents: ReadonlyArray<{
+    readonly item: string;
+    readonly player: RosterMember;
+    readonly added: boolean;
+  }>,
+  constraints: ProviderRosterConstraints,
+): {
+  readonly destinations: ReadonlyMap<string, string>;
+  readonly refused: ReadonlyMap<string, string>;
+} {
+  if (intents.length === 0) {
+    return { destinations: new Map(), refused: new Map() };
+  }
+  const intentKeys = new Set(intents.map((intent) => intent.player.key));
+  const preferBench =
+    constraints.startingSlotsMayStandEmpty && league.slots.some((slot) => slot.kind === "bench");
+  const players = [...state.values()].map((player) =>
+    intentKeys.has(player.key)
+      ? activeSolverPlayer(player, preferBench)
+      : solverPlayer(player, league, true),
+  );
+  const solved = solveLineup({
+    selectionBasis: neutralBasis,
+    availabilityTiers: [neutralTier],
+    slots: league.slots.map((slot) => slot.solver),
+    players,
+  });
+  if (solved.kind === "plan") {
+    const byPlayer = new Map(
+      solved.plan.assignments.map(
+        (assignment) => [String(assignment.playerId), String(assignment.slotId)] as const,
+      ),
+    );
+    return {
+      destinations: new Map(
+        intents.flatMap((intent) => {
+          const slot = byPlayer.get(intent.player.key);
+          return slot === undefined ? [] : [[intent.player.key, slot] as const];
+        }),
+      ),
+      refused: new Map(),
+    };
+  }
+  const stranded =
+    solved.refusal.reason === "player-has-no-legal-slot"
+      ? new Set(solved.refusal.playerIds.map(String))
+      : new Set<string>();
+  const destinations = new Map<string, string>();
+  const refused = new Map<string, string>();
+  for (const intent of intents) {
+    if (stranded.has(intent.player.key)) {
+      refused.set(
+        intent.player.key,
+        `${intent.player.name} has no place on the active roster: every place that would accept them is taken.`,
+      );
+      continue;
+    }
+    const slot = fallbackActiveSlot(state, league, intent.player);
+    if (slot === undefined) {
+      refused.set(
+        intent.player.key,
+        `${intent.player.name} has no place on the active roster: every place that would accept them is taken.`,
+      );
+      continue;
+    }
+    destinations.set(intent.player.key, slot);
+  }
+  return { destinations, refused };
+}
+
+function activeSolverPlayer(player: RosterMember, preferBench: boolean): RosterPlayer {
+  return {
+    id: makePlayerId(player.key),
+    eligiblePositions: player.positions,
+    availabilityTier: neutralTier,
+    selection: preferBench
+      ? unusableSelection(neutralBasis, "missing")
+      : knownSelection(neutralBasis, 0),
+    reserveEligible: false,
+    lockedSlotId: undefined,
+    currentSlotId: undefined,
+    mayBeLeftInPlace: false,
+  };
+}
+
+function fallbackActiveSlot(
+  state: RosterState,
+  league: League,
+  player: RosterMember,
+): string | undefined {
+  const bench = league.slots.find(
+    (slot) => slot.kind === "bench" && openSlot(state, league, slot, player),
+  );
+  if (bench !== undefined) {
+    return bench.position;
+  }
+  return league.slots.find(
+    (slot) => slot.kind === "starting" && openSlot(state, league, slot, player),
+  )?.position;
+}
+
+type ReserveDestination =
+  | { readonly status: "open"; readonly slot: LeagueSlot }
+  | { readonly status: "none" }
+  | { readonly status: "full"; readonly lists: ReadonlyArray<string> }
+  | { readonly status: "unknown" };
+
+function reserveDestination(
+  state: RosterState,
+  league: League,
+  player: RosterMember,
+  leaving: ReadonlySet<string>,
+): ReserveDestination {
+  const placements = league.slots
+    .filter((slot) => slot.kind === "reserve")
+    .map((slot) => ({ slot, legal: slotPlacement(league.rule, slot.position, player.positions) }));
+  const eligible = placements.filter((entry) => entry.legal.legal === true);
+  if (eligible.length === 0) {
+    return placements.some((entry) => entry.legal.legal === "unknown")
+      ? { status: "unknown" }
+      : { status: "none" };
+  }
+  const open = eligible.find((entry) => {
+    const occupants = [...state.values()].filter(
+      (occupant) => occupant.slot === entry.slot.position && !leaving.has(occupant.key),
+    );
+    return occupants.length < entry.slot.count;
+  });
+  if (open !== undefined) {
+    return { status: "open", slot: open.slot };
+  }
+  return { status: "full", lists: eligible.map((entry) => entry.slot.position) };
+}
+
+function reserveRefusalDetail(name: string, destination: ReserveDestination): string {
+  switch (destination.status) {
+    case "none":
+      return `${name} cannot sit on a reserve list: the league lists none they are eligible for.`;
+    case "full":
+      return `${name} cannot sit on a reserve list: the league's ${nameList(destination.lists)} ${destination.lists.length === 1 ? "reserve list has" : "reserve lists have"} no free place.`;
+    case "unknown":
+      return `${name} cannot sit on a reserve list: the league does not publish which players each of its reserve lists accepts.`;
+    case "open":
+      return "";
+  }
+}
+
+function activePlaceDetailFrom(
+  name: string,
+  from: string | undefined,
+  slot: string,
+  kind: "starting" | "bench" | "reserve" | undefined,
+): string {
+  const origin = from === undefined ? "their reserve place" : `the ${from} reserve list`;
+  switch (kind) {
+    case "bench":
+      return `${name} moves from ${origin} to ${slot} on the bench, which has room and asks them to start nothing.`;
+    case "starting":
+      return `${name} moves from ${origin} to the ${slot} starting place, the only active place open to them.`;
+    case "reserve":
+      return `${name} moves from ${origin} to the ${slot} reserve list, which accepts their positions and has a free place.`;
+    case undefined:
+      return `${name} moves from ${origin} to ${slot}, which has room for them.`;
+  }
+}
+
+function activePlaceDetail(
+  name: string,
+  slot: string,
+  kind: "starting" | "bench" | "reserve" | undefined,
+): string {
+  switch (kind) {
+    case "bench":
+      return `${name} goes to ${slot} on the bench, which has room and asks them to start nothing.`;
+    case "starting":
+      return `${name} goes to the ${slot} starting place, the only active place open to them.`;
+    case "reserve":
+      return `${name} goes to the ${slot} reserve list, which accepts their positions and has a free place.`;
+    case undefined:
+      return `${name} goes to ${slot}, which has room for them.`;
+  }
 }
 
 function conflictPlan(
@@ -153,7 +532,33 @@ function orderSteps(input: ProposalOrderInput, league: League, timing: Timing): 
         refused.push({ entry, refusal: readiness.refusal });
         continue;
       }
-      chosen = { entry, state: applied.state };
+      if (entry.item.placeAfter === undefined) {
+        chosen = { entry, state: applied.state };
+        break;
+      }
+      const placed = applyPlaceAfter(applied.state, entry.item.placeAfter, league);
+      if (placed.status === "refused") {
+        const target = entry.item.placeAfter;
+        const frees = freesDestination(
+          applied.state,
+          {
+            ...entry.item,
+            move: {
+              player: { key: target.playerKey, name: target.playerName },
+              toSlot: target.toSlot,
+            },
+          },
+          pending,
+          league,
+        );
+        if (placed.code === "move_slot_full" && frees) {
+          waiting.push({ entry, refusal: placed });
+        } else {
+          refused.push({ entry, refusal: placed });
+        }
+        continue;
+      }
+      chosen = { entry, state: placed.state };
       break;
     }
     if (chosen !== undefined) {
@@ -271,7 +676,7 @@ function awaitItem(
       : { status: "refused", refusal: before };
   }
   const after = placementFailure(applied, league, context);
-  if (after?.code !== "roster_full") {
+  if (after?.code !== "roster_full" || item.placeAfter !== undefined) {
     return { status: "ready" };
   }
   if (repairsPlace(applied, item, league, declaredMoveKeys)) {
@@ -625,6 +1030,45 @@ function planRepair(
   return undefined;
 }
 
+function applyPlaceAfter(
+  state: RosterState,
+  repair: ProposalOrderRepair,
+  league: League,
+): Application {
+  const player = state.get(repair.playerKey);
+  if (player === undefined) {
+    return {
+      status: "refused",
+      code: "drop_not_rostered",
+      detail: `${repair.playerName} is no longer on the roster, so the move cannot be made.`,
+    };
+  }
+  const slot = league.byPosition.get(repair.toSlot);
+  if (slot === undefined) {
+    return {
+      status: "refused",
+      code: "move_slot_unknown",
+      detail: `The league does not declare a ${repair.toSlot} slot, so ${player.name} cannot move there.`,
+    };
+  }
+  if (slotPlacement(league.rule, slot.position, player.positions).legal !== true) {
+    return {
+      status: "refused",
+      code: "slot_illegal",
+      detail: `${player.name} cannot move to the ${slotLabel(slot)}: it does not accept their positions (${player.positions.join(", ")}).`,
+    };
+  }
+  const capacity = slotCapacity(league.rule, slot);
+  if (capacity !== undefined && occupancyOf(state, slot.position) >= capacity) {
+    return {
+      status: "refused",
+      code: "move_slot_full",
+      detail: slotFullDetail(player, slot, state),
+    };
+  }
+  return { status: "applied", state: relocate(state, player.key, slot.position) };
+}
+
 function openSlots(
   state: RosterState,
   league: League,
@@ -816,7 +1260,7 @@ function itemPlaceAccounting(
   for (const drop of item.drops) {
     frees += rosterPlaceChange(league.rule, initial.get(drop.key)?.slot, undefined).frees;
   }
-  return { frees, consumes: item.adds.length };
+  return { frees, consumes: item.placeAfter === undefined ? item.adds.length : 0 };
 }
 
 function isLegal(state: RosterState, league: League): boolean {
@@ -1213,6 +1657,7 @@ export type ProposalOrderItem = {
   readonly drops: ReadonlyArray<ProposalOrderPlayerRef>;
   readonly move: ProposalOrderMove | undefined;
   readonly mayRepair: boolean;
+  readonly placeAfter?: ProposalOrderRepair;
 };
 
 type ProposalOrderTimingRule = "same_day" | "next_day" | "weekly_lock" | "not_published";
@@ -1233,7 +1678,7 @@ export type ProposalOrderInput = {
 type ProposalOrderRepair = {
   readonly playerKey: string;
   readonly playerName: string;
-  readonly fromSlot: string;
+  readonly fromSlot?: string;
   readonly toSlot: string;
 };
 
@@ -1292,3 +1737,62 @@ export type ProposalOrderPlan =
       readonly effectiveDate?: string;
       readonly detail: string;
     };
+
+export type ProposalPlacementIntent =
+  | { readonly kind: "activate"; readonly player: ProposalOrderPlayerRef }
+  | { readonly kind: "stash"; readonly player: ProposalOrderPlayerRef }
+  | { readonly kind: "add"; readonly to: "active" | "reserve" };
+
+type ProposalPlacementItem = {
+  readonly id: string;
+  readonly adds: ReadonlyArray<ProposalOrderPlayerRef>;
+  readonly drops: ReadonlyArray<ProposalOrderPlayerRef>;
+  readonly move: ProposalOrderMove | undefined;
+  readonly intent: ProposalPlacementIntent | undefined;
+};
+
+export type ProposalPlacementInput = {
+  readonly constraints: ProviderRosterConstraints;
+  readonly slots: ReadonlyArray<ProposalOrderSlot>;
+  readonly players: ReadonlyArray<ProposalOrderPlayer>;
+  readonly items: ReadonlyArray<ProposalPlacementItem>;
+};
+
+type ProposalPlacement = {
+  readonly item: string;
+  readonly playerKey: string;
+  readonly playerName: string;
+  readonly fromSlot?: string;
+  readonly toSlot: string;
+  readonly detail: string;
+};
+
+type ProposalPlacementMove = {
+  readonly item: string;
+  readonly player: ProposalOrderPlayerRef;
+  readonly toSlot: string;
+};
+
+type ProposalPlacementAfter = {
+  readonly item: string;
+  readonly repair: ProposalOrderRepair;
+};
+
+type ProposalPlacementRefusalCode =
+  | "reserve_unavailable"
+  | "intent_invalid"
+  | "slot_illegal"
+  | "state_unavailable";
+
+type ProposalPlacementRefusal = {
+  readonly item: string;
+  readonly code: ProposalPlacementRefusalCode;
+  readonly detail: string;
+};
+
+export type ProposalPlacementResult = {
+  readonly placements: ReadonlyArray<ProposalPlacement>;
+  readonly moves: ReadonlyArray<ProposalPlacementMove>;
+  readonly after: ReadonlyArray<ProposalPlacementAfter>;
+  readonly refused: ReadonlyArray<ProposalPlacementRefusal>;
+};

@@ -89,6 +89,27 @@ export const StoredProposalOrder = Schema.Struct({
 });
 export type StoredProposalOrder = typeof StoredProposalOrder.Type;
 
+const StoredProposalLineupStatus = Schema.Literals([
+  "settled",
+  "pending",
+  "blocked",
+  "failed",
+  "uncertain",
+  "not_started",
+  "not_needed",
+  "superseded",
+]);
+type StoredProposalLineupStatus = typeof StoredProposalLineupStatus.Type;
+
+export const StoredProposalLineup = Schema.Struct({
+  team: TeamId,
+  status: StoredProposalLineupStatus,
+  detail: Schema.NonEmptyString,
+  run: Schema.optional(Schema.NonEmptyString),
+  at: Schema.NonEmptyString,
+});
+export type StoredProposalLineup = typeof StoredProposalLineup.Type;
+
 export const ProposalSetRecord = Schema.Struct({
   id: ProposalSetId,
   userId: UserId,
@@ -96,6 +117,7 @@ export const ProposalSetRecord = Schema.Struct({
   fingerprint: Schema.NonEmptyString,
   teams: Schema.Array(TeamId),
   orders: Schema.Array(StoredProposalOrder),
+  lineups: Schema.Array(StoredProposalLineup),
   createdAt: Schema.DateTimeUtc,
   expiresAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
@@ -132,11 +154,27 @@ export type StoredSlotMove = typeof StoredSlotMove.Type;
 export const StoredReserveMove = Schema.Struct({
   playerKey: Schema.NonEmptyString,
   playerName: Schema.optional(Schema.NonEmptyString),
-  fromSlot: Schema.NonEmptyString,
+  fromSlot: Schema.optional(Schema.NonEmptyString),
   toSlot: Schema.NonEmptyString,
   order: Schema.Literals(["before", "after"]),
 });
 export type StoredReserveMove = typeof StoredReserveMove.Type;
+
+export const StoredProposalIntent = Schema.Struct({
+  kind: Schema.Literals(["add", "activate", "stash"]),
+  player: Schema.optional(StoredProposalPlayer),
+  to: Schema.optional(Schema.Literals(["active", "reserve"])),
+});
+export type StoredProposalIntent = typeof StoredProposalIntent.Type;
+
+export const StoredProposalPlacement = Schema.Struct({
+  playerKey: Schema.NonEmptyString,
+  playerName: Schema.optional(Schema.NonEmptyString),
+  fromSlot: Schema.optional(Schema.NonEmptyString),
+  toSlot: Schema.NonEmptyString,
+  detail: Schema.NonEmptyString,
+});
+export type StoredProposalPlacement = typeof StoredProposalPlacement.Type;
 
 export const ProposalItemRecord = Schema.Struct({
   id: ProposalItemId,
@@ -150,6 +188,8 @@ export const ProposalItemRecord = Schema.Struct({
   drops: Schema.Array(StoredProposalPlayer),
   slotMove: Schema.optional(StoredSlotMove),
   reserveMove: Schema.optional(StoredReserveMove),
+  intent: Schema.optional(StoredProposalIntent),
+  placement: Schema.optional(StoredProposalPlacement),
   counterpartyKey: Schema.optional(Schema.NonEmptyString),
   counterpartyName: Schema.optional(Schema.NonEmptyString),
   bid: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),

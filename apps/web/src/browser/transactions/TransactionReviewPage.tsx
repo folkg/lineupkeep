@@ -512,6 +512,30 @@ function TeamProposal(props: TeamProposalProps): JSX.Element {
         <Show when={props.submitted}>
           <ExecutedOrder items={props.team.items} />
         </Show>
+        <Show
+          when={
+            props.submitted && props.team.lineup?.status !== "not_needed"
+              ? props.team.lineup
+              : undefined
+          }
+        >
+          {(lineup) => (
+            <Notice
+              tone={
+                lineup().status === "failed" ||
+                lineup().status === "blocked" ||
+                lineup().status === "uncertain"
+                  ? "danger"
+                  : "neutral"
+              }
+              title="Lineup"
+            >
+              <Text size="caption" tone="muted">
+                {lineup().detail}
+              </Text>
+            </Notice>
+          )}
+        </Show>
       </Stack>
       <RuleList>
         <For each={props.team.items}>
@@ -657,6 +681,25 @@ function ProposalItem(props: ProposalItemProps): JSX.Element {
             />
           </Show>
         </Split>
+
+        <Show
+          when={
+            !blocked() &&
+            (result() === undefined || result()?.outcome === "executed") &&
+            props.item.placement
+          }
+        >
+          {(placement) => (
+            <Notice
+              tone="neutral"
+              title={result() === undefined ? "Where it goes" : "Where it went"}
+            >
+              <Text size="caption" tone="muted">
+                {placement().detail}
+              </Text>
+            </Notice>
+          )}
+        </Show>
 
         <Show when={!blocked() && result() === undefined && props.item.slotMove}>
           {(move) => (
@@ -1129,6 +1172,9 @@ function moveSummary(item: TransactionReviewItemView): string {
       ? "Slot move"
       : `Move ${item.slotMove.playerName ?? "this player"} to ${item.slotMove.toSlot}`;
   }
+  if (item.kind === "activate" || item.kind === "stash") {
+    return `${kindLabel(item.kind)} ${item.placement?.playerName ?? "this player"}`;
+  }
   const adds = playerNames(item.adds);
   const drops = playerNames(item.drops);
   if (item.kind === "trade" && adds !== undefined && drops !== undefined) {
@@ -1179,6 +1225,10 @@ function kindLabel(kind: TransactionReviewItemView["kind"]): string {
       return "Trade offer";
     case "slot_move":
       return "Slot move";
+    case "activate":
+      return "Activate";
+    case "stash":
+      return "Stash";
   }
 }
 

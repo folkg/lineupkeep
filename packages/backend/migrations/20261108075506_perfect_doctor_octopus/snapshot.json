@@ -1,0 +1,89 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "55576222-26fb-4c6c-9e2e-ada7b4463fc8",
+  "prevIds": ["41a2f8ee-9db7-4ba4-bc91-dbb04e9f0538"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "intent"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.intent",
+        "n|col|public.transaction_proposal_items.intent",
+        "e|col|public.transaction_proposal_items.intent"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_items", "placement"],
+      "writes": [
+        "s|col|public.transaction_proposal_items.placement",
+        "n|col|public.transaction_proposal_items.placement",
+        "e|col|public.transaction_proposal_items.placement"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_items", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transaction_proposal_sets", "lineups"],
+      "writes": [
+        "s|col|public.transaction_proposal_sets.lineups",
+        "n|col|public.transaction_proposal_sets.lineups",
+        "e|col|public.transaction_proposal_sets.lineups"
+      ],
+      "reads": ["n|tbl|public.transaction_proposal_sets", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "intent",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_items",
+        "name": "placement",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transaction_proposal_sets",
+        "name": "lineups",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

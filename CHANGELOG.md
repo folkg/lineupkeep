@@ -3,6 +3,12 @@
 MCP-facing behaviour changes, newest first. Deployment revisions name the web and worker Cloud Run
 revisions that carried each change.
 
+## Unreleased — transactions by intent, and a lineup after each submission
+
+- `propose_transactions` accepts `activate` and `stash` items and an add's `to: active | reserve`. Neither names a slot. The server chooses the place with the lineup solver and the set read carries a `placement` with the chosen place and one sentence saying why. `slot_move` stays for a client that genuinely wants one named slot. The input arrays `adds` and `drops` may be omitted when an item has only an intent.
+- A refusal states the intent: a stash says the player cannot sit on a reserve list and that the league lists none they are eligible for; an add or activate with no place says the team would hold one more player than the league allows and names the drop or reserve move that would free it. A slot move into an occupied starting slot is still refused with the occupant named.
+- Each team whose items executed in a submission gets one lineup run. The set read reports the run's status and reason separately, and a failed lineup run never changes a move's outcome.
+
 ## Unreleased — round-11 MCP fixes (explicit player lists, owner note, draft names)
 
 - `get_players` returns every reference in an explicit list in one response instead of paging at the

@@ -52,6 +52,28 @@ type TransactionReviewSlotMoveView = {
   readonly toSlot: string;
 };
 
+type TransactionReviewPlacementView = {
+  readonly playerName?: string;
+  readonly fromSlot?: string;
+  readonly toSlot: string;
+  readonly detail: string;
+};
+
+type TransactionReviewLineupView = {
+  readonly status:
+    | "settled"
+    | "pending"
+    | "blocked"
+    | "failed"
+    | "uncertain"
+    | "not_started"
+    | "not_needed"
+    | "superseded";
+  readonly detail: string;
+  readonly run?: string;
+  readonly at?: string;
+};
+
 type TransactionReviewCounterpartyView = {
   readonly ref: string;
   readonly name?: string;
@@ -115,6 +137,7 @@ export type TransactionReviewItemView = {
   readonly execution?: TransactionReviewExecutionView;
   readonly reserveMove?: TransactionReviewReserveMoveView;
   readonly slotMove?: TransactionReviewSlotMoveView;
+  readonly placement?: TransactionReviewPlacementView;
   readonly counterparty?: TransactionReviewCounterpartyView;
   readonly trade?: TransactionReviewTradeView;
 };
@@ -172,6 +195,7 @@ export type TransactionReviewTeamView = {
     | { readonly status: "not_published"; readonly detail: string };
   readonly tradeRules?: TransactionReviewTradeRulesView;
   readonly order?: TransactionReviewOrderView;
+  readonly lineup?: TransactionReviewLineupView;
   readonly failure?: string;
   readonly items: ReadonlyArray<TransactionReviewItemView>;
   readonly pendingOffers: ReadonlyArray<TransactionReviewPendingOfferView>;

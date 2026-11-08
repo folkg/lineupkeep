@@ -25,7 +25,10 @@ import type {
   ProposalSetRecord,
   ProposalStepRecord,
   ProposalTeamRecord,
+  StoredProposalIntent,
+  StoredProposalLineup,
   StoredProposalOrder,
+  StoredProposalPlacement,
   StoredProposalSubmission,
   StoredSlotMove,
   StoredProposalPlayer,
@@ -52,6 +55,7 @@ export type ProposalItemCommand = {
   readonly adds: ReadonlyArray<StoredProposalPlayer>;
   readonly drops: ReadonlyArray<StoredProposalPlayer>;
   readonly slotMove: StoredSlotMove | undefined;
+  readonly intent: StoredProposalIntent | undefined;
   readonly counterpartyKey: string | undefined;
   readonly counterpartyName: string | undefined;
   readonly bid: number | undefined;
@@ -63,6 +67,7 @@ type ProposalItemStore = {
   readonly command: ProposalItemCommand;
   readonly check: StoredProposalStaleness;
   readonly reserveMove: StoredReserveMove | undefined;
+  readonly placement: StoredProposalPlacement | undefined;
 };
 
 type LoadedProposalSet = {
@@ -79,6 +84,7 @@ export type ProposalItemChange = {
   readonly adds: ReadonlyArray<StoredProposalPlayer>;
   readonly drops: ReadonlyArray<StoredProposalPlayer>;
   readonly reserveMove?: StoredReserveMove;
+  readonly placement?: StoredProposalPlacement;
   readonly trade?: StoredProposalTrade;
   readonly state?: ProposalItemState;
 };
@@ -482,6 +488,29 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
           .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
       });
 
+      const recordLineups = Effect.fn("TransactionProposalRepository.recordLineups")(
+        function* (input: {
+          readonly userId: UserId;
+          readonly setId: ProposalSetId;
+          readonly lineups: ReadonlyArray<StoredProposalLineup>;
+          readonly at: DateTime.Utc;
+        }) {
+          return yield* database
+            .update(transactionProposalSets)
+            .set({
+              lineups: input.lineups.length === 0 ? null : [...input.lineups],
+              updatedAt: DateTime.toDateUtc(input.at),
+            })
+            .where(
+              and(
+                eq(transactionProposalSets.userId, input.userId),
+                eq(transactionProposalSets.id, input.setId),
+              ),
+            )
+            .pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause })));
+        },
+      );
+
       const listTeams = Effect.fn("TransactionProposalRepository.listTeams")(function* (
         userId: UserId,
       ) {
@@ -801,6 +830,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
         claimSubmission,
         recordItemOutcomes,
         completeSubmission,
+        recordLineups,
       };
 
       function applyChanges(
@@ -838,6 +868,7 @@ export class TransactionProposalRepository extends Context.Service<TransactionPr
                   adds: change.adds,
                   drops: change.drops,
                   reserveMove: change.reserveMove,
+                  placement: change.placement,
                   staleness: change.staleness,
                   ...(change.trade === undefined ? {} : { trade: change.trade }),
                   ...(change.state === undefined ? {} : { state: change.state }),
@@ -922,6 +953,8 @@ function storeRow(
     dropPlayers: command.drops,
     slotMove: command.slotMove ?? null,
     reserveMove: item.reserveMove ?? null,
+    intent: command.intent ?? null,
+    placement: item.placement ?? null,
     counterpartyTeamKey: command.counterpartyKey ?? null,
     counterpartyName: command.counterpartyName ?? null,
     bid: command.bid ?? null,

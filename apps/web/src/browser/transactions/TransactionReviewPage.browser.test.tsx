@@ -550,6 +550,34 @@ it("shows a refusal that names both operations when no legal order exists", asyn
   await expect.element(page.getByText(detail, { exact: true })).toBeVisible();
 });
 
+it("reports a settled lineup separately from the moves", async () => {
+  const base = reviewFixture();
+  using _app = setupReviewPage({
+    ...base,
+    set: {
+      ...base.set,
+      submissions: [{ submittedAt: now, completedAt: now }],
+      settled: true,
+    },
+    teams: [
+      {
+        ...teamFixture(alphaId, "Alpha", "nfl", "football", [dropItem()]),
+        lineup: {
+          status: "settled",
+          detail: "Set the lineup for 2026-10-31 after the add.",
+          run: "01M68X9EG00T861YNAKZM8FPFK",
+          at: now,
+        },
+      },
+    ],
+  });
+
+  await expect.element(page.getByText("Lineup", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("Set the lineup for 2026-10-31 after the add.", { exact: true }))
+    .toBeVisible();
+});
+
 it("shows what was sent and why a later move stopped", async () => {
   const base = reviewFixture();
   const rejection =

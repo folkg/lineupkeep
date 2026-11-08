@@ -72,6 +72,16 @@ function toTeamView(team: ProposalSetReview["teams"][number]): TransactionReview
           },
         }),
     ...(team.order === undefined ? {} : { order: toOrderView(team.order) }),
+    ...(team.lineup === undefined
+      ? {}
+      : {
+          lineup: {
+            status: team.lineup.status,
+            detail: team.lineup.detail,
+            ...(team.lineup.run === undefined ? {} : { run: team.lineup.run }),
+            ...(team.lineup.at === undefined ? {} : { at: team.lineup.at }),
+          },
+        }),
     ...(team.failure === undefined ? {} : { failure: unreadableTeamDetail }),
     items: team.items.map(toItemView),
     pendingOffers: team.pendingOffers.map(toPendingOfferView),
@@ -174,6 +184,18 @@ function toItemView(
               : { playerName: item.slotMove.player.name }),
             ...(item.slotMove.fromSlot === undefined ? {} : { fromSlot: item.slotMove.fromSlot }),
             toSlot: item.slotMove.toSlot,
+          },
+        }),
+    ...(item.placement === undefined
+      ? {}
+      : {
+          placement: {
+            ...(item.placement.player.name === undefined
+              ? {}
+              : { playerName: item.placement.player.name }),
+            ...(item.placement.fromSlot === undefined ? {} : { fromSlot: item.placement.fromSlot }),
+            toSlot: item.placement.toSlot,
+            detail: item.placement.detail,
           },
         }),
     ...(item.counterparty === undefined

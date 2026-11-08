@@ -2,12 +2,20 @@ import { Array, DateTime, Effect, Layer, Result, Schema } from "effect";
 
 import type { UserId } from "#contexts/auth/User.ts";
 import type { TeamId } from "#contexts/connections/FantasyTeam.ts";
-import { planProposalOrder, rosterChangeDate } from "#contexts/connections/ProposalOrder.ts";
+import type { LineupError, LineupRun } from "#contexts/connections/LineupRun.ts";
+import { LineupRuns } from "#contexts/connections/LineupRuns.ts";
+import {
+  placeIntentItems,
+  planProposalOrder,
+  rosterChangeDate,
+} from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProposalOrderItem,
   ProposalOrderPlan,
   ProposalOrderPlayer,
   ProposalOrderRefusalCode,
+  ProposalPlacementIntent,
+  ProposalPlacementResult,
 } from "#contexts/connections/ProposalOrder.ts";
 import type {
   ProviderCapabilities,
@@ -50,6 +58,7 @@ import type {
   ProposalSetReview,
   ProposalStaleCode,
   ProposalSubmission,
+  ProposalTeamLineup,
   ProposeTransactionsResult,
 } from "#contexts/connections/TransactionProposals.ts";
 import {
@@ -93,6 +102,8 @@ import {
   type ProposalSetRecord,
   type ProposalStepRecord,
   type ProposalTeamRecord,
+  type StoredProposalIntent,
+  type StoredProposalLineup,
   type StoredProposalOrder,
   type StoredProposalPlayer,
   type StoredProposalStaleReason,
@@ -110,7 +121,7 @@ import type {
 } from "./TransactionProposalRepository.ts";
 
 const contentInvalidDetail =
-  "A proposal set needs one to twenty items. Each item names an owned team, a kind, the players to add or drop, an optional FAAB bid of 0 or more, and a reason of at most 500 characters. A drop item adds nobody, a free-agent add carries no bid, a waiver claim requires a bid, a trade names a counterparty with at least one player going out and one coming back, and a slot move names one rostered player and one destination slot without adding or dropping anyone. A trade carries no bid and no draft picks.";
+  "A proposal set needs one to twenty items. Each item names an owned team, a kind, the players to add or drop, an optional destination of `active` or `reserve` for an add, an optional player for an activate or stash, an optional FAAB bid of 0 or more, and a reason of at most 500 characters. A drop item adds nobody, a free-agent add carries no bid, a waiver claim requires a bid, a trade names a counterparty with at least one player going out and one coming back, an activate or stash names one rostered player without adding or dropping anyone, and a slot move names one rostered player and one destination slot without adding or dropping anyone. A trade carries no bid and no draft picks.";
 
 const submitInvalidDetail =
   "A submission names one proposal set and one to twenty of its move ids. Reload the review and submit again.";
@@ -148,6 +159,7 @@ type OpenedDraft = {
   readonly adds: ReadonlyArray<string>;
   readonly drops: ReadonlyArray<string>;
   readonly slotMoveKey: string | undefined;
+  readonly intentPlayerKey: string | undefined;
   readonly counterpartyKey: string | undefined;
 };
 
@@ -216,6 +228,7 @@ export const TransactionProposalsLive = Layer.effect(
     const encryption = yield* ConnectionCredentialEncryption;
     const registry = yield* ProviderRegistry;
     const tokens = yield* QueryTokens;
+    const lineups = yield* LineupRuns;
 
     const propose: TransactionProposals["Service"]["propose"] = Effect.fn(
       "TransactionProposals.propose",
@@ -342,6 +355,9 @@ export const TransactionProposalsLive = Layer.effect(
           ...(entry.draft.slotMove === undefined || entry.draft.slotMove === null
             ? []
             : [entry.draft.slotMove.player]),
+          ...(entry.draft.player === undefined || entry.draft.player === null
+            ? []
+            : [entry.draft.player]),
         ]),
       }));
       const openedGroups = yield* tokens.openPlayerRefGroups({
@@ -356,7 +372,8 @@ export const TransactionProposalsLive = Layer.effect(
           const count =
             entry.draft.adds.length +
             entry.draft.drops.length +
-            (entry.draft.slotMove === undefined || entry.draft.slotMove === null ? 0 : 1);
+            (entry.draft.slotMove === undefined || entry.draft.slotMove === null ? 0 : 1) +
+            (entry.draft.player === undefined || entry.draft.player === null ? 0 : 1);
           openedByIndex.set(entry.index, opened.slice(offset, offset + count));
           offset += count;
         }
@@ -403,6 +420,11 @@ export const TransactionProposalsLive = Layer.effect(
         const addKeys = opened.slice(0, draft.adds.length);
         const dropKeys = opened.slice(draft.adds.length, draft.adds.length + draft.drops.length);
         const moveRef = opened[draft.adds.length + draft.drops.length];
+        const intentPlayerIndex =
+          draft.adds.length +
+          draft.drops.length +
+          (draft.slotMove === undefined || draft.slotMove === null ? 0 : 1);
+        const intentPlayerRef = opened[intentPlayerIndex];
         const adds = addKeys.filter(isPlayerKey);
         const drops = dropKeys.filter(isPlayerKey);
         if (adds.length !== addKeys.length || drops.length !== dropKeys.length) {
@@ -417,6 +439,20 @@ export const TransactionProposalsLive = Layer.effect(
           continue;
         }
         if (draft.kind === "slot_move" && !isPlayerKey(moveRef)) {
+          refusals.push(
+            refusedItem(
+              index,
+              "reference_invalid",
+              `Item ${String(index + 1)} carries a player reference this account did not receive from a read of that team's league.`,
+              "Read the roster again and name the player to move from that read.",
+            ),
+          );
+          continue;
+        }
+        if (
+          (draft.kind === "activate" || draft.kind === "stash") &&
+          !isPlayerKey(intentPlayerRef)
+        ) {
           refusals.push(
             refusedItem(
               index,
@@ -459,6 +495,7 @@ export const TransactionProposalsLive = Layer.effect(
           adds,
           drops,
           slotMoveKey: isPlayerKey(moveRef) ? moveRef : undefined,
+          intentPlayerKey: isPlayerKey(intentPlayerRef) ? intentPlayerRef : undefined,
           counterpartyKey: draft.kind === "trade" ? counterpartyByIndex.get(index) : undefined,
         });
       }
@@ -498,6 +535,17 @@ export const TransactionProposalsLive = Layer.effect(
           draft.slotMove === null
             ? undefined
             : { player: candidate.slotMoveKey, toSlot: draft.slotMove.toSlot };
+        const intent =
+          draft.kind === "activate" || draft.kind === "stash"
+            ? {
+                kind: draft.kind,
+                ...(candidate.intentPlayerKey === undefined
+                  ? {}
+                  : { player: { key: candidate.intentPlayerKey } }),
+              }
+            : draft.kind === "free_agent_add" || draft.kind === "waiver_claim"
+              ? { kind: "add" as const, to: draft.to ?? "active" }
+              : undefined;
         const key = proposalItemKey({
           team: draft.team,
           kind: draft.kind,
@@ -505,6 +553,7 @@ export const TransactionProposalsLive = Layer.effect(
           adds,
           drops,
           slotMove,
+          intent,
           bid: draft.bid ?? undefined,
           reason: draft.reason,
         });
@@ -515,6 +564,7 @@ export const TransactionProposalsLive = Layer.effect(
           adds,
           drops,
           slotMove,
+          intent,
           draft.bid ?? undefined,
         );
         const repeated = existingByMove.get(moveKey);
@@ -553,6 +603,7 @@ export const TransactionProposalsLive = Layer.effect(
             adds: staged?.outcome === "staged" ? staged.adds : adds.map((add) => ({ key: add })),
             drops:
               staged?.outcome === "staged" ? staged.drops : drops.map((drop) => ({ key: drop })),
+            intent,
             counterpartyKey,
             counterpartyName: staged?.outcome === "staged" ? staged.counterpartyName : undefined,
             slotMove:
@@ -695,6 +746,7 @@ export const TransactionProposalsLive = Layer.effect(
         ),
         check: candidate.change.staleness,
         reserveMove: candidate.change.reserveMove,
+        placement: candidate.change.placement,
       }));
 
       let currentSet: ProposalSetRecord;
@@ -1203,6 +1255,26 @@ export const TransactionProposalsLive = Layer.effect(
         submissionId: claimed.submissionId,
         at: completedAt,
       });
+      const settledLineups = yield* settleLineups({
+        userId,
+        submissionId: claimed.submissionId,
+        items: sendable,
+        outcomes,
+        checks: checkByTeam,
+        at: completedAt,
+      });
+      if (settledLineups.length > 0) {
+        const touched = new Set(settledLineups.map((entry) => entry.team));
+        yield* repository.recordLineups({
+          userId,
+          setId: loaded.set.id,
+          lineups: [
+            ...loaded.set.lineups.filter((entry) => !touched.has(entry.team)),
+            ...settledLineups,
+          ],
+          at: completedAt,
+        });
+      }
       const final = yield* repository.load(userId, loaded.set.id);
       if (final === undefined) {
         return yield* ProposalPersistenceFailed.make({
@@ -1274,13 +1346,31 @@ export const TransactionProposalsLive = Layer.effect(
           }
         }
         const moved =
-          input.item.kind === "slot_move"
+          input.item.kind === "slot_move" ||
+          input.item.kind === "activate" ||
+          input.item.kind === "stash"
             ? yield* executeSlotMove(input, steps)
             : yield* executeTransaction(input, steps);
-        if (repair === undefined || repairFirst || moved.outcome !== "executed") {
+        if (moved.outcome !== "executed") {
           return moved;
         }
-        const run = yield* executeReserveMove(input, repair);
+        if (repair !== undefined && !repairFirst) {
+          const run = yield* executeReserveMove(input, repair);
+          const after = [...moved.steps, run.step];
+          return run.outcome === "executed"
+            ? { ...moved, steps: after }
+            : {
+                outcome: run.outcome,
+                ...(run.detail === undefined ? {} : { detail: run.detail }),
+                steps: after,
+                settled: false,
+              };
+        }
+        const placement = placementAfterOf(input.item);
+        if (placement === undefined) {
+          return moved;
+        }
+        const run = yield* executeReserveMove(input, placement);
         const after = [...moved.steps, run.step];
         return run.outcome === "executed"
           ? { ...moved, steps: after }
@@ -1291,6 +1381,117 @@ export const TransactionProposalsLive = Layer.effect(
               settled: false,
             };
       });
+    }
+
+    function settleLineups(input: {
+      readonly userId: UserId;
+      readonly submissionId: string;
+      readonly items: ReadonlyArray<ProposalItemRecord>;
+      readonly outcomes: ReadonlyArray<ProposalOutcomeCommand>;
+      readonly checks: ReadonlyMap<TeamId, TeamCheck>;
+      readonly at: DateTime.Utc;
+    }): Effect.Effect<ReadonlyArray<StoredProposalLineup>> {
+      return Effect.gen(function* () {
+        const teamOfItem = new Map(input.items.map((item) => [item.id, item.team] as const));
+        const touched = new Set(input.items.map((item) => item.team));
+        const executed = new Set(
+          input.outcomes.flatMap((outcome) => {
+            const team = teamOfItem.get(outcome.itemId);
+            return outcome.outcome === "executed" && team !== undefined ? [team] : [];
+          }),
+        );
+        const pending = new Set(
+          input.outcomes.flatMap((outcome) => {
+            const team = teamOfItem.get(outcome.itemId);
+            return outcome.outcome === "pending" && team !== undefined ? [team] : [];
+          }),
+        );
+        const runnable = [...executed].filter(
+          (team) => input.checks.get(team)?.context !== undefined,
+        );
+        const settled: Array<StoredProposalLineup> = [];
+        if (runnable.length > 0) {
+          const submitted = yield* Effect.result(
+            lineups.submit(input.userId, {
+              requestId: input.submissionId,
+              teams: runnable.map((team) => ({ team, period: { coverage: "current" as const } })),
+            }),
+          );
+          if (submitted._tag === "Failure") {
+            for (const team of runnable) {
+              settled.push(
+                notStartedLineup(team, lineupFailureDetail(submitted.failure), input.at),
+              );
+            }
+          } else {
+            const byTeam = new Map(submitted.success.runs.map((run) => [run.team, run] as const));
+            for (const team of runnable) {
+              const run = byTeam.get(team);
+              settled.push(
+                run === undefined
+                  ? notStartedLineup(
+                      team,
+                      "The lineup run was not returned, so this team's lineup was left as it was.",
+                      input.at,
+                    )
+                  : lineupOf(team, run, input.at),
+              );
+            }
+          }
+        }
+        for (const team of executed) {
+          if (runnable.includes(team)) {
+            continue;
+          }
+          settled.push(
+            notStartedLineup(
+              team,
+              "This team's connection is not ready, so its lineup was left as it was.",
+              input.at,
+            ),
+          );
+        }
+        for (const team of touched) {
+          if (executed.has(team)) {
+            continue;
+          }
+          settled.push(
+            pending.has(team)
+              ? {
+                  team,
+                  status: "pending" as const,
+                  detail:
+                    "The waiver claim is still pending, so this team's lineup was left as it was.",
+                  at: DateTime.formatIso(input.at),
+                }
+              : {
+                  team,
+                  status: "not_needed" as const,
+                  detail: "No item changed this team's roster, so its lineup was left as it was.",
+                  at: DateTime.formatIso(input.at),
+                },
+          );
+        }
+        return settled;
+      });
+    }
+
+    function placementAfterOf(item: ProposalItemRecord): StoredReserveMove | undefined {
+      const placement = item.placement;
+      if (
+        placement === undefined ||
+        (item.kind !== "free_agent_add" && item.kind !== "waiver_claim") ||
+        item.intent?.to !== "reserve"
+      ) {
+        return undefined;
+      }
+      return {
+        playerKey: placement.playerKey,
+        ...(placement.playerName === undefined ? {} : { playerName: placement.playerName }),
+        ...(placement.fromSlot === undefined ? {} : { fromSlot: placement.fromSlot }),
+        toSlot: placement.toSlot,
+        order: "after",
+      };
     }
 
     function executeReserveMove(
@@ -1421,11 +1622,13 @@ export const TransactionProposalsLive = Layer.effect(
       steps: ReadonlyArray<ProposalStepCommand>,
     ): Effect.Effect<ItemExecution> {
       return Effect.gen(function* () {
-        const move = input.item.slotMove;
+        const move = input.item.kind === "slot_move" ? input.item.slotMove : input.item.placement;
+        const recordedFromSlot =
+          input.item.kind === "slot_move" ? undefined : input.item.placement?.fromSlot;
         if (move === undefined) {
           return {
             outcome: "skipped",
-            detail: "This slot move names no player and destination slot, so nothing was sent.",
+            detail: "This move names no player and destination place, so nothing was sent.",
             steps,
             settled: true,
           };
@@ -1441,7 +1644,11 @@ export const TransactionProposalsLive = Layer.effect(
           kind: "slot_move",
           playerKey: move.playerKey,
           playerName: rostered?.name ?? move.playerName,
-          ...(rostered?.slot.status === "verified" ? { fromSlot: rostered.slot.slot } : {}),
+          ...(rostered?.slot.status === "verified"
+            ? { fromSlot: rostered.slot.slot }
+            : recordedFromSlot === undefined
+              ? {}
+              : { fromSlot: recordedFromSlot }),
           toSlot: move.toSlot,
           outcome,
           ...(detail === undefined ? {} : { detail }),
@@ -2464,8 +2671,9 @@ export const TransactionProposalsLive = Layer.effect(
       const changes = items.map((item) =>
         evaluateItem(item, data.facts, budget, at, data.tradeFeed),
       );
-      const plan = orderFor(data.facts, items, changes);
-      const ordered = orderChanges(changes, items, plan, at);
+      const placed = placeTeam(data.facts, items, changes, at);
+      const plan = orderFor(data.facts, items, placed.changes, placed.resolutions);
+      const ordered = orderChanges(placed.changes, items, plan, at);
       const order = publishedOrder(plan.plan, items, ordered);
       return {
         team: teamId,
@@ -2500,10 +2708,146 @@ type TeamPlan = {
   >;
 };
 
+type PlacementResolution = {
+  readonly move?: {
+    readonly player: { readonly key: string; readonly name: string };
+    readonly toSlot: string;
+  };
+  readonly after?: {
+    readonly playerKey: string;
+    readonly playerName: string;
+    readonly fromSlot?: string;
+    readonly toSlot: string;
+  };
+};
+
+type PlacedTeam = {
+  readonly changes: ReadonlyArray<ProposalItemChange>;
+  readonly resolutions: ReadonlyMap<string, PlacementResolution>;
+};
+
+function placeTeam(
+  facts: TeamFacts,
+  items: ReadonlyArray<ProposalItemRecord>,
+  changes: ReadonlyArray<ProposalItemChange>,
+  at: DateTime.Utc,
+): PlacedTeam {
+  const placementItems = items.flatMap((item, index) => {
+    const change = changes[index];
+    if (change === undefined || item.kind === "trade" || change.staleness.status !== "current") {
+      return [];
+    }
+    return [
+      {
+        id: item.id,
+        adds: change.adds.map((add) => ({
+          key: add.key,
+          name: add.name ?? add.key,
+          positions: facts.players.get(add.key)?.eligiblePositions ?? [],
+        })),
+        drops: change.drops.map((drop) => ({ key: drop.key, name: drop.name ?? drop.key })),
+        move:
+          item.kind === "slot_move" && item.slotMove !== undefined
+            ? {
+                player: {
+                  key: item.slotMove.playerKey,
+                  name: item.slotMove.playerName ?? item.slotMove.playerKey,
+                },
+                toSlot: item.slotMove.toSlot,
+              }
+            : undefined,
+        intent: placementIntentOf(item),
+      },
+    ];
+  });
+  if (placementItems.length === 0) {
+    return { changes, resolutions: new Map() };
+  }
+  const placed = placeIntentItems({
+    constraints: facts.league.rosterConstraints,
+    slots: facts.league.rosterPositions.map((slot) => ({
+      position: slot.position,
+      kind: slot.kind,
+      count: slot.count,
+      eligibility: slot.eligibility,
+    })),
+    players: facts.roster.players.map((player) => ({
+      key: player.providerPlayerKey,
+      name: player.name,
+      positions: player.eligiblePositions,
+      slot: player.slot.status === "verified" ? player.slot.slot : undefined,
+      editable: player.isEditable === true,
+      injured: player.injuryCode !== undefined || player.injuryDetail !== undefined,
+    })),
+    items: placementItems,
+  });
+  return applyPlacement(placed, changes, at);
+}
+
+function placementIntentOf(item: ProposalItemRecord): ProposalPlacementIntent | undefined {
+  if (item.kind === "activate" || item.kind === "stash") {
+    const player = item.intent?.player;
+    return player === undefined
+      ? undefined
+      : { kind: item.kind, player: { key: player.key, name: player.name ?? player.key } };
+  }
+  if ((item.kind === "free_agent_add" || item.kind === "waiver_claim") && item.adds.length === 1) {
+    return { kind: "add", to: item.intent?.to ?? "active" };
+  }
+  return undefined;
+}
+
+function applyPlacement(
+  placed: ProposalPlacementResult,
+  changes: ReadonlyArray<ProposalItemChange>,
+  at: DateTime.Utc,
+): PlacedTeam {
+  const refused = new Map(placed.refused.map((entry) => [entry.item, entry] as const));
+  const placements = new Map(placed.placements.map((entry) => [entry.item, entry] as const));
+  const moves = new Map(placed.moves.map((entry) => [entry.item, entry] as const));
+  const after = new Map(placed.after.map((entry) => [entry.item, entry.repair] as const));
+  const resolutions = new Map<string, PlacementResolution>();
+  const updated = changes.map((change) => {
+    const refusal = refused.get(change.id);
+    if (refusal !== undefined) {
+      return {
+        ...change,
+        placement: undefined,
+        staleness:
+          refusal.code === "slot_illegal"
+            ? checked([], [{ code: refusal.code, detail: refusal.detail }], at)
+            : staleCheck([{ code: refusal.code, detail: refusal.detail }], at),
+      };
+    }
+    const placement = placements.get(change.id);
+    if (placement === undefined) {
+      return change;
+    }
+    const move = moves.get(change.id);
+    const repair = after.get(change.id);
+    resolutions.set(change.id, {
+      ...(move === undefined ? {} : { move }),
+      ...(repair === undefined ? {} : { after: repair }),
+    });
+    return {
+      ...change,
+      placement: {
+        playerKey: placement.playerKey,
+        playerName: placement.playerName,
+        ...(placement.fromSlot === undefined ? {} : { fromSlot: placement.fromSlot }),
+        toSlot: placement.toSlot,
+        detail: placement.detail,
+      },
+    };
+  });
+  return { changes: updated, resolutions };
+}
+
 function orderFor(
   facts: TeamFacts,
   items: ReadonlyArray<ProposalItemRecord>,
   changes: ReadonlyArray<ProposalItemChange>,
+  resolutions: ReadonlyMap<string, PlacementResolution>,
 ): TeamPlan {
   let remaining: Array<ProposalOrderItem> = [];
   for (const [index, change] of changes.entries()) {
@@ -2511,7 +2855,7 @@ function orderFor(
     if (item === undefined || item.kind === "trade" || change.staleness.status !== "current") {
       continue;
     }
-    remaining.push(orderItemOf(facts, item, change));
+    remaining.push(orderItemOf(facts, item, change, resolutions.get(item.id)));
   }
   if (remaining.length === 0) {
     return { plan: undefined, refused: new Map() };
@@ -2568,6 +2912,7 @@ function orderItemOf(
   facts: TeamFacts,
   item: ProposalItemRecord,
   change: ProposalItemChange,
+  resolution: PlacementResolution | undefined,
 ): ProposalOrderItem {
   const declared = item.kind === "slot_move" ? item.slotMove : undefined;
   const declaredName =
@@ -2578,15 +2923,15 @@ function orderItemOf(
         declared.playerName ??
         declared.playerKey);
   const move =
-    declared === undefined
-      ? undefined
-      : {
+    declared !== undefined
+      ? {
           player: {
             key: declared.playerKey,
             name: declaredName ?? declared.playerKey,
           },
           toSlot: declared.toSlot,
-        };
+        }
+      : resolution?.move;
   const adds = change.adds.map((add) => ({
     key: add.key,
     name: add.name ?? add.key,
@@ -2598,11 +2943,22 @@ function orderItemOf(
   }));
   return {
     id: item.id,
-    label: orderItemLabel(adds, drops, move),
+    label:
+      item.kind === "activate" || item.kind === "stash"
+        ? `${item.kind === "activate" ? "Activate" : "Stash"} ${move?.player.name ?? "this player"}`
+        : orderItemLabel(adds, drops, move),
     adds,
     drops,
     move,
-    mayRepair: item.kind !== "slot_move",
+    mayRepair:
+      item.kind !== "slot_move" &&
+      item.kind !== "activate" &&
+      item.kind !== "stash" &&
+      !(
+        (item.kind === "free_agent_add" || item.kind === "waiver_claim") &&
+        item.intent?.to === "reserve"
+      ),
+    ...(resolution?.after === undefined ? {} : { placeAfter: resolution.after }),
   };
 }
 
@@ -2837,6 +3193,7 @@ function buildReview(
       }
       const check = checks?.get(teamId);
       const order = check?.order ?? set.orders.find((entry) => entry.team === teamId)?.order;
+      const lineup = set.lineups.find((entry) => entry.team === teamId);
       const teamItems = [];
       for (const item of itemsByTeam.get(teamId) ?? []) {
         teamItems.push(
@@ -2872,6 +3229,7 @@ function buildReview(
               }),
           ...(check?.failure === undefined ? {} : { failure: check.failure }),
           ...(order === undefined ? {} : { order }),
+          ...(lineup === undefined ? {} : { lineup: lineupView(lineup) }),
           items: teamItems,
           pendingOffers: offersByTeam?.get(teamId) ?? [],
         }).pipe(Effect.mapError((cause) => ProposalPersistenceFailed.make({ cause }))),
@@ -2896,6 +3254,9 @@ function evaluateItem(
   }
   if (item.kind === "slot_move") {
     return evaluateSlotMoveItem(item, facts, at);
+  }
+  if (item.kind === "activate" || item.kind === "stash") {
+    return evaluateIntentItem(item, facts, at);
   }
   const reasons: Array<StoredProposalStaleReason> = [];
   const adds = item.adds.map((add) => ({ ...add }));
@@ -3000,6 +3361,59 @@ function evaluateItem(
     adds,
     drops,
     staleness: checked(reasons, [], at),
+  };
+}
+
+function evaluateIntentItem(
+  item: ProposalItemRecord,
+  facts: TeamFacts,
+  at: DateTime.Utc,
+): ProposalItemChange {
+  const intent = item.intent;
+  if (intent === undefined || intent.player === undefined) {
+    return {
+      id: item.id,
+      adds: [],
+      drops: [],
+      staleness: staleCheck(
+        [
+          {
+            code: "state_unavailable",
+            detail:
+              item.kind === "activate"
+                ? "This activate names no player, so there is nothing to move."
+                : "This stash names no player, so there is nothing to move.",
+          },
+        ],
+        at,
+      ),
+    };
+  }
+  const player = facts.roster.players.find(
+    (entry) => entry.providerPlayerKey === intent.player?.key,
+  );
+  if (player === undefined) {
+    return {
+      id: item.id,
+      adds: [],
+      drops: [],
+      staleness: staleCheck(
+        [
+          {
+            code: "move_not_rostered",
+            playerKey: intent.player.key,
+            detail: `${intent.player.name ?? "The moved player"} is no longer on this team's roster, so the move cannot be made.`,
+          },
+        ],
+        at,
+      ),
+    };
+  }
+  return {
+    id: item.id,
+    adds: [],
+    drops: [],
+    staleness: currentCheck(at),
   };
 }
 
@@ -3437,7 +3851,62 @@ function proposalShape(
 ): { readonly refusal: "kind_invalid" | "bid_invalid"; readonly detail: string } | undefined {
   const bid = draft.bid ?? undefined;
   const move = draft.slotMove ?? undefined;
+  const to = draft.to ?? undefined;
+  const intentPlayer = draft.player ?? undefined;
+  const onlyAddsNameDestination = (): ReturnType<typeof proposalShape> =>
+    to === undefined
+      ? undefined
+      : {
+          refusal: "kind_invalid",
+          detail: "Only an add names a destination, with `to` set to `active` or `reserve`.",
+        };
+  const onlyIntentNamesPlayer = (): ReturnType<typeof proposalShape> =>
+    intentPlayer === undefined
+      ? undefined
+      : {
+          refusal: "kind_invalid",
+          detail: "Only an activate or stash names a player, with `player`.",
+        };
+  const onlySlotMoveNamesDestination = (): ReturnType<typeof proposalShape> =>
+    move === undefined
+      ? undefined
+      : { refusal: "kind_invalid", detail: "Only a slot move item names a destination slot." };
   switch (draft.kind) {
+    case "activate":
+    case "stash": {
+      const intent =
+        draft.kind === "activate"
+          ? "An activate moves one reserve-list player onto the active roster."
+          : "A stash moves one active player onto a reserve list that accepts their positions.";
+      if (draft.adds.length > 0 || draft.drops.length > 0) {
+        return {
+          refusal: "kind_invalid",
+          detail: `${intent} It cannot also add or drop a player; use a separate item for that.`,
+        };
+      }
+      const destination = onlySlotMoveNamesDestination();
+      if (destination !== undefined) {
+        return destination;
+      }
+      if (intentPlayer === undefined) {
+        return {
+          refusal: "kind_invalid",
+          detail: `${intent} Name the player with \`player\`.`,
+        };
+      }
+      if (to !== undefined) {
+        return {
+          refusal: "kind_invalid",
+          detail: `${intent} It chooses the place itself, so it does not name \`to\`.`,
+        };
+      }
+      return bid === undefined
+        ? undefined
+        : {
+            refusal: "bid_invalid",
+            detail: `${intent} It carries no FAAB bid. Use a waiver claim to spend a bid.`,
+          };
+    }
     case "slot_move":
       if (draft.adds.length > 0 || draft.drops.length > 0) {
         return {
@@ -3451,6 +3920,18 @@ function proposalShape(
           refusal: "kind_invalid",
           detail:
             "A slot move names the player to move, with `slotMove.player`, and the destination slot, with `slotMove.toSlot`.",
+        };
+      }
+      if (intentPlayer !== undefined) {
+        return {
+          refusal: "kind_invalid",
+          detail: "A slot move names its player with `slotMove.player`, not `player`.",
+        };
+      }
+      if (to !== undefined) {
+        return {
+          refusal: "kind_invalid",
+          detail: "A slot move names its destination with `slotMove.toSlot`, not `to`.",
         };
       }
       return bid === undefined
@@ -3473,11 +3954,23 @@ function proposalShape(
           detail: "A drop item names at least one player to drop.",
         };
       }
-      if (move !== undefined) {
-        return {
-          refusal: "kind_invalid",
-          detail: "Only a slot move item names a destination slot.",
-        };
+      {
+        const destination = onlySlotMoveNamesDestination();
+        if (destination !== undefined) {
+          return destination;
+        }
+      }
+      {
+        const destination = onlyAddsNameDestination();
+        if (destination !== undefined) {
+          return destination;
+        }
+      }
+      {
+        const player = onlyIntentNamesPlayer();
+        if (player !== undefined) {
+          return player;
+        }
       }
       return bid === undefined
         ? undefined
@@ -3486,40 +3979,47 @@ function proposalShape(
             detail: "A drop item cannot carry a FAAB bid. Use a waiver claim to spend a bid.",
           };
     case "free_agent_add":
+    case "waiver_claim": {
       if (draft.adds.length === 0) {
         return {
           refusal: "kind_invalid",
-          detail: "A free-agent add names at least one player to add.",
+          detail:
+            draft.kind === "free_agent_add"
+              ? "A free-agent add names at least one player to add."
+              : "A waiver claim names at least one player to add.",
         };
       }
-      if (move !== undefined) {
+      {
+        const destination = onlySlotMoveNamesDestination();
+        if (destination !== undefined) {
+          return destination;
+        }
+      }
+      {
+        const player = onlyIntentNamesPlayer();
+        if (player !== undefined) {
+          return player;
+        }
+      }
+      if (to === "reserve" && draft.adds.length !== 1) {
         return {
           refusal: "kind_invalid",
-          detail: "Only a slot move item names a destination slot.",
+          detail:
+            "A reserve add names one player, because each player needs their own reserve place. Use one item for each player you want on a reserve list.",
         };
       }
-      return bid === undefined
-        ? undefined
-        : {
-            refusal: "bid_invalid",
-            detail: "A free-agent add carries no bid. Use a waiver claim for a FAAB bid.",
-          };
-    case "waiver_claim":
-      if (draft.adds.length === 0) {
-        return {
-          refusal: "kind_invalid",
-          detail: "A waiver claim names at least one player to add.",
-        };
-      }
-      if (move !== undefined) {
-        return {
-          refusal: "kind_invalid",
-          detail: "Only a slot move item names a destination slot.",
-        };
+      if (draft.kind === "free_agent_add") {
+        return bid === undefined
+          ? undefined
+          : {
+              refusal: "bid_invalid",
+              detail: "A free-agent add carries no bid. Use a waiver claim for a FAAB bid.",
+            };
       }
       return bid === undefined
         ? { refusal: "bid_invalid", detail: "A waiver claim requires a FAAB bid." }
         : undefined;
+    }
     case "trade":
       if (draft.adds.length === 0 || draft.drops.length === 0) {
         return {
@@ -3528,11 +4028,23 @@ function proposalShape(
             "A trade names at least one player going out and at least one player coming back.",
         };
       }
-      if (move !== undefined) {
-        return {
-          refusal: "kind_invalid",
-          detail: "Only a slot move item names a destination slot.",
-        };
+      {
+        const destination = onlySlotMoveNamesDestination();
+        if (destination !== undefined) {
+          return destination;
+        }
+      }
+      {
+        const destination = onlyAddsNameDestination();
+        if (destination !== undefined) {
+          return destination;
+        }
+      }
+      {
+        const player = onlyIntentNamesPlayer();
+        if (player !== undefined) {
+          return player;
+        }
       }
       return bid === undefined
         ? undefined
@@ -3542,7 +4054,6 @@ function proposalShape(
           };
   }
 }
-
 function proposalItemKey(input: {
   readonly team: string;
   readonly kind: string;
@@ -3550,6 +4061,7 @@ function proposalItemKey(input: {
   readonly adds: ReadonlyArray<string>;
   readonly drops: ReadonlyArray<string>;
   readonly slotMove: { readonly player: string; readonly toSlot: string } | undefined;
+  readonly intent: StoredProposalIntent | undefined;
   readonly bid: number | undefined;
   readonly reason: string;
 }): string {
@@ -3561,6 +4073,7 @@ function proposalItemKey(input: {
     [...input.drops].sort(),
     input.slotMove?.player ?? null,
     input.slotMove?.toSlot ?? null,
+    intentKey(input.intent),
     input.bid ?? null,
     input.reason,
   ]);
@@ -3573,6 +4086,7 @@ function proposalMoveKey(
   adds: ReadonlyArray<string>,
   drops: ReadonlyArray<string>,
   slotMove: { readonly player: string; readonly toSlot: string } | undefined,
+  intent: StoredProposalIntent | undefined,
   bid: number | undefined,
 ): string {
   return JSON.stringify([
@@ -3583,8 +4097,13 @@ function proposalMoveKey(
     [...drops].sort(),
     slotMove?.player ?? null,
     slotMove?.toSlot ?? null,
+    intentKey(intent),
     bid ?? null,
   ]);
+}
+
+function intentKey(intent: StoredProposalIntent | undefined): ReadonlyArray<string | null> | null {
+  return intent === undefined ? null : [intent.kind, intent.player?.key ?? null, intent.to ?? null];
 }
 
 function recordItemKey(item: ProposalItemRecord): string {
@@ -3598,6 +4117,7 @@ function recordItemKey(item: ProposalItemRecord): string {
       item.slotMove === undefined
         ? undefined
         : { player: item.slotMove.playerKey, toSlot: item.slotMove.toSlot },
+    intent: item.intent,
     bid: item.bid,
     reason: item.reason,
   });
@@ -3613,6 +4133,7 @@ function recordMoveKey(item: ProposalItemRecord): string {
     item.slotMove === undefined
       ? undefined
       : { player: item.slotMove.playerKey, toSlot: item.slotMove.toSlot },
+    item.intent,
     item.bid,
   );
 }
@@ -3658,6 +4179,10 @@ function staleFix(code: ProposalStaleCode): string {
       return "Add the drop or slot move that frees a roster place to this set, then propose again.";
     case "slot_illegal":
       return "Make the named player's slot legal: move them in your league, or propose a slot move or drop that opens a slot accepting them.";
+    case "reserve_unavailable":
+      return "Choose a player your league lists as eligible for a reserve list, or read the league's reserve lists again before proposing.";
+    case "intent_invalid":
+      return "Read this team's roster again: the named player is already on that part of the roster, so propose the move the roster still needs.";
     case "order_conflict":
       return "Withdraw or change one of the named moves so the team has a legal order, then propose again.";
     case "order_unresolved":
@@ -3685,14 +4210,25 @@ function namedCommand(
   command: ProposalItemCommand,
   facts: TeamFacts | undefined,
 ): ProposalItemCommand {
-  const move = command.slotMove;
-  if (move === undefined) {
-    return command;
+  const nameOf = (key: string): string | undefined =>
+    facts?.roster.players.find((player) => player.providerPlayerKey === key)?.name;
+  const withMove =
+    command.slotMove === undefined
+      ? command
+      : (() => {
+          const name = nameOf(command.slotMove.playerKey);
+          return name === undefined
+            ? command
+            : { ...command, slotMove: { ...command.slotMove, playerName: name } };
+        })();
+  const player = withMove.intent?.player;
+  if (player === undefined) {
+    return withMove;
   }
-  const name = facts?.roster.players.find(
-    (player) => player.providerPlayerKey === move.playerKey,
-  )?.name;
-  return name === undefined ? command : { ...command, slotMove: { ...move, playerName: name } };
+  const name = nameOf(player.key);
+  return name === undefined || withMove.intent === undefined
+    ? withMove
+    : { ...withMove, intent: { ...withMove.intent, player: { ...player, name } } };
 }
 
 function commandRecord(input: {
@@ -3715,6 +4251,7 @@ function commandRecord(input: {
     adds: command.adds,
     drops: command.drops,
     ...(command.slotMove === undefined ? {} : { slotMove: command.slotMove }),
+    ...(command.intent === undefined ? {} : { intent: command.intent }),
     ...(command.counterpartyKey === undefined ? {} : { counterpartyKey: command.counterpartyKey }),
     ...(command.counterpartyName === undefined
       ? {}
@@ -3842,6 +4379,7 @@ function toItem(
       ...executionSteps.map((step) => step.playerKey),
       ...(slotMove === undefined ? [] : [slotMove.playerKey]),
       ...(repair === undefined ? [] : [repair.playerKey]),
+      ...(record.placement === undefined ? [] : [record.placement.playerKey]),
     ];
     const stepRefs = yield* tokens.sealPlayerRefs({ userId, leagueKey, playerKeys: stepKeys });
     const counterpartyRoster =
@@ -3893,6 +4431,19 @@ function toItem(
         : {
             ...moveView(repair, stepRefs, executionSteps.length + (slotMove === undefined ? 0 : 1)),
             order: repair.order,
+          };
+    const placed =
+      record.placement === undefined
+        ? undefined
+        : {
+            ...moveView(
+              record.placement,
+              stepRefs,
+              executionSteps.length +
+                (slotMove === undefined ? 0 : 1) +
+                (repair === undefined ? 0 : 1),
+            ),
+            detail: record.placement.detail,
           };
     return yield* Schema.decodeEffect(ProposalItemSchema)({
       id: record.id,
@@ -3956,6 +4507,7 @@ function toItem(
       ...(execution === undefined ? {} : { execution }),
       ...(slot === undefined ? {} : { slotMove: slot }),
       ...(reserve === undefined ? {} : { reserveMove: reserve }),
+      ...(placed === undefined ? {} : { placement: placed }),
       ...(counterpartyRef === undefined
         ? {}
         : {
@@ -4063,6 +4615,11 @@ function executableRefusal(
       ? "This slot move names no player and destination slot, so there is nothing to send."
       : undefined;
   }
+  if (item.kind === "activate" || item.kind === "stash") {
+    return item.placement === undefined
+      ? "This move names no place for the player, so there is nothing to send."
+      : undefined;
+  }
   if (item.adds.length + item.drops.length === 0) {
     return "This move names no player to add or drop, so there is nothing to send.";
   }
@@ -4168,6 +4725,9 @@ function moveLabel(item: ProposalItemRecord): string {
   if (item.kind === "slot_move" && item.slotMove !== undefined) {
     return `Moving ${item.slotMove.playerName ?? "a player"} to ${item.slotMove.toSlot}`;
   }
+  if ((item.kind === "activate" || item.kind === "stash") && item.placement !== undefined) {
+    return `Moving ${item.placement.playerName ?? "a player"} to ${item.placement.toSlot}`;
+  }
   const adds = item.adds.flatMap((add) => (add.name === undefined ? [] : [add.name]));
   const drops = item.drops.flatMap((drop) => (drop.name === undefined ? [] : [drop.name]));
   if (item.kind === "trade" && adds.length > 0 && drops.length > 0) {
@@ -4183,6 +4743,85 @@ function moveLabel(item: ProposalItemRecord): string {
     return `Dropping ${drops.join(", ")}`;
   }
   return "This move";
+}
+
+function lineupView(lineup: StoredProposalLineup): ProposalTeamLineup {
+  return {
+    status: lineup.status,
+    detail: lineup.detail,
+    ...(lineup.run === undefined ? {} : { run: lineup.run }),
+    at: lineup.at,
+  };
+}
+
+function lineupOf(team: TeamId, run: LineupRun, at: DateTime.Utc): StoredProposalLineup {
+  const summary = run.outcome?.summary.trim() ?? "";
+  const decidedAt = DateTime.formatIso(at);
+  switch (run.status) {
+    case "completed":
+    case "skipped":
+      return {
+        team,
+        status: "settled",
+        detail: summary === "" ? "The lineup is settled." : summary,
+        run: run.run,
+        at: decidedAt,
+      };
+    case "failed":
+    case "blocked":
+    case "uncertain":
+      return {
+        team,
+        status: run.status,
+        detail: summary === "" ? "The lineup did not settle." : summary,
+        run: run.run,
+        at: decidedAt,
+      };
+    case "superseded":
+      return {
+        team,
+        status: "superseded",
+        detail: summary === "" ? "A later lineup run replaced this one." : summary,
+        run: run.run,
+        at: decidedAt,
+      };
+    case "queued":
+    case "reading":
+    case "planning":
+    case "validating":
+    case "applying":
+    case "verifying":
+    case "retry-wait":
+      return {
+        team,
+        status: "pending",
+        detail:
+          "The lineup run is queued; its outcome is reported separately from the transactions.",
+        run: run.run,
+        at: decidedAt,
+      };
+  }
+}
+
+function notStartedLineup(team: TeamId, detail: string, at: DateTime.Utc): StoredProposalLineup {
+  return { team, status: "not_started", detail, at: DateTime.formatIso(at) };
+}
+
+function lineupFailureDetail(error: LineupError): string {
+  switch (error._tag) {
+    case "lineup.connection_not_ready":
+      return "This team's connection is not ready, so its lineup was left as it was.";
+    case "lineup.team_not_found":
+      return "This team is not available to this account, so its lineup was left as it was.";
+    case "lineup.request_conflict":
+      return "Another lineup request already holds this submission's reference, so no lineup run was made.";
+    case "lineup.selection_invalid":
+      return "The lineup request was refused, so this team's lineup was left as it was.";
+    case "lineup.run_not_found":
+      return "The lineup run could not be found after it was requested.";
+    case "lineup.persistence_failed":
+      return "The lineup run could not be stored, so this team's lineup was left as it was.";
+  }
 }
 
 function proposalCoverage(league: ProviderLeagueSettings): ProviderRosterCoverage | undefined {
