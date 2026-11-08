@@ -126,7 +126,7 @@ A named, provider-reported fact about whether a player can appear in a period, s
 _Avoid_: Injury when it also covers byes, suspensions, and inactive players; availability condition when an ordering is meant
 
 **Starting lineup fact**:
-A provider-reported fact that a player is confirmed in, confirmed outside, or unconfirmed for their real team's starting lineup. It is neutral and three-valued; whether being outside the lineup means the player is unlikely to appear is sport and position knowledge the provider adapter applies from a declared table covering every reference sport.
+A provider-reported fact that a player is confirmed in, confirmed outside, or unconfirmed for their real team's starting lineup. It is neutral and three-valued; whether being outside the lineup means the player is unlikely to appear is sport and position knowledge the provider adapter applies from a declared table covering every reference sport. Published on a team roster row and the summary roster as `startingStatus`: `confirmed_starting`, `confirmed_not_starting`, or `unconfirmed`; `not_requested` says the read's request shape did not include it, as on a league roster page, and is distinct from `unconfirmed`.
 _Avoid_: Starter bonus, confirmed-start when the fact is meant, probable starter when the value is unconfirmed
 
 **Availability tier**:

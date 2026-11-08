@@ -298,3 +298,22 @@ history, and by the owner's ruling that a league's keeper arithmetic is a house 
 6. **Accepted: `undrafted` and `not_published` are different answers.** A league that published no
    picks, a provider that cannot read draft history, and a failed read are all `not_published` with
    the reason in coverage; only a successful history without the player is `undrafted`.
+
+## Round 15 — Two decoded facts are published without a new read
+
+Status: implemented. Motivated by the hidden-facts report, which found facts the server already read
+and never published, and the owner's approval of its two no-new-read candidates.
+
+1. **Accepted: a team roster row publishes the provider's starting status.** `get_rosters` team rows
+   and `get_team_summary` roster rows carry `startingStatus`: `confirmed_starting`,
+   `confirmed_not_starting`, or `unconfirmed`. It is the provider's real-world statement for the
+   scoring week, not a projection and not "will play"; the team roster read already requested it.
+2. **Accepted: a league roster row says `not_requested`, not `unconfirmed`.** The league-scope read
+   requests only `out=roster`, so its rows say the request shape did not include the fact. Publishing
+   `unconfirmed` there would claim the provider had no status when it was never asked.
+3. **Accepted: an off-roster player's injury note is published.** `get_players` availability carries
+   the note the detail read already decoded as `injury.detail` and sets `injury.reported` from it, so
+   a free agent is no longer reported as having no injury while its note is dropped.
+4. **Accepted: existing descriptions pay for the new ones.** The cursor description was shortened to
+   keep the total field-description budget under its 30,000-character ceiling; the new field is
+   described once per schema occurrence.

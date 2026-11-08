@@ -1693,7 +1693,7 @@ it("publishes the accepted player-statistics periods and the compact standings f
   expect(scoring).toContain("display-only");
 
   const cursor = JSON.stringify(tool("get_team_summary").inputSchema);
-  expect(cursor).toContain("bound to the arguments");
+  expect(cursor).toContain("bound to the issuing call's arguments");
 });
 
 function json(response: Response): Promise<unknown> {

@@ -1,8 +1,8 @@
 # Hidden facts: what we hold and never publish
 
 The owner asked for a full pass over information the server already reads or computes and never
-publishes where a decision is made, with a proposal rather than a blind build. This is that pass. It
-adds no read and no field: the two "publish now" candidates below are proposals, not changes.
+publishes where a decision is made. This is that pass. Two "publish now" candidates needed no new
+read; the owner approved both and a following change publishes them.
 
 ## What counts as a hidden fact
 
@@ -31,8 +31,8 @@ reported; no player, team, or league identifier is repeated here.
 
 | #   | Fact we hold                                               | Held where                                                                            | Read that would carry it                              | Decision it would change                                     | Another way today                                              | Verdict        |
 | --- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------- | -------------- |
-| 1   | Goalie/pitcher confirmed starting status                   | `ProviderRosterPlayer.startingLineup`                                                 | `get_rosters` team rows; summary roster rows          | Start or bench a goalie on a game day                        | None                                                           | Publish now    |
-| 2   | A pool player's injury note                                | `ProviderPlayerDetail.availabilityDetail`                                             | `get_players` `availability.injury.detail` off-roster | Add a free agent whose note explains the absence             | `search_players` `status.detail`, a second read                | Publish now    |
+| 1   | Goalie/pitcher confirmed starting status                   | `ProviderRosterPlayer.startingLineup`                                                 | `get_rosters` team rows; summary roster rows          | Start or bench a goalie on a game day                        | None                                                           | Published      |
+| 2   | A pool player's injury note                                | `ProviderPlayerDetail.availabilityDetail`                                             | `get_players` `availability.injury.detail` off-roster | Add a free agent whose note explains the absence             | `search_players` `status.detail`, a second read                | Published      |
 | 3   | The receiving team's unused roster spots on an offer       | `ProviderPendingTrade.unusedRosterSpots`                                              | `get_pending_trade_offers` offer row                  | Accept or propose a two-for-one without a drop               | Count the rival's roster and the league maximum, then subtract | Publish later  |
 | 4   | The custom lineup's per-player value and availability tier | Computed in `LineupScore`/`Valuation`                                                 | `get_lineup_runs` outcome, as a labelled ranking      | Trust, override, or audit an automated lineup                | None; stats and ranks can only approximate it                  | Publish later  |
 | 5   | The league's provider web address                          | `ProviderLeagueSettings.webUrl`                                                       | `get_league` overview                                 | None established                                             | The person can use the provider itself                         | Do not publish |
@@ -44,34 +44,35 @@ reported; no player, team, or league identifier is repeated here.
 | 11  | The exact assignments a run intended                       | `lineup_write_intents.before`/`plan`                                                  | `get_lineup_runs` outcome                             | None; `changes` and `differences` publish what happened      | The verified outcome                                           | Do not publish |
 | 12  | A provider refusal's status and wording                    | `connection_incidents.providerStatus`/`providerDetail`                                | `list_connections`                                    | None; the reconnect remedy is the same either way            | The published reconnect-required status                        | Do not publish |
 
-### 1. Goalie/pitcher starting status — publish now
+### 1. Goalie/pitcher starting status — published
 
 Every team roster read already requests `out=opponent,starting_status,transactions`, and the adapter
 decodes `starting_status.is_starting` into `confirmed-starting`, `confirmed-not-starting`, or
-`unconfirmed`. The only consumer is the lineup score. No query response publishes it, so a client
-cannot tell a confirmed starter from a goalie whose status is simply not out yet, and those two lead
-to opposite start/sit advice. This is not a new read and it is not a projection: it is the provider's
-own real-world starting status, published near game time.
+`unconfirmed`. Before publication the only consumer was the lineup score, so a client could not tell
+a confirmed starter from a goalie whose status was simply not out yet, and those two lead to opposite
+start/sit advice. Team roster rows and summary roster rows now publish `startingStatus` with those
+three values. This is not a new read and it is not a projection: it is the provider's own real-world
+starting status, published near game time.
 
 The recorded 2026-10-26 probe found the key on exactly one of five rosters' goalies
 (`is_starting: 0`), absent for every skater and for goalies whose team had no game that day. It is
 absent for most rows because the field applies to goalies and pitchers only, not because the read is
 broken; `unconfirmed` is the honest answer for everyone else. Carrying it on `get_rosters` team rows
 and the summary roster costs no provider read, because both already read that roster. The league
-roster page and the schedule read request only `out=roster` and `out=opponent`, so carrying it
-there would add an output to those request shapes rather than publish a fact already held; that is a
-separate decision. It should be named as the provider's starting status, not as "will play": a
-confirmed non-starter can still play.
+roster page requests only `out=roster`, so its rows say `not_requested`; carrying it there would add
+an output to that request shape rather than publish a fact already held, and remains a separate
+decision. The schedule read requests only `out=opponent` and has no starting status. It is named as
+the provider's starting status, not as "will play": a confirmed non-starter can still play.
 
-### 2. A pool player's injury note — publish now
+### 2. A pool player's injury note — published
 
 `read_player_details` already decodes `injury_note`/`status_full` into `availabilityDetail`. For a
 rostered player the roster row's own `injury` fields already carry the code and note. For a player
-off the roster, `get_players` `availability` publishes `injury: { reported: false }` and drops the
-note it just read. That is worse than a missing field: a free agent with a published injury note is
-reported as having none. `search_players` publishes the same note as `status.detail`, so the fact is
-available with a second read; the fix is to publish it from the read that already performed the
-lookup. It would change whether a pool player is worth an add or a stash without another call.
+off the roster, `get_players` `availability` used to publish `injury: { reported: false }` and drop
+the note it had just read. That was worse than a missing field: a free agent with a published injury
+note was reported as having none. It now publishes the note in `injury.detail` and sets `reported`
+from it, from the read that already performed the lookup. `search_players` still publishes the same
+note as `status.detail`; a client no longer needs that second read to learn why a free agent is out.
 
 ### 3. The receiving team's unused roster spots — publish later
 
@@ -116,7 +117,7 @@ the verified outcome, and the reconnect remedy are the client-facing facts.
 
 | Question                               | Provider surface we read                                                                                  | Held?                 | Published?                                             |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------ |
-| Goalie confirmed starter               | Roster `out=opponent,starting_status,transactions`                                                        | Yes, `startingLineup` | No — inventory item 1                                  |
+| Goalie confirmed starter               | Roster `out=opponent,starting_status,transactions`                                                        | Yes, `startingLineup` | Yes, `startingStatus`                                  |
 | Time on ice or minutes                 | Only if the league scores it as a category                                                                | Only as a league stat | Yes, through `actual_stats`, when the league scores it |
 | Shifts                                 | Not requested, not decoded                                                                                | No                    | —                                                      |
 | Line, pair, or depth                   | No field seen in any read or recorded capture                                                             | No                    | —                                                      |
@@ -195,6 +196,6 @@ projection is a different resource.
    publish it only with a stated meaning.
 4. Treat the lineup ranking as a separate policy proposal, not a query field.
 
-Nothing in items 1–2 was built with this pass; the change that carries it is the owner's decision.
-The report ships with the draft-provenance change so the keeper question and the wider hidden-facts
-question are read together.
+Items 1–2 are published; items 3–4 remain proposals, and the owner decides whether and when to
+publish them. The report ships with the draft-provenance change so the keeper question and the wider
+hidden-facts question are read together.

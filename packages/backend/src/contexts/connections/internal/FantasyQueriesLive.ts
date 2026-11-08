@@ -27,6 +27,7 @@ import type {
   ProviderRosterSchedule,
   ProviderSchedulePeriod,
   ProviderScheduledGame,
+  ProviderStartingLineup,
   ProviderStandings,
   ProviderStatBasis,
   ProviderStatPeriod,
@@ -103,6 +104,7 @@ import {
   type CounterpartyRef,
   type PlayerRef,
   type QueryTeam,
+  type StartingStatus,
   type StatPeriod,
   QueryPersistenceFailed,
   QuerySelectionInvalid,
@@ -1172,6 +1174,7 @@ export const FantasyQueriesLive = Layer.effect(
               ref,
               detail,
               rosterWeek(player, roster.coverage, projectedRanks.get(player.providerPlayerKey)),
+              "not_requested",
             );
           }),
         }));
@@ -1325,6 +1328,7 @@ export const FantasyQueriesLive = Layer.effect(
             player,
             detail,
             rosterWeek(player, roster.coverage, projectedRanks.get(player.providerPlayerKey)),
+            startingStatusOf(player.startingLineup),
           ),
         { concurrency: 1 },
       );
@@ -1955,7 +1959,7 @@ export const FantasyQueriesLive = Layer.effect(
                 ? { rosterStatus: "rostered" as const, injury: injuryOf(rosterPlayer) }
                 : detail === undefined
                   ? undefined
-                  : { rosterStatus: detail.rosterStatus, injury: { reported: false as const } };
+                  : { rosterStatus: detail.rosterStatus, injury: injuryOfDetail(detail) };
             if (groups.includes("availability") && availability === undefined) {
               failures.push({
                 code: "player_availability_unavailable",
@@ -2824,6 +2828,7 @@ export const FantasyQueriesLive = Layer.effect(
             reported: player.injuryCode !== undefined || player.injuryDetail !== undefined,
             ...(player.injuryCode === undefined ? {} : { code: player.injuryCode }),
           },
+          startingStatus: startingStatusOf(player.startingLineup),
         });
       }
 
@@ -4894,12 +4899,23 @@ function injuryOf(player: ProviderRosterPlayer): {
   };
 }
 
+function injuryOfDetail(detail: ProviderPlayerDetail): {
+  reported: boolean;
+  detail?: string;
+} {
+  return {
+    reported: detail.availabilityDetail !== undefined,
+    ...(detail.availabilityDetail === undefined ? {} : { detail: detail.availabilityDetail }),
+  };
+}
+
 function rosterPlayer(
   context: TeamContext,
   tokens: QueryTokens["Service"],
   player: ProviderRosterPlayer,
   detail: RosterDetail,
   week: PlayerWeek | undefined,
+  startingStatus: StartingStatus,
 ): Effect.Effect<RosterPlayerView> {
   return tokens
     .sealPlayerRef({
@@ -4907,7 +4923,7 @@ function rosterPlayer(
       leagueKey: context.owned.team.providerLeagueKey,
       playerKey: player.providerPlayerKey,
     })
-    .pipe(Effect.map((ref) => rosterRow(player, ref, detail, week)));
+    .pipe(Effect.map((ref) => rosterRow(player, ref, detail, week, startingStatus)));
 }
 
 function rosterRow(
@@ -4915,6 +4931,7 @@ function rosterRow(
   ref: PlayerRef,
   detail: RosterDetail,
   week: PlayerWeek | undefined,
+  startingStatus: StartingStatus,
 ): RosterPlayerView {
   return {
     player: ref,
@@ -4926,10 +4943,22 @@ function rosterRow(
     eligiblePositions: player.eligiblePositions,
     editable: player.isEditable,
     injury: injuryOf(player),
+    startingStatus,
     ...(week === undefined ? {} : { week }),
     transactionTrend: player.transactionTrend,
     ...(detail === "full" ? { undroppable: player.undroppable } : {}),
   };
+}
+
+function startingStatusOf(status: ProviderStartingLineup): StartingStatus {
+  switch (status) {
+    case "confirmed-starting":
+      return "confirmed_starting";
+    case "confirmed-not-starting":
+      return "confirmed_not_starting";
+    case "unconfirmed":
+      return "unconfirmed";
+  }
 }
 
 function poolWeek(

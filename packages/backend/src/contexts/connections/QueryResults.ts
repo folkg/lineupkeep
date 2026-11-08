@@ -19,6 +19,7 @@ import {
   QueryStatus,
   QueryTeam,
   RosterSlot,
+  StartingStatus,
   StatPeriod,
   StatPeriodPreset,
   StatRef,
@@ -782,6 +783,7 @@ export const RosterPlayer = Schema.Struct({
     code: Schema.optional(Schema.String),
     detail: Schema.optional(Schema.String),
   }),
+  startingStatus: StartingStatus,
   week: Schema.optional(PlayerWeek),
   undroppable: Schema.optional(
     Schema.NullOr(Schema.Boolean).pipe(
@@ -1861,6 +1863,7 @@ const SummaryRosterPlayer = Schema.Struct({
     reported: Schema.Boolean,
     code: Schema.optional(Schema.String),
   }),
+  startingStatus: StartingStatus,
 });
 export type SummaryRosterPlayer = typeof SummaryRosterPlayer.Type;
 

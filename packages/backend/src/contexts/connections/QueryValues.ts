@@ -190,6 +190,19 @@ export const RosterSlot = Schema.Union([
 );
 export type RosterSlot = typeof RosterSlot.Type;
 
+export const StartingStatus = Schema.Literals([
+  "confirmed_starting",
+  "confirmed_not_starting",
+  "unconfirmed",
+  "not_requested",
+]).pipe(
+  Schema.annotate({
+    description:
+      "A goalie or pitcher's real-world starting status; `unconfirmed` when the site published none.",
+  }),
+);
+export type StartingStatus = typeof StartingStatus.Type;
+
 export const NarrowingResult = Schema.Struct({
   status: Schema.Literal("narrowing_required"),
   resource: Schema.NonEmptyString,
@@ -219,7 +232,7 @@ export const Cursor = Schema.String.pipe(
   Schema.check(Schema.isMaxLength(2_048)),
   Schema.annotate({
     description:
-      "A continuation token from `page.next`. It is bound to the arguments of the call that issued it and expires after 15 minutes.",
+      "A `page.next` token, bound to the issuing call's arguments and valid for 15 minutes.",
   }),
 );
 export const PageLimit = Schema.Int.check(

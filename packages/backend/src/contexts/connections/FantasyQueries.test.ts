@@ -820,6 +820,60 @@ it.effect("reads compact and full rosters for an exact selected week", () =>
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
+it.effect("publishes the site's starting status on team roster rows and the summary roster", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const roster = rosterFixture({ count: 3 });
+    const statuses = ["confirmed-starting", "confirmed-not-starting", "unconfirmed"] as const;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      roster: {
+        ...roster,
+        players: roster.players.map((player, index) => ({
+          ...player,
+          startingLineup: statuses[index] ?? "unconfirmed",
+        })),
+      },
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+    yield* fake.setLeagueRosters([leagueRosterFixture("461.l.1000.t.1", "Alpha", 3, 10001)]);
+
+    const teamRoster = yield* queries.getRosters(owner, { team: teamId, period: { week: 3 } });
+    assert.strictEqual(yield* fake.readCount("read_roster"), 1);
+    assert.strictEqual(teamRoster.status, "ok");
+    if (teamRoster.status !== "ok" || teamRoster.scope !== "team") {
+      return;
+    }
+    assert.deepStrictEqual(
+      teamRoster.players.map((player) => player.startingStatus),
+      ["confirmed_starting", "confirmed_not_starting", "unconfirmed"],
+    );
+
+    const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
+    assert.strictEqual(yield* fake.readCount("read_roster"), 2);
+    assert.strictEqual(summary.status, "ok");
+    if (summary.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(
+      summary.roster?.map((player) => player.startingStatus),
+      ["confirmed_starting", "confirmed_not_starting", "unconfirmed"],
+    );
+
+    const leagueRoster = yield* queries.getRosters(owner, { team: teamId, scope: "league" });
+    assert.strictEqual(yield* fake.readCount("read_league_rosters"), 1);
+    assert.strictEqual(yield* fake.readCount("read_roster"), 2);
+    assert.strictEqual(leagueRoster.status, "ok");
+    if (leagueRoster.status !== "ok" || leagueRoster.scope !== "league") {
+      return;
+    }
+    assert.deepStrictEqual(
+      leagueRoster.teams.flatMap((entry) => entry.players.map((player) => player.startingStatus)),
+      ["not_requested", "not_requested", "not_requested"],
+    );
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
 it.effect("reads every team's roster in the linked league with team identity on each row", () =>
   Effect.gen(function* () {
     const queries = yield* FantasyQueries;
@@ -1353,6 +1407,44 @@ it.effect("hydrates a free agent's availability without the actual_stats group",
       injury: { reported: false },
     });
     assert.deepStrictEqual(hydrated.failures, []);
+  }).pipe(Effect.provide(QueriesTestLayer)),
+);
+
+it.effect("publishes an off-roster player's injury note instead of reporting none", () =>
+  Effect.gen(function* () {
+    const queries = yield* FantasyQueries;
+    const fake = yield* FakeProviderWorld;
+    const seeded = yield* seed(fake, [team("461.l.1000.t.1", "Alpha")], {
+      playerDetails: playerDetails.map((detail) =>
+        detail.providerPlayerKey === "461.p.10003"
+          ? { ...detail, availabilityDetail: "Out indefinitely with a foot injury" }
+          : detail,
+      ),
+    });
+    const teamId = Array.getUnsafe(seeded, 0).id;
+
+    const search = yield* queries.searchPlayers(owner, {
+      team: teamId,
+      availability: "free_agent",
+    });
+    assert.strictEqual(search.status, "ok");
+    if (search.status !== "ok") {
+      return;
+    }
+    const freeAgent = Array.getUnsafe(search.players, 0);
+    const hydrated = yield* queries.getPlayers(owner, {
+      team: teamId,
+      players: [freeAgent.player],
+      groups: ["identity", "availability"],
+    });
+    assert.strictEqual(hydrated.status, "ok");
+    if (hydrated.status !== "ok") {
+      return;
+    }
+    assert.deepStrictEqual(Array.getUnsafe(hydrated.players, 0).availability, {
+      rosterStatus: "free_agent",
+      injury: { reported: true, detail: "Out indefinitely with a foot injury" },
+    });
   }).pipe(Effect.provide(QueriesTestLayer)),
 );
 
@@ -2930,6 +3022,7 @@ it.effect("reads one draft history for the whole response, not one read per play
 
     const beforeSummary = yield* fake.readCount("read_draft_results");
     const summary = yield* queries.getTeamSummary(owner, { team: teamId, groups: ["roster"] });
+    assert.strictEqual(yield* fake.readCount("read_roster"), 1);
     assert.strictEqual(summary.status, "ok");
     if (summary.status !== "ok") {
       return;
