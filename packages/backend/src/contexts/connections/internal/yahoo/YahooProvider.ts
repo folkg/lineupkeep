@@ -27,6 +27,7 @@ import {
 import type {
   ProviderAcquisitionUsage,
   ProviderCategoryWinner,
+  ProviderDraftPick,
   ProviderFantasyDay,
   ProviderGamesPlayed,
   ProviderLeagueSettings,
@@ -50,7 +51,6 @@ import type {
   ProviderPlayerSearchInput,
   ProviderPlayerWeekFact,
   ProviderReadFailure,
-  ProviderRemainingGames,
   ProviderRosterChange,
   ProviderRosterConstraints,
   ProviderRosterCoverage,
@@ -87,10 +87,23 @@ import {
 } from "./YahooLimits.ts";
 import { scoreYahooRoster, yahooCapabilities, yahooPlayerStatus } from "./YahooLineup.ts";
 import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
+import type {
+  YahooDraftPick,
+  YahooLeagueSettings,
+  YahooMatchup,
+  YahooTransaction,
+  YahooTransactionPick,
+  YahooTransactionPlayer,
+  YahooTransactionTeam,
+} from "./YahooSdk.ts";
 import {
   discoverLeaguesThroughSdk,
+  readDraftResultsThroughSdk,
   readLeagueTeamsThroughSdk,
+  readLeagueThroughSdk,
+  readMatchupsThroughSdk,
   readRosterThroughSdk,
+  readTransactionsThroughSdk,
   rosterSlotOf,
   scheduledOpponent,
   searchPlayersThroughSdk,
@@ -220,16 +233,8 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_league");
     const cookie = yield* sessionCookie(input, "read_league");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_league");
-    const payload = yield* readJson(internet, {
-      operation: "read_league",
-      origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/settings`,
-      query: { format: "json" },
-      cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(LeaguePayload, payload, "read_league");
-    const settings = yield* leagueSettings(decoded, input.providerLeagueKey, input.sport);
+    const payload = yield* readLeagueThroughSdk(sdk, "read_league", cookie, leagueKey);
+    const settings = yield* leagueSettings(payload, input.sport);
     yield* Effect.annotateCurrentSpan({
       "provider.stat_category_count": settings.statCategories.length,
       "provider.roster_position_count": settings.rosterPositions.length,
@@ -988,16 +993,13 @@ export const yahooProvider = Effect.gen(function* () {
     const cookie = yield* sessionCookie(input, "read_matchups");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_matchups");
     const week = yield* ValidWeek(input.period.week);
-    const payload = yield* readJson(internet, {
-      operation: "read_matchups",
-      origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/scoreboard;week=${String(week)}`,
-      query: { format: "json" },
+    const matchups = yield* readMatchupsThroughSdk(
+      sdk,
+      "read_matchups",
       cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(MatchupsPayload, payload, "read_matchups");
-    const matchups = yield* matchupsFromPayload(decoded, leagueKey, input.period);
+      leagueKey,
+      week,
+    ).pipe(Effect.map((decoded) => providerMatchupsOf(decoded, input.period)));
     yield* Effect.annotateCurrentSpan("provider.matchup_count", matchups.length);
     return matchups;
   });
@@ -1015,30 +1017,14 @@ export const yahooProvider = Effect.gen(function* () {
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_transactions");
     const limit = yield* ValidTransactionLimit(input.limit);
     const offset = yield* ValidTransactionOffset(input.offset ?? 0);
-    const teamFilter = yield* ValidLeagueTeamKey(
-      input.providerTeamKey,
+    yield* ValidLeagueTeamKey(input.providerTeamKey, leagueKey, "read_transactions");
+    const decoded = yield* readTransactionsThroughSdk(sdk, "read_transactions", cookie, {
       leagueKey,
-      "read_transactions",
-    );
-    const payload = yield* readJson(internet, {
-      operation: "read_transactions",
-      origin: readOrigin,
-      path:
-        `/fantasy/v2/league/${leagueKey}/transactions;count=${String(limit)}` +
-        (offset === 0 ? "" : `;start=${String(offset)}`) +
-        teamFilter,
-      query: { format: "json" },
-      cookie,
-      normalize: true,
+      teamKey: input.providerTeamKey,
+      limit,
+      offset,
     });
-    const decoded = yield* decodePayload(TransactionsPayload, payload, "read_transactions");
-    if (decoded.league.league_key !== leagueKey) {
-      return yield* responseMismatch({
-        operation: "read_transactions",
-        field: "league.league_key",
-      });
-    }
-    const transactions = yield* decodeTransactions(decoded.league.transactions);
+    const transactions = decoded.map(providerTransactionOf);
     yield* Effect.annotateCurrentSpan("provider.transaction_count", transactions.length);
     return transactions;
   });
@@ -1121,33 +1107,8 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_draft_results");
     const cookie = yield* sessionCookie(input, "read_draft_results");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_draft_results");
-    const payload = yield* readJson(internet, {
-      operation: "read_draft_results",
-      origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/draftresults;out=players`,
-      query: { format: "json" },
-      cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(DraftResultsPayload, payload, "read_draft_results");
-    if (
-      decoded.league.league_key !== leagueKey ||
-      decoded.league.draft_results.some(
-        ({ draft_result }) => providerLeagueKey(draft_result.team_key) !== leagueKey,
-      )
-    ) {
-      return yield* responseMismatch({ operation: "read_draft_results" });
-    }
-    const picks = decoded.league.draft_results.map(({ draft_result }) => {
-      const name = optionalNonEmpty(draft_result.entries?.[0]?.players?.[0]?.name?.full ?? "");
-      return {
-        round: draft_result.round,
-        pick: draft_result.pick,
-        providerTeamKey: draft_result.team_key,
-        providerPlayerKey: draft_result.player_key,
-        ...(name === undefined ? {} : { name }),
-      };
-    });
+    const decoded = yield* readDraftResultsThroughSdk(sdk, "read_draft_results", cookie, leagueKey);
+    const picks = decoded.map(providerDraftPickOf);
     yield* Effect.annotateCurrentSpan("provider.draft_pick_count", picks.length);
     return picks;
   });
@@ -1866,92 +1827,66 @@ function httpsUrl(value: string | undefined): string | undefined {
 }
 
 function leagueSettings(
-  payload: typeof LeaguePayload.Type,
-  requestedLeagueKey: string,
+  settings: YahooLeagueSettings,
   sport: FantasySport,
 ): Effect.Effect<ProviderLeagueSettings, ProviderResponseInvalid | ProviderOperationUnsupported> {
   return Effect.gen(function* () {
-    const attributes = payload.league;
-    const settings = singleEntry(attributes.settings);
-    if (settings === undefined || attributes.league_key !== requestedLeagueKey) {
-      return yield* responseMismatch({
-        operation: "read_league",
-        field: "league.league_key",
-      });
-    }
-    const periodWindow = yield* weekWindow(attributes);
-    const rosterCoverage = yield* declaredRosterCoverage(attributes);
-    const rosterPositions = settings.roster_positions.map(({ roster_position }) => {
-      const kind = rosterSlotKind(roster_position.position, roster_position.is_starting_position);
-      return {
-        position: roster_position.position,
-        positionType: optionalNonEmpty(roster_position.position_type),
-        kind,
-        count: roster_position.count,
-        eligibility: kind === "bench" ? [] : [roster_position.position],
-      };
-    });
+    const periodWindow = yield* weekWindow(settings);
+    const rosterCoverage = yield* declaredRosterCoverage(settings);
+    const rosterPositions = settings.settings.rosterPositions.map(
+      ({ position, positionType, count, isStartingPosition }) => {
+        const kind = rosterSlotKind(position, isStartingPosition);
+        return {
+          position,
+          positionType,
+          kind,
+          count,
+          eligibility: kind === "bench" ? [] : [position],
+        };
+      },
+    );
     const webUrl = yield* Effect.try({
-      try: () => reviewBase(attributes.url, sport, leagueIdFromKey(attributes.league_key)).href,
+      try: () => reviewBase(settings.url, sport, leagueIdFromKey(settings.leagueKey)).href,
       catch: () => ProviderResponseInvalid.make({ operation: "read_league", field: "league.url" }),
     }).pipe(Effect.tapError((error) => reportSchemaMismatch(error.field)));
     return {
-      providerLeagueKey: attributes.league_key,
-      name: attributes.name,
+      providerLeagueKey: settings.leagueKey,
+      name: settings.name,
       webUrl,
-      season: attributes.season,
-      startDate: optionalNonEmpty(attributes.start_date),
-      endDate: optionalNonEmpty(attributes.end_date),
-      currentDate: optionalNonEmpty(attributes.current_date),
-      teamCount: attributes.num_teams,
-      format: leagueFormat(attributes.scoring_type, settings.stat_modifiers?.stats.length ?? 0),
-      scoringType: attributes.scoring_type,
-      scoringLabel: optionalNonEmpty(attributes.scoring_label),
-      weeklyDeadline: attributes.weekly_deadline,
-      rosterChange: rosterChange(attributes),
-      waiverType: optionalNonEmpty(settings.waiver_type),
-      waiverRule: optionalNonEmpty(settings.waiver_rule),
-      usesFaab: settings.uses_faab,
-      waiverDays: settings.waiver_time,
-      maxWeeklyAcquisitions: settings.max_weekly_adds,
-      maxSeasonAcquisitions: settings.max_adds,
-      tradeEndDate: optionalNonEmpty(settings.trade_end_date),
-      tradeRatification: tradeRatification(optionalNonEmpty(settings.trade_ratify_type)),
-      tradeObjectionDays: settings.trade_reject_time,
-      tradeDraftPicks: settings.can_trade_draft_picks,
-      draftStatus: optionalNonEmpty(attributes.draft_status),
+      season: settings.season,
+      startDate: settings.startDate,
+      endDate: settings.endDate,
+      currentDate: settings.currentDate,
+      teamCount: settings.teamCount,
+      format: leagueFormat(settings.scoringType, settings.settings.statModifiers.length),
+      scoringType: settings.scoringType,
+      scoringLabel: settings.scoringLabel,
+      weeklyDeadline: settings.weeklyDeadline,
+      rosterChange: rosterChange(settings),
+      waiverType: settings.settings.waiverType,
+      waiverRule: settings.settings.waiverRule,
+      usesFaab: settings.settings.usesFaab,
+      waiverDays: settings.settings.waiverTime,
+      maxWeeklyAcquisitions: settings.settings.maxWeeklyAdds,
+      maxSeasonAcquisitions: settings.settings.maxAdds,
+      tradeEndDate: settings.settings.tradeEndDate,
+      tradeRatification: tradeRatification(settings.settings.tradeRatifyType),
+      tradeObjectionDays: settings.settings.tradeRejectTime,
+      tradeDraftPicks: settings.settings.canTradeDraftPicks,
+      draftStatus: settings.draftStatus,
       periodWindow,
       rosterCoverage,
-      maxGamesPlayed: declaredLimit(settings.max_games_played),
-      maxInningsPitched: declaredLimit(settings.max_innings_pitched),
+      maxGamesPlayed: settings.settings.maxGamesPlayed,
+      maxInningsPitched: settings.settings.maxInningsPitched,
       rosterConstraints: yahooRosterConstraints(rosterPositions),
       rosterPositions,
-      statCategories: settings.stat_categories.stats.map(({ stat }) => ({
-        statId: stat.stat_id,
-        name: stat.name,
-        displayName: stat.display_name,
-        abbreviation: stat.abbr,
-        group: stat.group,
-        enabled: stat.enabled,
-        displayOnly:
-          stat.is_only_display_stat === true ||
-          (stat.stat_position_types ?? []).some(
-            ({ stat_position_type }) => stat_position_type.is_only_display_stat === true,
-          ),
-        positionTypes: (stat.stat_position_types ?? []).flatMap(({ stat_position_type }) =>
-          stat_position_type.position_type === undefined ? [] : [stat_position_type.position_type],
-        ),
-      })),
-      statModifiers: (settings.stat_modifiers?.stats ?? []).map(({ stat }) => ({
-        statId: stat.stat_id,
-        points: String(stat.value),
+      statCategories: settings.settings.statCategories,
+      statModifiers: settings.settings.statModifiers.map(({ statId, value }) => ({
+        statId,
+        points: String(value),
       })),
     };
   });
-}
-
-function declaredLimit(limit: number | undefined): number | undefined {
-  return limit !== undefined && limit > 0 ? limit : undefined;
 }
 
 function tradeRatification(type: string | undefined): ProviderTradeRatification | undefined {
@@ -1969,10 +1904,8 @@ function tradeRatification(type: string | undefined): ProviderTradeRatification 
   }
 }
 
-function rosterChange(
-  attributes: (typeof LeaguePayload.Type)["league"],
-): ProviderRosterChange | undefined {
-  const deadline = attributes.weekly_deadline;
+function rosterChange(settings: YahooLeagueSettings): ProviderRosterChange | undefined {
+  const deadline = settings.weeklyDeadline;
   if (deadline === undefined) {
     return undefined;
   }
@@ -2000,7 +1933,7 @@ function rosterChange(
   if (deadline !== "") {
     return undefined;
   }
-  const editKey = editKeyOf(attributes.edit_key);
+  const editKey = settings.editKey;
   if (editKey === undefined) {
     return undefined;
   }
@@ -2011,7 +1944,7 @@ function rosterChange(
       detail: `Your league's weekly_deadline is empty and its edit_key is ${JSON.stringify(editKey)}, a scoring week, so roster changes are locked to that week.`,
     };
   }
-  const currentDate = attributes.current_date;
+  const currentDate = settings.currentDate;
   if (!isCalendarDate(editKey) || currentDate === undefined || !isCalendarDate(currentDate)) {
     return undefined;
   }
@@ -2045,22 +1978,17 @@ function nextCalendarDate(value: string): string | undefined {
 }
 
 function declaredRosterCoverage(
-  attributes: (typeof LeaguePayload.Type)["league"],
+  settings: YahooLeagueSettings,
 ): Effect.Effect<ProviderCoverageKind, ProviderOperationUnsupported> {
-  const deadline = attributes.weekly_deadline ?? "";
-  const coverage =
-    weeklyDeadlineCoverage[deadline] ?? editKeyCoverage(editKeyOf(attributes.edit_key));
+  const deadline = settings.weeklyDeadline ?? "";
+  const coverage = weeklyDeadlineCoverage[deadline] ?? editKeyCoverage(settings.editKey);
   if (coverage !== undefined) {
     return Effect.succeed(coverage);
   }
   return ProviderOperationUnsupported.make({
     operation: "read_league",
-    reason: `The league declares weekly deadline ${JSON.stringify(deadline)} and editable period ${JSON.stringify(attributes.edit_key ?? null)}. Neither identifies a weekly or daily roster cadence, so this league's lineup period cannot be resolved.`,
+    reason: `The league declares weekly deadline ${JSON.stringify(deadline)} and editable period ${JSON.stringify(settings.editKey ?? null)}. Neither identifies a weekly or daily roster cadence, so this league's lineup period cannot be resolved.`,
   });
-}
-
-function editKeyOf(editKey: string | number | undefined): string | undefined {
-  return editKey === undefined ? undefined : String(editKey);
 }
 
 function editKeyCoverage(editKey: string | undefined): ProviderCoverageKind | undefined {
@@ -2119,11 +2047,11 @@ function yahooRosterConstraints(
 }
 
 function weekWindow(
-  attributes: (typeof LeaguePayload.Type)["league"],
+  settings: YahooLeagueSettings,
 ): Effect.Effect<ProviderPeriodWindow | undefined, ProviderResponseInvalid> {
-  const currentWeek = attributes.current_week;
-  const startWeek = attributes.start_week;
-  const endWeek = attributes.end_week;
+  const currentWeek = settings.currentWeek;
+  const startWeek = settings.startWeek;
+  const endWeek = settings.endWeek;
   if (currentWeek !== undefined && startWeek !== undefined && endWeek !== undefined) {
     return Effect.succeed({ current: currentWeek, start: startWeek, end: endWeek });
   }
@@ -3101,120 +3029,37 @@ function statValue(entry: typeof StatEntry.Type): ProviderStatValue {
   return { statId: entry.stat.stat_id, value: providerNumber(entry.stat.value) };
 }
 
-function matchupsFromPayload(
-  payload: typeof MatchupsPayload.Type,
-  requestedLeagueKey: string,
+function providerMatchupsOf(
+  matchups: ReadonlyArray<YahooMatchup>,
   period: ProviderScoringWeek,
-): Effect.Effect<ReadonlyArray<ProviderMatchup>, ProviderResponseInvalid | ProviderPeriodMismatch> {
-  return Effect.gen(function* () {
-    const scoreboard = payload.league.scoreboard;
-    if (payload.league.league_key !== requestedLeagueKey) {
-      return yield* responseMismatch({ operation: "read_matchups" });
-    }
-    if (scoreboard.week !== period.week) {
-      return yield* ProviderPeriodMismatch.make({
-        operation: "read_matchups",
-        requested: { type: "week", week: period.week },
-        covered: { type: "week", week: scoreboard.week },
-      });
-    }
-    const matchups: ProviderMatchup[] = [];
-    for (const group of scoreboard.entries) {
-      for (const matchup of group.matchups) {
-        if (matchup.week !== period.week) {
-          return yield* ProviderPeriodMismatch.make({
-            operation: "read_matchups",
-            requested: { type: "week", week: period.week },
-            covered: { type: "week", week: matchup.week },
-          });
-        }
-        const teams = matchup.entries.flatMap((entry) => entry.teams);
-        if (teams.length !== 2) {
-          return yield* responseMismatch({ operation: "read_matchups" });
-        }
-        const [home, away] = teams;
-        if (home === undefined || away === undefined) {
-          return yield* responseMismatch({ operation: "read_matchups" });
-        }
-        const homeScore = yield* teamScore(home, period);
-        const awayScore = yield* teamScore(away, period);
-        matchups.push({
-          period,
-          home: homeScore,
-          away: awayScore,
-          status: optionalNonEmpty(matchup.status ?? ""),
-          isPlayoffs: optionalFlag(matchup.is_playoffs),
-          isConsolation: optionalFlag(matchup.is_consolation),
-          isTied: optionalFlag(matchup.is_tied),
-          weekStart: optionalNonEmpty(matchup.week_start ?? ""),
-          weekEnd: optionalNonEmpty(matchup.week_end ?? ""),
-          categoryWinners: (matchup.stat_winners ?? []).map(
-            ({ stat_winner }): ProviderCategoryWinner => ({
-              statId: stat_winner.stat_id,
-              winnerProviderTeamKey: stat_winner.winner_team_key,
-              isTied: optionalFlag(stat_winner.is_tied) ?? false,
-            }),
-          ),
-        });
-      }
-    }
-    return matchups;
-  });
+): ReadonlyArray<ProviderMatchup> {
+  return matchups.map((matchup) => ({
+    period,
+    home: providerTeamScoreOf(matchup.home),
+    away: providerTeamScoreOf(matchup.away),
+    status: matchup.status,
+    isPlayoffs: matchup.isPlayoffs,
+    isConsolation: matchup.isConsolation,
+    isTied: matchup.isTied,
+    weekStart: matchup.weekStart,
+    weekEnd: matchup.weekEnd,
+    categoryWinners: matchup.categoryWinners.map((winner): ProviderCategoryWinner => ({
+      statId: winner.statId,
+      winnerProviderTeamKey: winner.winnerTeamKey,
+      isTied: winner.isTied,
+    })),
+  }));
 }
 
-function teamScore(
-  team: typeof ScoreboardTeamPayload.Type,
-  period: ProviderScoringWeek,
-): Effect.Effect<ProviderTeamScore, ProviderResponseInvalid | ProviderPeriodMismatch> {
-  return Effect.gen(function* () {
-    const points = team.team_points;
-    if (points?.week !== undefined && points.week !== period.week) {
-      return yield* ProviderPeriodMismatch.make({
-        operation: "read_matchups",
-        requested: { type: "week", week: period.week },
-        covered: { type: "week", week: points.week },
-      });
-    }
-    const projected = team.team_projected_points;
-    if (projected?.week !== undefined && projected.week !== period.week) {
-      return yield* ProviderPeriodMismatch.make({
-        operation: "read_matchups",
-        requested: { type: "week", week: period.week },
-        covered: { type: "week", week: projected.week },
-      });
-    }
-    const remaining = remainingGames(team.team_remaining_games, period);
-    if (remaining !== undefined && remaining.week !== null && remaining.week !== period.week) {
-      return yield* ProviderPeriodMismatch.make({
-        operation: "read_matchups",
-        requested: { type: "week", week: period.week },
-        covered: { type: "week", week: remaining.week },
-      });
-    }
-    return {
-      providerTeamKey: team.team_key,
-      name: team.name,
-      points: points === undefined ? null : providerNumber(points.total),
-      projectedPoints: projected === undefined ? null : providerNumber(projected.total),
-      winProbability: providerNumber(team.win_probability),
-      remainingGames: remaining,
-      categoryTotals: (team.team_stats?.stats ?? []).map(statValue),
-    };
-  });
-}
-
-function remainingGames(
-  value: (typeof ScoreboardTeamPayload.Type)["team_remaining_games"],
-  period: ProviderScoringWeek,
-): ProviderRemainingGames | undefined {
-  if (value?.total === undefined) {
-    return undefined;
-  }
+function providerTeamScoreOf(team: YahooMatchup["home"]): ProviderTeamScore {
   return {
-    week: value.week ?? period.week,
-    completed: value.total.completed_games,
-    live: value.total.live_games,
-    remaining: value.total.remaining_games,
+    providerTeamKey: team.teamKey,
+    name: team.name,
+    points: team.points,
+    projectedPoints: team.projectedPoints,
+    winProbability: team.winProbability,
+    remainingGames: team.remainingGames,
+    categoryTotals: team.stats,
   };
 }
 
@@ -3238,7 +3083,9 @@ function decodeTransactions(
             : player.eligible_positions.map(({ position }) => position),
         proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
       }));
-      const parties = transactionParties(transaction, type, players);
+      const proposer = transactionTeam(transaction.trader_team_key, transaction.trader_team_name);
+      const receiver = transactionTeam(transaction.tradee_team_key, transaction.tradee_team_name);
+      const parties = transactionParties(type, proposer, receiver, players);
       const picks = (transaction.picks ?? []).map(({ pick }) => ({
         round: pick.round,
         from: transactionTeam(pick.source_team_key, pick.source_team_name),
@@ -3314,6 +3161,71 @@ function decodePendingTrades(
     }
     return offers;
   });
+}
+
+function providerTransactionOf(transaction: YahooTransaction): ProviderTransaction {
+  const players = transaction.players.map(providerTransactionPlayerOf);
+  const parties = transactionParties(
+    transaction.type,
+    providerTransactionTeamOf(transaction.proposer),
+    providerTransactionTeamOf(transaction.receiver),
+    players,
+  );
+  const picks = transaction.picks.map(providerTransactionPickOf);
+  return {
+    transactionKey: transaction.transactionKey,
+    occurredAt: transaction.occurredAt,
+    type: transaction.type,
+    status: transaction.status,
+    parties,
+    teams: transactionTeams(players, picks, parties),
+    picks,
+    players,
+    incomplete: incompleteTransaction(transaction.type, players, picks),
+  };
+}
+
+function providerTransactionPlayerOf(player: YahooTransactionPlayer): ProviderTransactionPlayer {
+  return {
+    providerPlayerKey: player.playerKey,
+    movement: {
+      kind: player.movement.kind,
+      from: providerTransactionTeamOf(player.movement.from),
+      to: providerTransactionTeamOf(player.movement.to),
+    },
+    name: player.name,
+    primaryPosition: player.primaryPosition,
+    displayPosition: player.displayPosition,
+    eligiblePositions: player.eligiblePositions,
+    proTeam: player.proTeamAbbreviation,
+  };
+}
+
+function providerTransactionPickOf(
+  pick: YahooTransactionPick,
+): ProviderPendingTrade["picks"][number] {
+  return {
+    round: pick.round,
+    from: providerTransactionTeamOf(pick.from),
+    to: providerTransactionTeamOf(pick.to),
+    original: providerTransactionTeamOf(pick.original),
+  };
+}
+
+function providerTransactionTeamOf(
+  team: YahooTransactionTeam | undefined,
+): ProviderTransactionTeam | undefined {
+  return team === undefined ? undefined : { providerTeamKey: team.teamKey, name: team.name };
+}
+
+function providerDraftPickOf(pick: YahooDraftPick): ProviderDraftPick {
+  return {
+    round: pick.round,
+    pick: pick.pick,
+    providerTeamKey: pick.teamKey,
+    providerPlayerKey: pick.playerKey,
+    ...(pick.name === undefined ? {} : { name: pick.name }),
+  };
 }
 
 function incompletePendingTrade(
@@ -3394,8 +3306,9 @@ function transactionTeam(
 }
 
 function transactionParties(
-  transaction: typeof TransactionPayload.Type,
   type: ProviderTransaction["type"],
+  proposer: ProviderTransactionTeam | undefined,
+  receiver: ProviderTransactionTeam | undefined,
   players: ReadonlyArray<ProviderTransaction["players"][number]>,
 ): ProviderTransactionParties | undefined {
   const named = (team: ProviderTransactionTeam): ProviderTransactionTeam => {
@@ -3414,8 +3327,6 @@ function transactionParties(
     }
     return team;
   };
-  const proposer = transactionTeam(transaction.trader_team_key, transaction.trader_team_name);
-  const receiver = transactionTeam(transaction.tradee_team_key, transaction.tradee_team_name);
   if (proposer !== undefined || receiver !== undefined) {
     return {
       source: "provider",
@@ -3579,10 +3490,6 @@ function providerInstant(
     onNone: () => responseMismatch({ operation }),
     onSome: (instant) => Effect.succeed(DateTime.formatIso(instant)),
   });
-}
-
-function singleEntry<A>(value: ReadonlyArray<A> | A): A | undefined {
-  return isReadonlyArray(value) ? value[0] : value;
 }
 
 function isReadonlyArray<A>(value: ReadonlyArray<A> | A): value is ReadonlyArray<A> {
@@ -3790,16 +3697,6 @@ const SessionCookie = Schema.Trim.pipe(
   Schema.check(Schema.isPattern(/=/u)),
 );
 
-const Season = Schema.Union([Schema.String, Schema.Finite]).pipe(
-  Schema.decodeTo(
-    Schema.Int.check(Schema.isGreaterThan(1900)),
-    SchemaTransformation.transform({
-      decode: (value) => (typeof value === "number" ? value : Number(value)),
-      encode: (value) => value,
-    }),
-  ),
-);
-
 const IntFromStringOrNumber: Schema.Codec<number, number | string> = Schema.Union([
   Schema.Finite,
   Schema.String,
@@ -3841,90 +3738,6 @@ const AcquisitionPayload = Schema.Struct({
 const CrumbPayload = Schema.Struct({
   service: Schema.Struct({
     crumb: Schema.NullOr(Schema.String),
-  }),
-});
-
-const LeagueAttributes = Schema.Struct({
-  league_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[0-9]+\.l\.[0-9]+$/u))),
-  name: Schema.NonEmptyString,
-  url: Schema.String,
-  num_teams: IntFromStringOrNumber,
-  current_week: Schema.optional(IntFromStringOrNumber),
-  start_week: Schema.optional(IntFromStringOrNumber),
-  end_week: Schema.optional(IntFromStringOrNumber),
-  start_date: Schema.optional(Schema.String),
-  end_date: Schema.optional(Schema.String),
-  current_date: Schema.optional(Schema.String),
-  scoring_type: Schema.NonEmptyString,
-  scoring_label: Schema.optional(Schema.String),
-  weekly_deadline: Schema.optional(Schema.String),
-  edit_key: Schema.optional(Schema.Union([Schema.String, Schema.Finite])),
-  season: Season,
-  draft_status: Schema.optional(Schema.String),
-});
-
-const RosterPositionAttributes = Schema.Struct({
-  position: Schema.NonEmptyString,
-  position_type: Schema.optional(Schema.String),
-  count: IntFromStringOrNumber,
-  is_starting_position: Flag,
-});
-
-const StatPositionTypeAttributes = Schema.Struct({
-  stat_position_type: Schema.Struct({
-    position_type: Schema.optional(Schema.String),
-    is_only_display_stat: Schema.optional(Flag),
-  }),
-});
-const StatCategoryAttributes = Schema.Struct({
-  stat_id: IntFromStringOrNumber,
-  name: Schema.NonEmptyString,
-  display_name: Schema.NonEmptyString,
-  group: Schema.NonEmptyString,
-  abbr: Schema.NonEmptyString,
-  enabled: Flag,
-  is_only_display_stat: Schema.optional(Flag),
-  stat_position_types: Schema.optional(Schema.Array(StatPositionTypeAttributes)),
-});
-
-const StatModifierAttributes = Schema.Struct({
-  stat_id: IntFromStringOrNumber,
-  value: Schema.Union([Schema.String, Schema.Finite]),
-});
-
-const LeagueSettingsAttributes = Schema.Struct({
-  can_trade_draft_picks: Schema.optional(Flag),
-  max_games_played: Schema.optional(IntFromStringOrNumber),
-  max_innings_pitched: Schema.optional(IntFromStringOrNumber),
-  max_weekly_adds: Schema.optional(IntFromStringOrNumber),
-  max_adds: Schema.optional(IntFromStringOrNumber),
-  roster_type: Schema.optional(Schema.String),
-  waiver_type: Schema.optional(Schema.String),
-  waiver_rule: Schema.optional(Schema.String),
-  waiver_time: Schema.optional(IntFromStringOrNumber),
-  uses_faab: Schema.optional(Flag),
-  trade_end_date: Schema.optional(Schema.String),
-  trade_ratify_type: Schema.optional(Schema.String),
-  trade_reject_time: Schema.optional(IntFromStringOrNumber),
-  roster_positions: Schema.Array(
-    Schema.Struct({
-      roster_position: RosterPositionAttributes,
-    }),
-  ),
-  stat_categories: Schema.Struct({
-    stats: Schema.Array(Schema.Struct({ stat: StatCategoryAttributes })),
-  }),
-  stat_modifiers: Schema.optional(
-    Schema.Struct({
-      stats: Schema.Array(Schema.Struct({ stat: StatModifierAttributes })),
-    }),
-  ),
-});
-
-const LeaguePayload = Schema.Struct({
-  league: Schema.Struct({
-    ...LeagueAttributes.fields,
-    settings: Schema.Union([Schema.Array(LeagueSettingsAttributes), LeagueSettingsAttributes]),
   }),
 });
 
@@ -4130,18 +3943,6 @@ const ScoreboardPointsPayload = Schema.Struct({
   stats: Schema.optional(Schema.Array(StatEntry)),
 });
 
-const RemainingGamesPayload = Schema.Struct({
-  coverage_type: Schema.optional(Schema.String),
-  week: Schema.optional(IntFromStringOrNumber),
-  total: Schema.optional(
-    Schema.Struct({
-      completed_games: IntFromStringOrNumber,
-      live_games: IntFromStringOrNumber,
-      remaining_games: IntFromStringOrNumber,
-    }),
-  ),
-});
-
 const GamesPlayedPositionPayload = Schema.Struct({
   position: Schema.NonEmptyString,
   games_played: Schema.Struct({
@@ -4192,46 +3993,6 @@ const TeamStatsPayload = Schema.Struct({
   stats: Schema.Array(StatEntry),
 });
 
-const ScoreboardTeamPayload = Schema.Struct({
-  team_key: TeamKey,
-  name: Schema.NonEmptyString,
-  team_points: Schema.optional(ScoreboardPointsPayload),
-  team_projected_points: Schema.optional(ScoreboardPointsPayload),
-  team_remaining_games: Schema.optional(RemainingGamesPayload),
-  team_stats: Schema.optional(TeamStatsPayload),
-  win_probability: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-});
-
-const StatWinnerPayload = Schema.Struct({
-  stat_winner: Schema.Struct({
-    stat_id: IntFromStringOrNumber,
-    winner_team_key: Schema.optional(TeamKey),
-    is_tied: Schema.optional(Flag),
-  }),
-});
-
-const MatchupPayload = Schema.Struct({
-  week: IntFromStringOrNumber,
-  week_start: Schema.optional(Schema.String),
-  week_end: Schema.optional(Schema.String),
-  status: Schema.optional(Schema.String),
-  is_playoffs: Schema.optional(Flag),
-  is_consolation: Schema.optional(Flag),
-  is_tied: Schema.optional(Flag),
-  entries: Schema.Array(Schema.Struct({ teams: Schema.Array(ScoreboardTeamPayload) })),
-  stat_winners: Schema.optional(Schema.Array(StatWinnerPayload)),
-});
-
-const MatchupsPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    scoreboard: Schema.Struct({
-      week: IntFromStringOrNumber,
-      entries: Schema.Array(Schema.Struct({ matchups: Schema.Array(MatchupPayload) })),
-    }),
-  }),
-});
-
 const TransactionPlayerPayload = Schema.Struct({
   player_key: PlayerKey,
   name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
@@ -4273,33 +4034,6 @@ const TransactionPayload = Schema.Struct({
   tradee_team_name: Schema.optional(Schema.String),
   picks: Schema.optional(Schema.Array(TransactionPickPayload)),
   players: Schema.optional(Schema.Array(TransactionPlayerPayload)),
-});
-
-const DraftResultPlayerPayload = Schema.Struct({
-  name: Schema.optional(Schema.Struct({ full: Schema.optional(Schema.String) })),
-});
-
-const DraftResultPayload = Schema.Struct({
-  draft_result: Schema.Struct({
-    round: IntFromStringOrNumber,
-    pick: IntFromStringOrNumber,
-    team_key: TeamKey,
-    player_key: PlayerKey,
-    entries: Schema.optional(
-      Schema.Array(
-        Schema.Struct({
-          players: Schema.optional(Schema.Array(DraftResultPlayerPayload)),
-        }),
-      ),
-    ),
-  }),
-});
-
-const DraftResultsPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    draft_results: Schema.Array(DraftResultPayload),
-  }),
 });
 
 const AvailableDraftPicksPayload = Schema.Struct({

@@ -3793,6 +3793,25 @@ it.effect("refuses a transaction team filter from another league", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("rejects a transaction answer for another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readTransactions({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4001",
+        providerTeamKey: undefined,
+        limit: 25,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.league_key");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("reads bounded league transaction history with dropped-player identity", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
   return Effect.gen(function* () {
@@ -4148,6 +4167,23 @@ it.effect("reads a league's draft results with round, pick, team, and player", (
         providerPlayerKey: "466.p.20009",
       },
     ]);
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("rejects draft results for another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflDraftResults));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readDraftResults({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4001",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.draft_results.team_key");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 

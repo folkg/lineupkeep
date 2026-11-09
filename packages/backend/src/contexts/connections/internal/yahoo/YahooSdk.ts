@@ -33,6 +33,16 @@ import type { PublicInternet } from "#runtime/PublicInternet.ts";
 import { yahooReadDeadlineMillis, yahooReadResponseLimitBytes } from "./YahooLimits.ts";
 import { yahooPlayerStatus } from "./YahooLineup.ts";
 
+export type {
+  YahooDraftPick,
+  YahooLeagueSettings,
+  YahooMatchup,
+  YahooTransaction,
+  YahooTransactionPick,
+  YahooTransactionPlayer,
+  YahooTransactionTeam,
+} from "@lineupkeep/yahoo-sdk";
+
 export const yahooSdkContext = (
   internet: PublicInternet["Service"],
 ): Effect.Effect<Context.Context<HttpClient.HttpClient | Yahoo.Protocol>, never> =>
@@ -44,6 +54,91 @@ export const yahooSdkContext = (
       ),
     ),
   ).pipe(Effect.orDie);
+
+export const readLeagueThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  leagueKey: string,
+): Effect.Effect<Yahoo.YahooLeagueSettings, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    return yield* Yahoo.leagues.settings({ leagueKey }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
+  });
+
+export const readMatchupsThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  leagueKey: string,
+  week: number,
+): Effect.Effect<ReadonlyArray<Yahoo.YahooMatchup>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    return yield* Yahoo.matchups.week({ leagueKey, week }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
+  });
+
+export const readTransactionsThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  input: {
+    readonly leagueKey: string;
+    readonly teamKey: string | undefined;
+    readonly limit: number;
+    readonly offset: number;
+  },
+): Effect.Effect<ReadonlyArray<Yahoo.YahooTransaction>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    return yield* Yahoo.transactions
+      .list({
+        leagueKey: input.leagueKey,
+        limit: input.limit,
+        ...(input.teamKey === undefined ? {} : { teamKey: input.teamKey }),
+        ...(input.offset === 0 ? {} : { offset: input.offset }),
+      })
+      .pipe(
+        Yahoo.Retry.none,
+        Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+        Effect.provideService(Tracer.DisablePropagation, true),
+        Effect.mapError((error) => providerReadFailureOf(operation, error)),
+      );
+  });
+
+export const readDraftResultsThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  leagueKey: string,
+): Effect.Effect<ReadonlyArray<Yahoo.YahooDraftPick>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    return yield* Yahoo.draft.results({ leagueKey }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
+  });
 
 export const readLeagueTeamsThroughSdk = (
   context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
