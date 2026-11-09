@@ -30,7 +30,32 @@ const settings: Readonly<Record<string, ApplicationSetting>> = {
   },
   RESEND_API_KEY: {
     config: Config.Redacted("RESEND_API_KEY"),
-    production: "required",
+    production: "optional",
+    development: true,
+  },
+  EMAIL_SMTP_HOST: {
+    config: Config.String("EMAIL_SMTP_HOST"),
+    production: "optional",
+    development: true,
+  },
+  EMAIL_SMTP_PORT: {
+    config: Config.String("EMAIL_SMTP_PORT"),
+    production: "optional",
+    development: true,
+  },
+  EMAIL_SMTP_TLS: {
+    config: Config.String("EMAIL_SMTP_TLS"),
+    production: "optional",
+    development: true,
+  },
+  EMAIL_SMTP_USER: {
+    config: Config.String("EMAIL_SMTP_USER"),
+    production: "optional",
+    development: true,
+  },
+  EMAIL_SMTP_PASSWORD: {
+    config: Config.Redacted("EMAIL_SMTP_PASSWORD"),
+    production: "optional",
     development: true,
   },
   AUTH_CLIENT_IP_HEADERS: {

@@ -37,6 +37,7 @@
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "nodemailer": "10.4.0",
     "pg": "8.23.1",
     "postgres": "catalog:",
     "xstate": "catalog:"

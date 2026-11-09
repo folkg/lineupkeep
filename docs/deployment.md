@@ -8,7 +8,7 @@ Bootstrap, outside Alchemy (Alchemy has no billing-link provider, and state cann
 
 - GCP project `lineupkeep-prod` (number `602042678335`), billing account `0139E5-D27389-43F1F2`, region `us-east1`. The gcloud CLI's active project is still the deleted `auto-gm-372620`, so every command needs `--project=lineupkeep-prod`; set it in the CLI if bare commands are wanted.
 - Protected Alchemy state in the owner's shared Neon project `alchemy-state` (`spring-cell-62836171`): database and role `lineupkeep_state`, direct endpoint, `sslmode=verify-full`.
-- Provisioning inputs: `~/.config/lineupkeep/infra.env` (mode 600, outside the repository) with `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, `AUTH_CLIENT_IP_HEADERS`. A key rotation additionally carries `CONNECTION_ENCRYPTION_KEY_VERSION` and `CONNECTION_ENCRYPTION_RETAINED_KEYS`; see [connection credential encryption rotation](#connection-credential-encryption-rotation). `ALERT_EMAIL` is optional and only attaches an email notification channel to the lineup-run alert; without it the alert policy still opens incidents in Cloud Monitoring. Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token` and never echo it.
+- Provisioning inputs: `~/.config/lineupkeep/infra.env` (mode 600, outside the repository) with `ALCHEMY_STATE_DATABASE_URL`, `NEON_API_KEY`, `GOOGLE_PROJECT_ID`, `GCP_REGION`, `BETTER_AUTH_SECRET`, `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `AUTH_CLIENT_IP_HEADERS`, and one [mail transport](#mail-delivery): `RESEND_API_KEY` or the `EMAIL_SMTP_*` settings. A key rotation additionally carries `CONNECTION_ENCRYPTION_KEY_VERSION` and `CONNECTION_ENCRYPTION_RETAINED_KEYS`; see [connection credential encryption rotation](#connection-credential-encryption-rotation). `ALERT_EMAIL` is optional and only attaches an email notification channel to the lineup-run alert; without it the alert policy still opens incidents in Cloud Monitoring. Mint `GOOGLE_ACCESS_TOKEN` per session with `gcloud auth print-access-token` and never echo it.
 - Alchemy-managed: application Neon project (`database.run.ts`, stage `production`), project APIs and the CAD 5/month budget with 50/90/100% alerts (`platform.run.ts`, stage `production`), and the Cloud Run web service (`alchemy.run.ts`, stage `cloud-run`).
 - Email uses Resend's test sender `onboarding@resend.dev`, which delivers only to the owner's account address; a verified domain is a launch gate for open registration.
 
@@ -621,7 +621,7 @@ Plan and destroy need the same state store as deploy. Keep URLs out of source an
 
 ## Production configuration
 
-Supply the six required application inputs through protected provisioning/CI inputs: canonical HTTPS `BETTER_AUTH_URL`, a generated random `BETTER_AUTH_SECRET`, a base64-encoded 32-byte `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, `RESEND_API_KEY`, and a reviewed `AUTH_CLIENT_IP_HEADERS` policy. Optional rotation inputs are described under [connection credential encryption rotation](#connection-credential-encryption-rotation). Keep the auth and encryption secrets stable across restarts and rotate deliberately. The allowlist forwards secrets to the host, not to build commands; `APP_ENV` is generated as production.
+Supply the five required application inputs through protected provisioning/CI inputs: canonical HTTPS `BETTER_AUTH_URL`, a generated random `BETTER_AUTH_SECRET`, a base64-encoded 32-byte `CONNECTION_ENCRYPTION_KEY`, `EMAIL_FROM`, and a reviewed `AUTH_CLIENT_IP_HEADERS` policy, plus one [mail transport](#mail-delivery): `RESEND_API_KEY` or the `EMAIL_SMTP_*` settings. Optional rotation inputs are described under [connection credential encryption rotation](#connection-credential-encryption-rotation). Keep the auth and encryption secrets stable across restarts and rotate deliberately. The allowlist forwards secrets to the host, not to build commands; `APP_ENV` is generated as production.
 
 ### Connection credential encryption rotation
 
@@ -833,13 +833,31 @@ web's invoker binding regresses). The cost budget alerts at 50 %, 90 %, and
 
 ### Sign-in providers
 
-Email codes are the default; Google is optional. Codes resist mail-link scanners and let people choose the signing-in device. First verified sign-in creates an account; provider linking requires verified addresses. Production requires Resend rather than logging codes. Development may use console delivery; tests use an injected outbox or fake Resend, never real mail. Avoiding password hashing does not guarantee a platform CPU budget; review delivery latency, abuse, and unconfirmed-outcome recovery before changing authentication.
+Email codes are the default; Google is optional. Codes resist mail-link scanners and let people choose the signing-in device. First verified sign-in creates an account; provider linking requires verified addresses. Production requires a configured [mail transport](#mail-delivery) rather than logging codes. Development may use console delivery; tests use an injected outbox, a local SMTP sink, or fake Resend, never real mail. Avoiding password hashing does not guarantee a platform CPU budget; review delivery latency, abuse, and unconfirmed-outcome recovery before changing authentication.
 
 For [Resend](https://resend.com/docs/send-with-nodejs), verify a sending domain, create a sending-scoped API key, and set `EMAIL_FROM` to a sender on that domain. Keep the key protected. Per-client and per-recipient limits are **not a global email budget**. Review provider limits, distributed abuse, edge controls, monitoring, and delivery/recovery behavior for the actual application; no free-tier or quota-exhaustion guarantee is made.
 
 For [Google OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), create a web client and configure the application's consent/branding requirements with Google. Register the canonical origin and exact redirect URI `https://<host>/api/auth/callback/google`. For development, register `http://127.0.0.1:3000` and `http://127.0.0.1:3000/api/auth/callback/google`. Set both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, or neither. These are sign-in credentials, unrelated to GCP deployment credentials. The UI offers only server-reported enabled methods.
 
 The base origin is trusted automatically; there is **no supported extra-origins environment setting**. Previews require explicit isolated stage/database policy and registered callbacks; otherwise omit Google. No OAuth proxy or automatic database branch is configured. Changing sign-in methods is an application decision requiring security, recovery, and CPU tests, not a password-toggle recipe.
+
+### Mail delivery
+
+The email seam selects one transport from configuration: a non-empty `EMAIL_SMTP_HOST` selects SMTP even when `RESEND_API_KEY` is also set, otherwise a non-empty `RESEND_API_KEY` selects the Resend API, otherwise development prints to the console and production refuses to start. `EMAIL_FROM` is the sender for both transports.
+
+| Variable              | Meaning                                                                                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_SMTP_HOST`     | Relay hostname; setting it selects SMTP.                                                                                                                       |
+| `EMAIL_SMTP_PORT`     | TCP port, default `587`.                                                                                                                                       |
+| `EMAIL_SMTP_TLS`      | `starttls` (default; requires STARTTLS), `implicit` (TLS from the first byte, usually port 465), or `none` (plaintext, only for a relay on a trusted network). |
+| `EMAIL_SMTP_USER`     | Login name; set it with `EMAIL_SMTP_PASSWORD` or leave both unset.                                                                                             |
+| `EMAIL_SMTP_PASSWORD` | Login secret; keep it in the secret store.                                                                                                                     |
+
+For Gmail, enable two-step verification, create an app password, and set `EMAIL_SMTP_HOST=smtp.gmail.com`, `EMAIL_SMTP_PORT=587`, `EMAIL_SMTP_TLS=starttls`, `EMAIL_SMTP_USER` to the mailbox, and `EMAIL_SMTP_PASSWORD` to the app password. Gmail sends only as the authenticated account or a verified alias, so point `EMAIL_FROM` at that account. Gmail's own quotas and policies apply; they are not a global email budget.
+
+Rotate an SMTP credential by creating a new app password or relay credential, updating the secret, restarting the service, and then revoking the old credential at the provider. Rotate `RESEND_API_KEY` the same way: create the new key, deploy it, then delete the old key.
+
+When a delivery fails, the `email.send` span records `email.provider` (`smtp`, `resend`, or `console`), and accepted messages also record `email.provider_message_id`: a Resend API id, or the SMTP `Message-ID` derived from the message's idempotency key. A `rejected` failure is a permanent provider refusal, such as an SMTP 5xx reply to the sender, recipient, or message body, or a Resend 4xx response other than a retried 429. `unavailable` covers connection, TLS, authentication, timeout, and temporary failures. The failure's `detail` keeps the provider's own wording with email addresses removed, so an SMTP detail starts with the numeric reply code.
 
 ### MCP and OAuth
 

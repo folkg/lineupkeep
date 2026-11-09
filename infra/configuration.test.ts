@@ -146,6 +146,7 @@ it.effect(
             CONNECTION_ENCRYPTION_RETAINED_KEYS: "1:private-retained-connection-key",
             RESEND_API_KEY: "private-email-secret",
             EMAIL_FROM: "Lineupkeep <lineupkeep@example.com>",
+            EMAIL_SMTP_PASSWORD: "private-smtp-secret",
             AUTH_CLIENT_IP_HEADERS: "cf-connecting-ip",
             CLOUDFLARE_API_TOKEN: "must-not-cross",
           }),
@@ -155,6 +156,7 @@ it.effect(
       Effect.map((config) => {
         expect(Redacted.isRedacted(config["BETTER_AUTH_SECRET"])).toBe(true);
         expect(Redacted.isRedacted(config["RESEND_API_KEY"])).toBe(true);
+        expect(Redacted.isRedacted(config["EMAIL_SMTP_PASSWORD"])).toBe(true);
         expect(Redacted.isRedacted(config["CONNECTION_ENCRYPTION_KEY"])).toBe(true);
         expect(Redacted.isRedacted(config["CONNECTION_ENCRYPTION_RETAINED_KEYS"])).toBe(true);
         expect(config).not.toHaveProperty("CLOUDFLARE_API_TOKEN");
@@ -266,7 +268,7 @@ it.effect("selects optional development settings with explicitly redacted secret
   ),
 );
 
-it.effect("requires production email configuration even when development needs none", () =>
+it.effect("forwards SMTP relay settings with the password redacted", () =>
   applicationConfig.pipe(
     Effect.provide(
       ConfigProvider.layer(
@@ -276,11 +278,20 @@ it.effect("requires production email configuration even when development needs n
           CONNECTION_ENCRYPTION_KEY: "private-connection-encryption-key",
           EMAIL_FROM: "Lineupkeep <lineupkeep@example.com>",
           AUTH_CLIENT_IP_HEADERS: "cf-connecting-ip",
+          EMAIL_SMTP_HOST: "smtp.gmail.com",
+          EMAIL_SMTP_PORT: "587",
+          EMAIL_SMTP_TLS: "starttls",
+          EMAIL_SMTP_USER: "owner@example.com",
+          EMAIL_SMTP_PASSWORD: "private-smtp-secret",
         }),
       ),
     ),
-    Effect.exit,
 
-    Effect.map((exit) => expect(Exit.isFailure(exit)).toBe(true)),
+    Effect.map((config) => {
+      expect(config["EMAIL_SMTP_HOST"]).toBe("smtp.gmail.com");
+      expect(config["EMAIL_SMTP_USER"]).toBe("owner@example.com");
+      expect(Redacted.isRedacted(config["EMAIL_SMTP_PASSWORD"])).toBe(true);
+      expect(config).not.toHaveProperty("RESEND_API_KEY");
+    }),
   ),
 );
