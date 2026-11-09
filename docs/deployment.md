@@ -843,7 +843,7 @@ The base origin is trusted automatically; there is **no supported extra-origins 
 
 ### Mail delivery
 
-The email seam selects one transport from configuration: a non-empty `EMAIL_SMTP_HOST` selects SMTP even when `RESEND_API_KEY` is also set, otherwise a non-empty `RESEND_API_KEY` selects the Resend API, otherwise development prints to the console and production refuses to start. `EMAIL_FROM` is the sender for both transports.
+The email seam selects one transport from configuration: a non-empty `EMAIL_SMTP_HOST` selects SMTP even when `RESEND_API_KEY` is also set, otherwise a non-empty `RESEND_API_KEY` selects the Resend API, otherwise development prints to the console and production refuses to start. `EMAIL_FROM` is the sender for both transports. The current production sender is a Gmail mailbox configured over SMTP, because the Resend test sender reaches one address only; the erasure flow was proven live against it with a second mailbox, a feedback report, and an export, all gone after the erase.
 
 | Variable              | Meaning                                                                                                                                                        |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
