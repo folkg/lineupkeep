@@ -24,6 +24,8 @@
 - `packages/backend/src/runtime/`: runtime composition and PublicInternet.
 - `packages/backend/src/utilities/machine.ts`: starter machine convention, not a durable side-effect engine.
 - `packages/brand/src/product.ts`: shared product identity.
+- `packages/yahoo-sdk/`: the provider's own protocol, reads and writes, with its recorded fixtures and design
+  doc; the adapter reaches it through `internal/yahoo/YahooSdk.ts`, never the other way round.
 - `infra/`: Alchemy scaffolding, not approved/applied Lineupgrade production infrastructure.
 - `e2e/`: disposable verification harness, not deployed test endpoints.
 - `.agents/skills/`: local testing, domain, interaction, observability, and verification instructions.
