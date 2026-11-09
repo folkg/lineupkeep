@@ -62,10 +62,11 @@ GET https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_
 - **What it achieves:** discovers every league and team owned by the user, with
   settings and standings, in one request. It avoids one request per league and
   one settings read per league.
-- **Corroboration:** reference-audited only. The SDK implements this shape as
-  `leagues.discover`; `session.validate` still uses the plain
-  `users;use_login=1` read. No live capture of the four-game aggregate exists,
-  and the package test is synthetic.
+- **Corroboration:** live-captured for the four-game aggregate. Live responses
+  place the league directly in `leagues[]`, not under a single-key `league`
+  fragment; the decoder accepts both forms and the recorded payload is a
+  package fixture. `session.validate` still uses the plain `users;use_login=1`
+  read.
 
 #### 2. Multi-team rosters with pending transactions and games played
 
@@ -86,14 +87,17 @@ GET https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_
   eligibility and starting status, pending transactions, and remaining
   games/innings limits. It avoids a roster read, a pending-trade read, and a
   games-played read per team.
-- **Corroboration:** partial. Our Android capture contains a team aggregate
-  with `out=transactions,roster_alerts,stats,standings,games_played,...` plus
-  roster and player subresources, so those fields exist on the browser-session
-  API. The SDK implements the batch request as `rosters.forLeagues`; it decodes
-  rosters, pending transaction identity, and games-played limits from the same
-  response. The transaction and games-played shapes were decoded against the
-  reference MLB fixtures for that request. The exact multi-league
-  `users;use_login` response is reference-audited only.
+- **Corroboration:** live-captured for the multi-league `users;use_login`
+  response and its direct league entries. That collection is scoped to the
+  signed-in manager and returns one team per league. A root
+  `leagues;league_keys={leagueKeys}/teams;out=roster` request does return every
+  team in those leagues, but its five-league live response was 19.5 MB, which
+  exceeds the SDK's 4 MiB read bound. Full-league rosters therefore remain a
+  per-league read, and `rosters.forLeagues` publishes the signed-in manager's
+  teams only. The transaction and games-played shapes were also decoded against
+  the reference MLB fixtures for that request. A live team can publish an empty
+  `games_played` object; that means no games-played data, not a malformed
+  response.
 
 #### 3. Available players across several leagues in one read
 
@@ -108,9 +112,11 @@ GET https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_
   starting status.
 - **What it achieves:** compares the same free-agent or waiver pool across
   every league in one request, without repeating the query per league.
-- **Corroboration:** reference-audited only. The SDK implements this shape as
-  `players.search`, which now takes several league keys and returns grouped
-  results. The package test is synthetic.
+- **Corroboration:** live-captured for the multi-league search response. Live
+  responses place the league directly in `leagues[]`; the decoder accepts both
+  forms and the recorded payload is a package fixture. The SDK implements this
+  shape as `players.search`, which takes several league keys and returns grouped
+  results.
 
 #### 4. Game-wide player pool with paging and position expansion
 

@@ -237,7 +237,7 @@ export function decodeDiscoveredLeagues(
           });
         }
         for (const entry of game.leagues) {
-          const league = entry.league;
+          const league = "league" in entry ? entry.league : entry;
           const settings = yield* decodeLeagueSettings(
             { league: { ...league, season: game.season } },
             league.league_key,
@@ -289,10 +289,15 @@ const DiscoverLeaguePayload = Schema.Struct({
   teams: Schema.Array(TeamPayload),
 });
 
+const DiscoverLeagueEntry = Schema.Union([
+  Schema.Struct({ league: DiscoverLeaguePayload }),
+  DiscoverLeaguePayload,
+]);
+
 const DiscoverGamePayload = Schema.Struct({
   code: YahooGameKey,
   season: Season,
-  leagues: Schema.Array(Schema.Struct({ league: DiscoverLeaguePayload })),
+  leagues: Schema.Array(DiscoverLeagueEntry),
 });
 
 const DiscoverPayload = Schema.Struct({

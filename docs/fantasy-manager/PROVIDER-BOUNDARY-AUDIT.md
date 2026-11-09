@@ -388,27 +388,27 @@ Yahoo's sentence as `detail` only when Yahoo actually supplied one.
 
 ### Operation map
 
-| Port read                  | SDK operation                | Verdict                                                                                                                                                      |
-| -------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `readLeagueTeams`          | `teams.list`                 | **Migrated.** Same request, same published fields.                                                                                                           |
-| `validateSession`          | `session.validate`           | **Migrated.** Same request, same session outcome; refusal detail is gated by the SDK's `structured` mark.                                                    |
-| `readLeague`               | `leagues.settings`           | Clean request; the adapter keeps `format`, `rosterChange`, `rosterCoverage`, `rosterConstraints`, and `webUrl` policy.                                       |
-| `readRoster`               | `rosters.forTeam`            | **Migrated.** Same request and published fields, including the week-or-date selector and the 400-to-period-mismatch rule.                                    |
-| `readRosterSchedule`       | `rosters.forTeam`            | Clean per week or date; the range fan-out and game merge stay in the adapter.                                                                                |
-| `readPlayerDetails`        | `players.details`            | Clean per season, week, or date; period resolution and daily aggregation stay in the adapter.                                                                |
-| `readPlayerHistory`        | `players.details`            | Clean per period, with the same period-resolution boundary.                                                                                                  |
-| `readMatchups`             | `matchups.week`              | Clean request; direct shape mapping.                                                                                                                         |
-| `readTransactions`         | `transactions.list`          | Clean request; direct shape mapping.                                                                                                                         |
-| `readPendingTrades`        | `transactions.pendingTrades` | Clean request; `canRespond` is a number in the SDK and a boolean at the port.                                                                                |
-| `readDraftResults`         | `draft.results`              | Clean request; direct shape mapping.                                                                                                                         |
-| `discoverTeams`            | `leagues.discover`           | Not a swap: one aggregate `users;use_login` read instead of per-game team reads plus settings reads. The live check blocks it on the league-wrapper decoder. |
-| `readLeagueRosters`        | `rosters.forLeagues`         | Not a swap: the aggregate path returns only the signed-in manager's team, while the adapter publishes every team in the league. Live-blocked as well.        |
-| `searchPlayers`            | `players.search`             | Not a swap: league-scoped request versus the aggregate multi-league `users;use_login` request. The live check blocks it on the league-wrapper decoder.       |
-| `readStandings`            | none                         | No SDK operation. `leagues.discover` carries only rank, points for/against/back; the port publishes category totals, acquisition usage, and streaks.         |
-| `readCompletedTrades`      | none                         | `transactions.list` has no `type=trade` filter; filtering after `count` would change which trades are returned.                                              |
-| `readPlayerWeeks`          | none                         | Needs `out=ranks,opponent;ranks=projected_week`; `players.details` requests stats and ownership instead.                                                     |
-| `readAvailableDraftPicks`  | none                         | The adapter reads the Android read host with `out=available_draft_picks`; `leagues.teamAnalysis` uses the web host and a different `out`.                    |
-| `scoreRoster` player facts | none                         | Needs percent-started cut types and the full rank set; no SDK operation requests that shape.                                                                 |
+| Port read                  | SDK operation                | Verdict                                                                                                                                                                                                                                                                                                 |
+| -------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `readLeagueTeams`          | `teams.list`                 | **Migrated.** Same request, same published fields.                                                                                                                                                                                                                                                      |
+| `validateSession`          | `session.validate`           | **Migrated.** Same request, same session outcome; refusal detail is gated by the SDK's `structured` mark.                                                                                                                                                                                               |
+| `readLeague`               | `leagues.settings`           | Clean request; the adapter keeps `format`, `rosterChange`, `rosterCoverage`, `rosterConstraints`, and `webUrl` policy.                                                                                                                                                                                  |
+| `readRoster`               | `rosters.forTeam`            | **Migrated.** Same request and published fields, including the week-or-date selector and the 400-to-period-mismatch rule.                                                                                                                                                                               |
+| `readRosterSchedule`       | `rosters.forTeam`            | Clean per week or date; the range fan-out and game merge stay in the adapter.                                                                                                                                                                                                                           |
+| `readPlayerDetails`        | `players.details`            | Clean per season, week, or date; period resolution and daily aggregation stay in the adapter.                                                                                                                                                                                                           |
+| `readPlayerHistory`        | `players.details`            | Clean per period, with the same period-resolution boundary.                                                                                                                                                                                                                                             |
+| `readMatchups`             | `matchups.week`              | Clean request; direct shape mapping.                                                                                                                                                                                                                                                                    |
+| `readTransactions`         | `transactions.list`          | Clean request; direct shape mapping.                                                                                                                                                                                                                                                                    |
+| `readPendingTrades`        | `transactions.pendingTrades` | Clean request; `canRespond` is a number in the SDK and a boolean at the port.                                                                                                                                                                                                                           |
+| `readDraftResults`         | `draft.results`              | Clean request; direct shape mapping.                                                                                                                                                                                                                                                                    |
+| `discoverTeams`            | `leagues.discover`           | **Ready.** Five live leagues parse with zero field differences after the decoder accepted direct league entries; `gameKey` maps to `league`/`sport`, and `provider` comes from the registry.                                                                                                            |
+| `readLeagueRosters`        | `rosters.forLeagues`         | **Not a swap.** The aggregate `users;use_login` read returns the signed-in manager's team only (1 against 10–13 live). A root league-scoped read returns every team, but its five-league response is 19.5 MB against the 4 MiB read bound, so the adapter keeps its per-league `teams;out=roster` read. |
+| `searchPlayers`            | `players.search`             | Wrapper fixed; every published field agrees except `proTeamKey`. That field remains a mapping decision: the live payload sends `editorial_team_key` and the SDK summary does not carry it.                                                                                                              |
+| `readStandings`            | none                         | No SDK operation. `leagues.discover` carries only rank, points for/against/back; the port publishes category totals, acquisition usage, and streaks.                                                                                                                                                    |
+| `readCompletedTrades`      | none                         | `transactions.list` has no `type=trade` filter; filtering after `count` would change which trades are returned.                                                                                                                                                                                         |
+| `readPlayerWeeks`          | none                         | Needs `out=ranks,opponent;ranks=projected_week`; `players.details` requests stats and ownership instead.                                                                                                                                                                                                |
+| `readAvailableDraftPicks`  | none                         | The adapter reads the Android read host with `out=available_draft_picks`; `leagues.teamAnalysis` uses the web host and a different `out`.                                                                                                                                                               |
+| `scoreRoster` player facts | none                         | Needs percent-started cut types and the full rank set; no SDK operation requests that shape.                                                                                                                                                                                                            |
 
 Writes are unchanged. The SDK's `lineups.setNative`, `lineups.assign`, `transactions.apply`,
 `trades.propose`, `trades.withdraw`, and `lineups.reserve` cover the adapter's write surface but are not
@@ -424,8 +424,9 @@ enabled. `trades.propose` also accepts draft picks, which the port does not carr
 5. `players.details` and `readPlayerHistory` — request-identical once period resolution is lifted
    above the port.
 6. Live-verify the aggregate reads (`leagues.discover`, `rosters.forLeagues`, `players.search`) before
-   swapping; their browser-session shapes are reference-audited only. The live check below found two
-   decoder defects and a narrower team scope, so none of the three is ready to migrate.
+   swapping. `leagues.discover` is ready. `players.search` needs the `proTeamKey` mapping decision.
+   `rosters.forLeagues` stays out of the adapter's path: it publishes the signed-in manager's team,
+   and a full-league multi-league response exceeds the SDK read bound.
 7. Add SDK operations for standings, completed-trade filtering, weekly player ranks, and the Android
    available-draft-pick host.
 8. Writes last, one operation at a time, each with a recorded acceptance or refusal.
@@ -492,42 +493,50 @@ enabled. `trades.propose` also accepts draft picks, which the port does not carr
 
 `e2e/scratch/sdk-aggregate-check/check.ts` reads the owner's stored connection from the local
 development database, opens it with the application's credential cipher, and compares each aggregate
-SDK read with the adapter's published answer for the same league. It performs GETs only and writes its
-result to `e2e/scratch/sdk-aggregate-check/report.json` beside itself.
+SDK read with the adapter's published answer for the same league. It also requests the root
+league-scoped team collection to measure its team count and response size. It performs GETs only and
+writes its result to `e2e/scratch/sdk-aggregate-check/report.json` beside itself.
 
-| Port read           | SDK operation        | Live result                                                                                                                            |
-| ------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `discoverTeams`     | `leagues.discover`   | **Blocked.** All five leagues fail the decoder at `users.N.games.N.leagues.0.league`.                                                  |
-| `readLeagueRosters` | `rosters.forLeagues` | **Blocked twice.** Two of five leagues fail on an empty `games_played`; the three that parse return only the signed-in manager's team. |
-| `searchPlayers`     | `players.search`     | **Blocked.** All five leagues fail the decoder at `users.N.games.N.leagues.0.league`.                                                  |
+| Port read           | SDK operation        | Live result                                                                                                                                         |
+| ------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `discoverTeams`     | `leagues.discover`   | **Ready.** 5 of 5 leagues parse; 0 field differences.                                                                                               |
+| `readLeagueRosters` | `rosters.forLeagues` | **Not ready.** 5 of 5 leagues parse; each returns one team (16–22 players) against the adapter's 10–13 teams (187–281 players) for the same league. |
+| `searchPlayers`     | `players.search`     | **Not ready by one mapping decision.** 5 of 5 leagues parse; 10 players each; every field agrees except `proTeamKey`.                               |
 
 Findings:
 
-- **League wrapper.** Yahoo's aggregate responses put the league directly in `leagues[]`. The SDK
-  normalizer unwraps the single-key `league` fragment, so the decoded entry is the bare league object.
-  `leagues.discover` and `players.search` still require `entry.league`, which is why every league fails
-  at `leagues.0.league`. `rosters.forLeagues` accepts either shape, so it reaches the team payload.
-- **Empty games played.** `rosters.forLeagues` requests `out=transactions,games_played`. Yahoo returns
-  `team.games_played: {}` for leagues with no games-played data (football `470.l.70271` and hockey
-  `477.l.31027` live). The SDK schema requires `games_played_by_position_type`, so an empty object
-  fails the whole multi-league read. The three leagues without that empty object parse.
-- **Roster breadth.** The aggregate `users;use_login` path is scoped to the signed-in manager: it
-  returns one team per league. `readLeagueRosters` publishes every team in the league (10–13 live).
-  `rosters.forLeagues` cannot replace that read without narrowing what the port publishes.
+- **League wrapper.** Live aggregate responses put the league directly in `leagues[]`; the normalizer
+  produces the bare league object there. `leagues.discover` and `players.search` accepted only
+  `entry.league`, so every league failed at `leagues.0.league`. Both decoders now accept the direct
+  entry or the single-key `league` fragment, and `rosters.forLeagues` already did. The recorded live
+  responses are fixtures in `packages/yahoo-sdk/src/aggregateFixturesTest.ts`, and a malformed entry
+  still fails with `YahooParseError`.
+- **Empty games played.** Yahoo returns `team.games_played: {}` for leagues with no games-played data
+  (football `470.l.70271` and hockey `477.l.31027` live). The schema now accepts the empty object and
+  publishes no games-played rows for it. Malformed games-played rows still fail. This removed the last
+  decoder rejection from `rosters.forLeagues`: all five leagues parse.
+- **Roster scope.** The aggregate `users;use_login` path returns one team per league: the signed-in
+  manager's team. A root `leagues;league_keys=…/teams;out=roster` request returns every team in those
+  leagues (12, 12, 13, 10, and 10 live), but the five-league response is 19,523,980 bytes against the
+  SDK's 4,194,304-byte read bound. One league is 3,520,075 bytes and fits, so full-league rosters remain
+  a per-league read. `packages/yahoo-sdk/README.md` and `docs/design.md` publish that limitation, and
+  `rosters.forLeagues` stays out of the adapter's path.
 - **Roster fields.** On the one team the aggregate returns, every published roster field agrees
   exactly. Three fields differ only because the aggregate request asks for more than the adapter's
   `teams;out=roster` request: `opponent`/`scheduled` and `transactionTrend` are present in the SDK
   parse and absent or `not_published` in the adapter's answer. `pendingTransactions` and `gamesPlayed`
   are parsed by the SDK and have no port field.
-- **Search.** The aggregate returns ten players per league, so the limit and ordering semantics match
-  the per-league read once the wrapper is fixed. The SDK summary carries `opponent` and
-  `startingStatus`, which the port's search result does not publish, and drops `editorial_team_key`,
-  which the adapter publishes as `proTeamKey`. Both are mapping decisions.
+- **Search.** The aggregate returns ten players per league; limit and ordering semantics match the
+  per-league read. All published values agree except `proTeamKey`: the live payload includes
+  `editorial_team_key`, which the adapter publishes, while `YahooPlayerSummary` carries only the
+  abbreviation. The SDK summary also carries `opponent`, `startingStatus`, `ranks`, `stats`, and
+  `ownershipType`, which the port's search result does not publish. Both are migration mapping
+  decisions rather than decoder defects.
 - **Discover.** The aggregate returns the same single team per league as `discoverTeams`, plus league
-  settings, team standings, managers, and logos. After the wrapper fix it is a candidate replacement
-  for the per-game read plus the settings reads; it still needs a mapping decision for `gameKey` to
-  `league`/`sport` and for `providerUrl` synthesis.
+  settings, team standings, managers, and logos. It has zero comparable field differences; the
+  adapter-only `provider`, `league`, and `sport` values come from the registry and from `gameKey`.
 
-Verdict: none of the aggregate reads is ready to migrate. Two SDK decoder defects (the league wrapper
-assumption and the empty `games_played` object) must be fixed first, and `rosters.forLeagues` remains a
-narrower read than the port's league-roster answer even after they are.
+Verdict: `leagues.discover` is ready to migrate. `players.search` is ready once the `proTeamKey`
+mapping is decided; its decoded values otherwise agree. `rosters.forLeagues` is not ready and stays a
+per-league read, because the provider can return every team only in a response that exceeds the SDK's
+read bound.

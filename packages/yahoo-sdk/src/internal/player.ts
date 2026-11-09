@@ -40,7 +40,7 @@ export function decodePlayerSearchMany(
     for (const user of decoded.users) {
       for (const game of user.games) {
         for (const entry of game.leagues) {
-          const league = entry.league;
+          const league = "league" in entry ? entry.league : entry;
           if (!requestedLeagueKeys.includes(league.league_key)) {
             return yield* new YahooParseError({
               operation: "search_players",
@@ -518,12 +518,17 @@ const PlayerSearchPayload = Schema.Struct({
   league: LeaguePlayersPayload,
 });
 
+const AggregateLeaguePlayers = Schema.Union([
+  Schema.Struct({ league: LeaguePlayersPayload }),
+  LeaguePlayersPayload,
+]);
+
 const AggregatePlayerSearchPayload = Schema.Struct({
   users: Schema.Array(
     Schema.Struct({
       games: Schema.Array(
         Schema.Struct({
-          leagues: Schema.Array(Schema.Struct({ league: LeaguePlayersPayload })),
+          leagues: Schema.Array(AggregateLeaguePlayers),
         }),
       ),
     }),

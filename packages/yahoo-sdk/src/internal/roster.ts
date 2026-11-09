@@ -323,24 +323,30 @@ function gamesPlayedOf(
     return undefined;
   }
   const groups = isReadonlyArray(value) ? value : [value];
-  return groups.map((group) => {
+  const played = groups.flatMap((group) => {
     const detail = group.games_played_by_position_type;
-    return {
-      positionType: detail.position_type,
-      positions: (isReadonlyArray(detail.games_played)
-        ? detail.games_played
-        : detail.games_played === undefined
-          ? []
-          : [detail.games_played]
-      ).map(({ games_played_by_position }) => ({
-        position: games_played_by_position.position,
-        played: games_played_by_position.games_played.played,
-        max: games_played_by_position.games_played.max,
-        projected: games_played_by_position.games_played.projected,
-      })),
-      ...(detail.innings_pitched === undefined ? {} : { inningsPitched: detail.innings_pitched }),
-    };
+    if (detail === undefined) {
+      return [];
+    }
+    return [
+      {
+        positionType: detail.position_type,
+        positions: (isReadonlyArray(detail.games_played)
+          ? detail.games_played
+          : detail.games_played === undefined
+            ? []
+            : [detail.games_played]
+        ).map(({ games_played_by_position }) => ({
+          position: games_played_by_position.position,
+          played: games_played_by_position.games_played.played,
+          max: games_played_by_position.games_played.max,
+          projected: games_played_by_position.games_played.projected,
+        })),
+        ...(detail.innings_pitched === undefined ? {} : { inningsPitched: detail.innings_pitched }),
+      },
+    ];
   });
+  return played.length === 0 ? undefined : played;
 }
 
 type SelectedPositionType = typeof SelectedPosition.Type;
@@ -508,19 +514,21 @@ const GamesPlayedPositionPayload = Schema.Struct({
 });
 
 const GamesPlayedGroupPayload = Schema.Struct({
-  games_played_by_position_type: Schema.Struct({
-    position_type: Schema.String,
-    games_played: Schema.optional(
-      Schema.Union([GamesPlayedPositionPayload, Schema.Array(GamesPlayedPositionPayload)]),
-    ),
-    innings_pitched: Schema.optional(
-      Schema.Struct({
-        pitched: Schema.Union([Schema.String, Schema.Finite]),
-        max: Schema.Union([Schema.String, Schema.Finite]),
-        projected: Schema.Union([Schema.String, Schema.Finite]),
-      }),
-    ),
-  }),
+  games_played_by_position_type: Schema.optional(
+    Schema.Struct({
+      position_type: Schema.String,
+      games_played: Schema.optional(
+        Schema.Union([GamesPlayedPositionPayload, Schema.Array(GamesPlayedPositionPayload)]),
+      ),
+      innings_pitched: Schema.optional(
+        Schema.Struct({
+          pitched: Schema.Union([Schema.String, Schema.Finite]),
+          max: Schema.Union([Schema.String, Schema.Finite]),
+          projected: Schema.Union([Schema.String, Schema.Finite]),
+        }),
+      ),
+    }),
+  ),
 });
 
 const AggregateLeagueRostersPayload = Schema.Struct({
