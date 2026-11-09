@@ -92,6 +92,8 @@ The multi-league roster read is owned-team scoped because Yahoo's `users;use_log
 
 Request schemas and response types are public. Wire payloads are not: every decoder takes `unknown`, validates the provider's positional JSON shape, and returns the named response type. Unknown or absent fields are documented where they matter; missing statistics stay `null`, never zero. The package does not export raw wire schemas.
 
+A transaction player's movement carries the SDK's normalised `kind` and the provider's own `rawType`. Both `trade` and `pending_trade` classify as `trade`, but a caller that publishes the provider's vocabulary can keep them apart.
+
 ## Writes and outcomes
 
 Writes use the `pub-api-rw` host with `format=json_f` and a crumb. The SDK fetches the crumb from `pub-api/fantasy/v3/getCrumb` before each write; callers never pass a crumb. The crumb is held as `Redacted`, is not returned, and is scrubbed from provider messages.

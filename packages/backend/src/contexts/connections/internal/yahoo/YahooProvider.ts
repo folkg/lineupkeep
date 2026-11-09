@@ -91,6 +91,7 @@ import type {
   YahooDraftPick,
   YahooLeagueSettings,
   YahooMatchup,
+  YahooPendingTrade,
   YahooTransaction,
   YahooTransactionPick,
   YahooTransactionPlayer,
@@ -102,6 +103,7 @@ import {
   readLeagueTeamsThroughSdk,
   readLeagueThroughSdk,
   readMatchupsThroughSdk,
+  readPendingTradesThroughSdk,
   readRosterThroughSdk,
   readTransactionsThroughSdk,
   rosterSlotOf,
@@ -1076,27 +1078,15 @@ export const yahooProvider = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan("provider.operation", "read_pending_trades");
     const cookie = yield* sessionCookie(input, "read_pending_trades");
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "read_pending_trades");
-    const teamFilter = yield* ValidLeagueTeamKey(
-      input.providerTeamKey,
-      leagueKey,
+    yield* ValidLeagueTeamKey(input.providerTeamKey, leagueKey, "read_pending_trades");
+    const decoded = yield* readPendingTradesThroughSdk(
+      sdk,
       "read_pending_trades",
-    );
-    const payload = yield* readJson(internet, {
-      operation: "read_pending_trades",
-      origin: readOrigin,
-      path: `/fantasy/v2/league/${leagueKey}/transactions;type=pending_trade${teamFilter}`,
-      query: { format: "json" },
       cookie,
-      normalize: true,
-    });
-    const decoded = yield* decodePayload(PendingTradesPayload, payload, "read_pending_trades");
-    if (decoded.league.league_key !== leagueKey) {
-      return yield* responseMismatch({
-        operation: "read_pending_trades",
-        field: "league.league_key",
-      });
-    }
-    const offers = yield* decodePendingTrades(decoded.league.transactions, leagueKey);
+      leagueKey,
+      input.providerTeamKey,
+    );
+    const offers = decoded.map(providerPendingTradeOf);
     yield* Effect.annotateCurrentSpan("provider.pending_trade_count", offers.length);
     return offers;
   });
@@ -3108,61 +3098,6 @@ function decodeTransactions(
   });
 }
 
-function decodePendingTrades(
-  transactions: ReadonlyArray<typeof PendingTradePayload.Type>,
-  leagueKey: string,
-): Effect.Effect<ReadonlyArray<ProviderPendingTrade>, ProviderResponseInvalid> {
-  return Effect.gen(function* () {
-    const offers: Array<ProviderPendingTrade> = [];
-    for (const transaction of transactions) {
-      if (transaction.type !== "pending_trade") {
-        return yield* responseMismatch({ operation: "read_pending_trades", field: "type" });
-      }
-      const proposer = transactionTeam(transaction.trader_team_key, transaction.trader_team_name);
-      const receiver = transactionTeam(transaction.tradee_team_key, transaction.tradee_team_name);
-      for (const team of [proposer, receiver]) {
-        if (team !== undefined && providerLeagueKey(team.providerTeamKey) !== leagueKey) {
-          return yield* responseMismatch({
-            operation: "read_pending_trades",
-            field: "team_key",
-          });
-        }
-      }
-      const players = (transaction.players ?? []).map((player) => ({
-        providerPlayerKey: player.player_key,
-        movement: playerMovement(player.transaction_data),
-        name: optionalNonEmpty(player.name?.full ?? ""),
-        primaryPosition: optionalNonEmpty(player.primary_position ?? ""),
-        displayPosition: optionalNonEmpty(player.display_position ?? ""),
-        eligiblePositions:
-          player.eligible_positions === undefined
-            ? undefined
-            : player.eligible_positions.map(({ position }) => position),
-        proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
-      }));
-      const picks = (transaction.picks ?? []).map(({ pick }) => ({
-        round: pick.round,
-        from: transactionTeam(pick.source_team_key, pick.source_team_name),
-        to: transactionTeam(pick.destination_team_key, pick.destination_team_name),
-        original: transactionTeam(pick.original_team_key, pick.original_team_name),
-      }));
-      offers.push({
-        transactionKey: transaction.transaction_key,
-        proposedAt: yield* providerInstant(transaction.trade_proposed_time, "read_pending_trades"),
-        note: optionalNonEmpty(transaction.trade_note ?? ""),
-        canRespond: optionalFlag(transaction.current_login_can_respond) ?? false,
-        proposer,
-        receiver,
-        unusedRosterSpots: transaction.tradee_unused_roster_spots,
-        players,
-        picks,
-        incomplete: incompletePendingTrade(players, picks),
-      });
-    }
-    return offers;
-  });
-}
-
 function providerTransactionOf(transaction: YahooTransaction): ProviderTransaction {
   const players = transaction.players.map(providerTransactionPlayerOf);
   const parties = transactionParties(
@@ -3185,11 +3120,28 @@ function providerTransactionOf(transaction: YahooTransaction): ProviderTransacti
   };
 }
 
+function providerPendingTradeOf(offer: YahooPendingTrade): ProviderPendingTrade {
+  const players = offer.players.map(providerTransactionPlayerOf);
+  const picks = offer.picks.map(providerTransactionPickOf);
+  return {
+    transactionKey: offer.transactionKey,
+    proposedAt: offer.proposedAt,
+    note: offer.note,
+    canRespond: optionalFlag(offer.canRespond) ?? false,
+    proposer: providerTransactionTeamOf(offer.proposer),
+    receiver: providerTransactionTeamOf(offer.receiver),
+    unusedRosterSpots: offer.unusedRosterSpots,
+    players,
+    picks,
+    incomplete: incompletePendingTrade(players, picks),
+  };
+}
+
 function providerTransactionPlayerOf(player: YahooTransactionPlayer): ProviderTransactionPlayer {
   return {
     providerPlayerKey: player.playerKey,
     movement: {
-      kind: player.movement.kind,
+      kind: movementKind(player.movement.rawType),
       from: providerTransactionTeamOf(player.movement.from),
       to: providerTransactionTeamOf(player.movement.to),
     },
@@ -3482,12 +3434,9 @@ function providerNumber(value: number | string | null | undefined): number | nul
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function providerInstant(
-  timestamp: number,
-  operation: ProviderOperation = "read_transactions",
-): Effect.Effect<string, ProviderResponseInvalid> {
+function providerInstant(timestamp: number): Effect.Effect<string, ProviderResponseInvalid> {
   return Option.match(DateTime.make(timestamp * 1_000), {
-    onNone: () => responseMismatch({ operation }),
+    onNone: () => responseMismatch({ operation: "read_transactions" }),
     onSome: (instant) => Effect.succeed(DateTime.formatIso(instant)),
   });
 }
@@ -4058,29 +4007,6 @@ const TransactionsPayload = Schema.Struct({
   league: Schema.Struct({
     league_key: LeagueKey,
     transactions: Schema.Array(TransactionPayload),
-  }),
-});
-
-const PendingTradePayload = Schema.Struct({
-  transaction_key: Schema.NonEmptyString,
-  type: Schema.NonEmptyString,
-  status: Schema.optional(Schema.String),
-  trader_team_key: Schema.optional(TeamKey),
-  trader_team_name: Schema.optional(Schema.String),
-  tradee_team_key: Schema.optional(TeamKey),
-  tradee_team_name: Schema.optional(Schema.String),
-  trade_proposed_time: IntFromStringOrNumber,
-  tradee_unused_roster_spots: Schema.optional(IntFromStringOrNumber),
-  current_login_can_respond: Schema.optional(IntFromStringOrNumber),
-  trade_note: Schema.optional(Schema.String),
-  picks: Schema.optional(Schema.Array(TransactionPickPayload)),
-  players: Schema.optional(Schema.Array(TransactionPlayerPayload)),
-});
-
-const PendingTradesPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    transactions: Schema.Array(PendingTradePayload),
   }),
 });
 

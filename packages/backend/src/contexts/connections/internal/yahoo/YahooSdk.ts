@@ -37,6 +37,7 @@ export type {
   YahooDraftPick,
   YahooLeagueSettings,
   YahooMatchup,
+  YahooPendingTrade,
   YahooTransaction,
   YahooTransactionPick,
   YahooTransactionPlayer,
@@ -120,6 +121,25 @@ export const readTransactionsThroughSdk = (
         Effect.provideService(Tracer.DisablePropagation, true),
         Effect.mapError((error) => providerReadFailureOf(operation, error)),
       );
+  });
+
+export const readPendingTradesThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  leagueKey: string,
+  teamKey: string,
+): Effect.Effect<ReadonlyArray<Yahoo.YahooPendingTrade>, ProviderReadFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    return yield* Yahoo.transactions.pendingTrades({ leagueKey, teamKey }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerReadFailureOf(operation, error)),
+    );
   });
 
 export const readDraftResultsThroughSdk = (

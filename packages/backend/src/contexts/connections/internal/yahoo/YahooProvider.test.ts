@@ -3739,6 +3739,24 @@ it.effect("reads the owner's pending trade offers from the typed feed", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("rejects a pending trade answer for another league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflPendingTrades));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.readPendingTrades({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4001",
+        providerTeamKey: "466.l.4001.t.1",
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.league_key");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("refuses a pending trade row that is not a pending trade", () => {
   const internet = recordingInternet(() => jsonResponse(yahooNflTransactions));
   return Effect.gen(function* () {
