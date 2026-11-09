@@ -493,6 +493,27 @@ removes an entry from the table.
 
 ---
 
+## F3. Draft picks in trades (owner's next main-line item)
+
+The league switch is published and the SDK's Android capture proved the write: a Round 1 for Round 1 pending trade
+returned 201 and was cancelled with a 204, while the same proposal on the web write host is refused. What stands
+between us and the feature is the write host, a pick asset type, validation against the league's available picks,
+and the review line.
+
+- [ ] Prove, read-only, that our stored connection authenticates the Android v2 read host for
+      `available_draft_picks`, before promising the feature.
+- [ ] If it does, add a pick asset to the provider port: round, source team, destination team, with the league's
+      `tradeDraftPicks` capability gating it.
+- [ ] Validate a pick against the league's available picks and the team that owns it; refuse a pick the league does
+      not allow with the reason, never silently ignore it.
+- [ ] Carry picks through a proposal item, the order, submission and the reads, in league terms: a first-round
+      pick, from whom, to whom.
+- [ ] Report whether our own writes reach the Android host with our stored credential, and record the evidence
+      either way; if they do not, say so rather than shipping a feature that cannot execute.
+
+**Verify**: a pick proposal is accepted by validation, appears on the review with both sides named, and either
+executes through a proven host or is refused with the true reason. `M`
+
 ## G. Provider boundary and simplification
 
 ### G1 — Stop provider-shaped ideas leaking into generic code
@@ -952,12 +973,12 @@ the transaction review reads as English about a fantasy team. `S`
 The owner asked for a pass over small animations, with the guidance from Emil Kowalski's work: most things need no
 animation, frequent interactions should not be animated, and motion exists to delight on the rarer moments.
 
-- [ ] Read the skills before deciding anything, and record the handful of principles this product will keep, in
+- [x] Read the skills before deciding anything, and record the handful of principles this product will keep, in
       the same voice as `DESIGN.md`.
-- [ ] Pick a small number of infrequent moments where motion would genuinely help, not a sweep of the interface.
-- [ ] Fix the submit progress bar on the transaction review: the owner saw it stutter. Measure it before and
-      after rather than judging by eye, keep the work off the layout thread, and keep the indeterminate behaviour
-      that rule already requires.
+- [x] Pick a small number of infrequent moments where motion would genuinely help, not a sweep of the interface.
+- [x] Fix the working hairline: the owner saw it stutter, in Firefox. Measured in both engines, the cause was the
+      animated value, not the layout; it now animates a compositable transform and keeps full strength while the
+      control works.
 - [ ] Keep every duration and easing in the theme tokens, and keep the reduced-motion rule authoritative.
 - [ ] Do not animate the action states: their timing is already decided and written down.
 
@@ -1019,15 +1040,18 @@ why anything is declined. Currently zero open.
 
 | ID  | Decision                                                                                                               | Blocks |
 | --- | ---------------------------------------------------------------------------------------------------------------------- | ------ |
-| D1  | Staging model for CI: long-lived or per-branch                                                                         | C1     |
-| D2  | Cloudflare split, or make GCP cold start good enough                                                                   | E2     |
+| D1  | ~~Staging model for CI~~ settled: no staging; the container target is the proof                                        | —      |
+| D2  | ~~Cloudflare split~~ settled: stay on Cloud Run, the waking shell covers the cold start                                | —      |
 | D3  | ~~Schedule cache source: derived from our reads, or external~~ settled: cache our reads, NHL API external, no graphite | F1     |
 | D4  | Retention, RPO/RTO and recovery owner                                                                                  | N1     |
 | D5  | Rename to lineupgrade, and when                                                                                        | O1     |
-| D6  | Solver direction: positional scarcity first, or category-aware first                                                   | M1, M2 |
+| D6  | ~~Solver direction~~ settled: keep current behaviour, revisit only on a wrong lineup                                   | —      |
 | D7  | ~~Transactions read-only or executed~~ settled: group I owns it                                                        | —      |
 | D8  | Reserve-slot eligibility: per-player, or per reserve position                                                          | A7     |
 | D9  | Passkeys as a sign-in option                                                                                           | future |
+| D10 | Sign-in email delivery: Gmail relay for now, so a second address can sign in and the erasure proof can run             | J3     |
+| D11 | ~~Grant revocation on replay~~ settled: keep RFC 9700 family revocation                                                | —      |
+| D12 | ~~Roster spots on an offer; per-player ranking on a run~~ settled: neither publishes; neither changes a decision       | —      |
 
 Ruled already, recorded so they are not reopened: the transactions review is one group and comes before the
 framework migration, which is waiting on a release; Foldkit before any redesign; the rename before the
