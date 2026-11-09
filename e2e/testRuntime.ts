@@ -61,6 +61,12 @@ function yahooResponse(url: URL): unknown {
   if (url.pathname === "/fantasy/v2/users;use_login=1") {
     return sessionPayload();
   }
+  if (
+    url.pathname ===
+    "/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl/leagues;out=settings/teams;out=standings"
+  ) {
+    return discoverPayload();
+  }
   const match = /^\/fantasy\/v2\/users;use_login=1\/games;game_keys=(nfl|nhl)\/teams$/u.exec(
     url.pathname,
   );
@@ -307,76 +313,116 @@ function teamsPayload(league: "nfl" | "nhl"): unknown {
   };
 }
 
-function leagueSettingsPayload(leagueKey: string): unknown {
-  const teamKey = leagueKey === "461.l.9000" ? "461.l.9000.t.1" : "465.l.9100.t.2";
+function discoverPayload(): unknown {
   return {
     fantasy_content: {
-      league: [
+      users: [
         {
-          league_key: leagueKey,
-          name: leagueKey === "461.l.9000" ? "Embedded Football League" : "Hosted Hockey League",
-          url:
-            leagueKey === "461.l.9000"
-              ? "https://football.fantasysports.yahoo.com/f1/9000"
-              : "https://hockey.fantasysports.yahoo.com/hockey/9100",
-          num_teams: 10,
-          current_week: 6,
-          start_week: 1,
-          end_week: 17,
-          start_date: "2026-09-03",
-          end_date: "2026-12-28",
-          current_date: "2026-10-31",
-          scoring_type: "head",
-          scoring_label: "H2H",
-          weekly_deadline: "",
-          edit_key: "42",
-          season: "2026",
-          draft_status: "postdraft",
-        },
-        {
-          settings: [
+          games: [
             {
-              waiver_type: "FR",
-              waiver_rule: "continuous",
-              uses_faab: "0",
-              roster_positions: [
-                {
-                  roster_position: {
-                    position: "WR",
-                    position_type: "O",
-                    count: 2,
-                    is_starting_position: 1,
-                  },
-                },
-                {
-                  roster_position: {
-                    position: "BN",
-                    position_type: "B",
-                    count: 8,
-                    is_starting_position: 0,
-                  },
-                },
-              ],
-              stat_categories: {
-                stats: [
-                  {
-                    stat: {
-                      stat_id: 4,
-                      enabled: "1",
-                      name: "Receiving Yards",
-                      display_name: "Rec Yds",
-                      group: "receiving",
-                      abbr: "RECY",
-                    },
-                  },
-                ],
-              },
+              game_key: "461",
+              code: "nfl",
+              season: 2026,
+              leagues: [discoverLeague("461.l.9000", "Embedded Browser Team")],
+            },
+            {
+              game_key: "465",
+              code: "nhl",
+              season: 2026,
+              leagues: [discoverLeague("465.l.9100", "Hosted Hockey Team")],
             },
           ],
-          count: 1,
-          team_key: teamKey,
         },
       ],
+    },
+  };
+}
+
+function discoverLeague(leagueKey: string, teamName: string): unknown {
+  const { attributes, settings, teamKey } = leagueSettingsFragments(leagueKey);
+  return {
+    league: [
+      attributes,
+      { settings: [settings] },
+      { teams: [{ team_key: teamKey, name: teamName }] },
+    ],
+  };
+}
+
+function leagueSettingsPayload(leagueKey: string): unknown {
+  const { attributes, settings, teamKey } = leagueSettingsFragments(leagueKey);
+  return {
+    fantasy_content: {
+      league: [attributes, { settings: [settings], count: 1, team_key: teamKey }],
+    },
+  };
+}
+
+function leagueSettingsFragments(leagueKey: string): {
+  readonly attributes: Record<string, unknown>;
+  readonly settings: Record<string, unknown>;
+  readonly teamKey: string;
+} {
+  const teamKey = leagueKey === "461.l.9000" ? "461.l.9000.t.1" : "465.l.9100.t.2";
+  return {
+    teamKey,
+    attributes: {
+      league_key: leagueKey,
+      name: leagueKey === "461.l.9000" ? "Embedded Football League" : "Hosted Hockey League",
+      url:
+        leagueKey === "461.l.9000"
+          ? "https://football.fantasysports.yahoo.com/f1/9000"
+          : "https://hockey.fantasysports.yahoo.com/hockey/9100",
+      num_teams: 10,
+      current_week: 6,
+      start_week: 1,
+      end_week: 17,
+      start_date: "2026-09-03",
+      end_date: "2026-12-28",
+      current_date: "2026-10-31",
+      scoring_type: "head",
+      scoring_label: "H2H",
+      weekly_deadline: "",
+      edit_key: "42",
+      season: "2026",
+      draft_status: "postdraft",
+    },
+    settings: {
+      waiver_type: "FR",
+      waiver_rule: "continuous",
+      uses_faab: "0",
+      roster_positions: [
+        {
+          roster_position: {
+            position: "WR",
+            position_type: "O",
+            count: 2,
+            is_starting_position: 1,
+          },
+        },
+        {
+          roster_position: {
+            position: "BN",
+            position_type: "B",
+            count: 8,
+            is_starting_position: 0,
+          },
+        },
+      ],
+      stat_categories: {
+        stats: [
+          {
+            stat: {
+              stat_id: 4,
+              enabled: "1",
+              name: "Receiving Yards",
+              display_name: "Rec Yds",
+              group: "receiving",
+              abbr: "RECY",
+            },
+          },
+        ],
+      },
     },
   };
 }

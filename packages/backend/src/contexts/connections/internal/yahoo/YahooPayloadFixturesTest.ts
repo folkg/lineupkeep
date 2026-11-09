@@ -2106,60 +2106,293 @@ const nhlTeamEntry = [
   [],
 ];
 
-export const yahooNflTeams = {
-  fantasy_content: {
-    "xml:lang": "en-US",
-    "yahoo:uri": "/fantasy/v2/users;use_login=1/games;game_keys=nfl/teams",
-    users: {
-      "0": {
-        user: [
-          { guid: "SYNTHETICGUID" },
-          {
-            games: {
-              "0": {
-                game: [
-                  [
-                    { game_key: "466" },
-                    { game_id: "466" },
-                    { name: "Football" },
-                    { code: "nfl" },
-                    { type: "full" },
-                    { url: "https://football.fantasysports.yahoo.com/f1" },
-                    { season: "2026" },
-                    { is_registration_over: 1 },
-                    { is_game_over: 0 },
-                    { is_offseason: 0 },
-                    { is_live_draft_lobby_active: 0 },
-                    [],
-                  ],
-                  {
-                    teams: {
-                      "0": {
-                        team: [nflTeamEntry, []],
-                      },
-                      count: 1,
-                    },
-                  },
-                ],
-              },
-              count: 1,
-            },
-          },
-        ],
-      },
-      count: 1,
-    },
-  },
-};
+const nflTeamEntryWithoutUrl = nflTeamEntry.filter((fragment) => !("url" in fragment));
 
-function nflTeamsWith(teamEntries: ReadonlyArray<ReadonlyArray<unknown>>): Record<string, unknown> {
-  const teams = Object.fromEntries(
-    teamEntries.map((team, index) => [String(index), { team: [team, []] }]),
-  );
+const nhlDiscoverLeagueSettings = yahooNhlLeagueSettingsWith({
+  league_key: "466.l.4002",
+  league_id: "4002",
+  name: "Synthetic NHL League",
+  url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
+});
+
+export const yahooDiscoverWithBothLeagues = yahooDiscoverPayload([
+  {
+    code: "nfl",
+    leagues: [{ settings: yahooNflLeagueSettings, teams: [nflTeamEntry] }],
+  },
+  {
+    code: "nhl",
+    leagues: [{ settings: nhlDiscoverLeagueSettings, teams: [nhlTeamEntry] }],
+  },
+]);
+
+export const yahooDiscoverWithTwoFootballTeams = yahooDiscoverPayload([
+  {
+    code: "nfl",
+    leagues: [{ settings: yahooNflLeagueSettings, teams: [nflTeamEntry, nflSecondTeamEntry] }],
+  },
+  {
+    code: "nhl",
+    leagues: [{ settings: nhlDiscoverLeagueSettings, teams: [nhlTeamEntry] }],
+  },
+]);
+
+export const yahooNflDiscoverWithoutTeamUrl = yahooDiscoverPayload([
+  {
+    code: "nfl",
+    leagues: [{ settings: yahooNflLeagueSettings, teams: [nflTeamEntryWithoutUrl] }],
+  },
+]);
+
+export const yahooNflDiscoverWithMalformedSettings = yahooDiscoverPayload([
+  {
+    code: "nfl",
+    leagues: [
+      {
+        settings: {
+          fantasy_content: {
+            league: [nflLeagueAttributes, { settings: [{ roster_positions: "wrong" }] }],
+          },
+        },
+        teams: [nflTeamEntry],
+      },
+    ],
+  },
+]);
+
+export const yahooDiscoverWithUnrequestedGame = yahooDiscoverPayload([
+  { code: "nba", leagues: [] },
+]);
+
+function yahooDiscoverPayload(
+  games: ReadonlyArray<{
+    readonly code: "nfl" | "nhl" | "nba" | "mlb";
+    readonly leagues: ReadonlyArray<{
+      readonly settings: { readonly fantasy_content: Record<string, unknown> };
+      readonly teams: ReadonlyArray<ReadonlyArray<unknown>>;
+    }>;
+  }>,
+): { fantasy_content: Record<string, unknown> } {
   return {
     fantasy_content: {
-      "xml:lang": "en-US",
-      "yahoo:uri": "/fantasy/v2/users;use_login=1/games;game_keys=nfl/teams",
+      users: {
+        "0": {
+          user: [
+            { guid: "SYNTHETICGUID" },
+            {
+              games: Object.fromEntries(
+                games.map((game, gameIndex) => [
+                  String(gameIndex),
+                  {
+                    game: [
+                      [{ game_key: "466" }, { code: game.code }, { season: "2026" }],
+                      {
+                        leagues: {
+                          ...Object.fromEntries(
+                            game.leagues.map((league, leagueIndex) => {
+                              const { attributes, settings } = leagueFragments(league.settings);
+                              return [
+                                String(leagueIndex),
+                                {
+                                  league: [
+                                    attributes,
+                                    { settings: [settings] },
+                                    {
+                                      teams: {
+                                        ...Object.fromEntries(
+                                          league.teams.map((team, teamIndex) => [
+                                            String(teamIndex),
+                                            { team: [team, []] },
+                                          ]),
+                                        ),
+                                        count: league.teams.length,
+                                      },
+                                    },
+                                  ],
+                                },
+                              ];
+                            }),
+                          ),
+                          count: game.leagues.length,
+                        },
+                      },
+                    ],
+                  },
+                ]),
+              ),
+              count: games.length,
+            },
+          ],
+        },
+        count: 1,
+      },
+    },
+  };
+}
+
+function leagueFragments(fixture: { readonly fantasy_content: Record<string, unknown> }): {
+  readonly attributes: Readonly<Record<string, unknown>>;
+  readonly settings: Readonly<Record<string, unknown>>;
+} {
+  const fragments = fixture.fantasy_content["league"];
+  const attributes = isReadonlyArray(fragments) ? fragments[0] : undefined;
+  const container = isReadonlyArray(fragments) ? fragments[1] : undefined;
+  const settings =
+    isRecord(container) && isReadonlyArray(container["settings"])
+      ? container["settings"][0]
+      : undefined;
+  if (!isRecord(attributes) || !isRecord(settings)) {
+    throw new Error("A league settings fixture must publish league attributes and settings.");
+  }
+  return { attributes, settings };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isReadonlyArray(value: unknown): value is ReadonlyArray<unknown> {
+  return Array.isArray(value);
+}
+
+const nflFreeAgentPlayers = {
+  "0": {
+    player: [
+      [
+        { player_key: "466.p.20006" },
+        { player_id: "20006" },
+        {
+          name: {
+            full: "Synthetic Free Agent",
+            first: "Synthetic",
+            last: "Agent",
+            ascii_first: "Synthetic",
+            ascii_last: "Agent",
+          },
+        },
+        { url: "https://sports.yahoo.com/synthetic-free-agent" },
+        { editorial_team_abbr: "SYN" },
+        { editorial_team_key: "nfl.t.2" },
+        { is_keeper: "0" },
+        { uniform_number: "8" },
+        { display_position: "WR" },
+        { headshot: { image_url: "https://s.yimg.com/synthetic-free-agent.png" } },
+        { is_undroppable: "0" },
+        { position_type: "O" },
+        { primary_position: "WR" },
+        { eligible_positions: [{ position: "WR" }, { position: "W/R" }] },
+        { status: false },
+        [],
+      ],
+      { ownership: [{ ownership_type: "freeagents" }] },
+      {
+        percent_owned: [{ coverage_type: "week", week: "6" }, { value: 42.5 }, { delta: "3" }],
+      },
+      {
+        percent_started: [{ coverage_type: "week", week: "6" }, { value: 31.5 }, { delta: -2 }],
+      },
+      {
+        player_ranks: {
+          "0": { player_rank: { rank_type: "OR", rank_value: "22" } },
+          "1": { player_rank: { rank_type: "S", rank_value: "14", rank_season: "2026" } },
+          "2": { player_rank: { rank_type: "S", rank_value: "88", rank_season: "2025" } },
+          count: 3,
+        },
+      },
+      {
+        player_stats: {
+          "0": { coverage_type: "season", season: "2026" },
+          stats: [{ stat: { stat_id: 4, value: "1989" } }, { stat: { stat_id: 9, value: "14" } }],
+        },
+      },
+      { transactions: { total: "52", adds: "40", drops: "10", trades: "2" } },
+    ],
+  },
+  "2": {
+    player: [
+      [
+        { player_key: "466.p.20008" },
+        { player_id: "20008" },
+        {
+          name: {
+            full: "Synthetic Unstarted",
+            first: "Synthetic",
+            last: "Unstarted",
+            ascii_first: "Synthetic",
+            ascii_last: "Unstarted",
+          },
+        },
+        { display_position: "TE" },
+        { position_type: "O" },
+        { primary_position: "TE" },
+        { eligible_positions: [{ position: "TE" }] },
+        { status: "PUP-2027" },
+        [],
+      ],
+      { ownership: [{ ownership_type: "freeagents" }] },
+      {
+        percent_owned: [{ coverage_type: "week", week: "6" }, { value: 0 }, { delta: "0" }],
+      },
+      {
+        player_ranks: {
+          "0": { player_rank: { rank_type: "OR", rank_value: "3" } },
+          "1": { player_rank: { rank_type: "S", rank_value: "7", rank_season: "2026" } },
+          count: 2,
+        },
+      },
+      {
+        player_stats: {
+          "0": { coverage_type: "season", season: "2026" },
+          stats: [{ stat: { stat_id: 4, value: 0 } }],
+        },
+      },
+    ],
+  },
+  "1": {
+    player: [
+      [
+        { player_key: "466.p.20007" },
+        { player_id: "20007" },
+        {
+          name: {
+            full: "Synthetic Waiver",
+            first: "Synthetic",
+            last: "Waiver",
+            ascii_first: "Synthetic",
+            ascii_last: "Waiver",
+          },
+        },
+        { display_position: "RB" },
+        { position_type: "O" },
+        { primary_position: "RB" },
+        { eligible_positions: [{ position: "RB" }] },
+        { status: "IR-LT" },
+        { status_full: "Injured Reserve - Long Term" },
+        { injury_note: "Out for the season after surgery." },
+        [],
+      ],
+      { ownership: [{ ownership_type: "waivers" }] },
+      {
+        player_ranks: {
+          "0": { player_rank: { rank_type: "OR", rank_value: "41" } },
+          "1": { player_rank: { rank_type: "S", rank_value: "63", rank_season: "2026" } },
+          count: 2,
+        },
+      },
+    ],
+  },
+  count: 3,
+};
+
+export const yahooNflAggregateFreeAgents = yahooAggregatePlayerSearch([
+  { leagueKey: "466.l.4000", players: nflFreeAgentPlayers },
+]);
+
+export function yahooAggregatePlayerSearch(
+  leagues: ReadonlyArray<{ readonly leagueKey: string; readonly players: unknown }>,
+): { fantasy_content: Record<string, unknown> } {
+  return {
+    fantasy_content: {
       users: {
         "0": {
           user: [
@@ -2168,21 +2401,20 @@ function nflTeamsWith(teamEntries: ReadonlyArray<ReadonlyArray<unknown>>): Recor
               games: {
                 "0": {
                   game: [
-                    [
-                      { game_key: "466" },
-                      { game_id: "466" },
-                      { name: "Football" },
-                      { code: "nfl" },
-                      { type: "full" },
-                      { url: "https://football.fantasysports.yahoo.com/f1" },
-                      { season: "2026" },
-                      { is_registration_over: 1 },
-                      { is_game_over: 0 },
-                      { is_offseason: 0 },
-                      { is_live_draft_lobby_active: 0 },
-                      [],
-                    ],
-                    { teams: { ...teams, count: teamEntries.length } },
+                    [{ game_key: "466" }, { code: "nfl" }, { season: "2026" }],
+                    {
+                      leagues: {
+                        ...Object.fromEntries(
+                          leagues.map(({ leagueKey, players }, index) => [
+                            String(index),
+                            {
+                              league: [{ league_key: leagueKey }, { players }],
+                            },
+                          ]),
+                        ),
+                        count: leagues.length,
+                      },
+                    },
                   ],
                 },
                 count: 1,
@@ -2195,212 +2427,6 @@ function nflTeamsWith(teamEntries: ReadonlyArray<ReadonlyArray<unknown>>): Recor
     },
   };
 }
-
-const nflTeamEntryWithoutUrl = nflTeamEntry.filter((fragment) => !("url" in fragment));
-
-export const yahooNflTeamsWithTwoTeams = nflTeamsWith([nflTeamEntry, nflSecondTeamEntry]);
-
-export const yahooNflTeamsWithoutTeamUrl = nflTeamsWith([nflTeamEntryWithoutUrl]);
-
-export const yahooNhlTeams = {
-  fantasy_content: {
-    "xml:lang": "en-US",
-    "yahoo:uri": "/fantasy/v2/users;use_login=1/games;game_keys=nhl/teams",
-    users: {
-      "0": {
-        user: [
-          { guid: "SYNTHETICGUID" },
-          {
-            games: {
-              "0": {
-                game: [
-                  [
-                    { game_key: "466" },
-                    { game_id: "466" },
-                    { name: "Hockey" },
-                    { code: "nhl" },
-                    { type: "full" },
-                    { url: "https://hockey.fantasysports.yahoo.com/hockey" },
-                    { season: "2026" },
-                    { is_registration_over: 1 },
-                    { is_game_over: 0 },
-                    { is_offseason: 0 },
-                    { is_live_draft_lobby_active: 0 },
-                    [],
-                  ],
-                  {
-                    teams: {
-                      "0": {
-                        team: [nhlTeamEntry, []],
-                      },
-                      count: 1,
-                    },
-                  },
-                ],
-              },
-              count: 1,
-            },
-          },
-        ],
-      },
-      count: 1,
-    },
-  },
-};
-
-export const yahooNflFreeAgents = {
-  fantasy_content: {
-    "xml:lang": "en-US",
-    league: [
-      {
-        league_key: "466.l.4000",
-        league_id: "4000",
-        name: "Synthetic NFL League",
-        url: "https://football.fantasysports.yahoo.com/f1/4000",
-      },
-      {
-        players: {
-          "0": {
-            player: [
-              [
-                { player_key: "466.p.20006" },
-                { player_id: "20006" },
-                {
-                  name: {
-                    full: "Synthetic Free Agent",
-                    first: "Synthetic",
-                    last: "Agent",
-                    ascii_first: "Synthetic",
-                    ascii_last: "Agent",
-                  },
-                },
-                { url: "https://sports.yahoo.com/synthetic-free-agent" },
-                { editorial_team_abbr: "SYN" },
-                { is_keeper: "0" },
-                { uniform_number: "8" },
-                { display_position: "WR" },
-                { headshot: { image_url: "https://s.yimg.com/synthetic-free-agent.png" } },
-                { is_undroppable: "0" },
-                { position_type: "O" },
-                { primary_position: "WR" },
-                { eligible_positions: [{ position: "WR" }, { position: "W/R" }] },
-                { status: false },
-                [],
-              ],
-              { ownership: [{ ownership_type: "freeagents" }] },
-              {
-                percent_owned: [
-                  { coverage_type: "week", week: "6" },
-                  { value: 42.5 },
-                  { delta: "3" },
-                ],
-              },
-              {
-                percent_started: [
-                  { coverage_type: "week", week: "6" },
-                  { value: 31.5 },
-                  { delta: -2 },
-                ],
-              },
-              {
-                player_ranks: {
-                  "0": { player_rank: { rank_type: "OR", rank_value: "22" } },
-                  "1": { player_rank: { rank_type: "S", rank_value: "14", rank_season: "2026" } },
-                  "2": { player_rank: { rank_type: "S", rank_value: "88", rank_season: "2025" } },
-                  count: 3,
-                },
-              },
-              {
-                player_stats: {
-                  "0": { coverage_type: "season", season: "2026" },
-                  stats: [
-                    { stat: { stat_id: 4, value: "1989" } },
-                    { stat: { stat_id: 9, value: "14" } },
-                  ],
-                },
-              },
-              { transactions: { total: "52", adds: "40", drops: "10", trades: "2" } },
-            ],
-          },
-          "2": {
-            player: [
-              [
-                { player_key: "466.p.20008" },
-                { player_id: "20008" },
-                {
-                  name: {
-                    full: "Synthetic Unstarted",
-                    first: "Synthetic",
-                    last: "Unstarted",
-                    ascii_first: "Synthetic",
-                    ascii_last: "Unstarted",
-                  },
-                },
-                { display_position: "TE" },
-                { position_type: "O" },
-                { primary_position: "TE" },
-                { eligible_positions: [{ position: "TE" }] },
-                { status: "PUP-2027" },
-                [],
-              ],
-              { ownership: [{ ownership_type: "freeagents" }] },
-              {
-                percent_owned: [{ coverage_type: "week", week: "6" }, { value: 0 }, { delta: "0" }],
-              },
-              {
-                player_ranks: {
-                  "0": { player_rank: { rank_type: "OR", rank_value: "3" } },
-                  "1": { player_rank: { rank_type: "S", rank_value: "7", rank_season: "2026" } },
-                  count: 2,
-                },
-              },
-              {
-                player_stats: {
-                  "0": { coverage_type: "season", season: "2026" },
-                  stats: [{ stat: { stat_id: 4, value: 0 } }],
-                },
-              },
-            ],
-          },
-          "1": {
-            player: [
-              [
-                { player_key: "466.p.20007" },
-                { player_id: "20007" },
-                {
-                  name: {
-                    full: "Synthetic Waiver",
-                    first: "Synthetic",
-                    last: "Waiver",
-                    ascii_first: "Synthetic",
-                    ascii_last: "Waiver",
-                  },
-                },
-                { display_position: "RB" },
-                { position_type: "O" },
-                { primary_position: "RB" },
-                { eligible_positions: [{ position: "RB" }] },
-                { status: "IR-LT" },
-                { status_full: "Injured Reserve - Long Term" },
-                { injury_note: "Out for the season after surgery." },
-                [],
-              ],
-              { ownership: [{ ownership_type: "waivers" }] },
-              {
-                player_ranks: {
-                  "0": { player_rank: { rank_type: "OR", rank_value: "41" } },
-                  "1": { player_rank: { rank_type: "S", rank_value: "63", rank_season: "2026" } },
-                  count: 2,
-                },
-              },
-            ],
-          },
-          count: 3,
-        },
-      },
-    ],
-  },
-};
 
 function nflMatchupTeam(
   key: string,

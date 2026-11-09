@@ -17,6 +17,10 @@ import type {
   ProviderFailure,
   ProviderLeagueTeam,
   ProviderOperation,
+  ProviderPlayerSearchInput,
+  ProviderPlayerSearchResult,
+  ProviderPlayerSearchSort,
+  ProviderPlayerStatus,
   ProviderReadFailure,
   ProviderRoster,
   ProviderRosterPlayer,
@@ -95,9 +99,172 @@ export const validateSessionThroughSdk = (
       Yahoo.Retry.none,
       Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
       Effect.provideService(Tracer.DisablePropagation, true),
-      Effect.mapError((error) => sessionFailureOf(operation, error)),
+      Effect.mapError((error) => providerFailureOf(operation, error)),
     );
   });
+
+export const discoverLeaguesThroughSdk = <GameKey extends Yahoo.YahooGameKey>(
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  gameKeys: ReadonlyArray<GameKey>,
+): Effect.Effect<ReadonlyArray<DiscoveredLeague<GameKey>>, ProviderFailure> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    const leagues = yield* Yahoo.leagues.discover({ gameKeys }).pipe(
+      Yahoo.Retry.none,
+      Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+      Effect.provideService(Tracer.DisablePropagation, true),
+      Effect.mapError((error) => providerFailureOf(operation, error)),
+    );
+    return leagues.map((league) => ({
+      ...league,
+      gameKey: requestedGameKeyOf(league, gameKeys),
+    }));
+  });
+
+function requestedGameKeyOf<GameKey extends Yahoo.YahooGameKey>(
+  league: Yahoo.YahooDiscoveredLeague,
+  gameKeys: ReadonlyArray<GameKey>,
+): GameKey {
+  const gameKey = gameKeys.find((key) => key === league.gameKey);
+  if (gameKey === undefined) {
+    throw new Error("Yahoo discovered a game key that was not requested.");
+  }
+  return gameKey;
+}
+
+type DiscoveredLeague<GameKey extends Yahoo.YahooGameKey> = Omit<
+  Yahoo.YahooDiscoveredLeague,
+  "gameKey"
+> & { readonly gameKey: GameKey };
+
+type ProviderPlayerSearchRead = {
+  readonly leagueKey: string;
+  readonly season: number;
+  readonly query: string | undefined;
+  readonly availability: ProviderPlayerSearchInput["availability"];
+  readonly sort: ProviderPlayerSearchSort;
+  readonly statType: "season";
+  readonly statId: number | undefined;
+  readonly limit: number;
+};
+
+export const searchPlayersThroughSdk = (
+  context: Context.Context<HttpClient.HttpClient | Yahoo.Protocol>,
+  operation: ProviderOperation,
+  cookie: string,
+  input: ProviderPlayerSearchRead,
+): Effect.Effect<
+  ReadonlyArray<ProviderPlayerSearchResult["players"][number]>,
+  ProviderReadFailure
+> =>
+  Effect.gen(function* () {
+    const session = yield* Yahoo.makeSession(cookie).pipe(
+      Effect.mapError(() => ProviderSessionRejected.make({ operation })),
+    );
+    const groups = yield* Yahoo.players
+      .search({
+        leagueKeys: [input.leagueKey],
+        availability: input.availability,
+        sort: input.sort,
+        sortType: input.statType,
+        limit: input.limit,
+        ...(input.query === undefined ? {} : { query: input.query }),
+        ...(input.statId === undefined ? {} : { statId: input.statId }),
+      })
+      .pipe(
+        Yahoo.Retry.none,
+        Effect.provideContext(Context.add(context, Yahoo.Credentials, Effect.succeed(session))),
+        Effect.provideService(Tracer.DisablePropagation, true),
+        Effect.mapError((error) => providerReadFailureOf(operation, error)),
+      );
+    const players = groups.find((group) => group.leagueKey === input.leagueKey)?.players;
+    if (players === undefined) {
+      return yield* ProviderResponseInvalid.make({ operation, field: "league.league_key" });
+    }
+    return players.map((player) => providerSearchPlayerOf(player, input.season));
+  });
+
+function providerSearchPlayerOf(
+  player: Yahoo.YahooPlayerSummary,
+  season: number,
+): ProviderPlayerSearchResult["players"][number] {
+  return {
+    providerPlayerKey: player.playerKey,
+    name: player.name,
+    primaryPosition: player.primaryPosition,
+    displayPosition: player.displayPosition,
+    eligiblePositions: player.eligiblePositions,
+    availability: availabilityOf(player.ownershipType),
+    proTeam: player.proTeamAbbreviation,
+    ...(player.proTeamKey === undefined ? {} : { proTeamKey: player.proTeamKey }),
+    status: searchPlayerStatusOf(player.status),
+    percentOwned: player.percentOwned?.value ?? null,
+    percentOwnedDelta: player.percentOwned?.delta ?? null,
+    percentStarted: player.percentStarted?.value ?? null,
+    percentStartedChange: player.percentStarted?.delta ?? null,
+    actualRank: searchRankOf(player.ranks, "S", season),
+    overallRank: searchRankOf(player.ranks, "OR", season),
+    statValue: player.statValue,
+    transactionTrend: transactionTrendOf(player.transactionCounts),
+  };
+}
+
+function searchPlayerStatusOf(status: Yahoo.YahooPlayerStatus | undefined): {
+  readonly value: ProviderPlayerStatus;
+  readonly code: string | undefined;
+  readonly detail: string | undefined;
+} {
+  const raw = status?.code;
+  if (typeof raw === "boolean") {
+    return {
+      value: raw ? "unknown" : "healthy",
+      code: undefined,
+      detail: status?.detail,
+    };
+  }
+  const code = raw === undefined || raw.trim().length === 0 ? undefined : raw;
+  return { value: yahooPlayerStatus(code), code, detail: status?.detail };
+}
+
+function searchRankOf(
+  ranks: ReadonlyArray<Yahoo.YahooPlayerRank>,
+  type: "OR" | "S",
+  season: number,
+): number | null {
+  for (const rank of ranks) {
+    if (rank.type !== type) {
+      continue;
+    }
+    if (type === "S" && rank.season !== season) {
+      continue;
+    }
+    if (rank.value !== null && Number.isInteger(rank.value) && rank.value >= 1) {
+      return rank.value;
+    }
+  }
+  return null;
+}
+
+function availabilityOf(
+  ownershipType: string | undefined,
+): ProviderPlayerSearchResult["players"][number]["availability"] {
+  switch (ownershipType) {
+    case "team":
+      return "rostered";
+    case "freeagents":
+      return "free_agent";
+    case "waivers":
+      return "waiver";
+    case undefined:
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
 
 function providerLeagueTeamOf(team: Yahoo.YahooLeagueTeam): ProviderLeagueTeam {
   return {
@@ -256,27 +423,10 @@ function rosterFailureOf(
   return ProviderPeriodMismatch.make({ operation, requested: coverage, covered: null });
 }
 
-function sessionFailureOf(
+function providerFailureOf(
   operation: ProviderOperation,
   error: Yahoo.YahooReadError,
 ): ProviderFailure {
-  const failure = providerReadFailureOf(operation, error);
-  switch (failure._tag) {
-    case "provider.session_rejected":
-    case "provider.request_failed":
-    case "provider.response_invalid":
-      return failure;
-    case "provider.operation_unsupported":
-    case "provider.period_mismatch":
-    case "provider.period_unsupported":
-      return ProviderResponseInvalid.make({ operation });
-  }
-}
-
-function providerReadFailureOf(
-  operation: ProviderOperation,
-  error: Yahoo.YahooReadError,
-): ProviderReadFailure {
   switch (error._tag) {
     case "ConfigError":
       return ProviderSessionRejected.make({ operation });
@@ -289,12 +439,11 @@ function providerReadFailureOf(
       });
     case "YahooRequestInvalid":
     case "YahooParseError":
+    case "YahooCoverageMismatch":
       return ProviderResponseInvalid.make({
         operation,
-        ...(error.field === undefined ? {} : { field: error.field }),
+        ...("field" in error && error.field !== undefined ? { field: error.field } : {}),
       });
-    case "YahooCoverageMismatch":
-      return periodMismatchOf(operation, error);
     case "YahooHttpError":
       return ProviderRequestFailed.make({ operation, status: error.status });
     case "YahooWriteUnknown":
@@ -319,6 +468,15 @@ function providerReadFailureOf(
         ...(error.status === undefined ? {} : { status: error.status }),
       });
   }
+}
+
+function providerReadFailureOf(
+  operation: ProviderOperation,
+  error: Yahoo.YahooReadError,
+): ProviderReadFailure {
+  return error._tag === "YahooCoverageMismatch"
+    ? periodMismatchOf(operation, error)
+    : providerFailureOf(operation, error);
 }
 
 function periodMismatchOf(

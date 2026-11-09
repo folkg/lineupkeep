@@ -35,8 +35,14 @@ import type { PublicInternetOptions } from "#runtime/PublicInternet.ts";
 
 import { yahooCapabilities } from "./YahooLineup.ts";
 import {
+  yahooAggregatePlayerSearch,
+  yahooDiscoverWithBothLeagues,
+  yahooDiscoverWithTwoFootballTeams,
+  yahooDiscoverWithUnrequestedGame,
   yahooEmptyRoster,
-  yahooNflFreeAgents,
+  yahooNflAggregateFreeAgents,
+  yahooNflDiscoverWithMalformedSettings,
+  yahooNflDiscoverWithoutTeamUrl,
   yahooNflLeagueSettings,
   yahooNflLeagueRosters,
   yahooNflLeagueRostersForAnotherLeague,
@@ -53,10 +59,6 @@ import {
   yahooNflLeagueTeamsForAnotherLeague,
   yahooNflMatchups,
   yahooNflRosterWeekMismatch,
-  yahooNflTeams,
-  yahooNflTeamsWithTwoTeams,
-  yahooNflTeamsWithoutTeamUrl,
-  yahooNhlTeams,
   yahooSession,
   yahooNflSeasonPlayerDetails,
   yahooNflWeekPlayerDetails,
@@ -132,152 +134,79 @@ it.effect("validates a session with one exact read request", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("discovers both supported leagues with exact batches and stable team identity", () => {
-  const nhlSettings = yahooNhlLeagueSettingsWith({
-    league_key: "466.l.4002",
-    league_id: "4002",
-    name: "Synthetic NHL League",
-    url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
-  });
-  const internet = recordingInternet((request) => {
-    if (request.url.pathname.includes("game_keys=nhl")) {
-      return jsonResponse(yahooNhlTeams);
-    }
-    if (request.url.pathname.endsWith("/466.l.4000/settings")) {
-      return jsonResponse(yahooNflLeagueSettings);
-    }
-    if (request.url.pathname.endsWith("/466.l.4002/settings")) {
-      return jsonResponse(nhlSettings);
-    }
-    return jsonResponse(yahooNflTeams);
-  });
+it.effect(
+  "discovers both supported leagues with one aggregate read and stable team identity",
+  () => {
+    const internet = recordingInternet(() => jsonResponse(yahooDiscoverWithBothLeagues));
+    return Effect.gen(function* () {
+      const provider = yield* testProvider;
+
+      const teams = yield* provider.discoverTeams(sessionInput);
+
+      assert.deepStrictEqual(
+        internet.calls.map((call) => call.url.href),
+        [
+          "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl/leagues;out=settings/teams;out=standings?format=json",
+        ],
+      );
+      assert.deepStrictEqual(teams, [
+        {
+          provider: decodeProviderKey("yahoo"),
+          providerTeamKey: "466.l.4000.t.1",
+          providerLeagueKey: "466.l.4000",
+          league: "nfl",
+          sport: "football",
+          season: 2026,
+          name: "Synthetic NFL Team",
+          leagueName: "Synthetic NFL League",
+          providerUrl: "https://football.fantasysports.yahoo.com/f1/4000/1",
+        },
+        {
+          provider: decodeProviderKey("yahoo"),
+          providerTeamKey: "466.l.4002.t.3",
+          providerLeagueKey: "466.l.4002",
+          league: "nhl",
+          sport: "hockey",
+          season: 2026,
+          name: "Synthetic NHL Team",
+          leagueName: "Synthetic NHL League",
+          providerUrl: "https://hockey.fantasysports.yahoo.com/hockey/4002/3",
+        },
+      ]);
+      assert.isTrue(internet.calls.every((call) => call.options?.timeoutMs === 30_000));
+      assert.isTrue(internet.calls.every((call) => call.options?.maxResponseBytes === 4_194_304));
+    }).pipe(Effect.provide(yahooLayer(internet)));
+  },
+);
+
+it.effect("publishes one league name for every team that shares the aggregate league", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooDiscoverWithTwoFootballTeams));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
     const teams = yield* provider.discoverTeams(sessionInput);
 
-    assert.deepStrictEqual(
-      internet.calls.map((call) => call.url.href),
-      [
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl/teams?format=json",
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/settings?format=json",
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nhl/teams?format=json",
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4002/settings?format=json",
-      ],
-    );
-    assert.deepStrictEqual(teams, [
-      {
-        provider: decodeProviderKey("yahoo"),
-        providerTeamKey: "466.l.4000.t.1",
-        providerLeagueKey: "466.l.4000",
-        league: "nfl",
-        sport: "football",
-        season: 2026,
-        name: "Synthetic NFL Team",
-        leagueName: "Synthetic NFL League",
-        providerUrl: "https://football.fantasysports.yahoo.com/f1/4000/1",
-      },
-      {
-        provider: decodeProviderKey("yahoo"),
-        providerTeamKey: "466.l.4002.t.3",
-        providerLeagueKey: "466.l.4002",
-        league: "nhl",
-        sport: "hockey",
-        season: 2026,
-        name: "Synthetic NHL Team",
-        leagueName: "Synthetic NHL League",
-        providerUrl: "https://hockey.fantasysports.yahoo.com/hockey/4002/3",
-      },
-    ]);
-    assert.isTrue(internet.calls.every((call) => call.options?.timeoutMs === 30_000));
-    assert.isTrue(internet.calls.every((call) => call.options?.maxResponseBytes === 4_194_304));
-  }).pipe(Effect.provide(yahooLayer(internet)));
-});
-
-it.effect("reads each discovered league once for every team that shares it", () => {
-  const nhlSettings = yahooNhlLeagueSettingsWith({
-    league_key: "466.l.4002",
-    league_id: "4002",
-    name: "Synthetic NHL League",
-    url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
-  });
-  const internet = recordingInternet((request) => {
-    if (request.url.pathname.includes("game_keys=nfl")) {
-      return jsonResponse(yahooNflTeamsWithTwoTeams);
-    }
-    if (request.url.pathname.includes("game_keys=nhl")) {
-      return jsonResponse(yahooNhlTeams);
-    }
-    if (request.url.pathname.endsWith("/466.l.4000/settings")) {
-      return jsonResponse(yahooNflLeagueSettings);
-    }
-    if (request.url.pathname.endsWith("/466.l.4002/settings")) {
-      return jsonResponse(nhlSettings);
-    }
-    return jsonResponse({}, 404);
-  });
-  return Effect.gen(function* () {
-    const provider = yield* testProvider;
-
-    const teams = yield* provider.discoverTeams(sessionInput);
-
-    assert.deepStrictEqual(
-      internet.calls
-        .filter((call) => call.url.pathname.endsWith("/settings"))
-        .map((call) => call.url.pathname),
-      ["/fantasy/v2/league/466.l.4000/settings", "/fantasy/v2/league/466.l.4002/settings"],
-    );
+    assert.strictEqual(internet.calls.length, 1);
     const footballTeams = teams.filter((team) => team.providerLeagueKey === "466.l.4000");
+    assert.strictEqual(teams.length, 3);
     assert.strictEqual(footballTeams.length, 2);
     assert.isTrue(footballTeams.every((team) => team.leagueName === "Synthetic NFL League"));
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("keeps discovering teams when a league name cannot be read", () => {
-  const internet = recordingInternet((request) => {
-    if (request.url.pathname.includes("game_keys=nfl")) {
-      return jsonResponse(yahooNflTeamsWithTwoTeams);
-    }
-    if (request.url.pathname.includes("game_keys=nhl")) {
-      return jsonResponse(yahooNhlTeams);
-    }
-    if (request.url.pathname.endsWith("/settings")) {
-      return jsonResponse({ error: "upstream failed" }, 500);
-    }
-    return jsonResponse({}, 404);
-  });
+it.effect("rejects discovery when a discovered league publishes malformed settings", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooNflDiscoverWithMalformedSettings));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
-    const teams = yield* provider.discoverTeams(sessionInput);
+    const error = yield* Effect.flip(provider.discoverTeams(sessionInput));
 
-    assert.strictEqual(teams.length, 3);
-    assert.isTrue(teams.every((team) => team.leagueName === undefined));
+    assert.instanceOf(error, ProviderResponseInvalid);
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("derives your league team page url when the payload has none", () => {
-  const nhlSettings = yahooNhlLeagueSettingsWith({
-    league_key: "466.l.4002",
-    league_id: "4002",
-    name: "Synthetic NHL League",
-    url: "https://hockey.fantasysports.yahoo.com/hockey/4002",
-  });
-  const internet = recordingInternet((request) => {
-    if (request.url.pathname.includes("game_keys=nfl")) {
-      return jsonResponse(yahooNflTeamsWithoutTeamUrl);
-    }
-    if (request.url.pathname.includes("game_keys=nhl")) {
-      return jsonResponse(yahooNhlTeams);
-    }
-    if (request.url.pathname.endsWith("/466.l.4000/settings")) {
-      return jsonResponse(yahooNflLeagueSettings);
-    }
-    if (request.url.pathname.endsWith("/466.l.4002/settings")) {
-      return jsonResponse(nhlSettings);
-    }
-    return jsonResponse({}, 404);
-  });
+  const internet = recordingInternet(() => jsonResponse(yahooNflDiscoverWithoutTeamUrl));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
@@ -288,15 +217,15 @@ it.effect("derives your league team page url when the payload has none", () => {
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
-it.effect("rejects a discovered game that does not match the requested sport", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNhlTeams));
+it.effect("rejects a discovered game that was not requested", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooDiscoverWithUnrequestedGame));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
     const error = yield* Effect.flip(provider.discoverTeams(sessionInput));
 
     assert.instanceOf(error, ProviderResponseInvalid);
-    assert.strictEqual(error.field, "game.code");
+    assert.strictEqual(error.field, "games.code");
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
@@ -1010,7 +939,29 @@ it.effect.each([
     body: {
       fantasy_content: {
         users: {
-          "0": { user: [{ games: { "0": { game: [{ season: 2026, teams: "wrong" }] } } }] },
+          "0": {
+            user: [
+              { guid: "SYNTHETICGUID" },
+              {
+                games: {
+                  "0": {
+                    game: [
+                      [{ game_key: "466" }, { code: "nfl" }, { season: "2026" }],
+                      {
+                        leagues: {
+                          "0": {
+                            league: [{ league_key: "466.l.4000" }, { teams: "wrong" }],
+                          },
+                          count: 1,
+                        },
+                      },
+                    ],
+                  },
+                  count: 1,
+                },
+              },
+            ],
+          },
           count: 1,
         },
       },
@@ -2143,7 +2094,7 @@ it.effect("rejects an empty roster as an unestablished period", () => {
 });
 
 it.effect("searches free agents with one exact request and typed availability", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflAggregateFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
@@ -2161,7 +2112,7 @@ it.effect("searches free agents with one exact request and typed availability", 
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Free;out=ownership,percent_owned,percent_started,ranks,transactions?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;status=FA;sort=R_PO;count=10;search=Synthetic%20Free;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
     );
     assert.deepStrictEqual(result.players, [
       {
@@ -2172,6 +2123,7 @@ it.effect("searches free agents with one exact request and typed availability", 
         eligiblePositions: ["WR", "W/R"],
         availability: "free_agent",
         proTeam: "SYN",
+        proTeamKey: "nfl.t.2",
         status: { value: "healthy", code: undefined, detail: undefined },
         percentOwned: 42.5,
         percentOwnedDelta: 3,
@@ -2238,34 +2190,32 @@ it.effect("searches free agents with one exact request and typed availability", 
 });
 
 it.effect("never reads a flagged search row as healthy when it names no code", () => {
-  const payload = {
-    fantasy_content: {
-      league: {
-        league_key: "466.l.4000",
-        players: {
-          "0": {
-            player: [
-              { player_key: "466.p.30001" },
-              { name: { full: "Synthetic Flagged" } },
-              { primary_position: "WR" },
-              { display_position: "WR" },
-              { status: true },
-            ],
-          },
-          "1": {
-            player: [
-              { player_key: "466.p.30002" },
-              { name: { full: "Synthetic Cleared" } },
-              { primary_position: "RB" },
-              { display_position: "RB" },
-              { status: false },
-            ],
-          },
-          count: 2,
+  const payload = yahooAggregatePlayerSearch([
+    {
+      leagueKey: "466.l.4000",
+      players: {
+        "0": {
+          player: [
+            { player_key: "466.p.30001" },
+            { name: { full: "Synthetic Flagged" } },
+            { primary_position: "WR" },
+            { display_position: "WR" },
+            { status: true },
+          ],
         },
+        "1": {
+          player: [
+            { player_key: "466.p.30002" },
+            { name: { full: "Synthetic Cleared" } },
+            { primary_position: "RB" },
+            { display_position: "RB" },
+            { status: false },
+          ],
+        },
+        count: 2,
       },
     },
-  };
+  ]);
   const internet = recordingInternet(() => jsonResponse(payload));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
@@ -2293,7 +2243,7 @@ it.effect("never reads a flagged search row as healthy when it names no code", (
 });
 
 it.effect("searches waiver players without a query", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflAggregateFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
@@ -2311,13 +2261,13 @@ it.effect("searches waiver players without a query", () => {
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks,transactions?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;status=W;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("searches the whole player pool without an availability filter", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflAggregateFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
@@ -2335,13 +2285,13 @@ it.effect("searches the whole player pool without an availability filter", () =>
 
     assert.strictEqual(
       internet.calls[0]?.url.href,
-      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks,transactions?format=json",
+      "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;sort=NAME;count=25;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
     );
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
 it.effect("requests the rank and stat values that each provider-ordered sort publishes", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflAggregateFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
@@ -2371,8 +2321,8 @@ it.effect("requests the rank and stat values that each provider-ordered sort pub
     assert.deepStrictEqual(
       internet.calls.map((call) => call.url.href),
       [
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=4;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,stats,transactions?format=json",
-        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/466.l.4000/players;sort=AR;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,transactions?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;sort=4;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,stats,transactions,opponent,starting_status?format=json",
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/games;game_keys=nfl,nhl,nba,mlb/leagues;league_keys=466.l.4000/players;sort=AR;sort_type=season;count=10;out=ownership,percent_owned,percent_started,ranks,transactions,opponent,starting_status?format=json",
       ],
     );
     assert.deepStrictEqual(
@@ -2386,8 +2336,57 @@ it.effect("requests the rank and stat values that each provider-ordered sort pub
   }).pipe(Effect.provide(yahooLayer(internet)));
 });
 
+it.effect("rejects a search answer for a league it did not request", () => {
+  const payload = yahooAggregatePlayerSearch([{ leagueKey: "466.l.4002", players: { count: 0 } }]);
+  const internet = recordingInternet(() => jsonResponse(payload));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.searchPlayers({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        season: 2026,
+        query: undefined,
+        availability: "all",
+        sort: "name",
+        statId: undefined,
+        statType: "season",
+        limit: 10,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.league_key");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
+it.effect("rejects a search answer with no league group", () => {
+  const internet = recordingInternet(() => jsonResponse(yahooAggregatePlayerSearch([])));
+  return Effect.gen(function* () {
+    const provider = yield* testProvider;
+
+    const error = yield* Effect.flip(
+      provider.searchPlayers({
+        ...sessionInput,
+        providerLeagueKey: "466.l.4000",
+        season: 2026,
+        query: undefined,
+        availability: "all",
+        sort: "name",
+        statId: undefined,
+        statType: "season",
+        limit: 10,
+      }),
+    );
+
+    assert.instanceOf(error, ProviderResponseInvalid);
+    assert.strictEqual(error.field, "league.league_key");
+  }).pipe(Effect.provide(yahooLayer(internet)));
+});
+
 it.effect("refuses a weekly player sort the rows cannot explain", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflAggregateFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
@@ -2411,7 +2410,7 @@ it.effect("refuses a weekly player sort the rows cannot explain", () => {
 });
 
 it.effect("refuses a stat sort without a stat id", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflAggregateFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 
@@ -2435,7 +2434,7 @@ it.effect("refuses a stat sort without a stat id", () => {
 });
 
 it.effect("rejects an unbounded player search without a request", () => {
-  const internet = recordingInternet(() => jsonResponse(yahooNflFreeAgents));
+  const internet = recordingInternet(() => jsonResponse(yahooNflAggregateFreeAgents));
   return Effect.gen(function* () {
     const provider = yield* testProvider;
 

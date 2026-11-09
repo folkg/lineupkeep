@@ -372,14 +372,18 @@ of the suite. Its original seven source changes remain unmerged outside this rep
 moved here with one additional upstream change to the error fields.
 
 The migrated reads are `ProviderShape.readLeagueTeams`, backed by `Yahoo.teams.list`;
-`ProviderShape.validateSession`, backed by `Yahoo.session.validate`; and `ProviderShape.readRoster`,
-backed by `Yahoo.rosters.forTeam`. All three keep their byte-identical requests:
+`ProviderShape.validateSession`, backed by `Yahoo.session.validate`; `ProviderShape.readRoster`,
+backed by `Yahoo.rosters.forTeam`; `ProviderShape.discoverTeams`, backed by `Yahoo.leagues.discover`;
+and `ProviderShape.searchPlayers`, backed by `Yahoo.players.search`. The first three keep their
+byte-identical requests:
 `GET https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/{leagueKey}/teams?format=json`,
 `GET https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1?format=json`, and
 `GET https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/{teamKey}/roster{coverage}/players;out=opponent,starting_status,transactions?format=json`.
-The SDK transport replaces the adapter's `readJson` for these operations; the adapter path remains for
-every other read. `Yahoo.Retry.none` is installed at the port because the existing adapter has no read
-retry; enabling the SDK's transient retry would be a product decision, not a transport swap.
+The two aggregate reads change their requests by construction; their published rows, ordering, limits,
+and failure vocabulary do not change. The measured saving is recorded below. The SDK transport
+replaces the adapter's `readJson` for these operations; the adapter path remains for every other read.
+`Yahoo.Retry.none` is installed at the port because the existing adapter has no read retry; enabling
+the SDK's transient retry would be a product decision, not a transport swap.
 
 The upstream SDK now carries the provider's HTTP `status` on every status error and marks whether an
 `Unauthorized` or `Forbidden` message came from a structured provider envelope. A `GatewayTimeout`
@@ -401,9 +405,9 @@ Yahoo's sentence as `detail` only when Yahoo actually supplied one.
 | `readTransactions`         | `transactions.list`          | Clean request; direct shape mapping.                                                                                                                                                                                                                                                                    |
 | `readPendingTrades`        | `transactions.pendingTrades` | Clean request; `canRespond` is a number in the SDK and a boolean at the port.                                                                                                                                                                                                                           |
 | `readDraftResults`         | `draft.results`              | Clean request; direct shape mapping.                                                                                                                                                                                                                                                                    |
-| `discoverTeams`            | `leagues.discover`           | **Ready.** Five live leagues parse with zero field differences after the decoder accepted direct league entries; `gameKey` maps to `league`/`sport`, and `provider` comes from the registry.                                                                                                            |
+| `discoverTeams`            | `leagues.discover`           | **Migrated.** One aggregate read for both games replaces two per-game team reads and one settings read per league. Five live leagues: 7 requests → 1, median 1,709 ms → 311 ms, published rows byte-identical. `gameKey` maps to `league`/`sport`, and `provider` comes from the registry.              |
 | `readLeagueRosters`        | `rosters.forLeagues`         | **Not a swap.** The aggregate `users;use_login` read returns the signed-in manager's team only (1 against 10–13 live). A root league-scoped read returns every team, but its five-league response is 19.5 MB against the 4 MiB read bound, so the adapter keeps its per-league `teams;out=roster` read. |
-| `searchPlayers`            | `players.search`             | **Ready.** Five live leagues parse with zero field differences; the SDK summary carries the live `editorial_team_key` as `proTeamKey`.                                                                                                                                                                  |
+| `searchPlayers`            | `players.search`             | **Migrated.** One aggregate player-collection read per league: 1 request → 1, median 356–491 ms → 424–453 ms. Published rows, ordering, limit, refusals, and `proTeamKey` from `editorial_team_key` are unchanged on all five live leagues.                                                             |
 | `readStandings`            | none                         | No SDK operation. `leagues.discover` carries only rank, points for/against/back; the port publishes category totals, acquisition usage, and streaks.                                                                                                                                                    |
 | `readCompletedTrades`      | none                         | `transactions.list` has no `type=trade` filter; filtering after `count` would change which trades are returned.                                                                                                                                                                                         |
 | `readPlayerWeeks`          | none                         | Needs `out=ranks,opponent;ranks=projected_week`; `players.details` requests stats and ownership instead.                                                                                                                                                                                                |
@@ -424,9 +428,9 @@ enabled. `trades.propose` also accepts draft picks, which the port does not carr
 5. `players.details` and `readPlayerHistory` — request-identical once period resolution is lifted
    above the port.
 6. Live-verify the aggregate reads (`leagues.discover`, `rosters.forLeagues`, `players.search`) before
-   swapping. `leagues.discover` and `players.search` are ready. `rosters.forLeagues` stays out of the
-   adapter's path: it publishes the signed-in manager's team, and a full-league multi-league response
-   exceeds the SDK read bound.
+   swapping. `leagues.discover` and `players.search` are migrated, with the measurement below.
+   `rosters.forLeagues` stays out of the adapter's path: it publishes the signed-in manager's team, and
+   a full-league multi-league response exceeds the SDK read bound.
 7. Add SDK operations for standings, completed-trade filtering, weekly player ranks, and the Android
    available-draft-pick host.
 8. Writes last, one operation at a time, each with a recorded acceptance or refusal.
@@ -535,6 +539,56 @@ Findings:
   settings, team standings, managers, and logos. It has zero comparable field differences; the
   adapter-only `provider`, `league`, and `sport` values come from the registry and from `gameKey`.
 
-Verdict: `leagues.discover` and `players.search` are ready to migrate. `rosters.forLeagues` is not
-ready and stays a per-league read, because the provider can return every team only in a response that
-exceeds the SDK's read bound.
+Verdict at the time of that probe: `leagues.discover` and `players.search` were ready to migrate.
+Both are now migrated, with the measurement below. `rosters.forLeagues` is not ready and stays a
+per-league read, because the provider can return every team only in a response that exceeds the SDK's
+read bound.
+
+### Discovery and search migration measurement
+
+`e2e/scratch/sdk-aggregate-check/check.ts` reads the owner's stored connection, runs the adapter's own
+`discoverTeams` and per-league `searchPlayers` three times each, and records the provider request
+count and wall time beside every published row. It ran immediately before the migration and again
+after it, against the same five leagues: football `470.l.70271` and hockey `477.l.14882`,
+`477.l.31027`, `477.l.5744`, and `477.l.58487`. It performs GETs only.
+
+| Port read       | Operation          | Requests before | Requests after | Median wall time before | Median wall time after |
+| --------------- | ------------------ | --------------: | -------------: | ----------------------: | ---------------------: |
+| `discoverTeams` | `leagues.discover` |               7 |              1 |                1,709 ms |                 311 ms |
+| `searchPlayers` | `players.search`   |               1 |              1 |       356–491 ms/league |      424–453 ms/league |
+
+Discovery's seven requests were two per-game team reads plus one settings read for each of the five
+leagues, so every league also cost a settings request; the aggregate publishes each league name beside
+its teams, and the single shared read covers all five. Search was already one request per league; it
+keeps that count and reads the aggregate player collection instead of the league-scoped collection.
+Both reports used the same search parameters: all availability, ownership order, limit 10, no query.
+
+Search wall time by league, before and after: `470.l.70271` 371 → 452 ms, `477.l.14882` 412 → 424 ms,
+`477.l.31027` 356 → 451 ms, `477.l.5744` 491 → 453 ms, and `477.l.58487` 365 → 442 ms.
+
+Parity was measured from the published rows, not asserted from the request count. Stable-key
+comparison of the before and after reports finds identical discovery rows for all five leagues — team
+keys, names, seasons, league names, and team page URLs — and identical search rows for all five,
+including their order and every published field: `proTeamKey`, percentages and deltas, both ranks,
+stat value, status code and detail, and transaction trend.
+
+What changes at the edges, stated rather than invented:
+
+- Discovery now always publishes `leagueName` from the aggregate answer. The old read omitted it when
+  that league's settings read failed while still publishing its teams; a malformed league now fails
+  the whole discovery as `provider.response_invalid` instead of publishing teams without a name.
+- Discovery publishes the games in `nfl`-then-`nhl` order as before, and the teams within a league in
+  the provider's order.
+- The SDK decodes a team key in Yahoo's numeric form and a present team URL as `https`. A payload
+  whose team key is malformed, or whose team URL is not `https`, now fails discovery as an invalid
+  response where the old decoder accepted the key or synthesized the URL. No recorded live payload
+  exercises either shape.
+- An unrequested game key in a discovery answer is `provider.response_invalid` with field
+  `games.code`; the old adapter named the same failure `game.code`. The failure kind is unchanged.
+- A search answer with no group for the requested league, or with a league that was not requested, is
+  `provider.response_invalid` with field `league.league_key`. The old read reported that kind for a
+  mismatched league and a schema failure for a missing one. The aggregate collection is scoped to the
+  signed-in manager's leagues, so a league the session does not own has no group and is refused this
+  way; every product search resolves through a team the session owns.
+- The aggregate search rows also carry `opponent`, `startingStatus`, `ranks`, `stats`, and
+  `ownershipType`, which the port does not publish. No value the port does publish is omitted.

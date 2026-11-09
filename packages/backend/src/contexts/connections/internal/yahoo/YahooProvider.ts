@@ -48,9 +48,6 @@ import type {
   ProviderPlayerDetail,
   ProviderPlayerPeriod,
   ProviderPlayerSearchInput,
-  ProviderPlayerSearchResult,
-  ProviderPlayerSearchSort,
-  ProviderPlayerStatus,
   ProviderPlayerWeekFact,
   ProviderReadFailure,
   ProviderRemainingGames,
@@ -91,10 +88,12 @@ import {
 import { scoreYahooRoster, yahooCapabilities, yahooPlayerStatus } from "./YahooLineup.ts";
 import type { YahooPlayerFacts, YahooStartRateCut, YahooStartRateSummary } from "./YahooLineup.ts";
 import {
+  discoverLeaguesThroughSdk,
   readLeagueTeamsThroughSdk,
   readRosterThroughSdk,
   rosterSlotOf,
   scheduledOpponent,
+  searchPlayersThroughSdk,
   startingLineupOf,
   transactionTrendOf,
   validateSessionThroughSdk,
@@ -116,26 +115,6 @@ const reviewHosts: Readonly<Record<FantasySport, string>> = {
   football: "football.fantasysports.yahoo.com",
   hockey: "hockey.fantasysports.yahoo.com",
 };
-const searchStatus = {
-  free_agent: "FA",
-  waiver: "W",
-} as const;
-const searchSort = {
-  name: "NAME",
-  position: "NAME",
-  ownership: "R_PO",
-  actual_rank: "AR",
-  overall_rank: "OR",
-} as const satisfies Record<Exclude<ProviderPlayerSearchSort, "stat">, string>;
-
-function searchSortValue(sort: ProviderPlayerSearchSort, statId: number | undefined): string {
-  return sort === "stat" ? String(statId) : searchSort[sort];
-}
-const rankedSearchSorts = new Set<ProviderPlayerSearchInput["sort"]>([
-  "actual_rank",
-  "overall_rank",
-  "stat",
-]);
 const goalsAgainstAverageStatId = 23;
 const savePercentageStatId = 26;
 const maximumSelectedPlayers = 25;
@@ -178,52 +157,36 @@ export const yahooProvider = Effect.gen(function* () {
   ) {
     yield* Effect.annotateCurrentSpan("provider.operation", "discover_teams");
     const cookie = yield* sessionCookie(input, "discover_teams");
-    const teams: ProviderTeam[] = [];
-    const leagueNames = new Map<string, Option.Option<string>>();
-    for (const league of supportedLeagues) {
-      const payload = yield* readJson(internet, {
-        operation: "discover_teams",
-        origin: readOrigin,
-        path: `/fantasy/v2/users;use_login=1/games;game_keys=${league}/teams`,
-        query: { format: "json" },
-        cookie,
-        normalize: true,
-      });
-      const decoded = yield* decodePayload(TeamsPayload, payload, "discover_teams");
-      if (decoded.users.length === 0) {
-        return yield* ProviderSessionRejected.make({ operation: "discover_teams" });
-      }
-      for (const team of yield* teamsFromPayload(decoded, league)) {
-        if (!leagueNames.has(team.providerLeagueKey)) {
-          leagueNames.set(team.providerLeagueKey, yield* readLeagueName(input, team));
-          yield* Effect.annotateCurrentSpan("provider.operation", "discover_teams");
-        }
-        const leagueName = Option.getOrUndefined(
-          leagueNames.get(team.providerLeagueKey) ?? Option.none(),
-        );
-        teams.push({ ...team, ...(leagueName === undefined ? {} : { leagueName }) });
-      }
-    }
+    const leagues = yield* discoverLeaguesThroughSdk(
+      sdk,
+      "discover_teams",
+      cookie,
+      supportedLeagues,
+    );
+    const teams = [...leagues]
+      .sort(
+        (left, right) =>
+          supportedLeagues.indexOf(left.gameKey) - supportedLeagues.indexOf(right.gameKey),
+      )
+      .flatMap((league) =>
+        league.teams.map((team): ProviderTeam => {
+          const providerUrl = teamProviderUrl(team, league.gameKey);
+          return {
+            provider: key,
+            providerTeamKey: team.teamKey,
+            providerLeagueKey: team.leagueKey,
+            league: league.gameKey,
+            sport: leagueSport[league.gameKey],
+            season: league.season,
+            name: team.name,
+            leagueName: league.name,
+            ...(providerUrl === undefined ? {} : { providerUrl }),
+          };
+        }),
+      );
     yield* Effect.annotateCurrentSpan("provider.team_count", teams.length);
     return teams;
   });
-
-  const readLeagueName = (
-    input: ProviderSessionMaterial,
-    team: ProviderTeam,
-  ): Effect.Effect<Option.Option<string>, ProviderSessionRejected> =>
-    readLeague({
-      ...input,
-      providerLeagueKey: team.providerLeagueKey,
-      sport: team.sport,
-    }).pipe(
-      Effect.map((settings) => Option.some(settings.name)),
-      Effect.catchTags({
-        "provider.request_failed": () => Effect.succeed(Option.none<string>()),
-        "provider.response_invalid": () => Effect.succeed(Option.none<string>()),
-        "provider.operation_unsupported": () => Effect.succeed(Option.none<string>()),
-      }),
-    );
 
   const readCrumb = Effect.fn("YahooProvider.readCrumb")(function* (
     input: ProviderSessionMaterial,
@@ -1000,36 +963,17 @@ export const yahooProvider = Effect.gen(function* () {
     const leagueKey = yield* ValidLeagueKey(input.providerLeagueKey, "search_players");
     const limit = yield* ValidSearchLimit(input.limit);
     const query = yield* ValidSearchQuery(input.query);
-    const statId = yield* ValidSearchStat(input.sort, input.statId, input.statType);
-    const search = query === undefined ? "" : `;search=${encodeURIComponent(query)}`;
-    const status =
-      input.availability === "all" ? "" : `;status=${searchStatus[input.availability]}`;
-    const sortValue = searchSortValue(input.sort, statId);
-    const sortType = rankedSearchSorts.has(input.sort) ? `;sort_type=${input.statType}` : "";
-    const out =
-      input.sort === "stat"
-        ? "ownership,percent_owned,percent_started,ranks,stats,transactions"
-        : "ownership,percent_owned,percent_started,ranks,transactions";
-    const payload = yield* readJson(internet, {
-      operation: "search_players",
-      origin: readOrigin,
-      path:
-        `/fantasy/v2/league/${leagueKey}/players` +
-        status +
-        `;sort=${sortValue}${sortType}` +
-        `;count=${String(limit)}${search}` +
-        `;out=${out}`,
-      query: { format: "json" },
-      cookie,
-      normalize: true,
+    const stat = yield* ValidSearchStat(input.sort, input.statId, input.statType);
+    const players = yield* searchPlayersThroughSdk(sdk, "search_players", cookie, {
+      leagueKey,
+      season: input.season,
+      query,
+      availability: input.availability,
+      sort: input.sort,
+      statType: stat.statType,
+      statId: stat.statId,
+      limit,
     });
-    const decoded = yield* decodePayload(PlayerSearchPayload, payload, "search_players");
-    if (decoded.league.league_key !== leagueKey) {
-      return yield* responseMismatch({ operation: "search_players", field: "league.league_key" });
-    }
-    const players = decoded.league.players.map((player) =>
-      toSearchPlayer(player, input.season, statId),
-    );
     yield* Effect.annotateCurrentSpan("provider.player_count", players.length);
     return { players };
   });
@@ -1881,39 +1825,6 @@ function issuePath(root: SchemaIssue.Issue): ReadonlyArray<PropertyKey> {
   return path;
 }
 
-function teamsFromPayload(
-  payload: typeof TeamsPayload.Type,
-  league: (typeof supportedLeagues)[number],
-): Effect.Effect<ReadonlyArray<ProviderTeam>, ProviderResponseInvalid> {
-  return Effect.gen(function* () {
-    const teams: ProviderTeam[] = [];
-    for (const user of payload.users) {
-      for (const game of user.games) {
-        if (game.code !== league) {
-          return yield* responseMismatch({
-            operation: "discover_teams",
-            field: "game.code",
-          });
-        }
-        for (const team of game.teams ?? []) {
-          const providerUrl = teamProviderUrl(team, league);
-          teams.push({
-            provider: key,
-            providerTeamKey: team.team_key,
-            providerLeagueKey: providerLeagueKey(team.team_key),
-            league,
-            sport: leagueSport[league],
-            season: game.season,
-            name: team.name,
-            ...(providerUrl === undefined ? {} : { providerUrl }),
-          });
-        }
-      }
-    }
-    return teams;
-  });
-}
-
 function providerLeagueKey(teamKey: string): string {
   return teamKey.slice(0, teamKey.lastIndexOf(".t."));
 }
@@ -1926,18 +1837,18 @@ const teamPagePath = {
 } as const satisfies Readonly<Record<FantasySport, string>>;
 
 function teamProviderUrl(
-  team: { readonly team_key: string; readonly url?: string | undefined },
+  team: { readonly teamKey: string; readonly url?: string | undefined },
   league: (typeof supportedLeagues)[number],
 ): string | undefined {
   const payloadUrl = httpsUrl(team.url);
   if (payloadUrl !== undefined) {
     return payloadUrl;
   }
-  const leagueId = team.team_key.slice(
-    team.team_key.indexOf(".l.") + ".l.".length,
-    team.team_key.lastIndexOf(".t."),
+  const leagueId = team.teamKey.slice(
+    team.teamKey.indexOf(".l.") + ".l.".length,
+    team.teamKey.lastIndexOf(".t."),
   );
-  const teamId = team.team_key.slice(team.team_key.lastIndexOf(".t.") + ".t.".length);
+  const teamId = team.teamKey.slice(team.teamKey.lastIndexOf(".t.") + ".t.".length);
   const sport = leagueSport[league];
   return `https://${reviewHosts[sport]}/${teamPagePath[sport]}/${leagueId}/${teamId}`;
 }
@@ -3105,77 +3016,6 @@ function statSeries(
   });
 }
 
-function toSearchPlayer(
-  player: typeof SearchPlayerPayload.Type,
-  season: number,
-  statId: number | undefined,
-): ProviderPlayerSearchResult["players"][number] {
-  const injury = searchInjuryStatus(player.status);
-  return {
-    providerPlayerKey: player.player_key,
-    name: player.name.full,
-    primaryPosition: player.primary_position,
-    displayPosition: player.display_position,
-    eligiblePositions: (player.eligible_positions ?? []).map(({ position }) => position),
-    availability: availabilityOf(player.ownership?.ownership_type),
-    proTeam: optionalNonEmpty(player.editorial_team_abbr ?? ""),
-    ...(optionalNonEmpty(player.editorial_team_key ?? "") === undefined
-      ? {}
-      : { proTeamKey: optionalNonEmpty(player.editorial_team_key ?? "") }),
-    status: {
-      value: injury.value,
-      code: injury.code,
-      detail:
-        optionalNonEmpty(player.injury_note ?? "") ?? optionalNonEmpty(player.status_full ?? ""),
-    },
-    percentOwned:
-      player.percent_owned === undefined ? null : providerNumber(player.percent_owned.value),
-    percentOwnedDelta:
-      player.percent_owned === undefined ? null : providerNumber(player.percent_owned.delta),
-    percentStarted:
-      player.percent_started === undefined ? null : providerNumber(player.percent_started.value),
-    percentStartedChange:
-      player.percent_started === undefined ? null : providerNumber(player.percent_started.delta),
-    actualRank: searchRank(player.player_ranks, "S", season),
-    overallRank: searchRank(player.player_ranks, "OR", season),
-    statValue: statId === undefined ? null : searchStatValue(player.player_stats, statId),
-    transactionTrend: transactionTrendOf(player.transactions),
-  };
-}
-
-function searchRank(
-  ranks: ReadonlyArray<typeof PlayerRankPayload.Type> | undefined,
-  type: "OR" | "S",
-  season: number,
-): number | null {
-  for (const entry of ranks ?? []) {
-    const rank = entry.player_rank;
-    if (rank.rank_type !== type) {
-      continue;
-    }
-    if (type === "S" && rank.rank_season !== season) {
-      continue;
-    }
-    const value = providerNumber(rank.rank_value);
-    if (value !== null && Number.isInteger(value) && value >= 1) {
-      return value;
-    }
-  }
-  return null;
-}
-
-function searchStatValue(
-  stats: typeof PlayerStats.Type | undefined,
-  statId: number,
-): number | null {
-  for (const entry of stats?.stats ?? []) {
-    if (entry.stat.stat_id === statId) {
-      return providerNumber(entry.stat.value);
-    }
-  }
-  return null;
-}
-
 function standingsFromPayload(
   payload: typeof StandingsPayload.Type,
   requestedLeagueKey: string,
@@ -3720,12 +3560,6 @@ function rosterStatusOf(ownershipType: string | undefined): ProviderPlayerDetail
   }
 }
 
-function availabilityOf(
-  ownershipType: string | undefined,
-): "rostered" | "free_agent" | "waiver" | "unknown" {
-  return rosterStatusOf(ownershipType);
-}
-
 function providerNumber(value: number | string | null | undefined): number | null {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
@@ -3884,7 +3718,10 @@ function ValidSearchStat(
   sort: ProviderPlayerSearchInput["sort"],
   statId: number | undefined,
   statType: ProviderStatBasis["type"],
-): Effect.Effect<number | undefined, ProviderReadFailure> {
+): Effect.Effect<
+  { readonly statId: number | undefined; readonly statType: "season" },
+  ProviderReadFailure
+> {
   if (statType !== "season") {
     return ProviderOperationUnsupported.make({
       operation: "search_players",
@@ -3893,10 +3730,10 @@ function ValidSearchStat(
     });
   }
   if (sort !== "stat") {
-    return Effect.as(Effect.void, undefined);
+    return Effect.succeed({ statId: undefined, statType });
   }
   return statId !== undefined && Number.isSafeInteger(statId) && statId >= 1 && statId <= 1_000
-    ? Effect.succeed(statId)
+    ? Effect.succeed({ statId, statType })
     : ProviderResponseInvalid.make({ operation: "search_players" });
 }
 
@@ -3944,17 +3781,6 @@ function availabilityDetailOf(player: {
     optionalNonEmpty(player.status_full) ??
     (typeof player.status === "string" ? optionalNonEmpty(player.status) : undefined)
   );
-}
-
-function searchInjuryStatus(status: string | boolean | undefined): {
-  readonly value: ProviderPlayerStatus;
-  readonly code: string | undefined;
-} {
-  if (typeof status === "boolean") {
-    return status ? { value: "unknown", code: undefined } : { value: "healthy", code: undefined };
-  }
-  const code = optionalNonEmpty(status ?? "");
-  return { value: yahooPlayerStatus(code), code };
 }
 
 const SessionCookie = Schema.Trim.pipe(
@@ -4010,39 +3836,6 @@ const AcquisitionPayload = Schema.Struct({
   coverage_type: Schema.Literals(["week", "date"]),
   coverage_value: Schema.Union([Schema.Finite, Schema.String]),
   value: Schema.Union([Schema.Finite, Schema.String]),
-});
-
-const TeamPayload = Schema.Struct({
-  team_key: Schema.String.pipe(Schema.check(Schema.isPattern(/^[^.]+\.l\.[^.]+\.t\.[^.]+$/u))),
-  name: Schema.NonEmptyString,
-  url: Schema.optional(Schema.String),
-  managers: Schema.optional(
-    Schema.Array(
-      Schema.Struct({
-        manager: Schema.Struct({
-          manager_id: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-          nickname: Schema.optional(Schema.String),
-        }),
-      }),
-    ),
-  ),
-  number_of_moves: Schema.optional(Schema.Union([Schema.Finite, Schema.String])),
-  roster_adds: Schema.optional(AcquisitionPayload),
-  faab_balance: Schema.optional(IntFromStringOrNumber),
-});
-
-const GamePayload = Schema.Struct({
-  code: Schema.NonEmptyString,
-  season: Season,
-  teams: Schema.optional(Schema.Array(TeamPayload)),
-});
-
-const TeamsPayload = Schema.Struct({
-  users: Schema.Array(
-    Schema.Struct({
-      games: Schema.Array(GamePayload),
-    }),
-  ),
 });
 
 const CrumbPayload = Schema.Struct({
@@ -4326,32 +4119,6 @@ const PlayerDetailsPayload = Schema.Struct({
   league: Schema.Struct({
     league_key: LeagueKey,
     players: Schema.Array(PlayerDetailPayload),
-  }),
-});
-
-const SearchPlayerPayload = Schema.Struct({
-  player_key: PlayerKey,
-  name: Schema.Struct({ full: Schema.NonEmptyString }),
-  primary_position: Schema.NonEmptyString,
-  display_position: Schema.NonEmptyString,
-  eligible_positions: Schema.optional(Schema.Array(Schema.Struct({ position: Schema.String }))),
-  editorial_team_abbr: Schema.optional(Schema.String),
-  editorial_team_key: Schema.optional(Schema.String),
-  ownership: Schema.optional(PlayerOwnership),
-  percent_owned: Schema.optional(PercentOwned),
-  percent_started: Schema.optional(PercentOwned),
-  player_ranks: Schema.optional(Schema.Array(PlayerRankPayload)),
-  player_stats: Schema.optional(PlayerStats),
-  status: Schema.optional(Schema.Union([Schema.String, Schema.Boolean])),
-  status_full: Schema.optional(Schema.String),
-  injury_note: Schema.optional(Schema.String),
-  transactions: Schema.optional(PlayerTransactions),
-});
-
-const PlayerSearchPayload = Schema.Struct({
-  league: Schema.Struct({
-    league_key: LeagueKey,
-    players: Schema.Array(SearchPlayerPayload),
   }),
 });
 
